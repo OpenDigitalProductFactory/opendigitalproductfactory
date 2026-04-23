@@ -364,13 +364,79 @@ export function discoverDeliberationFiles(): Array<{
   return results;
 }
 
-export function parseDeliberationFile(filePath: string): DeliberationRecord {
-  const raw = readFileSync(filePath, "utf-8");
+/**
+ * Parse a deliberation pattern from raw file contents. Extracted from
+ * parseDeliberationFile so tests can exercise validation without touching
+ * the filesystem.
+ *
+ * Throws (loud failure — per 2026-04-17 silent-seed-skip audit) when any
+ * required top-level field is missing, empty, or structurally wrong. The
+ * wrapper seedDeliberationPatterns() catches and logs per-file so one bad
+ * file does not abort the whole seed, but the throw here is what makes the
+ * failure diagnosable instead of silently coerced to "".
+ */
+export function parseDeliberationContent(
+  raw: string,
+  filePath: string,
+): DeliberationRecord {
   const { frontmatter } = parseFrontmatter(raw);
 
-  const defaultRoles = Array.isArray(frontmatter.defaultRoles)
-    ? (frontmatter.defaultRoles as DeliberationRole[])
-    : [];
+  const requireNonEmptyString = (field: "slug" | "name" | "purpose") => {
+    const v = (frontmatter as Record<string, unknown>)[field];
+    if (typeof v !== "string" || v.trim() === "") {
+      throw new Error(
+        `[seed-deliberation] ${filePath}: required field "${field}" is missing or not a non-empty string`,
+      );
+    }
+  };
+  requireNonEmptyString("slug");
+  requireNonEmptyString("name");
+  requireNonEmptyString("purpose");
+
+  if (
+    !Array.isArray(frontmatter.defaultRoles) ||
+    frontmatter.defaultRoles.length === 0
+  ) {
+    throw new Error(
+      `[seed-deliberation] ${filePath}: required field "defaultRoles" is missing or not a non-empty array`,
+    );
+  }
+
+  if (
+    !frontmatter.topologyTemplate ||
+    typeof frontmatter.topologyTemplate !== "object" ||
+    Array.isArray(frontmatter.topologyTemplate) ||
+    Object.keys(frontmatter.topologyTemplate as Record<string, unknown>)
+      .length === 0
+  ) {
+    throw new Error(
+      `[seed-deliberation] ${filePath}: required field "topologyTemplate" is missing or not a non-empty object`,
+    );
+  }
+
+  const defaultRoles = frontmatter.defaultRoles as DeliberationRole[];
+  defaultRoles.forEach((role, idx) => {
+    if (!role || typeof role !== "object" || Array.isArray(role)) {
+      throw new Error(
+        `[seed-deliberation] ${filePath}: defaultRoles[${idx}] is not an object`,
+      );
+    }
+    if (typeof role.roleId !== "string" || role.roleId.trim() === "") {
+      throw new Error(
+        `[seed-deliberation] ${filePath}: defaultRoles[${idx}].roleId is missing or not a non-empty string`,
+      );
+    }
+    if (typeof role.count !== "number" || !Number.isFinite(role.count) || role.count < 1) {
+      throw new Error(
+        `[seed-deliberation] ${filePath}: defaultRoles[${idx}].count is missing or not a number >= 1`,
+      );
+    }
+    if (typeof role.required !== "boolean") {
+      throw new Error(
+        `[seed-deliberation] ${filePath}: defaultRoles[${idx}].required is missing or not a boolean`,
+      );
+    }
+  });
 
   const asObject = (value: unknown): Record<string, unknown> =>
     value && typeof value === "object" && !Array.isArray(value)
@@ -378,9 +444,9 @@ export function parseDeliberationFile(filePath: string): DeliberationRecord {
       : {};
 
   return {
-    slug: String(frontmatter.slug ?? basename(filePath, ".deliberation.md")),
-    name: String(frontmatter.name ?? ""),
-    purpose: String(frontmatter.purpose ?? ""),
+    slug: frontmatter.slug,
+    name: frontmatter.name,
+    purpose: frontmatter.purpose,
     defaultRoles,
     topologyTemplate: asObject(frontmatter.topologyTemplate),
     activationPolicyHints: asObject(frontmatter.activationPolicyHints),
@@ -390,6 +456,11 @@ export function parseDeliberationFile(filePath: string): DeliberationRecord {
     status: String(frontmatter.status ?? "active"),
     sourceFile: `deliberation/${basename(filePath)}`,
   };
+}
+
+export function parseDeliberationFile(filePath: string): DeliberationRecord {
+  const raw = readFileSync(filePath, "utf-8");
+  return parseDeliberationContent(raw, filePath);
 }
 
 /* -------------------------------------------------------------------------- */

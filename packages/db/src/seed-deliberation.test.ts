@@ -3,6 +3,7 @@ import {
   parseFrontmatter,
   discoverDeliberationFiles,
   parseDeliberationFile,
+  parseDeliberationContent,
   applyDeliberationPatterns,
   type DeliberationFrontmatter,
   type DeliberationRecord,
@@ -198,5 +199,87 @@ describe("seed-deliberation applyDeliberationPatterns (upsert + override skip)",
     expect(creates).toHaveLength(0);
     expect(updates).toHaveLength(0);
     expect(skipped).toEqual(["review"]);
+  });
+});
+
+describe("seed-deliberation parseDeliberationContent (malformed frontmatter)", () => {
+  const VIRTUAL_PATH = "deliberation/virtual.deliberation.md";
+
+  it("throws when slug is missing", () => {
+    const raw = `---
+name: Peer Review
+status: active
+purpose: Structured multi-agent critique.
+defaultRoles:
+  - roleId: author
+    count: 1
+    required: true
+topologyTemplate:
+  rootNodeType: review
+---
+
+Body.`;
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(/slug/);
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(
+      VIRTUAL_PATH,
+    );
+  });
+
+  it("throws when defaultRoles is missing", () => {
+    const raw = `---
+slug: review
+name: Peer Review
+status: active
+purpose: Structured multi-agent critique.
+topologyTemplate:
+  rootNodeType: review
+---
+
+Body.`;
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(
+      /defaultRoles/,
+    );
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(
+      VIRTUAL_PATH,
+    );
+  });
+
+  it("throws when defaultRoles is an empty array", () => {
+    const raw = `---
+slug: review
+name: Peer Review
+status: active
+purpose: Structured multi-agent critique.
+defaultRoles: []
+topologyTemplate:
+  rootNodeType: review
+---
+
+Body.`;
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(
+      /defaultRoles/,
+    );
+  });
+
+  it("throws when a defaultRoles item is missing roleId", () => {
+    const raw = `---
+slug: review
+name: Peer Review
+status: active
+purpose: Structured multi-agent critique.
+defaultRoles:
+  - count: 1
+    required: true
+topologyTemplate:
+  rootNodeType: review
+---
+
+Body.`;
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(
+      /defaultRoles\[0\]\.roleId/,
+    );
+    expect(() => parseDeliberationContent(raw, VIRTUAL_PATH)).toThrow(
+      VIRTUAL_PATH,
+    );
   });
 });
