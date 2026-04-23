@@ -1,7 +1,7 @@
 // apps/web/lib/feature-build-data.ts
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewResult, BuildPlanDoc, TaskResult, VerificationOutput, AcceptanceCriterion } from "./feature-build-types";
+import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewResult, BuildPlanDoc, TaskResult, VerificationOutput, AcceptanceCriterion, BuildDeliberationSummary } from "./feature-build-types";
 import { normalizeHappyPathState } from "./feature-build-types";
 import type { BuildContext } from "@/lib/build-agent-prompts";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
@@ -44,6 +44,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       uxVerificationStatus: true,
       buildExecState: true,
       scoutFindings: true,
+      deliberationSummary: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -70,6 +71,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     uxVerificationStatus: r.uxVerificationStatus as FeatureBuildRow["uxVerificationStatus"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
     scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
+    deliberationSummary: r.deliberationSummary as BuildDeliberationSummary | null,
     happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
@@ -115,6 +117,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       uxVerificationStatus: true,
       buildExecState: true,
       scoutFindings: true,
+      deliberationSummary: true,
       digitalProduct: {
         select: {
           productId: true,
@@ -143,6 +146,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     uxVerificationStatus: r.uxVerificationStatus as FeatureBuildRow["uxVerificationStatus"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
     scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
+    deliberationSummary: r.deliberationSummary as BuildDeliberationSummary | null,
     happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
