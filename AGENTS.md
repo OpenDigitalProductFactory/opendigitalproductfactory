@@ -87,6 +87,69 @@ Epics must be actively managed — not just created and forgotten.
 
 - Pre-2026-04-23 rule was "commit directly on `main`," driven by (a) worktree accidents causing lost work and (b) branch protection being unavailable on the Free tier while the repo was private. Both no longer apply: worktrees are not part of the flow, and the repo is public.
 
+### Typecheck Gate — local, before commit (mandatory)
+
+TypeScript errors must be caught at code time, not as an afterthought. Relying on CI alone has repeatedly broken `main` for all concurrent agents because one session's committed code referenced files another hadn't committed yet. The local pre-commit hook at [.githooks/pre-commit](.githooks/pre-commit) runs `pnpm --filter <affected workspace> typecheck` before every commit that touches `.ts` / `.tsx` / `.mts` / `.cts` files and rejects the commit if typecheck fails.
+
+**Required setup (once per clone):**
+
+```sh
+git config core.hooksPath .githooks
+```
+
+New clones inherit this automatically via the repo's `postinstall` script. Verify with `git config core.hooksPath` — must return `.githooks`. If it doesn't, re-set it.
+
+**How it scopes work:**
+
+- Only TS-affecting commits pay the typecheck cost. Doc-only / migration-only / config-only commits skip the hook.
+- Only affected workspaces are checked (scoped via `pnpm --filter`). A change in `packages/db` also re-checks `apps/web` because web consumes db types. A change in `services/adp` only checks that service.
+- Typical overhead on a focused commit: 15–60 seconds. On a multi-workspace commit: 1–3 minutes.
+
+**Emergency escape:** `DPF_SKIP_TYPECHECK=1 git commit ...` bypasses the gate. Use only when you must commit a known-broken intermediate state (e.g., rebasing in halves). CI will still catch it.
+
+**Authoring discipline — all agents:**
+
+- Before proposing a commit, mentally gate on "will typecheck pass?" — do not commit code that imports symbols you haven't also committed, doesn't populate required properties, or references modules that don't exist yet.
+- If you refactor a shared type in `feature-build-types.ts`, update every consumer in the same commit. Don't leave drift between the type and the data layer.
+- If you create a new file that another committed file imports, `git add` both in the same commit. Untracked-import drift is the single most common cause of "main is red" incidents.
+
+**Subagent dispatchers:** include "run `pnpm --filter web typecheck` before committing and fix any errors" in every task prompt that modifies TypeScript. Subagents do not read AGENTS.md.
+
+### Typecheck Gate — Build Studio (mandatory)
+
+The platform's own Build Studio feature-building lifecycle must apply the same gate to the sandbox it builds in. Two additions:
+
+1. **Per-task verification step** — after every Build Studio task execution in the sandbox, run `pnpm --filter web typecheck` and `pnpm --filter web build` inside the sandbox container. If either fails, the task status is `failed` and the coworker must fix the error before the phase advances. Mirrors the local pre-commit gate.
+2. **Pre-ship verification** — the review-phase verification pass (currently UX-only via browser-use) must include typecheck + production build as mandatory passes. The build never leaves the sandbox without passing what CI would run. Implementation landing spot: [apps/web/lib/queue/functions/build-review-verification.ts](apps/web/lib/queue/functions/build-review-verification.ts).
+
+Together these mean a Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox.
+
+### Concurrent Sessions — Per-Thread Worktree (mandatory when >1 session)
+
+Two Claude Code sessions editing the same working tree at `d:\DPF` fight over `HEAD`, the index, and the working tree — even if they target different branches. Observed symptoms: commits land on `main` instead of the intended feature branch; `git reflog` shows unexpected `checkout: moving from <feature> to main` entries; one session's staged files sweep into another's commit.
+
+**The fix is a git worktree per session, not just a branch per session.**
+
+**Setup (per topic, run from `d:\DPF`):**
+
+```sh
+git worktree add ../DPF-<topic> -b feat/<topic>-work
+```
+
+Each worktree gets its own working directory, HEAD, branch, and index. The `.git` object database is shared — disk-efficient, concurrency-safe. Open each Claude Code session with its **Primary working directory** pointed at the matching worktree path. One worktree stays on `main` for merges/releases/global inspection; agents never work in that one.
+
+**Cleanup after merge:** `git worktree remove ../DPF-<topic>` — prunes the checkout; the branch ref survives until explicitly deleted via `git branch -d`.
+
+**Signal that this rule is being violated:** a session notices its checkout flipped from a feature branch back to `main` between commands. That means another session is sharing the worktree. Stop, flag to Mark, move to a dedicated worktree before continuing.
+
+**Belt-and-suspenders branch guard in every commit command:**
+
+```sh
+BRANCH=$(git branch --show-current)
+if [ "$BRANCH" = "main" ]; then echo "ERROR: on main — abort"; exit 1; fi
+git commit --only <paths> -m "..."
+```
+
 ### Verification — Build Gate (mandatory)
 
 Work is NOT complete until the production build passes and UX-level testing has been run for the affected surfaces. This is non-negotiable.

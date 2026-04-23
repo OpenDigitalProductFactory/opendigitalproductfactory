@@ -1,17 +1,24 @@
 #!/bin/sh
-# Guard: prevent modification of already-committed Prisma migration files.
 #
-# Migration files are immutable once committed. Modifying them after they've
-# been applied causes DB drift — Prisma detects the checksum mismatch and
-# refuses to run new migrations without a full reset.
+# pre-commit: runs before every local commit. Two guards:
 #
-# To fix drift: use `prisma migrate resolve --applied <name>` to re-sync
-# checksums. Never edit a migration file after it has been committed.
+#   1. Migration immutability — reject commits that modify previously-committed
+#      Prisma migration .sql files (drift prevention).
+#   2. Typecheck gate — when TypeScript files are staged, run `pnpm typecheck`
+#      on the affected workspaces and reject the commit if it fails. Catches
+#      missing imports, symbol drift, and type errors BEFORE they reach CI.
+#
+# The typecheck step is skipped when:
+#   - Only non-TS files are staged (docs-only, config-only, migration-only)
+#   - DPF_SKIP_TYPECHECK=1 is set (emergency escape hatch — use sparingly; CI
+#     will still catch what you let through).
+#
+# Set up: `git config core.hooksPath .githooks` (done automatically at repo setup).
+
+# ─── Guard 1: migration immutability ────────────────────────────────────────
 
 MIGRATIONS_DIR="packages/db/prisma/migrations"
 
-# Get files staged for commit that are MODIFICATIONS (M) inside the migrations dir.
-# New files (A = added) are fine — that's a new migration being created.
 MODIFIED_MIGRATIONS=$(git diff --cached --name-status | grep "^M" | awk '{print $2}' | grep "^$MIGRATIONS_DIR" | grep "\.sql$")
 
 if [ -n "$MODIFIED_MIGRATIONS" ]; then
@@ -32,4 +39,88 @@ if [ -n "$MODIFIED_MIGRATIONS" ]; then
   exit 1
 fi
 
+# ─── Guard 2: typecheck gate ────────────────────────────────────────────────
+
+if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then
+  echo "[pre-commit] DPF_SKIP_TYPECHECK=1 — skipping typecheck gate."
+  exit 0
+fi
+
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|mts|cts)$' || true)
+
+if [ -z "$STAGED_TS" ]; then
+  exit 0
+fi
+
+echo "[pre-commit] TypeScript files staged — running scoped typecheck..."
+echo "[pre-commit] To skip in an emergency: DPF_SKIP_TYPECHECK=1 git commit ..."
+echo ""
+
+# Map staged paths to the affected pnpm workspace(s). Each workspace has its
+# own `typecheck` script (tsc --noEmit). Running only what's affected keeps
+# the hook fast on small commits while still catching cross-file errors
+# within each workspace.
+
+RUN_WEB=0
+RUN_DB=0
+RUN_TYPES=0
+RUN_VALIDATORS=0
+RUN_API_CLIENT=0
+RUN_MOBILE=0
+RUN_ADP_SERVICE=0
+
+while IFS= read -r file; do
+  case "$file" in
+    apps/web/*)                   RUN_WEB=1 ;;
+    packages/db/*)                RUN_DB=1 ;;
+    packages/types/*)             RUN_TYPES=1 ;;
+    packages/validators/*)        RUN_VALIDATORS=1 ;;
+    packages/api-client/*)        RUN_API_CLIENT=1 ;;
+    apps/mobile/*)                RUN_MOBILE=1 ;;
+    services/adp/*)               RUN_ADP_SERVICE=1 ;;
+  esac
+done <<EOF
+$STAGED_TS
+EOF
+
+# A change in a shared package (db, types, validators) can break web. Run web
+# typecheck whenever any upstream workspace is touched.
+if [ "$RUN_DB" = "1" ] || [ "$RUN_TYPES" = "1" ] || [ "$RUN_VALIDATORS" = "1" ]; then
+  RUN_WEB=1
+fi
+
+FAILED=""
+
+run_typecheck() {
+  filter="$1"
+  label="$2"
+  echo "  → $label"
+  if ! pnpm --filter "$filter" typecheck >/tmp/pre-commit-tc.log 2>&1; then
+    echo ""
+    echo "ERROR: typecheck failed for $label"
+    echo ""
+    cat /tmp/pre-commit-tc.log | tail -40
+    echo ""
+    FAILED="$FAILED $label"
+  fi
+}
+
+[ "$RUN_WEB" = "1" ]           && run_typecheck "web"               "apps/web"
+[ "$RUN_DB" = "1" ]            && run_typecheck "@dpf/db"           "packages/db"
+[ "$RUN_TYPES" = "1" ]         && run_typecheck "@dpf/types"        "packages/types"
+[ "$RUN_VALIDATORS" = "1" ]    && run_typecheck "@dpf/validators"   "packages/validators"
+[ "$RUN_API_CLIENT" = "1" ]    && run_typecheck "@dpf/api-client"   "packages/api-client"
+[ "$RUN_MOBILE" = "1" ]        && run_typecheck "mobile"            "apps/mobile"
+[ "$RUN_ADP_SERVICE" = "1" ]   && run_typecheck "dpf-adp-mcp"       "services/adp"
+
+if [ -n "$FAILED" ]; then
+  echo ""
+  echo "Commit rejected. Fix the typecheck errors above or, for an emergency override:"
+  echo "  DPF_SKIP_TYPECHECK=1 git commit ..."
+  echo "(CI will still gate the merge either way.)"
+  echo ""
+  exit 1
+fi
+
+echo "[pre-commit] typecheck ok"
 exit 0
