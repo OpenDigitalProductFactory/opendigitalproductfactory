@@ -53,7 +53,15 @@ export type AgentEvent =
   // without having to poll the build record.
   | { type: "verification:started"; buildId: string; testCount: number }
   | { type: "verification:step"; buildId: string; stepIndex: number; description: string; passed: boolean }
-  | { type: "verification:complete"; buildId: string; passed: number; total: number; status: "complete" | "failed" | "skipped" };
+  | { type: "verification:complete"; buildId: string; passed: number; total: number; status: "complete" | "failed" | "skipped" }
+  // Deliberation (Task 6) — emitted by queue/functions/deliberation-run.ts
+  // so the coworker panel + Build Studio can show when a pattern is running,
+  // which branches dispatched, and whether diversity degraded.
+  | { type: "deliberation:queued"; deliberationRunId: string; patternSlug: string }
+  | { type: "deliberation:branch_dispatched"; deliberationRunId: string; branchNodeId: string; role: string }
+  | { type: "deliberation:branch_completed"; deliberationRunId: string; branchNodeId: string; role: string; success: boolean }
+  | { type: "deliberation:degraded_diversity"; deliberationRunId: string; from: string; to: string; reason: string }
+  | { type: "deliberation:completed"; deliberationRunId: string; consensusState: string };
 
 type Handler = (event: AgentEvent) => void;
 
