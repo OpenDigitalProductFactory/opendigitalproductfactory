@@ -211,6 +211,8 @@ describe("assembleSystemPrompt", () => {
   it("includes calm under pressure and anti-reward-hacking guidance", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
     expect(prompt).toContain("Stay calm under pressure");
-    expect(prompt).toContain("Don't game tests, acceptance criteria, or approval flows");
+    expect(prompt).toContain(
+      "Don't game tests, acceptance criteria, or approval flows",
+    );
   });
 });

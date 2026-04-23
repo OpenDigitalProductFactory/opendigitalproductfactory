@@ -5,6 +5,18 @@ import {
   seedDeliberation,
 } from "./seed-deliberation";
 
+const defaultReviewRoles = [
+  { roleId: "author", count: 1, required: true },
+  { roleId: "reviewer", count: 1, required: true },
+  { roleId: "adjudicator", count: 1, required: true },
+];
+
+const defaultDebateRoles = [
+  { roleId: "debater", count: 1, required: true },
+  { roleId: "skeptic", count: 1, required: true },
+  { roleId: "adjudicator", count: 1, required: true },
+];
+
 describe("parseFrontmatter", () => {
   it("parses deliberation frontmatter and markdown body", () => {
     const raw = `---
@@ -87,26 +99,26 @@ describe("seedDeliberation", () => {
         name: "Peer Review",
         status: "active",
         purpose: "Structured critique",
-        defaultRoles: ["author", "reviewer", "adjudicator"],
+        defaultRoles: defaultReviewRoles,
         topologyTemplate: { rootNodeType: "review" },
         activationPolicyHints: { stageDefaults: ["ideate", "plan"] },
         evidenceRequirements: { retrievalRequired: true },
         outputContract: { summary: "merged recommendation" },
         providerStrategyHints: { strategyProfile: "balanced" },
-        content: "review body",
+        sourceFile: "deliberation/review.deliberation.md",
       },
       {
         slug: "debate",
         name: "Debate",
         status: "active",
         purpose: "Structured adversarial analysis",
-        defaultRoles: ["debater", "skeptic", "adjudicator"],
+        defaultRoles: defaultDebateRoles,
         topologyTemplate: { rootNodeType: "review" },
         activationPolicyHints: { explicitTriggers: ["debate this"] },
         evidenceRequirements: { retrievalRequired: true },
         outputContract: { summary: "consensus or non-consensus" },
         providerStrategyHints: { strategyProfile: "high-assurance" },
-        content: "debate body",
+        sourceFile: "deliberation/debate.deliberation.md",
       },
     ]);
 
