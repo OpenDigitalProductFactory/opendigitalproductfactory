@@ -6,7 +6,8 @@ settings:
 
 overrides:
   '@types/react': ^19
-  lodash: 4.17.23
+  '@hono/node-server': 1.19.13
+  lodash: 4.18.0
   '@tootallnate/once': 3.0.1
   '@xmldom/xmldom': 0.8.13
   dompurify: 3.4.0
@@ -1376,8 +1377,8 @@ packages:
     peerDependencies:
       tailwindcss: ^3.0 || ^4.0
 
-  '@hono/node-server@1.19.11':
-    resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
+  '@hono/node-server@1.19.13':
+    resolution: {integrity: sha512-TsQLe4i2gvoTtrHje625ngThGBySOgSK3Xo2XRYOdqGN1teR8+I7vchQC46uLJi8OF62YTYA3AhSpumtkhsaKQ==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -6136,8 +6137,9 @@ packages:
   lodash.throttle@4.1.1:
     resolution: {integrity: sha512-wIkUCfVKpVsWo3JSZlc+8MB5it+2AN5W8J7YVMST30UrvcQNZ1Okbj+rbVniijTWE6FGYy4XJq/rHkas8qJMLQ==}
 
-  lodash@4.17.23:
-    resolution: {integrity: sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==}
+  lodash@4.18.0:
+    resolution: {integrity: sha512-l1mfj2atMqndAHI3ls7XqPxEjV2J9ZkcNyHpoZA3r2T1LLwDB69jgkMWh71YKwhBbK0G2f4WSn05ahmQXVxupA==}
+    deprecated: Bad release. Please use lodash@4.17.21 instead.
 
   log-symbols@2.2.0:
     resolution: {integrity: sha512-VeIAFslyIerEJLXHziedo2basKbMKtTw3vfn5IzG0XTjhAVEJyNHnL2p7vc+wBDSdQuUpNw3M2u6xb9QsAY5Eg==}
@@ -9893,7 +9895,7 @@ snapshots:
     dependencies:
       tailwindcss: 3.4.19(tsx@4.21.0)(yaml@2.8.3)
 
-  '@hono/node-server@1.19.11(hono@4.12.14)':
+  '@hono/node-server@1.19.13(hono@4.12.14)':
     dependencies:
       hono: 4.12.14
 
@@ -11272,7 +11274,7 @@ snapshots:
       '@electric-sql/pglite': 0.4.1
       '@electric-sql/pglite-socket': 0.1.1(@electric-sql/pglite@0.4.1)
       '@electric-sql/pglite-tools': 0.3.1(@electric-sql/pglite@0.4.1)
-      '@hono/node-server': 1.19.11(hono@4.12.14)
+      '@hono/node-server': 1.19.13(hono@4.12.14)
       '@prisma/get-platform': 7.2.0
       '@prisma/query-plan-executor': 7.2.0
       '@prisma/streams-local': 0.1.2
@@ -12479,7 +12481,7 @@ snapshots:
       html-to-image: 1.11.13
       immer: 10.2.0
       jotai: 2.19.0(@babel/core@7.29.0)(@babel/template@7.28.6)(@types/react@19.2.14)(react@19.2.5)
-      lodash: 4.17.23
+      lodash: 4.18.0
       marked: 4.3.0
       pako: 2.1.0
       pino: 8.21.0
@@ -13476,7 +13478,7 @@ snapshots:
   dagre@0.8.5:
     dependencies:
       graphlib: 2.1.8
-      lodash: 4.17.23
+      lodash: 4.18.0
 
   data-uri-to-buffer@4.0.1: {}
 
@@ -14302,7 +14304,7 @@ snapshots:
 
   graphlib@2.1.8:
     dependencies:
-      lodash: 4.17.23
+      lodash: 4.18.0
 
   graphmatch@1.1.1: {}
 
@@ -14863,7 +14865,7 @@ snapshots:
       jest-watch-select-projects: 2.0.0
       jest-watch-typeahead: 2.2.1(jest@30.3.0(@types/node@24.12.2))
       json5: 2.2.3
-      lodash: 4.17.23
+      lodash: 4.18.0
       react-native: 0.85.2(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1)
       react-test-renderer: 19.0.0(react@18.3.1)
       server-only: 0.0.1
@@ -15443,7 +15445,7 @@ snapshots:
 
   lodash.throttle@4.1.1: {}
 
-  lodash@4.17.23: {}
+  lodash@4.18.0: {}
 
   log-symbols@2.2.0:
     dependencies:
