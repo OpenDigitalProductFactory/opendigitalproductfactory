@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@types/react': ^19
+  '@tootallnate/once': 3.0.1
   '@xmldom/xmldom': 0.8.13
   dompurify: 3.4.0
   node-forge: 1.4.0
@@ -3059,8 +3060,8 @@ packages:
       jest:
         optional: true
 
-  '@tootallnate/once@2.0.0':
-    resolution: {integrity: sha512-XCuKFP5PS55gnMVu3dty8KPatLqUoy/ZYzDzAGCQ8JNFCkLXzmI7vNHCR+XpbZaMWQK/vQubr7PkYq8g470J/A==}
+  '@tootallnate/once@3.0.1':
+    resolution: {integrity: sha512-VyMVKRrpHTT8PnotUeV8L/mDaMwD5DaAKCFLP73zAqAtvF0FCqky+Ki7BYbFCYQmqFyTe9316Ed5zS70QUR9eg==}
     engines: {node: '>= 10'}
 
   '@tootallnate/quickjs-emscripten@0.23.0':
@@ -11984,7 +11985,7 @@ snapshots:
     optionalDependencies:
       jest: 30.3.0(@types/node@24.12.2)
 
-  '@tootallnate/once@2.0.0': {}
+  '@tootallnate/once@3.0.1': {}
 
   '@tootallnate/quickjs-emscripten@0.23.0': {}
 
@@ -14425,7 +14426,7 @@ snapshots:
 
   http-proxy-agent@5.0.0:
     dependencies:
-      '@tootallnate/once': 2.0.0
+      '@tootallnate/once': 3.0.1
       agent-base: 6.0.2
       debug: 4.4.3
     transitivePeerDependencies:
