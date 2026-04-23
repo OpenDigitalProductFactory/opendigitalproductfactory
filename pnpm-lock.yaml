@@ -7,6 +7,7 @@ settings:
 overrides:
   '@types/react': ^19
   '@hono/node-server': 1.19.13
+  lodash-es: 4.18.0
   '@tootallnate/once': 3.0.1
   '@xmldom/xmldom': 0.8.13
   dompurify: 3.4.0
@@ -6124,8 +6125,9 @@ packages:
     resolution: {integrity: sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==}
     engines: {node: '>=10'}
 
-  lodash-es@4.17.23:
-    resolution: {integrity: sha512-kVI48u3PZr38HdYz98UmfPnXl2DXrpdctLrFLCd3kOx1xUkOmpFPx7gCWWM5MPkL/fD8zb+Ph0QzjGFs4+hHWg==}
+  lodash-es@4.18.0:
+    resolution: {integrity: sha512-koAgswPPA+UTaPN64Etp+PGP+WT6oqOS2NMi5yDkMaiGw9qY4VxQbQF0mtKMyr4BlTznWyzePV5UpECTJQmSUA==}
+    deprecated: Bad release. Please use lodash-es@4.17.23 instead.
 
   lodash.camelcase@4.3.0:
     resolution: {integrity: sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA==}
@@ -9273,12 +9275,12 @@ snapshots:
     dependencies:
       '@chevrotain/gast': 11.1.2
       '@chevrotain/types': 11.1.2
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   '@chevrotain/gast@11.1.2':
     dependencies:
       '@chevrotain/types': 11.1.2
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   '@chevrotain/regexp-to-ast@11.1.2': {}
 
@@ -13031,7 +13033,7 @@ snapshots:
   chevrotain-allstar@0.3.1(chevrotain@11.1.2):
     dependencies:
       chevrotain: 11.1.2
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   chevrotain@11.1.2:
     dependencies:
@@ -13040,7 +13042,7 @@ snapshots:
       '@chevrotain/regexp-to-ast': 11.1.2
       '@chevrotain/types': 11.1.2
       '@chevrotain/utils': 11.1.2
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   chokidar@3.6.0:
     dependencies:
@@ -13471,7 +13473,7 @@ snapshots:
   dagre-d3-es@7.0.14:
     dependencies:
       d3: 7.9.0
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   dagre@0.8.5:
     dependencies:
@@ -14147,7 +14149,7 @@ snapshots:
       float-tooltip: 1.7.5
       index-array-by: 1.4.2
       kapsule: 1.16.3
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   foreground-child@3.3.1:
     dependencies:
@@ -15285,7 +15287,7 @@ snapshots:
 
   kapsule@1.16.3:
     dependencies:
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
 
   katex@0.16.44:
     dependencies:
@@ -15435,7 +15437,7 @@ snapshots:
     dependencies:
       p-locate: 5.0.0
 
-  lodash-es@4.17.23: {}
+  lodash-es@4.18.0: {}
 
   lodash.camelcase@4.3.0: {}
 
@@ -15622,7 +15624,7 @@ snapshots:
       dompurify: 3.4.0
       katex: 0.16.44
       khroma: 2.1.0
-      lodash-es: 4.17.23
+      lodash-es: 4.18.0
       marked: 16.4.2
       roughjs: 4.6.6
       stylis: 4.3.6
