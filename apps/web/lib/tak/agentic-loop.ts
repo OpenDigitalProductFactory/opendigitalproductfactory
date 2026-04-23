@@ -853,7 +853,7 @@ export async function runAgenticLoop(params: {
         let preAuthorized = false;
         if (toolDef.autoApproveWhen) {
           try {
-            preAuthorized = await toolDef.autoApproveWhen({ userId });
+            preAuthorized = await toolDef.autoApproveWhen({ userId, params: tc.arguments });
           } catch (err) {
             console.warn(`[agentic-tool] autoApproveWhen threw for ${tc.name}:`, err);
             preAuthorized = false;

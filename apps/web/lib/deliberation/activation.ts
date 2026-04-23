@@ -190,7 +190,13 @@ export async function resolve(
   // pattern is an input error and we return null.
   if (explicit) {
     const explicitPattern = await getPattern(explicit);
-    if (!explicitPattern) return null;
+    if (!explicitPattern) {
+      console.warn(
+        `[deliberation] explicit pattern slug "${explicit}" not found in registry; returning null. ` +
+          `Typo in caller? Known patterns live under deliberation/ and DeliberationPattern table.`,
+      );
+      return null;
+    }
   }
 
   // Determine the chosen slug by applying the strengthen-but-not-weaken rule.

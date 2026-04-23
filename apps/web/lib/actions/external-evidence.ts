@@ -23,3 +23,10 @@ export async function recordExternalEvidence(input: {
     },
   });
 }
+
+// Deliberation's retrieval-mirror helper lives at `@/lib/deliberation/evidence`
+// as `mirrorDeliberationRetrievalEvent` — import it from there directly. It
+// cannot be re-exported from this module because `"use server"` files may only
+// export async functions, and the deliberation module also exports sync
+// helpers + types; a wildcard re-export causes Next.js RSC to treat this file
+// as having no exports at all.

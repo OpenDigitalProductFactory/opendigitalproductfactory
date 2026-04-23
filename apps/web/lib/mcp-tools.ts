@@ -10,6 +10,19 @@ import {
   searchPublicWeb,
 } from "@/lib/public-web-tools";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
+import {
+  DELIBERATION_ARTIFACT_TYPES,
+  DELIBERATION_STRATEGY_PROFILES,
+  DELIBERATION_TRIGGER_SOURCES,
+} from "@/lib/deliberation/types";
+import {
+  getIntegrationBenchmarkMetadata,
+  matchesIntegrationBenchmarkFilters,
+  type IntegrationBenchmarkDomain,
+  type IntegrationDeploymentMode,
+  type IntegrationProfileTag,
+  type IntegrationTreatment,
+} from "@/lib/integrate/integration-benchmarking";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -51,9 +64,14 @@ export type ToolDefinition = {
    * `contributionMode=contribute_all` — with DCO already accepted, the user
    * has given standing authorization for every shipped build to contribute
    * upstream, so the per-build proposal card is redundant ceremony that
-   * silently stalls autonomous runs.
+   * silently stalls autonomous runs. The predicate also receives the pending
+   * params (when available) so flows like `start_deliberation` can inspect
+   * `triggerSource` to pre-authorize stage-default / risk-escalated runs.
    */
-  autoApproveWhen?: (ctx: { userId: string }) => Promise<boolean>;
+  autoApproveWhen?: (ctx: {
+    userId: string;
+    params?: Record<string, unknown>;
+  }) => Promise<boolean>;
 };
 
 /** Derive tool annotations from existing ToolDefinition fields.
@@ -1716,15 +1734,46 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     description: "Search the MCP integrations catalog for services relevant to a feature or business need. Use when the user asks what they can connect, or when researching integrations for a new feature.",
     inputSchema: {
       type: "object",
-      properties: {
-        query: { type: "string", description: "What you are looking for — e.g. 'payments', 'email marketing', 'booking calendar', 'source control'" },
-        category: { type: "string", description: "Optional category filter — e.g. 'finance', 'cms', 'cloud', 'crm'" },
-        archetypeId: { type: "string", description: "Optional archetype filter — returns integrations tagged as relevant to this archetype" },
-        pricingModel: { type: "string", enum: ["free", "paid", "freemium", "open-source"], description: "Optional pricing filter" },
-        limit: { type: "number", description: "Max results to return. Default 10." },
+        properties: {
+          query: { type: "string", description: "What you are looking for — e.g. 'payments', 'email marketing', 'booking calendar', 'source control'" },
+          category: { type: "string", description: "Optional category filter — e.g. 'finance', 'cms', 'cloud', 'crm'" },
+          archetypeId: { type: "string", description: "Optional archetype filter — returns integrations tagged as relevant to this archetype" },
+          pricingModel: { type: "string", enum: ["free", "paid", "freemium", "open-source"], description: "Optional pricing filter" },
+          benchmarkDomain: {
+            type: "string",
+            enum: [
+              "hr_payroll",
+              "identity_directory",
+              "ticketing_service_desk",
+              "rmm_endpoint_device_management",
+              "documentation_knowledge_cmdb_assets",
+              "crm_sales",
+              "accounting_billing_payments",
+              "communications_email_chat",
+              "project_work_management",
+              "cloud_m365_google_security",
+            ],
+            description: "Optional benchmark domain filter aligned to the integration-harness taxonomy",
+          },
+          businessProfile: {
+            type: "string",
+            enum: ["msp"],
+            description: "Optional reusable business-profile overlay filter, starting with MSP",
+          },
+          deploymentMode: {
+            type: "string",
+            enum: ["cloud", "hybrid", "on_prem"],
+            description: "Optional deployment posture filter for private/on-prem aware planning",
+          },
+          recommendedTreatment: {
+            type: "string",
+            enum: ["native_first_class", "generic_connector", "bundle_default"],
+            description: "Optional DPF product-treatment filter from the benchmark model",
+          },
+          limit: { type: "number", description: "Max results to return. Default 10." },
+        },
+        required: ["query"],
       },
-      required: ["query"],
-    },
     requiredCapability: null,
   },
   {
@@ -2040,6 +2089,114 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["scopeType", "scopeRef"],
     },
     requiredCapability: "view_ea_modeler",
+    sideEffect: false,
+  },
+  // ─── Deliberation Pattern Framework Tools (spec §6.8) ──────────────────────
+  {
+    name: "start_deliberation",
+    description:
+      "Start a multi-branch deliberation run (peer review or debate) over an artifact. The activation resolver decides which pattern fires based on stage, risk, and the caller's explicit request. Stage-default and risk-escalated invocations are pre-authorized; explicit invocations require proposal review. Returns the new deliberationRunId synchronously; branches dispatch asynchronously via the Inngest runner.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        patternSlug: {
+          type: "string",
+          description:
+            "Explicit deliberation pattern slug (e.g. 'review', 'debate'). Used as explicitPatternSlug in the activation resolver — may be strengthened by stage/risk policy.",
+        },
+        taskRunId: {
+          type: "string",
+          description: "Optional parent TaskRun (external id). When omitted, the orchestrator bootstraps one.",
+        },
+        artifactType: {
+          type: "string",
+          enum: [...DELIBERATION_ARTIFACT_TYPES],
+          description: "The kind of artifact being deliberated.",
+        },
+        strategyProfile: {
+          type: "string",
+          enum: [...DELIBERATION_STRATEGY_PROFILES],
+          description: "Optional override for the cost/quality trade-off profile. Defaults to the pattern's declared hint.",
+        },
+        maxBranches: {
+          type: "number",
+          description: "Upper bound on branch count. Defaults to the pattern's required role count capped at 4.",
+        },
+        budgetUsd: {
+          type: "number",
+          description: "Upper bound on total USD spend across the run. Null = unbounded.",
+        },
+        stage: {
+          type: "string",
+          enum: ["ideate", "plan", "build", "review", "ship"],
+          description: "Build Studio stage the deliberation runs under. Drives stage-default activation.",
+        },
+        riskLevel: {
+          type: "string",
+          enum: ["low", "medium", "high", "critical"],
+          description: "Risk level of the work. Medium+ escalates activation.",
+        },
+        triggerSource: {
+          type: "string",
+          enum: [...DELIBERATION_TRIGGER_SOURCES],
+          description:
+            "Caller's intent signal for the activation layer. Used by autoApproveWhen to decide whether the call skips proposal review.",
+        },
+        routeContext: {
+          type: "string",
+          description: "Optional route / screen context (e.g. '/build') for telemetry and downstream routing.",
+        },
+      },
+      required: ["patternSlug", "artifactType"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "proposal",
+    sideEffect: true,
+    // Pre-authorize stage-default and risk-escalated invocations per activation
+    // policy (spec §7). Explicit invocations still go through proposal review.
+    // Memory: "Proposal-mode tools stall autonomous runs" — predicates inspect
+    // caller-supplied params so the check runs before the run row exists.
+    autoApproveWhen: async (ctx: unknown) => {
+      const params =
+        (ctx as { params?: Record<string, unknown> } | undefined)?.params ?? {};
+      const raw = params["triggerSource"];
+      return raw === "stage" || raw === "risk";
+    },
+  },
+  {
+    name: "get_deliberation_status",
+    description:
+      "Read-only snapshot of a deliberation run — consensus state, branch counts (total/completed/failed/pending), evidence coverage (source-backed/mixed/needs-more-evidence), and budget/diversity degradation flags.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        deliberationRunId: {
+          type: "string",
+          description: "The DeliberationRun id returned from start_deliberation.",
+        },
+      },
+      required: ["deliberationRunId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "get_deliberation_outcome",
+    description:
+      "Read-only full outcome for a deliberation run — merged recommendation, rationale, confidence, unresolved risks, issue set, and compact claim + evidence-bundle references. Returns null outcome when synthesis has not yet completed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        deliberationRunId: {
+          type: "string",
+          description: "The DeliberationRun id returned from start_deliberation.",
+        },
+      },
+      required: ["deliberationRunId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
     sideEffect: false,
   },
 ];
@@ -6530,14 +6687,14 @@ export async function executeTool(
       return { success: true, message: summary || "No endpoints to test.", data: { results } };
     }
 
-    case "search_integrations": {
-      const query = String(params["query"] ?? "");
-      const results = await prisma.mcpIntegration.findMany({
-        where: {
-          status: "active",
-          ...(typeof params["category"] === "string" ? { category: params["category"] } : {}),
-          ...(typeof params["pricingModel"] === "string" ? { pricingModel: params["pricingModel"] } : {}),
-          ...(typeof params["archetypeId"] === "string" ? { archetypeIds: { has: params["archetypeId"] } } : {}),
+      case "search_integrations": {
+        const query = String(params["query"] ?? "");
+        const rows = await prisma.mcpIntegration.findMany({
+          where: {
+            status: "active",
+            ...(typeof params["category"] === "string" ? { category: params["category"] } : {}),
+            ...(typeof params["pricingModel"] === "string" ? { pricingModel: params["pricingModel"] } : {}),
+            ...(typeof params["archetypeId"] === "string" ? { archetypeIds: { has: params["archetypeId"] } } : {}),
           ...(query.trim() ? {
             OR: [
               { name: { contains: query, mode: "insensitive" } },
@@ -6546,16 +6703,54 @@ export async function executeTool(
             ],
           } : {}),
         },
-        select: {
-          name: true, vendor: true, shortDescription: true, category: true,
-          pricingModel: true, rating: true, ratingCount: true, isVerified: true,
-          documentationUrl: true, logoUrl: true, archetypeIds: true,
-        },
-        orderBy: [{ isVerified: "desc" }, { installCount: "desc" }],
-        take: typeof params["limit"] === "number" ? params["limit"] : 10,
-      });
-      return { success: true, message: `Found ${results.length} integration(s).`, data: { results } };
-    }
+          select: {
+            name: true, vendor: true, shortDescription: true, category: true,
+            pricingModel: true, rating: true, ratingCount: true, isVerified: true,
+            documentationUrl: true, logoUrl: true, archetypeIds: true,
+            slug: true, tags: true, rawMetadata: true,
+          },
+          orderBy: [{ isVerified: "desc" }, { installCount: "desc" }],
+          take: Math.min(
+            Math.max(typeof params["limit"] === "number" ? params["limit"] * 5 : 50, 50),
+            200
+          ),
+        });
+        const results = rows
+          .map((row) => ({
+            ...row,
+            benchmark: getIntegrationBenchmarkMetadata({
+              name: row.name,
+              slug: row.slug,
+              category: row.category,
+              tags: row.tags,
+              vendor: row.vendor,
+              rawMetadata: row.rawMetadata,
+            }),
+          }))
+          .filter((row) =>
+            matchesIntegrationBenchmarkFilters(row.benchmark, {
+              benchmarkDomain:
+                typeof params["benchmarkDomain"] === "string"
+                  ? (params["benchmarkDomain"] as IntegrationBenchmarkDomain)
+                  : undefined,
+              deploymentMode:
+                typeof params["deploymentMode"] === "string"
+                  ? (params["deploymentMode"] as IntegrationDeploymentMode)
+                  : undefined,
+              businessProfile:
+                typeof params["businessProfile"] === "string"
+                  ? (params["businessProfile"] as IntegrationProfileTag)
+                  : undefined,
+              recommendedTreatment:
+                typeof params["recommendedTreatment"] === "string"
+                  ? (params["recommendedTreatment"] as IntegrationTreatment)
+                  : undefined,
+            })
+          )
+          .slice(0, typeof params["limit"] === "number" ? params["limit"] : 10)
+          .map(({ tags: _tags, rawMetadata: _rawMetadata, slug: _slug, ...row }) => row);
+        return { success: true, message: `Found ${results.length} integration(s).`, data: { results } };
+      }
 
     case "prefill_onboarding_wizard": {
       const data = {
@@ -7669,6 +7864,91 @@ export async function executeTool(
         const output = ((execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "")).trim();
         if (output) return { success: true, message: "Command exited with error.", data: { command, output: output.slice(0, 15000) } };
         return { success: false, error: (execErr.message ?? "Command failed").slice(0, 1000), message: `Failed: ${command.slice(0, 80)}` };
+      }
+    }
+
+    case "start_deliberation": {
+      const { startDeliberation } = await import("@/lib/actions/deliberation");
+      try {
+        const result = await startDeliberation({
+          userId,
+          patternSlug: String(params["patternSlug"] ?? ""),
+          taskRunId: typeof params["taskRunId"] === "string" ? params["taskRunId"] : undefined,
+          artifactType: params["artifactType"] as import("@/lib/deliberation/types").DeliberationArtifactType,
+          strategyProfile:
+            typeof params["strategyProfile"] === "string"
+              ? (params["strategyProfile"] as import("@/lib/deliberation/types").DeliberationStrategyProfile)
+              : undefined,
+          maxBranches:
+            typeof params["maxBranches"] === "number" ? params["maxBranches"] : undefined,
+          budgetUsd:
+            typeof params["budgetUsd"] === "number" ? params["budgetUsd"] : undefined,
+          stage:
+            typeof params["stage"] === "string"
+              ? (params["stage"] as "ideate" | "plan" | "build" | "review" | "ship")
+              : undefined,
+          riskLevel:
+            typeof params["riskLevel"] === "string"
+              ? (params["riskLevel"] as "low" | "medium" | "high" | "critical")
+              : undefined,
+          routeContext:
+            typeof params["routeContext"] === "string"
+              ? params["routeContext"]
+              : context?.routeContext,
+          threadId: context?.threadId,
+        });
+        return {
+          success: true,
+          entityId: result.deliberationRunId,
+          message: result.reason,
+          data: {
+            deliberationRunId: result.deliberationRunId,
+            triggerSource: result.triggerSource,
+            reason: result.reason,
+          },
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg, message: `start_deliberation failed: ${msg}` };
+      }
+    }
+
+    case "get_deliberation_status": {
+      const { getDeliberationStatus } = await import("@/lib/actions/deliberation");
+      try {
+        const result = await getDeliberationStatus({
+          deliberationRunId: String(params["deliberationRunId"] ?? ""),
+          userId,
+        });
+        return {
+          success: true,
+          entityId: result.deliberationRunId,
+          message: `Deliberation ${result.deliberationRunId} — ${result.consensusState}`,
+          data: result as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg, message: `get_deliberation_status failed: ${msg}` };
+      }
+    }
+
+    case "get_deliberation_outcome": {
+      const { getDeliberationOutcome } = await import("@/lib/actions/deliberation");
+      try {
+        const result = await getDeliberationOutcome({
+          deliberationRunId: String(params["deliberationRunId"] ?? ""),
+          userId,
+        });
+        return {
+          success: true,
+          message: result.outcome
+            ? `Outcome ready — ${result.claims.length} claim(s), ${result.evidenceBundles.length} bundle(s).`
+            : "Outcome not yet synthesized.",
+          data: result as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg, message: `get_deliberation_outcome failed: ${msg}` };
       }
     }
 
