@@ -43,7 +43,12 @@ describe("getBuildPhasePrompt", () => {
     const prompt = await getBuildPhasePrompt("build");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("run_sandbox_tests");
-    expect(prompt).toContain("Do not pause for routine go-ahead requests during planned build work");
+    expect(prompt).toContain(
+      "You are building a feature following the approved implementation plan.",
+    );
+    expect(prompt).toContain(
+      "Do not pause for routine go-ahead requests during planned build work",
+    );
     expect(prompt).toContain("Never reward-hack");
   });
   it("returns review prompt for review phase", async () => {

@@ -5,7 +5,7 @@ import { config as loadEnv } from "dotenv";
 
 const rootDir = resolve(__dirname, "../..");
 const webDir = resolve(__dirname);
-const webNodeModulesDir = resolve(webDir, "node_modules");
+const rootNodeModulesDir = resolve(rootDir, "node_modules");
 
 loadEnv({ path: resolve(rootDir, ".env") });
 loadEnv({ path: resolve(webDir, ".env.local"), override: true });
@@ -46,11 +46,11 @@ export default defineConfig({
       },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },
       { find: "next/server", replacement: resolve(rootDir, "node_modules/next/server.js") },
-      { find: "react/jsx-dev-runtime", replacement: resolve(webNodeModulesDir, "react/jsx-dev-runtime.js") },
-      { find: "react/jsx-runtime", replacement: resolve(webNodeModulesDir, "react/jsx-runtime.js") },
-      { find: "react-dom/server", replacement: resolve(rootDir, "node_modules/react-dom/server.node.js") },
-      { find: "react-dom", replacement: resolve(rootDir, "node_modules/react-dom/index.js") },
-      { find: "react", replacement: resolve(webNodeModulesDir, "react/index.js") },
+      { find: "react/jsx-dev-runtime", replacement: resolve(rootNodeModulesDir, "react/jsx-dev-runtime.js") },
+      { find: "react/jsx-runtime", replacement: resolve(rootNodeModulesDir, "react/jsx-runtime.js") },
+      { find: "react-dom/server", replacement: resolve(rootNodeModulesDir, "react-dom/server.node.js") },
+      { find: "react-dom", replacement: resolve(rootNodeModulesDir, "react-dom/index.js") },
+      { find: "react", replacement: resolve(rootNodeModulesDir, "react/index.js") },
     ],
   },
 });

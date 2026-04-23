@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { determineSocialAuthFlow, createTempToken, verifyTempToken } from "./social-auth.js";
 
 vi.mock("@dpf/db", () => ({
@@ -14,8 +14,13 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 
+const originalAuthSecret = process.env.AUTH_SECRET;
+
 describe("determineSocialAuthFlow", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.AUTH_SECRET = "test-auth-secret";
+  });
 
   it("returns 'sign-in' when SocialIdentity exists", async () => {
     (prisma.socialIdentity.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -88,6 +93,14 @@ describe("determineSocialAuthFlow", () => {
     });
     expect(result.flow).toBe("blocked");
   });
+});
+
+afterAll(() => {
+  if (originalAuthSecret === undefined) {
+    delete process.env.AUTH_SECRET;
+    return;
+  }
+  process.env.AUTH_SECRET = originalAuthSecret;
 });
 
 describe("temp tokens", () => {
