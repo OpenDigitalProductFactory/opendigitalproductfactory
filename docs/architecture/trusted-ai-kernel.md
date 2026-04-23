@@ -141,6 +141,31 @@ A conforming implementation `MUST` apply runtime control in layers. At minimum, 
 
 The runtime `MUST NOT` allow a lower layer to widen permissions restricted by a higher layer.
 
+### 7.2 Effective Permission Rule
+
+For any `(principal, agent, tool)` combination, the runtime `MUST` compute effective permission as the intersection of:
+
+- what the principal is allowed to do
+- what the agent is allowed to do
+- what the route, workflow, or context is allowed to expose
+
+The runtime `MUST NOT` treat the model's request as sufficient evidence of authorization.
+
+### 7.3 Domain and Route Scoping
+
+The runtime `SHOULD` expose only the domain-relevant subset of tools and context for a given route, task, or workflow stage.
+
+This is not only a usability optimization. It is a control. Smaller, better-bounded tool surfaces reduce:
+
+- mis-selection of tools
+- hallucinated capability claims
+- prompt injection blast radius
+- token waste
+
+![TAK authority layers](tak-diagrams/png/02-authority-layers.png)
+
+_Figure 1. Layered authority mediation is a required kernel behavior, not only a UI convenience._
+
 ### 7.4 Approved Operating Profiles
 
 A conforming runtime `MUST` treat an agent's approved operating profile as a governed runtime artifact.
@@ -170,7 +195,19 @@ The stronger claim is:
 
 `TAK` does not define the external identity namespace itself. That belongs to companion identity work such as `GAID`. `TAK` does, however, define the runtime conditions under which such identity claims can be trusted in operation.
 
-### 7.6 Material Change and Validation Continuity
+### 7.6 Core Runtime Semantics Versus Protocol Carriers
+
+`TAK` implementations `SHOULD` follow a stable-core and profile pattern similar to mature identity and directory standards.
+
+In that pattern:
+
+- the **core `TAK` model** defines approved operating profile semantics, runtime enforcement rules, validation continuity rules, and attestation expectations
+- **runtime or deployment extensions** define additional environment-specific control fields without changing those core semantics
+- **protocol carriers or profiles** define how `TAK` state is exposed through directories, APIs, event systems, or attestation envelopes
+
+`TAK` therefore `MUST NOT` be treated as a replacement for `LDAP`, `SCIM`, HTTP, or message protocols. It defines what those carriers need to say about trusted runtime state, not the transport itself.
+
+### 7.7 Material Change and Validation Continuity
 
 The runtime `MUST` treat material change as a trust-relevant event.
 
@@ -191,7 +228,7 @@ Therefore, the runtime `SHOULD` distinguish:
 
 and `MUST NOT` silently assume they are equivalent.
 
-### 7.7 Profile Fingerprints and Attestation
+### 7.8 Profile Fingerprints and Attestation
 
 For governed agents, the runtime `SHOULD` support:
 
@@ -203,30 +240,22 @@ This allows relying parties and auditors to distinguish between:
 - the same enduring agent subject
 - the same validated operational subject
 
-### 7.2 Effective Permission Rule
+### 7.9 Attestation and Projection Profiles
 
-For any `(principal, agent, tool)` combination, the runtime `MUST` compute effective permission as the intersection of:
+When `TAK` state is projected into external systems, the projection `SHOULD` preserve the distinction between:
 
-- what the principal is allowed to do
-- what the agent is allowed to do
-- what the route, workflow, or context is allowed to expose
+- enduring subject identity
+- current approved operating profile
+- current validation status
+- stronger attestation material that may not be appropriate to publish broadly
 
-The runtime `MUST NOT` treat the model’s request as sufficient evidence of authorization.
+For example:
 
-### 7.3 Domain and Route Scoping
+- `LDAP` projections `MAY` publish profile fingerprints, validation state, and verifier references needed for coarse trust decisions
+- `SCIM` projections `MAY` carry selected operating-profile and validation metadata for lifecycle automation
+- direct API or attestation carriers `SHOULD` carry the stronger signed or protected material needed to prove runtime state across trust boundaries
 
-The runtime `SHOULD` expose only the domain-relevant subset of tools and context for a given route, task, or workflow stage.
-
-This is not only a usability optimization. It is a control. Smaller, better-bounded tool surfaces reduce:
-
-- mis-selection of tools
-- hallucinated capability claims
-- prompt injection blast radius
-- token waste
-
-![TAK authority layers](tak-diagrams/png/02-authority-layers.png)
-
-_Figure 1. Layered authority mediation is a required kernel behavior, not only a UI convenience._
+An implementation `SHOULD` document those profile mappings explicitly so external systems know which parts of `TAK` they can rely on and which parts remain internal kernel evidence.
 
 ## 8. Tool Execution and Action Gating
 

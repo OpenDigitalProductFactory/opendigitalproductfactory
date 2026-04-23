@@ -603,7 +603,33 @@ _Figure 4. `GAID` receipts preserve the chain from principal to agent to delegat
 
 An implementation `SHOULD` declare how `GAID` claims are surfaced across the protocols it uses.
 
-### 11.2 MCP Profile
+### 11.2 Core, Extensions, and Profile Pattern
+
+`GAID` implementations `SHOULD` follow a stable-core and protocol-profile pattern rather than redefining each transport or directory protocol around AI agents.
+
+In that pattern:
+
+- the **core `GAID` model** defines the enduring subject, issuer lineage, `AIDoc`, badge semantics, receipt semantics, and continuity rules
+- **extension vocabularies** define additional sector, enterprise, or protocol-specific fields without altering core subject semantics
+- **protocol profiles** define how core and extension claims are projected into a particular carrier such as `LDAP`, `SCIM`, `MCP`, `A2A`, or HTTP APIs
+
+An implementation `MUST NOT` create protocol-specific subject identifiers that fragment the canonical `GAID` identity merely because the carrier format differs.
+
+### 11.3 Extension Registry Model
+
+A conforming ecosystem `SHOULD` maintain a registry or equivalent catalog for extension vocabularies and protocol profiles.
+
+That registry `SHOULD` identify at least:
+
+- the extension or profile name
+- the fields or claims it defines
+- whether those fields are normative, optional, or implementation-specific
+- what underlying `GAID` core concepts each field maps to
+- any privacy or disclosure constraints on publication
+
+This allows enterprise and public ecosystems to add agent-specific semantics without destabilizing the core identity model.
+
+### 11.4 MCP Profile
 
 For `MCP` environments:
 
@@ -611,30 +637,7 @@ For `MCP` environments:
 - declared tools in the `AIDoc` `SHOULD` align with the actual exposed tool surface
 - remote tool invocation receipts `SHOULD` preserve acting agent identity and trace context
 
-### 11.5 LDAP Profile
-
-`GAID` does not replace `LDAP`, but a conforming implementation `SHOULD` define how agent identity is projected into enterprise directory systems.
-
-For `LDAP` projections:
-
-- the enduring `GAID` `SHOULD` be published as a stable agent identity attribute
-- agent entries `SHOULD` remain distinguishable from human and service principals
-- profile fingerprint and validation state `SHOULD` be publishable to authorized relying parties
-- group membership `MAY` be used as the primary coarse authority surface for downstream compatibility
-
-An implementation `MUST NOT` rely only on directory placement or display labels to distinguish agent identity type.
-
-### 11.6 SCIM Profile
-
-`GAID` likewise does not replace `SCIM`, but a conforming implementation `SHOULD` define how the enduring agent subject and its selected metadata are projected through lifecycle provisioning interfaces.
-
-For `SCIM` projections:
-
-- the canonical `GAID` `SHOULD` remain the stable subject reference
-- operating-state references, validation state, and selected badge data `MAY` be mapped through appropriate profile extensions
-- lifecycle operations such as activation, suspension, and deprovisioning `SHOULD` preserve `GAID` continuity rather than fragmenting subject identity
-
-### 11.3 A2A Profile
+### 11.5 A2A Profile
 
 For `A2A` environments:
 
@@ -643,7 +646,7 @@ For `A2A` environments:
 - task and artifact events `SHOULD` preserve chain-of-custody identifiers
 - public agents `SHOULD` bind `Agent Card` metadata to issuer-controlled verification material
 
-### 11.4 HTTP and API Profile
+### 11.6 HTTP and API Profile
 
 For direct HTTP APIs:
 
@@ -651,7 +654,34 @@ For direct HTTP APIs:
 - signatures `SHOULD` bind the identity claim to the request
 - trace context `SHOULD` follow `W3C Trace Context`
 
-### 11.5 Async and Queue Profile
+### 11.7 LDAP Profile
+
+`GAID` does not replace `LDAP`, but a conforming implementation `SHOULD` define how agent identity is projected into enterprise directory systems.
+
+For `LDAP` projections:
+
+- the enduring `GAID` `SHOULD` be published as a stable agent identity attribute
+- standard structural directory classes `SHOULD` be preserved for broad client compatibility
+- agent-specific semantics `SHOULD` be added through auxiliary object classes or clearly namespaced attributes rather than replacing standard directory structure
+- agent entries `SHOULD` remain distinguishable from human and service principals by explicit type attributes and not only by directory placement
+- profile fingerprint and validation state `SHOULD` be publishable to authorized relying parties
+- issuer, exposure state, and verifier references `MAY` be projected where downstream trust decisions require them
+- group membership `MAY` be used as the primary coarse authority surface for downstream compatibility
+
+An implementation `MUST NOT` rely only on directory placement or display labels to distinguish agent identity type.
+
+### 11.8 SCIM Profile
+
+`GAID` likewise does not replace `SCIM`, but a conforming implementation `SHOULD` define how the enduring agent subject and its selected metadata are projected through lifecycle provisioning interfaces.
+
+For `SCIM` projections:
+
+- the canonical `GAID` `SHOULD` remain the stable subject reference
+- mutable operating-state references, validation state, and selected badge data `MAY` be mapped through appropriate profile extensions
+- lifecycle updates `SHOULD` revise the operating-state projection without minting a new enduring subject identifier
+- lifecycle operations such as activation, suspension, and deprovisioning `SHOULD` preserve `GAID` continuity rather than fragmenting subject identity
+
+### 11.9 Async and Queue Profile
 
 For queue-based or event-driven systems:
 
@@ -659,7 +689,7 @@ For queue-based or event-driven systems:
 - the receipt relationship `MUST` survive retries and delayed processing
 - replay or duplicate-delivery handling `SHOULD` be explicit
 
-### 11.6 UI and Human Interaction Profile
+### 11.10 UI and Human Interaction Profile
 
 Where agent interactions are surfaced to humans through approvals, task cards, or dynamic interfaces:
 
