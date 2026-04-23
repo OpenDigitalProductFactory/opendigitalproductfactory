@@ -25,6 +25,7 @@
     "overrides": {
       "@types/react": "^19",
       "@hono/node-server": "1.19.13",
+      "@expo/cli@0.24.24>picomatch": "3.0.2",
       "@tootallnate/once": "3.0.1",
       "@xmldom/xmldom": "0.8.13",
       "dompurify": "3.4.0",
