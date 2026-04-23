@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveCustomerConfigurationItemDefaults,
   deriveRevenueModelFromActivationProfile,
   isManagedServiceProviderProfile,
   readActivationProfile,
@@ -14,6 +15,18 @@ describe("readActivationProfile", () => {
       customerGraph: "separate-customer-projection",
       estateSeparation: "strict",
       seededServiceCategories: ["managed-support"],
+      seededConfigurationItemTypes: [
+        {
+          key: "endpoint-security-license",
+          label: "Endpoint Security License",
+          technologySourceType: "commercial",
+          defaultReviewCadenceDays: 30,
+          supportsLicensing: true,
+          defaultChargeModel: "pass_through",
+        },
+      ],
+      seededBillingUnitTypes: [{ key: "device", label: "Device" }],
+      seededChargeModels: [{ key: "pass_through", label: "Pass-through" }],
     });
 
     expect(profile).toMatchObject({
@@ -28,6 +41,36 @@ describe("readActivationProfile", () => {
     expect(readActivationProfile("managed-service-provider")).toBeNull();
     expect(readActivationProfile({ profileType: "managed-service-provider" })).toBeNull();
     expect(readActivationProfile({ modules: [] })).toBeNull();
+  });
+});
+
+describe("deriveCustomerConfigurationItemDefaults", () => {
+  it("returns seeded MSP operational defaults for managed items", () => {
+    const profile = readActivationProfile({
+      profileType: "managed-service-provider",
+      modules: ["customer-estate", "service-agreements", "service-operations"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "separate-customer-projection",
+      estateSeparation: "strict",
+      seededConfigurationItemTypes: [
+        {
+          key: "endpoint-security-license",
+          label: "Endpoint Security License",
+          technologySourceType: "commercial",
+          defaultReviewCadenceDays: 30,
+          supportsLicensing: true,
+          defaultChargeModel: "pass_through",
+        },
+      ],
+      seededBillingUnitTypes: [{ key: "device", label: "Device" }],
+      seededChargeModels: [{ key: "pass_through", label: "Pass-through" }],
+    });
+
+    const defaults = deriveCustomerConfigurationItemDefaults(profile);
+
+    expect(defaults.itemTypes[0]?.key).toBe("endpoint-security-license");
+    expect(defaults.billingUnitTypes[0]?.key).toBe("device");
+    expect(defaults.chargeModels[0]?.key).toBe("pass_through");
   });
 });
 

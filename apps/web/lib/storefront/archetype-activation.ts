@@ -21,6 +21,10 @@ function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
 export type ArchetypeActivationProfile = ActivationProfile;
 
 export function readActivationProfile(raw: unknown): ArchetypeActivationProfile | null {
@@ -32,6 +36,9 @@ export function readActivationProfile(raw: unknown): ArchetypeActivationProfile 
   const customerGraph = raw.customerGraph;
   const estateSeparation = raw.estateSeparation;
   const seededServiceCategories = raw.seededServiceCategories;
+  const seededConfigurationItemTypes = raw.seededConfigurationItemTypes;
+  const seededBillingUnitTypes = raw.seededBillingUnitTypes;
+  const seededChargeModels = raw.seededChargeModels;
 
   if (typeof profileType !== "string" || !PROFILE_TYPES.has(profileType as ActivationProfile["profileType"])) {
     return null;
@@ -53,9 +60,43 @@ export function readActivationProfile(raw: unknown): ArchetypeActivationProfile 
     return null;
   }
 
+  if (seededServiceCategories !== undefined && !isStringArray(seededServiceCategories)) {
+    return null;
+  }
+
   if (
-    seededServiceCategories !== undefined &&
-    (!Array.isArray(seededServiceCategories) || seededServiceCategories.some((category) => typeof category !== "string"))
+    seededConfigurationItemTypes !== undefined &&
+    (!Array.isArray(seededConfigurationItemTypes) ||
+      seededConfigurationItemTypes.some(
+        (item) =>
+          !isRecord(item) ||
+          typeof item.key !== "string" ||
+          typeof item.label !== "string" ||
+          !["commercial", "open_source", "hybrid"].includes(String(item.technologySourceType)) ||
+          (item.defaultReviewCadenceDays !== undefined && typeof item.defaultReviewCadenceDays !== "number") ||
+          (item.supportsLicensing !== undefined && typeof item.supportsLicensing !== "boolean") ||
+          (item.defaultChargeModel !== undefined && typeof item.defaultChargeModel !== "string"),
+      ))
+  ) {
+    return null;
+  }
+
+  if (
+    seededBillingUnitTypes !== undefined &&
+    (!Array.isArray(seededBillingUnitTypes) ||
+      seededBillingUnitTypes.some(
+        (item) => !isRecord(item) || typeof item.key !== "string" || typeof item.label !== "string",
+      ))
+  ) {
+    return null;
+  }
+
+  if (
+    seededChargeModels !== undefined &&
+    (!Array.isArray(seededChargeModels) ||
+      seededChargeModels.some(
+        (item) => !isRecord(item) || typeof item.key !== "string" || typeof item.label !== "string",
+      ))
   ) {
     return null;
   }
@@ -70,6 +111,12 @@ export function readActivationProfile(raw: unknown): ArchetypeActivationProfile 
     estateSeparation as ActivationProfile["estateSeparation"];
   const normalizedSeededServiceCategories =
     seededServiceCategories as ActivationProfile["seededServiceCategories"];
+  const normalizedSeededConfigurationItemTypes =
+    seededConfigurationItemTypes as ActivationProfile["seededConfigurationItemTypes"];
+  const normalizedSeededBillingUnitTypes =
+    seededBillingUnitTypes as ActivationProfile["seededBillingUnitTypes"];
+  const normalizedSeededChargeModels =
+    seededChargeModels as ActivationProfile["seededChargeModels"];
 
   return {
     profileType: normalizedProfileType,
@@ -79,6 +126,15 @@ export function readActivationProfile(raw: unknown): ArchetypeActivationProfile 
     estateSeparation: normalizedEstateSeparation,
     ...(normalizedSeededServiceCategories
       ? { seededServiceCategories: normalizedSeededServiceCategories }
+      : {}),
+    ...(normalizedSeededConfigurationItemTypes
+      ? { seededConfigurationItemTypes: normalizedSeededConfigurationItemTypes }
+      : {}),
+    ...(normalizedSeededBillingUnitTypes
+      ? { seededBillingUnitTypes: normalizedSeededBillingUnitTypes }
+      : {}),
+    ...(normalizedSeededChargeModels
+      ? { seededChargeModels: normalizedSeededChargeModels }
       : {}),
   };
 }
@@ -105,4 +161,14 @@ export function deriveRevenueModelFromActivationProfile(
   };
 
   return ctaRevenueModels[ctaType] ?? null;
+}
+
+export function deriveCustomerConfigurationItemDefaults(
+  profile: ArchetypeActivationProfile | null | undefined,
+) {
+  return {
+    itemTypes: profile?.seededConfigurationItemTypes ?? [],
+    billingUnitTypes: profile?.seededBillingUnitTypes ?? [],
+    chargeModels: profile?.seededChargeModels ?? [],
+  };
 }

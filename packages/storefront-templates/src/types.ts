@@ -73,6 +73,27 @@ export type CustomerGraphMode = "none" | "separate-customer-projection";
 
 export type EstateSeparationMode = "shared" | "strict";
 
+export type TechnologySourceType = "commercial" | "open_source" | "hybrid";
+
+export interface SeededConfigurationItemType {
+  key: string;
+  label: string;
+  technologySourceType: TechnologySourceType;
+  defaultReviewCadenceDays?: number;
+  supportsLicensing?: boolean;
+  defaultChargeModel?: string;
+}
+
+export interface SeededBillingUnitType {
+  key: string;
+  label: string;
+}
+
+export interface SeededChargeModel {
+  key: string;
+  label: string;
+}
+
 export interface ActivationProfile {
   profileType: ArchetypeProfileType;
   modules: ArchetypeModule[];
@@ -80,6 +101,9 @@ export interface ActivationProfile {
   customerGraph: CustomerGraphMode;
   estateSeparation: EstateSeparationMode;
   seededServiceCategories?: string[];
+  seededConfigurationItemTypes?: SeededConfigurationItemType[];
+  seededBillingUnitTypes?: SeededBillingUnitType[];
+  seededChargeModels?: SeededChargeModel[];
 }
 
 export interface ArchetypeDefinition {

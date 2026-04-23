@@ -5,6 +5,11 @@ import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
 import { generateInvoiceFromSalesOrder } from "@/lib/actions/finance";
+import {
+  resolveValidatedSiteAddress,
+  searchValidatedSiteAddresses,
+} from "@/lib/shared/site-address-validation";
+import { evaluateTechnologyLifecycle } from "@/lib/customer-estate/lifecycle-evaluation";
 
 // ─── Activity Logging (used by all other actions) ───────────────────────────
 
@@ -86,9 +91,14 @@ export async function createCustomerAccount(input: {
   return account;
 }
 
+export async function searchCustomerSiteAddresses(query: string) {
+  return searchValidatedSiteAddresses(query);
+}
+
 export async function createCustomerSite(input: {
   accountId: string;
   name: string;
+  validatedAddressRef?: string;
   siteType?: string;
   status?: string;
   timezone?: string;
@@ -101,20 +111,111 @@ export async function createCustomerSite(input: {
   if (!name) {
     throw new Error("Site name is required");
   }
+  if (!input.validatedAddressRef?.trim()) {
+    throw new Error("A validated address selection is required");
+  }
 
-  const site = await prisma.customerSite.create({
-    data: {
-      siteId: `SITE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-      accountId: input.accountId,
-      name,
-      siteType: input.siteType?.trim() || "office",
-      status: input.status?.trim() || "active",
-      timezone: input.timezone?.trim() || null,
-      accessInstructions: input.accessInstructions?.trim() || null,
-      hoursNotes: input.hoursNotes?.trim() || null,
-      serviceNotes: input.serviceNotes?.trim() || null,
-      primaryAddressId: input.primaryAddressId || null,
-    },
+  const validatedAddress = await resolveValidatedSiteAddress(
+    input.validatedAddressRef,
+  );
+
+  const site = await prisma.$transaction(async (tx) => {
+    const country = await tx.country.findFirst({
+      where: {
+        status: "active",
+        OR: [
+          { iso2: validatedAddress.countryCode },
+          { name: validatedAddress.country },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!country) {
+      throw new Error(
+        `Country reference data is missing for ${validatedAddress.country}.`,
+      );
+    }
+
+    let region = await tx.region.findFirst({
+      where: {
+        countryId: country.id,
+        status: "active",
+        OR: [
+          ...(validatedAddress.regionCode
+            ? [{ code: validatedAddress.regionCode }]
+            : []),
+          { name: validatedAddress.region },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!region) {
+      region = await tx.region.create({
+        data: {
+          countryId: country.id,
+          name: validatedAddress.region,
+          code: validatedAddress.regionCode,
+          status: "active",
+        },
+        select: { id: true },
+      });
+    }
+
+    let city = await tx.city.findFirst({
+      where: {
+        regionId: region.id,
+        status: "active",
+        name: {
+          equals: validatedAddress.city,
+          mode: "insensitive",
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!city) {
+      city = await tx.city.create({
+        data: {
+          regionId: region.id,
+          name: validatedAddress.city,
+          status: "active",
+        },
+        select: { id: true },
+      });
+    }
+
+    const address = await tx.address.create({
+      data: {
+        label: "site",
+        addressLine1: validatedAddress.addressLine1,
+        addressLine2: validatedAddress.addressLine2,
+        cityId: city.id,
+        postalCode: validatedAddress.postalCode,
+        latitude: validatedAddress.latitude,
+        longitude: validatedAddress.longitude,
+        validatedAt: new Date(),
+        validationSource: validatedAddress.validationSource,
+        status: "active",
+      },
+      select: { id: true },
+    });
+
+    return tx.customerSite.create({
+      data: {
+        siteId: `SITE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        accountId: input.accountId,
+        name,
+        siteType: input.siteType?.trim() || "office",
+        status: input.status?.trim() || "active",
+        timezone: input.timezone?.trim() || null,
+        accessInstructions: input.accessInstructions?.trim() || null,
+        hoursNotes: input.hoursNotes?.trim() || null,
+        serviceNotes: input.serviceNotes?.trim() || null,
+        primaryAddressId: input.primaryAddressId || address.id,
+      },
+    });
   });
 
   await logSystemActivity(`Customer site "${site.name}" created`, {
@@ -155,6 +256,112 @@ export async function createCustomerSiteNode(input: {
 
   revalidatePath(`/customer/${input.accountId}`);
   return node;
+}
+
+export async function createCustomerConfigurationItem(input: {
+  accountId: string;
+  siteId?: string;
+  name: string;
+  ciType: string;
+  technologySourceType?: "commercial" | "open_source" | "hybrid";
+  supportModel?: string;
+  manufacturer?: string;
+  normalizedVersion?: string;
+  observedVersion?: string;
+  billingCadence?: string;
+  customerChargeModel?: string;
+  renewalDate?: string;
+  endOfSupportAt?: string;
+  endOfLifeAt?: string;
+  warrantyEndAt?: string;
+  reviewCadenceDays?: number;
+  licenseQuantity?: number;
+  status?: string;
+}) {
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Configuration item name is required");
+  }
+
+  const ciType = input.ciType.trim();
+  if (!ciType) {
+    throw new Error("Configuration item type is required");
+  }
+
+  const lifecycle = evaluateTechnologyLifecycle(
+    {
+      name,
+      ciType,
+      technologySourceType: input.technologySourceType ?? "commercial",
+      supportModel: (input.supportModel as
+        | "vendor_contract"
+        | "subscription"
+        | "community"
+        | "lts"
+        | "partner"
+        | "unknown"
+        | undefined) ?? undefined,
+      normalizedVersion: input.normalizedVersion,
+      observedVersion: input.observedVersion,
+      billingCadence: input.billingCadence,
+      customerChargeModel: input.customerChargeModel,
+      renewalDate: input.renewalDate,
+      endOfSupportAt: input.endOfSupportAt,
+      endOfLifeAt: input.endOfLifeAt,
+      warrantyEndAt: input.warrantyEndAt,
+      licenseQuantity: input.licenseQuantity,
+    },
+    new Date(),
+  );
+
+  const nextLifecycleReviewAt =
+    lifecycle.nextReviewAt ??
+    (input.reviewCadenceDays
+      ? new Date(Date.now() + input.reviewCadenceDays * 24 * 60 * 60 * 1000)
+      : null);
+
+  const configurationItem = await prisma.customerConfigurationItem.create({
+    data: {
+      customerCiId: `CCI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      accountId: input.accountId,
+      siteId: input.siteId || null,
+      name,
+      ciType,
+      status: input.status?.trim() || "active",
+      technologySourceType: input.technologySourceType || "commercial",
+      supportModel: input.supportModel?.trim() || null,
+      manufacturer: input.manufacturer?.trim() || null,
+      normalizedVersion: input.normalizedVersion?.trim() || null,
+      observedVersion: input.observedVersion?.trim() || null,
+      billingCadence: input.billingCadence?.trim() || null,
+      customerChargeModel: input.customerChargeModel?.trim() || null,
+      renewalDate: input.renewalDate ? new Date(input.renewalDate) : null,
+      endOfSupportAt: input.endOfSupportAt ? new Date(input.endOfSupportAt) : null,
+      endOfLifeAt: input.endOfLifeAt ? new Date(input.endOfLifeAt) : null,
+      warrantyEndAt: input.warrantyEndAt ? new Date(input.warrantyEndAt) : null,
+      licenseQuantity: input.licenseQuantity ?? null,
+      lifecycleStatus: lifecycle.lifecycleStatus,
+      supportStatus: lifecycle.supportStatus,
+      recommendedAction: lifecycle.recommendedAction,
+      lifecycleConfidence:
+        lifecycle.attentionLevel === "high" ? 0.9 : lifecycle.attentionLevel === "medium" ? 0.75 : 0.6,
+      lastLifecycleReviewAt: new Date(),
+      nextLifecycleReviewAt,
+      lifecycleEvidence: {
+        summary: lifecycle.summary,
+        seededReviewCadenceDays: input.reviewCadenceDays ?? null,
+      },
+    },
+  });
+
+  await logSystemActivity(`Customer configuration item "${configurationItem.name}" created`, {
+    type: "account_created",
+    accountId: input.accountId,
+  });
+
+  revalidatePath("/customer");
+  revalidatePath(`/customer/${input.accountId}`);
+  return configurationItem;
 }
 
 // ─── Engagement Actions ─────────────────────────────────────────────────────

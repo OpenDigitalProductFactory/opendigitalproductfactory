@@ -45,5 +45,7 @@ describe("archetype catalog", () => {
     expect(msp?.activationProfile?.modules).toContain("service-operations");
     expect(msp?.activationProfile?.customerGraph).toBe("separate-customer-projection");
     expect(msp?.activationProfile?.estateSeparation).toBe("strict");
+    expect(msp?.activationProfile?.seededConfigurationItemTypes?.some((item) => item.key === "endpoint-security-license")).toBe(true);
+    expect(msp?.activationProfile?.seededChargeModels?.some((model) => model.key === "pass_through")).toBe(true);
   });
 });

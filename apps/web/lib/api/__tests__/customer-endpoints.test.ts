@@ -186,6 +186,13 @@ describe("GET /api/v1/customer/accounts/:id", () => {
               nodes: expect.any(Object),
             }),
           }),
+          configurationItems: expect.objectContaining({
+            select: expect.objectContaining({
+              customerCiId: true,
+              lifecycleStatus: true,
+              site: expect.any(Object),
+            }),
+          }),
         }),
       }),
     );

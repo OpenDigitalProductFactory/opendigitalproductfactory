@@ -2,9 +2,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { NewCustomerConfigurationItemButton } from "@/components/customer/NewCustomerConfigurationItemButton";
 import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
+import {
+  deriveCustomerConfigurationItemDefaults,
+  readActivationProfile,
+} from "@/lib/storefront/archetype-activation";
 
 const STATUS_COLOURS: Record<string, string> = {
   prospect: "#fbbf24",
@@ -34,7 +39,7 @@ export default async function AccountDetailPage({
 }) {
   const { id } = await params;
 
-  const [account, activities, opportunities, engagements, estateSummary] = await Promise.all([
+  const [account, activities, opportunities, engagements, estateSummary, storefrontConfig] = await Promise.all([
     prisma.customerAccount.findUnique({
       where: { id },
       include: {
@@ -76,6 +81,22 @@ export default async function AccountDetailPage({
           },
           orderBy: { name: "asc" },
         },
+        configurationItems: {
+          orderBy: [{ updatedAt: "desc" }],
+          take: 8,
+          select: {
+            id: true,
+            customerCiId: true,
+            name: true,
+            ciType: true,
+            technologySourceType: true,
+            lifecycleStatus: true,
+            recommendedAction: true,
+            billingCadence: true,
+            customerChargeModel: true,
+            site: { select: { id: true, name: true } },
+          },
+        },
         parentAccount: { select: { id: true, accountId: true, name: true } },
         childAccounts: { select: { id: true, accountId: true, name: true, status: true } },
       },
@@ -109,11 +130,37 @@ export default async function AccountDetailPage({
       select: { id: true, engagementId: true, title: true, status: true },
     }),
     loadCustomerEstateSummary(id),
+    prisma.storefrontConfig.findFirst({
+      include: {
+        archetype: {
+          select: {
+            activationProfile: true,
+          },
+        },
+      },
+    }),
   ]);
 
   if (!account) notFound();
 
   const statusColour = STATUS_COLOURS[account.status] ?? "#8888a0";
+  const managedItemDefaults = deriveCustomerConfigurationItemDefaults(
+    readActivationProfile(storefrontConfig?.archetype?.activationProfile),
+  );
+  const itemTypeOptions =
+    managedItemDefaults.itemTypes.length > 0
+      ? managedItemDefaults.itemTypes
+      : [
+          {
+            key: "custom",
+            label: "Custom Managed Item",
+            technologySourceType: "commercial" as const,
+          },
+        ];
+  const chargeModelOptions =
+    managedItemDefaults.chargeModels.length > 0
+      ? managedItemDefaults.chargeModels
+      : [{ key: "included", label: "Included" }];
 
   return (
     <div>
@@ -426,6 +473,61 @@ export default async function AccountDetailPage({
       </div>
 
       <div className="mt-6">
+        <div className="mb-6">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
+                Managed Items
+                <span className="ml-2 normal-case font-normal">{account.configurationItems.length}</span>
+              </h2>
+              <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                Archetype-seeded managed item categories, lifecycle review cadence, and billing-readiness options.
+              </p>
+            </div>
+            <NewCustomerConfigurationItemButton
+              accountId={account.id}
+              siteOptions={account.customerSites.map((site) => ({ id: site.id, name: site.name }))}
+              itemTypeOptions={itemTypeOptions}
+              chargeModelOptions={chargeModelOptions}
+            />
+          </div>
+
+          {account.configurationItems.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2">
+              {account.configurationItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-[var(--dpf-text)]">{item.name}</p>
+                    <span className="rounded-full bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
+                      {item.ciType}
+                    </span>
+                    <span className="rounded-full bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
+                      {item.technologySourceType.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[var(--dpf-muted)]">
+                    <span>{item.customerCiId}</span>
+                    {item.site ? <span>Site: {item.site.name}</span> : <span>Site: unassigned</span>}
+                    <span>Lifecycle: {item.lifecycleStatus}</span>
+                    {item.recommendedAction ? <span>Action: {item.recommendedAction}</span> : null}
+                    {item.billingCadence ? <span>Billing: {item.billingCadence}</span> : null}
+                    {item.customerChargeModel ? <span>Charge: {item.customerChargeModel}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+              <p className="text-sm text-[var(--dpf-muted)]">
+                No managed items registered yet. The MSP archetype can seed defaults like security licensing, Linux servers, and M365 tenants here.
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
