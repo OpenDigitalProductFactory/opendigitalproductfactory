@@ -56,10 +56,19 @@ export default async function BuildPage() {
   ]);
 
   const projectBranch = getProjectBranch();
+  const submissionBranchShortId = devConfig.clientId
+    ? devConfig.clientId.replace(/-/g, "").slice(0, 8)
+    : null;
 
   return (
     <section className="min-h-full">
-      <BuildStudio builds={builds} portfolios={portfolios} dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"} projectBranch={projectBranch} />
+      <BuildStudio
+        builds={builds}
+        portfolios={portfolios}
+        dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"}
+        projectBranch={projectBranch}
+        submissionBranchShortId={submissionBranchShortId}
+      />
     </section>
   );
 }

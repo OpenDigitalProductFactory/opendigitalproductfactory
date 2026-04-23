@@ -20,6 +20,14 @@
 - Do not edit `seed.ts` to represent day-to-day runtime changes.
 - Runtime workflow changes should be made through app actions, migrations, or direct DB operations as appropriate.
 
+## Local Login Memory
+
+- For local browser QA against this install, do not assume the seed fallback password `changeme123`.
+- The workforce login email is `admin@dpf.local` unless the user says otherwise.
+- Read the current install-specific admin password from the repo-root `.env` file via `ADMIN_PASSWORD`.
+- Do not look for this in `apps/web/.env.local` first; that file may omit the login password even when the root `.env` has it.
+- If `/build` or another shell route redirects to `/welcome`, authenticate first at `/login` using the root `.env` password.
+
 ## Backlog & Planning
 
 - The backlog lives in the PostgreSQL database (`Epic`, `BacklogItem` tables). Always query the live DB for current state.
@@ -74,18 +82,30 @@ Epics must be actively managed — not just created and forgotten.
 
 ### Verification — Build Gate (mandatory)
 
-Work is NOT complete until the production build passes. This is non-negotiable.
+Work is NOT complete until the production build passes and UX-level testing has been run for the affected surfaces. This is non-negotiable.
 
 **Required checks before claiming any task, epic, or session is done:**
 
 1. **Unit tests pass** — `npx vitest run` for affected test files (at minimum)
 2. **Production build succeeds** — `cd apps/web && npx next build` must complete with zero errors
-3. **Migration applies cleanly** — if a migration was added, verify it applies without drift
+3. **UX-level verification passes** — for any UI, agent, coworker, workflow, or end-user-facing change, run the affected browser/Playwright/manual QA flow against the real running app and confirm the user-visible behavior
+4. **Migration applies cleanly** — if a migration was added, verify it applies without drift
 
 **When to run the build:**
 - After completing each epic or logical chunk of work (not after every single commit)
 - Before claiming a feature is "done" or "shipped"
 - Before any session wrap-up summary that lists completed work
+
+**When UX verification is required:**
+- Any change to Build Studio, coworker behavior, prompts, routing, forms, page layout, visual rendering, or user workflow
+- Any fix where the bug was visible in the browser or chat UX
+- Any change where unit tests prove logic but do not prove the shipped user experience
+
+**Definition of done for user-facing work:**
+- Automated checks passing is necessary but not sufficient
+- The affected UX path must be exercised on the running app
+- If there is a relevant case in `tests/e2e/platform-qa-plan.md`, run it or the affected phase subset before calling the work done
+- If UX verification was not run, explicitly state that the work is not done yet
 
 **Why this matters:** TypeScript errors, missing imports, and type mismatches only surface during `next build` — not during `vitest run` or IDE checks. The project has experienced 300+ build errors discovered only at the end of a development cycle because builds were not run incrementally. Catching these early (per-epic, not per-release) is dramatically cheaper.
 
@@ -95,6 +115,7 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 - If the failure is pre-existing (not caused by your changes), note it explicitly but still fix if feasible
 
 **Subagent dispatchers:** When dispatching implementation subagents for the final task in an epic, include "run `cd apps/web && npx next build` and fix any errors" as part of the task.
+Also include the required UX/browser verification path for any user-facing change.
 
 ### Communication
 
@@ -122,11 +143,14 @@ Work is NOT complete until the production build passes. This is non-negotiable.
 
 Every release must pass the platform QA test plan before deployment. The test plan lives at `tests/e2e/platform-qa-plan.md` and covers 15 phases across all functional areas.
 
+For user-facing feature work, this is also part of the definition of done at the feature level, not just at release time. Unit tests and `next build` do not replace exercising the affected UX path.
+
 ### When to Run
 
 - **Full suite:** Before any production release or after a fresh install from source
 - **Affected phases:** After completing a feature or fix, run the phases that touch the changed areas
 - **Coworker tests:** Always run Phase 12 (AI Coworker Cross-Cutting) after changes to prompts, tools, or provider configuration
+- **Build Studio / workflow UX:** After Build Studio, coworker, or workflow changes, run the relevant Build Studio and/or coworker QA cases before claiming done
 
 ### How to Run
 
@@ -140,6 +164,8 @@ When implementing a new feature or fixing a bug:
 3. Include both **UI path** (button clicks, form fills) and **coworker path** (chat prompts, approve/reject) where applicable
 4. Include an **incomplete information test** — verify the coworker asks for missing required fields instead of guessing
 5. Run the affected phases to verify before marking the backlog item as done
+
+If the change is user-facing and there is no suitable QA case yet, add one before claiming the work is complete.
 
 ### Failure Handling
 

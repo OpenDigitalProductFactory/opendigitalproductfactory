@@ -9,6 +9,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
+import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
@@ -29,9 +30,16 @@ type Props = {
   portfolios: PortfolioForSelect[];
   dpfEnvironment?: string;
   projectBranch?: string | null;
+  submissionBranchShortId?: string | null;
 };
 
-export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch }: Props) {
+export function BuildStudio({
+  builds,
+  portfolios,
+  dpfEnvironment,
+  projectBranch,
+  submissionBranchShortId,
+}: Props) {
   const router = useRouter();
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
     builds.find((b) => b.phase !== "complete" && b.phase !== "failed") ?? null,
@@ -41,6 +49,11 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
   const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const isDevEnvironment = dpfEnvironment === "dev";
+  const branchBadge = resolveBuildStudioBranchBadge({
+    submissionBranchShortId,
+    buildTitle: activeBuild?.title ?? null,
+    workspaceBranch: projectBranch,
+  });
 
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
@@ -362,12 +375,12 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
                     <span>{activeBuild.buildId}</span>
-                    {projectBranch && (
+                    {branchBadge && (
                       <>
                         <span>&middot;</span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] font-mono" title="Project branch">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] font-mono" title={branchBadge.title}>
                           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
-                          {projectBranch}
+                          {branchBadge.value}
                         </span>
                       </>
                     )}
@@ -468,10 +481,10 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
               <div className="text-center max-w-md px-8">
                 <div className="text-5xl mb-4 opacity-20">&#128736;</div>
                 <h2 className="text-lg font-bold text-[var(--dpf-text)] mb-3">Product Development Studio</h2>
-                {projectBranch && (
-                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-xs font-mono text-[var(--dpf-muted)] mb-4">
+                {branchBadge && (
+                  <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-xs font-mono text-[var(--dpf-muted)] mb-4" title={branchBadge.title}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
-                    {projectBranch}
+                    {branchBadge.value}
                   </div>
                 )}
                 <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
