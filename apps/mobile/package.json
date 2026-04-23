@@ -28,7 +28,7 @@
     "expo-status-bar": "~2.2.3",
     "nativewind": "^4.0.0",
     "react": "18.3.1",
-    "react-native": "0.85.1",
+    "react-native": "0.85.2",
     "react-native-mmkv": "^3.0.0",
     "react-native-safe-area-context": "~4.14.1",
     "react-native-screens": "~4.24.0",
@@ -41,9 +41,9 @@
     "@types/react": "~18.3.0",
     "jest": "^30.3.0",
     "jest-expo": "~53.0.0",
-    "msw": "^2.13.4",
+    "msw": "^2.13.5",
     "react-test-renderer": "18.3.1",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3"
   }
 }

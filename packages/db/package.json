@@ -26,23 +26,23 @@
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
-    "@prisma/adapter-pg": "^7.7.0",
-    "@prisma/client": "^7.7.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "i18n-iso-countries": "^7.14.0",
     "neo4j-driver": "^6.0.1",
-    "net-snmp": "^3.26.1",
+    "net-snmp": "^3.26.3",
     "pg": "^8.13.0",
     "undici": "^8.1.0",
     "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
-    "prisma": "^7.7.0",
+    "prisma": "^7.8.0",
     "tsx": "^4.15.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.8",
-    "vitest": "^4.1.4"
+    "vite": "^8.0.9",
+    "vitest": "^4.1.5"
   }
 }
