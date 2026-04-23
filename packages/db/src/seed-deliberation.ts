@@ -604,3 +604,76 @@ export async function seedDeliberationPatterns(
   );
   return records;
 }
+
+export async function seedDeliberation(
+  prisma?: PrismaClient,
+  records?: DeliberationRecord[],
+): Promise<DeliberationRecord[] | ApplyDeliberationPatternsResult> {
+  if (records) {
+    if (!prisma) {
+      return {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+      };
+    }
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const record of records) {
+      const existing = await prisma.deliberationPattern.findUnique({
+        where: { slug: record.slug },
+        select: { id: true, slug: true, isOverridden: true },
+      });
+
+      if (!existing) {
+        await prisma.deliberationPattern.create({
+          data: {
+            slug: record.slug,
+            name: record.name,
+            purpose: record.purpose,
+            defaultRoles: record.defaultRoles as unknown as object,
+            topologyTemplate: record.topologyTemplate as object,
+            activationPolicyHints: record.activationPolicyHints as object,
+            evidenceRequirements: record.evidenceRequirements as object,
+            outputContract: record.outputContract as object,
+            providerStrategyHints: record.providerStrategyHints as object,
+            sourceFile: record.sourceFile ?? `deliberation/${record.slug}.deliberation.md`,
+            status: record.status,
+            isOverridden: false,
+          },
+        });
+        created++;
+        continue;
+      }
+
+      if (existing.isOverridden) {
+        skipped++;
+        continue;
+      }
+
+      await prisma.deliberationPattern.update({
+        where: { id: existing.id },
+        data: {
+          name: record.name,
+          purpose: record.purpose,
+          defaultRoles: record.defaultRoles as unknown as object,
+          topologyTemplate: record.topologyTemplate as object,
+          activationPolicyHints: record.activationPolicyHints as object,
+          evidenceRequirements: record.evidenceRequirements as object,
+          outputContract: record.outputContract as object,
+          providerStrategyHints: record.providerStrategyHints as object,
+          sourceFile: record.sourceFile ?? `deliberation/${record.slug}.deliberation.md`,
+          status: record.status,
+        },
+      });
+      updated++;
+    }
+
+    return { created, updated, skipped };
+  }
+
+  return seedDeliberationPatterns(prisma);
+}

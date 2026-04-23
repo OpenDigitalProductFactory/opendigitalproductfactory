@@ -157,6 +157,9 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | BUILD-24 | Click "Ship anyway", submit a 10+ character reason | Phase advances to ship; `BuildActivity` gains a `tool: ux-override` row with the submitted reason. |
 | BUILD-25 | Advance to review with ZERO acceptance criteria in the brief | `uxVerificationStatus = "skipped"`; ReviewPanel shows "UX verification skipped — no acceptance criteria"; review → ship is allowed. |
 | BUILD-26 | Stop the browser-use container mid-verification (`docker stop dpf-browser-use-1`) | Inngest handler records failure; `uxVerificationStatus = "failed"` with a diagnostic error in `uxTestResults[0].error`. Gate blocks ship advance. |
+| BUILD-32 | Open a build in ideate or plan that has `FeatureBuild.deliberationSummary` populated, then switch to the Details tab | The panel renders a deliberation summary card showing pattern (`Peer Review` or `Debate`), evidence quality, diversity label, consensus state, rationale, and any unresolved risks. |
+| BUILD-33 | Open a build in review/ship/complete with deliberation summaries for multiple phases, then switch to the Review tab | ReviewPanel renders one deliberation summary card per populated phase before the detailed evidence sections. |
+| BUILD-34 | Open the Graph tab for a build with deliberation summaries | The affected phase nodes show a deliberation chip (`Peer Review` or `Debate`) plus the consensus state directly on the process graph. |
 
 ## Phase 11: Storefront
 

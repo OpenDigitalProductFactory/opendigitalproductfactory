@@ -4,6 +4,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatText } from "@/lib/actions/local-format";
+import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
 import type {
   FeatureBuildRow,
   FeatureBrief,
@@ -20,12 +21,26 @@ type Props = {
 };
 
 export function ReviewPanel({ build }: Props) {
+  const deliberationEntries = Object.entries(build.deliberationSummary ?? {}) as Array<
+    ["ideate" | "plan" | "review", NonNullable<FeatureBuildRow["deliberationSummary"]>[keyof NonNullable<FeatureBuildRow["deliberationSummary"]>]]
+  >;
+
   return (
     <div className="p-4 space-y-3 max-w-3xl">
       <h3 className="text-sm font-bold text-[var(--dpf-text)]">Review: {build.title}</h3>
 
       {/* Compact evidence bar */}
       <EvidenceBar build={build} />
+
+      {deliberationEntries.length > 0 && (
+        <div className="space-y-3">
+          {deliberationEntries.map(([phase, summary]) =>
+            summary ? (
+              <DeliberationSummaryCard key={phase} phase={phase} summary={summary} />
+            ) : null,
+          )}
+        </div>
+      )}
 
       {/* Collapsible sections */}
       <BriefSection brief={build.brief} />
@@ -145,11 +160,11 @@ function BriefSection({ brief }: { brief: FeatureBrief | null }) {
         <div className="space-y-2 text-sm">
           <Field label="Description" value={brief.description} />
           <Field label="Portfolio Context" value={brief.portfolioContext} />
-          {brief.targetRoles.length > 0 && (
+          {Array.isArray(brief.targetRoles) && brief.targetRoles.length > 0 && (
             <Field label="Target Roles" value={brief.targetRoles.join(", ")} />
           )}
           <Field label="Data Needs" value={brief.dataNeeds} />
-          {brief.acceptanceCriteria.length > 0 && (
+          {Array.isArray(brief.acceptanceCriteria) && brief.acceptanceCriteria.length > 0 && (
             <div>
               <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
                 Acceptance Criteria
@@ -228,7 +243,7 @@ function DesignDocSection({
           {doc.dataModel && <Field label="Data Model" value={formatted.dataModel ?? doc.dataModel} />}
           <Field label="Existing Code Audit" value={formatted.existingCodeAudit ?? doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? ""} />
           <Field label="Reuse Plan" value={formatted.reusePlan ?? doc.reusePlan} />
-          {doc.acceptanceCriteria.length > 0 && (
+          {Array.isArray(doc.acceptanceCriteria) && doc.acceptanceCriteria.length > 0 && (
             <div>
               <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
                 Design Acceptance Criteria
@@ -863,7 +878,7 @@ function ReviewBadgeBlock({
       {summary && (
         <p className="text-[10px] text-[var(--dpf-muted)] mt-1 leading-relaxed">{safeRenderValue(summary)}</p>
       )}
-      {issues.length > 0 && (
+      {Array.isArray(issues) && issues.length > 0 && (
         <div className="mt-1 text-[10px] text-[var(--dpf-muted)]">
           {issues.length} issue{issues.length !== 1 ? "s" : ""} noted
         </div>

@@ -227,6 +227,7 @@ export function BuildStudio({ builds, portfolios, dpfEnvironment, projectBranch 
         uxTestResults: null,
         uxVerificationStatus: null,
         buildExecState: null,
+        deliberationSummary: null,
         phaseHandoffs: null,
       });
       setNewTitle("");

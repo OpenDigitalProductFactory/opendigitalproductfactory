@@ -31,6 +31,7 @@ export type DeliberationAdjudicationMode = (typeof DELIBERATION_ADJUDICATION_MOD
 
 export const DELIBERATION_ACTIVATED_RISK_LEVELS = ["low", "medium", "high", "critical"] as const;
 export type DeliberationActivatedRiskLevel = (typeof DELIBERATION_ACTIVATED_RISK_LEVELS)[number];
+export const DELIBERATION_RISK_LEVELS = DELIBERATION_ACTIVATED_RISK_LEVELS;
 
 export const DELIBERATION_DIVERSITY_MODES = [
   "single-model-multi-persona",
@@ -58,6 +59,7 @@ export type DeliberationConsensusState = (typeof DELIBERATION_CONSENSUS_STATES)[
 
 export const DELIBERATION_EVIDENCE_STRICTNESS = ["lenient", "standard", "strict"] as const;
 export type DeliberationEvidenceStrictness = (typeof DELIBERATION_EVIDENCE_STRICTNESS)[number];
+export const ROLE_EVIDENCE_STRICTNESS = DELIBERATION_EVIDENCE_STRICTNESS;
 
 export const CLAIM_TYPES = [
   "assertion",

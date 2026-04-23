@@ -71,6 +71,8 @@ export type PhaseNodeData = {
   color: string;
   icon: string;
   phase: BuildPhase;
+  deliberationLabel?: string;
+  deliberationState?: string;
 };
 
 export type TaskNodeData = {
@@ -226,6 +228,9 @@ export function buildPhaseGraph(build: FeatureBuildRow): GraphOutput {
     const status = getPhaseNodeStatus(phase, build);
     const label = PHASE_LABELS[phase] ?? phase;
     const icon = PHASE_ICONS[phase] ?? "circle";
+    const phaseSummary = phase in (build.deliberationSummary ?? {})
+      ? build.deliberationSummary?.[phase as keyof NonNullable<FeatureBuildRow["deliberationSummary"]>] ?? null
+      : null;
 
     // Use a neutral hex color per-status for graph display
     const color = statusToColor(status);
@@ -240,6 +245,12 @@ export function buildPhaseGraph(build: FeatureBuildRow): GraphOutput {
         color,
         icon,
         phase,
+        deliberationLabel: phaseSummary
+          ? phaseSummary.patternSlug === "debate"
+            ? "Debate"
+            : "Peer Review"
+          : undefined,
+        deliberationState: phaseSummary?.consensusState,
       },
     });
 

@@ -33,6 +33,8 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     verificationOut: build.verificationOut as FeatureBuildRow["verificationOut"],
     acceptanceMet: build.acceptanceMet as FeatureBuildRow["acceptanceMet"],
     happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
+    deliberationSummary:
+      build.deliberationSummary as FeatureBuildRow["deliberationSummary"],
     product: build.digitalProduct
       ? { productId: build.digitalProduct.productId, version: build.digitalProduct.version, backlogCount: 0 }
       : null,

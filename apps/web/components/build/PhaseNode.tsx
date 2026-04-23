@@ -18,7 +18,7 @@ const ACTOR_LABELS: Record<ProcessActorKind, string> = {
  */
 export const PhaseNode = memo(function PhaseNode({ data }: NodeProps) {
   const nodeData = data as PhaseNodeData;
-  const { label, status, color, icon } = nodeData;
+  const { label, status, color, icon, deliberationLabel, deliberationState } = nodeData;
 
   const isPending = status === "pending";
   const isRunning = status === "running";
@@ -160,6 +160,43 @@ export const PhaseNode = memo(function PhaseNode({ data }: NodeProps) {
           AI Coworker
         </span>
       </div>
+
+      {deliberationLabel && (
+        <div
+          style={{
+            marginTop: 8,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              padding: "1px 5px",
+              borderRadius: 999,
+              background: "var(--dpf-surface-2)",
+              color: "var(--dpf-text)",
+              border: "1px solid var(--dpf-border)",
+              letterSpacing: "0.03em",
+            }}
+          >
+            {deliberationLabel}
+          </span>
+          {deliberationState && (
+            <span
+              style={{
+                fontSize: 9,
+                color: "var(--dpf-muted)",
+              }}
+            >
+              {deliberationState}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 });

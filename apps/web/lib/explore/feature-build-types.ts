@@ -97,6 +97,27 @@ export type AcceptanceCriterion = {
   evidence: string;
 };
 
+export type BuildDeliberationPhase = "ideate" | "plan" | "review";
+
+export type BuildDeliberationSummaryEntry = {
+  patternSlug: "review" | "debate";
+  deliberationRunId: string;
+  consensusState:
+    | "consensus"
+    | "partial-consensus"
+    | "no-consensus"
+    | "insufficient-evidence"
+    | "pending";
+  rationaleSummary: string;
+  evidenceQuality: "source-backed" | "mixed" | "needs-more-evidence";
+  unresolvedRisks: string[];
+  diversityLabel: string;
+};
+
+export type BuildDeliberationSummary = Partial<
+  Record<BuildDeliberationPhase, BuildDeliberationSummaryEntry>
+>;
+
 export type HappyPathFailureStage = "connect" | "fetch" | "parse" | "persist";
 
 export type HappyPathIntakeState = {
@@ -221,6 +242,7 @@ export type FeatureBuildRow = {
   claimedAt: Date | null;
   claimStatus: string | null;
   buildExecState: BuildExecutionState | null;
+  deliberationSummary: BuildDeliberationSummary | null;
   phaseHandoffs: Array<{
     fromPhase: string;
     toPhase: string;

@@ -9,6 +9,9 @@ vi.mock("@dpf/db", () => ({
     scheduledJob: {
       upsert: vi.fn(),
     },
+    codeGraphIndexState: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -24,14 +27,36 @@ import {
   CODE_GRAPH_EVENT_NAME,
   CODE_GRAPH_GRAPH_KEY,
   CODE_GRAPH_JOB_ID,
+  ensureCodeGraphInitialized,
   planCodeGraphRefresh,
   queueCodeGraphReconcile,
   registerCodeGraphScheduledJob,
 } from "./code-graph-refresh";
 
+function makeIndexState(overrides: Record<string, unknown> = {}) {
+  return {
+    graphKey: CODE_GRAPH_GRAPH_KEY,
+    indexStatus: "ready",
+    lastIndexedHeadSha: "abc123",
+    lastIndexedAt: new Date("2026-04-20T12:00:00.000Z"),
+    lastError: null,
+    createdAt: new Date("2026-04-20T11:00:00.000Z"),
+    updatedAt: new Date("2026-04-20T12:00:00.000Z"),
+    workspaceDirty: false,
+    workspaceDirtyPaths: [],
+    workspaceDirtyObservedAt: null,
+    lastDiffBaseSha: null,
+    lastIncrementalAt: null,
+    nodeCount: 0,
+    edgeCount: 0,
+    ...overrides,
+  } as never;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.scheduledJob.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
   vi.mocked(inngest.send).mockResolvedValue({ ids: ["evt-1"] } as never);
 });
 
@@ -130,6 +155,53 @@ describe("queueCodeGraphReconcile", () => {
         branch: "main",
         graphKey: CODE_GRAPH_GRAPH_KEY,
       },
+    });
+  });
+});
+
+describe("ensureCodeGraphInitialized", () => {
+  it("runs a full manual reconcile when the graph has never been indexed", async () => {
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+
+    await ensureCodeGraphInitialized({ reconcile });
+
+    expect(prisma.codeGraphIndexState.findUnique).toHaveBeenCalledWith({
+      where: { graphKey: CODE_GRAPH_GRAPH_KEY },
+    });
+    expect(reconcile).toHaveBeenCalledWith({
+      reason: "manual",
+      graphKey: CODE_GRAPH_GRAPH_KEY,
+      forceFull: true,
+    });
+  });
+
+  it("skips bootstrap when an indexed graph already exists", async () => {
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(
+      makeIndexState(),
+    );
+
+    await ensureCodeGraphInitialized({ reconcile });
+
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it("retries bootstrap when the existing index state is failed", async () => {
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(
+      makeIndexState({
+        indexStatus: "failed",
+        lastIndexedHeadSha: null,
+        lastIndexedAt: null,
+      }),
+    );
+
+    await ensureCodeGraphInitialized({ reconcile });
+
+    expect(reconcile).toHaveBeenCalledWith({
+      reason: "manual",
+      graphKey: CODE_GRAPH_GRAPH_KEY,
+      forceFull: true,
     });
   });
 });

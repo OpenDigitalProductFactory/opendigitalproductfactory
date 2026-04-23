@@ -47,9 +47,10 @@ function makeRow(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
     verificationOut: null,
     acceptanceMet: null,
     scoutFindings: null,
-    uxTestResults: null,
-    uxVerificationStatus: null,
-    accountableEmployeeId: null,
+     uxTestResults: null,
+     uxVerificationStatus: null,
+     deliberationSummary: null,
+     accountableEmployeeId: null,
     claimedByAgentId: null,
     claimedAt: null,
     claimStatus: null,
@@ -120,6 +121,28 @@ describe("buildPhaseGraph", () => {
     expect(data?.status).toBe("running");
     expect(data?.label).toBe("Build");
     expect(typeof data?.icon).toBe("string");
+  });
+
+  it("includes deliberation metadata when a phase summary exists", () => {
+    const row = makeRow({
+      phase: "plan",
+      deliberationSummary: {
+        plan: {
+          patternSlug: "debate",
+          deliberationRunId: "del-1",
+          consensusState: "partial-consensus",
+          rationaleSummary: "Two models agreed on the core approach but disagreed on sourcing freshness.",
+          evidenceQuality: "mixed",
+          unresolvedRisks: ["Fresh provider checks still needed."],
+          diversityLabel: "Multi-provider review",
+        },
+      },
+    });
+    const { nodes } = buildPhaseGraph(row);
+    const planNode = nodes.find((n) => n.id === "phase-plan");
+    const data = planNode?.data as PhaseNodeData | undefined;
+    expect(data?.deliberationLabel).toBe("Debate");
+    expect(data?.deliberationState).toBe("partial-consensus");
   });
 
   it("edge source/target reference correct node ids", () => {

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { type FeatureBrief, type BuildPhase, type FeatureBuildRow } from "@/lib/feature-build-types";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
+import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
 import { EvidenceSummary } from "./EvidenceSummary";
 import { safeRenderValue } from "@/lib/safe-render";
 
@@ -20,6 +21,13 @@ type Props = {
 export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, build, loading }: Props) {
   // Track incremental progress messages emitted by ideate-dispatch
   const [progressMsg, setProgressMsg] = useState<string | null>(null);
+  const deliberationPhase =
+    phase === "ideate" || phase === "plan" || phase === "review"
+      ? phase
+      : null;
+  const phaseSummary = deliberationPhase
+    ? build?.deliberationSummary?.[deliberationPhase] ?? null
+    : null;
 
   useEffect(() => {
     function onProgress(e: Event) {
@@ -52,6 +60,11 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
     return (
       <div className="p-4">
         <h3 className="text-sm font-bold text-[var(--dpf-text)] mb-3">Build Summary</h3>
+        {phaseSummary && deliberationPhase && (
+          <div className="mb-4">
+            <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
+          </div>
+        )}
         {diffSummary ? (
           <pre className="text-xs text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed bg-[var(--dpf-surface-2)] p-3 rounded-md border border-[var(--dpf-border)]">
             {diffSummary}
@@ -79,6 +92,9 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
 
     return (
       <div className="p-4 flex flex-col gap-4">
+        {phaseSummary && deliberationPhase && (
+          <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
+        )}
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-[var(--dpf-text)]">Design Research</h3>
           {designReview && (
@@ -160,6 +176,9 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
   if (!brief) {
     return (
       <div className="p-4 flex flex-col gap-3">
+        {phaseSummary && deliberationPhase && (
+          <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
+        )}
         {build && <HappyPathStatusCard build={build} />}
         {progressMsg && (
           <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)] animate-pulse">
@@ -176,6 +195,9 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
 
   return (
     <div className="p-4 flex flex-col gap-3">
+      {phaseSummary && deliberationPhase && (
+        <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
+      )}
       {build && <HappyPathStatusCard build={build} />}
       {progressMsg && (
         <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)] animate-pulse">
