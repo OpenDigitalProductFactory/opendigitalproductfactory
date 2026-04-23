@@ -23,7 +23,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/react": "^19"
+      "@types/react": "^19",
+      "dompurify": "3.4.0"
     },
     "onlyBuiltDependencies": [
       "msw",
