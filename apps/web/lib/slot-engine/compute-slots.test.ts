@@ -41,6 +41,18 @@ const mockProvider = {
   isActive: true,
 };
 
+function nextWeekdayIso(targetWeekday: number): string {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  const today = date.getUTCDay();
+  let delta = (targetWeekday - today + 7) % 7;
+  if (delta === 0) {
+    delta = 7;
+  }
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
 describe("computeAvailableSlots", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
@@ -55,7 +67,7 @@ describe("computeAvailableSlots", () => {
     vi.mocked(prisma.storefrontBooking.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.bookingHold.findMany).mockResolvedValue([] as never);
 
-    const result = await computeAvailableSlots("itm-abc", "2026-03-23"); // Monday
+    const result = await computeAvailableSlots("itm-abc", nextWeekdayIso(1)); // next Monday
     expect(result.mode).toBe("next-available");
     if (result.mode === "next-available") {
       expect(result.slots.length).toBeGreaterThan(0);
@@ -67,14 +79,14 @@ describe("computeAvailableSlots", () => {
 
   it("returns error when item not found", async () => {
     vi.mocked(prisma.storefrontItem.findFirst).mockResolvedValue(null as never);
-    await expect(computeAvailableSlots("missing", "2026-03-23")).rejects.toThrow("Item not found");
+    await expect(computeAvailableSlots("missing", nextWeekdayIso(1))).rejects.toThrow("Item not found");
   });
 
   it("returns empty slots when no providers", async () => {
     vi.mocked(prisma.storefrontItem.findFirst).mockResolvedValue(mockItem as never);
     vi.mocked(prisma.serviceProvider.findMany).mockResolvedValue([] as never);
 
-    const result = await computeAvailableSlots("itm-abc", "2026-03-23");
+    const result = await computeAvailableSlots("itm-abc", nextWeekdayIso(1));
     if (result.mode === "next-available") {
       expect(result.slots).toEqual([]);
     }

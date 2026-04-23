@@ -41,7 +41,9 @@ export type ReconcileCodeGraphResult = {
 
 type CodeGraphIndexStateRecord = {
   graphKey: string;
+  indexStatus?: string | null;
   lastIndexedHeadSha: string | null;
+  lastIndexedAt?: Date | null;
 };
 
 type CodeGraphPrisma = {
@@ -260,6 +262,29 @@ export async function queueCodeGraphReconcile(input: QueueCodeGraphReconcileInpu
       branch: input.branch ?? null,
       graphKey: input.graphKey ?? CODE_GRAPH_GRAPH_KEY,
     },
+  });
+}
+
+export async function ensureCodeGraphInitialized(input: {
+  reconcile?: (input: ReconcileCodeGraphInput) => Promise<unknown>;
+} = {}): Promise<void> {
+  const existingState = await codeGraphPrisma.codeGraphIndexState.findUnique({
+    where: { graphKey: CODE_GRAPH_GRAPH_KEY },
+  });
+
+  const needsBootstrap =
+    !existingState ||
+    (existingState.indexStatus === "failed" && !existingState.lastIndexedHeadSha && !existingState.lastIndexedAt);
+
+  if (!needsBootstrap) {
+    return;
+  }
+
+  const reconcile = input.reconcile ?? reconcileCodeGraph;
+  await reconcile({
+    reason: "manual",
+    graphKey: CODE_GRAPH_GRAPH_KEY,
+    forceFull: true,
   });
 }
 

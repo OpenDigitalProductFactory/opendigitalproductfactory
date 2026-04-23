@@ -19,8 +19,8 @@ import type { BuildPhase } from "@/lib/feature-build-types";
 
 // ─── Test fixtures ──────────────────────────────────────────────────────────
 
-const TEST_USER_ID = "cmnmnsok308la6yl033n2sfhg"; // admin@dpf.local
 const TEST_CONTEXT = { routeContext: "/build", agentId: "AGT-TEST", threadId: "test-lifecycle" };
+const TEST_USER_EMAIL = "admin@dpf.local";
 
 const DESIGN_DOC = {
   problemStatement: "Customers need to file complaints about products and services",
@@ -82,6 +82,11 @@ const ACCEPTANCE_MET = [
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 let testBuildId: string;
+let testUserId = "";
+let createdTestUserId: string | null = null;
+let testTaxonomyId: string | null = null;
+let testBacklogItemId: string | null = null;
+let testEpicRowId: string | null = null;
 
 async function getPhase(): Promise<BuildPhase> {
   const build = await prisma.featureBuild.findUnique({
@@ -92,7 +97,7 @@ async function getPhase(): Promise<BuildPhase> {
 }
 
 async function callTool(name: string, params: Record<string, unknown> = {}) {
-  const result = await executeTool(name, params, TEST_USER_ID, TEST_CONTEXT);
+  const result = await executeTool(name, params, testUserId, TEST_CONTEXT);
   console.log(`  [${name}] ${result.success ? "OK" : "FAIL"}: ${result.message.slice(0, 120)}`);
   return result;
 }
@@ -101,14 +106,97 @@ async function callTool(name: string, params: Record<string, unknown> = {}) {
 
 describe("Build Studio full lifecycle", () => {
   beforeAll(async () => {
+    const existingUser = await prisma.user.findFirst({
+      where: { email: TEST_USER_EMAIL },
+      select: { id: true },
+    }) ?? await prisma.user.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      testUserId = existingUser.id;
+    } else {
+      const createdUser = await prisma.user.create({
+        data: {
+          email: `build-lifecycle-${Date.now()}@dpf.local`,
+          passwordHash: "test-password-hash",
+        },
+        select: { id: true },
+      });
+      testUserId = createdUser.id;
+      createdTestUserId = createdUser.id;
+    }
+
+    const taxonomyNode = await prisma.taxonomyNode.create({
+      data: {
+        nodeId: `test-build-${Date.now()}`,
+        name: "Test Build Intake",
+        status: "active",
+      },
+      select: { id: true },
+    });
+    testTaxonomyId = taxonomyNode.id;
+
+    const epic = await prisma.epic.create({
+      data: {
+        epicId: `EP-TEST-${Date.now().toString().slice(-6)}`,
+        title: "Integration Test: Customer Complaints",
+        status: "open",
+        submittedById: testUserId,
+      },
+      select: { id: true, epicId: true },
+    });
+    testEpicRowId = epic.id;
+
+    const backlogItem = await prisma.backlogItem.create({
+      data: {
+        itemId: `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        title: "Integration Test: Customer Complaints",
+        status: "in-progress",
+        type: "product",
+        taxonomyNodeId: taxonomyNode.id,
+        epicId: epic.id,
+        submittedById: testUserId,
+      },
+      select: { itemId: true },
+    });
+    testBacklogItemId = backlogItem.itemId;
+
     // Create a test build directly via Prisma (bypasses auth)
     testBuildId = generateBuildId();
     await prisma.featureBuild.create({
       data: {
         buildId: testBuildId,
         title: "Integration Test: Customer Complaints",
+        description: "Lifecycle integration test for the customer complaints workflow.",
         phase: "ideate",
-        createdById: TEST_USER_ID,
+        createdById: testUserId,
+        plan: {
+          happyPathState: {
+            intake: {
+              status: "ready",
+              taxonomyNodeId: taxonomyNode.id,
+              backlogItemId: backlogItem.itemId,
+              epicId: epic.epicId,
+              constrainedGoal: "Ship a working customer complaints workflow",
+              failureReason: null,
+            },
+            execution: {
+              engine: null,
+              source: null,
+              status: "pending",
+              failureStage: null,
+            },
+            verification: {
+              status: "pending",
+              checks: [],
+            },
+          },
+        } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        taxonomyAttribution: {
+          confirmedNodeId: taxonomyNode.id,
+        } as unknown as import("@dpf/db").Prisma.InputJsonValue,
       },
     });
     console.log(`\n  Created test build: ${testBuildId}\n`);
@@ -126,6 +214,18 @@ describe("Build Studio full lifecycle", () => {
         await prisma.digitalProduct.delete({ where: { id: build.digitalProductId } }).catch(() => {});
       }
       await prisma.featureBuild.delete({ where: { buildId: testBuildId } });
+      if (testBacklogItemId) {
+        await prisma.backlogItem.deleteMany({ where: { itemId: testBacklogItemId } });
+      }
+      if (testEpicRowId) {
+        await prisma.epic.delete({ where: { id: testEpicRowId } }).catch(() => {});
+      }
+      if (testTaxonomyId) {
+        await prisma.taxonomyNode.delete({ where: { id: testTaxonomyId } }).catch(() => {});
+      }
+      if (createdTestUserId) {
+        await prisma.user.delete({ where: { id: createdTestUserId } }).catch(() => {});
+      }
     } catch (err) {
       console.error("Cleanup error (non-fatal):", err);
     }
@@ -220,6 +320,17 @@ describe("Build Studio full lifecycle", () => {
       value: ACCEPTANCE_MET,
     });
     expect(result.success).toBe(true);
+
+    await prisma.featureBuild.update({
+      where: { buildId: testBuildId },
+      data: {
+        uxVerificationStatus: "complete",
+        uxTestResults: [
+          { step: "Open complaints dashboard", passed: true, screenshotUrl: null, error: null },
+          { step: "Submit public complaint", passed: true, screenshotUrl: null, error: null },
+        ] as unknown as import("@dpf/db").Prisma.InputJsonValue,
+      },
+    });
 
     const handoff = await callTool("save_phase_handoff", {
       summary: "All 4 acceptance criteria met. Ready to ship.",

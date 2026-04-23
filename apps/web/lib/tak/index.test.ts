@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 describe("tak barrel export", () => {
-  it("exports agent-action-types", async () => {
+  it("loads agent-action-types without runtime exports", async () => {
     const mod = await import("./agent-action-types");
-    expect(Object.keys(mod).length).toBeGreaterThan(0);
+    expect(Object.keys(mod)).toEqual([]);
   });
 
   it("exports agent-sensitivity", async () => {

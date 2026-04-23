@@ -34,7 +34,7 @@ describe("provider catalog reconciliation", () => {
 
   it("reports new official Codex candidates not yet in the known catalog", async () => {
     const html = `
-      <a href="/api/docs/models/gpt-5.3-codex">GPT-5.3 Codex</a>
+      <a href="/api/docs/models/gpt-5.5-codex">GPT-5.5 Codex</a>
       <a href="/api/docs/models/gpt-5.4">GPT-5.4</a>
       <a href="/api/docs/models/codex-mini-latest">Codex Mini</a>
     `;
@@ -45,7 +45,7 @@ describe("provider catalog reconciliation", () => {
 
     const signal = await collectProviderCatalogSignals("codex", fetchImpl as unknown as typeof fetch);
 
-    expect(signal.newCandidates.map((candidate) => candidate.modelId)).toContain("gpt-5.3-codex");
-    expect(formatCatalogSignalWarning(signal)).toContain("gpt-5.3-codex");
+    expect(signal.newCandidates.map((candidate) => candidate.modelId)).toContain("gpt-5.5-codex");
+    expect(formatCatalogSignalWarning(signal)).toContain("gpt-5.5-codex");
   });
 });

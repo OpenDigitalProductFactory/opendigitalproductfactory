@@ -142,7 +142,7 @@ describe("ollamaAdapter", () => {
       });
     });
 
-    // ── Capabilities — all null (unreliable from Ollama) ─────────────
+    // ── Capabilities — inferred for known tool-capable families ──────
 
     describe("capabilities", () => {
       const card = ollamaAdapter.extractModelCard(
@@ -150,12 +150,16 @@ describe("ollamaAdapter", () => {
         rawModels[0],
       );
 
-      it("all capabilities are null (EMPTY_CAPABILITIES)", () => {
-        expect(card.capabilities).toEqual(EMPTY_CAPABILITIES);
+      it("sets tool and structured output capabilities for tool-capable families", () => {
+        expect(card.capabilities).toEqual({
+          ...EMPTY_CAPABILITIES,
+          toolUse: true,
+          structuredOutput: true,
+        });
       });
 
-      it("toolUse is null", () => {
-        expect(card.capabilities.toolUse).toBeNull();
+      it("toolUse is true", () => {
+        expect(card.capabilities.toolUse).toBe(true);
       });
 
       it("streaming is null", () => {

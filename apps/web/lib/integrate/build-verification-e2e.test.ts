@@ -113,7 +113,7 @@ describe("coworker-driven UX verification — handler does not touch designRevie
     // lock in the intent rather than running the full handler.
     // Path is relative to vitest cwd (apps/web).
     const source = await import("fs/promises").then((fs) =>
-      fs.readFile("lib/queue/functions/build-review-verification.ts", "utf-8"),
+      fs.readFile(new URL("../queue/functions/build-review-verification.ts", import.meta.url), "utf-8"),
     );
 
     // Must update both of our fields

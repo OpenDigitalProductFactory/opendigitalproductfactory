@@ -43,6 +43,8 @@ export async function triggerMcpCatalogSync(): Promise<{ ok: boolean; message: s
   void inngest.send({
     name: "ops/mcp-catalog.sync",
     data: { syncId: sync.id },
+  }).catch((error) => {
+    console.error("[mcp-catalog] failed to dispatch manual sync", error);
   });
 
   return { ok: true, message: "Sync started.", syncId: sync.id };
@@ -106,9 +108,10 @@ export async function updateMcpCatalogSchedule(schedule: ScheduleValue): Promise
 export async function runMcpCatalogSyncIfDue(): Promise<void> {
   const job = await prisma.scheduledJob.findUnique({ where: { jobId: "mcp-catalog-sync" } });
   if (!job || job.schedule === "disabled") return;
-  // Trigger if: never run before OR nextRunAt is in the past
+  const now = new Date();
+  if (job.nextRunAt && job.nextRunAt > now) return;
   const neverRun = !job.lastRunAt;
-  const isDue = job.nextRunAt && job.nextRunAt <= new Date();
+  const isDue = !job.nextRunAt || job.nextRunAt <= now;
   if (!neverRun && !isDue) return;
   const running = await prisma.mcpCatalogSync.findFirst({ where: { status: "running" } });
   if (running) return;
@@ -120,5 +123,7 @@ export async function runMcpCatalogSyncIfDue(): Promise<void> {
   void inngest.send({
     name: "ops/mcp-catalog.sync",
     data: { syncId: sync.id },
+  }).catch((error) => {
+    console.error("[mcp-catalog] failed to dispatch scheduled sync", error);
   });
 }

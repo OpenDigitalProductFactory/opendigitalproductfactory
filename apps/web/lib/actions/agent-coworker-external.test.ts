@@ -28,6 +28,7 @@ vi.mock("@/lib/ai-provider-priority", () => ({
 
 vi.mock("@/lib/routed-inference", () => ({
   routeAndCall: vi.fn(),
+  NoEligibleEndpointsError: class NoEligibleEndpointsError extends Error {},
 }));
 
 vi.mock("@/lib/ai-inference", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/lib/mcp-tools", () => ({
   getAvailableTools: vi.fn(),
   toolsToOpenAIFormat: vi.fn(),
   executeTool: vi.fn(),
+  PLATFORM_TOOLS: [],
 }));
 
 vi.mock("@/lib/feature-flags", () => ({
@@ -114,6 +116,12 @@ vi.mock("@dpf/db", () => ({
     modelProvider: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    agentModelConfig: {
+      findUnique: vi.fn(),
+    },
+    toolExecution: {
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -156,6 +164,8 @@ describe("agent coworker external access", () => {
     mockPrisma.agentMessage.findMany.mockResolvedValue([]);
     mockPrisma.agentAttachment.findMany.mockResolvedValue([]);
     mockPrisma.agent.findUnique.mockResolvedValue(null);
+    mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
+    mockPrisma.toolExecution.create.mockResolvedValue({});
     mockPrisma.agentMessage.create
       .mockResolvedValueOnce({
         id: "user-msg-1",

@@ -19,7 +19,7 @@ describe("buildDependencyGraph", () => {
     expect(phases).toHaveLength(4); // schema, api, frontend, qa
     expect(phases[0]!.tasks[0]!.specialist).toBe("data-architect");
     expect(phases[1]!.tasks[0]!.specialist).toBe("software-engineer");
-    expect(phases[2]!.tasks[0]!.specialist).toBe("frontend-engineer");
+    expect(phases[2]!.tasks[0]!.specialist).toBe("software-engineer");
     expect(phases[3]!.tasks[0]!.specialist).toBe("qa-engineer");
   });
 

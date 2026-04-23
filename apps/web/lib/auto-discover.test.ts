@@ -8,11 +8,12 @@ describe("KNOWN_PROVIDER_MODELS catalog", () => {
     expect(KNOWN_PROVIDER_MODELS.codex.length).toBeGreaterThan(0);
     expect(KNOWN_PROVIDER_MODELS.chatgpt).toBeDefined();
     expect(KNOWN_PROVIDER_MODELS.chatgpt.length).toBeGreaterThan(0);
+    expect(KNOWN_PROVIDER_MODELS["anthropic-sub"]).toBeDefined();
+    expect(KNOWN_PROVIDER_MODELS["anthropic-sub"].length).toBeGreaterThan(0);
   });
 
-  it("does not have entries for discoverable providers", () => {
+  it("does not have entries for live-discoverable direct providers", () => {
     expect(KNOWN_PROVIDER_MODELS["anthropic"]).toBeUndefined();
-    expect(KNOWN_PROVIDER_MODELS["anthropic-sub"]).toBeUndefined();
     expect(KNOWN_PROVIDER_MODELS["openai"]).toBeUndefined();
     expect(KNOWN_PROVIDER_MODELS["gemini"]).toBeUndefined();
     expect(KNOWN_PROVIDER_MODELS["ollama"]).toBeUndefined();
@@ -39,12 +40,12 @@ describe("KNOWN_PROVIDER_MODELS catalog", () => {
     expect(gpt5Codex!.scores?.reasoning).toBeGreaterThan(codexMini!.scores?.reasoning ?? 0);
   });
 
-  it("chatgpt model matches seed.ts data", () => {
+  it("chatgpt model matches the curated fallback catalog", () => {
     const gpt = KNOWN_PROVIDER_MODELS.chatgpt[0];
     expect(gpt.modelId).toBe("gpt-5.4");
     expect(gpt.modelClass).toBe("chat");
     expect(gpt.costTier).toBe("subscription");
-    expect(gpt.capabilities.toolUse).toBe(true);
+    expect(gpt.capabilities.toolUse).toBe(false);
     expect(gpt.capabilities.imageInput).toBe(true);
     expect(gpt.scores?.reasoning).toBe(85);
     expect(gpt.scores?.codegen).toBe(90);

@@ -199,18 +199,18 @@ describe("assembleSystemPrompt", () => {
   // EP-SELF-DEV-002: Anti-fabrication rule (rule 15)
   it("includes anti-fabrication rule (rule 15)", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
-    expect(prompt).toContain("NEVER describe code you haven't written through a tool");
+    expect(prompt).toContain("NEVER claim you did something you didn't do");
   });
 
   // EP-SELF-DEV-002: Evidence-first action rule
   it("includes evidence-first action rule", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
-    expect(prompt).toContain("start with the most relevant evidence-gathering or action tool");
+    expect(prompt).toContain("start with the most relevant tool");
   });
 
   it("includes calm under pressure and anti-reward-hacking guidance", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
     expect(prompt).toContain("Stay calm under pressure");
-    expect(prompt).toContain("Do NOT game tests, acceptance criteria, approval flows, or tooling");
+    expect(prompt).toContain("Don't game tests, acceptance criteria, or approval flows");
   });
 });

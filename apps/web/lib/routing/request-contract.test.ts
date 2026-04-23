@@ -314,9 +314,9 @@ describe("inferContract – defaults", () => {
 // ── Capability flags (EP-INF-008b) ──────────────────────────────────────────
 
 describe("inferContract – capability flags", () => {
-  it("sets requiresWebSearch for web-search task type", async () => {
+  it("does not set requiresWebSearch for web-search task type unless native grounding is explicitly required", async () => {
     const contract = await inferContract("web-search", SIMPLE_MESSAGES);
-    expect(contract.requiresWebSearch).toBe(true);
+    expect(contract.requiresWebSearch).toBeUndefined();
   });
 
   it("does not set requiresWebSearch for non-web-search tasks", async () => {

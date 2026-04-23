@@ -4,7 +4,7 @@ import { VIEW_CONFIGS } from "@/lib/graph/view-config";
 import { filterGraphData } from "@/lib/graph/subnet-scope";
 
 describe("filterGraphData", () => {
-  it("returns only nodes with MEMBER_OF to the selected subnet plus in-scope links, and never mutates the input", () => {
+  it("returns nodes attached to the selected subnet plus in-scope links, and never mutates the input", () => {
     const input: GraphData = {
       nodes: [
         { id: "subnet-a", name: "Subnet A", label: "InfraCI", color: "", size: 1, ciType: "subnet" },
@@ -40,11 +40,13 @@ describe("filterGraphData", () => {
         { id: "subnet-a", name: "Subnet A", label: "InfraCI", color: "", size: 1, ciType: "subnet" },
         { id: "host-a", name: "Host A", label: "InfraCI", color: "", size: 1, ciType: "host" },
         { id: "gateway-a", name: "Gateway A", label: "InfraCI", color: "", size: 1, ciType: "gateway" },
+        { id: "rogue", name: "Rogue", label: "InfraCI", color: "", size: 1, ciType: "host" },
       ],
       links: [
         { source: "host-a", target: "subnet-a", type: "MEMBER_OF" },
         { source: "subnet-a", target: "gateway-a", type: "ROUTES_THROUGH" },
         { source: "gateway-a", target: "host-a", type: "CONNECTS_TO" },
+        { source: "rogue", target: "subnet-a", type: "ROUTES_THROUGH" },
       ],
     });
     expect(input).toEqual(original);

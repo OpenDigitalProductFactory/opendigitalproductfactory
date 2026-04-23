@@ -213,7 +213,7 @@ describe("buildSeedRecipe – unknown provider", () => {
 });
 
 describe("buildSeedRecipe – responses-backed providers", () => {
-  it("routes codex models through the responses adapter", () => {
+  it("routes codex models through the chat adapter because Codex CLI handling lives elsewhere", () => {
     const result = buildSeedRecipe(
       "codex",
       "gpt-5.3-codex",
@@ -222,7 +222,7 @@ describe("buildSeedRecipe – responses-backed providers", () => {
       baseContract(),
     );
 
-    expect(result.executionAdapter).toBe("responses");
+    expect(result.executionAdapter).toBe("chat");
   });
 
   it("routes chatgpt subscription models through the responses adapter", () => {

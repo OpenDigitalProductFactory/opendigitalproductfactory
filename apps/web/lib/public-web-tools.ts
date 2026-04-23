@@ -584,7 +584,7 @@ const TLD_TO_COUNTRY: Record<string, { countryCode: string; currency: string }> 
 
 /** Phone number pattern → country/currency (fallback when TLD is .com/.org etc.) */
 const PHONE_PATTERNS: Array<{ pattern: RegExp; countryCode: string; currency: string }> = [
-  { pattern: /\+44[\s\d]{9,12}|\b0[1-9]\d{8,9}\b/, countryCode: "GB", currency: "GBP" },
+  { pattern: /\+44(?:[\s(]*\d[\s)]*){9,12}|\b0(?:[\s-]*\d){10,11}\b/, countryCode: "GB", currency: "GBP" },
   { pattern: /\+353[\s\d]{8,12}/, countryCode: "IE", currency: "EUR" },
   { pattern: /\+49[\s\d]{9,13}/, countryCode: "DE", currency: "EUR" },
   { pattern: /\+33[\s\d]{9,11}/, countryCode: "FR", currency: "EUR" },

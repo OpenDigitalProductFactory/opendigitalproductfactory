@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getTaskRequirement, BUILT_IN_TASK_REQUIREMENTS } from "./task-requirements";
 
-const mockPrisma = {
-  taskRequirement: {
-    findUnique: vi.fn(),
+const { mockPrisma } = vi.hoisted(() => ({
+  mockPrisma: {
+    taskRequirement: {
+      findUnique: vi.fn(),
+    },
   },
-};
+}));
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 
 describe("BUILT_IN_TASK_REQUIREMENTS", () => {

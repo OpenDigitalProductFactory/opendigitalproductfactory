@@ -28,6 +28,9 @@ beforeEach(() => {
   mockPrisma.eaView.findUnique.mockResolvedValue({
     id: "view-1",
     notationId: "notation-1",
+    notation: {
+      slug: "it4it",
+    },
     name: "IT4IT value streams",
     description: "Reference model projection",
     layoutType: "graph",

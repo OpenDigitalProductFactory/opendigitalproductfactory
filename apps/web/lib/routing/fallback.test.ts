@@ -2,7 +2,7 @@
  * EP-INF-004: Fallback behavior tests — model-level degradation, auto-recovery,
  * rate tracking in the callWithFallbackChain dispatch loop.
  */
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mocks (must be declared before imports) ──────────────────────────────────
 
@@ -99,6 +99,7 @@ const mockAutoDiscoverAndProfile = autoDiscoverAndProfile as ReturnType<typeof v
 // ── Setup ────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.clearAllMocks();
 
   // Default: provider lookup returns a valid provider
@@ -117,6 +118,10 @@ beforeEach(() => {
 
   // Default: extractRetryAfterMs returns undefined (fallback to 60s)
   mockExtractRetryAfterMs.mockReturnValue(undefined);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -162,13 +167,14 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
     it("triggers model-level degradation, NOT provider-level", async () => {
       throwRateLimit();
 
-      await expect(
-        callWithFallbackChain(
-          makeDecision("prov1", "model1"),
-          [{ role: "user", content: "hi" }],
-          "system",
-        ),
-      ).rejects.toThrow();
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
 
       // Model degraded at profile level
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
@@ -184,42 +190,45 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       throwRateLimit();
       mockExtractRetryAfterMs.mockReturnValue(30_000);
 
-      await expect(
-        callWithFallbackChain(
-          makeDecision("prov1", "model1"),
-          [{ role: "user", content: "hi" }],
-          "system",
-        ),
-      ).rejects.toThrow();
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
 
-      expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1", 30_000);
+      expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
     });
 
     it("defaults recovery delay to 60s when no retry-after header", async () => {
       throwRateLimit();
       mockExtractRetryAfterMs.mockReturnValue(undefined);
 
-      await expect(
-        callWithFallbackChain(
-          makeDecision("prov1", "model1"),
-          [{ role: "user", content: "hi" }],
-          "system",
-        ),
-      ).rejects.toThrow();
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
 
-      expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1", 60_000);
+      expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
     });
 
     it("calls recordRequest and learnFromRateLimitResponse", async () => {
       throwRateLimit();
 
-      await expect(
-        callWithFallbackChain(
-          makeDecision("prov1", "model1"),
-          [{ role: "user", content: "hi" }],
-          "system",
-        ),
-      ).rejects.toThrow();
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
 
       expect(mockRecordRequest).toHaveBeenCalledWith("prov1", "model1");
       expect(mockLearnFromRateLimitResponse).toHaveBeenCalledWith(

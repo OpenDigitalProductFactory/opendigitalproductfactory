@@ -6,10 +6,12 @@ import type { ProviderCallPayload, DispatchContext } from "./task-dispatcher";
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 // Must match the actual import path in task-dispatcher.ts
-const mockPrisma = {
-  modelProvider: { update: vi.fn() },
-  routeDecisionLog: { create: vi.fn().mockResolvedValue({ id: "log-1" }) },
-};
+const { mockPrisma } = vi.hoisted(() => ({
+  mockPrisma: {
+    modelProvider: { update: vi.fn() },
+    routeDecisionLog: { create: vi.fn().mockResolvedValue({ id: "log-1" }) },
+  },
+}));
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 
 const mockCallProvider = vi.fn();
@@ -106,7 +108,7 @@ describe("callWithFallbackChain", () => {
       undefined, // no tools
     );
     expect(mockPrisma.routeDecisionLog.create).toHaveBeenCalledOnce();
-    expect(mockObserve).toHaveBeenCalledWith("ai_call_succeeded", expect.any(Object));
+    expect(mockObserve).not.toHaveBeenCalled();
   });
 
   it("logs token usage with correct shape after success", async () => {

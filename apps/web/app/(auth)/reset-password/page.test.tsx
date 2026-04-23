@@ -4,6 +4,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 vi.mock("@/lib/actions/users", () => ({
   completePasswordReset: vi.fn(),
 }));
+vi.mock("@/components/auth/ResetPasswordForm", () => ({
+  ResetPasswordForm: ({ token }: { token: string }) => (
+    <form>
+      <input name="newPassword" />
+      <input name="confirmPassword" />
+      <input type="hidden" value={token} />
+    </form>
+  ),
+}));
 
 import ResetPasswordPage from "./page";
 
