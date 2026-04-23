@@ -24,6 +24,7 @@
   "pnpm": {
     "overrides": {
       "@types/react": "^19",
+      "@xmldom/xmldom": "0.8.13",
       "dompurify": "3.4.0",
       "node-forge": "1.4.0"
     },
