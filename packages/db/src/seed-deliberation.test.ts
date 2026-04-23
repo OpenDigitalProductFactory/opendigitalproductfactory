@@ -5,6 +5,7 @@ import {
   parseDeliberationFile,
   parseDeliberationContent,
   applyDeliberationPatterns,
+  seedDeliberationPatterns,
   type DeliberationFrontmatter,
   type DeliberationRecord,
 } from "./seed-deliberation";
@@ -199,6 +200,146 @@ describe("seed-deliberation applyDeliberationPatterns (upsert + override skip)",
     expect(creates).toHaveLength(0);
     expect(updates).toHaveLength(0);
     expect(skipped).toEqual(["review"]);
+  });
+});
+
+describe("seedDeliberationPatterns (Prisma upsert path)", () => {
+  type StoredRow = {
+    slug: string;
+    name: string;
+    isOverridden: boolean;
+  };
+
+  /**
+   * Minimal mock of the PrismaClient surface seedDeliberationPatterns actually
+   * touches: prisma.deliberationPattern.findUnique / create / update. Built in
+   * the same spirit as seed-prompt-templates tests — no live DB dependency.
+   */
+  function makeMockPrisma(initial: StoredRow[] = []) {
+    const store = new Map<string, StoredRow>();
+    for (const row of initial) store.set(row.slug, { ...row });
+    const calls = {
+      findUnique: [] as string[],
+      create: [] as Array<{ slug: string; name: string }>,
+      update: [] as Array<{ slug: string; name: string }>,
+    };
+    const mock = {
+      deliberationPattern: {
+        findUnique: async ({
+          where,
+          select,
+        }: {
+          where: { slug: string };
+          select?: Record<string, boolean>;
+        }) => {
+          calls.findUnique.push(where.slug);
+          const row = store.get(where.slug);
+          if (!row) return null;
+          // Respect select if provided (mirrors Prisma's behaviour loosely)
+          if (select) {
+            const picked: Record<string, unknown> = {};
+            for (const key of Object.keys(select)) {
+              if (select[key]) picked[key] = (row as Record<string, unknown>)[key];
+            }
+            return picked;
+          }
+          return row;
+        },
+        create: async ({
+          data,
+        }: {
+          data: { slug: string; name: string; isOverridden?: boolean };
+        }) => {
+          calls.create.push({ slug: data.slug, name: data.name });
+          store.set(data.slug, {
+            slug: data.slug,
+            name: data.name,
+            isOverridden: data.isOverridden ?? false,
+          });
+          return store.get(data.slug)!;
+        },
+        update: async ({
+          where,
+          data,
+        }: {
+          where: { slug: string };
+          data: { name?: string };
+        }) => {
+          calls.update.push({ slug: where.slug, name: data.name ?? "" });
+          const row = store.get(where.slug);
+          if (!row) throw new Error("row missing in mock update");
+          if (data.name) row.name = data.name;
+          return row;
+        },
+      },
+    };
+    return { mock, calls, store };
+  }
+
+  it("creates new, updates non-overridden, and skips overridden in one pass", async () => {
+    const { mock, calls, store } = makeMockPrisma([
+      // "debate" already exists and is not overridden — should update
+      { slug: "debate", name: "Old Debate Name", isOverridden: false },
+      // another-pattern exists and is overridden — should be skipped if the
+      // seed files happen to include it (they don't today, but we still want
+      // the path exercised through the real seed wrapper).
+    ]);
+
+    // Mock console.log to silence seed output noise during test
+    const originalLog = console.log;
+    console.log = () => {};
+    try {
+      await seedDeliberationPatterns(
+        mock as unknown as Parameters<typeof seedDeliberationPatterns>[0],
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    // At minimum the "review" seed file is present and should be created fresh,
+    // and "debate" exists and should be updated (file has newer content).
+    const createdSlugs = calls.create.map((c) => c.slug).sort();
+    const updatedSlugs = calls.update.map((c) => c.slug).sort();
+
+    expect(createdSlugs).toContain("review");
+    expect(updatedSlugs).toContain("debate");
+    // "debate" should have been updated with the current file's name
+    expect(store.get("debate")?.name).not.toBe("Old Debate Name");
+  });
+
+  it("skips rows whose isOverridden flag is true", async () => {
+    const { mock, calls } = makeMockPrisma([
+      { slug: "review", name: "Admin Edited Review", isOverridden: true },
+      { slug: "debate", name: "Admin Edited Debate", isOverridden: true },
+    ]);
+
+    const originalLog = console.log;
+    console.log = () => {};
+    try {
+      await seedDeliberationPatterns(
+        mock as unknown as Parameters<typeof seedDeliberationPatterns>[0],
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    // Nothing should have been created or updated — both rows are overridden
+    expect(calls.create).toHaveLength(0);
+    expect(calls.update).toHaveLength(0);
+    // findUnique should still have been called for each discovered slug
+    expect(calls.findUnique.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to parse-only behaviour when no prisma client is supplied", async () => {
+    const originalLog = console.log;
+    console.log = () => {};
+    try {
+      const records = await seedDeliberationPatterns(undefined);
+      expect(Array.isArray(records)).toBe(true);
+      expect(records.length).toBeGreaterThan(0);
+    } finally {
+      console.log = originalLog;
+    }
   });
 });
 

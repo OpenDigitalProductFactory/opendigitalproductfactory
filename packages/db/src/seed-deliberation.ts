@@ -1,14 +1,10 @@
 // packages/db/src/seed-deliberation.ts
 // Reads deliberation/*.deliberation.md files, parses YAML frontmatter, and
-// produces DeliberationPattern seed records.
+// upserts DeliberationPattern rows from those files.
 //
-// NOTE (Task 1 scope): the Prisma models DeliberationPattern and
-// DeliberationRoleProfile do NOT exist yet — they arrive in Task 2 of the
-// plan. This module is therefore authored as pure parse/discover logic with
-// an injected `getExisting/create/update` surface so the behaviour
-// (including the isOverridden skip mirrored from seed-prompt-templates.ts)
-// is fully exercised by tests today. When Task 2 lands the Prisma bindings,
-// the entry wrapper can be extended to pass real DB callbacks.
+// Task 1 landed the parse-only path. Task 2 (this change) wires the top-level
+// seedDeliberationPatterns() wrapper to the real Prisma client by way of the
+// injected applyDeliberationPatterns() helper.
 //
 // Idempotency contract (mirrors seed-prompt-templates.ts):
 //   - create a row when none exists for the slug
@@ -17,6 +13,7 @@
 
 import { readdirSync, readFileSync } from "fs";
 import { join, basename } from "path";
+import type { PrismaClient } from "../generated/client/client";
 
 const DELIBERATION_DIR = join(__dirname, "..", "..", "..", "deliberation");
 
@@ -520,14 +517,13 @@ export async function applyDeliberationPatterns(
 /* -------------------------------------------------------------------------- */
 /* Top-level entry                                                             */
 /*                                                                            */
-/* Task 1 scope: the DeliberationPattern Prisma model does not yet exist.    */
-/* This function discovers and parses the files, logs a summary, and returns  */
-/* the parsed records. Task 2 will add the Prisma model and extend this       */
-/* wrapper to call applyDeliberationPatterns with real DB callbacks.          */
+/* Discovers and parses the seed files, then upserts into DeliberationPattern */
+/* via applyDeliberationPatterns(). Mirrors seedPromptTemplates(): files are   */
+/* the source of truth, runtime-overridden rows are skipped.                  */
 /* -------------------------------------------------------------------------- */
 
 export async function seedDeliberationPatterns(
-  _prisma?: unknown,
+  prisma?: PrismaClient,
 ): Promise<DeliberationRecord[]> {
   const files = discoverDeliberationFiles();
   if (files.length === 0) return [];
@@ -545,8 +541,66 @@ export async function seedDeliberationPatterns(
     }
   }
 
+  if (!prisma || records.length === 0) {
+    console.log(
+      `Parsed deliberation patterns: ${records.length} (no prisma client supplied — DB upsert skipped)`,
+    );
+    return records;
+  }
+
+  const result = await applyDeliberationPatterns({
+    records,
+    getExisting: async (slug) => {
+      const row = await prisma.deliberationPattern.findUnique({
+        where: { slug },
+        select: { slug: true, isOverridden: true },
+      });
+      return row ?? null;
+    },
+    create: async (record) => {
+      await prisma.deliberationPattern.create({
+        data: {
+          slug: record.slug,
+          name: record.name,
+          purpose: record.purpose,
+          defaultRoles: record.defaultRoles as unknown as object,
+          topologyTemplate: record.topologyTemplate as object,
+          activationPolicyHints: record.activationPolicyHints as object,
+          evidenceRequirements: record.evidenceRequirements as object,
+          outputContract: record.outputContract as object,
+          providerStrategyHints: record.providerStrategyHints as object,
+          sourceFile: record.sourceFile,
+          status: record.status,
+          isOverridden: false,
+        },
+      });
+    },
+    update: async (record) => {
+      await prisma.deliberationPattern.update({
+        where: { slug: record.slug },
+        data: {
+          name: record.name,
+          purpose: record.purpose,
+          defaultRoles: record.defaultRoles as unknown as object,
+          topologyTemplate: record.topologyTemplate as object,
+          activationPolicyHints: record.activationPolicyHints as object,
+          evidenceRequirements: record.evidenceRequirements as object,
+          outputContract: record.outputContract as object,
+          providerStrategyHints: record.providerStrategyHints as object,
+          sourceFile: record.sourceFile,
+          status: record.status,
+        },
+      });
+    },
+    onSkip: (slug) => {
+      console.log(
+        `[seed-deliberation] Skipping runtime-overridden pattern ${slug}`,
+      );
+    },
+  });
+
   console.log(
-    `Parsed deliberation patterns: ${records.length} (DB upsert deferred until Task 2 adds DeliberationPattern model)`,
+    `Seeded deliberation patterns: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped (overridden)`,
   );
   return records;
 }
