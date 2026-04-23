@@ -12,8 +12,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  PORTAL_IMAGE: ghcr.io/${{ github.repository_owner }}/dpf-portal
-  SANDBOX_IMAGE: ghcr.io/${{ github.repository_owner }}/dpf-sandbox
 
 jobs:
   build-and-push:
@@ -59,6 +57,10 @@ jobs:
           fi
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Normalize image owner
+        id: owner
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push portal image
         uses: docker/build-push-action@v7
         with:
@@ -66,8 +68,8 @@ jobs:
           target: runner
           push: true
           tags: |
-            ${{ env.PORTAL_IMAGE }}:${{ steps.tag.outputs.version }}
-            ${{ env.PORTAL_IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-portal:${{ steps.tag.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-portal:latest
 
       - name: Build and push sandbox image
         uses: docker/build-push-action@v7
@@ -76,5 +78,5 @@ jobs:
           file: Dockerfile.sandbox
           push: true
           tags: |
-            ${{ env.SANDBOX_IMAGE }}:${{ steps.tag.outputs.version }}
-            ${{ env.SANDBOX_IMAGE }}:latest
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-sandbox:${{ steps.tag.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-sandbox:latest
