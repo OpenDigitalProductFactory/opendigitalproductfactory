@@ -56,8 +56,10 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
       where: { taskRunId: input.taskRunId },
       data: { status: "active" },
     });
-  } catch {
-    // Best-effort.
+  } catch (err) {
+    console.warn(
+      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} active: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Load the DeliberationRun plus its branch TaskNodes and the pattern row.
@@ -333,8 +335,10 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
         data: { status: "completed", completedAt: new Date() },
       });
     }
-  } catch {
-    // Best-effort.
+  } catch (err) {
+    console.warn(
+      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} completed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
