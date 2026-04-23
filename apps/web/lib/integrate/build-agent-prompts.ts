@@ -509,6 +509,10 @@ export type BuildContext = {
   businessContext?: string;
   /** Scout findings: related models, gaps, external structure from fast codebase search. */
   scoutFindings?: string;
+  /** Optional one-sentence reason the current phase ran under deliberation
+   *  (Deliberation Pattern Framework v1, Step 8.6). Surfaces WHY a debate or
+   *  peer review was activated so downstream agents can explain decisions. */
+  deliberationReason?: string;
 };
 
 export async function getBuildContextSection(ctx: BuildContext): Promise<string> {
@@ -594,6 +598,14 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
       }
     }
     lines.push("Use this briefing to understand WHY decisions were made. Do not re-litigate settled decisions unless the user asks.");
+  }
+
+  // Deliberation Pattern Framework (Step 8.6): if the caller recorded a
+  // reason for running deliberation on this phase, surface it so downstream
+  // agents can explain why review/debate was activated.
+  if (ctx.deliberationReason && ctx.deliberationReason.trim()) {
+    lines.push("");
+    lines.push(`DELIBERATION: ${ctx.deliberationReason.trim()}`);
   }
 
   lines.push("");

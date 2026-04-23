@@ -15,6 +15,7 @@ import {
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
+import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
 import {
   getIntegrationBenchmarkMetadata,
   matchesIntegrationBenchmarkFilters,
@@ -3252,6 +3253,30 @@ export async function executeTool(
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
       logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
 
+      // Record a deliberation trail for this dual-reviewer run. The review
+      // result above still gates pass/fail; this layer is the honest
+      // retrospective the Deliberation Pattern Framework persists for UI +
+      // audit (spec §7). Wrap in try/catch — a deliberation write MUST NOT
+      // break the review gate (fail-loud via console.warn per project memory
+      // "silent seed skips audit").
+      try {
+        const reviewerBranches: ReviewBranchInput[] = [];
+        if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
+        if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        if (reviewerBranches.length > 0) {
+          const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
+          await runBuildReviewDeliberation({
+            userId,
+            buildId,
+            phase: "ideate",
+            reviewerBranches,
+            ...(context?.threadId ? { threadId: context.threadId } : {}),
+          });
+        }
+      } catch (err) {
+        console.warn("[deliberation] failed to record build review trail", err);
+      }
+
       // Failed review → structured recovery instructions, no auto-advance
       if (review.decision === "fail") {
         const criticalIssues = review.issues.filter((i: { severity: string }) => i.severity === "critical");
@@ -3420,6 +3445,28 @@ export async function executeTool(
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
       logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);
+
+      // Record a deliberation trail for this dual-reviewer run. See the
+      // matching block in reviewDesignDoc — same rules: review gate above is
+      // authoritative, deliberation persistence is best-effort, failures are
+      // logged loudly but do not throw.
+      try {
+        const reviewerBranches: ReviewBranchInput[] = [];
+        if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
+        if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        if (reviewerBranches.length > 0) {
+          const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
+          await runBuildReviewDeliberation({
+            userId,
+            buildId,
+            phase: "plan",
+            reviewerBranches,
+            ...(context?.threadId ? { threadId: context.threadId } : {}),
+          });
+        }
+      } catch (err) {
+        console.warn("[deliberation] failed to record build review trail", err);
+      }
 
       // Failed review → structured recovery instructions, no auto-advance
       if (review.decision === "fail") {

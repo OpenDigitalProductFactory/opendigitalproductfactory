@@ -2,7 +2,23 @@
 // Reviewer agents for Build Disciplines. Each reviewer is an LLM call
 // that validates evidence and returns a structured ReviewResult.
 
-import type { ReviewResult, BuildDesignDoc, BuildPlanDoc } from "@/lib/feature-build-types";
+import type {
+  ReviewResult,
+  BuildDesignDoc,
+  BuildPlanDoc,
+  BuildDeliberationPhase,
+  BuildDeliberationSummaryEntry,
+} from "@/lib/feature-build-types";
+import type {
+  BranchArtifact,
+  BranchClaim,
+  CompactBuildDeliberationSummary,
+} from "@/lib/deliberation/synthesizer";
+import type {
+  ClaimEvidenceGrade,
+  DeliberationConsensusState,
+  DeliberationActivatedRiskLevel,
+} from "@/lib/deliberation/types";
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
@@ -211,4 +227,178 @@ export function parseReviewResponse(raw: string): ReviewResult {
       summary: "Review failed — could not parse agent response",
     };
   }
+}
+
+// ─── Deliberation Integration (Task 8) ──────────────────────────────────────
+// Map the existing dual-reviewer output into the Deliberation Pattern
+// Framework v1. The reviewer LLM calls already ran — this layer wraps
+// their results as ClaimRecord rows, a DeliberationOutcome, and a compact
+// FeatureBuild.deliberationSummary[phase] entry. Option C in the Task 8
+// design: honest retrospective, never replaces the ReviewResult flow.
+
+/** Map a ReviewResult severity to a ClaimEvidenceGrade. Reviewer judgments
+ *  are inference unless the reviewer cited a source (we can't tell from
+ *  the structured result), so everything grades C — documented inference.
+ *  Critical findings earn grade B when we have a location reference, since
+ *  the reviewer is pointing at a concrete artifact. */
+function gradeForReviewIssue(issue: ReviewResult["issues"][number]): ClaimEvidenceGrade {
+  if (issue.location && issue.severity === "critical") return "B";
+  return "C";
+}
+
+/** Map severity to a confidence float. Critical findings are high-confidence
+ *  (reviewer believes the issue is real); minor findings are low. */
+function confidenceForReviewIssue(issue: ReviewResult["issues"][number]): number {
+  switch (issue.severity) {
+    case "critical":
+      return 0.85;
+    case "important":
+      return 0.65;
+    case "minor":
+    default:
+      return 0.4;
+  }
+}
+
+/**
+ * Extract BranchClaim rows from a single reviewer's ReviewResult.
+ *
+ * Each issue becomes an objection claim — the reviewer raising a concern.
+ * When the reviewer's overall decision is "pass", a single assertion claim
+ * is added representing their affirmative recommendation. This keeps the
+ * claim set honest for the synthesizer's consensus detection: a pass with
+ * zero objections is a strong agreement signal.
+ */
+export function extractClaimsFromReview(review: ReviewResult): {
+  assertions: BranchClaim[];
+  objections: BranchClaim[];
+} {
+  const assertions: BranchClaim[] = [];
+  const objections: BranchClaim[] = [];
+
+  if (review.decision === "pass") {
+    assertions.push({
+      claimText: review.summary || "Reviewer affirmed the artifact meets the discipline checklist.",
+      evidenceGrade: "C",
+      confidence: 0.7,
+    });
+  }
+
+  for (const issue of review.issues) {
+    const text = issue.location
+      ? `[${issue.severity}] ${issue.description} (at ${issue.location})`
+      : `[${issue.severity}] ${issue.description}`;
+    objections.push({
+      claimText: text,
+      evidenceGrade: gradeForReviewIssue(issue),
+      confidence: confidenceForReviewIssue(issue),
+    });
+  }
+
+  return { assertions, objections };
+}
+
+/** Shape of a single reviewer's contribution to a deliberation wrap. */
+export type ReviewBranchInput = {
+  branchNodeId: string;
+  role: string; // "reviewer" | "skeptic" | "author" etc.
+  review: ReviewResult | null; // null means the reviewer failed to respond
+  failureReason?: string;
+};
+
+/**
+ * Build BranchArtifact[] for the synthesizer from the dual-reviewer results.
+ * Each reviewer becomes one branch: completed if the ReviewResult parsed,
+ * failed (with failureReason) otherwise.
+ */
+export function buildReviewBranchArtifacts(
+  inputs: ReviewBranchInput[],
+): BranchArtifact[] {
+  return inputs.map((input) => {
+    if (!input.review) {
+      return {
+        branchNodeId: input.branchNodeId,
+        role: input.role,
+        completed: false,
+        failureReason: input.failureReason ?? "Reviewer did not produce a parsed response.",
+      };
+    }
+    const { assertions, objections } = extractClaimsFromReview(input.review);
+    const recommendation =
+      input.review.decision === "pass" ? "pass" : "fail";
+    return {
+      branchNodeId: input.branchNodeId,
+      role: input.role,
+      completed: true,
+      recommendation,
+      rationale: input.review.summary,
+      assertions,
+      objections,
+    };
+  });
+}
+
+/** Map the synthesizer's evidence badge to the BuildDeliberationSummaryEntry
+ *  evidence-quality label (values are the same by design). */
+function evidenceBadgeToQuality(
+  badge: "source-backed" | "mixed" | "needs-more-evidence",
+): BuildDeliberationSummaryEntry["evidenceQuality"] {
+  return badge;
+}
+
+/**
+ * Translate a CompactBuildDeliberationSummary from the synthesizer into the
+ * shape persisted on FeatureBuild.deliberationSummary[phase].
+ *
+ * The compact summary is the neutral synthesizer shape; the build entry is
+ * the UI-facing shape used by Build Studio. This mapper is the bridge —
+ * it never re-derives consensus or confidence, only reshapes.
+ */
+export function mapCompactSummaryToBuildEntry(params: {
+  patternSlug: "review" | "debate";
+  compactSummary: CompactBuildDeliberationSummary;
+  rationaleSummary: string;
+  unresolvedRisks: string[];
+  diversityLabel: string;
+}): BuildDeliberationSummaryEntry {
+  return {
+    patternSlug: params.patternSlug,
+    deliberationRunId: params.compactSummary.deliberationRunId,
+    consensusState: params.compactSummary.consensusState as DeliberationConsensusState,
+    rationaleSummary: params.rationaleSummary,
+    evidenceQuality: evidenceBadgeToQuality(params.compactSummary.evidenceBadge),
+    unresolvedRisks: params.unresolvedRisks,
+    diversityLabel: params.diversityLabel,
+  };
+}
+
+/**
+ * Risk-level heuristic for the activation resolver. Critical issues in
+ * either reviewer push to high; important issues land at medium; clean
+ * reviews stay at low. This drives whether an optional skeptic branch
+ * joins the default "review" pattern (spec §7.4).
+ */
+export function deriveReviewRiskLevel(
+  reviews: Array<ReviewResult | null>,
+): DeliberationActivatedRiskLevel {
+  let level: DeliberationActivatedRiskLevel = "low";
+  for (const r of reviews) {
+    if (!r) continue;
+    if (r.issues.some((i) => i.severity === "critical")) return "high";
+    if (r.issues.some((i) => i.severity === "important")) level = "medium";
+  }
+  return level;
+}
+
+/**
+ * Map a Build Studio phase to the Deliberation artifactType used by the
+ * activation resolver. Build Studio phases beyond plan/review run on the
+ * generated artifact, so "code-change" is the right category.
+ */
+export function artifactTypeForPhase(
+  phase: BuildDeliberationPhase,
+): "spec" | "plan" | "code-change" {
+  if (phase === "ideate") return "spec";
+  if (phase === "plan") return "plan";
+  return "code-change";
 }

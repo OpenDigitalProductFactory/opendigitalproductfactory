@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { buildDesignReviewPrompt, buildPlanReviewPrompt, buildCodeReviewPrompt, parseReviewResponse } from "./build-reviewers";
+import {
+  buildDesignReviewPrompt,
+  buildPlanReviewPrompt,
+  buildCodeReviewPrompt,
+  parseReviewResponse,
+  extractClaimsFromReview,
+  buildReviewBranchArtifacts,
+  deriveReviewRiskLevel,
+  artifactTypeForPhase,
+  mapCompactSummaryToBuildEntry,
+  type ReviewBranchInput,
+} from "./build-reviewers";
+import type { ReviewResult } from "@/lib/feature-build-types";
 
 describe("buildDesignReviewPrompt", () => {
   it("includes all design doc sections", () => {
@@ -118,5 +130,197 @@ describe("parseReviewResponse", () => {
     }));
     expect(result.decision).toBe("fail");
     expect(result.issues).toHaveLength(2);
+  });
+});
+
+// ─── Deliberation Integration (Task 8) ──────────────────────────────────────
+
+describe("extractClaimsFromReview", () => {
+  it("adds an affirmative assertion when the reviewer passes", () => {
+    const review: ReviewResult = {
+      decision: "pass",
+      issues: [],
+      summary: "Design is sound and complete.",
+    };
+    const { assertions, objections } = extractClaimsFromReview(review);
+    expect(assertions).toHaveLength(1);
+    expect(assertions[0].claimText).toContain("Design is sound");
+    expect(assertions[0].evidenceGrade).toBe("C");
+    expect(objections).toHaveLength(0);
+  });
+
+  it("maps each issue to an objection claim with severity in the text", () => {
+    const review: ReviewResult = {
+      decision: "fail",
+      issues: [
+        { severity: "critical", description: "Auth bypass", location: "lib/auth.ts" },
+        { severity: "important", description: "Missing tests" },
+        { severity: "minor", description: "Naming nit" },
+      ],
+      summary: "Needs work",
+    };
+    const { assertions, objections } = extractClaimsFromReview(review);
+    // Fail decision → no affirmative assertion.
+    expect(assertions).toHaveLength(0);
+    expect(objections).toHaveLength(3);
+
+    const critical = objections[0];
+    expect(critical.claimText).toContain("[critical]");
+    expect(critical.claimText).toContain("Auth bypass");
+    expect(critical.claimText).toContain("(at lib/auth.ts)");
+    // Location + critical → grade B.
+    expect(critical.evidenceGrade).toBe("B");
+    expect(critical.confidence).toBeCloseTo(0.85, 5);
+
+    const important = objections[1];
+    expect(important.claimText).toContain("[important]");
+    expect(important.evidenceGrade).toBe("C");
+    expect(important.confidence).toBeCloseTo(0.65, 5);
+
+    const minor = objections[2];
+    expect(minor.claimText).toContain("[minor]");
+    expect(minor.confidence).toBeCloseTo(0.4, 5);
+  });
+});
+
+describe("buildReviewBranchArtifacts", () => {
+  const passReview: ReviewResult = {
+    decision: "pass",
+    issues: [],
+    summary: "Looks good",
+  };
+  const failReview: ReviewResult = {
+    decision: "fail",
+    issues: [{ severity: "critical", description: "Data loss risk" }],
+    summary: "Blocking issue",
+  };
+
+  it("produces one branch per reviewer with claims populated", () => {
+    const inputs: ReviewBranchInput[] = [
+      { branchNodeId: "reviewer-1", role: "reviewer", review: passReview },
+      { branchNodeId: "reviewer-2", role: "reviewer", review: failReview },
+    ];
+    const branches = buildReviewBranchArtifacts(inputs);
+    expect(branches).toHaveLength(2);
+
+    expect(branches[0]).toMatchObject({
+      branchNodeId: "reviewer-1",
+      role: "reviewer",
+      completed: true,
+      recommendation: "pass",
+      rationale: "Looks good",
+    });
+    expect(branches[0].assertions).toHaveLength(1);
+    expect(branches[0].objections).toHaveLength(0);
+
+    expect(branches[1]).toMatchObject({
+      branchNodeId: "reviewer-2",
+      role: "reviewer",
+      completed: true,
+      recommendation: "fail",
+      rationale: "Blocking issue",
+    });
+    expect(branches[1].objections).toHaveLength(1);
+  });
+
+  it("marks a null-review branch as incomplete with a failure reason", () => {
+    const inputs: ReviewBranchInput[] = [
+      { branchNodeId: "reviewer-1", role: "reviewer", review: null, failureReason: "LLM timeout" },
+    ];
+    const branches = buildReviewBranchArtifacts(inputs);
+    expect(branches).toHaveLength(1);
+    expect(branches[0].completed).toBe(false);
+    expect(branches[0].failureReason).toBe("LLM timeout");
+    // Null-review branches have no recommendation or claim arrays.
+    expect(branches[0].recommendation).toBeUndefined();
+  });
+
+  it("supplies a default failure reason when caller omits one", () => {
+    const inputs: ReviewBranchInput[] = [
+      { branchNodeId: "reviewer-1", role: "reviewer", review: null },
+    ];
+    const branches = buildReviewBranchArtifacts(inputs);
+    expect(branches[0].failureReason).toMatch(/did not produce/i);
+  });
+});
+
+describe("deriveReviewRiskLevel", () => {
+  it("returns low when all reviewers passed with no issues", () => {
+    const reviews: Array<ReviewResult | null> = [
+      { decision: "pass", issues: [], summary: "ok" },
+      { decision: "pass", issues: [], summary: "ok" },
+    ];
+    expect(deriveReviewRiskLevel(reviews)).toBe("low");
+  });
+
+  it("returns medium when any reviewer raised an important (but no critical) issue", () => {
+    const reviews: Array<ReviewResult | null> = [
+      { decision: "pass", issues: [], summary: "ok" },
+      {
+        decision: "fail",
+        issues: [{ severity: "important", description: "Missing alternatives" }],
+        summary: "gap",
+      },
+    ];
+    expect(deriveReviewRiskLevel(reviews)).toBe("medium");
+  });
+
+  it("returns high as soon as any reviewer raised a critical issue", () => {
+    const reviews: Array<ReviewResult | null> = [
+      { decision: "pass", issues: [], summary: "ok" },
+      {
+        decision: "fail",
+        issues: [
+          { severity: "important", description: "Docs" },
+          { severity: "critical", description: "SQL injection" },
+        ],
+        summary: "broken",
+      },
+    ];
+    expect(deriveReviewRiskLevel(reviews)).toBe("high");
+  });
+
+  it("ignores null (failed-to-respond) reviewers instead of counting them as risk", () => {
+    const reviews: Array<ReviewResult | null> = [
+      null,
+      { decision: "pass", issues: [], summary: "ok" },
+    ];
+    expect(deriveReviewRiskLevel(reviews)).toBe("low");
+  });
+});
+
+describe("artifactTypeForPhase", () => {
+  it("maps ideate → spec, plan → plan, review → code-change", () => {
+    expect(artifactTypeForPhase("ideate")).toBe("spec");
+    expect(artifactTypeForPhase("plan")).toBe("plan");
+    expect(artifactTypeForPhase("review")).toBe("code-change");
+  });
+});
+
+describe("mapCompactSummaryToBuildEntry", () => {
+  it("passes the synthesizer's fields through without re-deriving consensus", () => {
+    const entry = mapCompactSummaryToBuildEntry({
+      patternSlug: "review",
+      compactSummary: {
+        deliberationRunId: "run-1",
+        consensusState: "consensus",
+        confidence: 0.82,
+        unresolvedCount: 0,
+        branchesCompleted: 2,
+        branchesTotal: 2,
+        budgetHalted: false,
+        degradedDiversity: false,
+        evidenceBadge: "mixed",
+      },
+      rationaleSummary: "Both reviewers affirmed the design.",
+      unresolvedRisks: [],
+      diversityLabel: "peer-review",
+    });
+    expect(entry.patternSlug).toBe("review");
+    expect(entry.deliberationRunId).toBe("run-1");
+    expect(entry.consensusState).toBe("consensus");
+    expect(entry.evidenceQuality).toBe("mixed");
+    expect(entry.diversityLabel).toBe("peer-review");
+    expect(entry.unresolvedRisks).toEqual([]);
   });
 });

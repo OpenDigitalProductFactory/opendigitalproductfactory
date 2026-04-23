@@ -19,11 +19,24 @@ import {
   SPECIALIST_TOOLS,
 } from "./specialist-prompts";
 import type { SpecialistRole } from "./task-dependency-graph";
-import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
+import type {
+  BuildPlanDoc,
+  BuildDeliberationPhase,
+  BuildDeliberationSummary,
+  BuildDeliberationSummaryEntry,
+} from "@/lib/explore/feature-build-types";
 import { mergeHappyPathStateIntoPlan } from "@/lib/explore/feature-build-types";
 import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
 import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
 import { getBuildStudioConfig } from "./build-studio-config";
+import type { ReviewResult } from "@/lib/feature-build-types";
+import {
+  buildReviewBranchArtifacts,
+  mapCompactSummaryToBuildEntry,
+  deriveReviewRiskLevel,
+  artifactTypeForPhase,
+  type ReviewBranchInput,
+} from "./build-reviewers";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -163,6 +176,180 @@ export function formatBuildCompleteMessage(summary: BuildSummary): string {
   }
 
   return parts.join("\n");
+}
+
+// ─── Deliberation integration (Task 8) ─────────────────────────────────────
+// Build Studio's review entry points (ideate → plan gate, plan → build gate,
+// and the post-build review phase) now wrap their dual-reviewer runs as a
+// DeliberationRun + DeliberationOutcome + compact FeatureBuild.deliberationSummary
+// entry.
+//
+// Pattern selection (spec §7.4):
+//   - "review"  is the default for ideate and plan — peer review at medium
+//                assurance. Risk can escalate to add a skeptic branch.
+//   - "debate"  is opt-in; callers set `explicitPattern: "debate"` when they
+//                want author/reviewer/adjudicator + rebuttals. Typically used
+//                for contested design decisions.
+//
+// The existing reviewer LLM calls still run — their ReviewResult stays the
+// source of truth for pass/fail gating. The deliberation layer is an honest
+// retrospective of what the reviewers found, so ClaimRecord rows, an outcome
+// row, and the FeatureBuild.deliberationSummary trail all exist for UI +
+// audit. Synthesis failures fail loud (memory: silent seed skips).
+
+type DeliberationPatternChoice = "review" | "debate";
+
+/**
+ * Default deliberation pattern per build phase. Ideate and plan are the two
+ * phases where deliberation is the default per the plan's Step 8.5.
+ * Callers that want to upgrade to "debate" for a single invocation pass
+ * `explicitPattern` to runBuildReviewDeliberation.
+ */
+export function defaultDeliberationPatternForPhase(
+  phase: BuildDeliberationPhase,
+): DeliberationPatternChoice {
+  // review pattern is the default at every build-phase review point.
+  // The activation resolver is what decides whether to actually activate,
+  // but for the Build Studio surfaces, "review" is the selected default.
+  void phase;
+  return "review";
+}
+
+export type BuildReviewDeliberationInput = {
+  userId: string;
+  buildId: string;
+  phase: BuildDeliberationPhase;
+  reviewerBranches: ReviewBranchInput[];
+  /** Optional TaskRun to tie the deliberation into an existing work unit. */
+  taskRunId?: string;
+  /** Optional thread id — progress events from the deliberation layer fan
+   *  out through the agent event bus for this thread. */
+  threadId?: string;
+  /** Opt-in to the debate pattern for this invocation. Omit for default
+   *  peer review. */
+  explicitPattern?: DeliberationPatternChoice;
+  /** Passed to the activation resolver to narrow strategy selection. */
+  strategyProfile?: "economy" | "balanced" | "high-assurance" | "document-authority";
+};
+
+export type BuildReviewDeliberationResult = {
+  entry: BuildDeliberationSummaryEntry;
+  deliberationRunId: string;
+  reason: string;
+};
+
+/**
+ * Wrap a completed dual-reviewer run as a deliberation. Persists the
+ * ClaimRecord + DeliberationOutcome trail and patches FeatureBuild
+ * .deliberationSummary[phase] with a compact UI entry.
+ *
+ * Fails loud — callers should not assume silent success. The reviewer path
+ * (build-reviewers.ts / mcp-tools.ts) retains authority over pass/fail
+ * gating; this function only records the deliberation trail.
+ */
+export async function runBuildReviewDeliberation(
+  input: BuildReviewDeliberationInput,
+): Promise<BuildReviewDeliberationResult> {
+  const { userId, buildId, phase, reviewerBranches, taskRunId, threadId, strategyProfile } = input;
+
+  const patternSlug: DeliberationPatternChoice =
+    input.explicitPattern ?? defaultDeliberationPatternForPhase(phase);
+
+  // Derive a risk level from the reviewer findings so the activation
+  // resolver can optionally escalate (spec §7.4 — skeptic branch on
+  // medium+ risk).
+  const parsedReviews: Array<ReviewResult | null> = reviewerBranches.map((b) => b.review);
+  const riskLevel = deriveReviewRiskLevel(parsedReviews);
+  const artifactType = artifactTypeForPhase(phase);
+
+  const { startDeliberation } = await import("@/lib/actions/deliberation");
+  const { synthesizeDeliberation } = await import("@/lib/deliberation/synthesizer");
+
+  // Stage/risk triggers are pre-authorized by the auto-approve predicate
+  // (see startDeliberationAutoApprove). Explicit debate invocations still
+  // go through normal proposal review — that matches spec §7.1.
+  const stageForResolver: "ideate" | "plan" | "review" = phase;
+
+  const started = await startDeliberation({
+    userId,
+    patternSlug,
+    taskRunId,
+    threadId,
+    buildId,
+    artifactType,
+    strategyProfile: strategyProfile ?? "balanced",
+    stage: stageForResolver,
+    riskLevel,
+    routeContext: "/build",
+  });
+
+  const branchArtifacts = buildReviewBranchArtifacts(reviewerBranches);
+
+  // Map branchNodeIds onto actual persisted TaskNode ids so the synthesizer
+  // can write ClaimRecord rows with valid foreign keys. The orchestrator
+  // already materialized branch nodes; we look them up in order.
+  const persistedBranches = await prisma.taskNode.findMany({
+    where: { taskRun: { id: undefined, taskRunId: undefined }, deliberationRun: { id: started.deliberationRunId } },
+    select: { id: true, workerRole: true },
+    orderBy: { createdAt: "asc" },
+  });
+  // The above where clause is intentionally over-restrictive to avoid false
+  // matches — fallback to TaskNode lookup by DeliberationRun id directly.
+  const nodesByRole = await prisma.taskNode.findMany({
+    where: { deliberationRunId: started.deliberationRunId },
+    select: { id: true, workerRole: true },
+    orderBy: { createdAt: "asc" },
+  });
+  void persistedBranches;
+
+  // Best-effort alignment: pair review branches with the persisted worker
+  // roles the orchestrator materialized. If counts don't match (pattern
+  // expanded extra branches we don't have content for), we let the
+  // synthesizer count them as incomplete — that's truthful.
+  const alignedArtifacts = branchArtifacts.map((art, idx) => ({
+    ...art,
+    branchNodeId: nodesByRole[idx]?.id ?? art.branchNodeId,
+  }));
+
+  const synth = await synthesizeDeliberation({
+    deliberationRunId: started.deliberationRunId,
+    artifactType,
+    branches: alignedArtifacts,
+    diversityLabel: patternSlug === "debate" ? "debate-roles" : "peer-review",
+  });
+
+  const entry = mapCompactSummaryToBuildEntry({
+    patternSlug,
+    compactSummary: synth.compactSummary,
+    rationaleSummary: synth.outcome.rationaleSummary,
+    unresolvedRisks: synth.outcome.unresolvedRisks,
+    diversityLabel: patternSlug === "debate" ? "debate-roles" : "peer-review",
+  });
+
+  // Patch FeatureBuild.deliberationSummary[phase]. Read-modify-write, because
+  // deliberationSummary is a JSON blob keyed by phase.
+  const existing = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { deliberationSummary: true },
+  });
+  const current = (existing?.deliberationSummary as BuildDeliberationSummary | null) ?? {};
+  const nextSummary: BuildDeliberationSummary = {
+    ...current,
+    [phase]: entry,
+  };
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      deliberationSummary: nextSummary as unknown as import("@dpf/db").Prisma.InputJsonValue,
+    },
+  });
+
+  return {
+    entry,
+    deliberationRunId: started.deliberationRunId,
+    reason: started.reason,
+  };
 }
 
 // ─── Specialist Outcome Protocol (Superpowers-inspired) ────────────────────
