@@ -44,3 +44,24 @@ export interface RecipeRow {
   toolPolicy: unknown;
   responsePolicy: unknown;
 }
+
+// ── RoleRoutingRecipe ────────────────────────────────────────────────────────
+//
+// Lightweight preference hint that lets deliberation branch roles (reviewer,
+// skeptic, adjudicator, debater, ...) express what kind of model they want
+// WITHOUT bypassing the existing task-router pipeline. The router still owns
+// endpoint selection and recipe binding — this just rides alongside the
+// request so branches can ask for e.g. a high-tier synthesis model for an
+// adjudicator role or a diverse provider for a skeptic.
+//
+// Populated from DeliberationPattern.providerStrategyHints.rolesRecipes by
+// the deliberation registry. Read by callers via loadRoleRecipe() in
+// recipe-loader.ts.
+
+export interface RoleRoutingRecipe {
+  roleId: string;
+  capabilityTier?: "low" | "medium" | "high";
+  taskType?: string;
+  preferProviderDiversity?: boolean;
+  requireProviderDiversity?: boolean;
+}

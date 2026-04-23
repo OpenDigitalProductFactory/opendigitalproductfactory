@@ -10,7 +10,8 @@
     "./neo4j-sync": "./src/neo4j-sync.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",
-    "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts"
+    "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
+    "./seed-deliberation": "./src/seed-deliberation.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",

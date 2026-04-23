@@ -12,10 +12,21 @@ export default defineConfig({
     exclude: ["node_modules", ".next"],
   },
   resolve: {
-    alias: {
-      "@": resolve(__dirname, "."),
-      "@dpf/db": resolve(__dirname, "../../packages/db/src/client.ts"),
-      "@dpf/finance-templates": resolve(__dirname, "../../packages/finance-templates/src/index.ts"),
-    },
+    // Alias order matters: Vite prefix-matches string aliases in the order
+    // they are declared, so subpath entries (`@dpf/db/foo`) MUST come before
+    // the bare-name entry (`@dpf/db`) or the subpath would be rewritten to
+    // `<client.ts>/foo` and fail to resolve.
+    alias: [
+      {
+        find: "@dpf/db/seed-deliberation",
+        replacement: resolve(__dirname, "../../packages/db/src/seed-deliberation.ts"),
+      },
+      { find: "@", replacement: resolve(__dirname, ".") },
+      { find: "@dpf/db", replacement: resolve(__dirname, "../../packages/db/src/client.ts") },
+      {
+        find: "@dpf/finance-templates",
+        replacement: resolve(__dirname, "../../packages/finance-templates/src/index.ts"),
+      },
+    ],
   },
 });
