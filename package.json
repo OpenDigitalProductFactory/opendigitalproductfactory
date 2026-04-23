@@ -23,7 +23,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@types/react": "^19"
+      "@types/react": "^19",
+      "@xmldom/xmldom": "0.8.13"
     },
     "onlyBuiltDependencies": [
       "msw",
