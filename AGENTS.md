@@ -59,26 +59,33 @@ Epics must be actively managed — not just created and forgotten.
 
 ### Core Rule
 
-- **Work directly on `main`.** Do not create feature branches or worktrees unless the user explicitly asks for one.
-- Commit early, commit often. Small, focused commits on `main` are preferred over long-lived branches.
+- **All changes land via a pull request against `main` — including the maintainer's.** No direct pushes to `main`.
+- Branch from `main` with a short-lived topic branch named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. One concern per branch, one concern per PR.
+- Open the PR with `gh pr create --base main`. Keep `Typecheck` and `Production Build` green before requesting merge. `Unit Tests` runs informationally while the broken-test surface is being cleaned up.
+- Merge via squash-and-delete once CI passes: `gh pr merge <n> --squash --delete-branch`.
+- Always push after committing — local-only commits are invisible to CI.
 
 ### Why
 
-- Worktrees and feature branches caused lost uncommitted work across multiple directories.
-- This is a single-developer project where `main` is the working branch.
-- Simplicity beats process overhead — if something breaks, `git revert` is straightforward.
+- The repo is public on GitHub. Branch protection on `main` enforces this at the platform level once configured.
+- CI has to run on every change before it lands — direct pushes bypass the gate.
+- External contributors already use fork → branch → PR (see [CONTRIBUTING.md](CONTRIBUTING.md)). The maintainer using the same flow means one workflow, not two.
+- A PR diff is reviewable even for single-maintainer work; `git revert` is still straightforward but the review pass catches issues earlier.
 
 ### Commits
 
-- Commit completed work promptly so nothing is lost.
-- Use descriptive commit messages that explain *why*, not just *what*.
-- Do not batch unrelated changes into a single commit.
+- Small, focused commits within a branch. Each commit should leave the tree in a working state.
+- Commit messages explain *why*, not just *what*. Conventional-commit prefixes (`feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`) match the existing history.
+- Do not batch unrelated changes into a single PR.
 
-### When to Branch (exception, not default)
+### Concurrent sessions
 
-- Only create a branch if the user explicitly requests one.
-- Only create a branch for experimental work the user wants to isolate.
-- If a branch is created, merge or discard it quickly — do not let branches linger.
+- Multiple Claude sessions work in parallel on separate branches — no working-tree collisions by default.
+- If two sessions ever share a working tree on the same branch, use `git commit --only <paths>` to scope commits to the files you touched.
+
+### History
+
+- Pre-2026-04-23 rule was "commit directly on `main`," driven by (a) worktree accidents causing lost work and (b) branch protection being unavailable on the Free tier while the repo was private. Both no longer apply: worktrees are not part of the flow, and the repo is public.
 
 ### Verification — Build Gate (mandatory)
 
