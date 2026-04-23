@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
+import { buildLifecycleReviewQueue } from "@/lib/shared/lifecycle-review";
 import { evaluateTechnologyLifecycle } from "./lifecycle-evaluation";
 
 type CustomerEstateSummary = {
@@ -12,6 +13,58 @@ type CustomerEstateSummary = {
   commercialCount: number;
   openSourceCount: number;
   hybridCount: number;
+  reviewQueueCounts: {
+    urgent: number;
+    renewal: number;
+    review: number;
+    research: number;
+  };
+  reviewQueues: {
+    urgent: Array<{
+      id: string;
+      customerCiId: string;
+      name: string;
+      ciType: string;
+      lifecycleStatus: string;
+      supportStatus: string;
+      recommendedAction: string;
+      attentionLevel: string;
+      queue: "urgent";
+    }>;
+    renewal: Array<{
+      id: string;
+      customerCiId: string;
+      name: string;
+      ciType: string;
+      lifecycleStatus: string;
+      supportStatus: string;
+      recommendedAction: string;
+      attentionLevel: string;
+      queue: "renewal";
+    }>;
+    review: Array<{
+      id: string;
+      customerCiId: string;
+      name: string;
+      ciType: string;
+      lifecycleStatus: string;
+      supportStatus: string;
+      recommendedAction: string;
+      attentionLevel: string;
+      queue: "review";
+    }>;
+    research: Array<{
+      id: string;
+      customerCiId: string;
+      name: string;
+      ciType: string;
+      lifecycleStatus: string;
+      supportStatus: string;
+      recommendedAction: string;
+      attentionLevel: string;
+      queue: "research";
+    }>;
+  };
   topAttentionItems: Array<{
     id: string;
     customerCiId: string;
@@ -112,6 +165,80 @@ export async function loadCustomerEstateSummary(
       return left.name.localeCompare(right.name);
     });
 
+  const reviewQueue = buildLifecycleReviewQueue(
+    evaluatedItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      ciType: item.ciType,
+      lifecycleStatus: item.lifecycle.lifecycleStatus,
+      supportStatus: item.lifecycle.supportStatus,
+      recommendedAction: item.lifecycle.recommendedAction,
+      attentionLevel: item.lifecycle.attentionLevel,
+      licensingReviewRequired: item.lifecycle.licensingReviewRequired,
+      nextReviewAt: item.lifecycle.nextReviewAt,
+    })),
+    asOf,
+  );
+
+  const reviewQueueDetails = {
+    urgent: reviewQueue.queues.urgent.map((queueItem) => {
+      const source = evaluatedItems.find((item) => item.id === queueItem.id)!;
+      return {
+        id: source.id,
+        customerCiId: source.customerCiId,
+        name: source.name,
+        ciType: source.ciType,
+        lifecycleStatus: source.lifecycle.lifecycleStatus,
+        supportStatus: source.lifecycle.supportStatus,
+        recommendedAction: source.lifecycle.recommendedAction,
+        attentionLevel: source.lifecycle.attentionLevel,
+        queue: "urgent" as const,
+      };
+    }),
+    renewal: reviewQueue.queues.renewal.map((queueItem) => {
+      const source = evaluatedItems.find((item) => item.id === queueItem.id)!;
+      return {
+        id: source.id,
+        customerCiId: source.customerCiId,
+        name: source.name,
+        ciType: source.ciType,
+        lifecycleStatus: source.lifecycle.lifecycleStatus,
+        supportStatus: source.lifecycle.supportStatus,
+        recommendedAction: source.lifecycle.recommendedAction,
+        attentionLevel: source.lifecycle.attentionLevel,
+        queue: "renewal" as const,
+      };
+    }),
+    review: reviewQueue.queues.review.map((queueItem) => {
+      const source = evaluatedItems.find((item) => item.id === queueItem.id)!;
+      return {
+        id: source.id,
+        customerCiId: source.customerCiId,
+        name: source.name,
+        ciType: source.ciType,
+        lifecycleStatus: source.lifecycle.lifecycleStatus,
+        supportStatus: source.lifecycle.supportStatus,
+        recommendedAction: source.lifecycle.recommendedAction,
+        attentionLevel: source.lifecycle.attentionLevel,
+        queue: "review" as const,
+      };
+    }),
+    research: reviewQueue.queues.research.map((queueItem) => {
+      const source = evaluatedItems.find((item) => item.id === queueItem.id)!;
+      return {
+        id: source.id,
+        customerCiId: source.customerCiId,
+        name: source.name,
+        ciType: source.ciType,
+        lifecycleStatus: source.lifecycle.lifecycleStatus,
+        supportStatus: source.lifecycle.supportStatus,
+        recommendedAction: source.lifecycle.recommendedAction,
+        attentionLevel: source.lifecycle.attentionLevel,
+        queue: "research" as const,
+      };
+    }),
+  };
+
   return {
     siteCount: sites.length,
     activeSiteCount: sites.filter((site) => site.status === "active").length,
@@ -121,6 +248,8 @@ export async function loadCustomerEstateSummary(
     commercialCount: configurationItems.filter((item) => item.technologySourceType === "commercial").length,
     openSourceCount: configurationItems.filter((item) => item.technologySourceType === "open_source").length,
     hybridCount: configurationItems.filter((item) => item.technologySourceType === "hybrid").length,
+    reviewQueueCounts: reviewQueue.counts,
+    reviewQueues: reviewQueueDetails,
     topAttentionItems: attentionItems.slice(0, 5).map((item) => ({
       id: item.id,
       customerCiId: item.customerCiId,

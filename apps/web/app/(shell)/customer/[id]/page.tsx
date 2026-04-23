@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { NewCustomerConfigurationItemButton } from "@/components/customer/NewCustomerConfigurationItemButton";
+import { CustomerLifecycleReviewQueues } from "@/components/customer/CustomerLifecycleReviewQueues";
 import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
@@ -473,6 +474,13 @@ export default async function AccountDetailPage({
       </div>
 
       <div className="mt-6">
+        <div className="mb-6">
+          <CustomerLifecycleReviewQueues
+            counts={estateSummary.reviewQueueCounts}
+            queues={estateSummary.reviewQueues}
+          />
+        </div>
+
         <div className="mb-6">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>

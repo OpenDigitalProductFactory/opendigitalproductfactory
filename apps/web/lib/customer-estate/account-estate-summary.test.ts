@@ -81,6 +81,16 @@ describe("loadCustomerEstateSummary", () => {
     expect(summary.recurringLicensedItemCount).toBe(1);
     expect(summary.openSourceCount).toBe(1);
     expect(summary.commercialCount).toBe(1);
+    expect(summary.reviewQueueCounts).toEqual({
+      urgent: 0,
+      renewal: 1,
+      review: 1,
+      research: 0,
+    });
+    expect(summary.reviewQueues.renewal[0]).toMatchObject({
+      name: "SentinelOne Complete",
+      queue: "renewal",
+    });
     expect(summary.topAttentionItems).toHaveLength(2);
     expect(summary.topAttentionItems[0]).toMatchObject({
       name: "SentinelOne Complete",
