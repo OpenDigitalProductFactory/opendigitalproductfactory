@@ -23,3 +23,14 @@ export async function recordExternalEvidence(input: {
     },
   });
 }
+
+// Deliberation (spec §8) is retrieval-first: when a branch performs public-web
+// fetches, file reads, or other external research to support a claim, we mirror
+// that activity into the existing external-evidence stream so the platform can
+// observe all external-research activity in one place without overloading
+// ExternalEvidenceRecord with deliberation-only columns. The helper
+// `mirrorDeliberationRetrievalEvent` lives in
+// `apps/web/lib/deliberation/evidence.ts` (where the evidence policy owns it)
+// and is re-exported here so callers in the actions layer can import
+// `recordExternalEvidence` and the deliberation mirror side by side.
+export { mirrorDeliberationRetrievalEvent } from "../deliberation/evidence";
