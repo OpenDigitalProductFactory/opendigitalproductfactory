@@ -258,8 +258,7 @@ export async function createCustomerSiteNode(input: {
   return node;
 }
 
-export async function createCustomerConfigurationItem(input: {
-  accountId: string;
+type CustomerConfigurationItemInput = {
   siteId?: string;
   name: string;
   ciType: string;
@@ -270,46 +269,106 @@ export async function createCustomerConfigurationItem(input: {
   observedVersion?: string;
   billingCadence?: string;
   customerChargeModel?: string;
-  renewalDate?: string;
-  endOfSupportAt?: string;
-  endOfLifeAt?: string;
-  warrantyEndAt?: string;
+  renewalDate?: string | Date | null;
+  endOfSupportAt?: string | Date | null;
+  endOfLifeAt?: string | Date | null;
+  warrantyEndAt?: string | Date | null;
   reviewCadenceDays?: number;
-  licenseQuantity?: number;
+  licenseQuantity?: number | null;
   status?: string;
-}) {
-  const name = input.name.trim();
-  if (!name) {
-    throw new Error("Configuration item name is required");
+  evidenceSource?: string;
+  evidenceNotes?: string;
+};
+
+function trimOrNull(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
   }
 
-  const ciType = input.ciType.trim();
-  if (!ciType) {
-    throw new Error("Configuration item type is required");
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toDateOrNull(value: string | Date | null | undefined) {
+  if (!value) {
+    return null;
   }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function readLifecycleEvidenceField(
+  value: unknown,
+  key: "source" | "notes",
+) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record[key] === "string" ? record[key] : undefined;
+}
+
+function deriveLifecycleConfidence(input: {
+  supportModel: string | null;
+  normalizedVersion: string | null;
+  observedVersion: string | null;
+  renewalDate: Date | null;
+  endOfSupportAt: Date | null;
+  endOfLifeAt: Date | null;
+  warrantyEndAt: Date | null;
+  evidenceSource: string | null;
+  evidenceNotes: string | null;
+}) {
+  let confidence = 0.35;
+
+  if (input.supportModel) confidence += 0.15;
+  if (input.normalizedVersion || input.observedVersion) confidence += 0.15;
+  if (input.renewalDate || input.endOfSupportAt || input.endOfLifeAt || input.warrantyEndAt) confidence += 0.2;
+  if (input.evidenceSource) confidence += 0.1;
+  if (input.evidenceNotes) confidence += 0.05;
+
+  return Math.min(0.95, Number(confidence.toFixed(2)));
+}
+
+function buildCustomerConfigurationItemLifecycleState(input: CustomerConfigurationItemInput) {
+  const supportModel = trimOrNull(input.supportModel);
+  const manufacturer = trimOrNull(input.manufacturer);
+  const normalizedVersion = trimOrNull(input.normalizedVersion);
+  const observedVersion = trimOrNull(input.observedVersion);
+  const billingCadence = trimOrNull(input.billingCadence);
+  const customerChargeModel = trimOrNull(input.customerChargeModel);
+  const evidenceSource = trimOrNull(input.evidenceSource);
+  const evidenceNotes = trimOrNull(input.evidenceNotes);
+  const renewalDate = toDateOrNull(input.renewalDate);
+  const endOfSupportAt = toDateOrNull(input.endOfSupportAt);
+  const endOfLifeAt = toDateOrNull(input.endOfLifeAt);
+  const warrantyEndAt = toDateOrNull(input.warrantyEndAt);
 
   const lifecycle = evaluateTechnologyLifecycle(
     {
-      name,
-      ciType,
+      name: input.name,
+      ciType: input.ciType,
       technologySourceType: input.technologySourceType ?? "commercial",
-      supportModel: (input.supportModel as
+      supportModel: (supportModel as
         | "vendor_contract"
         | "subscription"
         | "community"
         | "lts"
         | "partner"
         | "unknown"
+        | null
         | undefined) ?? undefined,
-      normalizedVersion: input.normalizedVersion,
-      observedVersion: input.observedVersion,
-      billingCadence: input.billingCadence,
-      customerChargeModel: input.customerChargeModel,
-      renewalDate: input.renewalDate,
-      endOfSupportAt: input.endOfSupportAt,
-      endOfLifeAt: input.endOfLifeAt,
-      warrantyEndAt: input.warrantyEndAt,
-      licenseQuantity: input.licenseQuantity,
+      normalizedVersion,
+      observedVersion,
+      billingCadence,
+      customerChargeModel,
+      renewalDate,
+      endOfSupportAt,
+      endOfLifeAt,
+      warrantyEndAt,
+      licenseQuantity: input.licenseQuantity ?? undefined,
     },
     new Date(),
   );
@@ -320,6 +379,60 @@ export async function createCustomerConfigurationItem(input: {
       ? new Date(Date.now() + input.reviewCadenceDays * 24 * 60 * 60 * 1000)
       : null);
 
+  return {
+    supportModel,
+    manufacturer,
+    normalizedVersion,
+    observedVersion,
+    billingCadence,
+    customerChargeModel,
+    renewalDate,
+    endOfSupportAt,
+    endOfLifeAt,
+    warrantyEndAt,
+    lifecycleStatus: lifecycle.lifecycleStatus,
+    supportStatus: lifecycle.supportStatus,
+    recommendedAction: lifecycle.recommendedAction,
+    lifecycleConfidence: deriveLifecycleConfidence({
+      supportModel,
+      normalizedVersion,
+      observedVersion,
+      renewalDate,
+      endOfSupportAt,
+      endOfLifeAt,
+      warrantyEndAt,
+      evidenceSource,
+      evidenceNotes,
+    }),
+    lastLifecycleReviewAt: new Date(),
+    nextLifecycleReviewAt,
+    lifecycleEvidence: {
+      summary: lifecycle.summary,
+      seededReviewCadenceDays: input.reviewCadenceDays ?? null,
+      source: evidenceSource,
+      notes: evidenceNotes,
+    },
+  };
+}
+
+export async function createCustomerConfigurationItem(input: CustomerConfigurationItemInput & {
+  accountId: string;
+}) {
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Configuration item name is required");
+  }
+
+  const ciType = input.ciType.trim();
+  if (!ciType) {
+    throw new Error("Configuration item type is required");
+  }
+  const lifecycleState = buildCustomerConfigurationItemLifecycleState({
+    ...input,
+    name,
+    ciType,
+  });
+
   const configurationItem = await prisma.customerConfigurationItem.create({
     data: {
       customerCiId: `CCI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
@@ -329,28 +442,24 @@ export async function createCustomerConfigurationItem(input: {
       ciType,
       status: input.status?.trim() || "active",
       technologySourceType: input.technologySourceType || "commercial",
-      supportModel: input.supportModel?.trim() || null,
-      manufacturer: input.manufacturer?.trim() || null,
-      normalizedVersion: input.normalizedVersion?.trim() || null,
-      observedVersion: input.observedVersion?.trim() || null,
-      billingCadence: input.billingCadence?.trim() || null,
-      customerChargeModel: input.customerChargeModel?.trim() || null,
-      renewalDate: input.renewalDate ? new Date(input.renewalDate) : null,
-      endOfSupportAt: input.endOfSupportAt ? new Date(input.endOfSupportAt) : null,
-      endOfLifeAt: input.endOfLifeAt ? new Date(input.endOfLifeAt) : null,
-      warrantyEndAt: input.warrantyEndAt ? new Date(input.warrantyEndAt) : null,
+      supportModel: lifecycleState.supportModel,
+      manufacturer: lifecycleState.manufacturer,
+      normalizedVersion: lifecycleState.normalizedVersion,
+      observedVersion: lifecycleState.observedVersion,
+      billingCadence: lifecycleState.billingCadence,
+      customerChargeModel: lifecycleState.customerChargeModel,
+      renewalDate: lifecycleState.renewalDate,
+      endOfSupportAt: lifecycleState.endOfSupportAt,
+      endOfLifeAt: lifecycleState.endOfLifeAt,
+      warrantyEndAt: lifecycleState.warrantyEndAt,
       licenseQuantity: input.licenseQuantity ?? null,
-      lifecycleStatus: lifecycle.lifecycleStatus,
-      supportStatus: lifecycle.supportStatus,
-      recommendedAction: lifecycle.recommendedAction,
-      lifecycleConfidence:
-        lifecycle.attentionLevel === "high" ? 0.9 : lifecycle.attentionLevel === "medium" ? 0.75 : 0.6,
-      lastLifecycleReviewAt: new Date(),
-      nextLifecycleReviewAt,
-      lifecycleEvidence: {
-        summary: lifecycle.summary,
-        seededReviewCadenceDays: input.reviewCadenceDays ?? null,
-      },
+      lifecycleStatus: lifecycleState.lifecycleStatus,
+      supportStatus: lifecycleState.supportStatus,
+      recommendedAction: lifecycleState.recommendedAction,
+      lifecycleConfidence: lifecycleState.lifecycleConfidence,
+      lastLifecycleReviewAt: lifecycleState.lastLifecycleReviewAt,
+      nextLifecycleReviewAt: lifecycleState.nextLifecycleReviewAt,
+      lifecycleEvidence: lifecycleState.lifecycleEvidence,
     },
   });
 
@@ -362,6 +471,118 @@ export async function createCustomerConfigurationItem(input: {
   revalidatePath("/customer");
   revalidatePath(`/customer/${input.accountId}`);
   return configurationItem;
+}
+
+export async function updateCustomerConfigurationItem(input: CustomerConfigurationItemInput & {
+  accountId: string;
+  configurationItemId: string;
+}) {
+  const existing = await prisma.customerConfigurationItem.findUnique({
+    where: { id: input.configurationItemId },
+    select: {
+      id: true,
+      accountId: true,
+      name: true,
+      siteId: true,
+      ciType: true,
+      technologySourceType: true,
+      supportModel: true,
+      manufacturer: true,
+      normalizedVersion: true,
+      observedVersion: true,
+      billingCadence: true,
+      customerChargeModel: true,
+      renewalDate: true,
+      endOfSupportAt: true,
+      endOfLifeAt: true,
+      warrantyEndAt: true,
+      licenseQuantity: true,
+      status: true,
+      lifecycleEvidence: true,
+    },
+  });
+
+  if (!existing || existing.accountId !== input.accountId) {
+    throw new Error("Configuration item not found for this account");
+  }
+
+  const name = (input.name ?? existing.name).trim();
+  if (!name) {
+    throw new Error("Configuration item name is required");
+  }
+
+  const ciType = (input.ciType ?? existing.ciType).trim();
+  if (!ciType) {
+    throw new Error("Configuration item type is required");
+  }
+
+  const lifecycleState = buildCustomerConfigurationItemLifecycleState({
+    siteId: input.siteId !== undefined ? input.siteId : existing.siteId ?? undefined,
+    name,
+    ciType,
+    technologySourceType: input.technologySourceType ?? (existing.technologySourceType as "commercial" | "open_source" | "hybrid"),
+    supportModel: input.supportModel !== undefined ? input.supportModel : existing.supportModel ?? undefined,
+    manufacturer: input.manufacturer !== undefined ? input.manufacturer : existing.manufacturer ?? undefined,
+    normalizedVersion: input.normalizedVersion !== undefined ? input.normalizedVersion : existing.normalizedVersion ?? undefined,
+    observedVersion: input.observedVersion !== undefined ? input.observedVersion : existing.observedVersion ?? undefined,
+    billingCadence: input.billingCadence !== undefined ? input.billingCadence : existing.billingCadence ?? undefined,
+    customerChargeModel:
+      input.customerChargeModel !== undefined ? input.customerChargeModel : existing.customerChargeModel ?? undefined,
+    renewalDate: input.renewalDate !== undefined ? input.renewalDate : existing.renewalDate,
+    endOfSupportAt: input.endOfSupportAt !== undefined ? input.endOfSupportAt : existing.endOfSupportAt,
+    endOfLifeAt: input.endOfLifeAt !== undefined ? input.endOfLifeAt : existing.endOfLifeAt,
+    warrantyEndAt: input.warrantyEndAt !== undefined ? input.warrantyEndAt : existing.warrantyEndAt,
+    reviewCadenceDays: input.reviewCadenceDays,
+    licenseQuantity: input.licenseQuantity !== undefined ? input.licenseQuantity : Number(existing.licenseQuantity ?? 0) || null,
+    status: input.status !== undefined ? input.status : existing.status,
+    evidenceSource:
+      input.evidenceSource !== undefined
+        ? input.evidenceSource
+        : readLifecycleEvidenceField(existing.lifecycleEvidence, "source"),
+    evidenceNotes:
+      input.evidenceNotes !== undefined
+        ? input.evidenceNotes
+        : readLifecycleEvidenceField(existing.lifecycleEvidence, "notes"),
+  });
+
+  const updated = await prisma.customerConfigurationItem.update({
+    where: { id: input.configurationItemId },
+    data: {
+      siteId: input.siteId !== undefined ? input.siteId || null : existing.siteId ?? null,
+      name,
+      ciType,
+      status: input.status?.trim() || existing.status,
+      technologySourceType: input.technologySourceType ?? existing.technologySourceType,
+      supportModel: lifecycleState.supportModel,
+      manufacturer: lifecycleState.manufacturer,
+      normalizedVersion: lifecycleState.normalizedVersion,
+      observedVersion: lifecycleState.observedVersion,
+      billingCadence: lifecycleState.billingCadence,
+      customerChargeModel: lifecycleState.customerChargeModel,
+      renewalDate: lifecycleState.renewalDate,
+      endOfSupportAt: lifecycleState.endOfSupportAt,
+      endOfLifeAt: lifecycleState.endOfLifeAt,
+      warrantyEndAt: lifecycleState.warrantyEndAt,
+      licenseQuantity:
+        input.licenseQuantity !== undefined ? input.licenseQuantity : existing.licenseQuantity,
+      lifecycleStatus: lifecycleState.lifecycleStatus,
+      supportStatus: lifecycleState.supportStatus,
+      recommendedAction: lifecycleState.recommendedAction,
+      lifecycleConfidence: lifecycleState.lifecycleConfidence,
+      lastLifecycleReviewAt: lifecycleState.lastLifecycleReviewAt,
+      nextLifecycleReviewAt: lifecycleState.nextLifecycleReviewAt,
+      lifecycleEvidence: lifecycleState.lifecycleEvidence,
+    },
+  });
+
+  await logSystemActivity(`Customer configuration item "${updated.name}" updated`, {
+    type: "account_created",
+    accountId: input.accountId,
+  });
+
+  revalidatePath("/customer");
+  revalidatePath(`/customer/${input.accountId}`);
+  return updated;
 }
 
 // ─── Engagement Actions ─────────────────────────────────────────────────────

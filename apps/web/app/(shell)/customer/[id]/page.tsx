@@ -2,11 +2,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { EditCustomerConfigurationItemButton } from "@/components/customer/EditCustomerConfigurationItemButton";
 import { NewCustomerConfigurationItemButton } from "@/components/customer/NewCustomerConfigurationItemButton";
 import { CustomerLifecycleReviewQueues } from "@/components/customer/CustomerLifecycleReviewQueues";
 import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
+import type { TechnologySourceType } from "@/lib/customer-estate/lifecycle-evaluation";
 import {
   deriveCustomerConfigurationItemDefaults,
   readActivationProfile,
@@ -32,6 +34,20 @@ const ACTIVITY_ICONS: Record<string, string> = {
   quote_event: "📋",
   system: "⚙️",
 };
+
+function normalizeTechnologySourceType(
+  value: string | null | undefined,
+): TechnologySourceType {
+  if (
+    value === "commercial" ||
+    value === "open_source" ||
+    value === "hybrid"
+  ) {
+    return value;
+  }
+
+  return "commercial";
+}
 
 export default async function AccountDetailPage({
   params,
@@ -89,12 +105,23 @@ export default async function AccountDetailPage({
             id: true,
             customerCiId: true,
             name: true,
+            siteId: true,
             ciType: true,
             technologySourceType: true,
+            supportModel: true,
+            observedVersion: true,
+            normalizedVersion: true,
             lifecycleStatus: true,
+            lifecycleConfidence: true,
             recommendedAction: true,
+            renewalDate: true,
+            endOfSupportAt: true,
+            endOfLifeAt: true,
+            warrantyEndAt: true,
+            licenseQuantity: true,
             billingCadence: true,
             customerChargeModel: true,
+            lifecycleEvidence: true,
             site: { select: { id: true, name: true } },
           },
         },
@@ -507,22 +534,86 @@ export default async function AccountDetailPage({
                   key={item.id}
                   className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-[var(--dpf-text)]">{item.name}</p>
-                    <span className="rounded-full bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
-                      {item.ciType}
-                    </span>
-                    <span className="rounded-full bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
-                      {item.technologySourceType.replace("_", " ")}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[var(--dpf-muted)]">
-                    <span>{item.customerCiId}</span>
-                    {item.site ? <span>Site: {item.site.name}</span> : <span>Site: unassigned</span>}
-                    <span>Lifecycle: {item.lifecycleStatus}</span>
-                    {item.recommendedAction ? <span>Action: {item.recommendedAction}</span> : null}
-                    {item.billingCadence ? <span>Billing: {item.billingCadence}</span> : null}
-                    {item.customerChargeModel ? <span>Charge: {item.customerChargeModel}</span> : null}
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-[var(--dpf-text)]">{item.name}</p>
+                        <span className="rounded-full bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
+                          {item.ciType}
+                        </span>
+                        <span className="rounded-full bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
+                          {item.technologySourceType.replace("_", " ")}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[var(--dpf-muted)]">
+                        <span>{item.customerCiId}</span>
+                        {item.site ? <span>Site: {item.site.name}</span> : <span>Site: unassigned</span>}
+                        <span>Lifecycle: {item.lifecycleStatus}</span>
+                        {item.recommendedAction ? <span>Action: {item.recommendedAction}</span> : null}
+                        {item.billingCadence ? <span>Billing: {item.billingCadence}</span> : null}
+                        {item.customerChargeModel ? <span>Charge: {item.customerChargeModel}</span> : null}
+                        {typeof item.lifecycleConfidence === "number" ? (
+                          <span>Confidence: {Math.round(item.lifecycleConfidence * 100)}%</span>
+                        ) : null}
+                      </div>
+                      {item.lifecycleEvidence && typeof item.lifecycleEvidence === "object" ? (
+                        <div className="mt-2 text-[10px] text-[var(--dpf-muted)]">
+                          {"source" in item.lifecycleEvidence &&
+                          typeof item.lifecycleEvidence.source === "string" &&
+                          item.lifecycleEvidence.source.length > 0 ? (
+                            <p>Evidence: {item.lifecycleEvidence.source}</p>
+                          ) : null}
+                          {"notes" in item.lifecycleEvidence &&
+                          typeof item.lifecycleEvidence.notes === "string" &&
+                          item.lifecycleEvidence.notes.length > 0 ? (
+                            <p>{item.lifecycleEvidence.notes}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                    <EditCustomerConfigurationItemButton
+                      accountId={account.id}
+                      siteOptions={account.customerSites.map((site) => ({ id: site.id, name: site.name }))}
+                      itemTypeOptions={itemTypeOptions}
+                      chargeModelOptions={chargeModelOptions}
+                      item={{
+                        id: item.id,
+                        customerCiId: item.customerCiId,
+                        name: item.name,
+                        siteId: item.siteId,
+                        ciType: item.ciType,
+                        technologySourceType: normalizeTechnologySourceType(
+                          item.technologySourceType,
+                        ),
+                        supportModel: item.supportModel,
+                        observedVersion: item.observedVersion,
+                        normalizedVersion: item.normalizedVersion,
+                        renewalDate: item.renewalDate?.toISOString() ?? null,
+                        endOfSupportAt: item.endOfSupportAt?.toISOString() ?? null,
+                        endOfLifeAt: item.endOfLifeAt?.toISOString() ?? null,
+                        warrantyEndAt: item.warrantyEndAt?.toISOString() ?? null,
+                        licenseQuantity:
+                          item.licenseQuantity !== null && item.licenseQuantity !== undefined
+                            ? Number(item.licenseQuantity)
+                            : null,
+                        billingCadence: item.billingCadence,
+                        customerChargeModel: item.customerChargeModel,
+                        evidenceSource:
+                          item.lifecycleEvidence &&
+                          typeof item.lifecycleEvidence === "object" &&
+                          "source" in item.lifecycleEvidence &&
+                          typeof item.lifecycleEvidence.source === "string"
+                            ? item.lifecycleEvidence.source
+                            : null,
+                        evidenceNotes:
+                          item.lifecycleEvidence &&
+                          typeof item.lifecycleEvidence === "object" &&
+                          "notes" in item.lifecycleEvidence &&
+                          typeof item.lifecycleEvidence.notes === "string"
+                            ? item.lifecycleEvidence.notes
+                            : null,
+                      }}
+                    />
                   </div>
                 </div>
               ))}

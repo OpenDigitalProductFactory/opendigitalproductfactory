@@ -25,6 +25,8 @@ vi.mock("@dpf/db", () => ({
     },
     customerConfigurationItem: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
     activity: {
       create: vi.fn(),
@@ -56,6 +58,7 @@ import {
   searchCustomerSiteAddresses,
   createCustomerSite,
   createCustomerSiteNode,
+  updateCustomerConfigurationItem,
 } from "./crm";
 
 beforeEach(() => {
@@ -303,6 +306,71 @@ describe("createCustomerConfigurationItem", () => {
         lifecycleStatus: "renew",
         supportStatus: "supported",
         recommendedAction: "renew",
+      }),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/customer");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+  });
+});
+
+describe("updateCustomerConfigurationItem", () => {
+  it("updates lifecycle evidence and recalculates support posture", async () => {
+    vi.mocked(prisma.customerConfigurationItem.findUnique).mockResolvedValue({
+      id: "cci-1",
+      accountId: "acct-1",
+      name: "Ubuntu Server",
+      ciType: "linux-server",
+      technologySourceType: "open_source",
+      supportModel: null,
+      manufacturer: null,
+      observedVersion: null,
+      normalizedVersion: null,
+      billingCadence: null,
+      customerChargeModel: null,
+      renewalDate: null,
+      endOfSupportAt: null,
+      endOfLifeAt: null,
+      warrantyEndAt: null,
+      licenseQuantity: null,
+      lifecycleEvidence: null,
+    } as never);
+
+    vi.mocked(prisma.customerConfigurationItem.update).mockResolvedValue({
+      id: "cci-1",
+      accountId: "acct-1",
+      name: "Ubuntu Server",
+      lifecycleStatus: "review",
+      supportStatus: "approaching_end",
+      recommendedAction: "upgrade",
+    } as never);
+
+    const item = await updateCustomerConfigurationItem({
+      accountId: "acct-1",
+      configurationItemId: "cci-1",
+      name: "Ubuntu Server",
+      ciType: "linux-server",
+      supportModel: "lts",
+      normalizedVersion: "22.04 LTS",
+      endOfSupportAt: "2026-07-15",
+      evidenceSource: "Ubuntu LTS release calendar",
+      evidenceNotes: "Verified against vendor-supported LTS timeline.",
+      reviewCadenceDays: 45,
+    });
+
+    expect(item.lifecycleStatus).toBe("review");
+    expect(prisma.customerConfigurationItem.update).toHaveBeenCalledWith({
+      where: { id: "cci-1" },
+      data: expect.objectContaining({
+        supportModel: "lts",
+        normalizedVersion: "22.04 LTS",
+        lifecycleStatus: "review",
+        supportStatus: "approaching_end",
+        recommendedAction: "upgrade",
+        lifecycleEvidence: expect.objectContaining({
+          source: "Ubuntu LTS release calendar",
+          notes: "Verified against vendor-supported LTS timeline.",
+          seededReviewCadenceDays: 45,
+        }),
       }),
     });
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
