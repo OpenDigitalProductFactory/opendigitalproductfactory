@@ -386,7 +386,7 @@ if (-not (Test-StepDone "download")) {
 
             $oldEAP = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
-            git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1 | ForEach-Object { "$_" }
+            git clone "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git" "$DPF_DIR" 2>&1 | ForEach-Object { "$_" }
             $ErrorActionPreference = $oldEAP
             if ($LASTEXITCODE -ne 0) {
                 Write-Warn "Clone failed. Check your internet connection."

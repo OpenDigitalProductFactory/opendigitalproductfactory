@@ -72,7 +72,7 @@ Both modes include the full platform with AI coworkers, Build Studio sandbox, an
 Open PowerShell and paste:
 
 ```powershell
-gh api repos/markdbodman/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" > install-dpf.ps1
+gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" > install-dpf.ps1
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 

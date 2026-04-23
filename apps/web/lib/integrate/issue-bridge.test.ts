@@ -51,7 +51,7 @@ function seededConfig(
 ) {
   return {
     contributionMode: "selective",
-    upstreamRemoteUrl: "https://github.com/markdbodman/opendigitalproductfactory.git",
+    upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
     ...overrides,
   } as Awaited<ReturnType<typeof prisma.platformDevConfig.findUnique>>;
 }
@@ -296,7 +296,7 @@ describe("escalateToUpstreamIssue", () => {
       status: 201,
       json: async () => ({
         number: 123,
-        html_url: "https://github.com/markdbodman/opendigitalproductfactory/issues/123",
+        html_url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/123",
       }),
     });
 
@@ -305,14 +305,14 @@ describe("escalateToUpstreamIssue", () => {
     expect(result).toEqual({
       status: "created",
       issueNumber: 123,
-      url: "https://github.com/markdbodman/opendigitalproductfactory/issues/123",
+      url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/123",
     });
 
     // Verify GitHub API call shape.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe(
-      "https://api.github.com/repos/markdbodman/opendigitalproductfactory/issues",
+      "https://api.github.com/repos/OpenDigitalProductFactory/opendigitalproductfactory/issues",
     );
     expect(init.method).toBe("POST");
     expect(init.headers.Authorization).toBe("Bearer ghp_testtoken");
@@ -394,7 +394,7 @@ describe("escalateToUpstreamIssue", () => {
       status: 201,
       json: async () => ({
         number: 501,
-        html_url: "https://github.com/markdbodman/opendigitalproductfactory/issues/501",
+        html_url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/501",
       }),
     });
 

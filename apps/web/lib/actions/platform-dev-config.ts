@@ -251,14 +251,14 @@ export async function saveContributionSetup(input: {
       contributionMode: input.mode,
       configuredAt: new Date(),
       configuredById: userId,
-      upstreamRemoteUrl: "https://github.com/markdbodman/opendigitalproductfactory.git",
+      upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
     },
     create: {
       id: "singleton",
       contributionMode: input.mode,
       configuredAt: new Date(),
       configuredById: userId,
-      upstreamRemoteUrl: "https://github.com/markdbodman/opendigitalproductfactory.git",
+      upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
     },
   });
 

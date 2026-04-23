@@ -4247,7 +4247,7 @@ export async function executeTool(
           where: { id: "singleton" },
           select: { upstreamRemoteUrl: true },
         });
-        const url = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
+        const url = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
         const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
         if (match) { repoOwner = match[1]; repoName = match[2]; }
       }
@@ -5246,7 +5246,7 @@ export async function executeTool(
       let prUrl: string | null = null;
       let prError: string | null = null;
       try {
-        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
+        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
 
         // DCO + token already validated up-front (see prerequisite checks
         // earlier in this case); reuse the resolved token so we don't hit

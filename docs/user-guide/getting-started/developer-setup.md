@@ -24,7 +24,7 @@ If you want the packaged customer experience, use the installer instead — see 
 ### Option A: Automated script
 
 ```powershell
-git clone https://github.com/markdbodman/opendigitalproductfactory.git
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
 cd opendigitalproductfactory
 .\scripts\fresh-install.bat
 ```
@@ -45,7 +45,7 @@ pnpm --filter web dev      # http://localhost:3000
 ### Option B: Manual setup
 
 ```bash
-git clone https://github.com/markdbodman/opendigitalproductfactory.git
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
 cd opendigitalproductfactory
 pnpm install
 ```

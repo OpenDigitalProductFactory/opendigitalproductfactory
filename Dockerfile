@@ -53,7 +53,7 @@ FROM base AS runner
 LABEL org.opencontainers.image.title="Open Digital Product Factory"
 LABEL org.opencontainers.image.description="Self-developing digital product management platform"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
+LABEL org.opencontainers.image.source="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
 WORKDIR /app
 RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl
 ENV NODE_ENV=production
