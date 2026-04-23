@@ -536,6 +536,142 @@ git add apps/web/lib/identity/directory-projection.ts apps/web/lib/identity/dire
 git commit -m "feat(directory): add LDAP and SCIM projection settings"
 ```
 
+### Task 6.2: Implement agent LDAP projection vocabulary
+
+**Files:**
+- Modify: `apps/web/lib/identity/directory-projection.ts`
+- Create: `apps/web/lib/identity/ldap-agent-profile.ts`
+- Create: `apps/web/lib/identity/ldap-agent-profile.test.ts`
+- Modify: `docs/operations/authentik-runtime-notes.md`
+
+- [ ] **Step 1: Write the failing agent LDAP profile tests**
+
+```ts
+it("projects an agent principal with explicit GAID and TAK trust markers", () => {
+  const entry = projectAgentLdapEntry(sampleAgentPrincipal, sampleTakState);
+  expect(entry.attributes.gaid).toBe("gaid:priv:dpf.internal:hr-coworker-001");
+  expect(entry.attributes.dpfPrincipalType).toBe("agent");
+  expect(entry.attributes.takValidationStatus).toBe("validated");
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+Run: `pnpm --filter web test apps/web/lib/identity/ldap-agent-profile.test.ts`
+
+- [ ] **Step 3: Implement the projection helper**
+
+Responsibilities:
+- emit a stable LDAP-safe identifier for agent principals
+- project `gaid`, `dpfPrincipalType`, `takProfileFingerprint`, `takValidationStatus`, `gaidIssuer`, `gaidExposureState`, and `dpfVerifierRef`
+- keep role and business authority in group membership rather than bespoke permission attributes
+
+- [ ] **Step 4: Document the expected authentik mapping**
+
+Capture:
+- base DN assumptions
+- attribute names used by the edge
+- read-only publication stance for external consumers
+
+- [ ] **Step 5: Re-run tests**
+
+Run: `pnpm --filter web test apps/web/lib/identity/ldap-agent-profile.test.ts apps/web/lib/identity/directory-projection.test.ts`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/web/lib/identity/directory-projection.ts apps/web/lib/identity/ldap-agent-profile.ts apps/web/lib/identity/ldap-agent-profile.test.ts docs/operations/authentik-runtime-notes.md
+git commit -m "feat(directory): add LDAP agent projection vocabulary for GAID and TAK"
+```
+
+### Task 6.3: Add SCIM agent extension projection
+
+**Files:**
+- Create: `apps/web/lib/identity/scim-agent-extension.ts`
+- Create: `apps/web/lib/identity/scim-agent-extension.test.ts`
+- Modify: `apps/web/lib/integrate/authentik/provisioning-client.ts`
+- Modify: `apps/web/lib/integrate/authentik/provisioning-client.test.ts`
+
+- [ ] **Step 1: Write the failing SCIM extension tests**
+
+```ts
+it("maps an agent principal into the DPF SCIM agent extension", () => {
+  const payload = buildScimPrincipalPayload(sampleAgentPrincipal, sampleTakState);
+  expect(payload.schemas).toContain("urn:dpf:params:scim:schemas:extension:agent:2.0:User");
+  expect(payload["urn:dpf:params:scim:schemas:extension:agent:2.0:User"].gaid).toContain("gaid:");
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+Run: `pnpm --filter web test apps/web/lib/identity/scim-agent-extension.test.ts apps/web/lib/integrate/authentik/provisioning-client.test.ts`
+
+- [ ] **Step 3: Implement the extension builder**
+
+Responsibilities:
+- map `principalId` into `externalId`
+- attach the DPF agent extension for `gaid`, `principalType`, `profileFingerprint`, `validationStatus`, `exposureState`, `badgeRefs`, and `verifierRef`
+- omit the extension for non-agent principals unless explicitly configured
+
+- [ ] **Step 4: Update the provisioning client to use the builder**
+
+Keep the provisioning client boundary SCIM-shaped even if bootstrap still uses the edge admin API behind the scenes.
+
+- [ ] **Step 5: Re-run tests**
+
+Run: `pnpm --filter web test apps/web/lib/identity/scim-agent-extension.test.ts apps/web/lib/integrate/authentik/provisioning-client.test.ts`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/web/lib/identity/scim-agent-extension.ts apps/web/lib/identity/scim-agent-extension.test.ts apps/web/lib/integrate/authentik/provisioning-client.ts apps/web/lib/integrate/authentik/provisioning-client.test.ts
+git commit -m "feat(scim): add GAID-aware agent extension projection"
+```
+
+### Task 6.4: Add TAK attestation projection helper
+
+**Files:**
+- Create: `apps/web/lib/tak/attestation-projection.ts`
+- Create: `apps/web/lib/tak/attestation-projection.test.ts`
+- Modify: `apps/web/lib/actions/agent-coworker.ts`
+
+- [ ] **Step 1: Write the failing attestation projection tests**
+
+```ts
+it("builds a public trust marker without exposing kernel-only evidence", () => {
+  const envelope = buildTakProjectionEnvelope(sampleTakState);
+  expect(envelope.profileFingerprint).toMatch(/^sha256:/);
+  expect(envelope.evidenceRef).toContain("tak://attestations/");
+  expect((envelope as Record<string, unknown>).approvedProfile).toBeUndefined();
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+Run: `pnpm --filter web test apps/web/lib/tak/attestation-projection.test.ts`
+
+- [ ] **Step 3: Implement the projection helper**
+
+Responsibilities:
+- build a comparison-safe envelope with `gaid`, `profileFingerprint`, `validationStatus`, `issuedAt`, `verifierRef`, `evidenceRef`, and optional signature material
+- explicitly exclude full kernel profile content and internal review records
+- make the helper available to coworker/auth surfaces that need to show trust state
+
+- [ ] **Step 4: Thread the projection into coworker-facing auth surfaces**
+
+Expose trust markers only where they help humans or relying systems verify continuity; do not leak the full approved operating bundle.
+
+- [ ] **Step 5: Re-run tests**
+
+Run: `pnpm --filter web test apps/web/lib/tak/attestation-projection.test.ts`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/web/lib/tak/attestation-projection.ts apps/web/lib/tak/attestation-projection.test.ts apps/web/lib/actions/agent-coworker.ts
+git commit -m "feat(tak): add projected attestation envelope for trusted agent identity"
+```
+
 ---
 
 ## Chunk 7: External Product Federation
@@ -694,4 +830,3 @@ When this plan is executed, review each chunk before moving on. The highest-risk
 - manager-scope enforcement leaks
 - identity edge sync drift
 - coworker/tool permissions accidentally widening during refactor
-

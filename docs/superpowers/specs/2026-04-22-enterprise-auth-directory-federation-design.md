@@ -518,6 +518,56 @@ Example:
 - `cn=role-HR-300,ou=groups,dc=dpf,dc=internal`
 - `cn=dept-finance,ou=groups,dc=dpf,dc=internal`
 
+### Agent schema projection
+
+Agent entries should not force `LDAP` consumers to understand `GAID` or `TAK` in full, but they should publish enough stable metadata to distinguish an AI coworker from a human or service principal.
+
+Recommended pattern:
+
+- preserve a standard structural user/account object class for broad client compatibility
+- add an auxiliary DPF-specific class for agent semantics
+- publish agent identity and runtime trust markers as explicit attributes
+
+Recommended published attributes:
+
+- `gaid`
+- `dpfPrincipalType`
+- `takProfileFingerprint`
+- `takValidationStatus`
+- `gaidIssuer`
+- `gaidExposureState`
+- `dpfVerifierRef`
+
+Illustrative entry shape:
+
+```ldif
+dn: gaid=gaid:priv:dpf.internal:hr-coworker-001,ou=agents,dc=dpf,dc=internal
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+objectClass: dpfAgentPrincipalAux
+cn: HR Coworker 001
+sn: Coworker
+uid: agt-001
+gaid: gaid:priv:dpf.internal:hr-coworker-001
+dpfPrincipalType: agent
+takProfileFingerprint: sha256:4a1f...
+takValidationStatus: validated
+gaidIssuer: dpf.internal
+gaidExposureState: private
+dpfVerifierRef: tak://profiles/hr-coworker-001/current
+memberOf: cn=role-HR-300,ou=groups,dc=dpf,dc=internal
+```
+
+The goal is not to standardize these exact names immediately. The goal is to lock the implementation pattern:
+
+- stable agent subject identity
+- explicit non-human type
+- visible validated-state marker
+- coarse authority through groups
+- richer trust semantics retained in DPF and `TAK`
+
 ### Read/write stance
 
 External LDAP clients should be **read-only by default**.
@@ -559,6 +609,54 @@ This keeps DPF from having to implement one-off provisioning adapters for every 
 ### Why SCIM matters here
 
 SCIM is where current standards work is active, and it cleanly separates lifecycle provisioning from interactive login and route-time authorization.
+
+### Agent SCIM extension shape
+
+The DPF implementation should treat `SCIM` agent data as an extension profile layered on top of a stable subject identifier rather than as a replacement subject model.
+
+Recommended core mapping:
+
+- SCIM resource `id` remains the edge-system identifier
+- `externalId` carries the DPF `principalId`
+- the enduring `GAID` is carried in a DPF agent extension block
+
+Recommended extension fields:
+
+- `gaid`
+- `principalType`
+- `profileFingerprint`
+- `validationStatus`
+- `exposureState`
+- `badgeRefs`
+- `verifierRef`
+
+Illustrative payload shape:
+
+```json
+{
+  "schemas": [
+    "urn:ietf:params:scim:schemas:core:2.0:User",
+    "urn:dpf:params:scim:schemas:extension:agent:2.0:User"
+  ],
+  "externalId": "PRN-000123",
+  "userName": "hr-coworker-001",
+  "active": true,
+  "urn:dpf:params:scim:schemas:extension:agent:2.0:User": {
+    "gaid": "gaid:priv:dpf.internal:hr-coworker-001",
+    "principalType": "agent",
+    "profileFingerprint": "sha256:4a1f...",
+    "validationStatus": "validated",
+    "exposureState": "private",
+    "badgeRefs": [
+      "badge:hr-sensitive-reviewed",
+      "badge:tool-payroll-read"
+    ],
+    "verifierRef": "tak://profiles/hr-coworker-001/current"
+  }
+}
+```
+
+This allows lifecycle systems to provision and compare agent identity state without forcing them to understand the full `TAK` runtime model.
 
 ---
 
@@ -631,6 +729,44 @@ Examples:
 - a manager interacting with a coworker receives scoped answers for their team, not unrestricted HR back-office access
 
 This design extends existing TAK enforcement rather than replacing it.
+
+### TAK attestation projection
+
+`TAK` should remain the kernel of trust, not the public directory itself. The enterprise identity architecture therefore needs a clean split between:
+
+- **publicly projectable trust markers**
+- **kernel-only attestation evidence**
+
+Projected markers that may appear in `LDAP`, `SCIM`, or downstream claims:
+
+- `gaid`
+- current `profileFingerprint`
+- `validationStatus`
+- selected badge references
+- verifier reference
+
+Kernel-only evidence retained inside DPF/`TAK`:
+
+- full approved operating profile bundle
+- sealed or signed attestation material
+- internal dependency evidence
+- validation receipts and review history
+
+Illustrative attestation envelope:
+
+```json
+{
+  "gaid": "gaid:priv:dpf.internal:hr-coworker-001",
+  "profileFingerprint": "sha256:4a1f...",
+  "validationStatus": "validated",
+  "issuedAt": "2026-04-22T16:30:00Z",
+  "verifierRef": "tak://profiles/hr-coworker-001/current",
+  "evidenceRef": "tak://attestations/att-000441",
+  "signature": "<protected-signature-material>"
+}
+```
+
+That envelope can be carried directly by APIs or referenced indirectly by `LDAP` and `SCIM` projections. It gives relying systems a stable comparison point without disclosing the entire kernel-governed profile.
 
 ---
 
@@ -795,4 +931,3 @@ The March unified identity spec remains the foundation. This document narrows it
 - external product federation
 - ADP-backed manager separation
 - coworker route/tool access
-
