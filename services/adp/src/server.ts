@@ -1,11 +1,12 @@
 // ADP MCP server entry point.
-// P0.4 scaffold: health endpoint + empty MCP tools/list. Tool handlers land in P2.
+// HTTP JSON-RPC over POST /mcp. Health at GET /health.
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { listWorkers, TOOL_DEFINITION as LIST_WORKERS_DEF } from "./tools/list-workers.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "8600", 10);
 const SERVICE_NAME = "adp";
-const SERVICE_VERSION = "0.1.0";
+const SERVICE_VERSION = "0.2.0";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -20,6 +21,22 @@ interface JsonRpcResponse {
   result?: unknown;
   error?: { code: number; message: string };
 }
+
+interface ToolsCallParams {
+  name: string;
+  arguments?: unknown;
+  _meta?: {
+    coworkerId?: string;
+    userId?: string | null;
+  };
+}
+
+type ToolHandler = (args: unknown, ctx: { coworkerId: string; userId: string | null }) => Promise<unknown>;
+
+// Registry of callable tools. Add new tools here as they land.
+const TOOLS: Record<string, { definition: typeof LIST_WORKERS_DEF; handler: ToolHandler }> = {
+  adp_list_workers: { definition: LIST_WORKERS_DEF, handler: listWorkers },
+};
 
 async function readBody(req: IncomingMessage): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -39,16 +56,41 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-function handleMcp(request: JsonRpcRequest): JsonRpcResponse {
+async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcResponse> {
   switch (request.method) {
     case "tools/list":
-      return { jsonrpc: "2.0", id: request.id, result: { tools: [] } };
-    case "tools/call":
       return {
         jsonrpc: "2.0",
         id: request.id,
-        error: { code: -32601, message: "No tools registered yet — P0 scaffold only" },
+        result: { tools: Object.values(TOOLS).map((t) => t.definition) },
       };
+    case "tools/call": {
+      const params = request.params as ToolsCallParams | undefined;
+      const toolName = params?.name;
+      if (!toolName || !(toolName in TOOLS)) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: `Tool not found: ${toolName ?? "<unset>"}` },
+        };
+      }
+      const ctx = {
+        coworkerId: params?._meta?.coworkerId ?? "unknown",
+        userId: params?._meta?.userId ?? null,
+      };
+      try {
+        const result = await TOOLS[toolName]!.handler(params?.arguments, ctx);
+        return { jsonrpc: "2.0", id: request.id, result };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "unknown error";
+        const code = err instanceof Error && "code" in err ? String((err as { code: unknown }).code) : undefined;
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: code ? `${code}: ${message}` : message },
+        };
+      }
+    }
     default:
       return {
         jsonrpc: "2.0",
@@ -76,8 +118,8 @@ const server = createServer(async (req, res) => {
         });
         return;
       }
-      sendJson(res, 200, handleMcp(request));
-    } catch (err) {
+      sendJson(res, 200, await handleMcp(request));
+    } catch {
       sendJson(res, 400, {
         jsonrpc: "2.0",
         id: null,
@@ -91,7 +133,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[${SERVICE_NAME}] listening on :${PORT}`);
+  console.log(`[${SERVICE_NAME}] listening on :${PORT} (v${SERVICE_VERSION})`);
 });
 
 process.on("SIGTERM", () => {
