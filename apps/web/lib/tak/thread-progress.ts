@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/tak/agent-event-bus";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
+import { projectTaskStreamEvents } from "@/lib/tak/task-stream-projection";
 
 /**
  * Persist a progress event to TaskRun.progressPayload AND best-effort
@@ -22,15 +23,20 @@ export async function pushThreadProgress(
   taskRunId: string,
   event: AgentEvent,
 ): Promise<void> {
+  let contextId: string | null = threadId;
   try {
-    await prisma.taskRun.update({
+    const taskRun = await prisma.taskRun.update({
       where: { taskRunId },
       data: {
         // Event is a tagged union, safe to persist as JSON
         progressPayload: JSON.parse(JSON.stringify(event)),
         updatedAt: new Date(),
       },
+      select: {
+        contextId: true,
+      },
     });
+    contextId = taskRun.contextId ?? contextId;
   } catch {
     // Best-effort; progress writes must not break the producer.
   }
@@ -38,7 +44,9 @@ export async function pushThreadProgress(
   if (threadId) {
     try {
       if (agentEventBus.isActive(threadId)) {
-        agentEventBus.emit(threadId, event);
+        for (const projectedEvent of projectTaskStreamEvents(event, contextId)) {
+          agentEventBus.emit(threadId, projectedEvent);
+        }
       }
     } catch {
       // Best-effort.
