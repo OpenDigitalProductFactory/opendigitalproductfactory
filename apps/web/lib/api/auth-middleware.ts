@@ -12,6 +12,7 @@
 import { prisma } from "@dpf/db";
 import type { DpfSession } from "../auth";
 import { auth } from "../auth";
+import { buildEffectiveAuthContext, type EffectiveAuthContext } from "../identity/effective-auth-context";
 import { getGrantedCapabilities } from "../permissions";
 import { verifyAccessToken } from "./jwt";
 import { apiError } from "./error";
@@ -19,6 +20,7 @@ import { apiError } from "./error";
 export type AuthResult = {
   user: DpfSession["user"];
   capabilities: string[];
+  authContext: EffectiveAuthContext;
 };
 
 /**
@@ -46,7 +48,15 @@ export async function authenticateRequest(
     // Look up user to get current state
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { groups: { include: { platformRole: true } } },
+      include: {
+        groups: { include: { platformRole: true } },
+        employeeProfile: {
+          select: {
+            id: true,
+            directReports: { select: { id: true } },
+          },
+        },
+      },
     });
 
     if (!user || !user.isActive) {
@@ -68,8 +78,13 @@ export async function authenticateRequest(
       platformRole: sessionUser.platformRole,
       isSuperuser: sessionUser.isSuperuser,
     });
+    const authContext = buildEffectiveAuthContext({
+      user: sessionUser,
+      grantedCapabilities: capabilities,
+      employeeProfile: user.employeeProfile,
+    });
 
-    return { user: sessionUser, capabilities };
+    return { user: sessionUser, capabilities, authContext };
   }
 
   // --- Path 2: NextAuth session ---
@@ -84,8 +99,12 @@ export async function authenticateRequest(
     platformRole: sessionUser.platformRole,
     isSuperuser: sessionUser.isSuperuser,
   });
+  const authContext = buildEffectiveAuthContext({
+    user: sessionUser,
+    grantedCapabilities: capabilities,
+  });
 
-  return { user: sessionUser, capabilities };
+  return { user: sessionUser, capabilities, authContext };
 }
 
 /**

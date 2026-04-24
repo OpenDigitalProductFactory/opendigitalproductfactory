@@ -63,6 +63,10 @@ describe("authenticateRequest — Bearer token", () => {
       isActive: true,
       isSuperuser: false,
       groups: [{ platformRole: { roleId: "HR-000" } }],
+      employeeProfile: {
+        id: "emp-1",
+        directReports: [{ id: "emp-2" }],
+      },
     });
 
     const mockCapabilities = getGrantedCapabilities as ReturnType<typeof vi.fn>;
@@ -75,6 +79,9 @@ describe("authenticateRequest — Bearer token", () => {
     expect(result.user.id).toBe("user-1");
     expect(result.user.email).toBe("alice@example.com");
     expect(result.capabilities).toEqual(["view_admin", "view_portfolio"]);
+    expect(result.authContext.principalId).toBe("PRN-USER-user-1");
+    expect(result.authContext.employeeId).toBe("emp-1");
+    expect(result.authContext.managerScope?.directReportIds).toEqual(["emp-2"]);
   });
 
   it("throws 401 if Bearer token is invalid", async () => {
@@ -121,6 +128,9 @@ describe("authenticateRequest — session fallback", () => {
     expect(result.user.id).toBe("user-2");
     expect(result.user.email).toBe("bob@example.com");
     expect(result.capabilities).toEqual(["view_ea_modeler"]);
+    expect(result.authContext.principalId).toBe("PRN-USER-user-2");
+    expect(result.authContext.employeeId).toBeNull();
+    expect(result.authContext.managerScope).toBeNull();
   });
 
   it("throws 401 when no Bearer token and no session", async () => {

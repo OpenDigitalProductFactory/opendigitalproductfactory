@@ -4,12 +4,12 @@
 // Returns JWT access token and refresh token for mobile/API clients.
 
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { prisma } from "@dpf/db";
 import { loginSchema } from "@dpf/validators";
 import { signAccessToken, createRefreshToken } from "@/lib/api/jwt";
 import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
+import { hashPassword, verifyPassword } from "@/lib/govern/password";
 
 export async function POST(request: Request) {
   try {
@@ -39,9 +39,17 @@ export async function POST(request: Request) {
     }
 
     // 3. Verify password
-    const passwordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!passwordValid) {
+    const { valid, needsRehash } = await verifyPassword(password, user.passwordHash);
+    if (!valid) {
       throw apiError("INVALID_CREDENTIALS", "Invalid email or password", 401);
+    }
+
+    if (needsRehash) {
+      const nextHash = await hashPassword(password);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: nextHash },
+      });
     }
 
     // 4. Check user is active
