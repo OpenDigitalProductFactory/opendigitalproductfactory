@@ -1,0 +1,52 @@
+{
+  "token": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "workers": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "payStatements": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "timeCards": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "deductions": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  }
+}

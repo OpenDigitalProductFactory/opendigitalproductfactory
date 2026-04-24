@@ -1,0 +1,30 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"access_token\":"
+  },
+  "companyInfo": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"CompanyInfo\":"
+  },
+  "customer": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Customer\":"
+  },
+  "invoice": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Invoice\":"
+  }
+}

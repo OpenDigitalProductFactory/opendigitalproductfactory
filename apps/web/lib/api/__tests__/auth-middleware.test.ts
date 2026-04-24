@@ -6,6 +6,9 @@ vi.mock("@dpf/db", () => ({
     user: {
       findUnique: vi.fn(),
     },
+    principalAlias: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -63,10 +66,20 @@ describe("authenticateRequest — Bearer token", () => {
       isActive: true,
       isSuperuser: false,
       groups: [{ platformRole: { roleId: "HR-000" } }],
+      employeeProfile: {
+        id: "emp-1",
+        directReports: [{ id: "emp-2" }],
+      },
     });
 
     const mockCapabilities = getGrantedCapabilities as ReturnType<typeof vi.fn>;
     mockCapabilities.mockReturnValue(["view_admin", "view_portfolio"]);
+    const mockPrincipalAlias = prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>;
+    mockPrincipalAlias.mockResolvedValue({
+      principal: {
+        principalId: "PRN-000123",
+      },
+    });
 
     const req = mockRequest({ authorization: "Bearer my-jwt-token" });
     const result = await authenticateRequest(req as never);
@@ -75,6 +88,9 @@ describe("authenticateRequest — Bearer token", () => {
     expect(result.user.id).toBe("user-1");
     expect(result.user.email).toBe("alice@example.com");
     expect(result.capabilities).toEqual(["view_admin", "view_portfolio"]);
+    expect(result.authContext.principalId).toBe("PRN-000123");
+    expect(result.authContext.employeeId).toBe("emp-1");
+    expect(result.authContext.managerScope?.directReportIds).toEqual(["emp-2"]);
   });
 
   it("throws 401 if Bearer token is invalid", async () => {
@@ -114,6 +130,24 @@ describe("authenticateRequest — session fallback", () => {
 
     const mockCapabilities = getGrantedCapabilities as ReturnType<typeof vi.fn>;
     mockCapabilities.mockReturnValue(["view_ea_modeler"]);
+    const mockPrincipalAlias = prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>;
+    mockPrincipalAlias.mockResolvedValue({
+      principal: {
+        principalId: "PRN-000456",
+      },
+    });
+    const mockFindUnique = prisma.user.findUnique as ReturnType<typeof vi.fn>;
+    mockFindUnique.mockResolvedValue({
+      id: "user-2",
+      email: "bob@example.com",
+      isActive: true,
+      isSuperuser: false,
+      groups: [{ platformRole: { roleId: "HR-300" } }],
+      employeeProfile: {
+        id: "emp-2",
+        directReports: [{ id: "emp-3" }],
+      },
+    });
 
     const req = mockRequest({});
     const result = await authenticateRequest(req as never);
@@ -121,6 +155,9 @@ describe("authenticateRequest — session fallback", () => {
     expect(result.user.id).toBe("user-2");
     expect(result.user.email).toBe("bob@example.com");
     expect(result.capabilities).toEqual(["view_ea_modeler"]);
+    expect(result.authContext.principalId).toBe("PRN-000456");
+    expect(result.authContext.employeeId).toBe("emp-2");
+    expect(result.authContext.managerScope?.directReportIds).toEqual(["emp-3"]);
   });
 
   it("throws 401 when no Bearer token and no session", async () => {

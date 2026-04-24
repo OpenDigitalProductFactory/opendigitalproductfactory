@@ -10,9 +10,6 @@ setup: ## Full first-time setup (install, env, docker, migrate, seed)
 		cp .env.example apps/web/.env.local; \
 		echo "Created apps/web/.env.local — edit AUTH_SECRET before deploying."; \
 	fi
-	@if [ ! -f packages/db/.env ]; then \
-		cp .env.example packages/db/.env; \
-	fi
 	@echo "Starting databases..."
 	docker compose up -d
 	@echo "Waiting for PostgreSQL to be ready..."

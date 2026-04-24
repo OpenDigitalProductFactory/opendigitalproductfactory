@@ -1,24 +1,29 @@
 # ADP MCP server — standalone Node 20 service.
-# Not a pnpm-workspace member; has its own dep tree so it stays portable for Hive publication.
-
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY services/adp/package.json ./
-RUN corepack enable && pnpm install
+# The runtime ships as its own container, but it consumes
+# packages/integration-shared as a local file dependency during the image build.
 
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY services/adp/package.json services/adp/tsconfig.json ./
-COPY services/adp/src ./src
-RUN corepack enable && pnpm build
+COPY tsconfig.base.json ./tsconfig.base.json
+COPY services/adp ./services/adp
+COPY packages/integration-shared ./packages/integration-shared
+WORKDIR /app/packages/integration-shared
+RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.main = './dist/index.js'; pkg.types = './dist/index.d.ts'; pkg.scripts = { ...(pkg.scripts ?? {}), build: 'tsc' }; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');" \
+  && corepack enable \
+  && pnpm install --no-frozen-lockfile \
+  && pnpm build
+WORKDIR /app/services/adp
+RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.dependencies['@dpf/integration-shared'] = 'file:../../packages/integration-shared'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');" \
+  && corepack enable \
+  && pnpm install --no-frozen-lockfile \
+  && pnpm build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
-COPY services/adp/package.json ./
+COPY --from=build /app/services/adp/dist ./dist
+COPY --from=build /app/services/adp/node_modules ./node_modules
+COPY services/adp/package.json ./package.json
 USER node
 EXPOSE 8600
 CMD ["node", "dist/server.js"]

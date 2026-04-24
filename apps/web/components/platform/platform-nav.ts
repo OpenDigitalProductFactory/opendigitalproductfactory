@@ -2,6 +2,7 @@ import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 export type PlatformFamilyKey =
   | "overview"
+  | "identity"
   | "ai"
   | "tools"
   | "audit"
@@ -24,6 +25,23 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     description: "Supervise platform operations from a small number of workflow hubs.",
     matchPrefixes: ["/platform"],
     subItems: [{ label: "Platform Hub", href: "/platform" }],
+  },
+  {
+    key: "identity",
+    label: "Identity & Access",
+    href: "/platform/identity",
+    description: "Manage principals, memberships, directory authorities, federation, and route-aware access from one control plane.",
+    matchPrefixes: ["/platform/identity"],
+    subItems: [
+      { label: "Overview", href: "/platform/identity" },
+      { label: "Principals", href: "/platform/identity/principals" },
+      { label: "Groups", href: "/platform/identity/groups" },
+      { label: "Directory", href: "/platform/identity/directory" },
+      { label: "Federation", href: "/platform/identity/federation" },
+      { label: "Applications", href: "/platform/identity/applications" },
+      { label: "Authorization", href: "/platform/identity/authorization" },
+      { label: "Agents", href: "/platform/identity/agents" },
+    ],
   },
   {
     key: "ai",

@@ -2,15 +2,18 @@
 import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
 import { getDefaultDunningSequence } from "@/lib/actions/dunning";
 import { getOrgSettings } from "@/lib/actions/currency";
+import { prisma } from "@dpf/db";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 export default async function FinancialSettingsPage() {
-  const [setupStatus, orgSettings, dunningSequence] = await Promise.all([
+  const [setupStatus, orgSettings, dunningSequence, taxProfile, taxRegistrationCount] = await Promise.all([
     getFinancialSetupStatus(),
     getOrgSettings(),
     getDefaultDunningSequence(),
+    prisma.organizationTaxProfile.findFirst(),
+    prisma.taxRegistration.count(),
   ]);
 
   // Derive profile-specific values. If profile isn't applied we show defaults.
@@ -30,6 +33,7 @@ export default async function FinancialSettingsPage() {
 
   const dunningStepCount = dunningSequence?.steps.length ?? 0;
   const dunningEnabled = setupStatus.dunningActive && dunningStepCount > 0;
+  const taxSetupStatus = taxProfile?.setupStatus ?? "draft";
 
   return (
     <div>
@@ -192,6 +196,31 @@ export default async function FinancialSettingsPage() {
           </div>
           <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
             Automated payment reminders sent to overdue accounts.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
+            Tax Remittance
+          </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-[var(--dpf-text)]">
+                {taxRegistrationCount > 0 ? `${taxRegistrationCount} registration${taxRegistrationCount !== 1 ? "s" : ""}` : "Not configured"}
+              </span>
+              <span className="text-[9px] px-2 py-0.5 rounded-full font-medium border border-[var(--dpf-border)] text-[var(--dpf-text)]">
+                {taxSetupStatus}
+              </span>
+            </div>
+            <Link
+              href="/finance/settings/tax"
+              className="text-[10px] text-[var(--dpf-accent)] hover:underline"
+            >
+              Open →
+            </Link>
+          </div>
+          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+            Manage tax setup posture, authority registrations, and filing-readiness groundwork.
           </p>
         </div>
 

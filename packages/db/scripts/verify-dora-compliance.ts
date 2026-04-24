@@ -2,10 +2,12 @@
  * EP-REG-DORA-001: Verify DORA compliance data — gap assessment, posture scoring, snapshot
  * Run: cd packages/db && npx tsx scripts/verify-dora-compliance.ts
  */
-import "dotenv/config";
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import * as crypto from "crypto";
+import { loadDbEnv } from "../src/load-env";
+
+loadDbEnv();
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });

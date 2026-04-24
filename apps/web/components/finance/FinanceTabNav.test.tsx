@@ -50,4 +50,14 @@ describe("FinanceTabNav", () => {
     expect(html).not.toContain('href="/finance/invoices"');
     expect(html).not.toContain('href="/finance/bills"');
   });
+
+  it("shows tax remittance in the configuration sub-navigation", () => {
+    pathname = "/finance/settings/tax";
+    const html = renderToStaticMarkup(<FinanceTabNav />);
+
+    expect(html).toContain('href="/finance/settings"');
+    expect(html).toContain('href="/finance/settings/currency"');
+    expect(html).toContain('href="/finance/settings/dunning"');
+    expect(html).toContain('href="/finance/settings/tax"');
+  });
 });
