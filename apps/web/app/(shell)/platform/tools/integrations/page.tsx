@@ -4,10 +4,10 @@ import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks"] }, status: "connected" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "connected" },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks"] }, status: "error" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "error" },
     }),
   ]);
 
@@ -38,6 +38,16 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-success)"
           metrics={[
             { label: "Category", value: "Finance" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Stripe Billing & Payments"
+          description="Payments anchor for balance, customer, invoice, and payment-intent context on the enterprise substrate."
+          href="/platform/tools/integrations/stripe"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Category", value: "Payments" },
             { label: "Model", value: "Native" },
           ]}
         />
