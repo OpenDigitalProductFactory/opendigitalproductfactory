@@ -41,7 +41,7 @@ export default async function TaxRemittanceSettingsPage() {
         </p>
         <p className="mt-1 text-sm text-[var(--dpf-text)]">{workspace.organization.name}</p>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          This surface supports both already-configured businesses and first-time setup. The finance coworker should ask what exists before making assumptions.
+          This surface supports both already-configured businesses and first-time setup without assuming either posture by default.
         </p>
       </div>
 

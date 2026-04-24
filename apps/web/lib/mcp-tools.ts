@@ -15,6 +15,7 @@ import {
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
+import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
 import {
   getIntegrationBenchmarkMetadata,
@@ -2516,7 +2517,7 @@ export async function executeTool(
         where: {
           userId,
           title: "Extract brand design system",
-          status: "active",
+          status: { in: [...TASK_IN_FLIGHT_STATES] },
         },
         select: { taskRunId: true },
       });
@@ -2555,13 +2556,14 @@ export async function executeTool(
           taskRunId,
           userId,
           threadId: context?.threadId ?? null,
+          contextId: context?.threadId ?? taskRunId,
           routeContext: context?.routeContext ?? null,
           title: "Extract brand design system",
           objective: url
             ? `Extract brand from ${url}`
             : "Extract brand from supplied sources",
           source: "coworker",
-          status: "active",
+          status: "submitted",
         },
       });
 
@@ -4533,8 +4535,10 @@ export async function executeTool(
       const { createBranchAndPR, mergePR, commentOnPR } = await import("@/lib/integrate/github-api-commit");
 
       const prResult = await createBranchAndPR({
-        owner: repoOwner,
-        repo: repoName,
+        headOwner: repoOwner,
+        headRepo: repoName,
+        baseOwner: repoOwner,
+        baseRepo: repoName,
         branchName,
         commitMessage,
         diff,
@@ -5312,7 +5316,16 @@ export async function executeTool(
 
       const devConfig = await prisma.platformDevConfig.findUnique({
         where: { id: "singleton" },
-        select: { contributionMode: true, upstreamRemoteUrl: true, dcoAcceptedAt: true, gitRemoteUrl: true },
+        select: {
+          contributionMode: true,
+          upstreamRemoteUrl: true,
+          dcoAcceptedAt: true,
+          gitRemoteUrl: true,
+          contributionModel: true,
+          contributorForkOwner: true,
+          contributorForkRepo: true,
+          forkVerifiedAt: true,
+        },
       });
       const { getPlatformDevPolicyState } = await import("@/lib/platform-dev-policy");
       const policyState = getPlatformDevPolicyState(devConfig);
@@ -5444,9 +5457,10 @@ export async function executeTool(
         });
       }
 
-      // Create upstream PR via direct branch push (Option B).
-      // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
-      // No customer fork needed — the hive token provides write access.
+      // Upstream PR creation — flag-off keeps the legacy direct-push flow;
+      // flag-on dispatches on PlatformDevConfig.contributionModel via
+      // resolveContributionDispatch (which also signals fork reverification
+      // and merge-upstream needs for the fork-pr path).
       let prUrl: string | null = null;
       let prError: string | null = null;
       try {
@@ -5463,6 +5477,58 @@ export async function executeTool(
           if (!upstreamMatch) {
             prError = `upstreamRemoteUrl "${upstreamUrl}" is not a recognizable GitHub URL.`;
           } else {
+            const [, upstreamOwner, upstreamRepo] = upstreamMatch;
+
+            // Dispatch on contributionModel (flag-gated internally).
+            const { resolveContributionDispatch } = await import("@/lib/integrate/contribution-dispatch");
+            const dispatch = resolveContributionDispatch({
+              contributionModel: devConfig?.contributionModel ?? null,
+              upstreamOwner,
+              upstreamRepo,
+              contributorForkOwner: devConfig?.contributorForkOwner ?? null,
+              contributorForkRepo: devConfig?.contributorForkRepo ?? null,
+              forkVerifiedAt: devConfig?.forkVerifiedAt ?? null,
+            });
+
+            if (dispatch.kind === "error") {
+              prError = dispatch.error;
+              throw new Error(dispatch.error);
+            }
+
+            // Fork-specific prep: verify the fork still exists (if stale or
+            // never verified) and sync its base branch from upstream so our
+            // new commit parents off an up-to-date sha. Either step's failure
+            // produces an actionable prError and aborts before createBranchAndPR.
+            if (dispatch.kind === "fork") {
+              const { forkExistsAndIsFork, syncForkFromUpstream } = await import("@/lib/integrate/github-fork");
+
+              if (dispatch.needsForkReverification) {
+                const check = await forkExistsAndIsFork({
+                  owner: dispatch.headOwner,
+                  repo: dispatch.headRepo,
+                  upstreamOwner,
+                  upstreamRepo,
+                  token: hiveToken,
+                });
+                if (!check.exists || !check.isFork) {
+                  const msg = `Fork ${dispatch.headOwner}/${dispatch.headRepo} is no longer a fork of ${upstreamOwner}/${upstreamRepo} (or has been deleted). Re-run fork setup before retrying.`;
+                  prError = msg;
+                  throw new Error(msg);
+                }
+                await prisma.platformDevConfig.update({
+                  where: { id: "singleton" },
+                  data: { forkVerifiedAt: new Date() },
+                });
+              }
+
+              await syncForkFromUpstream({
+                forkOwner: dispatch.headOwner,
+                forkRepo: dispatch.headRepo,
+                branch: "main",
+                token: hiveToken,
+              });
+            }
+
             const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
 
             const branchName = generatePrivateBranchName(platformId.clientId, build.title);
@@ -5496,8 +5562,10 @@ export async function executeTool(
             if (!securityScan.passed) labels.push("security-review-needed");
 
             const prResult = await createBranchAndPR({
-              owner: upstreamMatch[1],
-              repo: upstreamMatch[2],
+              headOwner: dispatch.headOwner,
+              headRepo: dispatch.headRepo,
+              baseOwner: dispatch.baseOwner,
+              baseRepo: dispatch.baseRepo,
               branchName,
               commitMessage,
               diff,

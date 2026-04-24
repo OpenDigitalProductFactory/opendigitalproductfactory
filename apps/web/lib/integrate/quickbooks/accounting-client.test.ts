@@ -66,7 +66,9 @@ describe("probeQuickBooksAccounting", () => {
       .intercept({
         path: (value) =>
           value.startsWith("/v3/company/9130355377388383/query?") &&
-          decodeURIComponent(value.replace(/\+/g, "%20")).includes("select * from Customer maxresults 1"),
+          decodeURIComponent(value.replace(/\+/g, "%20")).includes(
+            "select * from Customer maxresults 1",
+          ),
         method: "GET",
       })
       .reply(200, {
@@ -78,7 +80,9 @@ describe("probeQuickBooksAccounting", () => {
       .intercept({
         path: (value) =>
           value.startsWith("/v3/company/9130355377388383/query?") &&
-          decodeURIComponent(value.replace(/\+/g, "%20")).includes("select * from Invoice maxresults 1"),
+          decodeURIComponent(value.replace(/\+/g, "%20")).includes(
+            "select * from Invoice maxresults 1",
+          ),
         method: "GET",
       })
       .reply(200, {
@@ -133,7 +137,9 @@ describe("probeQuickBooksAccounting", () => {
       .intercept({
         path: (value) =>
           value.startsWith("/v3/company/9130355377388383/query?") &&
-          decodeURIComponent(value.replace(/\+/g, "%20")).includes("select * from Customer maxresults 3"),
+          decodeURIComponent(value.replace(/\+/g, "%20")).includes(
+            "select * from Customer maxresults 3",
+          ),
         method: "GET",
       })
       .reply(200, {
@@ -165,7 +171,9 @@ describe("probeQuickBooksAccounting", () => {
       .intercept({
         path: (value) =>
           value.startsWith("/v3/company/9130355377388383/query?") &&
-          decodeURIComponent(value.replace(/\+/g, "%20")).includes("select * from Invoice maxresults 2"),
+          decodeURIComponent(value.replace(/\+/g, "%20")).includes(
+            "select * from Invoice maxresults 2",
+          ),
         method: "GET",
       })
       .reply(200, {

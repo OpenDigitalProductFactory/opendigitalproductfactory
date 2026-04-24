@@ -2,8 +2,8 @@
 title: "Finance"
 area: finance
 order: 1
-lastUpdated: 2026-03-21
-updatedBy: Claude (COO)
+lastUpdated: 2026-04-24
+updatedBy: Codex
 ---
 
 ## Overview
@@ -24,3 +24,12 @@ The Finance area handles your organization's core financial operations: billing 
 - Record incoming bills and match them to purchase orders
 - Raise purchase orders and track their fulfillment status
 - Review outstanding payables and receivables at a glance
+- Monitor AI providers as finance-owned suppliers, including draft contracts, open setup work items, and linked billing/usage pages
+- Review committed AI spend and setup gaps from the dedicated `/finance/spend/ai` workspace
+
+## Route Guide
+
+- `/finance` — Finance overview workspace
+- `/finance/spend` — spend hub for suppliers, bills, expenses, and AI spend summary
+- `/finance/spend/ai` — dedicated AI supplier spend and utilization workspace
+- `/finance/suppliers/[id]` — supplier detail, including AI finance context when the supplier is linked to a provider

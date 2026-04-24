@@ -88,7 +88,10 @@ function toConnectionState(record: IntegrationCredentialRow): QuickBooksConnecti
   }>(record.fieldsEnc);
 
   return {
-    status: record.status === "connected" || record.status === "error" ? record.status : "unconfigured",
+    status:
+      record.status === "connected" || record.status === "error"
+        ? record.status
+        : "unconfigured",
     companyName: typeof decoded?.companyName === "string" ? decoded.companyName : null,
     realmId: typeof decoded?.realmId === "string" ? decoded.realmId : null,
     lastErrorMsg: record.lastErrorMsg,
@@ -247,13 +250,18 @@ function PreviewList({
 }: {
   items: Array<{ primary: string | undefined; secondary: string | null }>;
 }) {
-  const visibleItems = items.filter((item) => typeof item.primary === "string" && item.primary.length > 0);
+  const visibleItems = items.filter(
+    (item) => typeof item.primary === "string" && item.primary.length > 0,
+  );
   if (visibleItems.length === 0) return null;
 
   return (
     <div className="space-y-2">
       {visibleItems.map((item) => (
-        <div key={`${item.primary}-${item.secondary ?? ""}`} className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2">
+        <div
+          key={`${item.primary}-${item.secondary ?? ""}`}
+          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2"
+        >
           <div className="font-medium text-[var(--dpf-text)]">{item.primary}</div>
           {item.secondary && <div className="text-xs text-[var(--dpf-muted)]">{item.secondary}</div>}
         </div>

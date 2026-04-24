@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createTaxRegistration } from "@/lib/actions/tax-remittance";
-import type { CreateTaxRegistrationInput } from "@/lib/finance/tax-remittance-validation";
+import { createTaxRegistration, verifyTaxRegistration } from "@/lib/actions/tax-remittance";
+import type {
+  CreateTaxRegistrationInput,
+  VerifyTaxRegistrationInput,
+} from "@/lib/finance/tax-remittance-validation";
 
 const inputClasses =
   "rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none";
@@ -28,6 +31,10 @@ type RegistrationRecord = {
   filingBasis: string | null;
   remitterRole: string;
   effectiveFrom: Date | string;
+  portalAccountNotes: string | null;
+  verifiedFromSourceUrl: string | null;
+  lastVerifiedAt: Date | string | null;
+  confidence: string;
   jurisdictionReference: {
     authorityName: string;
     jurisdictionRefId: string;
@@ -36,9 +43,19 @@ type RegistrationRecord = {
   };
 };
 
+type TaxIssueRecord = {
+  id: string;
+  issueType: string;
+  severity: string;
+  status: string;
+  title: string;
+  registrationId: string | null;
+};
+
 type Props = {
   jurisdictionOptions: JurisdictionOption[];
   registrations: RegistrationRecord[];
+  issues: TaxIssueRecord[];
 };
 
 const defaultForm: CreateTaxRegistrationInput = {
@@ -53,12 +70,38 @@ const defaultForm: CreateTaxRegistrationInput = {
   portalAccountNotes: "",
 };
 
-export function TaxRegistrationEditor({ jurisdictionOptions, registrations }: Props) {
+type VerificationFormState = Record<string, VerifyTaxRegistrationInput>;
+
+export function TaxRegistrationEditor({ jurisdictionOptions, registrations, issues }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState<CreateTaxRegistrationInput>(defaultForm);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [verificationForms, setVerificationForms] = useState<VerificationFormState>(() =>
+    Object.fromEntries(
+      registrations.map((registration) => [
+        registration.id,
+        {
+          registrationId: registration.id,
+          verifiedFromSourceUrl: registration.verifiedFromSourceUrl ?? "",
+          portalAccountNotes: registration.portalAccountNotes ?? "",
+          confidence: "high",
+        },
+      ]),
+    ),
+  );
+
+  const issuesByRegistration = useMemo(() => {
+    const map = new Map<string, TaxIssueRecord[]>();
+    for (const issue of issues) {
+      if (!issue.registrationId || issue.status !== "open") continue;
+      const current = map.get(issue.registrationId) ?? [];
+      current.push(issue);
+      map.set(issue.registrationId, current);
+    }
+    return map;
+  }, [issues]);
 
   function labelForJurisdiction(option: JurisdictionOption) {
     const region = option.stateProvinceCode ? ` ${option.stateProvinceCode}` : "";
@@ -70,6 +113,25 @@ export function TaxRegistrationEditor({ jurisdictionOptions, registrations }: Pr
     value: CreateTaxRegistrationInput[K],
   ) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateVerificationField(
+    registrationId: string,
+    key: keyof VerifyTaxRegistrationInput,
+    value: string,
+  ) {
+    setVerificationForms((current) => ({
+      ...current,
+      [registrationId]: {
+        ...(current[registrationId] ?? {
+          registrationId,
+          verifiedFromSourceUrl: "",
+          portalAccountNotes: "",
+          confidence: "high",
+        }),
+        [key]: value,
+      },
+    }));
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -86,6 +148,30 @@ export function TaxRegistrationEditor({ jurisdictionOptions, registrations }: Pr
       } catch (submissionError) {
         setError(
           submissionError instanceof Error ? submissionError.message : "Unable to save registration.",
+        );
+      }
+    });
+  }
+
+  function handleVerificationSubmit(
+    event: React.FormEvent<HTMLFormElement>,
+    registrationId: string,
+  ) {
+    event.preventDefault();
+    setError(null);
+
+    startTransition(async () => {
+      try {
+        await verifyTaxRegistration(verificationForms[registrationId] ?? {
+          registrationId,
+          verifiedFromSourceUrl: "",
+          portalAccountNotes: "",
+          confidence: "high",
+        });
+        router.refresh();
+      } catch (submissionError) {
+        setError(
+          submissionError instanceof Error ? submissionError.message : "Unable to verify registration.",
         );
       }
     });
@@ -114,27 +200,108 @@ export function TaxRegistrationEditor({ jurisdictionOptions, registrations }: Pr
               No authority registrations have been recorded yet.
             </div>
           ) : (
-            registrations.map((registration) => (
-              <div
-                key={registration.id}
-                className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-4 py-3"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--dpf-text)]">
-                      {registration.jurisdictionReference.authorityName}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                      {registration.taxType} · {registration.filingFrequency}
-                      {registration.registrationNumber ? ` · ${registration.registrationNumber}` : ""}
-                    </p>
+            registrations.map((registration) => {
+              const registrationIssues = issuesByRegistration.get(registration.id) ?? [];
+              const verificationState = verificationForms[registration.id] ?? {
+                registrationId: registration.id,
+                verifiedFromSourceUrl: registration.verifiedFromSourceUrl ?? "",
+                portalAccountNotes: registration.portalAccountNotes ?? "",
+                confidence: "high",
+              };
+
+              return (
+                <div
+                  key={registration.id}
+                  className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-4 py-3"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--dpf-text)]">
+                        {registration.jurisdictionReference.authorityName}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                        {registration.taxType} · {registration.filingFrequency}
+                        {registration.registrationNumber ? ` · ${registration.registrationNumber}` : " · registration number pending"}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                        {registration.lastVerifiedAt
+                          ? `Live verified ${new Date(registration.lastVerifiedAt).toLocaleDateString()}`
+                          : "Live verification still needed"}
+                      </p>
+                      {registration.verifiedFromSourceUrl && (
+                        <a
+                          href={registration.verifiedFromSourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-xs text-[var(--dpf-accent)] hover:underline"
+                        >
+                          Open recorded source
+                        </a>
+                      )}
+                    </div>
+                    <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
+                      {registration.registrationStatus}
+                    </span>
                   </div>
-                  <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
-                    {registration.registrationStatus}
-                  </span>
+
+                  {registrationIssues.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+                        Open gaps
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {registrationIssues.map((issue) => (
+                          <div key={issue.id} className="text-xs text-[var(--dpf-text)]">
+                            <span className="font-medium">{issue.title}</span>
+                            <span className="ml-2 text-[var(--dpf-muted)]">{issue.severity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <form
+                    onSubmit={(event) => handleVerificationSubmit(event, registration.id)}
+                    className="mt-3 grid gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto]"
+                  >
+                    <label className="text-xs text-[var(--dpf-muted)]">
+                      Official source URL
+                      <input
+                        value={verificationState.verifiedFromSourceUrl}
+                        onChange={(event) =>
+                          updateVerificationField(registration.id, "verifiedFromSourceUrl", event.target.value)
+                        }
+                        className={`mt-1 w-full ${inputClasses}`}
+                        placeholder="https://..."
+                        required
+                      />
+                    </label>
+
+                    <label className="text-xs text-[var(--dpf-muted)]">
+                      Verification notes
+                      <input
+                        value={verificationState.portalAccountNotes ?? ""}
+                        onChange={(event) =>
+                          updateVerificationField(registration.id, "portalAccountNotes", event.target.value)
+                        }
+                        className={`mt-1 w-full ${inputClasses}`}
+                        placeholder="Portal confirmed, cadence confirmed, accountant owner..."
+                      />
+                    </label>
+
+                    <div className="flex items-end">
+                      <button
+                        type="submit"
+                        className="w-full rounded bg-[var(--dpf-accent)] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                        disabled={isPending}
+                      >
+                        {isPending ? "Saving..." : registration.lastVerifiedAt ? "Refresh verification" : "Mark live verified"}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

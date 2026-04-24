@@ -16,7 +16,8 @@ export default async function EnterpriseIntegrationsPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Integrations</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Native, first-class business integrations with customer-supplied credentials and platform-managed governance.
+          Native, first-class business integrations with customer-supplied credentials and
+          platform-managed governance.
         </p>
       </div>
 
@@ -58,9 +59,9 @@ export default async function EnterpriseIntegrationsPage() {
           Current Posture
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          {configuredIntegrations} configured native integrations, {errorStates} needing operator attention.
-          Native connectors stay separate from MCP services so enterprise auth, credential custody, and
-          approval boundaries remain explicit.
+          {configuredIntegrations} configured native integrations, {errorStates} needing operator
+          attention. Native connectors stay separate from MCP services so enterprise auth,
+          credential custody, and approval boundaries remain explicit.
         </p>
       </div>
     </div>

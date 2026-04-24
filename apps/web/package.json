@@ -56,7 +56,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",
-    "@types/node": "^24",
+    "@types/node": "^25",
     "@types/nodemailer": "^8.0.0",
     "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.20.0",

@@ -82,13 +82,23 @@ export async function probeQuickBooksAccounting(
 export async function listQuickBooksCustomers(
   params: ProbeQuickBooksAccountingParams & { limit?: number },
 ): Promise<QuickBooksCustomer[]> {
-  return queryEntities<QuickBooksCustomer>("Customer", params, resolveAccountingBaseUrl(params.environment), params.limit);
+  return queryEntities<QuickBooksCustomer>(
+    "Customer",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
 }
 
 export async function listQuickBooksInvoices(
   params: ProbeQuickBooksAccountingParams & { limit?: number },
 ): Promise<QuickBooksInvoice[]> {
-  return queryEntities<QuickBooksInvoice>("Invoice", params, resolveAccountingBaseUrl(params.environment), params.limit);
+  return queryEntities<QuickBooksInvoice>(
+    "Invoice",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
 }
 
 export async function getQuickBooksInvoice(
@@ -145,7 +155,9 @@ async function fetchJson<T>(
       },
     });
   } catch {
-    throw new QuickBooksAccountingError("QuickBooks accounting probe failed — check network reachability and try again.");
+    throw new QuickBooksAccountingError(
+      "QuickBooks accounting probe failed — check network reachability and try again.",
+    );
   }
 
   if (response.statusCode === 401 || response.statusCode === 403) {
@@ -157,20 +169,26 @@ async function fetchJson<T>(
 
   if (response.statusCode >= 500) {
     await safelyDrainBody(response.body);
-    throw new QuickBooksAccountingError("QuickBooks accounting API returned a server error — retry later.", {
-      statusCode: response.statusCode,
-    });
+    throw new QuickBooksAccountingError(
+      "QuickBooks accounting API returned a server error — retry later.",
+      {
+        statusCode: response.statusCode,
+      },
+    );
   }
 
   if (response.statusCode !== 200) {
     await safelyDrainBody(response.body);
-    throw new QuickBooksAccountingError(`QuickBooks accounting probe failed with status ${response.statusCode}`, {
-      statusCode: response.statusCode,
-    });
+    throw new QuickBooksAccountingError(
+      `QuickBooks accounting probe failed with status ${response.statusCode}`,
+      {
+        statusCode: response.statusCode,
+      },
+    );
   }
 
   try {
-    return await response.body.json() as T;
+    return (await response.body.json()) as T;
   } catch {
     throw new QuickBooksAccountingError("QuickBooks accounting response was not valid JSON", {
       statusCode: response.statusCode,

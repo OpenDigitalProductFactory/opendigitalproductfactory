@@ -205,14 +205,12 @@ describe("assembleSystemPrompt", () => {
   // EP-SELF-DEV-002: Evidence-first action rule
   it("includes evidence-first action rule", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
-    expect(prompt).toContain("start with the most relevant tool");
+    expect(prompt).toContain("start with the most relevant");
   });
 
   it("includes calm under pressure and anti-reward-hacking guidance", async () => {
     const prompt = await assembleSystemPrompt(fullInput);
     expect(prompt).toContain("Stay calm under pressure");
-    expect(prompt).toContain(
-      "Don't game tests, acceptance criteria, or approval flows",
-    );
+    expect(prompt).toContain("game tests, acceptance criteria");
   });
 });

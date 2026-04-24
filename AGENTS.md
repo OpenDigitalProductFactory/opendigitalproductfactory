@@ -67,8 +67,9 @@ Epics must be actively managed — not just created and forgotten.
 
 ### Why
 
-- The repo is public on GitHub. Branch protection on `main` enforces this at the platform level once configured.
+- The repo is public on GitHub. Branch protection on `main` enforces the PR flow at the platform level: required checks are `Typecheck`, `Production Build`, and `DCO`; linear history; no force-push; admins included.
 - CI has to run on every change before it lands — direct pushes bypass the gate.
+- Every commit in every PR must carry a `Signed-off-by:` trailer — use `git commit -s`. The DCO bot is a required check and blocks merge until every commit has it.
 - External contributors already use fork → branch → PR (see [CONTRIBUTING.md](CONTRIBUTING.md)). The maintainer using the same flow means one workflow, not two.
 - A PR diff is reviewable even for single-maintainer work; `git revert` is still straightforward but the review pass catches issues earlier.
 
@@ -115,14 +116,21 @@ New clones inherit this automatically via the repo's `postinstall` script. Verif
 
 **Subagent dispatchers:** include "run `pnpm --filter web typecheck` before committing and fix any errors" in every task prompt that modifies TypeScript. Subagents do not read AGENTS.md.
 
-### Typecheck Gate — Build Studio (mandatory)
+### Typecheck Gate — Build Studio (policy + implementation status)
 
-The platform's own Build Studio feature-building lifecycle must apply the same gate to the sandbox it builds in. Two additions:
+The platform's own Build Studio feature-building lifecycle must apply the same gate to the sandbox it builds in. The policy has two parts:
 
 1. **Per-task verification step** — after every Build Studio task execution in the sandbox, run `pnpm --filter web typecheck` and `pnpm --filter web build` inside the sandbox container. If either fails, the task status is `failed` and the coworker must fix the error before the phase advances. Mirrors the local pre-commit gate.
-2. **Pre-ship verification** — the review-phase verification pass (currently UX-only via browser-use) must include typecheck + production build as mandatory passes. The build never leaves the sandbox without passing what CI would run. Implementation landing spot: [apps/web/lib/queue/functions/build-review-verification.ts](apps/web/lib/queue/functions/build-review-verification.ts).
+2. **Pre-ship verification** — the review-phase verification pass must include typecheck + production build as mandatory passes. The build never leaves the sandbox without passing what CI would run.
 
 Together these mean a Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox.
+
+**Implementation status — NOT YET LANDED (audited 2026-04-24):**
+
+- Per-task verification does **not** run typecheck or build. Instead, [apps/web/lib/integrate/build-orchestrator.ts:375-401](apps/web/lib/integrate/build-orchestrator.ts#L375-L401) classifies outcome by string-matching the CLI's stdout for keywords like `"error"` / `"typecheck.*fail"`. A task whose CLI summary omits those words can silently pass even if typecheck is red. The landing spot for the real gate is after [`classifyOutcome()` returns at build-orchestrator.ts:583](apps/web/lib/integrate/build-orchestrator.ts#L583): before writing status `"DONE"`, exec the two `pnpm --filter web …` commands inside the sandbox container and override to `"BLOCKED"` on non-zero exit.
+- Pre-ship verification in [apps/web/lib/queue/functions/build-review-verification.ts](apps/web/lib/queue/functions/build-review-verification.ts) runs browser-use UX tests only. Typecheck + production build must be added as sibling `step.run(...)` blocks, with failures persisted alongside `uxTestResults` and `checkPhaseGate` extended to block ship until both are green.
+
+Until both are implemented, a Build Studio PR can still be typecheck-red or build-red when it leaves the sandbox. CI catches it on the PR (the merge gates on `main` hold), but the stated goal is to catch it at the sandbox boundary, not at merge time. Tracked in the repo's issue tracker.
 
 ### Concurrent Sessions — Per-Thread Worktree (mandatory when >1 session)
 

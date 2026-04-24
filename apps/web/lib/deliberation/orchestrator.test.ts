@@ -136,9 +136,17 @@ describe("orchestrateDeliberation — review pattern", () => {
 
     // TaskRun bootstrapped because no taskRunId supplied.
     expect(mocks.taskRunCreate).toHaveBeenCalledTimes(1);
-    expect(mocks.taskRunCreate.mock.calls[0]![0].data.title).toContain(
-      "Deliberation: review",
+    const taskRunCreateData = mocks.taskRunCreate.mock.calls[0]![0].data;
+    expect(taskRunCreateData.title).toContain("Deliberation: review");
+    expect(taskRunCreateData).toEqual(
+      expect.objectContaining({
+        contextId: expect.any(String),
+        status: "submitted",
+        authorityScope: [],
+      }),
     );
+    expect(taskRunCreateData).not.toHaveProperty("state");
+    expect(taskRunCreateData).not.toHaveProperty("governanceEnvelope");
 
     // 1 author + 2 reviewers + 0 skeptic (low risk, optional) + 1 adjudicator = 4 nodes
     expect(mocks.taskNodeCreate).toHaveBeenCalledTimes(4);

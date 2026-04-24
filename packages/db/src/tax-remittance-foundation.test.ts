@@ -52,6 +52,8 @@ describe("tax remittance foundation model shape", () => {
       homeCountryCode: "US",
       primaryRegionCode: "WA",
       taxModel: "hybrid",
+      filingOwner: "accountant",
+      handoffMode: "external_filing",
       externalSystem: "quickbooks",
       footprintSummary: "Operates from Washington and sells managed services in multiple states.",
       notes: null,
@@ -103,6 +105,8 @@ describe("tax remittance foundation model shape", () => {
       filedAt: null,
       paidAt: null,
       confirmationRef: null,
+      dueSoonNotifiedAt: null,
+      overdueNotifiedAt: null,
       preparedByAgentId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -152,6 +156,8 @@ describe("tax remittance foundation model shape", () => {
       setupStatus: "draft",
       homeCountryCode: "GB",
       taxModel: "hybrid",
+      filingOwner: "business_team",
+      handoffMode: "dpf_readiness_only",
     };
 
     const createRegistration: Prisma.TaxRegistrationCreateInput = {

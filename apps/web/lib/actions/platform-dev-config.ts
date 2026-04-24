@@ -199,6 +199,91 @@ export async function getStoredGitHubToken(): Promise<string | null> {
 }
 
 /**
+ * Model-aware token validation for the contribution flow.
+ *
+ * maintainer-direct: checks that the token has push access to
+ *   upstreamOwner/upstreamRepo via GET /repos/{owner}/{repo}'s
+ *   permissions.push flag.
+ *
+ * fork-pr: checks the token's account (GET /user) matches expectedOwner
+ *   unless machineUser=true, which opts out of the identity check (for
+ *   installs using a dedicated machine-user GitHub account to host the fork).
+ *
+ * Both paths first run the plain /user check to verify the token is live.
+ * Scope mismatches (wrong PAT scope) surface later at the actual fork/PR
+ * operation with a GitHub 403 rather than being pre-checked here, since
+ * fine-grained PATs do not expose scope info on /user.
+ */
+export async function validateGitHubTokenForModel(input: {
+  token: string;
+  model: "maintainer-direct" | "fork-pr";
+  /** maintainer-direct only — the repo the token must push to. */
+  upstreamOwner?: string;
+  upstreamRepo?: string;
+  /** fork-pr only — the fork owner the token's account must match, unless machineUser. */
+  expectedOwner?: string;
+  /** fork-pr only — skip the identity check when true. */
+  machineUser?: boolean;
+}): Promise<{ valid: boolean; username?: string; error?: string }> {
+  const basic = await validateGitHubToken(input.token);
+  if (!basic.valid) return basic;
+
+  if (input.model === "maintainer-direct") {
+    if (!input.upstreamOwner || !input.upstreamRepo) {
+      return { valid: false, error: "maintainer-direct validation requires upstreamOwner and upstreamRepo." };
+    }
+    try {
+      const repoRes = await fetch(
+        `https://api.github.com/repos/${input.upstreamOwner}/${input.upstreamRepo}`,
+        {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${input.token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        },
+      );
+      if (!repoRes.ok) {
+        return {
+          valid: false,
+          error: `Token cannot read ${input.upstreamOwner}/${input.upstreamRepo} (${repoRes.status}). maintainer-direct requires contents:write on the upstream repo.`,
+        };
+      }
+      const repoData = (await repoRes.json()) as { permissions?: { push?: boolean } };
+      if (!repoData.permissions?.push) {
+        return {
+          valid: false,
+          error: `Token does not have push access to ${input.upstreamOwner}/${input.upstreamRepo}. maintainer-direct requires contents:write on the upstream repo.`,
+        };
+      }
+      return { valid: true, username: basic.username };
+    } catch {
+      return { valid: false, error: "Could not verify upstream access. Check your internet connection." };
+    }
+  }
+
+  if (input.model === "fork-pr") {
+    if (input.machineUser === true) {
+      return { valid: true, username: basic.username };
+    }
+    if (!input.expectedOwner) {
+      return { valid: false, error: "fork-pr validation requires expectedOwner unless machineUser=true." };
+    }
+    const tokenOwner = basic.username?.toLowerCase();
+    const expected = input.expectedOwner.toLowerCase();
+    if (tokenOwner !== expected) {
+      return {
+        valid: false,
+        error: `Token owner (${basic.username}) does not match fork owner (${input.expectedOwner}). Use a PAT owned by the fork owner, or check the "machine-user account" opt-out if this is intentional.`,
+      };
+    }
+    return { valid: true, username: basic.username };
+  }
+
+  return { valid: false, error: `Unsupported contribution model: ${String((input as { model: string }).model)}.` };
+}
+
+/**
  * Validate a GitHub token by making a test API call.
  * Returns the authenticated username on success, or an error message.
  */
@@ -279,4 +364,139 @@ export async function saveContributionSetup(input: {
 
   revalidatePath("/admin/platform-development");
   return { success: true, username: validation.username };
+}
+
+// ─── Fork setup for the fork-pr contribution model ───────────────────────────
+//
+// Gated on CONTRIBUTION_MODEL_ENABLED at the UI layer; the action itself is
+// safe to call regardless — it writes fork metadata but does NOT set
+// contributionModel, so it has no dispatch-time effect until a later phase
+// wires contribute_to_hive to branch on contributionModel.
+
+const DEFAULT_UPSTREAM_URL =
+  "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
+
+export type ConfigureForkSetupResult =
+  | { success: true; status: "ready" | "deferred"; forkOwner: string; forkRepo: string }
+  | { success: false; error: string };
+
+export async function configureForkSetup(input: {
+  contributorForkOwner: string;
+  token: string;
+  /** Phase 5: opt out of the "token owner must match fork owner" check for machine-user accounts. */
+  machineUserOptIn?: boolean;
+}): Promise<ConfigureForkSetupResult> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { success: false, error: "Not authenticated" };
+
+  if (!input.contributorForkOwner.trim()) {
+    return { success: false, error: "GitHub username is required." };
+  }
+
+  // Validate token with the fork-pr model check (owner-match unless
+  // machineUser). validateGitHubTokenForModel short-circuits to the basic
+  // /user check first, so "token dead" errors still surface with the right
+  // message.
+  const validation = await validateGitHubTokenForModel({
+    token: input.token,
+    model: "fork-pr",
+    expectedOwner: input.contributorForkOwner.trim(),
+    machineUser: input.machineUserOptIn === true,
+  });
+  if (!validation.valid) {
+    return { success: false, error: validation.error ?? "Token validation failed." };
+  }
+
+  // Parse upstream owner/repo from PlatformDevConfig.upstreamRemoteUrl, with
+  // a documented default for installs that haven't been configured yet.
+  const cfg = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { upstreamRemoteUrl: true },
+  });
+  const upstreamUrl = cfg?.upstreamRemoteUrl ?? DEFAULT_UPSTREAM_URL;
+  const match = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+  if (!match) {
+    return { success: false, error: `Upstream URL is not a recognizable GitHub repo: ${upstreamUrl}` };
+  }
+  const [, upstreamOwner, upstreamRepo] = match;
+
+  const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/integrate/github-fork");
+
+  // Does the contributor already own a fork? Three cases:
+  //   (a) exists + is fork of upstream → use it.
+  //   (b) exists but not a fork of upstream → fail actionably.
+  //   (c) does not exist → create one and poll for readiness.
+  //
+  // Fork-rename case (admin renamed the fork repo) is out of scope; this
+  // path looks up the fork by upstreamRepo name. If the admin renamed their
+  // fork, they must rename it back or delete it before retrying.
+  let existing: Awaited<ReturnType<typeof forkExistsAndIsFork>>;
+  try {
+    existing = await forkExistsAndIsFork({
+      owner: input.contributorForkOwner,
+      repo: upstreamRepo,
+      upstreamOwner,
+      upstreamRepo,
+      token: input.token,
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: `Could not check for an existing fork: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (existing.exists && !existing.isFork) {
+    return {
+      success: false,
+      error: `A repo ${input.contributorForkOwner}/${upstreamRepo} exists but is not a fork of ${upstreamOwner}/${upstreamRepo}. Rename it or delete it, then retry.`,
+    };
+  }
+
+  let forkOwner: string;
+  let forkRepo: string;
+  let status: "ready" | "deferred";
+
+  if (existing.exists && existing.isFork) {
+    forkOwner = input.contributorForkOwner;
+    forkRepo = upstreamRepo;
+    status = "ready";
+  } else {
+    try {
+      const created = await createForkAndWait({
+        upstreamOwner,
+        upstreamRepo,
+        token: input.token,
+      });
+      forkOwner = created.forkOwner;
+      forkRepo = created.forkRepo;
+      status = created.status;
+    } catch (err) {
+      return {
+        success: false,
+        error: `Fork creation failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  await prisma.platformDevConfig.upsert({
+    where: { id: "singleton" },
+    update: {
+      contributorForkOwner: forkOwner,
+      contributorForkRepo: forkRepo,
+      forkVerifiedAt: status === "ready" ? new Date() : null,
+      machineUserOptIn: input.machineUserOptIn === true,
+    },
+    create: {
+      id: "singleton",
+      contributorForkOwner: forkOwner,
+      contributorForkRepo: forkRepo,
+      forkVerifiedAt: status === "ready" ? new Date() : null,
+      machineUserOptIn: input.machineUserOptIn === true,
+    },
+  });
+
+  revalidatePath("/admin/platform-development");
+  return { success: true, status, forkOwner, forkRepo };
 }
