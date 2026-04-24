@@ -2699,6 +2699,8 @@ model FeatureBuild {
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
   uxVerificationStatus  String? // null | "running" | "complete" | "failed" | "skipped"
+  sandboxVerification   Json? // { typecheck: SandboxCheckResult, build: SandboxCheckResult, ranAt: string }
+  sandboxVerificationStatus String? // null | "running" | "complete" | "failed"
   deliberationSummary   Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
   buildExecState        Json?
   taxonomyAttribution   Json?

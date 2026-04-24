@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { configureForkSetup } from "@/lib/actions/platform-dev-config";
+import { CONTRIBUTION_COPY } from "@/lib/integrate/contribution-copy";
 
 export interface ForkSetupPanelProps {
   /** Feature flag result (resolved server-side, passed down). */
@@ -15,6 +16,8 @@ export interface ForkSetupPanelProps {
   contributorForkRepo: string | null;
   /** Whether a hive-contribution token is stored. If not, admin needs the main setup flow first. */
   hasContributionToken: boolean;
+  /** Pre-fills the machine-user checkbox when an existing config had it set. */
+  machineUserOptIn?: boolean;
 }
 
 type PanelState =
@@ -36,6 +39,7 @@ type PanelState =
 export function ForkSetupPanel(props: ForkSetupPanelProps) {
   const [username, setUsername] = useState(props.contributorForkOwner ?? "");
   const [tokenInput, setTokenInput] = useState("");
+  const [machineUserOptIn, setMachineUserOptIn] = useState(props.machineUserOptIn ?? false);
   const [state, setState] = useState<PanelState>(() => {
     if (props.contributorForkOwner && props.contributorForkRepo) {
       return { kind: "ready", forkOwner: props.contributorForkOwner, forkRepo: props.contributorForkRepo };
@@ -56,6 +60,7 @@ export function ForkSetupPanel(props: ForkSetupPanelProps) {
       const result = await configureForkSetup({
         contributorForkOwner: username.trim(),
         token: tokenInput.trim(),
+        machineUserOptIn,
       });
       if (!result.success) {
         setState({ kind: "error", message: result.error });
@@ -84,9 +89,8 @@ export function ForkSetupPanel(props: ForkSetupPanelProps) {
         pull request against the upstream repo. This keeps your token scoped to your own
         account — no upstream write access required.
       </p>
-      <p className="mb-3 text-xs text-[var(--dpf-muted)]">
-        Your GitHub username will be visible on every PR you contribute. If that is not
-        acceptable, use a pseudonymous GitHub account for this install.
+      <p className="mb-3 text-xs text-[var(--dpf-muted)]" data-testid="pseudonymity-tradeoff">
+        {CONTRIBUTION_COPY.pseudonymityTradeoff}
       </p>
 
       <div className="mb-3">
@@ -105,8 +109,11 @@ export function ForkSetupPanel(props: ForkSetupPanelProps) {
 
       <div className="mb-3">
         <label htmlFor="fork-token" className="mb-1 block text-sm text-[var(--dpf-text)]">
-          GitHub personal access token (public_repo scope on your account)
+          GitHub personal access token
         </label>
+        <p className="mb-1 text-xs text-[var(--dpf-muted)]" data-testid="token-scope-copy">
+          {CONTRIBUTION_COPY.tokenScope.forkPr}
+        </p>
         <input
           id="fork-token"
           type="password"
@@ -115,6 +122,24 @@ export function ForkSetupPanel(props: ForkSetupPanelProps) {
           placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           className="w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 font-mono text-xs text-[var(--dpf-text)]"
         />
+      </div>
+
+      <div className="mb-3">
+        <label className="flex items-start gap-2 text-sm text-[var(--dpf-text)]">
+          <input
+            id="fork-machine-user"
+            type="checkbox"
+            checked={machineUserOptIn}
+            onChange={(e) => setMachineUserOptIn(e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium">{CONTRIBUTION_COPY.machineUserOptIn.label}</span>
+            <span className="block text-xs text-[var(--dpf-muted)]" data-testid="machine-user-description">
+              {CONTRIBUTION_COPY.machineUserOptIn.description}
+            </span>
+          </span>
+        </label>
       </div>
 
       <button
