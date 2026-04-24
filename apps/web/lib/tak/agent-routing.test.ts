@@ -53,6 +53,7 @@ describe("resolveAgentForRoute", () => {
     expect(result.agentName).toBe("Finance Specialist");
     expect(result.canAssist).toBe(true);
     expect(result.systemPrompt).toContain("tax remittance");
+    expect(result.systemPrompt).toContain("handoff");
   });
 
   it("returns canAssist=false when platformRole is null on gated route", () => {

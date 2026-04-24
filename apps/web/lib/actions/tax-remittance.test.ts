@@ -191,6 +191,8 @@ describe("getTaxRemittanceWorkspace", () => {
       homeCountryCode: null,
       primaryRegionCode: null,
       taxModel: "hybrid",
+      filingOwner: "business",
+      handoffMode: "dpf_readiness_only",
       externalSystem: null,
       footprintSummary: null,
       notes: null,
@@ -210,6 +212,34 @@ describe("getTaxRemittanceWorkspace", () => {
     expect(result.openIssues.length).toBeGreaterThan(0);
     expect(mockPrisma.taxIssue.create).toHaveBeenCalled();
   });
+
+  it("flags external filing handoff when no external system is recorded", async () => {
+    const profile = {
+      id: "profile-1",
+      organizationId: bootstrapOrg.id,
+      setupMode: "existing",
+      setupStatus: "active",
+      homeCountryCode: "US",
+      primaryRegionCode: "WA",
+      taxModel: "hybrid",
+      filingOwner: "accountant",
+      handoffMode: "external_filing",
+      externalSystem: null,
+      footprintSummary: "Washington operations",
+      notes: null,
+      lastVerifiedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue(profile);
+    mockPrisma.taxRegistration.findMany.mockResolvedValue([]);
+    mockPrisma.taxJurisdictionReference.findMany.mockResolvedValue([]);
+    mockPrisma.taxObligationPeriod.findMany.mockResolvedValue([]);
+
+    const result = await getTaxRemittanceWorkspace();
+
+    expect(result.openIssues.some((issue) => issue.issueType === "tax_external_handoff_missing")).toBe(true);
+  });
 });
 
 describe("updateOrganizationTaxProfile", () => {
@@ -219,13 +249,15 @@ describe("updateOrganizationTaxProfile", () => {
     await expect(
       updateOrganizationTaxProfile({
         setupMode: "existing",
-        setupStatus: "draft",
-        homeCountryCode: "US",
-        primaryRegionCode: "WA",
-        taxModel: "hybrid",
-        externalSystem: "quickbooks",
-        footprintSummary: "WA operations",
-        notes: "",
+      setupStatus: "draft",
+      homeCountryCode: "US",
+      primaryRegionCode: "WA",
+      taxModel: "hybrid",
+      filingOwner: "business",
+      handoffMode: "dpf_readiness_only",
+      externalSystem: "quickbooks",
+      footprintSummary: "WA operations",
+      notes: "",
       }),
     ).rejects.toThrow("Unauthorized");
   });
@@ -247,6 +279,8 @@ describe("updateOrganizationTaxProfile", () => {
       homeCountryCode: "US",
       primaryRegionCode: "WA",
       taxModel: "hybrid",
+      filingOwner: "accountant",
+      handoffMode: "external_filing",
       externalSystem: "quickbooks",
       footprintSummary: "WA operations",
       notes: "",
@@ -260,6 +294,8 @@ describe("updateOrganizationTaxProfile", () => {
         homeCountryCode: "US",
         primaryRegionCode: "WA",
         externalSystem: "quickbooks",
+        filingOwner: "accountant",
+        handoffMode: "external_filing",
       }),
     });
   });

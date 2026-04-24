@@ -66,6 +66,8 @@ const MANAGED_TAX_ISSUE_TYPES = new Set([
   "tax_registration_research_needed",
   "tax_registration_number_missing",
   "tax_registration_live_verification_needed",
+  "tax_external_handoff_missing",
+  "tax_dpf_filing_not_available",
 ]);
 
 async function requireManageFinance() {
@@ -253,6 +255,26 @@ function buildManagedTaxIssues(
       title: "Operating footprint is not documented",
       details:
         "Record where the business is registered, operates, and delivers taxable services before tax setup is treated as ready.",
+    });
+  }
+
+  if (profile.handoffMode !== "dpf_readiness_only" && !nullableString(profile.externalSystem)) {
+    issues.push({
+      issueType: "tax_external_handoff_missing",
+      severity: "high",
+      title: "External filing handoff is not configured",
+      details:
+        "Record the accountant, filing partner, or external tax system that owns final filing and payment before treating this remittance workflow as operational.",
+    });
+  }
+
+  if (profile.filingOwner === "dpf_coworker" && profile.handoffMode !== "dpf_readiness_only") {
+    issues.push({
+      issueType: "tax_dpf_filing_not_available",
+      severity: "medium",
+      title: "Direct DPF filing remains future-scope automation",
+      details:
+        "DPF can prepare registrations, periods, workpapers, and evidence today, but final statutory submission and payment still need an external handoff boundary.",
     });
   }
 
@@ -550,6 +572,8 @@ export async function updateOrganizationTaxProfile(input: UpdateOrganizationTaxP
       homeCountryCode: nullableString(parsed.homeCountryCode),
       primaryRegionCode: nullableString(parsed.primaryRegionCode),
       taxModel: parsed.taxModel,
+      filingOwner: parsed.filingOwner,
+      handoffMode: parsed.handoffMode,
       externalSystem: nullableString(parsed.externalSystem),
       footprintSummary: nullableString(parsed.footprintSummary),
       notes: nullableString(parsed.notes),

@@ -2023,6 +2023,8 @@ model OrganizationTaxProfile {
   homeCountryCode  String?
   primaryRegionCode String?
   taxModel         String   @default("hybrid")
+  filingOwner      String   @default("business")
+  handoffMode      String   @default("dpf_readiness_only")
   externalSystem   String?
   footprintSummary String?
   notes            String?
