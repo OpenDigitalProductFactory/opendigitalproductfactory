@@ -1,0 +1,38 @@
+{
+  "token": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "invalid_grant"
+    }
+  },
+  "companyInfo": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "customer": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "invoice": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  }
+}

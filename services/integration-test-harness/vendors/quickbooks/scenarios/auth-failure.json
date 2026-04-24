@@ -1,0 +1,38 @@
+{
+  "token": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "invalid_client"
+    }
+  },
+  "companyInfo": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "customer": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "invoice": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  }
+}

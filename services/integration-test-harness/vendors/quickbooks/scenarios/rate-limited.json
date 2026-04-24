@@ -1,0 +1,42 @@
+{
+  "token": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "companyInfo": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "customer": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "invoice": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  }
+}

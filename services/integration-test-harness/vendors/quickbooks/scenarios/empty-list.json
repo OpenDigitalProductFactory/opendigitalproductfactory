@@ -1,0 +1,54 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "access_token": "qb-access-token-empty",
+      "refresh_token": "qb-refresh-token-empty",
+      "token_type": "bearer",
+      "expires_in": 3600,
+      "x_refresh_token_expires_in": 8726400
+    }
+  },
+  "companyInfo": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "CompanyInfo": {
+        "Id": "9130355377388383",
+        "CompanyName": "Acme Services LLC",
+        "Country": "US"
+      }
+    }
+  },
+  "customer": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Customer": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  },
+  "invoice": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Invoice": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  }
+}

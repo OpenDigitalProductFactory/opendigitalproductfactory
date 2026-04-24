@@ -143,4 +143,73 @@ describe("harness vendor routing", () => {
       error: "Contract validation failed",
     });
   });
+
+  it("serves the default happy-path QuickBooks company payload from a second vendor contract", async () => {
+    const state = createScenarioStateStore();
+    const server = await createHarnessServer({
+      isTestMode: true,
+      controlToken: "test-token",
+      state,
+    });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected TCP address");
+    }
+
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/v3/company/9130355377388383/companyinfo/9130355377388383`,
+      {
+        headers: {
+          "X-DPF-Harness-Session": "qb-run-1",
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      CompanyInfo: {
+        CompanyName: "Acme Services LLC",
+        Country: "US",
+      },
+    });
+  });
+
+  it("keeps vendor scenario overrides isolated when the same session hits QuickBooks and ADP", async () => {
+    const state = createScenarioStateStore();
+    state.setScenario("adp", "cross-vendor-session", "rate-limited");
+
+    const server = await createHarnessServer({
+      isTestMode: true,
+      controlToken: "test-token",
+      state,
+    });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected TCP address");
+    }
+
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/v3/company/9130355377388383/companyinfo/9130355377388383`,
+      {
+        headers: {
+          "X-DPF-Harness-Session": "cross-vendor-session",
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      CompanyInfo: {
+        CompanyName: "Acme Services LLC",
+      },
+    });
+  });
 });
