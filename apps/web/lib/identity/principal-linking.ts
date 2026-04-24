@@ -6,6 +6,8 @@ type PrincipalDb = Pick<
   "user" | "employeeProfile" | "agent" | "principal" | "principalAlias"
 >;
 
+type PrincipalAliasDb = Pick<typeof prisma, "principalAlias">;
+
 type AliasRecord = {
   aliasType: string;
   aliasValue: string;
@@ -290,6 +292,53 @@ export async function ensureAgentPrincipalIdentity(
     }
     throw error;
   }
+}
+
+export async function getAgentGaidMap(
+  agentIds: string[],
+  db: PrincipalAliasDb = prisma,
+): Promise<Map<string, string>> {
+  const uniqueAgentIds = [...new Set(agentIds.map((agentId) => agentId.trim()).filter(Boolean))];
+  if (uniqueAgentIds.length === 0) {
+    return new Map();
+  }
+
+  const agentAliases = await db.principalAlias.findMany({
+    where: {
+      aliasType: "agent",
+      aliasValue: { in: uniqueAgentIds },
+      issuer: INTERNAL_ISSUER,
+    },
+    select: {
+      principalId: true,
+      aliasValue: true,
+    },
+  });
+
+  if (agentAliases.length === 0) {
+    return new Map();
+  }
+
+  const gaidAliases = await db.principalAlias.findMany({
+    where: {
+      aliasType: "gaid",
+      principalId: { in: agentAliases.map((alias) => alias.principalId) },
+      issuer: INTERNAL_ISSUER,
+    },
+    select: {
+      principalId: true,
+      aliasValue: true,
+    },
+  });
+
+  const gaidByPrincipalId = new Map(gaidAliases.map((alias) => [alias.principalId, alias.aliasValue]));
+
+  return new Map(
+    agentAliases.flatMap((alias) => {
+      const gaid = gaidByPrincipalId.get(alias.principalId);
+      return gaid ? [[alias.aliasValue, gaid] as const] : [];
+    }),
+  );
 }
 
 export async function resolvePrincipalIdForUser(

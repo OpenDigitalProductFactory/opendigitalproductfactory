@@ -1,11 +1,13 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { AuditClass } from "@/lib/audit-classes";
+import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 
 export type ToolExecutionRow = {
   id: string;
   threadId: string;
   agentId: string;
+  agentIdentityRef: string | null;
   userId: string;
   toolName: string;
   parameters: Record<string, unknown>;
@@ -70,6 +72,7 @@ function mapRow(r: {
     id: r.id,
     threadId: r.threadId,
     agentId: r.agentId,
+    agentIdentityRef: null,
     userId: r.userId,
     toolName: r.toolName,
     parameters: r.parameters as Record<string, unknown>,
@@ -85,6 +88,17 @@ function mapRow(r: {
   };
 }
 
+async function hydrateAgentIdentityRefs(
+  rows: ToolExecutionRow[],
+): Promise<ToolExecutionRow[]> {
+  const gaidByAgentId = await getAgentGaidMap(rows.map((row) => row.agentId));
+
+  return rows.map((row) => ({
+    ...row,
+    agentIdentityRef: gaidByAgentId.get(row.agentId) ?? null,
+  }));
+}
+
 // ─── Queries ────────────────────────────────────────────────────────────────
 
 /** All executions — full history including probe reads. */
@@ -94,7 +108,7 @@ export const getToolExecutions = cache(async (limit = 200): Promise<ToolExecutio
     orderBy: { createdAt: "desc" },
     take: limit,
   });
-  return rows.map(mapRow);
+  return hydrateAgentIdentityRefs(rows.map(mapRow));
 });
 
 /** Journal + ledger executions only — excludes metrics_only probe rows.
@@ -112,7 +126,7 @@ export const getJournalToolExecutions = cache(async (limit = 500): Promise<ToolE
     orderBy: { createdAt: "desc" },
     take: limit,
   });
-  return rows.map(mapRow);
+  return hydrateAgentIdentityRefs(rows.map(mapRow));
 });
 
 /** Ledger-only executions — side-effecting writes. */
@@ -123,7 +137,7 @@ export const getLedgerToolExecutions = cache(async (limit = 200): Promise<ToolEx
     orderBy: { createdAt: "desc" },
     take: limit,
   });
-  return rows.map(mapRow);
+  return hydrateAgentIdentityRefs(rows.map(mapRow));
 });
 
 export const getToolExecutionStats = cache(async (): Promise<ToolExecutionStats> => {
