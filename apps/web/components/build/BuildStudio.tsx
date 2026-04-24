@@ -239,6 +239,8 @@ export function BuildStudio({
         claimStatus: null,
         uxTestResults: null,
         uxVerificationStatus: null,
+        sandboxVerification: null,
+        sandboxVerificationStatus: null,
         buildExecState: null,
         deliberationSummary: null,
         phaseHandoffs: null,
