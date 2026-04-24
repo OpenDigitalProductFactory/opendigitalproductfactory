@@ -47,7 +47,7 @@ describe("getBuildPhasePrompt", () => {
       "You are building a feature following the approved implementation plan.",
     );
     expect(prompt).toContain(
-      "Do not pause for routine go-ahead requests during planned build work",
+      "You have approval to build everything in the plan. Just build it.",
     );
     expect(prompt).toContain("Never reward-hack");
   });
