@@ -99,9 +99,24 @@ export async function authenticateRequest(
     platformRole: sessionUser.platformRole,
     isSuperuser: sessionUser.isSuperuser,
   });
+  const workforceUser =
+    sessionUser.type === "admin"
+      ? await prisma.user.findUnique({
+          where: { id: sessionUser.id },
+          include: {
+            employeeProfile: {
+              select: {
+                id: true,
+                directReports: { select: { id: true } },
+              },
+            },
+          },
+        })
+      : null;
   const authContext = buildEffectiveAuthContext({
     user: sessionUser,
     grantedCapabilities: capabilities,
+    employeeProfile: workforceUser?.employeeProfile ?? undefined,
   });
 
   return { user: sessionUser, capabilities, authContext };

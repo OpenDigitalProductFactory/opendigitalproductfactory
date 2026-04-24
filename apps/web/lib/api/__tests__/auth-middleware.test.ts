@@ -121,6 +121,18 @@ describe("authenticateRequest — session fallback", () => {
 
     const mockCapabilities = getGrantedCapabilities as ReturnType<typeof vi.fn>;
     mockCapabilities.mockReturnValue(["view_ea_modeler"]);
+    const mockFindUnique = prisma.user.findUnique as ReturnType<typeof vi.fn>;
+    mockFindUnique.mockResolvedValue({
+      id: "user-2",
+      email: "bob@example.com",
+      isActive: true,
+      isSuperuser: false,
+      groups: [{ platformRole: { roleId: "HR-300" } }],
+      employeeProfile: {
+        id: "emp-2",
+        directReports: [{ id: "emp-3" }],
+      },
+    });
 
     const req = mockRequest({});
     const result = await authenticateRequest(req as never);
@@ -129,8 +141,8 @@ describe("authenticateRequest — session fallback", () => {
     expect(result.user.email).toBe("bob@example.com");
     expect(result.capabilities).toEqual(["view_ea_modeler"]);
     expect(result.authContext.principalId).toBe("PRN-USER-user-2");
-    expect(result.authContext.employeeId).toBeNull();
-    expect(result.authContext.managerScope).toBeNull();
+    expect(result.authContext.employeeId).toBe("emp-2");
+    expect(result.authContext.managerScope?.directReportIds).toEqual(["emp-3"]);
   });
 
   it("throws 401 when no Bearer token and no session", async () => {
