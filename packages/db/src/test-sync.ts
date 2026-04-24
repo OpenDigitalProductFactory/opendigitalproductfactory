@@ -1,3 +1,4 @@
+import "./load-env.js";
 import { prisma } from "./client.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 

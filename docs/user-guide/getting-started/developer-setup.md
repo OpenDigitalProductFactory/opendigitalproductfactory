@@ -56,12 +56,11 @@ pnpm install
 # 1. Root .env — used by Docker Compose for container credentials
 cp .env.docker.example .env
 
-# 2. App-level .env files — used by Next.js and Prisma for local dev
+# 2. App-level .env file — used by Next.js and local Prisma commands
 cp .env.example apps/web/.env.local
-cp .env.example packages/db/.env
 ```
 
-Then edit `.env`, `apps/web/.env.local`, and `packages/db/.env` to replace the `<generate with: ...>` placeholders with real values. On Windows PowerShell:
+Then edit `.env` and `apps/web/.env.local` to replace the `<generate with: ...>` placeholders with real values. On Windows PowerShell:
 
 ```powershell
 # Generate AUTH_SECRET (base64)
@@ -71,6 +70,8 @@ Then edit `.env`, `apps/web/.env.local`, and `packages/db/.env` to replace the `
 ```
 
 Or use the automated script (Option A) which handles this automatically.
+
+If you have an older install with `packages/db/.env`, Prisma still treats it as a legacy fallback, but new installs should not need it.
 
 **Start databases (with ports exposed to host):**
 
