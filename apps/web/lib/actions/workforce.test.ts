@@ -31,6 +31,15 @@ vi.mock("@dpf/db", () => ({
     employmentEvent: {
       create: vi.fn(),
     },
+    principal: {
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    principalAlias: {
+      findFirst: vi.fn(),
+      createMany: vi.fn(),
+      findMany: vi.fn(),
+    },
     terminationRecord: {
       upsert: vi.fn(),
     },
@@ -61,6 +70,8 @@ const authMock = auth as unknown as { mockResolvedValue: (value: unknown) => voi
 
 beforeEach(() => {
   vi.clearAllMocks();
+
+  vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback(prisma as never));
 
   authMock.mockResolvedValue({
     user: {
@@ -154,6 +165,73 @@ describe("createEmployeeProfile", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/start date/i);
     expect(vi.mocked(prisma.employeeProfile.create)).not.toHaveBeenCalled();
+  });
+
+  it("issues a principal identity when HR creates a new employee profile", async () => {
+    vi.mocked(prisma.employeeProfile.findUnique)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "emp-db-1",
+        employeeId: "EMP-001",
+        userId: null,
+        displayName: "Ada Lovelace",
+        status: "active",
+        workEmail: "ada@example.com",
+      } as never);
+    vi.mocked(prisma.employeeProfile.create).mockResolvedValue({
+      id: "emp-db-1",
+      displayName: "Ada Lovelace",
+    } as never);
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.principal.create).mockResolvedValue({
+      id: "principal-db-1",
+      principalId: "PRN-000001",
+      kind: "human",
+      status: "active",
+      displayName: "Ada Lovelace",
+      createdAt: new Date("2026-04-23T00:00:00Z"),
+      updatedAt: new Date("2026-04-23T00:00:00Z"),
+    });
+    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
+      {
+        id: "alias-employee",
+        principalId: "principal-db-1",
+        aliasType: "employee",
+        aliasValue: "EMP-001",
+        issuer: "",
+        createdAt: new Date("2026-04-23T00:00:00Z"),
+      },
+    ]);
+
+    const result = await createEmployeeProfile({
+      employeeId: "EMP-001",
+      firstName: "Ada",
+      lastName: "Lovelace",
+      status: "active",
+      workEmail: "ada@example.com",
+      startDate: new Date("2026-03-13"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(prisma.principal.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: "human",
+        status: "active",
+        displayName: "Ada Lovelace",
+      }),
+    });
+    expect(prisma.principalAlias.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          principalId: "principal-db-1",
+          aliasType: "employee",
+          aliasValue: "EMP-001",
+          issuer: "",
+        },
+      ],
+      skipDuplicates: true,
+    });
   });
 });
 

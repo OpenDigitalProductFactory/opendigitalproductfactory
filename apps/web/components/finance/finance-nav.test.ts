@@ -38,8 +38,15 @@ describe("finance-nav", () => {
     expect(getFinanceFamily("/finance/settings").key).toBe("configuration");
     expect(getFinanceFamily("/finance/settings/currency").key).toBe("configuration");
     expect(getFinanceFamily("/finance/settings/dunning").key).toBe("configuration");
+    expect(getFinanceFamily("/finance/settings/tax").key).toBe("configuration");
     expect(getFinanceFamily("/finance/banking").key).toBe("configuration");
     expect(getFinanceFamily("/finance/banking/rules").key).toBe("configuration");
+  });
+
+  it("includes Tax Remittance in the configuration sub-navigation", () => {
+    const configuration = FINANCE_FAMILIES.find((family) => family.key === "configuration");
+    expect(configuration?.subItems.map((item) => item.label)).toContain("Tax Remittance");
+    expect(configuration?.subItems.map((item) => item.href)).toContain("/finance/settings/tax");
   });
 
   it("keeps the finance root in the Overview family", () => {

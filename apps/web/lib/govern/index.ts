@@ -3,6 +3,7 @@
 export * from "./auth";
 export * from "./auth-utils";
 export * from "./permissions";
+export * from "./manager-scope";
 export * from "./principal-context";
 export * from "./approval-authority";
 export * from "./user-governance";

@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "services/adp"
+  - "services/integration-test-harness"
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true

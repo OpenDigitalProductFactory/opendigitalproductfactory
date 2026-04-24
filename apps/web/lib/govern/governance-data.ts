@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
+import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 
 export async function getUserTeamIds(userId: string): Promise<string[]> {
   const memberships = await prisma.teamMembership.findMany({
@@ -92,13 +93,17 @@ export async function createAuthorizationDecisionLog(input: {
   decision: "allow" | "deny" | "require_approval";
   rationale: Prisma.InputJsonValue;
 }): Promise<void> {
+  const agentIdentityRef = input.agentContextRef
+    ? (await getAgentGaidMap([input.agentContextRef])).get(input.agentContextRef) ?? input.agentContextRef
+    : null;
+
   await prisma.authorizationDecisionLog.create({
     data: {
       decisionId: crypto.randomUUID(),
       actorType: input.actorType,
       actorRef: input.actorRef,
       humanContextRef: input.humanContextRef ?? null,
-      agentContextRef: input.agentContextRef ?? null,
+      agentContextRef: agentIdentityRef,
       delegationGrantId: input.delegationGrantId ?? null,
       actionKey: input.actionKey,
       objectRef: input.objectRef ?? null,

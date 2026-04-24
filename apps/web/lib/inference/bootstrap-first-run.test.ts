@@ -34,9 +34,14 @@ vi.mock("../actions/setup-progress", () => ({
   createSetupProgress: vi.fn(),
 }));
 
+vi.mock("../identity/principal-linking", () => ({
+  syncAgentPrincipal: vi.fn(),
+}));
+
 import { prisma } from "@dpf/db";
 import { checkBootstrapNeeded, seedOnboardingAgent } from "./bootstrap-first-run";
 import { isFirstRun } from "../actions/setup-progress";
+import { syncAgentPrincipal } from "../identity/principal-linking";
 
 describe("bootstrap-first-run", () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -87,6 +92,7 @@ describe("bootstrap-first-run", () => {
           }),
         }),
       );
+      expect(syncAgentPrincipal).toHaveBeenCalledWith("onboarding-coo");
     });
   });
 });

@@ -1,0 +1,47 @@
+{
+  "token": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "invalid_client"
+    }
+  },
+  "workers": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "unauthorized"
+    }
+  },
+  "payStatements": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "unauthorized"
+    }
+  },
+  "timeCards": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "unauthorized"
+    }
+  },
+  "deductions": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "unauthorized"
+    }
+  }
+}

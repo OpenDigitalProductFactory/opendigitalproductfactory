@@ -11,7 +11,7 @@ P0 scaffold — only `GET /health` and an empty `POST /mcp tools/list` implement
 
 ## Architecture
 
-- **Standalone**, not a pnpm-workspace member. Keeps the service portable for future publication to the DPF hive (P5 of the plan).
+- **Dedicated runtime package inside the repo workspace.** The service still ships as its own container/runtime boundary, but it now participates in the pnpm workspace so it can reuse shared connector primitives without copying them.
 - Node 20 + `@modelcontextprotocol/sdk` + `undici` + `node:tls` for mTLS client credential exchanges to ADP.
 - Customer's ADP client ID, client secret, cert PEM, and private key PEM are read from the shared portal Postgres (`IntegrationCredential` row with `provider="adp"`). Decrypted via the same `credential-crypto` key (`CREDENTIAL_ENCRYPTION_KEY`) the portal uses.
 
@@ -40,6 +40,23 @@ curl -sf http://localhost:8600/health
 # {"ok":true,"service":"adp","version":"0.1.0"}
 ```
 
+Optional local harness overrides:
+
+```bash
+ADP_API_BASE_URL=http://integration-test-harness:8700
+ADP_TOKEN_ENDPOINT_URL=http://integration-test-harness:8700/oauth/token
+DPF_INTEGRATION_TEST_SESSION_ID=test-run-001
+```
+
+When the override URLs use `http://`, the service treats them as harness transport, skips mTLS agent setup, and forwards `X-DPF-Harness-Session` for scenario-scoped test runs.
+
 ## Compose wiring
 
-Not yet wired into `docker-compose.yml`. Adding the service to compose is the explicit infra step — see plan P0.4 Step 4.
+The test harness now has a dedicated `integration-test` compose profile. To route ADP through it locally, set the override env vars and then start:
+
+```powershell
+$env:ADP_API_BASE_URL = "http://integration-test-harness:8700"
+$env:ADP_TOKEN_ENDPOINT_URL = "http://integration-test-harness:8700/oauth/token"
+$env:DPF_INTEGRATION_TEST_SESSION_ID = "local-compose-run"
+docker compose --profile integration-test up -d integration-test-harness adp
+```

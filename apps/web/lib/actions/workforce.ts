@@ -8,6 +8,7 @@ import { can } from "@/lib/permissions";
 import { getUserTeamIds, createAuthorizationDecisionLog } from "@/lib/governance-data";
 import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
+import { syncEmployeePrincipal } from "@/lib/identity/principal-linking";
 import { validateLifecycleTransition, validateEmployeeProfileInput, type EmployeeProfileInput, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
 
 export type WorkforceActionResult = {
@@ -203,47 +204,52 @@ export async function createEmployeeProfile(input: EmployeeProfileInput): Promis
       if (existing) return workforceDenied("Employee ID already exists.");
 
       const displayName = buildDisplayName(input);
-      const employee = await prisma.employeeProfile.create({
-        data: {
-          employeeId,
-          userId,
-          firstName: trimRequired(input.firstName),
-          middleName: trimOptional(input.middleName),
-          lastName: trimRequired(input.lastName),
-          displayName,
-          workEmail: trimOptional(input.workEmail),
-          personalEmail: trimOptional(input.personalEmail),
-          phoneWork: trimOptional(input.phoneWork),
-          phoneMobile: trimOptional(input.phoneMobile),
-          phoneEmergency: trimOptional(input.phoneEmergency),
-          status: input.status,
-          employmentTypeId: trimOptional(input.employmentTypeId),
-          departmentId: trimOptional(input.departmentId),
-          positionId: trimOptional(input.positionId),
-          managerEmployeeId: trimOptional(input.managerEmployeeId),
-          dottedLineManagerId: trimOptional(input.dottedLineManagerId),
-          workLocationId: trimOptional(input.workLocationId),
-          timezone: trimOptional(input.timezone),
-          startDate: input.startDate ?? null,
-          confirmationDate: input.confirmationDate ?? null,
-          endDate: input.endDate ?? null,
-        },
-        select: { id: true, displayName: true },
-      });
+      const employee = await prisma.$transaction(async (tx) => {
+        const createdEmployee = await tx.employeeProfile.create({
+          data: {
+            employeeId,
+            userId,
+            firstName: trimRequired(input.firstName),
+            middleName: trimOptional(input.middleName),
+            lastName: trimRequired(input.lastName),
+            displayName,
+            workEmail: trimOptional(input.workEmail),
+            personalEmail: trimOptional(input.personalEmail),
+            phoneWork: trimOptional(input.phoneWork),
+            phoneMobile: trimOptional(input.phoneMobile),
+            phoneEmergency: trimOptional(input.phoneEmergency),
+            status: input.status,
+            employmentTypeId: trimOptional(input.employmentTypeId),
+            departmentId: trimOptional(input.departmentId),
+            positionId: trimOptional(input.positionId),
+            managerEmployeeId: trimOptional(input.managerEmployeeId),
+            dottedLineManagerId: trimOptional(input.dottedLineManagerId),
+            workLocationId: trimOptional(input.workLocationId),
+            timezone: trimOptional(input.timezone),
+            startDate: input.startDate ?? null,
+            confirmationDate: input.confirmationDate ?? null,
+            endDate: input.endDate ?? null,
+          },
+          select: { id: true, displayName: true },
+        });
 
-      await prisma.employmentEvent.create({
-        data: {
-          eventId: `EEVT-${crypto.randomUUID()}`,
-          employeeProfileId: employee.id,
-          eventType: buildLifecycleCreateEvent(input.status),
-          effectiveAt: input.startDate ?? new Date(),
-          reason: "employee_profile_created",
-          actorUserId: actor.id,
-          metadata: {
-            source: "employee_profile.create",
-            initialStatus: input.status,
-          } satisfies Prisma.InputJsonValue,
-        },
+        await tx.employmentEvent.create({
+          data: {
+            eventId: `EEVT-${crypto.randomUUID()}`,
+            employeeProfileId: createdEmployee.id,
+            eventType: buildLifecycleCreateEvent(input.status),
+            effectiveAt: input.startDate ?? new Date(),
+            reason: "employee_profile_created",
+            actorUserId: actor.id,
+            metadata: {
+              source: "employee_profile.create",
+              initialStatus: input.status,
+            } satisfies Prisma.InputJsonValue,
+          },
+        });
+
+        await syncEmployeePrincipal(createdEmployee.id, tx as never);
+        return createdEmployee;
       });
 
       revalidatePath("/employee");

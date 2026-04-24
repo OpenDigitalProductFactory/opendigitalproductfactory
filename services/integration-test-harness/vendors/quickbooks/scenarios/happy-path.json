@@ -1,0 +1,70 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "access_token": "qb-access-token-123",
+      "refresh_token": "qb-refresh-token-123",
+      "token_type": "bearer",
+      "expires_in": 3600,
+      "x_refresh_token_expires_in": 8726400
+    }
+  },
+  "companyInfo": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "CompanyInfo": {
+        "Id": "9130355377388383",
+        "CompanyName": "Acme Services LLC",
+        "LegalName": "Acme Services LLC",
+        "Country": "US",
+        "Email": {
+          "Address": "billing@acmeservices.example"
+        },
+        "WebAddr": {
+          "URI": "https://acmeservices.example"
+        }
+      }
+    }
+  },
+  "customer": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Customer": {
+        "Id": "42",
+        "DisplayName": "Acme Managed IT",
+        "CompanyName": "Acme Managed IT",
+        "PrimaryEmailAddr": {
+          "Address": "accounts-payable@acmeit.example"
+        }
+      }
+    }
+  },
+  "invoice": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Invoice": {
+        "Id": "9001",
+        "DocNumber": "INV-9001",
+        "TotalAmt": 1250,
+        "Balance": 1250,
+        "CustomerRef": {
+          "value": "42",
+          "name": "Acme Managed IT"
+        },
+        "PrivateNote": "Monthly managed services retainer."
+      }
+    }
+  }
+}

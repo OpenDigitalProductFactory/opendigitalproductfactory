@@ -1,0 +1,48 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "access_token": "harness-token-empty",
+      "expires_in": 3600
+    }
+  },
+  "workers": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "workers": []
+    }
+  },
+  "payStatements": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "payStatements": []
+    }
+  },
+  "timeCards": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "timeCards": []
+    }
+  },
+  "deductions": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "deductions": []
+    }
+  }
+}

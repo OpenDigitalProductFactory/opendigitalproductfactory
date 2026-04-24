@@ -3,6 +3,7 @@
 // Dedup TODO when a shared integrations package lands.
 
 import { Agent, request, type Dispatcher } from "undici";
+import { getAdpRuntimeConfig, getHarnessRequestHeaders, isHarnessTransport } from "./runtime-config.js";
 
 export type AdpEnvironment = "sandbox" | "production";
 
@@ -33,8 +34,7 @@ export class AdpAuthError extends Error {
 }
 
 export function resolveTokenEndpoint(env: AdpEnvironment): string {
-  if (env === "production") return "https://accounts.api.adp.com/auth/oauth/v2/token";
-  return "https://accounts.sandbox.api.adp.com/auth/oauth/v2/token";
+  return getAdpRuntimeConfig(env).tokenEndpointUrl;
 }
 
 function buildMtlsDispatcher(certPem: string, privateKeyPem: string): Agent {
@@ -43,7 +43,8 @@ function buildMtlsDispatcher(certPem: string, privateKeyPem: string): Agent {
 
 export async function exchangeToken(params: ExchangeTokenParams): Promise<ExchangeTokenResult> {
   const url = resolveTokenEndpoint(params.environment);
-  const dispatcher = params.dispatcher ?? buildMtlsDispatcher(params.certPem, params.privateKeyPem);
+  const dispatcher = params.dispatcher
+    ?? (isHarnessTransport(url) ? undefined : buildMtlsDispatcher(params.certPem, params.privateKeyPem));
 
   const body = new URLSearchParams({
     grant_type: "client_credentials",
@@ -58,6 +59,7 @@ export async function exchangeToken(params: ExchangeTokenParams): Promise<Exchan
       headers: {
         "content-type": "application/x-www-form-urlencoded",
         accept: "application/json",
+        ...getHarnessRequestHeaders(),
       },
       body,
       dispatcher,

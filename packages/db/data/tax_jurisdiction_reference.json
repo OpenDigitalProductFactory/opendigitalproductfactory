@@ -1,0 +1,103 @@
+{
+  "generatedAt": "2026-04-23T00:00:00.000Z",
+  "sharedSources": {
+    "usStateDirectory": "https://taxadmin.org/electronic-filing-information/",
+    "euCountryInfo": "https://taxation-customs.ec.europa.eu/taxation/vat/vat-directive/vat-rates/country-specific-information-vat_en",
+    "euVatOverview": "https://taxation-customs.ec.europa.eu/taxation/vat_en"
+  },
+  "usStateCodes": [
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+  ],
+  "euCountryCodes": [
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+    "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+    "PL", "PT", "RO", "SK", "SI", "ES", "SE"
+  ],
+  "defaults": {
+    "usState": {
+      "taxTypes": ["sales_tax"],
+      "localityModel": "state_plus_local",
+      "cadenceHints": ["monthly", "quarterly", "annual"],
+      "filingNotes": "Use the Federation of Tax Administrators directory as the bootstrap entry point, then verify the current state filing portal, local-jurisdiction model, and assigned filing cadence live before saving business setup."
+    },
+    "euVat": {
+      "taxTypes": ["vat"],
+      "localityModel": "country_only",
+      "cadenceHints": ["monthly", "quarterly", "annual"],
+      "filingNotes": "Use the European Commission country-specific VAT directory as the bootstrap entry point, then verify the national authority portal, registration path, and assigned filing cadence live before saving business setup."
+    }
+  },
+  "overrides": [
+    {
+      "jurisdictionRefId": "TAX-JUR-GB-VAT",
+      "countryCode": "GB",
+      "authorityName": "HM Revenue & Customs",
+      "authorityType": "country",
+      "taxTypes": ["vat"],
+      "localityModel": "country_only",
+      "officialWebsiteUrl": "https://www.gov.uk/business-tax/vat",
+      "registrationUrl": "https://www.gov.uk/register-for-vat",
+      "filingUrl": "https://www.gov.uk/submit-vat-return",
+      "paymentUrl": "https://www.gov.uk/pay-vat",
+      "helpUrl": "https://www.gov.uk/vat-returns/overview",
+      "cadenceHints": ["quarterly", "annual"],
+      "filingNotes": "VAT returns are usually due one calendar month and 7 days after the accounting period. Verify the business's actual scheme and dates in the HMRC online account.",
+      "sourceUrls": [
+        "https://www.gov.uk/submit-vat-return",
+        "https://www.gov.uk/vat-returns/overview",
+        "https://www.gov.uk/business-tax/vat"
+      ],
+      "sourceKind": "official",
+      "confidence": "high",
+      "tags": ["uk_vat", "priority"]
+    },
+    {
+      "jurisdictionRefId": "TAX-JUR-DK-VAT",
+      "countryCode": "DK",
+      "authorityName": "Skattestyrelsen",
+      "authorityType": "country",
+      "taxTypes": ["vat"],
+      "localityModel": "country_only",
+      "officialWebsiteUrl": "https://skat.dk/en-us/businesses/vat",
+      "registrationUrl": "https://skat.dk/en-us/businesses/vat",
+      "filingUrl": "https://skat.dk/en-us/businesses/vat/deadlines-filing-vat-returns-and-paying-vat",
+      "paymentUrl": "https://skat.dk/en-us/erhverv/moms/moms-saadan-goer-du/saadan-betaler-du-moms",
+      "helpUrl": "https://skat.dk/en-us/businesses/vat/deadlines-filing-vat-returns-and-paying-vat",
+      "cadenceHints": ["monthly", "quarterly", "half_yearly", "oss_quarterly"],
+      "filingNotes": "Denmark assigns cadence by business profile and revenue bands. Verify the business's actual settlement period and whether OSS/IOSS applies.",
+      "sourceUrls": [
+        "https://skat.dk/en-us/businesses/vat/deadlines-filing-vat-returns-and-paying-vat",
+        "https://skat.dk/en-us/erhverv/moms/moms-saadan-goer-du/saadan-betaler-du-moms"
+      ],
+      "sourceKind": "official",
+      "confidence": "high",
+      "tags": ["eu_vat", "priority"]
+    },
+    {
+      "jurisdictionRefId": "TAX-JUR-NO-VAT",
+      "countryCode": "NO",
+      "authorityName": "Skatteetaten",
+      "authorityType": "country",
+      "taxTypes": ["vat"],
+      "localityModel": "country_only",
+      "officialWebsiteUrl": "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/",
+      "registrationUrl": "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/",
+      "filingUrl": "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/",
+      "paymentUrl": "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/paying-vat/",
+      "helpUrl": "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/",
+      "cadenceHints": ["bi_monthly", "annual"],
+      "filingNotes": "Most enterprises file every other month. Some qualify for annual periods. Verify current registration status, annual-period eligibility, and nil-return obligations.",
+      "sourceUrls": [
+        "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/",
+        "https://www.skatteetaten.no/en/business-and-organisation/vat-and-duties/vat/paying-vat/"
+      ],
+      "sourceKind": "official",
+      "confidence": "high",
+      "tags": ["norway_vat", "priority"]
+    }
+  ]
+}
