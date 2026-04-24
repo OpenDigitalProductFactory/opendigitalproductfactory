@@ -5,13 +5,13 @@ export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
       where: {
-        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google"] },
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
         status: "connected",
       },
     }),
     prisma.integrationCredential.count({
       where: {
-        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google"] },
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
         status: "error",
       },
     }),
@@ -85,6 +85,16 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-accent)"
           metrics={[
             { label: "Category", value: "Marketing Intelligence" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Facebook Lead Ads"
+          description="Localized lead-capture anchor for page forms, recent submissions, and downstream CRM follow-up on the enterprise substrate."
+          href="/platform/tools/integrations/facebook-lead-ads"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Category", value: "Localized Lead Capture" },
             { label: "Model", value: "Native" },
           ]}
         />

@@ -18,13 +18,13 @@ export default async function ToolsHubPage() {
     prisma.mcpServerTool.count({ where: { isEnabled: true } }),
     prisma.integrationCredential.count({
       where: {
-        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google"] },
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
         status: "connected",
       },
     }),
     prisma.integrationCredential.count({
       where: {
-        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google"] },
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
         status: "error",
       },
     }),
