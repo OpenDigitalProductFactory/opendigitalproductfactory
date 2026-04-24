@@ -1982,6 +1982,7 @@ model Organization {
   brandingConfig        BrandingConfig?
   storefrontConfig      StorefrontConfig?
   businessContext       BusinessContext?
+  taxProfile            OrganizationTaxProfile?
   platformSetupProgress PlatformSetupProgress? @relation("OrgSetupProgress")
 }
 
@@ -2012,6 +2013,162 @@ model BusinessContext {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model OrganizationTaxProfile {
+  id               String   @id @default(cuid())
+  organizationId   String   @unique
+  setupMode        String   @default("unknown")
+  setupStatus      String   @default("draft")
+  homeCountryCode  String?
+  primaryRegionCode String?
+  taxModel         String   @default("hybrid")
+  externalSystem   String?
+  footprintSummary String?
+  notes            String?
+  lastVerifiedAt   DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  registrations TaxRegistration[]
+  issues        TaxIssue[]
+}
+
+model TaxJurisdictionReference {
+  id                    String   @id @default(cuid())
+  jurisdictionRefId     String   @unique
+  countryCode           String
+  stateProvinceCode     String?
+  authorityName         String
+  authorityType         String
+  parentJurisdictionRefId String?
+  taxTypes              String[]
+  localityModel         String
+  officialWebsiteUrl    String?
+  registrationUrl       String?
+  filingUrl             String?
+  paymentUrl            String?
+  helpUrl               String?
+  cadenceHints          String[]
+  filingNotes           String?
+  automationHints       Json?
+  sourceUrls            String[]
+  sourceKind            String   @default("official")
+  lastResearchedAt      DateTime?
+  lastVerifiedAt        DateTime?
+  confidence            String   @default("medium")
+  staleAfterDays        Int      @default(180)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  registrations TaxRegistration[]
+
+  @@index([countryCode, stateProvinceCode])
+  @@index([authorityType])
+}
+
+model TaxRegistration {
+  id                       String   @id @default(cuid())
+  registrationId           String   @unique
+  organizationTaxProfileId String
+  jurisdictionReferenceId  String
+  taxType                  String
+  registrationNumber       String?
+  registrationStatus       String   @default("draft")
+  filingFrequency          String
+  filingBasis              String?
+  remitterRole             String   @default("business")
+  effectiveFrom            DateTime
+  effectiveTo              DateTime?
+  firstPeriodStart         DateTime?
+  portalAccountNotes       String?
+  verifiedFromSourceUrl    String?
+  lastVerifiedAt           DateTime?
+  confidence               String   @default("medium")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  jurisdictionReference  TaxJurisdictionReference @relation(fields: [jurisdictionReferenceId], references: [id], onDelete: Restrict)
+  obligationPeriods      TaxObligationPeriod[]
+  issues                 TaxIssue[]
+
+  @@index([organizationTaxProfileId])
+  @@index([jurisdictionReferenceId])
+  @@index([registrationStatus])
+}
+
+model TaxObligationPeriod {
+  id                     String   @id @default(cuid())
+  periodId               String   @unique
+  registrationId         String
+  periodStart            DateTime
+  periodEnd              DateTime
+  dueDate                DateTime
+  status                 String   @default("draft")
+  salesTaxAmount         Decimal  @default(0)
+  inputTaxAmount         Decimal  @default(0)
+  netTaxAmount           Decimal  @default(0)
+  manualAdjustmentAmount Decimal  @default(0)
+  exportStatus           String   @default("not_started")
+  filedAt                DateTime?
+  paidAt                 DateTime?
+  confirmationRef        String?
+  preparedByAgentId      String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  registration TaxRegistration   @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  artifacts    TaxFilingArtifact[]
+  issues       TaxIssue[]
+
+  @@index([registrationId])
+  @@index([status, dueDate])
+}
+
+model TaxFilingArtifact {
+  id               String   @id @default(cuid())
+  periodId         String
+  artifactType     String
+  storageKey       String?
+  externalRef      String?
+  sourceUrl        String?
+  notes            String?
+  createdByAgentId String?
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+
+  period TaxObligationPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@index([periodId])
+  @@index([artifactType])
+}
+
+model TaxIssue {
+  id                       String   @id @default(cuid())
+  issueId                  String   @unique
+  organizationTaxProfileId String
+  registrationId           String?
+  periodId                 String?
+  issueType                String
+  severity                 String   @default("medium")
+  status                   String   @default("open")
+  title                    String
+  details                  String?
+  openedAt                 DateTime @default(now())
+  resolvedAt               DateTime?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration          TaxRegistration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  period                TaxObligationPeriod?   @relation(fields: [periodId], references: [id], onDelete: SetNull)
+
+  @@index([organizationTaxProfileId])
+  @@index([registrationId])
+  @@index([periodId])
+  @@index([status, severity])
 }
 
 model PlatformSetupProgress {

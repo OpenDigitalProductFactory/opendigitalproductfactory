@@ -12,6 +12,7 @@ import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
+import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
@@ -1954,6 +1955,7 @@ async function main(): Promise<void> {
   console.log("Starting seed...");
   await ensureBootstrapOrganization();
   await seedGeographicData(prisma);
+  await seedTaxJurisdictions(prisma);
   await seedRoles();
   await seedGovernanceReferenceData(prisma);
   await seedWorkforceReferenceData(prisma);
