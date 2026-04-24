@@ -5,7 +5,7 @@ import type { ComponentCatalogEntry } from "../types";
 
 function safeRead(path: string): string | null {
   try {
-    return readFileSync(path, "utf-8");
+    return readFileSync(/* turbopackIgnore: true */ path, "utf-8");
   } catch {
     return null;
   }
@@ -52,26 +52,26 @@ function parseCssRootVars(source: string): Record<string, string> {
 
 function tryFindTailwindConfig(root: string): string | null {
   for (const name of ["tailwind.config.ts", "tailwind.config.js", "tailwind.config.mjs"]) {
-    const p = join(root, name);
-    if (existsSync(p)) return p;
+    const p = join(/* turbopackIgnore: true */ root, name);
+    if (existsSync(/* turbopackIgnore: true */ p)) return p;
   }
   return null;
 }
 
 function tryFindGlobalsCss(root: string): string | null {
   for (const rel of ["app/globals.css", "styles/globals.css", "src/app/globals.css"]) {
-    const p = join(root, rel);
-    if (existsSync(p)) return p;
+    const p = join(/* turbopackIgnore: true */ root, rel);
+    if (existsSync(/* turbopackIgnore: true */ p)) return p;
   }
   return null;
 }
 
 function listShadcnComponents(root: string): ComponentCatalogEntry[] {
-  const componentsDir = join(root, "components", "ui");
-  if (!existsSync(componentsDir)) return [];
+  const componentsDir = join(/* turbopackIgnore: true */ root, "components", "ui");
+  if (!existsSync(/* turbopackIgnore: true */ componentsDir)) return [];
   let entries: string[];
   try {
-    entries = readdirSync(componentsDir);
+    entries = readdirSync(/* turbopackIgnore: true */ componentsDir);
   } catch {
     return [];
   }
@@ -101,7 +101,7 @@ export async function codebaseAdapter(rootPath: string): Promise<PartialDesignSy
     };
   }
 
-  if (!existsSync(rootPath)) {
+  if (!existsSync(/* turbopackIgnore: true */ rootPath)) {
     return {
       sources: [],
       gaps: ["codebase-path-missing"],
@@ -110,7 +110,7 @@ export async function codebaseAdapter(rootPath: string): Promise<PartialDesignSy
   }
 
   try {
-    if (!statSync(rootPath).isDirectory()) {
+    if (!statSync(/* turbopackIgnore: true */ rootPath).isDirectory()) {
       return {
         sources: [],
         gaps: ["codebase-path-not-directory"],
