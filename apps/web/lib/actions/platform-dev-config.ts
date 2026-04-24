@@ -182,6 +182,12 @@ export async function hasContributionToken(): Promise<boolean> {
  * Retrieve the stored GitHub token (decrypted). Used by the contribution
  * pipeline when process.env.GITHUB_TOKEN is not set.
  * Returns null if no credential is stored or decryption fails.
+ *
+ * When the stored value is plaintext (no `enc:` prefix) AND
+ * `CREDENTIAL_ENCRYPTION_KEY` is set, the row is opportunistically
+ * re-encrypted in place. The `updateMany` guard clause makes the write
+ * concurrent-safe — a simultaneous second caller lands a count=0 no-op
+ * rather than double-encrypting.
  */
 export async function getStoredGitHubToken(): Promise<string | null> {
   const cred = await prisma.credentialEntry.findUnique({
@@ -190,9 +196,26 @@ export async function getStoredGitHubToken(): Promise<string | null> {
   });
   if (!cred || cred.status !== "active" || !cred.secretRef) return null;
 
+  const stored = cred.secretRef;
   try {
-    const { decryptSecret } = await import("@/lib/credential-crypto");
-    return decryptSecret(cred.secretRef);
+    const { decryptSecret, encryptSecret } = await import("@/lib/credential-crypto");
+    const decrypted = stored.startsWith("enc:") ? decryptSecret(stored) : stored;
+    if (decrypted === null) return null;
+
+    if (!stored.startsWith("enc:") && process.env.CREDENTIAL_ENCRYPTION_KEY) {
+      const encrypted = encryptSecret(decrypted);
+      if (encrypted.startsWith("enc:")) {
+        await prisma.credentialEntry.updateMany({
+          where: {
+            providerId: "git-backup",
+            NOT: { secretRef: { startsWith: "enc:" } },
+          },
+          data: { secretRef: encrypted },
+        });
+      }
+    }
+
+    return decrypted;
   } catch {
     return null;
   }
