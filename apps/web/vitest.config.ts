@@ -1,11 +1,13 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { resolve } from "path";
+import { dirname, resolve } from "path";
 import { config as loadEnv } from "dotenv";
 
 const rootDir = resolve(__dirname, "../..");
 const webDir = resolve(__dirname);
 const rootNodeModulesDir = resolve(rootDir, "node_modules");
+const webReactDir = dirname(require.resolve("react/package.json", { paths: [webDir] }));
+const webReactDomDir = dirname(require.resolve("react-dom/package.json", { paths: [webDir] }));
 
 loadEnv({ path: resolve(rootDir, ".env") });
 loadEnv({ path: resolve(webDir, ".env.local"), override: true });
@@ -57,15 +59,15 @@ export default defineConfig({
       },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },
       { find: "next/server", replacement: resolve(rootDir, "node_modules/next/server.js") },
-      { find: /^react\/jsx-dev-runtime$/, replacement: resolve(rootNodeModulesDir, "react/jsx-dev-runtime.js") },
-      { find: /^react\/jsx-runtime$/, replacement: resolve(rootNodeModulesDir, "react/jsx-runtime.js") },
-      { find: /^react-dom\/server$/, replacement: resolve(rootNodeModulesDir, "react-dom/server.node.js") },
-      // Use exact-match aliases for React packages. Prefix aliases like
-      // `find: "react-dom"` can accidentally rewrite `react-dom/server`
-      // and other subpaths, which breaks SSR rendering under Vitest on
-      // Linux/pnpm hoists (see vitejs/vite#18894).
-      { find: /^react-dom$/, replacement: resolve(rootNodeModulesDir, "react-dom/index.js") },
-      { find: /^react$/, replacement: resolve(rootNodeModulesDir, "react/index.js") },
+      { find: /^react\/jsx-dev-runtime$/, replacement: resolve(webReactDir, "jsx-dev-runtime.js") },
+      { find: /^react\/jsx-runtime$/, replacement: resolve(webReactDir, "jsx-runtime.js") },
+      { find: /^react-dom\/server$/, replacement: resolve(webReactDomDir, "server.node.js") },
+      // Resolve React from the web workspace's own dependency graph instead of
+      // the monorepo root hoist. The root can legitimately hoist a different
+      // React for mobile/Expo, which leads Vitest to render components with one
+      // copy while react-dom uses another on Linux CI.
+      { find: /^react-dom$/, replacement: resolve(webReactDomDir, "index.js") },
+      { find: /^react$/, replacement: resolve(webReactDir, "index.js") },
     ],
   },
 });
