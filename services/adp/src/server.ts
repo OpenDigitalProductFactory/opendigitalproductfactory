@@ -3,10 +3,14 @@
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { listWorkers, TOOL_DEFINITION as LIST_WORKERS_DEF } from "./tools/list-workers.js";
+import {
+  getPayStatements,
+  TOOL_DEFINITION as GET_PAY_STATEMENTS_DEF,
+} from "./tools/get-pay-statements.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "8600", 10);
 const SERVICE_NAME = "adp";
-const SERVICE_VERSION = "0.2.0";
+const SERVICE_VERSION = "0.3.0";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -33,9 +37,21 @@ interface ToolsCallParams {
 
 type ToolHandler = (args: unknown, ctx: { coworkerId: string; userId: string | null }) => Promise<unknown>;
 
+interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+    additionalProperties?: boolean;
+  };
+}
+
 // Registry of callable tools. Add new tools here as they land.
-const TOOLS: Record<string, { definition: typeof LIST_WORKERS_DEF; handler: ToolHandler }> = {
+const TOOLS: Record<string, { definition: ToolDefinition; handler: ToolHandler }> = {
   adp_list_workers: { definition: LIST_WORKERS_DEF, handler: listWorkers },
+  adp_get_pay_statements: { definition: GET_PAY_STATEMENTS_DEF, handler: getPayStatements },
 };
 
 async function readBody(req: IncomingMessage): Promise<string> {
