@@ -1,4 +1,7 @@
 // apps/web/lib/permissions.ts
+import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
+
+import { canAccessEmployeeScope } from "./manager-scope";
 
 export type PlatformRoleId =
   | "HR-000" | "HR-100" | "HR-200"
@@ -87,6 +90,14 @@ export function can(user: UserContext, capability: CapabilityKey): boolean {
   // even for exhaustive Record types.
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return PERMISSIONS[capability]!.roles.includes(user.platformRole);
+}
+
+export function canAccessEmployeeRecord(
+  context: EffectiveAuthContext,
+  targetEmployeeId: string,
+): boolean {
+  if (!context.grantedCapabilities.includes("view_employee")) return false;
+  return canAccessEmployeeScope(context, targetEmployeeId);
 }
 
 export type WorkspaceTile = {

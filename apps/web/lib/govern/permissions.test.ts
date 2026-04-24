@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   can,
+  canAccessEmployeeRecord,
   getShellNavSections,
   getWorkspaceSections,
   getWorkspaceTiles,
@@ -145,5 +146,45 @@ describe("finance permissions", () => {
   it("superuser gets finance access", () => {
     expect(can({ platformRole: null, isSuperuser: true }, "view_finance")).toBe(true);
     expect(can({ platformRole: null, isSuperuser: true }, "manage_finance")).toBe(true);
+  });
+});
+
+describe("canAccessEmployeeRecord()", () => {
+  it("allows access to a direct report when the user can view employees", () => {
+    expect(
+      canAccessEmployeeRecord(
+        {
+          principalId: "PRN-USER-user-1",
+          platformRole: "HR-100",
+          isSuperuser: false,
+          employeeId: "emp-manager",
+          managerScope: {
+            directReportIds: ["emp-report-1"],
+            indirectReportIds: [],
+          },
+          grantedCapabilities: ["view_employee"],
+        },
+        "emp-report-1",
+      ),
+    ).toBe(true);
+  });
+
+  it("denies access without the employee-view capability", () => {
+    expect(
+      canAccessEmployeeRecord(
+        {
+          principalId: "PRN-USER-user-1",
+          platformRole: "HR-100",
+          isSuperuser: false,
+          employeeId: "emp-manager",
+          managerScope: {
+            directReportIds: ["emp-report-1"],
+            indirectReportIds: [],
+          },
+          grantedCapabilities: [],
+        },
+        "emp-report-1",
+      ),
+    ).toBe(false);
   });
 });

@@ -16,4 +16,9 @@ describe("govern barrel export", () => {
     const mod = await import("./policy-types");
     expect(Object.keys(mod).length).toBeGreaterThan(0);
   });
+
+  it("exports manager scope helpers", async () => {
+    const mod = await import("./manager-scope");
+    expect(mod).toHaveProperty("canAccessEmployeeScope");
+  });
 });

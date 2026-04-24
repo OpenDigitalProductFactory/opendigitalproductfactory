@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    user: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn() },
     apiToken: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("bcryptjs", () => ({
-  default: { compare: vi.fn() },
+  default: { compare: vi.fn(), hash: vi.fn() },
 }));
 
 vi.mock("../../api/jwt.js", () => ({
@@ -163,6 +163,35 @@ describe("POST /api/v1/auth/login", () => {
     const res = await loginHandler(req);
 
     expect(res.status).toBe(401);
+  });
+
+  it("accepts a legacy sha256 password and rehashes on success", async () => {
+    const legacySha256 =
+      "fcf730b6d95236ecd3c9fc2d92d7b6b2bb061514961aec041d6c7a7192f592e4";
+    (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...MOCK_USER,
+      passwordHash: legacySha256,
+    });
+    (bcrypt.compare as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    (bcrypt.hash as ReturnType<typeof vi.fn>).mockResolvedValue("$2a$12$rehash");
+    (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...MOCK_USER,
+      passwordHash: "$2a$12$rehash",
+    });
+    (signAccessToken as ReturnType<typeof vi.fn>).mockResolvedValue("jwt-access-token");
+    (createRefreshToken as ReturnType<typeof vi.fn>).mockResolvedValue("refresh-token-abc");
+
+    const req = jsonRequest({ email: "alice@example.com", password: "secret123" });
+    const res = await loginHandler(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.accessToken).toBe("jwt-access-token");
+    expect(body.refreshToken).toBe("refresh-token-abc");
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { passwordHash: "$2a$12$rehash" },
+    });
   });
 
   it("returns 403 for inactive user", async () => {
