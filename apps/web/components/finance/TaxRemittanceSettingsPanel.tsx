@@ -27,6 +27,8 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
     homeCountryCode: workspace.profile.homeCountryCode ?? "",
     primaryRegionCode: workspace.profile.primaryRegionCode ?? "",
     taxModel: workspace.profile.taxModel as UpdateOrganizationTaxProfileInput["taxModel"],
+    filingOwner: (workspace.profile.filingOwner ?? "business") as UpdateOrganizationTaxProfileInput["filingOwner"],
+    handoffMode: (workspace.profile.handoffMode ?? "dpf_readiness_only") as UpdateOrganizationTaxProfileInput["handoffMode"],
     externalSystem: workspace.profile.externalSystem ?? "",
     footprintSummary: workspace.profile.footprintSummary ?? "",
     notes: workspace.profile.notes ?? "",
@@ -130,6 +132,33 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
           </label>
 
           <label className="text-xs text-[var(--dpf-muted)]">
+            Filing owner
+            <select
+              value={form.filingOwner}
+              onChange={(event) => updateField("filingOwner", event.target.value as UpdateOrganizationTaxProfileInput["filingOwner"])}
+              className={`mt-1 w-full ${inputClasses}`}
+            >
+              <option value="business" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Business team</option>
+              <option value="accountant" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Accountant</option>
+              <option value="tax_partner" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Tax partner</option>
+              <option value="dpf_coworker" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">DPF coworker</option>
+            </select>
+          </label>
+
+          <label className="text-xs text-[var(--dpf-muted)]">
+            Filing handoff mode
+            <select
+              value={form.handoffMode}
+              onChange={(event) => updateField("handoffMode", event.target.value as UpdateOrganizationTaxProfileInput["handoffMode"])}
+              className={`mt-1 w-full ${inputClasses}`}
+            >
+              <option value="dpf_readiness_only" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">DPF readiness only</option>
+              <option value="external_filing" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">External filing</option>
+              <option value="shared_handoff" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Shared handoff</option>
+            </select>
+          </label>
+
+          <label className="text-xs text-[var(--dpf-muted)]">
             External accounting or tax system
             <input
               value={form.externalSystem ?? ""}
@@ -177,12 +206,103 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
         </form>
       </div>
 
+      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+              Operating Boundary
+            </p>
+            <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+              This records who owns final filing and payment while keeping the page focused on readiness, evidence, and handoff facts.
+            </p>
+          </div>
+          <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
+            {form.handoffMode.replaceAll("_", " ")}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+              Current Owner
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
+              {form.filingOwner.replaceAll("_", " ")}
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+              DPF Scope
+            </p>
+            <p className="mt-1 text-sm text-[var(--dpf-text)]">
+              Registrations, periods, filing packet prep, evidence capture, and due-date readiness.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+              External Boundary
+            </p>
+            <p className="mt-1 text-sm text-[var(--dpf-text)]">
+              {form.handoffMode === "dpf_readiness_only"
+                ? "Final statutory filing and payment stay outside the current DPF runtime."
+                : form.externalSystem?.trim()
+                  ? `${form.externalSystem.trim()} is recorded as the current handoff system.`
+                  : "A filing system, accountant, or partner still needs to be recorded for final handoff."}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <TaxRegistrationEditor
         jurisdictionOptions={workspace.jurisdictionOptions}
         registrations={workspace.registrations}
+        issues={workspace.openIssues}
       />
 
-      <TaxObligationPeriodsTable periods={workspace.periods} />
+      <TaxObligationPeriodsTable periods={workspace.periods} monitoring={workspace.monitoring} />
+
+      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+              Setup Gaps
+            </p>
+            <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+              These are unresolved tax setup facts that still need to be captured or verified.
+            </p>
+          </div>
+          <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
+            {workspace.openIssues.length} open
+          </span>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {workspace.openIssues.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-4 py-5 text-sm text-[var(--dpf-muted)]">
+              No open tax setup issues right now.
+            </div>
+          ) : (
+            workspace.openIssues.map((issue) => (
+              <div
+                key={issue.id}
+                className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-4 py-3"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--dpf-text)]">{issue.title}</p>
+                    {issue.details && (
+                      <p className="mt-1 text-xs text-[var(--dpf-muted)]">{issue.details}</p>
+                    )}
+                  </div>
+                  <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
+                    {issue.severity}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
