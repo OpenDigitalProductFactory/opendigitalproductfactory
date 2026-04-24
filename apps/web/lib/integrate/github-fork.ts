@@ -1,15 +1,21 @@
-// Fork detection + creation helpers for the fork-based PR contribution model
-// (see docs/superpowers/specs/2026-04-23-public-contribution-mode-design.md).
+// Fork detection + creation + sync helpers for the fork-based PR contribution
+// model (see docs/superpowers/specs/2026-04-23-public-contribution-mode-design.md).
 //
 // These helpers wrap the GitHub REST endpoints:
-//   GET  /repos/{owner}/{repo}           — check existence + fork-of relation
-//   POST /repos/{owner}/{repo}/forks     — create a fork under the token owner's account
+//   GET  /repos/{owner}/{repo}             — check existence + fork-of relation
+//   POST /repos/{owner}/{repo}/forks       — create a fork under the token owner's account
+//   POST /repos/{owner}/{repo}/merge-upstream — pull upstream default branch into the fork
 //
 // Forks are created asynchronously by GitHub. The documented upper bound is
 // five minutes; typical is 1-5 seconds. createForkAndWait polls for readiness
 // and returns "deferred" when readiness is not observed within the polling
 // window — callers should surface this as "fork is being created, retry soon"
 // rather than treating it as a failure.
+//
+// syncForkFromUpstream is called before every contribute_to_hive fork-pr
+// contribution to keep the fork's base branch in lockstep with upstream.
+// Staleness manifests as merge conflicts at PR time, not push time, so the
+// pre-push sync is a cheap guard against a common failure mode.
 
 function getHeaders(token: string): Record<string, string> {
   return {
@@ -117,4 +123,40 @@ export async function createForkAndWait(params: {
   }
 
   return { status: "deferred", forkOwner, forkRepo };
+}
+
+/**
+ * Pull the upstream default branch into the fork's same branch.
+ *
+ * Used before every fork-pr contribution so the new branch is parented off
+ * an up-to-date base — a stale fork manifests as merge conflicts at PR time,
+ * not push time, and the UX is worse when it happens late. Called by
+ * contribute_to_hive's fork-pr dispatch in Phase 4.
+ *
+ * 409 is surfaced as an actionable conflict error — the admin needs to
+ * resolve divergence manually (typically by rebasing or deleting the
+ * conflicting fork branch).
+ */
+export async function syncForkFromUpstream(params: {
+  forkOwner: string;
+  forkRepo: string;
+  branch: string;
+  token: string;
+}): Promise<void> {
+  const { forkOwner, forkRepo, branch, token } = params;
+  const url = `https://api.github.com/repos/${forkOwner}/${forkRepo}/merge-upstream`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { ...getHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ branch }),
+  });
+
+  if (res.ok) return;
+  const body = await res.text();
+  if (res.status === 409) {
+    throw new Error(
+      `Fork merge-upstream conflict on ${forkOwner}/${forkRepo}@${branch}: ${body.slice(0, 200)}`,
+    );
+  }
+  throw new Error(`POST ${url}: ${res.status} ${body.slice(0, 200)}`);
 }
