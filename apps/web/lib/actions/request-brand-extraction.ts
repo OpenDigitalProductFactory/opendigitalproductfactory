@@ -63,15 +63,24 @@ export async function requestBrandExtraction(
     // Non-fatal — the tool call below is the authoritative trigger.
   }
 
-  const toolResult = await executeTool(
-    "extract_brand_design_system",
-    {
-      url: input.url,
-      includeCodebase: input.includeCodebase,
-    },
-    userId,
-    { threadId: thread.id, routeContext: "/admin/branding", agentId: "admin-assistant" },
-  );
+  let toolResult;
+  try {
+    toolResult = await executeTool(
+      "extract_brand_design_system",
+      {
+        url: input.url,
+        includeCodebase: input.includeCodebase,
+      },
+      userId,
+      { threadId: thread.id, routeContext: "/admin/branding", agentId: "admin-assistant" },
+    );
+  } catch (error) {
+    console.error("[requestBrandExtraction] executeTool failed", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Extraction failed to queue.",
+    };
+  }
 
   if (!toolResult.success) {
     return {

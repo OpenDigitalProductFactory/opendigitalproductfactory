@@ -2400,6 +2400,7 @@ model AgentThread {
 model AgentMessage {
   id               String               @id @default(cuid())
   threadId         String
+  taskRunId        String?
   role             String
   content          String
   tone             String?
@@ -2414,6 +2415,7 @@ model AgentMessage {
   thread           AgentThread          @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@index([threadId])
+  @@index([taskRunId, createdAt])
   @@index([createdAt])
 }
 
@@ -2442,6 +2444,7 @@ model AgentActionProposal {
   id               String          @id @default(cuid())
   proposalId       String          @unique
   threadId         String
+  taskRunId        String?
   messageId        String          @unique
   agentId          String
   actionType       String
@@ -2461,6 +2464,7 @@ model AgentActionProposal {
   toolEvaluation   ToolEvaluation? @relation(fields: [toolEvaluationId], references: [id])
 
   @@index([threadId])
+  @@index([taskRunId])
   @@index([status])
 }
 
@@ -2808,13 +2812,19 @@ model TaskRun {
   taskRunId          String            @unique
   userId             String
   threadId           String?
+  contextId          String?
   buildId            String?
+  initiatingAgentId  String?
+  currentAgentId     String?
+  parentTaskRunId    String?
   routeContext       String?
   title              String
   objective          String            @db.Text
   source             String            @default("coworker") // coworker | build | skill | proactive
-  status             String            @default("active") // active | awaiting_human | completed | failed | cancelled | archived
+  /// A2A-aligned task states: submitted | working | input-required | auth-required | completed | failed | canceled | rejected | archived
+  status             String            @default("submitted")
   authorityScope     Json?
+  a2aMetadata        Json?
   progressPayload    Json?
   repeatedPatternKey String?
   templateId         String?
@@ -2825,12 +2835,50 @@ model TaskRun {
   updatedAt          DateTime          @updatedAt
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   nodes              TaskNode[]
+  messages           TaskMessage[]
+  artifacts          TaskArtifact[]
   deliberationRuns   DeliberationRun[]
 
   @@index([userId, status])
   @@index([threadId])
+  @@index([contextId])
+  @@index([parentTaskRunId])
   @@index([routeContext, status])
   @@index([repeatedPatternKey])
+}
+
+model TaskMessage {
+  id               String   @id
+  messageId        String   @unique
+  taskRunId        String
+  contextId        String?
+  role             String
+  parts            Json
+  metadata         Json?
+  referenceTaskIds String[] @default([])
+  createdAt        DateTime @default(now())
+  taskRun          TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskRunId, createdAt])
+  @@index([contextId])
+}
+
+model TaskArtifact {
+  id              String   @id
+  artifactId      String   @unique
+  taskRunId       String
+  name            String
+  description     String?
+  parts           Json
+  metadata        Json?
+  producerAgentId String?
+  producerNodeId  String?
+  createdAt       DateTime @default(now())
+  taskRun         TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskRunId, createdAt])
+  @@index([producerAgentId])
+  @@index([producerNodeId])
 }
 
 model TaskNode {

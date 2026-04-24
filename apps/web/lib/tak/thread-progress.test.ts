@@ -63,7 +63,24 @@ describe("pushThreadProgress", () => {
     };
     await pushThreadProgress("thread-1", "run-1", event);
 
-    expect(mocks.busEmit).toHaveBeenCalledWith("thread-1", event);
+    expect(mocks.busEmit.mock.calls).toEqual([
+      ["thread-1", event],
+      [
+        "thread-1",
+        {
+          type: "task:status",
+          taskId: "run-1",
+          contextId: "thread-1",
+          state: "working",
+          sourceEvent: "brand:extract.progress",
+          message: "Merging",
+          progress: {
+            stage: "merging",
+            percent: 50,
+          },
+        },
+      ],
+    ]);
   });
 
   it("does NOT emit to bus when thread is not active (cross-process worker case)", async () => {
