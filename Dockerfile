@@ -13,6 +13,7 @@ CMD ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && 
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema.prisma ./packages/db/prisma/
@@ -24,6 +25,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 # Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
 COPY pnpm-workspace.yaml tsconfig.base.json ./
+COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docker-entrypoint.sh ./
@@ -34,6 +36,7 @@ RUN pnpm --filter web build
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json ./
+COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/

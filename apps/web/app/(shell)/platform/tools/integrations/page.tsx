@@ -4,10 +4,10 @@ import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "connected" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365"] }, status: "connected" },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "error" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365"] }, status: "error" },
     }),
   ]);
 
@@ -49,6 +49,16 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-warning)"
           metrics={[
             { label: "Category", value: "Payments" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Microsoft 365 Communications"
+          description="Communications anchor for inbox, calendar, Teams, channels, and recent message context on the enterprise substrate."
+          href="/platform/tools/integrations/microsoft365-communications"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Category", value: "Communications" },
             { label: "Model", value: "Native" },
           ]}
         />
