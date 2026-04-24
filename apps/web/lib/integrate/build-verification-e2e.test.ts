@@ -32,15 +32,6 @@ function evidence(overrides: Partial<Record<string, unknown>> = {}): Record<stri
     verificationOut: { passed: true },
     acceptanceMet: [{ criterion: "ac-1", met: true, evidence: "ok" }],
     acceptanceCriteria: ["User can click the button", "Form submits without error"],
-    // Sandbox typecheck + build gate (#212). These tests exercise the UX
-    // path specifically, so we default the sandbox gate to "complete" so
-    // failures remain attributable to the UX path.
-    sandboxVerificationStatus: "complete",
-    sandboxVerification: {
-      typecheck: { passed: true },
-      build: { passed: true },
-      allPassed: true,
-    },
     ...overrides,
   };
 }

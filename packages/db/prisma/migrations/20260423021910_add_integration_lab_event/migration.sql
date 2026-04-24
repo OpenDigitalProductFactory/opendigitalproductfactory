@@ -1,5 +1,0 @@
--- Historical stub restored from live migration history.
--- The original migration file was missing from the repository when this
--- branch was reconciled. Current schema does not depend on its artifacts,
--- so this placeholder preserves migration-chain continuity for local/dev
--- environments without reintroducing abandoned lab tables into fresh installs.

@@ -139,13 +139,6 @@ describe("Build Disciplines — Full Flow Integration", () => {
         { criterion: "Filter works", met: true, evidence: "Test passes" },
         { criterion: "Debounced", met: true, evidence: "300ms delay verified" },
       ],
-      // Sandbox typecheck + build gate (#212).
-      sandboxVerificationStatus: "complete" as const,
-      sandboxVerification: {
-        typecheck: { passed: true },
-        build: { passed: true },
-        allPassed: true,
-      },
     };
 
     it("BLOCKS without any evidence", () => {

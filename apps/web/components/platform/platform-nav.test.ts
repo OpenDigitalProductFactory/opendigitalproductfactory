@@ -8,7 +8,6 @@ describe("platform-nav", () => {
   it("defines the top-level platform workflow families", () => {
     expect(PLATFORM_FAMILIES.map((family) => family.label)).toEqual([
       "Overview",
-      "Identity & Access",
       "AI Operations",
       "Tools & Services",
       "Governance & Audit",

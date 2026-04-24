@@ -50,6 +50,7 @@ export const FINANCE_FAMILIES: FinanceFamily[] = [
     ],
     subItems: [
       { label: "Spend Hub", href: "/finance/spend" },
+      { label: "AI Spend", href: "/finance/spend/ai" },
       { label: "Bills", href: "/finance/bills" },
       { label: "Suppliers", href: "/finance/suppliers" },
       { label: "Expenses", href: "/finance/expense-claims" },
