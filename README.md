@@ -119,7 +119,7 @@ If you want to contribute to the codebase rather than just run it:
 
 ---
 
-## What's Inside
+## What's included in this platform
 
 ### Core Platform
 
