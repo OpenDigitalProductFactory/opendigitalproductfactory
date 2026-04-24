@@ -13,12 +13,14 @@ import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 import { OllamaManagement } from "@/components/platform/OllamaManagement";
 import { RecipePanel } from "@/components/platform/RecipePanel";
 import { OAuthConnectionStatus } from "@/components/platform/OAuthConnectionStatus";
+import { AiProviderFinancePanel } from "@/components/finance/AiProviderFinancePanel";
+import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 
 type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts] = await Promise.all([
+  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
@@ -28,6 +30,7 @@ export default async function ProviderDetailPage({ params }: Props) {
     getRecentRouteDecisions(providerId),
     getRecipesForProvider(providerId),
     getModelClassCounts(providerId),
+    getAiProviderFinanceDetail(providerId),
   ]);
   if (!pw) notFound();
 
@@ -124,6 +127,9 @@ export default async function ProviderDetailPage({ params }: Props) {
           )}
           <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
             <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <AiProviderFinancePanel detail={financeDetail} />
           </div>
           {/* Execution Recipes */}
           <RecipePanel recipes={recipes} />

@@ -85,6 +85,9 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | FIN-10 | From `/finance/settings/tax`, generate obligation periods, prepare a filing packet, and add supporting evidence to a period | Periods appear with due dates and captured amounts, filing packet status changes to ready/prepared, and audit evidence is visible without using the coworker surface for dialog |
 | FIN-11 | From `/finance/settings/tax`, set filing owner and handoff mode, leave external filing selected without an external system, then save | The page records the authority boundary, shows the operating boundary summary as facts, and raises a setup gap when external filing is selected without a recorded handoff system |
 | FIN-12 | From `/finance/settings/tax`, review tax reminders and enable monitoring when due/overdue periods exist | The page shows due-soon and overdue counts as facts, creates deduped in-app reminders, and records an active finance monitoring task without adding coworker dialog to the page |
+| FIN-13 | Configure an AI provider from `/platform/ai/providers/[providerId]` without entering plan details, then reload the provider detail page | Technical setup succeeds, Finance Bridge panel appears, and it shows seeded/draft finance ownership rather than blocking setup |
+| FIN-14 | Navigate to `/finance/spend` and then `/finance/spend/ai` after at least one provider has been configured | Spend hub shows the AI Spend summary card, the dedicated AI Spend workspace loads, and the workspace shows committed spend, contracts needing setup, and open work-item counts |
+| FIN-15 | Open `/finance/suppliers/[id]` for a supplier linked to an AI provider | Supplier detail shows the AI finance context panel with linked provider, contract posture, and latest utilization or “No data” state |
 
 ## Phase 6: Compliance
 

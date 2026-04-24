@@ -4,6 +4,8 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { getAiSupplierFinanceDetail } from "@/lib/finance/ai-provider-finance";
+import { AiSupplierFinancePanel } from "@/components/finance/AiSupplierFinancePanel";
 
 const BILL_STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -28,6 +30,7 @@ export default async function SupplierDetailPage({ params }: Props) {
   const { id } = await params;
   const supplier = await getSupplier(id);
   if (!supplier) notFound();
+  const supplierFinance = await getAiSupplierFinanceDetail(supplier.id);
 
   const orgSettings = await getOrgSettings();
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
@@ -95,6 +98,8 @@ export default async function SupplierDetailPage({ params }: Props) {
           </div>
         ))}
       </div>
+
+      <AiSupplierFinancePanel detail={supplierFinance} />
 
       {/* Recent Bills */}
       <section className="mb-8">

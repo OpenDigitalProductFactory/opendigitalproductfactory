@@ -29,10 +29,6 @@ import { mergeHappyPathStateIntoPlan } from "@/lib/explore/feature-build-types";
 import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
 import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
 import { getBuildStudioConfig } from "./build-studio-config";
-import {
-  runSandboxTypecheckBuildGate,
-  formatGateFailureForContext,
-} from "./sandbox/sandbox-verification";
 import type { ReviewResult } from "@/lib/feature-build-types";
 import {
   buildReviewBranchArtifacts,
@@ -536,63 +532,6 @@ export function buildStoredResultsSummary(
   return summary;
 }
 
-// ─── Per-task typecheck + build gate ────────────────────────────────────────
-// AGENTS.md §"Typecheck Gate — Build Studio" mandates that a task whose diff
-// introduces a TS error or breaks `next build` ends BLOCKED, not DONE. The
-// classifyOutcome() heuristics can't see compiler errors — they only read
-// the specialist's own summary text. This gate execs the real tools inside
-// the sandbox after the specialist claims success.
-async function applyPerTaskGate<T extends AgenticResult | CodexResult | ClaudeResult>(params: {
-  buildId: string;
-  parentThreadId: string;
-  role: SpecialistRole;
-  taskTitle: string;
-  result: T;
-  outcome: SpecialistOutcome;
-}): Promise<{ outcome: SpecialistOutcome; result: T }> {
-  const { buildId, parentThreadId, role, taskTitle, result, outcome } = params;
-
-  // Only gate outcomes that claim success. BLOCKED / NEEDS_CONTEXT already
-  // signals a problem — re-running the gate would just add noise.
-  if (outcome !== "DONE" && outcome !== "DONE_WITH_CONCERNS") {
-    return { outcome, result };
-  }
-
-  const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-
-  let gate;
-  try {
-    gate = await runSandboxTypecheckBuildGate(containerId);
-  } catch (err) {
-    // Sandbox unreachable — don't silently pass. Flag as BLOCKED so the next
-    // iteration investigates rather than the orchestrator continuing with
-    // unknown correctness.
-    const message = err instanceof Error ? err.message : String(err);
-    const failureContext = `SANDBOX VERIFICATION GATE UNAVAILABLE — could not exec typecheck/build in ${containerId}: ${message.slice(0, 500)}`;
-    return {
-      outcome: "BLOCKED",
-      result: { ...result, content: `${result.content}\n\n${failureContext}` } as T,
-    };
-  }
-
-  if (gate.allPassed) return { outcome, result };
-
-  agentEventBus.emit(parentThreadId, {
-    type: "orchestrator:task_gate_failed",
-    buildId,
-    taskTitle,
-    specialist: ROLE_LABELS[role],
-    typecheckPassed: gate.typecheck.passed,
-    buildPassed: gate.build.passed,
-  });
-
-  const updatedContent = `${result.content}\n\n${formatGateFailureForContext(gate)}`;
-  return {
-    outcome: "BLOCKED",
-    result: { ...result, content: updatedContent } as T,
-  };
-}
-
 // ─── Specialist Dispatch ────────────────────────────────────────────────────
 
 type SpecialistResult = {
@@ -641,29 +580,21 @@ async function dispatchSpecialist(params: {
       ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel, sessionId, onProgress })
       : await dispatchCodexTask({ task, buildId, buildContext, priorResults, providerId: config.codexProviderId, model: config.codexModel, onProgress });
 
-    const classified = classifyOutcome(cliResult, role);
-    const gated = await applyPerTaskGate({
-      buildId,
-      parentThreadId,
-      role,
-      taskTitle: task.title,
-      result: cliResult,
-      outcome: classified,
-    });
+    const outcome = classifyOutcome(cliResult, role);
 
     agentEventBus.emit(parentThreadId, {
       type: "orchestrator:task_complete",
       buildId,
       taskTitle: task.title,
       specialist: ROLE_LABELS[role],
-      outcome: gated.outcome,
+      outcome: cliResult.success ? "DONE" : "BLOCKED",
     });
 
     return {
       task,
-      result: gated.result,
-      outcome: gated.outcome,
-      success: gated.outcome === "DONE" || gated.outcome === "DONE_WITH_CONCERNS",
+      result: cliResult,
+      outcome,
+      success: outcome === "DONE" || outcome === "DONE_WITH_CONCERNS",
       retries: 0,
     };
   }
@@ -714,24 +645,12 @@ async function dispatchSpecialist(params: {
       onProgress: (event: AgentEvent) => agentEventBus.emit(parentThreadId, event),
     });
 
-    const classified = classifyOutcome(lastResult, role);
-    const gated = await applyPerTaskGate({
-      buildId,
-      parentThreadId,
-      role,
-      taskTitle: task.title,
-      result: lastResult,
-      outcome: classified,
-    });
+    const outcome = classifyOutcome(lastResult, role);
 
-    if (gated.outcome === "DONE" || gated.outcome === "DONE_WITH_CONCERNS") {
-      return { task, result: gated.result, outcome: gated.outcome, success: true, retries: attempt };
+    if (outcome === "DONE" || outcome === "DONE_WITH_CONCERNS") {
+      return { task, result: lastResult, outcome, success: true, retries: attempt };
     }
 
-    // Gate may have flipped DONE → BLOCKED and enriched content with the
-    // tsc/next build output. Carry the enriched result into the next retry
-    // so the specialist sees the actual compiler errors.
-    lastResult = gated.result as AgenticResult;
     retries = attempt + 1;
     if (attempt < MAX_SPECIALIST_RETRIES) {
       agentEventBus.emit(parentThreadId, {

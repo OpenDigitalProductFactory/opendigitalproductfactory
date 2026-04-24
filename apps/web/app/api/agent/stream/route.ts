@@ -7,7 +7,6 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { agentEventBus } from "@/lib/agent-event-bus";
-import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +15,7 @@ export const dynamic = "force-dynamic";
  * Window during which terminal-status TaskRuns are still replayed.
  * Short-lived async jobs (e.g. brand extract completes in ~7s) finish
  * before the browser's EventSource connects. If we only replay
- * in-flight task states, the subscriber misses the terminal event entirely
+ * status="active", the subscriber misses the terminal event entirely
  * and the panel sits on "Working on it..." until the user refreshes
  * and the server-rendered state takes over.
  *
@@ -36,7 +35,7 @@ async function loadReplayEvents(
         threadId,
         progressPayload: { not: null as never },
         OR: [
-          { status: { in: [...TASK_IN_FLIGHT_STATES] } },
+          { status: "active" },
           {
             status: { in: ["completed", "failed"] },
             updatedAt: { gte: terminalFloor },
