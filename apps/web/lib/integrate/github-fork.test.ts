@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createForkAndWait, forkExistsAndIsFork } from "./github-fork";
+import { createForkAndWait, forkExistsAndIsFork, syncForkFromUpstream } from "./github-fork";
 
 const UPSTREAM = { owner: "OpenDigitalProductFactory", repo: "opendigitalproductfactory" };
 
@@ -215,5 +215,62 @@ describe("createForkAndWait", () => {
         maxAttempts: 2,
       }),
     ).rejects.toThrow(/403/);
+  });
+});
+
+describe("syncForkFromUpstream", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  it("resolves on 200 success", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(okJson({ message: "Successfully fetched and fast-forwarded" }));
+
+    await expect(
+      syncForkFromUpstream({
+        forkOwner: "jane-dev",
+        forkRepo: UPSTREAM.repo,
+        branch: "main",
+        token: "ghp_test",
+      }),
+    ).resolves.toBeUndefined();
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.github.com/repos/jane-dev/opendigitalproductfactory/merge-upstream");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init!.body as string)).toEqual({ branch: "main" });
+  });
+
+  it("throws an actionable conflict error on 409", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      errResponse(409, "merge conflict"),
+    );
+
+    await expect(
+      syncForkFromUpstream({
+        forkOwner: "jane-dev",
+        forkRepo: UPSTREAM.repo,
+        branch: "main",
+        token: "ghp_test",
+      }),
+    ).rejects.toThrow(/merge-upstream conflict/i);
+  });
+
+  it("throws with status and body on other non-ok responses", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      errResponse(422, "unprocessable"),
+    );
+
+    await expect(
+      syncForkFromUpstream({
+        forkOwner: "jane-dev",
+        forkRepo: UPSTREAM.repo,
+        branch: "main",
+        token: "ghp_test",
+      }),
+    ).rejects.toThrow(/422/);
   });
 });
