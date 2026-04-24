@@ -16,7 +16,8 @@
     "db:studio": "pnpm --filter @dpf/db studio",
     "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts",
     "test:endpoints": "tsx scripts/test-endpoints.ts",
-    "docs:tak": "node docs/architecture/generate-tak-docx.mjs"
+    "docs:tak": "node docs/architecture/generate-tak-docx.mjs",
+    "postinstall": "node scripts/set-hooks-path.mjs"
   },
   "engines": {
     "node": ">=20",
