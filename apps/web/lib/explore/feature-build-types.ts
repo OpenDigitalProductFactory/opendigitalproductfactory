@@ -213,6 +213,7 @@ export type FeatureBuildRow = {
   title: string;
   description: string | null;
   portfolioId: string | null;
+  originatingBacklogItemId: string | null;
   brief: FeatureBrief | null;
   plan: Record<string, unknown> | null;
   phase: BuildPhase;
@@ -227,6 +228,7 @@ export type FeatureBuildRow = {
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
+  draftApprovedAt: Date | null;
   designDoc: BuildDesignDoc | null;
   designReview: ReviewResult | null;
   buildPlan: BuildPlanDoc | null;
@@ -243,6 +245,18 @@ export type FeatureBuildRow = {
   claimStatus: string | null;
   buildExecState: BuildExecutionState | null;
   deliberationSummary: BuildDeliberationSummary | null;
+  originator: {
+    id: string;
+    itemId: string;
+    title: string;
+    status: string;
+    triageOutcome: string | null;
+    effortSize: string | null;
+    proposedOutcome: string | null;
+    activeBuildId: string | null;
+    resolution: string | null;
+    abandonReason: string | null;
+  } | null;
   phaseHandoffs: Array<{
     fromPhase: string;
     toPhase: string;

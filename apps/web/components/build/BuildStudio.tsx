@@ -18,6 +18,7 @@ import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
+import { deriveLifecycleLabel } from "@/lib/governed-backlog-workflow";
 import {
   BUILD_STUDIO_TEST_IDS,
   getBuildStudioGraphPanelClassName,
@@ -28,6 +29,7 @@ import {
 type Props = {
   builds: FeatureBuildRow[];
   portfolios: PortfolioForSelect[];
+  governedBacklogEnabled: boolean;
   dpfEnvironment?: string;
   projectBranch?: string | null;
   submissionBranchShortId?: string | null;
@@ -36,6 +38,7 @@ type Props = {
 export function BuildStudio({
   builds,
   portfolios,
+  governedBacklogEnabled,
   dpfEnvironment,
   projectBranch,
   submissionBranchShortId,
@@ -54,6 +57,19 @@ export function BuildStudio({
     buildTitle: activeBuild?.title ?? null,
     workspaceBranch: projectBranch,
   });
+  const activeLifecycleLabel = activeBuild
+    ? deriveLifecycleLabel({
+      backlogItem: activeBuild.originator
+        ? {
+          status: activeBuild.originator.status,
+          triageOutcome: activeBuild.originator.triageOutcome,
+          activeBuildId: activeBuild.originator.activeBuildId,
+        }
+        : null,
+      featureBuild: activeBuild,
+      governedBacklogEnabled,
+    })
+    : null;
 
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
@@ -205,6 +221,8 @@ export function BuildStudio({
         createdById: "",
         createdAt: new Date(),
         updatedAt: new Date(),
+        originatingBacklogItemId: null,
+        draftApprovedAt: null,
         designDoc: null,
         designReview: null,
         buildPlan: null,
@@ -241,6 +259,7 @@ export function BuildStudio({
         uxVerificationStatus: null,
         buildExecState: null,
         deliberationSummary: null,
+        originator: null,
         phaseHandoffs: null,
       });
       setNewTitle("");
@@ -316,7 +335,20 @@ export function BuildStudio({
                 </p>
               </div>
             ) : (
-              builds.map((build, idx) => (
+              builds.map((build, idx) => {
+                const lifecycleLabel = deriveLifecycleLabel({
+                  backlogItem: build.originator
+                    ? {
+                      status: build.originator.status,
+                      triageOutcome: build.originator.triageOutcome,
+                      activeBuildId: build.originator.activeBuildId,
+                    }
+                    : null,
+                  featureBuild: build,
+                  governedBacklogEnabled,
+                });
+
+                return (
                 <button
                   key={build.buildId}
                   onClick={() => { setActiveBuild(build); setSidebarOpen(true); }}
@@ -352,13 +384,25 @@ export function BuildStudio({
                     </button>
                   </div>
                   <div className="text-xs text-[var(--dpf-muted)]">
-                    {build.buildId} &middot; {build.phase}
+                    {build.buildId}
+                    {build.originator && (
+                      <span> &middot; {build.originator.itemId}</span>
+                    )}
+                    <span> &middot; {build.phase}</span>
                     {build.product && (
                       <span> &middot; v{build.product.version} &middot; {build.product.backlogCount} item{build.product.backlogCount !== 1 ? "s" : ""}</span>
                     )}
                   </div>
+                  {lifecycleLabel && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--dpf-text)]">
+                        {lifecycleLabel}
+                      </span>
+                    </div>
+                  )}
                 </button>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -375,6 +419,22 @@ export function BuildStudio({
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
                     <span>{activeBuild.buildId}</span>
+                    {activeBuild.originator && (
+                      <>
+                        <span>&middot;</span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
+                          {activeBuild.originator.itemId}
+                        </span>
+                      </>
+                    )}
+                    {activeLifecycleLabel && (
+                      <>
+                        <span>&middot;</span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
+                          Workflow: {activeLifecycleLabel}
+                        </span>
+                      </>
+                    )}
                     {branchBadge && (
                       <>
                         <span>&middot;</span>
@@ -394,8 +454,31 @@ export function BuildStudio({
               )}
 
               <div className="flex min-h-0 flex-1 flex-col">
+                {activeBuild.originator && (
+                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
+                      <span className="font-semibold text-[var(--dpf-text)]">Canonical backlog item</span>
+                      <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
+                        {activeBuild.originator.itemId}
+                      </span>
+                      <span>{activeBuild.originator.title}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
+                      <span>Status: {activeBuild.originator.status}</span>
+                      {activeBuild.originator.triageOutcome && (
+                        <span>Triage: {activeBuild.originator.triageOutcome}</span>
+                      )}
+                      {activeBuild.originator.effortSize && (
+                        <span>Size: {activeBuild.originator.effortSize}</span>
+                      )}
+                      {activeBuild.originator.resolution && (
+                        <span>Decision: {activeBuild.originator.resolution}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Tab selector */}
-                <div role="tablist" aria-label="Build view tabs" className="flex gap-1 px-4 pt-3 pb-0">
+                <div role="tablist" aria-label="Workflow view tabs" className="flex gap-1 px-4 pt-3 pb-0">
                   <button
                     role="tab"
                     aria-selected={buildView === "graph"}
@@ -408,7 +491,7 @@ export function BuildStudio({
                       borderBottom: buildView === "graph" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
                     }}
                   >
-                    Graph
+                    Workflow
                   </button>
                   {/* Details tab — always available so design doc / brief is visible during ideate/plan */}
                   <button
@@ -447,7 +530,10 @@ export function BuildStudio({
                     className={getBuildStudioGraphPanelClassName()}
                     data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                   >
-                    <ProcessGraph build={activeBuild} />
+                    <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
+                      Select any stage or task to inspect what happened, related artifacts, and the next approval gate.
+                    </div>
+                    <ProcessGraph build={activeBuild} workflowLabel={activeLifecycleLabel} />
                   </div>
                 )}
                 {buildView !== "graph" && (

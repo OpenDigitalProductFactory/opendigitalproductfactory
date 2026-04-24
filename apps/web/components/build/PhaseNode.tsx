@@ -47,6 +47,7 @@ export const PhaseNode = memo(function PhaseNode({ data }: NodeProps) {
         opacity: isPending ? 0.45 : 1,
         position: "relative",
         userSelect: "none",
+        cursor: "pointer",
         transition: "opacity 200ms, border-color 200ms",
         // Set custom property for the pulse animation
         ...(isRunning ? { "--pg-color-25": `color-mix(in srgb, ${color} 25%, transparent)` } as React.CSSProperties : {}),
