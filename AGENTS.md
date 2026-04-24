@@ -67,8 +67,9 @@ Epics must be actively managed — not just created and forgotten.
 
 ### Why
 
-- The repo is public on GitHub. Branch protection on `main` enforces this at the platform level once configured.
+- The repo is public on GitHub. Branch protection on `main` enforces the PR flow at the platform level: required checks are `Typecheck`, `Production Build`, and `DCO`; linear history; no force-push; admins included.
 - CI has to run on every change before it lands — direct pushes bypass the gate.
+- Every commit in every PR must carry a `Signed-off-by:` trailer — use `git commit -s`. The DCO bot is a required check and blocks merge until every commit has it.
 - External contributors already use fork → branch → PR (see [CONTRIBUTING.md](CONTRIBUTING.md)). The maintainer using the same flow means one workflow, not two.
 - A PR diff is reviewable even for single-maintainer work; `git revert` is still straightforward but the review pass catches issues earlier.
 
