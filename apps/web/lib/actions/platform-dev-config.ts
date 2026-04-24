@@ -199,6 +199,91 @@ export async function getStoredGitHubToken(): Promise<string | null> {
 }
 
 /**
+ * Model-aware token validation for the contribution flow.
+ *
+ * maintainer-direct: checks that the token has push access to
+ *   upstreamOwner/upstreamRepo via GET /repos/{owner}/{repo}'s
+ *   permissions.push flag.
+ *
+ * fork-pr: checks the token's account (GET /user) matches expectedOwner
+ *   unless machineUser=true, which opts out of the identity check (for
+ *   installs using a dedicated machine-user GitHub account to host the fork).
+ *
+ * Both paths first run the plain /user check to verify the token is live.
+ * Scope mismatches (wrong PAT scope) surface later at the actual fork/PR
+ * operation with a GitHub 403 rather than being pre-checked here, since
+ * fine-grained PATs do not expose scope info on /user.
+ */
+export async function validateGitHubTokenForModel(input: {
+  token: string;
+  model: "maintainer-direct" | "fork-pr";
+  /** maintainer-direct only — the repo the token must push to. */
+  upstreamOwner?: string;
+  upstreamRepo?: string;
+  /** fork-pr only — the fork owner the token's account must match, unless machineUser. */
+  expectedOwner?: string;
+  /** fork-pr only — skip the identity check when true. */
+  machineUser?: boolean;
+}): Promise<{ valid: boolean; username?: string; error?: string }> {
+  const basic = await validateGitHubToken(input.token);
+  if (!basic.valid) return basic;
+
+  if (input.model === "maintainer-direct") {
+    if (!input.upstreamOwner || !input.upstreamRepo) {
+      return { valid: false, error: "maintainer-direct validation requires upstreamOwner and upstreamRepo." };
+    }
+    try {
+      const repoRes = await fetch(
+        `https://api.github.com/repos/${input.upstreamOwner}/${input.upstreamRepo}`,
+        {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${input.token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        },
+      );
+      if (!repoRes.ok) {
+        return {
+          valid: false,
+          error: `Token cannot read ${input.upstreamOwner}/${input.upstreamRepo} (${repoRes.status}). maintainer-direct requires contents:write on the upstream repo.`,
+        };
+      }
+      const repoData = (await repoRes.json()) as { permissions?: { push?: boolean } };
+      if (!repoData.permissions?.push) {
+        return {
+          valid: false,
+          error: `Token does not have push access to ${input.upstreamOwner}/${input.upstreamRepo}. maintainer-direct requires contents:write on the upstream repo.`,
+        };
+      }
+      return { valid: true, username: basic.username };
+    } catch {
+      return { valid: false, error: "Could not verify upstream access. Check your internet connection." };
+    }
+  }
+
+  if (input.model === "fork-pr") {
+    if (input.machineUser === true) {
+      return { valid: true, username: basic.username };
+    }
+    if (!input.expectedOwner) {
+      return { valid: false, error: "fork-pr validation requires expectedOwner unless machineUser=true." };
+    }
+    const tokenOwner = basic.username?.toLowerCase();
+    const expected = input.expectedOwner.toLowerCase();
+    if (tokenOwner !== expected) {
+      return {
+        valid: false,
+        error: `Token owner (${basic.username}) does not match fork owner (${input.expectedOwner}). Use a PAT owned by the fork owner, or check the "machine-user account" opt-out if this is intentional.`,
+      };
+    }
+    return { valid: true, username: basic.username };
+  }
+
+  return { valid: false, error: `Unsupported contribution model: ${String((input as { model: string }).model)}.` };
+}
+
+/**
  * Validate a GitHub token by making a test API call.
  * Returns the authenticated username on success, or an error message.
  */
@@ -298,6 +383,8 @@ export type ConfigureForkSetupResult =
 export async function configureForkSetup(input: {
   contributorForkOwner: string;
   token: string;
+  /** Phase 5: opt out of the "token owner must match fork owner" check for machine-user accounts. */
+  machineUserOptIn?: boolean;
 }): Promise<ConfigureForkSetupResult> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -307,9 +394,16 @@ export async function configureForkSetup(input: {
     return { success: false, error: "GitHub username is required." };
   }
 
-  // Validate token (reuses the /user call — confirms the token is live and
-  // has API access; scope validation is layered in Phase 5).
-  const validation = await validateGitHubToken(input.token);
+  // Validate token with the fork-pr model check (owner-match unless
+  // machineUser). validateGitHubTokenForModel short-circuits to the basic
+  // /user check first, so "token dead" errors still surface with the right
+  // message.
+  const validation = await validateGitHubTokenForModel({
+    token: input.token,
+    model: "fork-pr",
+    expectedOwner: input.contributorForkOwner.trim(),
+    machineUser: input.machineUserOptIn === true,
+  });
   if (!validation.valid) {
     return { success: false, error: validation.error ?? "Token validation failed." };
   }
@@ -392,12 +486,14 @@ export async function configureForkSetup(input: {
       contributorForkOwner: forkOwner,
       contributorForkRepo: forkRepo,
       forkVerifiedAt: status === "ready" ? new Date() : null,
+      machineUserOptIn: input.machineUserOptIn === true,
     },
     create: {
       id: "singleton",
       contributorForkOwner: forkOwner,
       contributorForkRepo: forkRepo,
       forkVerifiedAt: status === "ready" ? new Date() : null,
+      machineUserOptIn: input.machineUserOptIn === true,
     },
   });
 
