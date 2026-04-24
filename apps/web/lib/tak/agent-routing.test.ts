@@ -47,6 +47,14 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("routes finance pages to the finance agent", () => {
+    const result = resolveAgentForRoute("/finance/settings/tax", superuser);
+    expect(result.agentId).toBe("finance-agent");
+    expect(result.agentName).toBe("Finance Specialist");
+    expect(result.canAssist).toBe(true);
+    expect(result.systemPrompt).toContain("tax remittance");
+  });
+
   it("returns canAssist=false when platformRole is null on gated route", () => {
     const result = resolveAgentForRoute("/portfolio", noRole);
     expect(result.agentId).toBe("portfolio-advisor");
@@ -82,7 +90,7 @@ describe("resolveAgentForRoute", () => {
   });
 
   it("every route agent has a non-empty systemPrompt", () => {
-    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
+    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/finance", "/platform", "/admin", "/workspace"];
     for (const route of routes) {
       const result = resolveAgentForRoute(route, superuser);
       expect(result.systemPrompt.length).toBeGreaterThan(0);
@@ -90,7 +98,7 @@ describe("resolveAgentForRoute", () => {
   });
 
   it("returns skills array for each agent", () => {
-    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/platform", "/admin", "/workspace"];
+    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/finance", "/platform", "/admin", "/workspace"];
     for (const route of routes) {
       const result = resolveAgentForRoute(route, superuser);
       expect(result.skills.length).toBeGreaterThan(0);
@@ -140,5 +148,12 @@ describe("generateCannedResponse", () => {
 
     expect(response).toContain("Digital Product Estate Specialist");
     expect(response).toContain("dependencies");
+  });
+
+  it("uses finance-oriented canned copy for the finance agent", () => {
+    const response = generateCannedResponse("finance-agent", "/finance/settings/tax", "HR-000");
+
+    expect(response).toContain("Finance Specialist");
+    expect(response).toContain("tax");
   });
 });

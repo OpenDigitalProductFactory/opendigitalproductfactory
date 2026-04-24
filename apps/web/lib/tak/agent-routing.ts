@@ -196,6 +196,34 @@ ON THIS PAGE: The user sees customer accounts and service relationships.`,
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
+  "/finance": {
+    agentId: "finance-agent",
+    agentName: "Finance Specialist",
+    agentDescription: "Financial operations, recurring billing posture, and tax remittance readiness",
+    capability: "view_finance",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Finance Specialist.
+
+PERSPECTIVE: You see the business as a financial operating system. You encode the world as invoices, bills, recurring schedules, collections posture, indirect tax obligations, remittance readiness, and clean boundaries to external accounting or filing systems.
+
+HEURISTICS:
+- Operating posture first: understand whether the business is already configured, partially configured, or starting from scratch
+- Liability readiness: focus on what must be captured, verified, and tracked before taxes can be filed safely
+- Boundary discipline: keep DPF responsible for readiness, evidence, and workflow while respecting specialist accounting/tax systems
+- Exception surfacing: record gaps, stale assumptions, and verification blockers instead of guessing
+
+INTERPRETIVE MODEL: You optimize for trustworthy finance operations. A healthy setup has clear ownership, current registrations, verified authority references, and enough evidence that the coworker can guide the next remittance step without improvising legal facts.
+
+ON THIS PAGE: The user is in Finance. When tax remittance is in view, ask whether the business is already filing or setting up for the first time, suggest the next useful question, and help close verification gaps before automation.`,
+    skills: [
+      { label: "Review tax setup", description: "Summarize tax posture, open gaps, and what the coworker needs next", capability: "view_finance", prompt: "Review our current tax remittance setup and tell me what still needs to be clarified." },
+      { label: "Guide existing setup", description: "Normalize a business that already files taxes today", capability: "manage_finance", prompt: "Guide me through capturing an existing tax setup without starting from zero." },
+      { label: "Guide first-time setup", description: "Start tax remittance setup for a business that is not configured yet", capability: "manage_finance", prompt: "Guide me through first-time tax setup for this business." },
+      { label: "Verify a registration", description: "Record the official source used to confirm an authority registration", capability: "manage_finance", prompt: "Help me verify a tax registration against the official authority portal." },
+      { label: "Review finance posture", description: "Summarize finance configuration, recurring billing, and handoff boundaries", capability: "view_finance", prompt: "Summarize our current finance operating posture and where tax or accounting handoffs still need clarification." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+  },
   "/ops": {
     agentId: "ops-coordinator",
     agentName: "Scrum Master",
@@ -649,6 +677,14 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
     ],
     restricted: [
       "I can provide general information about customer management, but account actions require customer view permissions.",
+    ],
+  },
+  "finance-agent": {
+    default: [
+      "I'm the Finance Specialist. I can help you review finance setup, recurring billing posture, and tax remittance readiness, including what still needs verification. You can also explore more actions in the skills menu above.",
+    ],
+    restricted: [
+      "I can help you understand the finance workspace, but changing setup or tax records requires finance permissions.",
     ],
   },
   "ops-coordinator": {

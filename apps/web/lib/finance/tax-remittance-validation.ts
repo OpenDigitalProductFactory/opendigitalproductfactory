@@ -15,6 +15,7 @@ export const TAX_FILING_FREQUENCIES = [
 ] as const;
 export const TAX_FILING_BASES = ["accrual", "cash", "mixed"] as const;
 export const TAX_REMITTER_ROLES = ["business", "accountant", "partner"] as const;
+export const TAX_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 
 export const updateOrganizationTaxProfileSchema = z.object({
   setupMode: z.enum(TAX_SETUP_MODES),
@@ -39,5 +40,13 @@ export const createTaxRegistrationSchema = z.object({
   portalAccountNotes: z.string().trim().max(500).optional().nullable(),
 });
 
+export const verifyTaxRegistrationSchema = z.object({
+  registrationId: z.string().min(1),
+  verifiedFromSourceUrl: z.url().trim().max(500),
+  portalAccountNotes: z.string().trim().max(500).optional().nullable(),
+  confidence: z.enum(TAX_CONFIDENCE_LEVELS).default("high"),
+});
+
 export type UpdateOrganizationTaxProfileInput = z.infer<typeof updateOrganizationTaxProfileSchema>;
 export type CreateTaxRegistrationInput = z.infer<typeof createTaxRegistrationSchema>;
+export type VerifyTaxRegistrationInput = z.infer<typeof verifyTaxRegistrationSchema>;
