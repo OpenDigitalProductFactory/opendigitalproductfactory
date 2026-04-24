@@ -2,7 +2,7 @@
 
 **The platform that builds itself.**
 
-An open-source, AI-native digital product management platform that gives any organization — from a single person startup to a regulated enterprise — the same capabilities that the largest companies would have. This is an AI first platofrm, built by AI, with an eimbedded AI workforce. The AI agents don't just answer questions: they help manage your business. They model your architecture, execute your backlog, interacti with customer, do your marketing, help with invoices, end even improve the platform itself.  All actions require human approval at every step, and are recorded to make sure you can see what happened, and produce evidence for regulatory audits. 
+An open-source, AI-native digital product management platform that gives any organization, from a single person startup to a regulated enterprise, the same capabilities that the largest companies would have. This is an AI first platofrm, built by AI, with an eimbedded AI workforce. The AI agents don't just answer questions: they help manage your business. They model your architecture, execute your backlog, interacti with customer, do your marketing, help with invoices, end even improve the platform itself.  All actions require human approval at every step, and are recorded to make sure you can see what happened, and produce evidence for regulatory audits. 
 
 No vendor lock-in. No consultants. No million-dollar license. One installer to run on you own hardware. Your AI workforce starts working immediately.
 
