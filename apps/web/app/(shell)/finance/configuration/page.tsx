@@ -5,11 +5,13 @@ import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 export default async function FinanceConfigurationPage() {
-  const [setupStatus, orgSettings, bankAccountCount, bankRuleCount] = await Promise.all([
+  const [setupStatus, orgSettings, bankAccountCount, bankRuleCount, taxProfile, taxRegistrationCount] = await Promise.all([
     getFinancialSetupStatus(),
     getOrgSettings(),
     prisma.bankAccount.count(),
     prisma.bankRule.count(),
+    prisma.organizationTaxProfile.findFirst(),
+    prisma.taxRegistration.count(),
   ]);
 
   return (
@@ -62,6 +64,16 @@ export default async function FinanceConfigurationPage() {
           metrics={[
             { label: "Active", value: setupStatus.dunningActive ? "Yes" : "No" },
             { label: "Setup", value: setupStatus.isConfigured ? "Applied" : "Needed" },
+          ]}
+        />
+        <FinanceSummaryCard
+          title="Tax remittance"
+          description="Set tax posture, authority registrations, and the remittance-readiness workspace."
+          href="/finance/settings/tax"
+          accentColor="var(--dpf-warning)"
+          metrics={[
+            { label: "Setup", value: taxProfile?.setupStatus ?? "Draft" },
+            { label: "Registrations", value: `${taxRegistrationCount}` },
           ]}
         />
       </div>

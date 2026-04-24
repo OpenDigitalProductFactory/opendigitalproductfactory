@@ -114,12 +114,10 @@ DPF_HOST_INSTALL_PATH=$InstallRoot
 
 Write-Host "========================================================" 
 
-Write-Step "Creating app-level .env files (Next.js + Prisma)"
+Write-Step "Creating app-level .env files"
 
 $envExamplePath = Join-Path $InstallRoot ".env.example"
 $webEnvPath     = Join-Path $InstallRoot "apps\web\.env.local"
-$dbEnvPath      = Join-Path $InstallRoot "packages\db\.env"
-
 if (Test-Path $envExamplePath) {
     if (-not (Test-Path $webEnvPath)) {
         Copy-Item $envExamplePath $webEnvPath
@@ -137,13 +135,6 @@ if (Test-Path $envExamplePath) {
         Write-Ok "Created apps/web/.env.local with generated secrets"
     } else {
         Write-Ok "apps/web/.env.local already exists  skipping"
-    }
-
-    if (-not (Test-Path $dbEnvPath)) {
-        Copy-Item $envExamplePath $dbEnvPath
-        Write-Ok "Created packages/db/.env from .env.example"
-    } else {
-        Write-Ok "packages/db/.env already exists  skipping"
     }
 } else {
     Write-Warn ".env.example not found  skipping app-level .env creation"

@@ -3,6 +3,7 @@
 // Run after Prisma migrations or when Neo4j EA data is suspected stale.
 // Usage: pnpm --filter @dpf/db neo4j:rebuild-ea
 
+import "./load-env.js";
 import { prisma } from "./client.js";
 import { closeNeo4j, runCypher } from "./neo4j.js";
 import { syncEaElement, syncEaRelationship } from "./neo4j-sync.js";
