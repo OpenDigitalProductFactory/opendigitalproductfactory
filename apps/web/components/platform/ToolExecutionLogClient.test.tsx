@@ -1,10 +1,32 @@
+// @vitest-environment jsdom
+
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
 import { ToolExecutionLogClient } from "./ToolExecutionLogClient";
 
+async function renderClient(element: React.ReactElement) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(element);
+  });
+
+  const html = container.innerHTML;
+
+  await act(async () => {
+    root.unmount();
+  });
+
+  container.remove();
+  return html;
+}
+
 describe("ToolExecutionLogClient", () => {
-  it("shows the GAID identity reference when present", () => {
-    const html = renderToStaticMarkup(
+  it("shows the GAID identity reference when present", async () => {
+    const html = await renderClient(
       <ToolExecutionLogClient
         executions={[
           {
