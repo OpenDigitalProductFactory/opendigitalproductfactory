@@ -16,6 +16,20 @@ export const TAX_FILING_FREQUENCIES = [
 export const TAX_FILING_BASES = ["accrual", "cash", "mixed"] as const;
 export const TAX_REMITTER_ROLES = ["business", "accountant", "partner"] as const;
 export const TAX_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
+export const TAX_FILING_ARTIFACT_TYPES = [
+  "workpaper",
+  "export",
+  "confirmation",
+  "supporting_note",
+] as const;
+
+const blankToNull = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => {
+    if (typeof value === "string" && value.trim().length === 0) {
+      return null;
+    }
+    return value;
+  }, schema.nullable().optional());
 
 export const updateOrganizationTaxProfileSchema = z.object({
   setupMode: z.enum(TAX_SETUP_MODES),
@@ -47,6 +61,21 @@ export const verifyTaxRegistrationSchema = z.object({
   confidence: z.enum(TAX_CONFIDENCE_LEVELS).default("high"),
 });
 
+export const prepareTaxFilingPacketSchema = z.object({
+  periodId: z.string().min(1),
+});
+
+export const addTaxFilingArtifactSchema = z.object({
+  periodId: z.string().min(1),
+  artifactType: z.enum(TAX_FILING_ARTIFACT_TYPES),
+  storageKey: blankToNull(z.string().trim().max(255)),
+  externalRef: blankToNull(z.string().trim().max(255)),
+  sourceUrl: blankToNull(z.url().trim().max(500)),
+  notes: blankToNull(z.string().trim().max(2000)),
+});
+
 export type UpdateOrganizationTaxProfileInput = z.infer<typeof updateOrganizationTaxProfileSchema>;
 export type CreateTaxRegistrationInput = z.infer<typeof createTaxRegistrationSchema>;
 export type VerifyTaxRegistrationInput = z.infer<typeof verifyTaxRegistrationSchema>;
+export type PrepareTaxFilingPacketInput = z.infer<typeof prepareTaxFilingPacketSchema>;
+export type AddTaxFilingArtifactInput = z.infer<typeof addTaxFilingArtifactSchema>;

@@ -25,11 +25,24 @@ vi.mock("@dpf/db", () => ({
     },
     taxObligationPeriod: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    taxFilingArtifact: {
+      findMany: vi.fn(),
+      create: vi.fn(),
     },
     taxIssue: {
       findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+    },
+    invoice: {
+      aggregate: vi.fn(),
+    },
+    bill: {
+      aggregate: vi.fn(),
     },
   },
 }));
@@ -38,8 +51,11 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import {
+  addTaxFilingArtifact,
   createTaxRegistration,
+  generateTaxObligationPeriods,
   getTaxRemittanceWorkspace,
+  prepareTaxFilingPacket,
   updateOrganizationTaxProfile,
   verifyTaxRegistration,
 } from "./tax-remittance";
@@ -74,6 +90,7 @@ beforeEach(() => {
   mockPrisma.taxIssue.update.mockImplementation(({ where, data }: any) =>
     Promise.resolve({ id: where.id, ...data }),
   );
+  mockPrisma.taxFilingArtifact.findMany.mockResolvedValue([]);
 });
 
 describe("getTaxRemittanceWorkspace", () => {
@@ -362,6 +379,188 @@ describe("verifyTaxRegistration", () => {
       where: { id: "issue-1" },
       data: expect.objectContaining({
         status: "resolved",
+      }),
+    });
+  });
+});
+
+describe("generateTaxObligationPeriods", () => {
+  it("creates tracked periods for verified active registrations using invoice and bill tax totals", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({
+      id: "profile-1",
+      organizationId: bootstrapOrg.id,
+      setupMode: "existing",
+      setupStatus: "active",
+      homeCountryCode: "US",
+      primaryRegionCode: "AL",
+      taxModel: "hybrid",
+      externalSystem: null,
+      footprintSummary: "Alabama services",
+      notes: null,
+      lastVerifiedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockPrisma.taxRegistration.findMany.mockResolvedValue([
+      {
+        id: "reg-1",
+        registrationId: "TAX-REG-AL-1",
+        organizationTaxProfileId: "profile-1",
+        jurisdictionReferenceId: "jur-1",
+        taxType: "sales_tax",
+        registrationNumber: "AL-001",
+        registrationStatus: "active",
+        filingFrequency: "quarterly",
+        filingBasis: "accrual",
+        remitterRole: "business",
+        effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+        effectiveTo: null,
+        firstPeriodStart: new Date("2026-01-01T00:00:00.000Z"),
+        portalAccountNotes: null,
+        verifiedFromSourceUrl: "https://www.revenue.alabama.gov/sales-use/one-spot/",
+        lastVerifiedAt: new Date("2026-01-15T00:00:00.000Z"),
+        confidence: "high",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        jurisdictionReference: {
+          id: "jur-1",
+          jurisdictionRefId: "TAX-JUR-US-AL",
+          authorityName: "Alabama",
+          countryCode: "US",
+          stateProvinceCode: "AL",
+          authorityType: "state",
+          taxTypes: ["sales_tax"],
+        },
+      },
+    ]);
+    mockPrisma.taxObligationPeriod.findMany.mockResolvedValue([]);
+    mockPrisma.invoice.aggregate.mockResolvedValue({ _sum: { taxAmount: 125.5 } });
+    mockPrisma.bill.aggregate.mockResolvedValue({ _sum: { taxAmount: 20.25 } });
+    mockPrisma.taxObligationPeriod.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: `period-${data.periodId}`, ...data }),
+    );
+
+    await generateTaxObligationPeriods();
+
+    expect(mockPrisma.taxObligationPeriod.create).toHaveBeenCalled();
+    expect(mockPrisma.invoice.aggregate).toHaveBeenCalled();
+    expect(mockPrisma.bill.aggregate).toHaveBeenCalled();
+    expect(mockPrisma.taxObligationPeriod.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        registrationId: "reg-1",
+        salesTaxAmount: expect.anything(),
+        inputTaxAmount: expect.anything(),
+        netTaxAmount: expect.anything(),
+      }),
+    });
+  });
+});
+
+describe("prepareTaxFilingPacket", () => {
+  it("creates a workpaper artifact and moves the period into a ready export state", async () => {
+    mockPrisma.taxObligationPeriod.findFirst.mockResolvedValue({
+      id: "period-1",
+      periodId: "TAX-PER-1",
+      registrationId: "reg-1",
+      periodStart: new Date("2026-01-01T00:00:00.000Z"),
+      periodEnd: new Date("2026-03-31T00:00:00.000Z"),
+      dueDate: new Date("2026-04-30T00:00:00.000Z"),
+      status: "draft",
+      exportStatus: "not_started",
+      salesTaxAmount: 125.5,
+      inputTaxAmount: 20.25,
+      netTaxAmount: 105.25,
+      manualAdjustmentAmount: 0,
+      registration: {
+        taxType: "sales_tax",
+        registrationNumber: "AL-001",
+        jurisdictionReference: {
+          authorityName: "Alabama",
+        },
+      },
+    });
+    mockPrisma.taxFilingArtifact.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: "artifact-1", ...data }),
+    );
+    mockPrisma.taxObligationPeriod.update.mockImplementation(({ where, data }: any) =>
+      Promise.resolve({ id: where.id, ...data }),
+    );
+
+    await prepareTaxFilingPacket({ periodId: "period-1" });
+
+    expect(mockPrisma.taxFilingArtifact.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        periodId: "period-1",
+        artifactType: "workpaper",
+      }),
+    });
+    expect(mockPrisma.taxObligationPeriod.update).toHaveBeenCalledWith({
+      where: { id: "period-1" },
+      data: expect.objectContaining({
+        status: "ready",
+        exportStatus: "prepared",
+      }),
+    });
+  });
+});
+
+describe("addTaxFilingArtifact", () => {
+  it("adds manual evidence to an obligation period", async () => {
+    mockPrisma.taxObligationPeriod.findFirst.mockResolvedValue({
+      id: "period-1",
+      registrationId: "reg-1",
+      exportStatus: "prepared",
+    });
+    mockPrisma.taxFilingArtifact.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: "artifact-2", ...data }),
+    );
+
+    await addTaxFilingArtifact({
+      periodId: "period-1",
+      artifactType: "supporting_note",
+      notes: "Uploaded accountant reconciliation note.",
+      sourceUrl: "https://example.com/workpaper",
+      externalRef: "ACC-42",
+    });
+
+    expect(mockPrisma.taxFilingArtifact.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        periodId: "period-1",
+        artifactType: "supporting_note",
+        notes: "Uploaded accountant reconciliation note.",
+        sourceUrl: "https://example.com/workpaper",
+        externalRef: "ACC-42",
+      }),
+    });
+  });
+
+  it("accepts blank optional evidence fields from the browser form", async () => {
+    mockPrisma.taxObligationPeriod.findFirst.mockResolvedValue({
+      id: "period-1",
+      registrationId: "reg-1",
+      exportStatus: "prepared",
+    });
+    mockPrisma.taxFilingArtifact.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: "artifact-3", ...data }),
+    );
+
+    await addTaxFilingArtifact({
+      periodId: "period-1",
+      artifactType: "supporting_note",
+      notes: "Only a note was captured.",
+      sourceUrl: "",
+      externalRef: "",
+      storageKey: "",
+    });
+
+    expect(mockPrisma.taxFilingArtifact.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        periodId: "period-1",
+        artifactType: "supporting_note",
+        notes: "Only a note was captured.",
+        sourceUrl: null,
+        externalRef: null,
+        storageKey: null,
       }),
     });
   });

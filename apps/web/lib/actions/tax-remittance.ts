@@ -6,10 +6,14 @@ import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
 import {
+  addTaxFilingArtifactSchema,
   createTaxRegistrationSchema,
+  prepareTaxFilingPacketSchema,
   updateOrganizationTaxProfileSchema,
   verifyTaxRegistrationSchema,
+  type AddTaxFilingArtifactInput,
   type CreateTaxRegistrationInput,
+  type PrepareTaxFilingPacketInput,
   type UpdateOrganizationTaxProfileInput,
   type VerifyTaxRegistrationInput,
 } from "@/lib/finance/tax-remittance-validation";
@@ -64,7 +68,7 @@ const MANAGED_TAX_ISSUE_TYPES = new Set([
   "tax_registration_live_verification_needed",
 ]);
 
-async function requireManageFinance(): Promise<void> {
+async function requireManageFinance() {
   const session = await auth();
   const user = session?.user;
   if (
@@ -73,6 +77,8 @@ async function requireManageFinance(): Promise<void> {
   ) {
     throw new Error("Unauthorized");
   }
+
+  return user;
 }
 
 async function requireOrganization() {
@@ -126,6 +132,10 @@ function issuePublicId() {
   return `TAX-ISS-${nanoid(8).toUpperCase()}`;
 }
 
+function periodPublicId() {
+  return `TAX-PER-${nanoid(8).toUpperCase()}`;
+}
+
 function issueKey(issueType: string, registrationId?: string | null, periodId?: string | null) {
   return [issueType, registrationId ?? "profile", periodId ?? "none"].join(":");
 }
@@ -135,6 +145,79 @@ function revalidateTaxRoutes() {
   revalidatePath("/finance/settings");
   revalidatePath("/finance/settings/tax");
   revalidatePath("/finance/configuration");
+}
+
+function decimalValue(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Number(value) || 0;
+  if (value && typeof value === "object" && "toNumber" in value && typeof value.toNumber === "function") {
+    return value.toNumber();
+  }
+  if (value && typeof value === "object" && "toString" in value && typeof value.toString === "function") {
+    return Number(value.toString()) || 0;
+  }
+  return 0;
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+}
+
+function periodMonthsForFrequency(filingFrequency: string) {
+  switch (filingFrequency) {
+    case "monthly":
+      return 1;
+    case "bi_monthly":
+      return 2;
+    case "quarterly":
+      return 3;
+    case "half_yearly":
+      return 6;
+    case "annual":
+      return 12;
+    default:
+      return null;
+  }
+}
+
+function buildFilingPacketNotes(period: {
+  periodStart: Date;
+  periodEnd: Date;
+  salesTaxAmount: unknown;
+  inputTaxAmount: unknown;
+  netTaxAmount: unknown;
+  registration: {
+    taxType: string;
+    registrationNumber: string | null;
+    jurisdictionReference: {
+      authorityName: string;
+    };
+  };
+}) {
+  const salesTaxAmount = roundCurrency(decimalValue(period.salesTaxAmount));
+  const inputTaxAmount = roundCurrency(decimalValue(period.inputTaxAmount));
+  const netTaxAmount = roundCurrency(decimalValue(period.netTaxAmount));
+
+  return [
+    `${period.registration.jurisdictionReference.authorityName} ${period.registration.taxType} filing packet`,
+    `Period: ${period.periodStart.toISOString().slice(0, 10)} to ${period.periodEnd.toISOString().slice(0, 10)}`,
+    `Registration: ${period.registration.registrationNumber ?? "pending"}`,
+    `Sales tax captured: ${salesTaxAmount.toFixed(2)}`,
+    `Input tax captured: ${inputTaxAmount.toFixed(2)}`,
+    `Net tax due: ${netTaxAmount.toFixed(2)}`,
+  ].join("\n");
 }
 
 function buildManagedTaxIssues(
@@ -405,6 +488,9 @@ async function loadTaxWorkspaceState(profile: TaxProfileRecord) {
             },
           },
         },
+        artifacts: {
+          orderBy: { createdAt: "desc" },
+        },
       },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 12,
@@ -603,4 +689,208 @@ export async function verifyTaxRegistration(input: VerifyTaxRegistrationInput) {
 
   revalidateTaxRoutes();
   return updated;
+}
+
+export async function generateTaxObligationPeriods() {
+  await requireManageFinance();
+  const organization = await requireOrganization();
+  const profile = await getOrCreateTaxProfile(organization.id);
+  const registrations = await prisma.taxRegistration.findMany({
+    where: {
+      organizationTaxProfileId: profile.id,
+      registrationStatus: "active",
+      lastVerifiedAt: {
+        not: null,
+      },
+    },
+    include: {
+      jurisdictionReference: {
+        select: {
+          id: true,
+          jurisdictionRefId: true,
+          authorityName: true,
+          countryCode: true,
+          stateProvinceCode: true,
+          authorityType: true,
+          taxTypes: true,
+        },
+      },
+    },
+    orderBy: { effectiveFrom: "asc" },
+  });
+
+  const generatedPeriods: Array<{ id: string; periodId: string }> = [];
+  const canSummarizeOrgTax = registrations.length === 1;
+  const generationBoundary = new Date();
+
+  for (const registration of registrations) {
+    const monthsPerPeriod = periodMonthsForFrequency(registration.filingFrequency);
+    if (!monthsPerPeriod) continue;
+
+    let periodStart = registration.firstPeriodStart ?? registration.effectiveFrom;
+    let iterationCount = 0;
+
+    while (periodStart <= generationBoundary && iterationCount < 6) {
+      const nextStart = addMonths(periodStart, monthsPerPeriod);
+      const periodEnd = addDays(nextStart, -1);
+      const dueDate = addDays(periodEnd, 30);
+
+      const existing = await prisma.taxObligationPeriod.findFirst({
+        where: {
+          registrationId: registration.id,
+          periodStart,
+          periodEnd,
+        },
+      });
+
+      let salesTaxAmount = 0;
+      let inputTaxAmount = 0;
+
+      if (canSummarizeOrgTax) {
+        const [invoiceTotals, billTotals] = await Promise.all([
+          prisma.invoice.aggregate({
+            _sum: { taxAmount: true },
+            where: {
+              status: {
+                notIn: ["draft", "void"],
+              },
+              issueDate: {
+                gte: periodStart,
+                lte: periodEnd,
+              },
+            },
+          }),
+          prisma.bill.aggregate({
+            _sum: { taxAmount: true },
+            where: {
+              status: {
+                notIn: ["draft", "void"],
+              },
+              issueDate: {
+                gte: periodStart,
+                lte: periodEnd,
+              },
+            },
+          }),
+        ]);
+
+        salesTaxAmount = roundCurrency(decimalValue(invoiceTotals._sum.taxAmount));
+        inputTaxAmount = roundCurrency(decimalValue(billTotals._sum.taxAmount));
+      }
+
+      const manualAdjustmentAmount = existing ? roundCurrency(decimalValue(existing.manualAdjustmentAmount)) : 0;
+      const netTaxAmount = roundCurrency(salesTaxAmount - inputTaxAmount + manualAdjustmentAmount);
+
+      if (existing) {
+        await prisma.taxObligationPeriod.update({
+          where: { id: existing.id },
+          data: {
+            dueDate,
+            salesTaxAmount,
+            inputTaxAmount,
+            netTaxAmount,
+          },
+        });
+        generatedPeriods.push({ id: existing.id, periodId: existing.periodId });
+      } else {
+        const created = await prisma.taxObligationPeriod.create({
+          data: {
+            periodId: periodPublicId(),
+            registrationId: registration.id,
+            periodStart,
+            periodEnd,
+            dueDate,
+            status: "draft",
+            salesTaxAmount,
+            inputTaxAmount,
+            netTaxAmount,
+            manualAdjustmentAmount,
+            exportStatus: "not_started",
+          },
+        });
+        generatedPeriods.push({ id: created.id, periodId: created.periodId });
+      }
+
+      periodStart = nextStart;
+      iterationCount += 1;
+      if (registration.effectiveTo && periodStart > registration.effectiveTo) {
+        break;
+      }
+    }
+  }
+
+  revalidateTaxRoutes();
+  return generatedPeriods;
+}
+
+export async function prepareTaxFilingPacket(input: PrepareTaxFilingPacketInput) {
+  const user = await requireManageFinance();
+  const parsed = prepareTaxFilingPacketSchema.parse(input);
+
+  const period = await prisma.taxObligationPeriod.findFirst({
+    where: { id: parsed.periodId },
+    include: {
+      registration: {
+        include: {
+          jurisdictionReference: {
+            select: {
+              authorityName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!period) {
+    throw new Error("Tax obligation period not found.");
+  }
+
+  const artifact = await prisma.taxFilingArtifact.create({
+    data: {
+      periodId: period.id,
+      artifactType: "workpaper",
+      notes: buildFilingPacketNotes(period),
+      createdByUserId: user.id,
+    },
+  });
+
+  await prisma.taxObligationPeriod.update({
+    where: { id: period.id },
+    data: {
+      status: "ready",
+      exportStatus: "prepared",
+    },
+  });
+
+  revalidateTaxRoutes();
+  return artifact;
+}
+
+export async function addTaxFilingArtifact(input: AddTaxFilingArtifactInput) {
+  const user = await requireManageFinance();
+  const parsed = addTaxFilingArtifactSchema.parse(input);
+
+  const period = await prisma.taxObligationPeriod.findFirst({
+    where: { id: parsed.periodId },
+  });
+
+  if (!period) {
+    throw new Error("Tax obligation period not found.");
+  }
+
+  const artifact = await prisma.taxFilingArtifact.create({
+    data: {
+      periodId: period.id,
+      artifactType: parsed.artifactType,
+      storageKey: nullableString(parsed.storageKey),
+      externalRef: nullableString(parsed.externalRef),
+      sourceUrl: nullableString(parsed.sourceUrl),
+      notes: nullableString(parsed.notes),
+      createdByUserId: user.id,
+    },
+  });
+
+  revalidateTaxRoutes();
+  return artifact;
 }
