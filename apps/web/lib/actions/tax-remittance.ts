@@ -138,6 +138,10 @@ function periodPublicId() {
   return `TAX-PER-${nanoid(8).toUpperCase()}`;
 }
 
+function taxMonitorTaskId() {
+  return `tax-monitor-${nanoid(8).toLowerCase()}`;
+}
+
 function issueKey(issueType: string, registrationId?: string | null, periodId?: string | null) {
   return [issueType, registrationId ?? "profile", periodId ?? "none"].join(":");
 }
@@ -174,6 +178,35 @@ function addDays(date: Date, days: number) {
 function addMonths(date: Date, months: number) {
   const next = new Date(date);
   next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+}
+
+function computeNextCronRun(cronExpr: string, from: Date) {
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return addDays(from, 1);
+
+  const [minPart, hourPart, , , dowPart] = parts;
+  const minute = minPart === "*" ? 0 : parseInt(minPart!, 10);
+  const hour = hourPart === "*" ? from.getHours() : parseInt(hourPart!, 10);
+
+  const next = new Date(from);
+  next.setSeconds(0, 0);
+  next.setMinutes(minute);
+  next.setHours(hour);
+
+  if (next <= from) {
+    next.setDate(next.getDate() + 1);
+  }
+
+  if (dowPart && dowPart !== "*") {
+    const targetDays = dowPart.split(",").map((value) => parseInt(value, 10));
+    let safety = 0;
+    while (!targetDays.includes(next.getDay()) && safety < 8) {
+      next.setDate(next.getDate() + 1);
+      safety += 1;
+    }
+  }
+
   return next;
 }
 
@@ -472,8 +505,8 @@ function buildCoworkerGuide(
   };
 }
 
-async function loadTaxWorkspaceState(profile: TaxProfileRecord) {
-  const [registrations, periods, jurisdictionOptions] = await Promise.all([
+async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUserId: string) {
+  const [registrations, periods, jurisdictionOptions, monitoringTask] = await Promise.all([
     prisma.taxRegistration.findMany({
       where: { organizationTaxProfileId: profile.id },
       include: {
@@ -530,10 +563,36 @@ async function loadTaxWorkspaceState(profile: TaxProfileRecord) {
         taxTypes: true,
       },
     }),
+    prisma.scheduledAgentTask.findFirst({
+      where: {
+        ownerUserId,
+        routeContext: "/finance/settings/tax",
+        title: "Tax Remittance Monitor",
+      },
+      select: {
+        taskId: true,
+        title: true,
+        schedule: true,
+        isActive: true,
+        nextRunAt: true,
+        lastRunAt: true,
+        lastStatus: true,
+      },
+    }),
   ]);
 
   const openIssues = await reconcileTaxIssues(profile, registrations);
   const coworkerGuide = buildCoworkerGuide(profile, registrations, openIssues);
+  const now = new Date();
+  const dueSoonCount = periods.filter((period) => {
+    if (["filed", "paid"].includes(period.status)) return false;
+    const dueDate = new Date(period.dueDate);
+    return dueDate >= now && dueDate <= addDays(now, 14);
+  }).length;
+  const overdueCount = periods.filter((period) => {
+    if (["filed", "paid"].includes(period.status)) return false;
+    return new Date(period.dueDate) < now;
+  }).length;
 
   return {
     registrations,
@@ -541,15 +600,20 @@ async function loadTaxWorkspaceState(profile: TaxProfileRecord) {
     jurisdictionOptions,
     openIssues,
     coworkerGuide,
+    monitoring: {
+      dueSoonCount,
+      overdueCount,
+      monitoringTask,
+    },
   };
 }
 
 export async function getTaxRemittanceWorkspace() {
-  await requireManageFinance();
+  const user = await requireManageFinance();
 
   const organization = await requireOrganization();
   const profile = await getOrCreateTaxProfile(organization.id);
-  const workspaceState = await loadTaxWorkspaceState(profile);
+  const workspaceState = await loadTaxWorkspaceState(profile, user.id);
 
   return {
     organization,
@@ -830,6 +894,8 @@ export async function generateTaxObligationPeriods() {
             netTaxAmount,
             manualAdjustmentAmount,
             exportStatus: "not_started",
+            dueSoonNotifiedAt: null,
+            overdueNotifiedAt: null,
           },
         });
         generatedPeriods.push({ id: created.id, periodId: created.periodId });
@@ -845,6 +911,160 @@ export async function generateTaxObligationPeriods() {
 
   revalidateTaxRoutes();
   return generatedPeriods;
+}
+
+export async function reviewTaxDeadlineNotifications() {
+  const user = await requireManageFinance();
+  const organization = await requireOrganization();
+  const profile = await getOrCreateTaxProfile(organization.id);
+  const now = new Date();
+  const dueSoonBoundary = addDays(now, 14);
+
+  const periods = await prisma.taxObligationPeriod.findMany({
+    where: {
+      registration: {
+        organizationTaxProfileId: profile.id,
+      },
+      status: {
+        notIn: ["filed", "paid"],
+      },
+      dueDate: {
+        lte: dueSoonBoundary,
+      },
+    },
+    include: {
+      registration: {
+        include: {
+          jurisdictionReference: {
+            select: {
+              authorityName: true,
+              countryCode: true,
+              stateProvinceCode: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  let notificationsCreated = 0;
+
+  for (const period of periods) {
+    const dueDate = new Date(period.dueDate);
+    const authorityName = period.registration.jurisdictionReference.authorityName;
+
+    if (dueDate < now && !period.overdueNotifiedAt) {
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          type: "tax-remittance",
+          title: `Overdue tax remittance: ${authorityName}`,
+          body: `${period.periodId} is overdue for filing or payment. Review the tax remittance workspace and resolve the blocked period immediately.`,
+          deepLink: "/finance/settings/tax",
+          read: false,
+        },
+      });
+      await prisma.taxObligationPeriod.update({
+        where: { id: period.id },
+        data: { overdueNotifiedAt: now },
+      });
+      notificationsCreated += 1;
+      continue;
+    }
+
+    if (dueDate >= now && !period.dueSoonNotifiedAt) {
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          type: "tax-remittance",
+          title: `Upcoming tax remittance: ${authorityName}`,
+          body: `${period.periodId} is due on ${dueDate.toISOString().slice(0, 10)}. Review the filing packet, evidence, and handoff status now.`,
+          deepLink: "/finance/settings/tax",
+          read: false,
+        },
+      });
+      await prisma.taxObligationPeriod.update({
+        where: { id: period.id },
+        data: { dueSoonNotifiedAt: now },
+      });
+      notificationsCreated += 1;
+    }
+  }
+
+  revalidateTaxRoutes();
+  return { notificationsCreated };
+}
+
+export async function ensureTaxDeadlineMonitoringTask() {
+  const user = await requireManageFinance();
+
+  const existing = await prisma.scheduledAgentTask.findFirst({
+    where: {
+      ownerUserId: user.id,
+      routeContext: "/finance/settings/tax",
+      title: "Tax Remittance Monitor",
+    },
+    select: {
+      taskId: true,
+      title: true,
+      schedule: true,
+      isActive: true,
+      nextRunAt: true,
+      lastRunAt: true,
+      lastStatus: true,
+    },
+  });
+
+  if (existing) {
+    return { created: false, task: existing };
+  }
+
+  const schedule = "0 8 * * *";
+  const nextRunAt = computeNextCronRun(schedule, new Date());
+  const taskId = taxMonitorTaskId();
+
+  const task = await prisma.scheduledAgentTask.create({
+    data: {
+      taskId,
+      agentId: "finance-agent",
+      title: "Tax Remittance Monitor",
+      prompt:
+        "Review tax remittance periods due in the next 14 days or already overdue. Highlight blocked filings, missing evidence, and missing external handoff details, then summarize what needs attention.",
+      routeContext: "/finance/settings/tax",
+      schedule,
+      timezone: "America/Chicago",
+      ownerUserId: user.id,
+      nextRunAt,
+    },
+    select: {
+      taskId: true,
+      title: true,
+      schedule: true,
+      isActive: true,
+      nextRunAt: true,
+      lastRunAt: true,
+      lastStatus: true,
+    },
+  });
+
+  await prisma.scheduledJob.upsert({
+    where: { jobId: taskId },
+    create: {
+      jobId: taskId,
+      name: "Agent: Tax Remittance Monitor",
+      schedule,
+      nextRunAt,
+    },
+    update: {
+      name: "Agent: Tax Remittance Monitor",
+      schedule,
+      nextRunAt,
+    },
+  });
+
+  revalidateTaxRoutes();
+  return { created: true, task };
 }
 
 export async function prepareTaxFilingPacket(input: PrepareTaxFilingPacketInput) {

@@ -84,6 +84,7 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | FIN-09 | Navigate to `/finance/settings/tax`, confirm the page shows operational tax setup state only, add a jurisdiction registration, mark it live verified, then open the AI coworker on the same page | Tax remittance workspace loads without error, registration verification state updates, the page keeps conversational guidance out of the main surface, and the coworker resolves to Finance Specialist instead of the generic workspace agent |
 | FIN-10 | From `/finance/settings/tax`, generate obligation periods, prepare a filing packet, and add supporting evidence to a period | Periods appear with due dates and captured amounts, filing packet status changes to ready/prepared, and audit evidence is visible without using the coworker surface for dialog |
 | FIN-11 | From `/finance/settings/tax`, set filing owner and handoff mode, leave external filing selected without an external system, then save | The page records the authority boundary, shows the operating boundary summary as facts, and raises a setup gap when external filing is selected without a recorded handoff system |
+| FIN-12 | From `/finance/settings/tax`, review tax reminders and enable monitoring when due/overdue periods exist | The page shows due-soon and overdue counts as facts, creates deduped in-app reminders, and records an active finance monitoring task without adding coworker dialog to the page |
 
 ## Phase 6: Compliance
 

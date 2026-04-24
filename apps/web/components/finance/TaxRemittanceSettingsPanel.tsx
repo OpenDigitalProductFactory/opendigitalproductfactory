@@ -259,7 +259,7 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
         issues={workspace.openIssues}
       />
 
-      <TaxObligationPeriodsTable periods={workspace.periods} />
+      <TaxObligationPeriodsTable periods={workspace.periods} monitoring={workspace.monitoring} />
 
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-start justify-between gap-4">

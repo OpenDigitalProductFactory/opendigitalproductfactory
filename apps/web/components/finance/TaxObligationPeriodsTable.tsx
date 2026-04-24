@@ -4,8 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   addTaxFilingArtifact,
+  ensureTaxDeadlineMonitoringTask,
   generateTaxObligationPeriods,
   prepareTaxFilingPacket,
+  reviewTaxDeadlineNotifications,
 } from "@/lib/actions/tax-remittance";
 import type { AddTaxFilingArtifactInput } from "@/lib/finance/tax-remittance-validation";
 
@@ -43,6 +45,19 @@ type PeriodRecord = {
 
 type Props = {
   periods: PeriodRecord[];
+  monitoring: {
+    dueSoonCount: number;
+    overdueCount: number;
+    monitoringTask: {
+      taskId: string;
+      title: string;
+      schedule: string;
+      isActive: boolean;
+      nextRunAt: Date | string | null;
+      lastRunAt: Date | string | null;
+      lastStatus: string | null;
+    } | null;
+  };
 };
 
 const inputClasses =
@@ -86,7 +101,7 @@ function defaultArtifactForm(periodId: string): AddTaxFilingArtifactInput {
   };
 }
 
-export function TaxObligationPeriodsTable({ periods }: Props) {
+export function TaxObligationPeriodsTable({ periods, monitoring }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -146,8 +161,40 @@ export function TaxObligationPeriodsTable({ periods }: Props) {
         </div>
         <div className="flex items-center gap-3">
           <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
+            {monitoring.overdueCount} overdue
+          </span>
+          <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
+            {monitoring.dueSoonCount} due soon
+          </span>
+          <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
             {periods.length} tracked
           </span>
+          <button
+            type="button"
+            className="rounded border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-1)] disabled:opacity-60"
+            disabled={isPending}
+            onClick={() =>
+              runAction(async () => {
+                const result = await reviewTaxDeadlineNotifications();
+                setSuccess(`${result.notificationsCreated} tax reminder${result.notificationsCreated === 1 ? "" : "s"} created.`);
+              })
+            }
+          >
+            {isPending && activePeriodId === null ? "Reviewing..." : "Review reminders"}
+          </button>
+          <button
+            type="button"
+            className="rounded border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-1)] disabled:opacity-60"
+            disabled={isPending || Boolean(monitoring.monitoringTask?.isActive)}
+            onClick={() =>
+              runAction(async () => {
+                const result = await ensureTaxDeadlineMonitoringTask();
+                setSuccess(result.created ? "Finance coworker monitoring enabled." : "Finance coworker monitoring already exists.");
+              })
+            }
+          >
+            {monitoring.monitoringTask?.isActive ? "Monitoring enabled" : "Enable monitoring"}
+          </button>
           <button
             type="button"
             className="rounded bg-[var(--dpf-accent)] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
@@ -161,6 +208,35 @@ export function TaxObligationPeriodsTable({ periods }: Props) {
           >
             {isPending && activePeriodId === null ? "Generating..." : "Generate periods"}
           </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+            Reminder Review
+          </p>
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">
+            Deduped in-app reminders are created for due-soon and overdue periods without moving coworker dialog into this page.
+          </p>
+        </div>
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+            Coworker Monitor
+          </p>
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">
+            {monitoring.monitoringTask?.isActive
+              ? `Active. Next run ${monitoring.monitoringTask.nextRunAt ? formatDate(monitoring.monitoringTask.nextRunAt) : "pending"}${monitoring.monitoringTask.lastStatus ? ` · Last status ${monitoring.monitoringTask.lastStatus}` : ""}`
+              : "No recurring finance monitor is enabled yet."}
+          </p>
+        </div>
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+            Monitoring Focus
+          </p>
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">
+            Upcoming due dates, overdue periods, missing evidence, and incomplete filing handoff details.
+          </p>
         </div>
       </div>
 

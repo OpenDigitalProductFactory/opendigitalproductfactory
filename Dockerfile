@@ -17,6 +17,7 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema.prisma ./packages/db/prisma/
 COPY packages/db/prisma.config.ts ./packages/db/
+COPY packages/db/src/load-env.ts ./packages/db/src/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 3: build ───────────────────────────────────────────────────────────

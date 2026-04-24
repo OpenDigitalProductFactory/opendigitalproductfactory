@@ -29,6 +29,17 @@ vi.mock("@dpf/db", () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    notification: {
+      create: vi.fn(),
+    },
+    scheduledAgentTask: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    scheduledJob: {
+      upsert: vi.fn(),
+    },
     taxFilingArtifact: {
       findMany: vi.fn(),
       create: vi.fn(),
@@ -55,6 +66,8 @@ import {
   createTaxRegistration,
   generateTaxObligationPeriods,
   getTaxRemittanceWorkspace,
+  reviewTaxDeadlineNotifications,
+  ensureTaxDeadlineMonitoringTask,
   prepareTaxFilingPacket,
   updateOrganizationTaxProfile,
   verifyTaxRegistration,
@@ -91,6 +104,14 @@ beforeEach(() => {
     Promise.resolve({ id: where.id, ...data }),
   );
   mockPrisma.taxFilingArtifact.findMany.mockResolvedValue([]);
+  mockPrisma.notification.create.mockImplementation(({ data }: any) =>
+    Promise.resolve({ id: `notif-${data.title}`, ...data }),
+  );
+  mockPrisma.scheduledAgentTask.findFirst.mockResolvedValue(null);
+  mockPrisma.scheduledAgentTask.create.mockImplementation(({ data }: any) =>
+    Promise.resolve({ id: data.taskId, ...data }),
+  );
+  mockPrisma.scheduledJob.upsert.mockResolvedValue(null);
 });
 
 describe("getTaxRemittanceWorkspace", () => {
@@ -537,6 +558,113 @@ describe("prepareTaxFilingPacket", () => {
         exportStatus: "prepared",
       }),
     });
+  });
+});
+
+describe("reviewTaxDeadlineNotifications", () => {
+  it("creates deduped due-soon and overdue notifications for open tax periods", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({
+      id: "profile-1",
+      organizationId: bootstrapOrg.id,
+      setupMode: "existing",
+      setupStatus: "active",
+      homeCountryCode: "US",
+      primaryRegionCode: "AL",
+      taxModel: "hybrid",
+      filingOwner: "business",
+      handoffMode: "dpf_readiness_only",
+      externalSystem: null,
+      footprintSummary: "Alabama services",
+      notes: null,
+      lastVerifiedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    mockPrisma.taxObligationPeriod.findMany.mockResolvedValue([
+      {
+        id: "period-due-soon",
+        periodId: "TAX-PER-DUE",
+        status: "ready",
+        dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        dueSoonNotifiedAt: null,
+        overdueNotifiedAt: null,
+        registration: {
+          taxType: "sales_tax",
+          jurisdictionReference: {
+            authorityName: "Alabama",
+            countryCode: "US",
+            stateProvinceCode: "AL",
+          },
+        },
+      },
+      {
+        id: "period-overdue",
+        periodId: "TAX-PER-LATE",
+        status: "ready",
+        dueDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        dueSoonNotifiedAt: null,
+        overdueNotifiedAt: null,
+        registration: {
+          taxType: "sales_tax",
+          jurisdictionReference: {
+            authorityName: "Washington",
+            countryCode: "US",
+            stateProvinceCode: "WA",
+          },
+        },
+      },
+      {
+        id: "period-already-notified",
+        periodId: "TAX-PER-SKIP",
+        status: "ready",
+        dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        dueSoonNotifiedAt: new Date(),
+        overdueNotifiedAt: null,
+        registration: {
+          taxType: "sales_tax",
+          jurisdictionReference: {
+            authorityName: "Colorado",
+            countryCode: "US",
+            stateProvinceCode: "CO",
+          },
+        },
+      },
+    ]);
+
+    const result = await reviewTaxDeadlineNotifications();
+
+    expect(result.notificationsCreated).toBe(2);
+    expect(mockPrisma.notification.create).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.taxObligationPeriod.update).toHaveBeenCalledWith({
+      where: { id: "period-due-soon" },
+      data: expect.objectContaining({
+        dueSoonNotifiedAt: expect.any(Date),
+      }),
+    });
+    expect(mockPrisma.taxObligationPeriod.update).toHaveBeenCalledWith({
+      where: { id: "period-overdue" },
+      data: expect.objectContaining({
+        overdueNotifiedAt: expect.any(Date),
+      }),
+    });
+  });
+});
+
+describe("ensureTaxDeadlineMonitoringTask", () => {
+  it("creates a finance monitoring task when one does not already exist", async () => {
+    const result = await ensureTaxDeadlineMonitoringTask();
+
+    expect(result.created).toBe(true);
+    expect(mockPrisma.scheduledAgentTask.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        agentId: "finance-agent",
+        title: "Tax Remittance Monitor",
+        routeContext: "/finance/settings/tax",
+        ownerUserId: "user-1",
+      }),
+      select: expect.any(Object),
+    });
+    expect(mockPrisma.scheduledJob.upsert).toHaveBeenCalled();
   });
 });
 
