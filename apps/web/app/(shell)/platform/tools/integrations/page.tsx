@@ -89,6 +89,16 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Google Business Profile"
+          description="Localized presence anchor for business listings, location details, and recent review context on the enterprise substrate."
+          href="/platform/tools/integrations/google-business-profile"
+          accent="var(--dpf-success)"
+          metrics={[
+            { label: "Category", value: "Local Presence" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Facebook Lead Ads"
           description="Localized lead-capture anchor for page forms, recent submissions, and downstream CRM follow-up on the enterprise substrate."
           href="/platform/tools/integrations/facebook-lead-ads"
