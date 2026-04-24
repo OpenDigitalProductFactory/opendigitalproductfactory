@@ -7,10 +7,18 @@ import {
   getPayStatements,
   TOOL_DEFINITION as GET_PAY_STATEMENTS_DEF,
 } from "./tools/get-pay-statements.js";
+import {
+  getTimeCards,
+  TOOL_DEFINITION as GET_TIME_CARDS_DEF,
+} from "./tools/get-time-cards.js";
+import {
+  getDeductions,
+  TOOL_DEFINITION as GET_DEDUCTIONS_DEF,
+} from "./tools/get-deductions.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "8600", 10);
 const SERVICE_NAME = "adp";
-const SERVICE_VERSION = "0.3.0";
+const SERVICE_VERSION = "0.4.0";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -52,6 +60,8 @@ interface ToolDefinition {
 const TOOLS: Record<string, { definition: ToolDefinition; handler: ToolHandler }> = {
   adp_list_workers: { definition: LIST_WORKERS_DEF, handler: listWorkers },
   adp_get_pay_statements: { definition: GET_PAY_STATEMENTS_DEF, handler: getPayStatements },
+  adp_get_time_cards: { definition: GET_TIME_CARDS_DEF, handler: getTimeCards },
+  adp_get_deductions: { definition: GET_DEDUCTIONS_DEF, handler: getDeductions },
 };
 
 async function readBody(req: IncomingMessage): Promise<string> {
