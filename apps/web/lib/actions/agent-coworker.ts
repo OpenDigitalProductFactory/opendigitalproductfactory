@@ -36,6 +36,10 @@ import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
 import { loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
 import type { RoutingMeta } from "@/lib/process-observer-hook";
+import {
+  ensureTaskForCoworkerTurn,
+  projectThreadMessageToTask,
+} from "@/lib/tak/task-chat-projection";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -218,6 +222,83 @@ export async function sendMessage(input: {
   if (validationError) return { error: validationError };
 
   const trimmedContent = input.content.trim();
+  let currentTaskRun: Awaited<ReturnType<typeof ensureTaskForCoworkerTurn>> | null = null;
+  let taskProjectionAgentId: string | null = null;
+
+  const getCurrentTaskRun = async (agentId?: string | null) => {
+    if (currentTaskRun && (!agentId || taskProjectionAgentId === agentId)) {
+      return currentTaskRun;
+    }
+
+    currentTaskRun = await ensureTaskForCoworkerTurn({
+      userId: user.id!,
+      threadId: input.threadId,
+      routeContext: input.routeContext,
+      content: trimmedContent,
+      agentId: agentId ?? null,
+    }).catch(() => null);
+
+    if (agentId) {
+      taskProjectionAgentId = agentId;
+    }
+
+    return currentTaskRun;
+  };
+
+  const createProjectedAgentMessage = async (message: {
+    role: "user" | "assistant" | "system";
+    content: string;
+    agentId?: string | null;
+    routeContext?: string | null;
+    providerId?: string | null;
+    taskType?: string | null;
+    routedEndpointId?: string | null;
+    messageType?: string;
+    metadata?: Record<string, unknown>;
+  }) => {
+    const taskRun = await getCurrentTaskRun(message.agentId ?? null);
+    const persisted = await prisma.agentMessage.create({
+      data: {
+        threadId: input.threadId,
+        taskRunId: taskRun?.taskRunId ?? null,
+        role: message.role,
+        content: message.content,
+        ...(message.agentId !== undefined ? { agentId: message.agentId } : {}),
+        ...(message.routeContext !== undefined ? { routeContext: message.routeContext } : {}),
+        ...(message.providerId !== undefined ? { providerId: message.providerId } : {}),
+        ...(message.taskType !== undefined ? { taskType: message.taskType } : {}),
+        ...(message.routedEndpointId !== undefined ? { routedEndpointId: message.routedEndpointId } : {}),
+      },
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        agentId: true,
+        routeContext: true,
+        createdAt: true,
+      },
+    });
+
+    if (taskRun) {
+      await projectThreadMessageToTask({
+        task: taskRun,
+        role: persisted.role,
+        content: persisted.content,
+        routeContext: persisted.routeContext ?? input.routeContext,
+        agentId: persisted.agentId ?? message.agentId ?? null,
+        providerId: message.providerId ?? null,
+        taskType: message.taskType ?? null,
+        routedEndpointId: message.routedEndpointId ?? null,
+        messageType: message.messageType,
+        metadata: {
+          threadMessageId: persisted.id,
+          ...(message.metadata ?? {}),
+        },
+      }).catch(() => {});
+    }
+
+    return persisted;
+  };
 
   // Handle "re-enable" command — last-resort provider recovery
   if (trimmedContent.toLowerCase() === "re-enable") {
@@ -236,14 +317,11 @@ export async function sendMessage(input: {
         where: { jobId: `provider-reenable-${reEnabled.providerId}` },
       }).catch(() => {});
 
-      const sysMsg = await prisma.agentMessage.create({
-        data: {
-          threadId: input.threadId,
-          role: "system",
-          content: `${reEnabled.name} has been re-enabled. It may have reduced quota — try sending your message again.`,
-          routeContext: input.routeContext,
-        },
-        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      const sysMsg = await createProjectedAgentMessage({
+        role: "system",
+        content: `${reEnabled.name} has been re-enabled. It may have reduced quota — try sending your message again.`,
+        routeContext: input.routeContext,
+        messageType: "status",
       });
 
       // Fire-and-forget: process observer
@@ -252,9 +330,10 @@ export async function sendMessage(input: {
       );
 
       return {
-        userMessage: serializeMessage(await prisma.agentMessage.create({
-          data: { threadId: input.threadId, role: "user", content: trimmedContent, routeContext: input.routeContext },
-          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+        userMessage: serializeMessage(await createProjectedAgentMessage({
+          role: "user",
+          content: trimmedContent,
+          routeContext: input.routeContext,
         })),
         agentMessage: serializeMessage(sysMsg),
       };
@@ -262,21 +341,10 @@ export async function sendMessage(input: {
   }
 
   // Persist user message
-  const userMsg = await prisma.agentMessage.create({
-    data: {
-      threadId: input.threadId,
-      role: "user",
-      content: trimmedContent,
-      routeContext: input.routeContext,
-    },
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      createdAt: true,
-    },
+  const userMsg = await createProjectedAgentMessage({
+    role: "user",
+    content: trimmedContent,
+    routeContext: input.routeContext,
   });
 
   // Link attachment to the user message if provided
@@ -881,6 +949,7 @@ export async function sendMessage(input: {
   let responseModelId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
+  currentTaskRun = await getCurrentTaskRun(agent.agentId);
 
   // EP-AI-WORKFORCE-001: Provider pinning is now via AgentModelConfig.pinnedProviderId
   // (resolved in agentic-loop.ts via agentModelConfig lookup). No need to merge here.
@@ -1008,6 +1077,7 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       agentId: agent.agentId,
       threadId: input.threadId,
+      taskRunId: currentTaskRun?.taskRunId,
       taskType: taskTypeId,
       agentDisplayName: agent.agentName,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
@@ -1021,20 +1091,23 @@ export async function sendMessage(input: {
     if (agenticResult.proposal) {
       const tc = agenticResult.proposal;
       const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-      const agentMsg = await prisma.agentMessage.create({
-        data: {
-          threadId: input.threadId, role: "assistant",
-          content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
-          agentId: agent.agentId, routeContext: input.routeContext,
-          providerId: agenticResult.providerId,
-          taskType: taskTypeId !== "unknown" ? taskTypeId : null,
-          routedEndpointId: null, // EP-INF-009b: routing handled per-iteration by routeAndCall
+      const agentMsg = await createProjectedAgentMessage({
+        role: "assistant",
+        content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+        agentId: agent.agentId,
+        routeContext: input.routeContext,
+        providerId: agenticResult.providerId,
+        taskType: taskTypeId !== "unknown" ? taskTypeId : null,
+        routedEndpointId: null,
+        messageType: "proposal",
+        metadata: {
+          proposalName: tc.name,
         },
-        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
       const proposal = await prisma.agentActionProposal.create({
         data: {
           proposalId, threadId: input.threadId, messageId: agentMsg.id,
+          taskRunId: currentTaskRun?.taskRunId ?? null,
           agentId: agent.agentId, actionType: tc.name,
           parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue, status: "proposed",
         },
@@ -1287,15 +1360,12 @@ export async function sendMessage(input: {
         },
       });
       if (!recentDowngrade) {
-        const sysMsg = await prisma.agentMessage.create({
-          data: {
-            threadId: input.threadId,
-            role: "system",
-            content: result.downgradeMessage,
-            agentId: agent.agentId,
-            routeContext: input.routeContext,
-          },
-          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+        const sysMsg = await createProjectedAgentMessage({
+          role: "system",
+          content: result.downgradeMessage,
+          agentId: agent.agentId,
+          routeContext: input.routeContext,
+          messageType: "status",
         });
         systemMessage = serializeMessage(sysMsg);
       }
@@ -1304,17 +1374,14 @@ export async function sendMessage(input: {
     if (e instanceof NoEligibleEndpointsError || e instanceof NoAllowedProvidersForSensitivityError) {
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
 
-      const sysMsg = await prisma.agentMessage.create({
-        data: {
-          threadId: input.threadId,
-          role: "system",
-          content: e instanceof NoEligibleEndpointsError
-            ? `No eligible AI endpoints for this task (${e.reason}). The coworker used a local fallback response.`
-            : `The current page is marked ${agent.sensitivity}. No allowed AI provider is configured for that sensitivity, so the coworker switched to a local fallback response.`,
-          agentId: agent.agentId,
-          routeContext: input.routeContext,
-        },
-        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      const sysMsg = await createProjectedAgentMessage({
+        role: "system",
+        content: e instanceof NoEligibleEndpointsError
+          ? `No eligible AI endpoints for this task (${e.reason}). The coworker used a local fallback response.`
+          : `The current page is marked ${agent.sensitivity}. No allowed AI provider is configured for that sensitivity, so the coworker switched to a local fallback response.`,
+        agentId: agent.agentId,
+        routeContext: input.routeContext,
+        messageType: "status",
       });
       systemMessage = serializeMessage(sysMsg);
     } else if (e instanceof NoProvidersAvailableError) {
@@ -1336,15 +1403,12 @@ export async function sendMessage(input: {
         sysContent = "No AI providers are configured. An administrator can set them up from Platform > AI Providers.";
       }
 
-      const sysMsg = await prisma.agentMessage.create({
-        data: {
-          threadId: input.threadId,
-          role: "system",
-          content: sysContent,
-          agentId: agent.agentId,
-          routeContext: input.routeContext,
-        },
-        select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+      const sysMsg = await createProjectedAgentMessage({
+        role: "system",
+        content: sysContent,
+        agentId: agent.agentId,
+        routeContext: input.routeContext,
+        messageType: "status",
       });
       systemMessage = serializeMessage(sysMsg);
     } else {
@@ -1393,25 +1457,14 @@ export async function sendMessage(input: {
   }
 
   // Persist agent response
-  const agentMsg = await prisma.agentMessage.create({
-    data: {
-      threadId: input.threadId,
-      role: "assistant",
-      content: responseContent,
-      agentId: agent.agentId,
-      routeContext: input.routeContext,
-      providerId: responseProviderId,
-      taskType: taskTypeId !== "unknown" ? taskTypeId : null,
-      routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
-    },
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      createdAt: true,
-    },
+  const agentMsg = await createProjectedAgentMessage({
+    role: "assistant",
+    content: responseContent,
+    agentId: agent.agentId,
+    routeContext: input.routeContext,
+    providerId: responseProviderId,
+    taskType: taskTypeId !== "unknown" ? taskTypeId : null,
+    routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
   });
 
   // Fire-and-forget: store conversation memories in Qdrant
@@ -1526,11 +1579,22 @@ export async function recordAgentTransition(input: {
     return { error: "Unauthorized" };
   }
 
+  const content = `${input.agentName} has joined the conversation`;
+
+  const taskRun = await ensureTaskForCoworkerTurn({
+    userId: user.id,
+    threadId: input.threadId,
+    routeContext: input.routeContext,
+    content,
+    agentId: input.agentId,
+  }).catch(() => null);
+
   const msg = await prisma.agentMessage.create({
     data: {
       threadId: input.threadId,
+      taskRunId: taskRun?.taskRunId ?? null,
       role: "system",
-      content: `${input.agentName} has joined the conversation`,
+      content,
       agentId: input.agentId,
       routeContext: input.routeContext,
     },
@@ -1543,6 +1607,20 @@ export async function recordAgentTransition(input: {
       createdAt: true,
     },
   });
+
+  if (taskRun) {
+    await projectThreadMessageToTask({
+      task: taskRun,
+      role: "system",
+      content,
+      routeContext: input.routeContext,
+      agentId: input.agentId,
+      messageType: "status",
+      metadata: {
+        threadMessageId: msg.id,
+      },
+    }).catch(() => {});
+  }
 
   return { message: serializeMessage(msg) };
 }

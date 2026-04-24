@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { auth } from "@/lib/auth";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { BrandingPageClient } from "@/components/admin/BrandingPageClient";
@@ -25,7 +26,11 @@ export default async function AdminBrandingPage() {
       : null,
     userId
       ? prisma.taskRun.findFirst({
-          where: { userId, title: "Extract brand design system", status: "active" },
+          where: {
+            userId,
+            title: "Extract brand design system",
+            status: { in: [...TASK_IN_FLIGHT_STATES] },
+          },
           select: { taskRunId: true },
         })
       : null,

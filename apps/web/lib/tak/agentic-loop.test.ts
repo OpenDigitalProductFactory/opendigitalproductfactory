@@ -230,6 +230,40 @@ describe("runAgenticLoop", () => {
     expect(toolMsg!.content).toContain("Found 3 files");
   });
 
+  it("records taskRunId in tool audit rows when present", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "",
+      toolCalls: [{ id: "toolu_task", name: "search_project_files", arguments: { query: "agent" } }],
+    }));
+    mockExecuteTool.mockResolvedValueOnce({
+      success: true,
+      message: "Found files",
+      data: { files: ["agent.ts"] },
+    });
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Found the relevant files.",
+    }));
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Found the relevant files in agent.ts, which is the main implementation path for this request.",
+    }));
+
+    await runAgenticLoop({
+      ...baseParams,
+      taskRunId: "run-123",
+    });
+
+    expect(vi.mocked(prisma.toolExecution.create)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskRunId: "run-123",
+        }),
+      }),
+    );
+  });
+
   it("returns text-only response when no tool calls (after nudge)", async () => {
     const mockRoute = vi.mocked(routeAndCall);
 
