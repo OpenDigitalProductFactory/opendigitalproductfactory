@@ -2699,6 +2699,8 @@ model FeatureBuild {
   gitCommitHashes       String[]          @default([])
   uxTestResults         Json?
   uxVerificationStatus  String? // null | "running" | "complete" | "failed" | "skipped"
+  sandboxVerification   Json? // { typecheck: SandboxCheckResult, build: SandboxCheckResult, ranAt: string }
+  sandboxVerificationStatus String? // null | "running" | "complete" | "failed"
   deliberationSummary   Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
   buildExecState        Json?
   taxonomyAttribution   Json?
@@ -3000,6 +3002,10 @@ model PlatformDevConfig {
   contributorForkOwner String?
   contributorForkRepo  String?
   forkVerifiedAt       DateTime?
+  // Opt-out checkbox for the fork-pr "token owner must match fork owner" rule.
+  // Enabled when the admin uses a dedicated machine-user GitHub account whose
+  // identity is distinct from the fork owner they entered.
+  machineUserOptIn     Boolean   @default(false)
 }
 
 model EaNotation {

@@ -36,6 +36,7 @@ export default async function AdminPlatformDevelopmentPage() {
         contributorForkOwner={config?.contributorForkOwner ?? null}
         contributorForkRepo={config?.contributorForkRepo ?? null}
         hasContributionToken={hasContribToken}
+        machineUserOptIn={config?.machineUserOptIn ?? false}
       />
       <PlatformDevelopmentForm
         policyState={policyState}
