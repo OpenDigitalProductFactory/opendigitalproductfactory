@@ -2023,6 +2023,8 @@ model OrganizationTaxProfile {
   homeCountryCode  String?
   primaryRegionCode String?
   taxModel         String   @default("hybrid")
+  filingOwner      String   @default("business")
+  handoffMode      String   @default("dpf_readiness_only")
   externalSystem   String?
   footprintSummary String?
   notes            String?
@@ -2115,6 +2117,8 @@ model TaxObligationPeriod {
   filedAt                DateTime?
   paidAt                 DateTime?
   confirmationRef        String?
+  dueSoonNotifiedAt      DateTime?
+  overdueNotifiedAt      DateTime?
   preparedByAgentId      String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -2935,6 +2939,14 @@ model PlatformDevConfig {
   // indistinguishable by name but unique and traceable by email hash.
   clientId          String? // UUID, generated at first seed
   gitAgentEmail     String? // agent-<sha256(clientId)[:16]>@hive.dpf
+  // Which push model to use when contributionMode is selective | contribute_all.
+  // null = unconfigured; explicit value required before contribute_to_hive runs.
+  // "maintainer-direct" — push directly to upstream (legacy path, requires upstream write)
+  // "fork-pr"          — push to contributor-owned fork, open cross-repo PR (public-repo default)
+  contributionModel    String?
+  contributorForkOwner String?
+  contributorForkRepo  String?
+  forkVerifiedAt       DateTime?
 }
 
 model EaNotation {

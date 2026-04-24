@@ -52,14 +52,14 @@
 
 ## Git Workflow
 
-- **All changes go through pull requests**, including the maintainer's. This is the rule, enforced by discipline today and by branch protection once the repo flips public (GitHub Free does not expose branch protection for private repos).
-- **CI runs on every PR:** typecheck, unit tests, production build. Typecheck and production build are the merge-blocking gates today. Unit tests run but are temporarily informational — see the "broken tests" tracking issue.
+- **All changes go through pull requests**, including the maintainer's. Enforced at the platform level by branch protection on `main`: `Typecheck`, `Production Build`, and `DCO` must all be green before merge; PR required; linear history; no force-push; admins included.
+- **CI runs on every PR:** typecheck, unit tests, production build. Typecheck and production build are the merge-blocking gates. Unit tests run but are temporarily informational — see the "broken tests" tracking issue.
 - **Maintainer work uses short-lived branches named by intent:** `feat/*` for features, `fix/*` for fixes, `chore/*` for dependency and housekeeping work, `doc/*` for documentation-only changes, `clean/*` for repo hygiene. One concern per branch, one concern per PR.
 - **External contributors** fork the repo, branch from `main`, and open a PR against `main`. See [CONTRIBUTING.md](CONTRIBUTING.md).
-- **Do not push directly to `main`** even though the tier-locked branch protection cannot block you today. The rule is the rule; cutting corners here defeats the workflow that lets CI catch issues on the maintainer's work too.
+- **DCO sign-off required on every commit.** Add `Signed-off-by: Name <email>` to each commit message — easiest with `git commit -s`. The DCO bot is a required check and blocks merge until every commit in a PR carries a matching trailer.
+- **Direct pushes to `main` are blocked by branch protection for everyone, including admins.** The only merge path is PR → CI green → squash-merge.
 - **Always push** after committing — local-only commits are invisible to CI, the build pipeline, and other agents.
 - **Future — customer branch model:** When customers contribute, each gets one persistent branch (`customer/<id>`), named by who owns them rather than by fix or feature. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale for thousands of contributors.
-- **Branch protection activation:** enabling the GitHub-level enforcement on `main` requires either (a) flipping the repo visibility to public, or (b) upgrading the plan to GitHub Pro/Team. Configure `Typecheck` and `Production Build` as required status checks, include administrators, allow squash-merge or linear history — whichever the maintainer picks.
 
 ## AI Coworker Prompts
 

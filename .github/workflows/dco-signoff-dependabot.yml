@@ -1,0 +1,68 @@
+name: DCO sign-off for Dependabot
+
+# Why this exists:
+#   The repo's DCO required check (branch protection on main) demands every
+#   commit in every PR carry a `Signed-off-by:` trailer. Dependabot cannot add
+#   such a trailer to its commits, so every Dependabot PR would be unmergeable
+#   without this workflow. Here we amend Dependabot's commits on open/update
+#   with a signoff using Dependabot's own bot identity — DCO Probot then
+#   validates the trailer against the commit author and reports success.
+#
+# Safety:
+#   `pull_request_target` runs in the base-repo context with repo secrets.
+#   We gate every step on `github.actor == 'dependabot[bot]'`; GitHub
+#   authenticates the actor, so a malicious contributor cannot impersonate
+#   the bot.
+#
+# Scope:
+#   This only touches Dependabot PRs. Human contributors still need to sign
+#   their own commits (`git commit -s`) — that requirement stands.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  signoff:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head with full history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Skip if all commits already signed
+        id: check
+        run: |
+          UNSIGNED=0
+          while IFS= read -r sha; do
+            if ! git show -s --format=%B "$sha" | grep -qE "^Signed-off-by: "; then
+              UNSIGNED=$((UNSIGNED + 1))
+            fi
+          done < <(git log origin/${{ github.event.pull_request.base.ref }}..HEAD --format=%H)
+
+          if [ "$UNSIGNED" -eq 0 ]; then
+            echo "All commits on this branch are signed. Nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$UNSIGNED commit(s) lack a Signed-off-by trailer. Will re-sign."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Re-sign commits with Dependabot identity
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          git config user.name "dependabot[bot]"
+          git config user.email "49699333+dependabot[bot]@users.noreply.github.com"
+          git rebase --signoff "origin/${{ github.event.pull_request.base.ref }}"
+
+      - name: Force-push signed commits back to the PR branch
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          git push --force-with-lease origin "HEAD:${{ github.event.pull_request.head.ref }}"

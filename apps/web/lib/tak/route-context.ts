@@ -20,6 +20,7 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   "/ops": getOpsContext,
   "/compliance": getComplianceContext,
   "/workspace": getWorkspaceContext,
+  "/finance": getFinanceContext,
   "/portfolio/product": getProductEstateContext,
   "/portfolio": getPortfolioContext,
   "/inventory": getDiscoveryOperationsContext,
@@ -309,6 +310,55 @@ async function getWorkspaceContext(): Promise<string> {
     `Builds: ${buildCount} active feature builds`,
     `AI: ${providerCount} active providers`,
   ].join("\n");
+}
+
+async function getFinanceContext(): Promise<string> {
+  const sections: string[] = ["\nPAGE DATA — Finance:"];
+
+  const [taxProfile, registrationCount, openIssueCount, recurringCount, overdueInvoices] = await Promise.all([
+    prisma.organizationTaxProfile.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: {
+        setupMode: true,
+        setupStatus: true,
+        homeCountryCode: true,
+        primaryRegionCode: true,
+        taxModel: true,
+        filingOwner: true,
+        handoffMode: true,
+        externalSystem: true,
+      },
+    }),
+    prisma.taxRegistration.count(),
+    prisma.taxIssue.count({ where: { status: "open" } }),
+    prisma.recurringSchedule.count({ where: { status: "active" } }),
+    prisma.invoice.count({ where: { status: { in: ["sent", "overdue"] } } }),
+  ]);
+
+  if (!taxProfile) {
+    sections.push(
+      "No organization tax profile has been configured yet.",
+      `Recurring schedules: ${recurringCount}`,
+      `Outstanding customer invoices: ${overdueInvoices}`,
+    );
+    return sections.join("\n");
+  }
+
+  sections.push(
+    `Tax setup mode: ${taxProfile.setupMode}`,
+    `Tax setup status: ${taxProfile.setupStatus}`,
+    `Home jurisdiction: ${taxProfile.homeCountryCode ?? "unassigned"}${taxProfile.primaryRegionCode ? ` / ${taxProfile.primaryRegionCode}` : ""}`,
+    `Tax model: ${taxProfile.taxModel}`,
+    `Filing owner: ${taxProfile.filingOwner}`,
+    `Handoff mode: ${taxProfile.handoffMode}`,
+    `External system: ${taxProfile.externalSystem ?? "none recorded"}`,
+    `Registrations recorded: ${registrationCount}`,
+    `Open tax setup issues: ${openIssueCount}`,
+    `Recurring schedules: ${recurringCount}`,
+    `Outstanding customer invoices: ${overdueInvoices}`,
+  );
+
+  return sections.join("\n");
 }
 
 // ─── Portfolio Context ───────────────────────────────────────────────────

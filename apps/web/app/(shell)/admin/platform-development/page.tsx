@@ -1,4 +1,5 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import {
   getPlatformDevConfig,
@@ -6,6 +7,7 @@ import {
   hasContributionToken,
   hasGitBackupCredential,
 } from "@/lib/actions/platform-dev-config";
+import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 import { getDisplayPseudonym } from "@/lib/integrate/identity-privacy";
 import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 
@@ -28,6 +30,13 @@ export default async function AdminPlatformDevelopmentPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Platform Development</p>
       </div>
       <AdminTabNav />
+      <ForkSetupPanel
+        enabled={isContributionModelEnabled()}
+        contributionModel={config?.contributionModel ?? null}
+        contributorForkOwner={config?.contributorForkOwner ?? null}
+        contributorForkRepo={config?.contributorForkRepo ?? null}
+        hasContributionToken={hasContribToken}
+      />
       <PlatformDevelopmentForm
         policyState={policyState}
         currentMode={(config?.contributionMode as "fork_only" | "selective" | "contribute_all") ?? null}
