@@ -4,10 +4,16 @@ import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot"] }, status: "connected" },
+      where: {
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google"] },
+        status: "connected",
+      },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot"] }, status: "error" },
+      where: {
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google"] },
+        status: "error",
+      },
     }),
   ]);
 
@@ -69,6 +75,16 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-info)"
           metrics={[
             { label: "Category", value: "Marketing / CRM" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Google Marketing Intelligence"
+          description="Read-first GA4 and Search Console anchor for traffic, conversions, and search visibility on the enterprise substrate."
+          href="/platform/tools/integrations/google-marketing-intelligence"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Category", value: "Marketing Intelligence" },
             { label: "Model", value: "Native" },
           ]}
         />
