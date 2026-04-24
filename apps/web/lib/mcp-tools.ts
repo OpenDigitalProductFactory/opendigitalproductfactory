@@ -15,6 +15,7 @@ import {
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
+import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
 import {
   getIntegrationBenchmarkMetadata,
@@ -2516,7 +2517,7 @@ export async function executeTool(
         where: {
           userId,
           title: "Extract brand design system",
-          status: "active",
+          status: { in: [...TASK_IN_FLIGHT_STATES] },
         },
         select: { taskRunId: true },
       });
@@ -2555,13 +2556,14 @@ export async function executeTool(
           taskRunId,
           userId,
           threadId: context?.threadId ?? null,
+          contextId: context?.threadId ?? taskRunId,
           routeContext: context?.routeContext ?? null,
           title: "Extract brand design system",
           objective: url
             ? `Extract brand from ${url}`
             : "Extract brand from supplied sources",
           source: "coworker",
-          status: "active",
+          status: "submitted",
         },
       });
 

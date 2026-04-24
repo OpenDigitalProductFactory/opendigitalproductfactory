@@ -21,10 +21,13 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
   const { prisma } = await import("@dpf/db");
   const { extractBrandDesignSystem } = await import("@/lib/brand/extraction");
   const { pushThreadProgress } = await import("@/lib/tak/thread-progress");
+  const { createTaskArtifact, createTaskMessage } = await import("@/lib/tak/task-records");
   const { designSystemToThemeTokens } = await import("@/lib/brand/apply");
 
   // Resolve uploads from AgentAttachment IDs if supplied.
   let uploads: Array<{ name: string; mimeType: string; data: Buffer }> | undefined;
+  let taskRunRecordId: string | null = null;
+  let taskContextId: string | null = input.threadId ?? input.taskRunId;
   if (input.sources.uploadIds && input.sources.uploadIds.length > 0) {
     try {
       const attachments = await prisma.agentAttachment.findMany({
@@ -42,10 +45,21 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
   }
 
   try {
-    // Mark TaskRun active (idempotent; may already be active from the MCP tool)
+    const taskRun = await prisma.taskRun.findUnique({
+      where: { taskRunId: input.taskRunId },
+      select: { id: true, contextId: true },
+    });
+    taskRunRecordId = taskRun?.id ?? null;
+    taskContextId = taskRun?.contextId ?? taskContextId;
+  } catch {
+    // Best-effort lookup; helper can resolve again if needed.
+  }
+
+  try {
+    // Mark TaskRun working (idempotent; submitted is the initial envelope state).
     await prisma.taskRun.update({
       where: { taskRunId: input.taskRunId },
-      data: { status: "active", startedAt: new Date() },
+      data: { status: "working", startedAt: new Date() },
     });
   } catch {
     // Best-effort.
@@ -59,6 +73,19 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
       message: progress.message,
       percent: progress.percent,
     });
+    await createTaskMessage({
+      taskRunId: input.taskRunId,
+      taskRunRecordId,
+      contextId: taskContextId,
+      role: "system",
+      messageType: "progress",
+      content: progress.message,
+      metadata: {
+        eventType: "brand:extract.progress",
+        stage: progress.stage,
+        percent: progress.percent,
+      },
+    }).catch(() => {});
   };
 
   let result;
@@ -92,6 +119,18 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
     } catch {
       // Best-effort.
     }
+    await createTaskMessage({
+      taskRunId: input.taskRunId,
+      taskRunRecordId,
+      contextId: taskContextId,
+      role: "agent",
+      messageType: "status",
+      content: `Brand extraction failed: ${message}`,
+      metadata: {
+        eventType: "brand:extract.failed",
+        error: message,
+      },
+    }).catch(() => {});
     if (input.threadId) {
       try {
         await prisma.agentMessage.create({
@@ -118,18 +157,19 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
 
   // Derive runtime theme tokens and upsert BrandingConfig so the
   // storefront/admin themers pick up the new brand automatically.
+  let themeTokens: unknown = null;
   try {
-    const tokens = designSystemToThemeTokens(ds);
+    themeTokens = designSystemToThemeTokens(ds);
     await prisma.brandingConfig.upsert({
       where: { scope: `organization:${input.organizationId}` },
       update: {
-        tokens: JSON.parse(JSON.stringify(tokens)),
+        tokens: JSON.parse(JSON.stringify(themeTokens)),
         organizationId: input.organizationId,
       },
       create: {
         scope: `organization:${input.organizationId}`,
         label: ds.identity.name || "Organization",
-        tokens: JSON.parse(JSON.stringify(tokens)),
+        tokens: JSON.parse(JSON.stringify(themeTokens)),
         organizationId: input.organizationId,
       },
     });
@@ -155,6 +195,50 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
     taskRunId: input.taskRunId,
     summary,
   });
+
+  await createTaskMessage({
+    taskRunId: input.taskRunId,
+    taskRunRecordId,
+    contextId: taskContextId,
+    role: "agent",
+    messageType: "status",
+    content: summary,
+    metadata: {
+      eventType: "brand:extract.complete",
+      confidence: ds.confidence.overall,
+      sourceCount: result.sourcesUsed.length,
+    },
+  }).catch(() => {});
+
+  await createTaskArtifact({
+    taskRunId: input.taskRunId,
+    taskRunRecordId,
+    artifactType: "design-system",
+    name: "Extracted brand design system",
+    mimeType: "application/json",
+    summary,
+    content: ds,
+    metadata: {
+      sourceCount: result.sourcesUsed.length,
+      sourcesUsed: result.sourcesUsed,
+      durationMs: result.durationMs,
+    },
+  }).catch(() => {});
+
+  if (themeTokens) {
+    await createTaskArtifact({
+      taskRunId: input.taskRunId,
+      taskRunRecordId,
+      artifactType: "theme-tokens",
+      name: "Derived brand theme tokens",
+      mimeType: "application/json",
+      summary: "Runtime branding tokens derived from the extracted design system.",
+      content: themeTokens,
+      metadata: {
+        sourceArtifactType: "design-system",
+      },
+    }).catch(() => {});
+  }
 
   // Post a summary message to the thread so the coworker "returns" with results.
   if (input.threadId) {

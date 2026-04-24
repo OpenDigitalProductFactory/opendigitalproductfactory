@@ -6,7 +6,7 @@
 // ships it through the queue.
 //
 // Responsibilities:
-//   1. Mark TaskRun.status = "active" at start (idempotent; orchestrator
+//   1. Mark TaskRun.status = "working" at start (idempotent; orchestrator
 //      already sets it on bootstrap, but the resume-path may not have).
 //   2. Wrap pipeline-v2 with a BranchDispatcher instance so the
 //      orchestrator can dispatch each branch through the existing routing
@@ -50,15 +50,15 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
   const { computeActualDiversity } = await import("@/lib/deliberation/orchestrator");
   const { routeEndpointV2 } = await import("@/lib/routing/pipeline-v2");
 
-  // Mark TaskRun active (idempotent).
+  // Mark TaskRun working (idempotent).
   try {
     await prisma.taskRun.update({
       where: { taskRunId: input.taskRunId },
-      data: { status: "active" },
+      data: { status: "working" },
     });
   } catch (err) {
     console.warn(
-      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} active: ${err instanceof Error ? err.message : String(err)}`,
+      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} working: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 

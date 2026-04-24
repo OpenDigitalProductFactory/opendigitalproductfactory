@@ -63,6 +63,11 @@ vi.mock("@/lib/agent-router-data", () => ({
   ensurePerformanceProfile: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tak/task-chat-projection", () => ({
+  ensureTaskForCoworkerTurn: vi.fn(),
+  projectThreadMessageToTask: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/feature-build-data", () => ({
   getFeatureBuildForContext: vi.fn().mockResolvedValue(null),
 }));
@@ -116,6 +121,12 @@ vi.mock("@dpf/db", () => ({
     modelProvider: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    taskRun: {
+      findFirst: vi.fn(),
+    },
+    agentActionProposal: {
+      create: vi.fn(),
+    },
     agentModelConfig: {
       findUnique: vi.fn(),
     },
@@ -129,8 +140,12 @@ import { auth } from "@/lib/auth";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { routeAndCall } from "@/lib/routed-inference";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import {
+  ensureTaskForCoworkerTurn,
+  projectThreadMessageToTask,
+} from "@/lib/tak/task-chat-projection";
 import { prisma } from "@dpf/db";
-import { sendMessage } from "./agent-coworker";
+import { recordAgentTransition, sendMessage } from "./agent-coworker";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
 const mockResolveAgentForRoute = resolveAgentForRouteWithPrompts as ReturnType<typeof vi.fn>;
@@ -138,6 +153,8 @@ const mockRouteAndCall = routeAndCall as ReturnType<typeof vi.fn>;
 const mockGetAvailableTools = getAvailableTools as ReturnType<typeof vi.fn>;
 const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
+const mockEnsureTaskForCoworkerTurn = ensureTaskForCoworkerTurn as ReturnType<typeof vi.fn>;
+const mockProjectThreadMessageToTask = projectThreadMessageToTask as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
 
 describe("agent coworker external access", () => {
@@ -164,25 +181,35 @@ describe("agent coworker external access", () => {
     mockPrisma.agentMessage.findMany.mockResolvedValue([]);
     mockPrisma.agentAttachment.findMany.mockResolvedValue([]);
     mockPrisma.agent.findUnique.mockResolvedValue(null);
+    mockPrisma.taskRun.findFirst.mockResolvedValue(null);
+    mockEnsureTaskForCoworkerTurn.mockResolvedValue({
+      id: "task-row-1",
+      taskRunId: "run-123",
+      contextId: "thread-1",
+    });
+    mockProjectThreadMessageToTask.mockResolvedValue(undefined);
+    mockPrisma.agentActionProposal.create.mockResolvedValue({
+      proposalId: "AP-TRACE",
+      actionType: "create_backlog_item",
+      parameters: {},
+      status: "proposed",
+      resultEntityId: null,
+      resultError: null,
+    });
     mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
     mockPrisma.toolExecution.create.mockResolvedValue({});
-    mockPrisma.agentMessage.create
-      .mockResolvedValueOnce({
-        id: "user-msg-1",
-        role: "user",
-        content: "Analyze this site",
-        agentId: null,
-        routeContext: "/admin",
-        createdAt: new Date("2026-03-14T00:00:00.000Z"),
-      })
-      .mockResolvedValueOnce({
-        id: "agent-msg-1",
-        role: "assistant",
-        content: "Derived branding suggestions for Jack Jack's Pack.",
-        agentId: "admin-assistant",
-        routeContext: "/admin",
-        createdAt: new Date("2026-03-14T00:00:01.000Z"),
-      });
+    let messageCount = 0;
+    mockPrisma.agentMessage.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
+      messageCount += 1;
+      return {
+        id: `${String(data.role ?? "message")}-msg-${messageCount}`,
+        role: data.role,
+        content: data.content,
+        agentId: data.agentId ?? null,
+        routeContext: data.routeContext ?? null,
+        createdAt: new Date(`2026-03-14T00:00:0${messageCount}.000Z`),
+      };
+    });
     mockToolsToOpenAIFormat.mockReturnValue([]);
   });
 
@@ -213,6 +240,72 @@ describe("agent coworker external access", () => {
         isSuperuser: false,
       },
       expect.objectContaining({ externalAccessEnabled: true }),
+    );
+  });
+
+  it("projects coworker chat turns onto the canonical task message stream", async () => {
+    mockGetAvailableTools.mockReturnValue([]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "This is a substantive assistant reply for task projection testing.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "Analyze this site",
+      routeContext: "/admin",
+    });
+
+    expect(mockEnsureTaskForCoworkerTurn).toHaveBeenCalled();
+    expect(mockEnsureTaskForCoworkerTurn.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            userId: "user-1",
+            threadId: "thread-1",
+            routeContext: "/admin",
+            content: "Analyze this site",
+          }),
+        ],
+      ]),
+    );
+    expect(mockProjectThreadMessageToTask).toHaveBeenCalledTimes(2);
+    expect(mockProjectThreadMessageToTask.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            task: expect.objectContaining({ taskRunId: "run-123" }),
+            role: "user",
+            content: "Analyze this site",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            task: expect.objectContaining({ taskRunId: "run-123" }),
+            role: "assistant",
+            content: "This is a substantive assistant reply for task projection testing.",
+            providerId: "ollama-local",
+          }),
+        ],
+      ]),
+    );
+    expect(mockPrisma.agentMessage.create.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            data: expect.objectContaining({
+              taskRunId: "run-123",
+            }),
+          }),
+        ],
+      ]),
     );
   });
 
@@ -310,5 +403,85 @@ describe("agent coworker external access", () => {
         paletteAccent: "#4f46e5",
       });
     }
+  });
+
+  it("stamps the current task run on proposals", async () => {
+    mockGetAvailableTools.mockReturnValue([
+      {
+        name: "create_backlog_item",
+        description: "Create backlog item",
+        inputSchema: {},
+        requiredCapability: "manage_backlog",
+        executionMode: "proposal",
+        sideEffect: true,
+      },
+    ]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "I'd like to create a backlog item for this.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+      toolCalls: [
+        {
+          id: "proposal_tool",
+          name: "create_backlog_item",
+          arguments: {
+            title: "Follow up on provider setup",
+          },
+        },
+      ],
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "Create a follow-up backlog item",
+      routeContext: "/admin",
+    });
+
+    expect(mockPrisma.agentActionProposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskRunId: "run-123",
+        }),
+      }),
+    );
+  });
+
+  it("projects agent transition notices onto the canonical task message stream", async () => {
+    await recordAgentTransition({
+      threadId: "thread-1",
+      agentId: "finance-coworker",
+      agentName: "Finance Coworker",
+      routeContext: "/finance",
+    });
+
+    expect(mockEnsureTaskForCoworkerTurn).toHaveBeenCalledWith({
+      userId: "user-1",
+      threadId: "thread-1",
+      routeContext: "/finance",
+      content: "Finance Coworker has joined the conversation",
+      agentId: "finance-coworker",
+    });
+    expect(mockProjectThreadMessageToTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: expect.objectContaining({ taskRunId: "run-123" }),
+        role: "system",
+        content: "Finance Coworker has joined the conversation",
+        routeContext: "/finance",
+        agentId: "finance-coworker",
+        messageType: "status",
+      }),
+    );
+    expect(mockPrisma.agentMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskRunId: "run-123",
+        }),
+      }),
+    );
   });
 });
