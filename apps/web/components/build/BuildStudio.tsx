@@ -10,7 +10,7 @@ import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
-import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
+import { approveBuildStart, createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import type { BuildFlowState } from "@/lib/build-flow-state";
@@ -51,6 +51,7 @@ export function BuildStudio({
   const [newTitle, setNewTitle] = useState("");
   const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [approvingStart, setApprovingStart] = useState(false);
   const isDevEnvironment = dpfEnvironment === "dev";
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
@@ -70,6 +71,18 @@ export function BuildStudio({
       governedBacklogEnabled,
     })
     : null;
+  const requiresStartApproval =
+    activeBuild != null
+    && governedBacklogEnabled
+    && activeBuild.originator != null
+    && activeBuild.phase === "ideate"
+    && activeBuild.draftApprovedAt == null;
+  const isApprovedDraft =
+    activeBuild != null
+    && governedBacklogEnabled
+    && activeBuild.originator != null
+    && activeBuild.phase === "ideate"
+    && activeBuild.draftApprovedAt != null;
 
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
@@ -281,6 +294,19 @@ export function BuildStudio({
     }
   }
 
+  async function handleApproveStart() {
+    if (!activeBuild || approvingStart) return;
+    setApprovingStart(true);
+    try {
+      await approveBuildStart(activeBuild.buildId);
+      const refreshed = await getFeatureBuild(activeBuild.buildId);
+      if (refreshed) setActiveBuild(refreshed);
+      router.refresh();
+    } finally {
+      setApprovingStart(false);
+    }
+  }
+
   return (
     <div className={getBuildStudioShellClassName()} data-testid={BUILD_STUDIO_TEST_IDS.shell}>
       <div className="relative flex flex-1 overflow-hidden">
@@ -475,6 +501,38 @@ export function BuildStudio({
                         <span>Decision: {activeBuild.originator.resolution}</span>
                       )}
                     </div>
+                    {requiresStartApproval && (
+                      <div className="mt-3 flex flex-col gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--dpf-text)]">Prepared Draft</p>
+                          <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">
+                            This governed backlog effort has been prepared in Build Studio, but it will not move into planning until a human approves the start.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleApproveStart}
+                            disabled={approvingStart}
+                            className="inline-flex items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {approvingStart && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                            {approvingStart ? "Approving..." : "Approve Start"}
+                          </button>
+                          <span className="text-xs text-[var(--dpf-muted)]">
+                            Review the brief, assumptions, and workflow details before starting execution.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {isApprovedDraft && (
+                      <div className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+                        <p className="text-sm font-semibold text-[var(--dpf-text)]">Ready to Start</p>
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">
+                          Start approval has been recorded. Build Studio can now continue from ideate into planning when you are ready.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
                 {/* Tab selector */}

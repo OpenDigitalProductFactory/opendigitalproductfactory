@@ -3445,6 +3445,8 @@ export async function executeTool(
           where: { buildId },
           select: {
             phase: true,
+            originatingBacklogItemId: true,
+            draftApprovedAt: true,
             designDoc: true,
             designReview: true,
             plan: true,
@@ -3456,6 +3458,24 @@ export async function executeTool(
         });
 
         if (updatedBuild && updatedBuild.phase === "ideate" && canTransitionPhase("ideate", "plan")) {
+          const governedConfig = await prisma.platformDevConfig.findUnique({
+            where: { id: "singleton" },
+            select: { governedBacklogEnabled: true },
+          });
+          const requiresStartApproval =
+            governedConfig?.governedBacklogEnabled === true
+            && updatedBuild.originatingBacklogItemId != null
+            && updatedBuild.draftApprovedAt == null;
+
+          if (requiresStartApproval) {
+            logBuildActivity(buildId, "phase:gate-blocked", "Approve Start is required before ideate can advance to plan.");
+            return {
+              success: true,
+              message: `Design review: ${review.decision}. ${review.summary} This governed backlog draft is prepared and now waiting for Approve Start before planning can begin.`,
+              data: { review, blocked: true, action: "approve_start" },
+            };
+          }
+
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           let happyPathState = normalizeHappyPathState(plan.happyPathState);
 
