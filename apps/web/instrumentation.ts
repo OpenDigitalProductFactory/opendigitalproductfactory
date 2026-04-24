@@ -129,5 +129,14 @@ export async function register() {
         await pgPool.end().catch(() => {});
       }
     }, STARTUP_DELAY_MS);
+
+    // ── CREDENTIAL_ENCRYPTION_KEY fail-loud guard ──────────────────────────
+    // Refuses to boot in production when the credential store contains
+    // secrets but the encryption key is unset — that combination would cause
+    // silent plaintext storage (data-at-rest vulnerability).
+    // Dev mode short-circuits immediately; zero overhead outside production.
+    // See docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
+    const { assertCredentialEncryptionKeyIsSet } = await import("@/lib/govern/credential-crypto");
+    await assertCredentialEncryptionKeyIsSet();
   }
 }

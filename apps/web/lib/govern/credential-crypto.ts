@@ -65,6 +65,26 @@ export function decryptSecret(stored: string): string | null {
   }
 }
 
+/**
+ * Startup guard. Refuses to run in production if the credential store contains
+ * secrets but CREDENTIAL_ENCRYPTION_KEY is not set — that combination means
+ * existing credentials are stored plaintext or new writes would degrade silently.
+ * Development mode falls back to plaintext per dev-mode convenience; see
+ * docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
+ */
+export async function assertCredentialEncryptionKeyIsSet(): Promise<void> {
+  if (process.env.NODE_ENV !== "production") return;
+  if (getEncryptionKey()) return;
+  const { prisma } = await import("@dpf/db");
+  const count = await prisma.credentialEntry.count({ where: { secretRef: { not: null } } });
+  if (count === 0) return;
+  throw new Error(
+    "FATAL: CREDENTIAL_ENCRYPTION_KEY is not set, but the credential store\n" +
+    "contains secrets that would be read/written in plaintext. Set this variable\n" +
+    "(64 hex chars = 32 bytes) before restarting. For dev, set NODE_ENV=development."
+  );
+}
+
 /** Encrypt a structured value by JSON-stringifying it first. Shape-agnostic — use for polymorphic
  *  integration credential blobs where the fields vary by provider. */
 export function encryptJson<T>(value: T): string {
