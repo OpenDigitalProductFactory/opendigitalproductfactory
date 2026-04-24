@@ -17,10 +17,10 @@ export default async function ToolsHubPage() {
     prisma.mcpServer.count({ where: { status: "unconfigured" } }),
     prisma.mcpServerTool.count({ where: { isEnabled: true } }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365"] }, status: "connected" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot"] }, status: "connected" },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365"] }, status: "error" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot"] }, status: "error" },
     }),
     prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
     prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),

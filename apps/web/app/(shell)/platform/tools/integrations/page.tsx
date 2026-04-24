@@ -4,10 +4,10 @@ import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365"] }, status: "connected" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot"] }, status: "connected" },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365"] }, status: "error" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot"] }, status: "error" },
     }),
   ]);
 
@@ -59,6 +59,16 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-accent)"
           metrics={[
             { label: "Category", value: "Communications" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="HubSpot CRM & Marketing"
+          description="Marketing and CRM anchor for account details, contacts, and lead-capture forms on the enterprise substrate."
+          href="/platform/tools/integrations/hubspot"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Category", value: "Marketing / CRM" },
             { label: "Model", value: "Native" },
           ]}
         />
