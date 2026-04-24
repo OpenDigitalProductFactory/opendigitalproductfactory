@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { appendHarnessAdminEvent } from "./admin-event-log.js";
 import { applyScenarioControl, ControlApiError } from "./control-api.js";
+import { ContractValidationError, createVendorContract, type VendorContract } from "./prism-contract.js";
 import { createScenarioStateStore } from "./session-state.js";
 import type { HarnessScenarioFixture, LoadedVendorDefinition, ScenarioStateStore } from "./types.js";
 import { loadScenarioFixture, loadVendors } from "./vendor-registry.js";
@@ -62,6 +63,11 @@ export async function createHarnessServer(
   };
 
   const vendors = await loadVendors(runtimeConfig.vendorRoot);
+  const contracts = new Map<string, VendorContract>(
+    await Promise.all(
+      vendors.map(async (vendor) => [vendor.slug, await createVendorContract(vendor)] as const),
+    ),
+  );
 
   return createServer(async (req, res) => {
     const requestUrl = new URL(req.url ?? "/", "http://integration-test-harness.local");
@@ -117,6 +123,30 @@ export async function createHarnessServer(
     const activeScenario = runtimeConfig.state.getScenario(matchedRoute.vendor.slug, sessionId) ?? "happy-path";
 
     try {
+      const rawBody = req.method === "POST" ? await readBody(req) : undefined;
+      const contract = contracts.get(matchedRoute.vendor.slug);
+      if (!contract) {
+        sendJson(res, 500, { error: `Contract runtime missing for vendor '${matchedRoute.vendor.slug}'` });
+        return;
+      }
+
+      const contractResponse = await contract.mock({
+        method: matchedRoute.route.method,
+        pathname: requestUrl.pathname,
+        searchParams: requestUrl.searchParams,
+        headers: normalizeRequestHeaders(req.headers),
+        body: rawBody,
+      });
+
+      if (activeScenario === "happy-path") {
+        sendFixtureResponse(res, {
+          status: contractResponse.status,
+          headers: contractResponse.headers,
+          body: contractResponse.body,
+        });
+        return;
+      }
+
       const fixture = await loadScenarioFixture(matchedRoute.vendor, activeScenario);
       const response = fixture[matchedRoute.route.key];
       if (!response) {
@@ -129,6 +159,10 @@ export async function createHarnessServer(
       sendFixtureResponse(res, response);
       return;
     } catch (error) {
+      if (error instanceof ContractValidationError) {
+        sendJson(res, 422, { error: error.message, details: error.details });
+        return;
+      }
       const message = error instanceof Error ? error.message : "Internal server error";
       sendJson(res, 500, { error: message });
     }
@@ -140,6 +174,16 @@ function normalizeHeaderValue(value: string | string[] | undefined): string {
     return value[0]?.trim() ?? "";
   }
   return value?.trim() ?? "";
+}
+
+function normalizeRequestHeaders(
+  headers: IncomingMessage["headers"],
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers)
+      .filter((entry): entry is [string, string | string[]] => typeof entry[1] === "string" || Array.isArray(entry[1]))
+      .map(([key, value]) => [key.toLowerCase(), Array.isArray(value) ? value.join(", ") : value]),
+  );
 }
 
 function findMatchingRoute(

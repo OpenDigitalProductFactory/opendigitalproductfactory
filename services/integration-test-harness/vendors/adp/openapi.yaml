@@ -30,6 +30,9 @@ paths:
           description: Access token response
           content:
             application/json:
+              example:
+                access_token: harness-token-123
+                expires_in: 3600
               schema:
                 $ref: "#/components/schemas/TokenResponse"
         "401":
@@ -51,6 +54,23 @@ paths:
           description: Worker list
           content:
             application/json:
+              example:
+                workers:
+                  - associateOID: G3QZ9WB3KH1234567
+                    workerID:
+                      idValue: EMP0042
+                    person:
+                      legalName:
+                        givenName: Jane
+                        familyName: Doe
+                      birthDate: "1984-11-02"
+                    workAssignments:
+                      - positionTitle: Senior Engineer
+                        hireDate: "2020-03-15"
+                        assignmentStatus:
+                          statusCode:
+                            codeValue: Active
+                        note: Promoted in 2023 and in good standing.
               schema:
                 $ref: "#/components/schemas/WorkersResponse"
   /payroll/v1/workers/{workerId}/pay-statements:
@@ -67,6 +87,16 @@ paths:
           description: Pay statement list
           content:
             application/json:
+              example:
+                payStatements:
+                  - statementID: PS-2026-0401
+                    payDate: "2026-04-15"
+                    grossPayAmount:
+                      amountValue: 4500
+                      currencyCode: USD
+                    netPayAmount:
+                      amountValue: 3187.4
+                      currencyCode: USD
               schema:
                 $ref: "#/components/schemas/PayStatementsResponse"
   /time/v2/workers/{workerId}/time-cards:
@@ -83,6 +113,17 @@ paths:
           description: Time card list
           content:
             application/json:
+              example:
+                timeCards:
+                  - timeCardID: TC-2026-W15-EMP0042
+                    payPeriodStart: "2026-04-06"
+                    payPeriodEnd: "2026-04-12"
+                    totalHours: 42.5
+                    entries:
+                      - date: "2026-04-06"
+                        hoursWorked: 8.5
+                        positionCode: ENG-SR
+                        notes: Normal shift.
               schema:
                 $ref: "#/components/schemas/TimeCardsResponse"
   /payroll/v1/workers/{workerId}/deductions:
@@ -99,6 +140,17 @@ paths:
           description: Deduction list
           content:
             application/json:
+              example:
+                deductions:
+                  - deductionID: DED-HEALTH-EMP0042
+                    code:
+                      codeValue: HEALTH
+                      shortName: Medical
+                    description: BCBS PPO family plan
+                    amount:
+                      amountValue: 280
+                      currencyCode: USD
+                    frequency: biweekly
               schema:
                 $ref: "#/components/schemas/DeductionsResponse"
 components:

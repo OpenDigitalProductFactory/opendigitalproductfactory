@@ -10,7 +10,13 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@stoplight/prism-cli": "5.12.0",
+    "@stoplight/prism-http": "5.12.0",
+    "pino": "^6.13.3"
+  },
   "devDependencies": {
+    "@types/pino": "^6.3.12",
     "@types/node": "^24.10.1",
     "tsx": "^4.20.6",
     "typescript": "^6.0.3",
