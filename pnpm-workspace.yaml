@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "services/adp"
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
