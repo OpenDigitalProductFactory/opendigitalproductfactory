@@ -1,4 +1,5 @@
 // packages/db/src/seed.ts
+import "./load-env.js";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { prisma } from "./client.js";

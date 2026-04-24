@@ -993,11 +993,6 @@ if ($InstallMode -eq "customizer" -and -not (Test-StepDone "dev_setup")) {
             $webContent | Set-Content $webEnvPath
             Write-OK "Created apps/web/.env.local"
         }
-        $dbEnvPath = "$DPF_DIR\packages\db\.env"
-        if (-not (Test-Path $dbEnvPath)) {
-            Copy-Item $envExamplePath $dbEnvPath
-            Write-OK "Created packages/db/.env"
-        }
     } else {
         Write-Warn ".env.example not found -- skipping app-level .env creation"
     }

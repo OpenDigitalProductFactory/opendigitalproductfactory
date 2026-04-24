@@ -9,6 +9,7 @@
 //
 //   pnpm --filter @dpf/db exec tsx src/backfill-capability-ids.ts
 
+import "./load-env.js";
 import { prisma } from "./client.js";
 
 async function main(): Promise<void> {

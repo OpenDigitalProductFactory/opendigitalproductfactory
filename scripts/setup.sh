@@ -74,11 +74,6 @@ else
   ok "apps/web/.env.local already exists -- skipping"
 fi
 
-if [ ! -f packages/db/.env ]; then
-  cp .env.example packages/db/.env
-  ok "Created packages/db/.env"
-fi
-
 # Ensure root .env has real secrets for Docker Compose
 if [ ! -f .env ]; then
   cp .env.docker.example .env
