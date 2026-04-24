@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { BrandingPageClient } from "@/components/admin/BrandingPageClient";
 import { BrandExtractionSection } from "@/components/storefront-admin/BrandExtractionSection";
+import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { isBrandDesignSystem, type BrandDesignSystem } from "@/lib/brand/types";
 
 export default async function AdminBrandingPage() {
@@ -25,7 +26,7 @@ export default async function AdminBrandingPage() {
       : null,
     userId
       ? prisma.taskRun.findFirst({
-          where: { userId, title: "Extract brand design system", status: "active" },
+          where: activeBrandExtractionWhere(userId),
           select: { taskRunId: true },
         })
       : null,

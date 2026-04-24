@@ -9,6 +9,7 @@ import {
   fetchPublicWebsiteEvidence,
   searchPublicWeb,
 } from "@/lib/public-web-tools";
+import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import {
   DELIBERATION_ARTIFACT_TYPES,
@@ -2513,11 +2514,7 @@ export async function executeTool(
       // Concurrency guard (AD-7): return early if another extraction is already
       // running for this user, so the coworker doesn't fire duplicate jobs.
       const active = await prisma.taskRun.findFirst({
-        where: {
-          userId,
-          title: "Extract brand design system",
-          status: "active",
-        },
+        where: activeBrandExtractionWhere(userId),
         select: { taskRunId: true },
       });
       if (active) {
