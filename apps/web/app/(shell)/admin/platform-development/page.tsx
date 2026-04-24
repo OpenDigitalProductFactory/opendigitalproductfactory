@@ -1,4 +1,5 @@
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { ContributionModelBanner } from "@/components/admin/ContributionModelBanner";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import {
@@ -30,6 +31,12 @@ export default async function AdminPlatformDevelopmentPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Platform Development</p>
       </div>
       <AdminTabNav />
+      <ContributionModelBanner
+        enabled={isContributionModelEnabled()}
+        contributionMode={config?.contributionMode ?? null}
+        contributionModel={config?.contributionModel ?? null}
+      />
+      <div id="contribution-setup" />
       <ForkSetupPanel
         enabled={isContributionModelEnabled()}
         contributionModel={config?.contributionModel ?? null}

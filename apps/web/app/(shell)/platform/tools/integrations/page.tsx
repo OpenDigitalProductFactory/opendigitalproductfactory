@@ -4,10 +4,10 @@ import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks"] }, status: "connected" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "connected" },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks"] }, status: "error" },
+      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "error" },
     }),
   ]);
 
@@ -16,7 +16,8 @@ export default async function EnterpriseIntegrationsPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Integrations</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Native, first-class business integrations with customer-supplied credentials and platform-managed governance.
+          Native, first-class business integrations with customer-supplied credentials and
+          platform-managed governance.
         </p>
       </div>
 
@@ -41,6 +42,16 @@ export default async function EnterpriseIntegrationsPage() {
             { label: "Model", value: "Native" },
           ]}
         />
+        <PlatformSummaryCard
+          title="Stripe Billing & Payments"
+          description="Payments anchor for balance, customer, invoice, and payment-intent context on the enterprise substrate."
+          href="/platform/tools/integrations/stripe"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Category", value: "Payments" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
       </div>
 
       <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
@@ -48,9 +59,9 @@ export default async function EnterpriseIntegrationsPage() {
           Current Posture
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          {configuredIntegrations} configured native integrations, {errorStates} needing operator attention.
-          Native connectors stay separate from MCP services so enterprise auth, credential custody, and
-          approval boundaries remain explicit.
+          {configuredIntegrations} configured native integrations, {errorStates} needing operator
+          attention. Native connectors stay separate from MCP services so enterprise auth,
+          credential custody, and approval boundaries remain explicit.
         </p>
       </div>
     </div>

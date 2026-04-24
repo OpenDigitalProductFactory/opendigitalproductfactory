@@ -11,28 +11,28 @@ export default async function ToolsHubPage() {
     integrationErrors,
     activeDiscoveryConnections,
     needsReviewCount,
-  ] =
-    await Promise.all([
-      prisma.mcpIntegration.count({ where: { status: "active" } }),
-      prisma.mcpServer.count({ where: { status: "active" } }),
-      prisma.mcpServer.count({ where: { status: "unconfigured" } }),
-      prisma.mcpServerTool.count({ where: { isEnabled: true } }),
-      prisma.integrationCredential.count({
-        where: { provider: { in: ["adp", "quickbooks"] }, status: "connected" },
-      }),
-      prisma.integrationCredential.count({
-        where: { provider: { in: ["adp", "quickbooks"] }, status: "error" },
-      }),
-      prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
-      prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
-    ]);
+  ] = await Promise.all([
+    prisma.mcpIntegration.count({ where: { status: "active" } }),
+    prisma.mcpServer.count({ where: { status: "active" } }),
+    prisma.mcpServer.count({ where: { status: "unconfigured" } }),
+    prisma.mcpServerTool.count({ where: { isEnabled: true } }),
+    prisma.integrationCredential.count({
+      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "connected" },
+    }),
+    prisma.integrationCredential.count({
+      where: { provider: { in: ["adp", "quickbooks", "stripe"] }, status: "error" },
+    }),
+    prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
+    prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+  ]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Tools &amp; Services</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Discover integrations, run discovery operations, activate MCP services, and confirm what tools are really available to agents.
+          Discover integrations, run discovery operations, activate MCP services, and confirm what
+          tools are really available to agents.
         </p>
       </div>
 
@@ -94,8 +94,9 @@ export default async function ToolsHubPage() {
           Recommended Flow
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          Start in the catalog when you are researching options, move to discovery operations when you need to understand what was found and why it matters,
-          then use services and capability inventory to manage the platform tooling the AI workforce relies on.
+          Start in the catalog when you are researching options, move to discovery operations when
+          you need to understand what was found and why it matters, then use services and capability
+          inventory to manage the platform tooling the AI workforce relies on.
         </p>
       </div>
     </div>
