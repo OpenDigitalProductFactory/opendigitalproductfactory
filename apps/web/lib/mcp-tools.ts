@@ -4533,8 +4533,10 @@ export async function executeTool(
       const { createBranchAndPR, mergePR, commentOnPR } = await import("@/lib/integrate/github-api-commit");
 
       const prResult = await createBranchAndPR({
-        owner: repoOwner,
-        repo: repoName,
+        headOwner: repoOwner,
+        headRepo: repoName,
+        baseOwner: repoOwner,
+        baseRepo: repoName,
         branchName,
         commitMessage,
         diff,
@@ -5496,8 +5498,13 @@ export async function executeTool(
             if (!securityScan.passed) labels.push("security-review-needed");
 
             const prResult = await createBranchAndPR({
-              owner: upstreamMatch[1],
-              repo: upstreamMatch[2],
+              // Phase 3: caller still passes head === base. Phase 4 will switch
+              // to head = contributor fork / base = upstream when
+              // contributionModel === "fork-pr".
+              headOwner: upstreamMatch[1],
+              headRepo: upstreamMatch[2],
+              baseOwner: upstreamMatch[1],
+              baseRepo: upstreamMatch[2],
               branchName,
               commitMessage,
               diff,
