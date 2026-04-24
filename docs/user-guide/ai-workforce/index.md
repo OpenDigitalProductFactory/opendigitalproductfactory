@@ -2,8 +2,8 @@
 title: "AI Workforce"
 area: ai-workforce
 order: 1
-lastUpdated: 2026-03-26
-updatedBy: Claude (COO)
+lastUpdated: 2026-04-24
+updatedBy: Codex
 ---
 
 ## Overview
@@ -17,6 +17,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - **Routing** — The logic that selects which model handles a given request. Routing considers the task type, required capability level, current provider availability, and cost constraints.
 - **Failover Chain** — The ordered sequence of fallback models to use if the primary model is unavailable or returns an error. Failover is automatic and transparent to users.
 - **Token Spend** — Usage tracking per provider and model. Visible to admins to monitor cost and identify unexpected consumption patterns.
+- **Finance Bridge** — When a provider is configured, the platform can seed finance ownership by linking the provider to a supplier, draft contract, and finance work items.
 - **Tool Grants** — Each agent has a declared set of tool grants in `agent_registry.json` that control which platform tools it can invoke. Tool grants are enforced at runtime — an agent can only use tools that match its grants AND the user's role capabilities (effective permissions = user role intersection with agent grants).
 - **HITL Tiers** — Human-In-The-Loop tiers define how much autonomy an agent has. Tier 0 = executive oversight required, Tier 1 = manager approval, Tier 2 = auto-approved with audit, Tier 3 = informational only.
 - **Tool Evaluation Pipeline** — External tools (MCP servers, npm packages, APIs) must pass a multi-agent evaluation pipeline (security, architecture, compliance, integration) before adoption. See EP-GOVERN-002.
@@ -27,11 +28,17 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - Review available models per provider and configure their routing profiles
 - Set up failover chains to ensure continuity when a provider is degraded
 - Monitor token spend and usage patterns across all active providers
+- Hand off configured providers into Finance so supplier ownership and committed spend stay visible
 - Manage agent-to-provider assignments for specific platform capabilities
 - View the **Authority** tab to understand agent tool grants, HITL tiers, and escalation paths
 - Review the **Action History** to see all agent proposals and their approval status
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
 - Evaluate external tools via the **Tool Evaluation Pipeline** before adding them to the platform
+
+## Related Routes
+
+- `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
+- `/finance/spend/ai` — finance-owned view of AI supplier commitments and work items
 
 ## Authority & Governance
 
