@@ -24,6 +24,26 @@ export interface VendorDefinition {
   routesPath: string;
 }
 
+export interface VendorRouteDefinition {
+  key: string;
+  method: "GET" | "POST";
+  path: string;
+}
+
+export interface LoadedVendorDefinition extends VendorDefinition {
+  scenariosDir: string;
+  routes: VendorRouteDefinition[];
+}
+
+export interface HarnessScenarioResponse {
+  status: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+  rawBody?: string;
+}
+
+export type HarnessScenarioFixture = Record<string, HarnessScenarioResponse>;
+
 export interface HarnessAdminEvent {
   kind: "scenario_flip";
   vendor: string;

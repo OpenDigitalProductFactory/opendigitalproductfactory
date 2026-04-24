@@ -6,7 +6,7 @@
     "lib": ["ES2022"],
     "types": ["node"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -16,6 +16,6 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "vendors/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

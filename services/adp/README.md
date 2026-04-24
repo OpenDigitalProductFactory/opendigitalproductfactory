@@ -43,7 +43,7 @@ curl -sf http://localhost:8600/health
 Optional local harness overrides:
 
 ```bash
-ADP_API_BASE_URL=http://integration-test-harness:8700/adp-api
+ADP_API_BASE_URL=http://integration-test-harness:8700
 ADP_TOKEN_ENDPOINT_URL=http://integration-test-harness:8700/oauth/token
 DPF_INTEGRATION_TEST_SESSION_ID=test-run-001
 ```
@@ -52,4 +52,11 @@ When the override URLs use `http://`, the service treats them as harness transpo
 
 ## Compose wiring
 
-Not yet wired into `docker-compose.yml`. Adding the service to compose is the explicit infra step — see plan P0.4 Step 4.
+The test harness now has a dedicated `integration-test` compose profile. To route ADP through it locally, set the override env vars and then start:
+
+```powershell
+$env:ADP_API_BASE_URL = "http://integration-test-harness:8700"
+$env:ADP_TOKEN_ENDPOINT_URL = "http://integration-test-harness:8700/oauth/token"
+$env:DPF_INTEGRATION_TEST_SESSION_ID = "local-compose-run"
+docker compose --profile integration-test up -d integration-test-harness adp
+```

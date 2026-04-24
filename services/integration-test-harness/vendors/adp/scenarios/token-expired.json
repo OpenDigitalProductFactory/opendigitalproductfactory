@@ -1,0 +1,48 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "access_token": "expired-harness-token",
+      "expires_in": 1
+    }
+  },
+  "workers": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "payStatements": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "timeCards": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "deductions": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  }
+}

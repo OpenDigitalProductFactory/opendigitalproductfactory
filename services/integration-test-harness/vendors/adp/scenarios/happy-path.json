@@ -1,0 +1,98 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "access_token": "harness-token-123",
+      "expires_in": 3600
+    }
+  },
+  "workers": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "workers": [
+        {
+          "associateOID": "G3QZ9WB3KH1234567",
+          "workerID": { "idValue": "EMP0042" },
+          "person": {
+            "legalName": {
+              "givenName": "Jane",
+              "familyName": "Doe"
+            },
+            "birthDate": "1984-11-02"
+          },
+          "workAssignments": [
+            {
+              "positionTitle": "Senior Engineer",
+              "hireDate": "2020-03-15",
+              "assignmentStatus": { "statusCode": { "codeValue": "Active" } },
+              "note": "Promoted in 2023 and in good standing."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "payStatements": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "payStatements": [
+        {
+          "statementID": "PS-2026-0401",
+          "payDate": "2026-04-15",
+          "grossPayAmount": { "amountValue": 4500.0, "currencyCode": "USD" },
+          "netPayAmount": { "amountValue": 3187.4, "currencyCode": "USD" }
+        }
+      ]
+    }
+  },
+  "timeCards": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "timeCards": [
+        {
+          "timeCardID": "TC-2026-W15-EMP0042",
+          "payPeriodStart": "2026-04-06",
+          "payPeriodEnd": "2026-04-12",
+          "totalHours": 42.5,
+          "entries": [
+            {
+              "date": "2026-04-06",
+              "hoursWorked": 8.5,
+              "positionCode": "ENG-SR",
+              "notes": "Normal shift."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "deductions": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "deductions": [
+        {
+          "deductionID": "DED-HEALTH-EMP0042",
+          "code": { "codeValue": "HEALTH", "shortName": "Medical" },
+          "description": "BCBS PPO family plan",
+          "amount": { "amountValue": 280.0, "currencyCode": "USD" },
+          "frequency": "biweekly"
+        }
+      ]
+    }
+  }
+}
