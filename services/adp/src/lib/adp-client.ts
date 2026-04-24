@@ -3,6 +3,7 @@
 import { Agent, request, type Dispatcher } from "undici";
 import type { AdpEnvironment } from "./token-client.js";
 import type { ActiveCredential } from "./creds.js";
+import { getAdpRuntimeConfig, getHarnessRequestHeaders, isHarnessTransport } from "./runtime-config.js";
 
 export class AdpApiError extends Error {
   readonly statusCode: number;
@@ -29,12 +30,14 @@ export async function adpGet<T>(params: AdpGetParams): Promise<T> {
   const url = `${baseHost}${params.path}${queryString}`;
 
   const dispatcher = params.dispatcher
-    ?? new Agent({
-      connect: {
-        cert: params.credential.certPem,
-        key: params.credential.privateKeyPem,
-      },
-    });
+    ?? (isHarnessTransport(baseHost)
+      ? undefined
+      : new Agent({
+        connect: {
+          cert: params.credential.certPem,
+          key: params.credential.privateKeyPem,
+        },
+      }));
 
   let response: Dispatcher.ResponseData;
   try {
@@ -43,6 +46,7 @@ export async function adpGet<T>(params: AdpGetParams): Promise<T> {
       headers: {
         authorization: `Bearer ${params.credential.accessToken}`,
         accept: "application/json",
+        ...getHarnessRequestHeaders(),
       },
       dispatcher,
     });
@@ -78,12 +82,7 @@ export async function adpGet<T>(params: AdpGetParams): Promise<T> {
 }
 
 function resolveApiHost(env: AdpEnvironment): string {
-  // TODO(sandbox-URL): ADP's sandbox host needs confirmation during the first
-  // manual sandbox test. The token endpoint pattern is accounts.sandbox.api.adp.com,
-  // so api.sandbox.adp.com is the most likely mirror — but ADP's partner docs
-  // also reference apis-workforcenow.adp.com for some tenants. Adjust here
-  // once we have a confirmed sandbox base URL from a partner account.
-  return env === "production" ? "https://api.adp.com" : "https://api.sandbox.adp.com";
+  return getAdpRuntimeConfig(env).apiBaseUrl;
 }
 
 function buildQuery(q: Record<string, string | number | undefined> | undefined): string {
