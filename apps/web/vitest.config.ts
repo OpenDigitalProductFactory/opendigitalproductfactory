@@ -17,7 +17,7 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: ["**/*.test.{ts,tsx}"],
-    exclude: ["node_modules", ".next"],
+    exclude: ["node_modules", ".next", "tests/**"],
   },
   resolve: {
     dedupe: ["react", "react-dom"],
