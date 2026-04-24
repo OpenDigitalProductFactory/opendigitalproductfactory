@@ -1,3 +1,3 @@
-export * from "./credential-crypto";
-export * from "./redact";
-export * from "./tool-call-audit";
+export * from "./credential-crypto.js";
+export * from "./redact.js";
+export * from "./tool-call-audit.js";

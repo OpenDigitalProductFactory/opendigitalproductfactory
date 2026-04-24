@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/harness.js",
+    "start": "node dist/src/harness.js",
     "dev": "tsx watch src/harness.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

@@ -1,0 +1,141 @@
+openapi: 3.0.3
+info:
+  title: DPF Authored ADP Harness Contract
+  version: 0.1.0
+servers:
+  - url: https://accounts.api.adp.com
+  - url: https://accounts.sandbox.api.adp.com
+  - url: https://api.adp.com
+  - url: https://api.sandbox.adp.com
+paths:
+  /oauth/token:
+    post:
+      summary: Exchange ADP client credentials for an access token
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type:
+                  type: string
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+      responses:
+        "200":
+          description: Access token response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid client credentials
+  /hr/v2/workers:
+    get:
+      summary: List workers
+      parameters:
+        - name: $top
+          in: query
+          schema:
+            type: integer
+        - name: $skip
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Worker list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkersResponse"
+  /payroll/v1/workers/{workerId}/pay-statements:
+    get:
+      summary: List pay statements for a worker
+      parameters:
+        - name: workerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pay statement list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayStatementsResponse"
+  /time/v2/workers/{workerId}/time-cards:
+    get:
+      summary: List time cards for a worker
+      parameters:
+        - name: workerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Time card list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeCardsResponse"
+  /payroll/v1/workers/{workerId}/deductions:
+    get:
+      summary: List deductions for a worker
+      parameters:
+        - name: workerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deduction list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeductionsResponse"
+components:
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access_token]
+      properties:
+        access_token:
+          type: string
+        expires_in:
+          type: integer
+    WorkersResponse:
+      type: object
+      properties:
+        workers:
+          type: array
+          items:
+            type: object
+    PayStatementsResponse:
+      type: object
+      properties:
+        payStatements:
+          type: array
+          items:
+            type: object
+    TimeCardsResponse:
+      type: object
+      properties:
+        timeCards:
+          type: array
+          items:
+            type: object
+    DeductionsResponse:
+      type: object
+      properties:
+        deductions:
+          type: array
+          items:
+            type: object

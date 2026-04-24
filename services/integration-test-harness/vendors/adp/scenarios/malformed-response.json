@@ -1,0 +1,37 @@
+{
+  "token": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"access_token\":"
+  },
+  "workers": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"workers\":["
+  },
+  "payStatements": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"payStatements\":["
+  },
+  "timeCards": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"timeCards\":["
+  },
+  "deductions": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"deductions\":["
+  }
+}

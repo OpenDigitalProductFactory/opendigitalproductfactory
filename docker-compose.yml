@@ -259,11 +259,34 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       PORT: "8600"
+      ADP_API_BASE_URL: ${ADP_API_BASE_URL:-}
+      ADP_TOKEN_ENDPOINT_URL: ${ADP_TOKEN_ENDPOINT_URL:-}
+      DPF_INTEGRATION_TEST_SESSION_ID: ${DPF_INTEGRATION_TEST_SESSION_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8600/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  integration-test-harness:
+    build:
+      context: .
+      dockerfile: services/integration-test-harness/Dockerfile
+    restart: unless-stopped
+    profiles: ["integration-test"]
+    ports:
+      - "8700:8700"
+    environment:
+      PORT: "8700"
+      HARNESS_TEST_MODE: ${HARNESS_TEST_MODE:-1}
+      HARNESS_CONTROL_TOKEN: ${HARNESS_CONTROL_TOKEN:-integration-test-token}
+      HARNESS_ADMIN_LOG_PATH: ${HARNESS_ADMIN_LOG_PATH:-/tmp/harness-admin-events.ndjson}
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8700/health"]
       interval: 30s
       timeout: 5s
       retries: 3
