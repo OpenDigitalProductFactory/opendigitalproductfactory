@@ -25,6 +25,7 @@ export type SyncedPrincipal = PrincipalRecord & {
 };
 
 const INTERNAL_ISSUER = "";
+const PRIVATE_GAID_ISSUER = "dpf.internal";
 
 function nextPrincipalId(): string {
   return `PRN-${crypto.randomUUID()}`;
@@ -33,6 +34,20 @@ function nextPrincipalId(): string {
 function normalizeStatus(status?: string | null): string {
   if (!status) return "active";
   return status;
+}
+
+function normalizeGaidLocalId(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "agent";
+}
+
+export function buildPrivateAgentGaid(agentId: string): string {
+  return `gaid:priv:${PRIVATE_GAID_ISSUER}:${normalizeGaidLocalId(agentId)}`;
 }
 
 async function findPrincipalByAliases(
@@ -99,20 +114,25 @@ async function upsertPrincipalForAliases(
   },
 ): Promise<SyncedPrincipal> {
   const existing = await findPrincipalByAliases(db, input.aliases);
+  const nextStatus = normalizeStatus(input.status);
   const principal = existing
-    ? await db.principal.update({
-        where: { id: existing.id },
-        data: {
-          kind: input.kind,
-          status: normalizeStatus(input.status),
-          displayName: input.displayName,
-        },
-      })
+    ? existing.kind === input.kind &&
+        existing.status === nextStatus &&
+        existing.displayName === input.displayName
+      ? existing
+      : await db.principal.update({
+          where: { id: existing.id },
+          data: {
+            kind: input.kind,
+            status: nextStatus,
+            displayName: input.displayName,
+          },
+        })
     : await db.principal.create({
         data: {
           principalId: nextPrincipalId(),
           kind: input.kind,
-          status: normalizeStatus(input.status),
+          status: nextStatus,
           displayName: input.displayName,
         },
       });
@@ -249,8 +269,27 @@ export async function syncAgentPrincipal(
         aliasValue: agent.agentId,
         issuer: INTERNAL_ISSUER,
       },
+      {
+        aliasType: "gaid",
+        aliasValue: buildPrivateAgentGaid(agent.agentId),
+        issuer: INTERNAL_ISSUER,
+      },
     ],
   });
+}
+
+export async function ensureAgentPrincipalIdentity(
+  agentId: string,
+  db: PrincipalDb = prisma,
+): Promise<SyncedPrincipal | null> {
+  try {
+    return await syncAgentPrincipal(agentId, db);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("not found")) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function resolvePrincipalIdForUser(

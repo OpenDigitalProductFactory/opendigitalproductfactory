@@ -83,7 +83,7 @@ describe("syncEmployeePrincipal", () => {
 });
 
 describe("syncAgentPrincipal", () => {
-  it("creates an agent principal with an agent alias for AI workforce identities", async () => {
+  it("creates an agent principal with agent and GAID aliases for AI workforce identities", async () => {
     vi.mocked(prisma.agent.findUnique).mockResolvedValue({
       id: "agent-db-1",
       agentId: "AGT-100",
@@ -100,13 +100,21 @@ describe("syncAgentPrincipal", () => {
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });
-    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 2 });
     vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
       {
         id: "alias-agent",
         principalId: "principal-db-2",
         aliasType: "agent",
         aliasValue: "AGT-100",
+        issuer: "",
+        createdAt: new Date("2026-04-23T00:00:00Z"),
+      },
+      {
+        id: "alias-gaid",
+        principalId: "principal-db-2",
+        aliasType: "gaid",
+        aliasValue: "gaid:priv:dpf.internal:agt-100",
         issuer: "",
         createdAt: new Date("2026-04-23T00:00:00Z"),
       },
@@ -118,6 +126,10 @@ describe("syncAgentPrincipal", () => {
     expect(result.aliases).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ aliasType: "agent", aliasValue: "AGT-100" }),
+        expect.objectContaining({
+          aliasType: "gaid",
+          aliasValue: "gaid:priv:dpf.internal:agt-100",
+        }),
       ]),
     );
   });
