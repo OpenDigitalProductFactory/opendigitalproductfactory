@@ -280,3 +280,127 @@ export async function saveContributionSetup(input: {
   revalidatePath("/admin/platform-development");
   return { success: true, username: validation.username };
 }
+
+// ─── Fork setup for the fork-pr contribution model ───────────────────────────
+//
+// Gated on CONTRIBUTION_MODEL_ENABLED at the UI layer; the action itself is
+// safe to call regardless — it writes fork metadata but does NOT set
+// contributionModel, so it has no dispatch-time effect until a later phase
+// wires contribute_to_hive to branch on contributionModel.
+
+const DEFAULT_UPSTREAM_URL =
+  "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
+
+export type ConfigureForkSetupResult =
+  | { success: true; status: "ready" | "deferred"; forkOwner: string; forkRepo: string }
+  | { success: false; error: string };
+
+export async function configureForkSetup(input: {
+  contributorForkOwner: string;
+  token: string;
+}): Promise<ConfigureForkSetupResult> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { success: false, error: "Not authenticated" };
+
+  if (!input.contributorForkOwner.trim()) {
+    return { success: false, error: "GitHub username is required." };
+  }
+
+  // Validate token (reuses the /user call — confirms the token is live and
+  // has API access; scope validation is layered in Phase 5).
+  const validation = await validateGitHubToken(input.token);
+  if (!validation.valid) {
+    return { success: false, error: validation.error ?? "Token validation failed." };
+  }
+
+  // Parse upstream owner/repo from PlatformDevConfig.upstreamRemoteUrl, with
+  // a documented default for installs that haven't been configured yet.
+  const cfg = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { upstreamRemoteUrl: true },
+  });
+  const upstreamUrl = cfg?.upstreamRemoteUrl ?? DEFAULT_UPSTREAM_URL;
+  const match = upstreamUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+  if (!match) {
+    return { success: false, error: `Upstream URL is not a recognizable GitHub repo: ${upstreamUrl}` };
+  }
+  const [, upstreamOwner, upstreamRepo] = match;
+
+  const { forkExistsAndIsFork, createForkAndWait } = await import("@/lib/integrate/github-fork");
+
+  // Does the contributor already own a fork? Three cases:
+  //   (a) exists + is fork of upstream → use it.
+  //   (b) exists but not a fork of upstream → fail actionably.
+  //   (c) does not exist → create one and poll for readiness.
+  //
+  // Fork-rename case (admin renamed the fork repo) is out of scope; this
+  // path looks up the fork by upstreamRepo name. If the admin renamed their
+  // fork, they must rename it back or delete it before retrying.
+  let existing: Awaited<ReturnType<typeof forkExistsAndIsFork>>;
+  try {
+    existing = await forkExistsAndIsFork({
+      owner: input.contributorForkOwner,
+      repo: upstreamRepo,
+      upstreamOwner,
+      upstreamRepo,
+      token: input.token,
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: `Could not check for an existing fork: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (existing.exists && !existing.isFork) {
+    return {
+      success: false,
+      error: `A repo ${input.contributorForkOwner}/${upstreamRepo} exists but is not a fork of ${upstreamOwner}/${upstreamRepo}. Rename it or delete it, then retry.`,
+    };
+  }
+
+  let forkOwner: string;
+  let forkRepo: string;
+  let status: "ready" | "deferred";
+
+  if (existing.exists && existing.isFork) {
+    forkOwner = input.contributorForkOwner;
+    forkRepo = upstreamRepo;
+    status = "ready";
+  } else {
+    try {
+      const created = await createForkAndWait({
+        upstreamOwner,
+        upstreamRepo,
+        token: input.token,
+      });
+      forkOwner = created.forkOwner;
+      forkRepo = created.forkRepo;
+      status = created.status;
+    } catch (err) {
+      return {
+        success: false,
+        error: `Fork creation failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  await prisma.platformDevConfig.upsert({
+    where: { id: "singleton" },
+    update: {
+      contributorForkOwner: forkOwner,
+      contributorForkRepo: forkRepo,
+      forkVerifiedAt: status === "ready" ? new Date() : null,
+    },
+    create: {
+      id: "singleton",
+      contributorForkOwner: forkOwner,
+      contributorForkRepo: forkRepo,
+      forkVerifiedAt: status === "ready" ? new Date() : null,
+    },
+  });
+
+  revalidatePath("/admin/platform-development");
+  return { success: true, status, forkOwner, forkRepo };
+}
