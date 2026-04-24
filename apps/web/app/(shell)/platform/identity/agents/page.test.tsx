@@ -43,6 +43,14 @@ describe("PlatformIdentityAgentsPage", () => {
         issuer: "",
         createdAt: new Date("2026-04-23T00:00:00Z"),
       },
+      {
+        id: "alias-gaid-1",
+        principalId: "principal-2",
+        aliasType: "gaid",
+        aliasValue: "gaid:priv:dpf.internal:agt-100",
+        issuer: "",
+        createdAt: new Date("2026-04-23T00:00:00Z"),
+      },
     ] as never);
 
     const { default: PlatformIdentityAgentsPage } = await import("./page");
@@ -53,5 +61,6 @@ describe("PlatformIdentityAgentsPage", () => {
     expect(html).toContain("HR Assistant");
     expect(html).toContain("principal linked");
     expect(html).toContain("needs linking");
+    expect(html).toContain("gaid:priv:dpf.internal:agt-100");
   });
 });

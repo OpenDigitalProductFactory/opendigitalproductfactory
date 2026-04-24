@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AgentGovernanceCard } from "@/components/ea/AgentGovernanceCard";
 import { AgentProviderSelect } from "@/components/platform/AgentProviderSelect";
 import { getAgentGrantSummaries } from "@/lib/agent-grants";
+import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Tier 1 - Orchestrators",
@@ -71,6 +72,7 @@ export default async function PlatformAiPage() {
 
   const grantSummaries = await getAgentGrantSummaries();
   const grantLookup = new Map(grantSummaries.map(g => [g.agentId, g]));
+  const gaidByAgentId = await getAgentGaidMap(agents.map((agent) => agent.agentId));
 
   const tiers = [1, 2, 3] as const;
   const byTier = new Map(tiers.map((tier) => [tier, agents.filter((agent) => agent.tier === tier)]));
@@ -201,6 +203,21 @@ export default async function PlatformAiPage() {
                       </span>
                     )}
                   </div>
+                  {gaidByAgentId.get(agent.agentId) ? (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        color: "var(--dpf-muted)",
+                        fontFamily: "monospace",
+                        fontSize: 10,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {gaidByAgentId.get(agent.agentId)}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

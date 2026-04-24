@@ -60,14 +60,14 @@ export function CapabilityJournalClient({ executions }: Props) {
       {/* Filters */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <select value={auditClassFilter} onChange={(e) => setAuditClassFilter(e.target.value)} style={selectStyle}>
-          <option value="all">All classes</option>
-          <option value="ledger">Ledger only</option>
-          <option value="journal">Journal only</option>
+          <option value="all" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">All classes</option>
+          <option value="ledger" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Ledger only</option>
+          <option value="journal" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Journal only</option>
         </select>
         <select value={successFilter} onChange={(e) => setSuccessFilter(e.target.value)} style={selectStyle}>
-          <option value="all">All outcomes</option>
-          <option value="success">Success</option>
-          <option value="failure">Failure</option>
+          <option value="all" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">All outcomes</option>
+          <option value="success" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Success</option>
+          <option value="failure" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Failure</option>
         </select>
         <input
           type="text"
@@ -123,7 +123,7 @@ export function CapabilityJournalClient({ executions }: Props) {
                     gridTemplateColumns: "90px 80px 1.1fr 1.6fr 1fr 60px 70px",
                     gap: 8,
                     padding: "10px 12px",
-                    background: isExpanded ? "#1e1e35" : "#1a1a2e",
+                    background: isExpanded ? "var(--dpf-surface-2)" : "var(--dpf-surface-1)",
                     border: "1px solid var(--dpf-border)",
                     borderRadius: isExpanded ? "6px 6px 0 0" : 6,
                     cursor: "pointer",
@@ -149,8 +149,31 @@ export function CapabilityJournalClient({ executions }: Props) {
                       <span style={{ color: "var(--dpf-muted)", fontSize: 11 }}>&mdash;</span>
                     )}
                   </span>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {AGENT_NAME_MAP[e.agentId] ?? e.agentId}
+                  <span
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 2,
+                      minWidth: 0,
+                    }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {AGENT_NAME_MAP[e.agentId] ?? e.agentId}
+                    </span>
+                    {e.agentIdentityRef ? (
+                      <span
+                        style={{
+                          color: "var(--dpf-muted)",
+                          fontFamily: "monospace",
+                          fontSize: 10,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {e.agentIdentityRef}
+                      </span>
+                    ) : null}
                   </span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {formatToolName(e.toolName)}
@@ -197,7 +220,7 @@ export function CapabilityJournalClient({ executions }: Props) {
                         <pre style={{
                           margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all",
                           color: "var(--dpf-text)", fontSize: 11, lineHeight: 1.5,
-                          background: "#12121e", padding: 10, borderRadius: 4, border: "1px solid var(--dpf-border)",
+                          background: "var(--dpf-bg)", padding: 10, borderRadius: 4, border: "1px solid var(--dpf-border)",
                         }}>
                           {JSON.stringify(e.parameters, null, 2)}
                         </pre>
@@ -207,16 +230,16 @@ export function CapabilityJournalClient({ executions }: Props) {
                         <pre style={{
                           margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all",
                           color: e.success ? "var(--dpf-text)" : "var(--dpf-error)", fontSize: 11, lineHeight: 1.5,
-                          background: "#12121e", padding: 10, borderRadius: 4, border: "1px solid var(--dpf-border)",
+                          background: "var(--dpf-bg)", padding: 10, borderRadius: 4, border: "1px solid var(--dpf-border)",
                         }}>
                           {JSON.stringify(e.result, null, 2)}
                         </pre>
                       </>
                     )}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
-                      <div><span style={{ color: "#666" }}>Mode: </span>{e.executionMode}</div>
-                      <div><span style={{ color: "#666" }}>Thread: </span>{e.threadId.slice(0, 12)}...</div>
-                      <div><span style={{ color: "#666" }}>Created: </span>{new Date(e.createdAt).toLocaleString()}</div>
+                      <div><span style={{ color: "var(--dpf-muted)" }}>Mode: </span>{e.executionMode}</div>
+                      <div><span style={{ color: "var(--dpf-muted)" }}>Thread: </span>{e.threadId.slice(0, 12)}...</div>
+                      <div><span style={{ color: "var(--dpf-muted)" }}>Created: </span>{new Date(e.createdAt).toLocaleString()}</div>
                     </div>
                   </div>
                 )}

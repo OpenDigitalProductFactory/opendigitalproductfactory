@@ -6,6 +6,7 @@ type AgentIdentityRow = {
   lifecycleStage: string;
   humanSupervisorId: string | null;
   linkedPrincipalId: string | null;
+  gaid: string | null;
 };
 
 export function AgentIdentityPanel({ agents }: { agents: AgentIdentityRow[] }) {
@@ -54,6 +55,9 @@ export function AgentIdentityPanel({ agents }: { agents: AgentIdentityRow[] }) {
                 </span>
                 {agent.linkedPrincipalId ? (
                   <p className="mt-2 text-[11px] font-mono text-[var(--dpf-muted)]">{agent.linkedPrincipalId}</p>
+                ) : null}
+                {agent.gaid ? (
+                  <p className="mt-1 text-[11px] font-mono text-[var(--dpf-muted)]">{agent.gaid}</p>
                 ) : null}
               </div>
             </div>

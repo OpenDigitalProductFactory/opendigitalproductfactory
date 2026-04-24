@@ -3,6 +3,7 @@ import { checkBundledProviders, getOllamaHardwareInfo } from "./ollama";
 import { getOllamaBaseUrl } from "./ollama-url";
 import { isFirstRun, createSetupProgress } from "../actions/setup-progress";
 import { activateProvider } from "@/lib/govern/activate-provider";
+import { syncAgentPrincipal } from "@/lib/identity/principal-linking";
 
 /** Check if first-run bootstrap is needed. */
 export async function checkBootstrapNeeded(): Promise<boolean> {
@@ -65,6 +66,8 @@ export async function seedOnboardingAgent(): Promise<void> {
       pinnedProviderId: null, // Clear any stale pins from prior runs
     },
   });
+
+  await syncAgentPrincipal(agent.agentId);
 }
 
 /**

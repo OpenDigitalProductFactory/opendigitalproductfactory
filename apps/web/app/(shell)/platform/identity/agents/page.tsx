@@ -15,21 +15,33 @@ export default async function PlatformIdentityAgentsPage() {
       },
     }),
     prisma.principalAlias.findMany({
-      where: { aliasType: "agent", issuer: "" },
+      where: { aliasType: { in: ["agent", "gaid"] }, issuer: "" },
       orderBy: { aliasValue: "asc" },
     }),
   ]);
 
   const principalIdByAgentId = new Map(
-    aliases.map((alias) => [alias.aliasValue, alias.principalId]),
+    aliases
+      .filter((alias) => alias.aliasType === "agent")
+      .map((alias) => [alias.aliasValue, alias.principalId]),
+  );
+  const gaidByPrincipalId = new Map(
+    aliases
+      .filter((alias) => alias.aliasType === "gaid")
+      .map((alias) => [alias.principalId, alias.aliasValue]),
   );
 
   return (
     <AgentIdentityPanel
-      agents={agents.map((agent) => ({
-        ...agent,
-        linkedPrincipalId: principalIdByAgentId.get(agent.agentId) ?? null,
-      }))}
+      agents={agents.map((agent) => {
+        const linkedPrincipalId = principalIdByAgentId.get(agent.agentId) ?? null;
+
+        return {
+          ...agent,
+          linkedPrincipalId,
+          gaid: linkedPrincipalId ? gaidByPrincipalId.get(linkedPrincipalId) ?? null : null,
+        };
+      })}
     />
   );
 }
