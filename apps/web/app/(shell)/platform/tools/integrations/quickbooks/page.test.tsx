@@ -81,8 +81,22 @@ describe("QuickBooksIntegrationPage", () => {
       state: "available",
       preview: {
         companyInfo: { CompanyName: "Acme Services LLC", Country: "US" },
-        sampleCustomer: { Id: "42", DisplayName: "Acme Managed IT" },
-        sampleInvoice: { Id: "9001", DocNumber: "INV-9001" },
+        recentCustomers: [
+          { Id: "42", DisplayName: "Acme Managed IT" },
+          { Id: "84", DisplayName: "Northwind Services" },
+        ],
+        recentInvoices: [
+          { Id: "9001", DocNumber: "INV-9001", TotalAmt: 1250, Balance: 1250 },
+          { Id: "9002", DocNumber: "INV-9002", TotalAmt: 320, Balance: 0 },
+        ],
+        featuredInvoice: {
+          Id: "9001",
+          DocNumber: "INV-9001",
+          TotalAmt: 1250,
+          Balance: 1250,
+          CustomerRef: { value: "42", name: "Acme Managed IT" },
+          PrivateNote: "Monthly managed services retainer.",
+        },
         loadedAt: "2026-04-24T06:00:00.000Z",
       },
     });
@@ -98,5 +112,7 @@ describe("QuickBooksIntegrationPage", () => {
     expect(html).toContain("Acme Services LLC");
     expect(html).toContain("Acme Managed IT");
     expect(html).toContain("INV-9001");
+    expect(html).toContain("Northwind Services");
+    expect(html).toContain("Monthly managed services retainer.");
   });
 });

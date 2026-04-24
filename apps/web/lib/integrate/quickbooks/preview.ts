@@ -1,8 +1,13 @@
 import { prisma } from "@dpf/db";
 import { decryptJson, encryptJson } from "@/lib/govern/credential-crypto";
 import {
+  getQuickBooksInvoice,
+  listQuickBooksCustomers,
+  listQuickBooksInvoices,
   probeQuickBooksAccounting,
   type ProbeQuickBooksAccountingResult,
+  type QuickBooksCustomer,
+  type QuickBooksInvoice,
 } from "./accounting-client";
 import {
   exchangeRefreshToken,
@@ -31,6 +36,24 @@ interface QuickBooksPreviewDeps {
     realmId: string;
     accessToken: string;
   }) => Promise<ProbeQuickBooksAccountingResult>;
+  listQuickBooksCustomers?: (args: {
+    environment: "sandbox" | "production";
+    realmId: string;
+    accessToken: string;
+    limit: number;
+  }) => Promise<QuickBooksCustomer[]>;
+  listQuickBooksInvoices?: (args: {
+    environment: "sandbox" | "production";
+    realmId: string;
+    accessToken: string;
+    limit: number;
+  }) => Promise<QuickBooksInvoice[]>;
+  getQuickBooksInvoice?: (args: {
+    environment: "sandbox" | "production";
+    realmId: string;
+    accessToken: string;
+    invoiceId: string;
+  }) => Promise<QuickBooksInvoice>;
 }
 
 export type QuickBooksPreviewResult =
@@ -38,8 +61,9 @@ export type QuickBooksPreviewResult =
     state: "available";
     preview: {
       companyInfo: ProbeQuickBooksAccountingResult["companyInfo"];
-      sampleCustomer: ProbeQuickBooksAccountingResult["sampleCustomer"];
-      sampleInvoice: ProbeQuickBooksAccountingResult["sampleInvoice"];
+      recentCustomers: QuickBooksCustomer[];
+      recentInvoices: QuickBooksInvoice[];
+      featuredInvoice: QuickBooksInvoice | null;
       loadedAt: string;
     };
   }
@@ -64,6 +88,9 @@ export async function loadQuickBooksPreview(
 
   const exchange = deps.exchangeRefreshToken ?? exchangeRefreshToken;
   const probe = deps.probeQuickBooksAccounting ?? probeQuickBooksAccounting;
+  const listCustomers = deps.listQuickBooksCustomers ?? listQuickBooksCustomers;
+  const listInvoices = deps.listQuickBooksInvoices ?? listQuickBooksInvoices;
+  const getInvoice = deps.getQuickBooksInvoice ?? getQuickBooksInvoice;
 
   try {
     const token = await exchange({
@@ -77,6 +104,27 @@ export async function loadQuickBooksPreview(
       realmId: fields.realmId,
       accessToken: token.accessToken,
     });
+    const recentCustomers = await listCustomers({
+      environment: fields.environment,
+      realmId: fields.realmId,
+      accessToken: token.accessToken,
+      limit: 5,
+    });
+    const recentInvoices = await listInvoices({
+      environment: fields.environment,
+      realmId: fields.realmId,
+      accessToken: token.accessToken,
+      limit: 5,
+    });
+    const featuredInvoice =
+      typeof recentInvoices[0]?.Id === "string"
+        ? await getInvoice({
+          environment: fields.environment,
+          realmId: fields.realmId,
+          accessToken: token.accessToken,
+          invoiceId: recentInvoices[0].Id,
+        })
+        : null;
 
     const now = new Date();
     const companyName =
@@ -109,8 +157,9 @@ export async function loadQuickBooksPreview(
       state: "available",
       preview: {
         companyInfo: probeResult.companyInfo,
-        sampleCustomer: probeResult.sampleCustomer,
-        sampleInvoice: probeResult.sampleInvoice,
+        recentCustomers,
+        recentInvoices,
+        featuredInvoice,
         loadedAt: now.toISOString(),
       },
     };

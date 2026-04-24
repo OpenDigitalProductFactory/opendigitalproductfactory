@@ -18,12 +18,21 @@ export interface QuickBooksCompanyInfo {
 export interface QuickBooksCustomer {
   Id?: string;
   DisplayName?: string;
+  CompanyName?: string;
   [key: string]: unknown;
 }
 
 export interface QuickBooksInvoice {
   Id?: string;
   DocNumber?: string;
+  TotalAmt?: number;
+  Balance?: number;
+  CustomerRef?: {
+    value?: string;
+    name?: string;
+    [key: string]: unknown;
+  };
+  PrivateNote?: string;
   [key: string]: unknown;
 }
 
@@ -70,13 +79,47 @@ export async function probeQuickBooksAccounting(
   };
 }
 
+export async function listQuickBooksCustomers(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksCustomer[]> {
+  return queryEntities<QuickBooksCustomer>("Customer", params, resolveAccountingBaseUrl(params.environment), params.limit);
+}
+
+export async function listQuickBooksInvoices(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksInvoice[]> {
+  return queryEntities<QuickBooksInvoice>("Invoice", params, resolveAccountingBaseUrl(params.environment), params.limit);
+}
+
+export async function getQuickBooksInvoice(
+  params: ProbeQuickBooksAccountingParams & { invoiceId: string },
+): Promise<QuickBooksInvoice> {
+  const baseUrl = resolveAccountingBaseUrl(params.environment);
+  const response = await fetchJson<InvoiceResponse>(
+    `${baseUrl}/v3/company/${params.realmId}/invoice/${params.invoiceId}`,
+    params,
+  );
+  return response.Invoice;
+}
+
 async function queryEntity<T extends Record<string, unknown>>(
   entity: "Customer" | "Invoice",
   params: ProbeQuickBooksAccountingParams,
   baseUrl: string,
 ): Promise<T | null> {
+  const results = await queryEntities<T>(entity, params, baseUrl, 1);
+  return results[0] ?? null;
+}
+
+async function queryEntities<T extends Record<string, unknown>>(
+  entity: "Customer" | "Invoice",
+  params: ProbeQuickBooksAccountingParams,
+  baseUrl: string,
+  limit = 5,
+): Promise<T[]> {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.trunc(limit), 25)) : 5;
   const query = new URLSearchParams({
-    query: `select * from ${entity} maxresults 1`,
+    query: `select * from ${entity} maxresults ${safeLimit}`,
   }).toString();
   const response = await fetchJson<QueryResponse<T>>(
     `${baseUrl}/v3/company/${params.realmId}/query?${query}`,
@@ -84,7 +127,7 @@ async function queryEntity<T extends Record<string, unknown>>(
   );
 
   const results = response.QueryResponse?.[entity];
-  return Array.isArray(results) && results.length > 0 ? results[0]! : null;
+  return Array.isArray(results) ? results : [];
 }
 
 async function fetchJson<T>(
@@ -137,6 +180,10 @@ async function fetchJson<T>(
 
 interface CompanyInfoResponse {
   CompanyInfo: QuickBooksCompanyInfo;
+}
+
+interface InvoiceResponse {
+  Invoice: QuickBooksInvoice;
 }
 
 type QueryResponse<T extends Record<string, unknown>> = {

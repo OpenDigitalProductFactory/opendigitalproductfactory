@@ -56,7 +56,7 @@ export default async function QuickBooksIntegrationPage() {
         <h2 className="font-semibold text-[var(--dpf-text)]">What this integration enables</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--dpf-muted)]">
           <li>Verifies tenant-scoped QuickBooks connectivity with your own Intuit app credentials.</li>
-          <li>Reads company profile plus a sample customer and invoice through the Accounting API.</li>
+          <li>Reads company profile plus customer and invoice lists through the Accounting API.</li>
           <li>Keeps the connection on the native enterprise-integration substrate instead of a one-off secret store.</li>
           <li>Sets the platform up for later invoice, payment, and billing automation without skipping governance.</li>
         </ul>
@@ -181,15 +181,31 @@ function QuickBooksPreviewSection({
           <PreviewRow label="Name" value={previewData.companyInfo.CompanyName} />
           <PreviewRow label="Country" value={previewData.companyInfo.Country} />
         </PreviewCard>
-        <PreviewCard title="Sample customer" fallback="No customers returned yet.">
-          <PreviewRow label="Name" value={previewData.sampleCustomer?.DisplayName} />
-          <PreviewRow label="ID" value={previewData.sampleCustomer?.Id} />
+        <PreviewCard title="Recent customers" fallback="No customers returned yet.">
+          <PreviewList
+            items={previewData.recentCustomers.map((customer) => ({
+              primary: customer.DisplayName,
+              secondary: customer.Id ? `ID ${customer.Id}` : null,
+            }))}
+          />
         </PreviewCard>
-        <PreviewCard title="Sample invoice" fallback="No invoices returned yet.">
-          <PreviewRow label="Doc #" value={previewData.sampleInvoice?.DocNumber} />
-          <PreviewRow label="ID" value={previewData.sampleInvoice?.Id} />
+        <PreviewCard title="Recent invoices" fallback="No invoices returned yet.">
+          <PreviewList
+            items={previewData.recentInvoices.map((invoice) => ({
+              primary: invoice.DocNumber ?? invoice.Id,
+              secondary: formatInvoiceSummary(invoice),
+            }))}
+          />
         </PreviewCard>
       </div>
+
+      <PreviewCard title="Featured invoice detail" fallback="No invoice detail returned.">
+        <PreviewRow label="Doc #" value={previewData.featuredInvoice?.DocNumber} />
+        <PreviewRow label="Customer" value={previewData.featuredInvoice?.CustomerRef?.name} />
+        <PreviewRow label="Total" value={formatCurrencyLike(previewData.featuredInvoice?.TotalAmt)} />
+        <PreviewRow label="Balance" value={formatCurrencyLike(previewData.featuredInvoice?.Balance)} />
+        <PreviewRow label="Note" value={previewData.featuredInvoice?.PrivateNote} />
+      </PreviewCard>
     </section>
   );
 }
@@ -226,6 +242,26 @@ function PreviewRow({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+function PreviewList({
+  items,
+}: {
+  items: Array<{ primary: string | undefined; secondary: string | null }>;
+}) {
+  const visibleItems = items.filter((item) => typeof item.primary === "string" && item.primary.length > 0);
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {visibleItems.map((item) => (
+        <div key={`${item.primary}-${item.secondary ?? ""}`} className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2">
+          <div className="font-medium text-[var(--dpf-text)]">{item.primary}</div>
+          {item.secondary && <div className="text-xs text-[var(--dpf-muted)]">{item.secondary}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function hasRenderableChildren(value: React.ReactNode): boolean {
   if (Array.isArray(value)) {
     return value.some(Boolean);
@@ -245,4 +281,27 @@ function formatDateTime(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function formatInvoiceSummary(invoice: {
+  TotalAmt?: number;
+  Balance?: number;
+}): string | null {
+  const total = formatCurrencyLike(invoice.TotalAmt);
+  const balance = formatCurrencyLike(invoice.Balance);
+
+  if (total && balance) return `Total ${total}, balance ${balance}`;
+  if (total) return `Total ${total}`;
+  if (balance) return `Balance ${balance}`;
+  return null;
+}
+
+function formatCurrencyLike(value: unknown): string | null {
+  if (typeof value !== "number" || Number.isNaN(value)) return null;
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }

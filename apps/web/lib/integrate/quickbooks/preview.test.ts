@@ -58,21 +58,52 @@ describe("loadQuickBooksPreview", () => {
 
     const probeQuickBooksAccounting = vi.fn().mockResolvedValue({
       companyInfo: { CompanyName: "Acme Services LLC", Country: "US" },
-      sampleCustomer: { Id: "42", DisplayName: "Acme Managed IT" },
-      sampleInvoice: { Id: "9001", DocNumber: "INV-9001" },
+    });
+    const listQuickBooksCustomers = vi.fn().mockResolvedValue([
+      { Id: "42", DisplayName: "Acme Managed IT" },
+      { Id: "84", DisplayName: "Northwind Services" },
+    ]);
+    const listQuickBooksInvoices = vi.fn().mockResolvedValue([
+      { Id: "9001", DocNumber: "INV-9001", TotalAmt: 1250, Balance: 1250 },
+      { Id: "9002", DocNumber: "INV-9002", TotalAmt: 320, Balance: 0 },
+    ]);
+    const getQuickBooksInvoice = vi.fn().mockResolvedValue({
+      Id: "9001",
+      DocNumber: "INV-9001",
+      TotalAmt: 1250,
+      Balance: 1250,
+      CustomerRef: { value: "42", name: "Acme Managed IT" },
+      PrivateNote: "Monthly managed services retainer.",
     });
 
     const result = await loadQuickBooksPreview({
       exchangeRefreshToken,
       probeQuickBooksAccounting,
+      listQuickBooksCustomers,
+      listQuickBooksInvoices,
+      getQuickBooksInvoice,
     });
 
     expect(result).toEqual({
       state: "available",
       preview: {
         companyInfo: { CompanyName: "Acme Services LLC", Country: "US" },
-        sampleCustomer: { Id: "42", DisplayName: "Acme Managed IT" },
-        sampleInvoice: { Id: "9001", DocNumber: "INV-9001" },
+        recentCustomers: [
+          { Id: "42", DisplayName: "Acme Managed IT" },
+          { Id: "84", DisplayName: "Northwind Services" },
+        ],
+        recentInvoices: [
+          { Id: "9001", DocNumber: "INV-9001", TotalAmt: 1250, Balance: 1250 },
+          { Id: "9002", DocNumber: "INV-9002", TotalAmt: 320, Balance: 0 },
+        ],
+        featuredInvoice: {
+          Id: "9001",
+          DocNumber: "INV-9001",
+          TotalAmt: 1250,
+          Balance: 1250,
+          CustomerRef: { value: "42", name: "Acme Managed IT" },
+          PrivateNote: "Monthly managed services retainer.",
+        },
         loadedAt: "2026-04-24T06:00:00.000Z",
       },
     });
@@ -86,6 +117,24 @@ describe("loadQuickBooksPreview", () => {
       environment: "sandbox",
       realmId: "9130355377388383",
       accessToken: "access-token-456",
+    });
+    expect(listQuickBooksCustomers).toHaveBeenCalledWith({
+      environment: "sandbox",
+      realmId: "9130355377388383",
+      accessToken: "access-token-456",
+      limit: 5,
+    });
+    expect(listQuickBooksInvoices).toHaveBeenCalledWith({
+      environment: "sandbox",
+      realmId: "9130355377388383",
+      accessToken: "access-token-456",
+      limit: 5,
+    });
+    expect(getQuickBooksInvoice).toHaveBeenCalledWith({
+      environment: "sandbox",
+      realmId: "9130355377388383",
+      accessToken: "access-token-456",
+      invoiceId: "9001",
     });
 
     expect(mockUpdate).toHaveBeenCalledTimes(1);
@@ -129,6 +178,9 @@ describe("loadQuickBooksPreview", () => {
     const result = await loadQuickBooksPreview({
       exchangeRefreshToken: vi.fn().mockRejectedValue(new Error("invalid QuickBooks credentials")),
       probeQuickBooksAccounting: vi.fn(),
+      listQuickBooksCustomers: vi.fn(),
+      listQuickBooksInvoices: vi.fn(),
+      getQuickBooksInvoice: vi.fn(),
     });
 
     expect(result).toEqual({
