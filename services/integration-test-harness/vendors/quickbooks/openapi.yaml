@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: DPF Authored QuickBooks Harness Contract
+  version: 0.1.0
+  description: >
+    Authored from current Intuit QuickBooks Online OAuth 2.0 and Accounting API
+    documentation because a public downloadable OpenAPI artifact was not verified
+    during implementation.
+servers:
+  - url: https://oauth.platform.intuit.com
+  - url: https://sandbox-quickbooks.api.intuit.com
+  - url: https://quickbooks.api.intuit.com
+paths:
+  /oauth2/v1/tokens/bearer:
+    post:
+      summary: Exchange an authorization code or refresh token for QuickBooks tokens
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code, refresh_token]
+                code:
+                  type: string
+                refresh_token:
+                  type: string
+                redirect_uri:
+                  type: string
+      responses:
+        "200":
+          description: Token exchange response
+          content:
+            application/json:
+              example:
+                access_token: qb-access-token-123
+                refresh_token: qb-refresh-token-123
+                token_type: bearer
+                expires_in: 3600
+                x_refresh_token_expires_in: 8726400
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid QuickBooks credentials
+  /v3/company/{realmId}/companyinfo/{realmId}:
+    get:
+      summary: Get company information for a QuickBooks company
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Company info
+          content:
+            application/json:
+              example:
+                CompanyInfo:
+                  Id: "9130355377388383"
+                  CompanyName: Acme Services LLC
+                  LegalName: Acme Services LLC
+                  Country: US
+                  Email:
+                    Address: billing@acmeservices.example
+                  WebAddr:
+                    URI: https://acmeservices.example
+              schema:
+                $ref: "#/components/schemas/CompanyInfoResponse"
+  /v3/company/{realmId}/customer/{customerId}:
+    get:
+      summary: Get a customer by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Customer record
+          content:
+            application/json:
+              example:
+                Customer:
+                  Id: "42"
+                  DisplayName: Acme Managed IT
+                  CompanyName: Acme Managed IT
+                  PrimaryEmailAddr:
+                    Address: accounts-payable@acmeit.example
+              schema:
+                $ref: "#/components/schemas/CustomerResponse"
+  /v3/company/{realmId}/invoice/{invoiceId}:
+    get:
+      summary: Get an invoice by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoice record
+          content:
+            application/json:
+              example:
+                Invoice:
+                  Id: "9001"
+                  DocNumber: INV-9001
+                  TotalAmt: 1250
+                  Balance: 1250
+                  CustomerRef:
+                    value: "42"
+                    name: Acme Managed IT
+                  PrivateNote: Monthly managed services retainer.
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+components:
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+        x_refresh_token_expires_in:
+          type: integer
+    CompanyInfoResponse:
+      type: object
+      required: [CompanyInfo]
+      properties:
+        CompanyInfo:
+          type: object
+    CustomerResponse:
+      type: object
+      required: [Customer]
+      properties:
+        Customer:
+          type: object
+    InvoiceResponse:
+      type: object
+      required: [Invoice]
+      properties:
+        Invoice:
+          type: object

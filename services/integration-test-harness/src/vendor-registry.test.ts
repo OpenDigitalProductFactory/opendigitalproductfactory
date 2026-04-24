@@ -78,4 +78,62 @@ describe("vendor-registry", () => {
     ]);
     expect(fixture.workers?.status).toBe(200);
   });
+
+  it("loads multiple vendors in stable slug order without framework-specific wiring", async () => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-harness-vendors-"));
+    roots.push(root);
+
+    const quickbooksDir = join(root, "quickbooks");
+    mkdirSync(join(quickbooksDir, "scenarios"), { recursive: true });
+    writeFileSync(
+      join(quickbooksDir, "openapi.yaml"),
+      "openapi: 3.0.3\ninfo:\n  title: QuickBooks\n  version: 1.0.0\n",
+    );
+    writeFileSync(
+      join(quickbooksDir, "routes.js"),
+      "export const routes = [{ key: 'companyInfo', method: 'GET', path: '/v3/company/{realmId}/companyinfo/{realmId}' }];\n",
+    );
+    writeFileSync(
+      join(quickbooksDir, "scenarios", "happy-path.json"),
+      JSON.stringify({
+        companyInfo: {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          body: { CompanyInfo: { CompanyName: "Acme Co" } },
+        },
+      }),
+    );
+
+    const adpDir = join(root, "adp");
+    mkdirSync(join(adpDir, "scenarios"), { recursive: true });
+    writeFileSync(
+      join(adpDir, "openapi.yaml"),
+      "openapi: 3.0.3\ninfo:\n  title: ADP\n  version: 1.0.0\n",
+    );
+    writeFileSync(
+      join(adpDir, "routes.js"),
+      "export const routes = [{ key: 'workers', method: 'GET', path: '/hr/v2/workers' }];\n",
+    );
+    writeFileSync(
+      join(adpDir, "scenarios", "happy-path.json"),
+      JSON.stringify({
+        workers: {
+          status: 200,
+          headers: { "content-type": "application/json" },
+          body: { workers: [] },
+        },
+      }),
+    );
+
+    const vendors = await loadVendors(root);
+
+    expect(vendors.map((vendor) => vendor.slug)).toEqual(["adp", "quickbooks"]);
+    expect(vendors[1]?.routes).toEqual([
+      {
+        key: "companyInfo",
+        method: "GET",
+        path: "/v3/company/{realmId}/companyinfo/{realmId}",
+      },
+    ]);
+  });
 });
