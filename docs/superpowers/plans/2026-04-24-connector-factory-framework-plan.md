@@ -17,6 +17,7 @@
 - Do **not** implement weekly contract-drift CI in this plan.
 - Do **not** collapse `services/adp/` into a shared monolithic connector runtime.
 - Do **not** introduce bilateral Pact or record/replay tooling.
+- Portal-side ADP token client (`apps/web/lib/integrate/adp/token-client.ts`) stays as-is in v1; only the crypto/redact/audit primitives are extracted. Extending the shared package to cover token exchange is deferred to the next plan.
 
 ## File Structure
 
@@ -56,8 +57,6 @@
 
 - `apps/web/lib/integrate/adp/redact.ts` — adopt shared redaction helpers
 - `apps/web/lib/integrate/adp/redact.test.ts` — update expectations to shared implementation
-- `apps/web/lib/integrate/adp/token-client.ts` — align with shared helper seams if extracted here
-- `apps/web/lib/integrate/adp/token-client.test.ts` — keep portal-side token tests green after extraction
 - `services/adp/package.json` — depend on `packages/integration-shared`
 - `services/adp/src/lib/crypto.ts` — thin wrapper or replacement with shared package exports
 - `services/adp/src/lib/redact.ts` — thin wrapper or replacement with shared package exports
@@ -97,9 +96,15 @@
 - Modify: `apps/web/lib/integrate/adp/redact.ts`
 - Modify: `apps/web/lib/integrate/adp/redact.test.ts`
 
-- [ ] **Step 1: Write the failing shared-package tests**
+- [ ] **Step 1: Scaffold the workspace shell, then write the failing shared-package tests**
 
-Add tests that prove:
+Scaffold first so the test runner can resolve the workspace:
+- `packages/integration-shared/package.json` with `"name": "@dpf/integration-shared"` (matches the `@dpf/db` workspace convention) and `vitest` as a devDep
+- `packages/integration-shared/tsconfig.json`
+- add the package to `pnpm-workspace.yaml` if not already covered by the existing `packages/*` glob
+- run `pnpm install` once so the workspace link lands
+
+Then add tests that prove:
 - the encryption envelope remains compatible with the existing ADP ciphertext shape
 - SSN/bank/DOB redaction stays unchanged
 - suspicious-content scrubbing still flags jailbreak phrases
@@ -111,7 +116,7 @@ Run:
 pnpm --dir packages/integration-shared exec vitest run src/credential-crypto.test.ts src/redact.test.ts src/tool-call-audit.test.ts
 ```
 
-Expected: FAIL because the package and files do not exist yet.
+Expected: FAIL because the `src/*.ts` implementation files do not exist yet. The failure mode must be "module not found: ./credential-crypto" (missing implementation), NOT "workspace not found" or "vitest not installed" (missing scaffolding).
 
 - [ ] **Step 2: Create the shared package with minimal exports**
 
@@ -119,6 +124,8 @@ Implement the shared package by moving logic, not re-inventing it. Keep the firs
 - `credential-crypto.ts` from the existing ADP/app crypto logic
 - `redact.ts` from the existing ADP/app redaction logic
 - `tool-call-audit.ts` for shared argument hashing / audit payload helpers
+- `src/index.ts` re-exports the three modules so consumers import from `@dpf/integration-shared` (not deep paths)
+- add `"@dpf/integration-shared": "workspace:*"` to `services/adp/package.json` dependencies, and to `apps/web/package.json` dependencies since the portal-side `redact.ts` also adopts it
 
 - [ ] **Step 3: Repoint ADP and portal-side redaction wrappers**
 
@@ -175,6 +182,7 @@ Cover:
 - `ADP_TOKEN_ENDPOINT_URL` override
 - test-mode detection when override URLs are `http://`
 - propagation of `X-DPF-Harness-Session` when `DPF_INTEGRATION_TEST_SESSION_ID` is set
+- **real-mode mTLS stays enforced** when the resolved URL is a production ADP host (invariant: the transport downgrade must not silently apply to real vendor endpoints — the resolver's "relaxed transport" decision must return `false` for every production hostname)
 
 Run:
 
@@ -219,7 +227,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add services/adp/src/lib/runtime-config.ts services/adp/src/lib/runtime-config.test.ts services/adp/src/lib/token-client.ts services/adp/src/lib/adp-client.ts services/adp/src/tools/*.test.ts services/adp/README.md
+git add services/adp/src/lib/runtime-config.ts services/adp/src/lib/runtime-config.test.ts services/adp/src/lib/token-client.ts services/adp/src/lib/adp-client.ts services/adp/src/tools/get-pay-statements.test.ts services/adp/src/tools/get-time-cards.test.ts services/adp/src/tools/get-deductions.test.ts services/adp/src/tools/list-workers.test.ts services/adp/README.md
 git commit -m "feat(adp): add test-mode endpoint and session override support"
 ```
 
@@ -242,9 +250,15 @@ git commit -m "feat(adp): add test-mode endpoint and session override support"
 - Create: `services/integration-test-harness/src/vendor-registry.test.ts`
 - Create: `services/integration-test-harness/README.md`
 
-- [ ] **Step 1: Write failing harness tests**
+- [ ] **Step 1: Scaffold the harness workspace, then write failing harness tests**
 
-Cover:
+Scaffold first:
+- `services/integration-test-harness/package.json` with a scoped name (e.g. `@dpf/integration-test-harness`) and `vitest`, `typescript` as devDeps
+- `services/integration-test-harness/tsconfig.json`
+- ensure the service is included by the `services/*` workspace glob in `pnpm-workspace.yaml`
+- run `pnpm install` once so workspace links resolve
+
+Then cover:
 - vendor directories are discovered from `vendors/*`
 - control API rejects missing `sessionId`
 - control API rejects missing or invalid shared secret
@@ -252,6 +266,7 @@ Cover:
 - scenario state is isolated by vendor + session
 - process-global default namespace is disallowed in CI mode
 - scenario flips are recorded as harness-admin events outside `IntegrationToolCallLog`
+- **conduit invariant**: the harness never reads real `IntegrationCredential` rows. A test must assert that, even when a DB URL is reachable, the harness either uses only seeded test-only credential records (tagged with a test-profile marker) or refuses to touch the credential table at all. This is the `feedback_dpf_as_integration_conduit.md` guardrail — customers bring their own vendor relationships; the harness must not accidentally exercise them.
 
 Run:
 
@@ -259,7 +274,7 @@ Run:
 cd services/integration-test-harness && pnpm exec vitest run src/control-api.test.ts src/admin-event-log.test.ts src/vendor-registry.test.ts
 ```
 
-Expected: FAIL because the harness files do not exist yet.
+Expected: FAIL because the harness `src/*.ts` implementation files do not exist yet. Failures must read "module not found" for harness internals, NOT scaffolding errors.
 
 - [ ] **Step 2: Create the minimal harness service**
 
@@ -296,17 +311,17 @@ cd services/integration-test-harness && pnpm exec tsc --noEmit
 
 Expected: PASS.
 
-- [ ] **Step 4a: Verify production-safe gating**
+- [ ] **Step 5: Verify production-safe gating**
 
 Run:
 
 ```bash
-cd services/integration-test-harness && $env:HARNESS_TEST_MODE='0'; pnpm exec vitest run src/control-api.test.ts -t "rejects requests when not in test mode"
+cd services/integration-test-harness && HARNESS_TEST_MODE=0 pnpm exec vitest run src/control-api.test.ts -t "rejects requests when not in test mode"
 ```
 
 Expected: PASS, proving the scenario-flip endpoint is unavailable outside explicit test mode.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add services/integration-test-harness
@@ -443,7 +458,7 @@ cd services/integration-test-harness && pnpm exec tsc --noEmit
 cd apps/web && npx next build
 ```
 
-Expected: PASS. If `apps/web` build fails because of unrelated pre-existing issues, document them in the implementation session before claiming completion.
+Expected: PASS. No soft-skips: if `apps/web` build fails, fix the root cause — or, if the failure is provably unrelated to this branch, open a concurrent fix PR and block this PR on it before merging. Do not "document and proceed." Deferring build errors or warnings contradicts the platform rule captured in `feedback_fix_all_warnings.md`.
 
 - [ ] **Step 6: Run local docker verification**
 
@@ -489,7 +504,7 @@ These should be queued as the next plan/spec follow-ons once this foundation lan
 - Keep commits small and aligned to the tasks above.
 - Do not mix QuickBooks or CI drift work into this execution branch.
 - Preserve `services/adp/` as the runtime owner of ADP-specific semantics.
-- The first implementation branch should update backlog item status as tasks land so `EP-INT-2E7C1A` stays trustworthy.
-- When Task 3 lands, update the live backlog to reflect that the harness control-plane foundation is in progress or done rather than leaving the epic state stale.
+- Update backlog item status as tasks land via the `update_backlog_item` MCP tool so `EP-INT-2E7C1A` stays trustworthy. Use the canonical enum values from `apps/web/lib/backlog.ts` — see `CLAUDE.md` § "Strongly-Typed String Enums — MANDATORY COMPLIANCE". Valid `Epic.status`: `"open"` / `"in-progress"` / `"done"`. Valid `BacklogItem.status`: `"open"` / `"in-progress"` / `"done"` / `"deferred"`. Hyphenated, never underscored.
+- Concrete sequencing: flip `EP-INT-2E7C1A` to `"in-progress"` when Task 3 (harness skeleton) lands, and to `"done"` only when Task 5 (compose wiring + end-to-end smoke) merges. Flip `BI-INT-59E6B4`, `BI-INT-92C1F8`, `BI-LAB-72E4AB` individually as each task in its scope lands.
 
 Plan complete and saved to `docs/superpowers/plans/2026-04-24-connector-factory-framework-plan.md`. Ready to execute?

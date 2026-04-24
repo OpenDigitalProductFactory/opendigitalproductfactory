@@ -3,6 +3,7 @@
 import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Orchestrator",
@@ -44,6 +45,8 @@ export default async function AgentDetailPage({
   });
 
   if (!agent) return notFound();
+
+  const gaid = (await getAgentGaidMap([agent.agentId])).get(agent.agentId) ?? null;
 
   return (
     <div>
@@ -96,6 +99,9 @@ export default async function AgentDetailPage({
 
       <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 20 }}>
         <span>ID: <code style={{ fontSize: 10 }}>{agent.agentId}</code></span>
+        {gaid && (
+          <span style={{ marginLeft: 12 }}>GAID: <code style={{ fontSize: 10 }}>{gaid}</code></span>
+        )}
         {agent.slugId && (
           <span style={{ marginLeft: 12 }}>Slug: <code style={{ fontSize: 10 }}>{agent.slugId}</code></span>
         )}

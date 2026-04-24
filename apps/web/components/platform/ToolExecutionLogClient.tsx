@@ -58,9 +58,15 @@ export function ToolExecutionLogClient({ executions }: Props) {
           onChange={(e) => setAgentFilter(e.target.value)}
           style={selectStyle}
         >
-          <option value="all">All agents</option>
+          <option value="all" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">All agents</option>
           {agents.map((a) => (
-            <option key={a} value={a}>{AGENT_NAME_MAP[a] ?? a}</option>
+            <option
+              key={a}
+              value={a}
+              className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+            >
+              {AGENT_NAME_MAP[a] ?? a}
+            </option>
           ))}
         </select>
         <select
@@ -68,9 +74,15 @@ export function ToolExecutionLogClient({ executions }: Props) {
           onChange={(e) => setToolFilter(e.target.value)}
           style={selectStyle}
         >
-          <option value="all">All tools</option>
+          <option value="all" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">All tools</option>
           {tools.map((t) => (
-            <option key={t} value={t}>{formatToolName(t)}</option>
+            <option
+              key={t}
+              value={t}
+              className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+            >
+              {formatToolName(t)}
+            </option>
           ))}
         </select>
         <select
@@ -78,9 +90,9 @@ export function ToolExecutionLogClient({ executions }: Props) {
           onChange={(e) => setSuccessFilter(e.target.value)}
           style={selectStyle}
         >
-          <option value="all">All outcomes</option>
-          <option value="success">Success</option>
-          <option value="failure">Failure</option>
+          <option value="all" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">All outcomes</option>
+          <option value="success" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Success</option>
+          <option value="failure" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Failure</option>
         </select>
       </div>
 
@@ -131,7 +143,7 @@ export function ToolExecutionLogClient({ executions }: Props) {
                     gridTemplateColumns: "100px 1.2fr 1.5fr 60px 80px 1fr",
                     gap: 8,
                     padding: "10px 12px",
-                    background: isExpanded ? "#1e1e35" : "#1a1a2e",
+                    background: isExpanded ? "var(--dpf-surface-2)" : "var(--dpf-surface-1)",
                     border: "1px solid var(--dpf-border)",
                     borderRadius: isExpanded ? "6px 6px 0 0" : 6,
                     cursor: "pointer",
@@ -143,7 +155,23 @@ export function ToolExecutionLogClient({ executions }: Props) {
                   <span style={{ color: "var(--dpf-muted)", fontSize: 11 }}>
                     {timeAgo(e.createdAt)}
                   </span>
-                  <span>{AGENT_NAME_MAP[e.agentId] ?? e.agentId}</span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span>{AGENT_NAME_MAP[e.agentId] ?? e.agentId}</span>
+                    {e.agentIdentityRef ? (
+                      <span
+                        style={{
+                          color: "var(--dpf-muted)",
+                          fontFamily: "monospace",
+                          fontSize: 10,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {e.agentIdentityRef}
+                      </span>
+                    ) : null}
+                  </span>
                   <span>{formatToolName(e.toolName)}</span>
                   <span>
                     <span style={{
@@ -182,7 +210,7 @@ export function ToolExecutionLogClient({ executions }: Props) {
                       color: "var(--dpf-text)",
                       fontSize: 11,
                       lineHeight: 1.5,
-                      background: "#12121e",
+                      background: "var(--dpf-bg)",
                       padding: 10,
                       borderRadius: 4,
                       border: "1px solid var(--dpf-border)",
@@ -200,7 +228,7 @@ export function ToolExecutionLogClient({ executions }: Props) {
                       color: e.success ? "var(--dpf-text)" : "var(--dpf-error)",
                       fontSize: 11,
                       lineHeight: 1.5,
-                      background: "#12121e",
+                      background: "var(--dpf-bg)",
                       padding: 10,
                       borderRadius: 4,
                       border: "1px solid var(--dpf-border)",
@@ -210,15 +238,15 @@ export function ToolExecutionLogClient({ executions }: Props) {
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
                       <div>
-                        <span style={{ color: "#666" }}>Execution Mode: </span>
+                        <span style={{ color: "var(--dpf-muted)" }}>Execution Mode: </span>
                         {e.executionMode}
                       </div>
                       <div>
-                        <span style={{ color: "#666" }}>Thread: </span>
+                        <span style={{ color: "var(--dpf-muted)" }}>Thread: </span>
                         {e.threadId.slice(0, 12)}...
                       </div>
                       <div>
-                        <span style={{ color: "#666" }}>Created: </span>
+                        <span style={{ color: "var(--dpf-muted)" }}>Created: </span>
                         {new Date(e.createdAt).toLocaleString()}
                       </div>
                     </div>
