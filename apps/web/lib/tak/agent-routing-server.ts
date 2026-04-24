@@ -8,6 +8,7 @@ import { resolveAgentForRoute } from "./agent-routing";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
+import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
 import type { UserContext } from "@/lib/permissions";
 
 /**
@@ -21,6 +22,8 @@ export async function resolveAgentForRouteWithPrompts(
 ): Promise<AgentInfo> {
   // Get the base agent info with hardcoded prompts and inline skills
   const agent = resolveAgentForRoute(pathname, userContext, useUnified);
+
+  await ensureAgentPrincipalIdentity(agent.agentId);
 
   // Load DB-sourced skills (falls back to inline skills if DB is empty)
   const dbSkills = await getSkillsForAgentLegacy(agent.agentId);
