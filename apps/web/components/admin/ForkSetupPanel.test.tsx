@@ -63,7 +63,7 @@ describe("ForkSetupPanel", () => {
     const html = await renderClient(<ForkSetupPanel {...baseProps} />);
     expect(html).toContain("Configure fork-based contribution");
     expect(html).toContain("Your GitHub username");
-    expect(html).toContain("public_repo scope");
+    expect(html).toContain("`public_repo` scope");
   });
 
   it("shows the pseudonymity tradeoff copy", async () => {
