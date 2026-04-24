@@ -60,66 +60,6 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-              Coworker Guidance
-            </p>
-            <p className="mt-1 text-sm text-[var(--dpf-text)]">{workspace.coworkerGuide.summary}</p>
-          </div>
-          <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">
-            {workspace.coworkerGuide.openIssueCount} open gaps
-          </span>
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
-            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-              Next Questions
-            </p>
-            <div className="mt-2 space-y-2">
-              {workspace.coworkerGuide.nextQuestions.map((question) => (
-                <p key={question} className="text-sm text-[var(--dpf-text)]">
-                  {question}
-                </p>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
-            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-              Recommended Actions
-            </p>
-            <div className="mt-2 space-y-2">
-              {workspace.coworkerGuide.recommendedActions.map((action) => (
-                <p key={action} className="text-sm text-[var(--dpf-text)]">
-                  {action}
-                </p>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {workspace.coworkerGuide.verificationQueue.length > 0 && (
-          <div className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
-            <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-              Verification Queue
-            </p>
-            <div className="mt-2 space-y-2">
-              {workspace.coworkerGuide.verificationQueue.map((item) => (
-                <p key={item.registrationId} className="text-sm text-[var(--dpf-text)]">
-                  {item.authorityName}
-                  <span className="ml-2 text-[var(--dpf-muted)]">
-                    {item.registrationNumber ? item.registrationNumber : "registration number pending"}
-                  </span>
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
           Tax Posture
         </p>
@@ -249,10 +189,10 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
-              Setup Issues
+              Setup Gaps
             </p>
             <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-              The finance coworker should treat these as structured gaps to resolve, not as reasons to guess.
+              These are unresolved tax setup facts that still need to be captured or verified.
             </p>
           </div>
           <span className="rounded-full border border-[var(--dpf-border)] px-2.5 py-1 text-[11px] text-[var(--dpf-text)]">

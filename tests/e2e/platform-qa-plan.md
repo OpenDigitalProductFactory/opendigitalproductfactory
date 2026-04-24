@@ -81,7 +81,7 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | FIN-06 | Create invoice with line items and save as draft | Invoice saved, appears in invoice list |
 | FIN-07 | View invoice PDF | PDF renders with correct totals |
 | FIN-08 | Navigate to reports (P&L, aged debtors, cash flow) | Each report page loads without error |
-| FIN-09 | Navigate to `/finance/settings/tax`, confirm Coworker Guidance / Setup Issues render, add a jurisdiction registration, mark it live verified, then open the AI coworker on the same page | Tax remittance workspace loads without error, registration verification state updates, and the coworker resolves to Finance Specialist instead of the generic workspace agent |
+| FIN-09 | Navigate to `/finance/settings/tax`, confirm the page shows operational tax setup state only, add a jurisdiction registration, mark it live verified, then open the AI coworker on the same page | Tax remittance workspace loads without error, registration verification state updates, the page keeps conversational guidance out of the main surface, and the coworker resolves to Finance Specialist instead of the generic workspace agent |
 
 ## Phase 6: Compliance
 
