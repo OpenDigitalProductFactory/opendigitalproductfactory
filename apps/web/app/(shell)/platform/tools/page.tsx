@@ -7,6 +7,8 @@ export default async function ToolsHubPage() {
     activeServices,
     unconfiguredServices,
     enabledTools,
+    nativeIntegrations,
+    integrationErrors,
     activeDiscoveryConnections,
     needsReviewCount,
   ] =
@@ -15,6 +17,12 @@ export default async function ToolsHubPage() {
       prisma.mcpServer.count({ where: { status: "active" } }),
       prisma.mcpServer.count({ where: { status: "unconfigured" } }),
       prisma.mcpServerTool.count({ where: { isEnabled: true } }),
+      prisma.integrationCredential.count({
+        where: { provider: { in: ["adp", "quickbooks"] }, status: "connected" },
+      }),
+      prisma.integrationCredential.count({
+        where: { provider: { in: ["adp", "quickbooks"] }, status: "error" },
+      }),
       prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
       prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
     ]);
@@ -57,6 +65,16 @@ export default async function ToolsHubPage() {
           metrics={[
             { label: "Active", value: activeServices },
             { label: "Enabled tools", value: enabledTools },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Enterprise Integrations"
+          description="Configure native business-system anchors that run on the shared credential and governance substrate."
+          href="/platform/tools/integrations"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Configured", value: nativeIntegrations },
+            { label: "Errors", value: integrationErrors },
           ]}
         />
         <PlatformSummaryCard
