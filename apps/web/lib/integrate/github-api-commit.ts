@@ -219,20 +219,35 @@ async function githubPost<T>(url: string, body: unknown, token: string): Promise
 /**
  * Create a branch with committed files and a PR, entirely via GitHub API.
  *
- * @param owner - GitHub repo owner
- * @param repo - GitHub repo name
- * @param branchName - Feature branch name (e.g. "build/FB-XXXX/customer-complaint-tracker")
- * @param commitMessage - Full commit message including trailers
- * @param diff - The unified diff from the sandbox
- * @param prTitle - PR title
- * @param prBody - PR body markdown
- * @param labels - PR labels
- * @param token - GitHub token
- * @param baseBranch - Base branch (default: "main")
+ * Supports both same-repo and cross-repo (fork → upstream) PRs through the
+ * head/base parameter split introduced for the fork-based contribution model.
+ * When headOwner === baseOwner (same repo), the PR body uses the bare branch
+ * name. When they differ (contributor fork → upstream), the PR body uses the
+ * cross-repo shape `{headOwner}:{branchName}`.
+ *
+ * Behavioral invariants (preserved from the pre-split implementation):
+ *   1. Order of side effects on the HEAD repo: base-sha lookup → blobs →
+ *      tree → commit → ref. Then PR POST + labels POST on the BASE repo.
+ *   2. The base-ref lookup reads from HEAD (the commit must be parented off a
+ *      sha that exists in the head repo). For fork-pr this requires the fork
+ *      to be in sync with upstream — Phase 4 adds a merge-upstream step
+ *      before this call.
+ *   3. Labels are POSTed to the BASE repo's issue (where the PR lives),
+ *      not the HEAD repo's.
+ *   4. explainBaseRefFailure wraps 401/403/404 on the base-ref lookup.
+ *   5. Existing-PR recovery on 422 looks up open PRs on the BASE repo and
+ *      surfaces their URL so callers can back-write the PR URL onto the
+ *      FeaturePack.
  */
 export async function createBranchAndPR(input: {
-  owner: string;
-  repo: string;
+  /** Where the branch is pushed. For fork-pr, this is the contributor's fork. */
+  headOwner: string;
+  headRepo: string;
+  /** Where the PR is opened against. Always the upstream in fork-pr. */
+  baseOwner: string;
+  baseRepo: string;
+  /** Base branch — typically "main". */
+  baseBranch?: string;
   branchName: string;
   commitMessage: string;
   diff: string;
@@ -240,24 +255,43 @@ export async function createBranchAndPR(input: {
   prBody: string;
   labels: string[];
   token: string;
-  baseBranch?: string;
 }): Promise<GitHubCommitResult> {
-  const { owner, repo, branchName, commitMessage, diff, prTitle, prBody, labels, token } = input;
+  const {
+    headOwner,
+    headRepo,
+    baseOwner,
+    baseRepo,
+    branchName,
+    commitMessage,
+    diff,
+    prTitle,
+    prBody,
+    labels,
+    token,
+  } = input;
   const baseBranch = input.baseBranch ?? "main";
-  const apiBase = `https://api.github.com/repos/${owner}/${repo}`;
+  const headApiBase = `https://api.github.com/repos/${headOwner}/${headRepo}`;
+  const baseApiBase = `https://api.github.com/repos/${baseOwner}/${baseRepo}`;
+  const isCrossRepo = headOwner !== baseOwner || headRepo !== baseRepo;
+  const prHead = isCrossRepo ? `${headOwner}:${branchName}` : branchName;
 
-  // 1. Get the SHA of the base branch
+  // 1. Get the SHA of the base branch on the HEAD repo.
+  //
+  // For cross-repo PRs this reads from the fork, not upstream — the new
+  // commit must be parented off a sha that exists in the head repo. Forks
+  // share history with upstream, so this works as long as the fork is not
+  // behind upstream (Phase 4 adds a merge-upstream step to guarantee that).
   //
   // Wrap the raw GitHub error with a token-access-aware hint. A 404 here is
   // almost never a GitHub outage — it's a token that can't see the repo.
   let baseRef: GitHubRef;
   try {
     baseRef = await githubGet<GitHubRef>(
-      `${apiBase}/git/ref/heads/${baseBranch}`,
+      `${headApiBase}/git/ref/heads/${baseBranch}`,
       token,
     );
   } catch (err) {
-    throw explainBaseRefFailure(err, owner, repo, baseBranch);
+    throw explainBaseRefFailure(err, headOwner, headRepo, baseBranch);
   }
   const baseSha = baseRef.object.sha;
 
@@ -295,7 +329,7 @@ export async function createBranchAndPR(input: {
 
     // Create a blob for this file
     const blob = await githubPost<GitHubBlob>(
-      `${apiBase}/git/blobs`,
+      `${headApiBase}/git/blobs`,
       { content, encoding: "utf-8" },
       token,
     );
@@ -307,16 +341,16 @@ export async function createBranchAndPR(input: {
     throw new Error("No file contents could be resolved for the commit");
   }
 
-  // 4. Create a new tree based on the base commit's tree
+  // 4. Create a new tree based on the base commit's tree (on HEAD repo).
   const tree = await githubPost<GitHubTree>(
-    `${apiBase}/git/trees`,
+    `${headApiBase}/git/trees`,
     { base_tree: baseSha, tree: treeEntries },
     token,
   );
 
-  // 5. Create a commit
+  // 5. Create a commit on the HEAD repo.
   const commit = await githubPost<GitHubCommit>(
-    `${apiBase}/git/commits`,
+    `${headApiBase}/git/commits`,
     {
       message: commitMessage,
       tree: tree.sha,
@@ -325,16 +359,16 @@ export async function createBranchAndPR(input: {
     token,
   );
 
-  // 6. Create the branch ref
+  // 6. Create the branch ref on the HEAD repo.
   try {
     await githubPost(
-      `${apiBase}/git/refs`,
+      `${headApiBase}/git/refs`,
       { ref: `refs/heads/${branchName}`, sha: commit.sha },
       token,
     );
   } catch (err) {
     // Branch might already exist — try updating it
-    const response = await fetch(`${apiBase}/git/refs/heads/${branchName}`, {
+    const response = await fetch(`${headApiBase}/git/refs/heads/${branchName}`, {
       method: "PATCH",
       headers: getHeaders(token),
       body: JSON.stringify({ sha: commit.sha, force: true }),
@@ -344,24 +378,25 @@ export async function createBranchAndPR(input: {
     }
   }
 
-  // 7. Create the PR
+  // 7. Create the PR on the BASE repo. head is "{headOwner}:{branchName}" for
+  // cross-repo PRs, bare branch name for same-repo.
   let prUrl: string | null = null;
   let prNumber: number | null = null;
 
   try {
     const pr = await githubPost<GitHubPR>(
-      `${apiBase}/pulls`,
-      { title: prTitle, body: prBody, head: branchName, base: baseBranch },
+      `${baseApiBase}/pulls`,
+      { title: prTitle, body: prBody, head: prHead, base: baseBranch },
       token,
     );
     prUrl = pr.html_url;
     prNumber = pr.number;
 
-    // Add labels (best-effort)
+    // Add labels on the BASE repo's issue (not HEAD) — best-effort.
     if (labels.length > 0) {
       try {
         await githubPost(
-          `${apiBase}/issues/${pr.number}/labels`,
+          `${baseApiBase}/issues/${pr.number}/labels`,
           { labels },
           token,
         );
@@ -371,12 +406,12 @@ export async function createBranchAndPR(input: {
     console.warn(`[github-api-commit] PR creation failed: ${(err as Error).message}`);
     // A second call for the same branch commonly fails here because an open PR
     // already exists (GitHub returns 422 "A pull request already exists for …").
-    // Recover the existing PR's URL so the caller can back-write it onto the
-    // FeaturePack — otherwise the pack's manifest.prUrl stays null forever
-    // even though the PR is live on GitHub.
+    // Recover the existing PR's URL from the BASE repo (where the PR lives) so
+    // the caller can back-write it onto the FeaturePack — otherwise the pack's
+    // manifest.prUrl stays null forever even though the PR is live on GitHub.
     try {
       const existing = await githubGet<Array<GitHubPR & { state?: string }>>(
-        `${apiBase}/pulls?head=${owner}:${branchName}&state=open`,
+        `${baseApiBase}/pulls?head=${headOwner}:${branchName}&state=open`,
         token,
       );
       if (Array.isArray(existing) && existing.length > 0) {
@@ -389,78 +424,6 @@ export async function createBranchAndPR(input: {
   }
 
   return { branchName, commitSha: commit.sha, prUrl, prNumber };
-}
-
-// ─── Cross-Fork PR ──────────────────────────────────────────────────────────
-
-/**
- * Create a branch on a fork and PR targeting an upstream repo.
- * Used when the user has a fork configured as their gitRemoteUrl.
- */
-export async function createCrossForkPR(input: {
-  forkOwner: string;
-  forkRepo: string;
-  upstreamOwner: string;
-  upstreamRepo: string;
-  branchName: string;
-  commitMessage: string;
-  diff: string;
-  prTitle: string;
-  prBody: string;
-  labels: string[];
-  token: string;
-  baseBranch?: string;
-}): Promise<GitHubCommitResult> {
-  const { forkOwner, forkRepo, upstreamOwner, upstreamRepo, branchName, commitMessage, diff, prTitle, prBody, labels, token } = input;
-  const baseBranch = input.baseBranch ?? "main";
-
-  // 1. Create branch and commit on the fork
-  const result = await createBranchAndPR({
-    owner: forkOwner,
-    repo: forkRepo,
-    branchName,
-    commitMessage,
-    diff,
-    prTitle: prTitle, // won't create PR here — we'll create it on upstream
-    prBody,
-    labels: [],
-    token,
-    baseBranch,
-  });
-
-  // 2. Create PR on upstream targeting the fork's branch
-  const upstreamApiBase = `https://api.github.com/repos/${upstreamOwner}/${upstreamRepo}`;
-  let prUrl: string | null = null;
-  let prNumber: number | null = null;
-
-  try {
-    const pr = await githubPost<GitHubPR>(
-      `${upstreamApiBase}/pulls`,
-      {
-        title: prTitle,
-        body: prBody,
-        head: `${forkOwner}:${branchName}`,
-        base: baseBranch,
-      },
-      token,
-    );
-    prUrl = pr.html_url;
-    prNumber = pr.number;
-
-    if (labels.length > 0) {
-      try {
-        await githubPost(
-          `${upstreamApiBase}/issues/${pr.number}/labels`,
-          { labels },
-          token,
-        );
-      } catch { /* best-effort */ }
-    }
-  } catch (err) {
-    console.warn(`[github-api-commit] Cross-fork PR creation failed: ${(err as Error).message}`);
-  }
-
-  return { branchName, commitSha: result.commitSha, prUrl, prNumber };
 }
 
 // ─── PR Status & Merge ─────────────────────────────────────────────────────

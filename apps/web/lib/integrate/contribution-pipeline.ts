@@ -283,7 +283,7 @@ export async function submitBuildAsPR(
 
   if (targetRepo && token) {
     // ─── GitHub API Mode: Create PR via REST API (no local git needed) ──
-    const { createBranchAndPR, createCrossForkPR } = await import("@/lib/integrate/github-api-commit");
+    const { createBranchAndPR } = await import("@/lib/integrate/github-api-commit");
 
     const commitMessage = generateCommitMessage({
       title: input.title,
@@ -298,37 +298,23 @@ export async function submitBuildAsPR(
     if (!securityScan.passed) labels.push("security-review-needed");
 
     try {
-      let result;
-
-      if (forkRepo && upstreamRepo) {
-        // Cross-fork: commit to fork, PR targets upstream
-        result = await createCrossForkPR({
-          forkOwner: forkRepo.owner,
-          forkRepo: forkRepo.repo,
-          upstreamOwner: upstreamRepo.owner,
-          upstreamRepo: upstreamRepo.repo,
-          branchName,
-          commitMessage,
-          diff: input.diffPatch,
-          prTitle,
-          prBody,
-          labels,
-          token,
-        });
-      } else {
-        // Same-repo: commit and PR on the same repo
-        result = await createBranchAndPR({
-          owner: targetRepo.owner,
-          repo: targetRepo.repo,
-          branchName,
-          commitMessage,
-          diff: input.diffPatch,
-          prTitle,
-          prBody,
-          labels,
-          token,
-        });
-      }
+      // Unified call: cross-fork → head = fork, base = upstream. Same-repo →
+      // head and base both point at targetRepo.
+      const head = forkRepo && upstreamRepo ? forkRepo : targetRepo;
+      const base = forkRepo && upstreamRepo ? upstreamRepo : targetRepo;
+      const result = await createBranchAndPR({
+        headOwner: head.owner,
+        headRepo: head.repo,
+        baseOwner: base.owner,
+        baseRepo: base.repo,
+        branchName,
+        commitMessage,
+        diff: input.diffPatch,
+        prTitle,
+        prBody,
+        labels,
+        token,
+      });
 
       return {
         mode: "remote" as const,
