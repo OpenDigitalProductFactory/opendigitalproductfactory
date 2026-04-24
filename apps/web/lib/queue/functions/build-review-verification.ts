@@ -50,7 +50,7 @@ export const buildReviewVerification = inngest.createFunction(
       const { prisma } = await import("@dpf/db");
       await prisma.featureBuild.update({
         where: { buildId },
-        data: { uxVerificationStatus: "running" },
+        data: { uxVerificationStatus: "running", sandboxVerificationStatus: "running" },
       });
       if (build.threadId) {
         const { agentEventBus } = await import("@/lib/agent-event-bus");
@@ -58,6 +58,67 @@ export const buildReviewVerification = inngest.createFunction(
           type: "verification:started",
           buildId,
           testCount: testCases.length,
+        });
+      }
+    });
+
+    // ─── Sandbox typecheck + build gate ────────────────────────────────────
+    // Runs before UX verification. Persists results so checkPhaseGate can
+    // block review -> ship when either check is red. UX tests still run
+    // independently — the phase gate reads both signals to decide.
+    await step.run("sandbox-verification", async () => {
+      const { runSandboxTypecheckBuildGate } = await import(
+        "@/lib/integrate/sandbox/sandbox-verification"
+      );
+      const { prisma } = await import("@dpf/db");
+      let gate;
+      try {
+        gate = await runSandboxTypecheckBuildGate(build.sandboxId!);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const failureShape = {
+          typecheck: {
+            name: "typecheck" as const,
+            command: "pnpm --filter web typecheck",
+            passed: false,
+            exitCode: null,
+            stdoutTail: `Sandbox verification could not exec in ${build.sandboxId}: ${message.slice(0, 500)}`,
+            durationMs: 0,
+          },
+          build: {
+            name: "build" as const,
+            command: "pnpm --filter web build",
+            passed: false,
+            exitCode: null,
+            stdoutTail: "Not attempted — sandbox unreachable.",
+            durationMs: 0,
+            skipped: true,
+          },
+          allPassed: false,
+          ranAt: new Date().toISOString(),
+        };
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: {
+            sandboxVerification: failureShape as unknown as import("@dpf/db").Prisma.InputJsonValue,
+            sandboxVerificationStatus: "failed",
+          },
+        });
+        return;
+      }
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: {
+          sandboxVerification: gate as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          sandboxVerificationStatus: gate.allPassed ? "complete" : "failed",
+        },
+      });
+      if (build.threadId) {
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        agentEventBus.emit(build.threadId, {
+          type: "evidence:update",
+          buildId,
+          field: "sandboxVerification",
         });
       }
     });
