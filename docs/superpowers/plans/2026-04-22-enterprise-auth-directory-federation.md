@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement a coherent enterprise identity stack for DPF that hardens current auth, adds manager-aware authorization, syncs ADP workforce hierarchy, introduces an identity edge for LDAP/OIDC/SAML/SCIM, and aligns HR/Finance coworkers with the same access model.
+**Goal:** Implement a coherent enterprise identity stack for DPF that hardens current auth, adds manager-aware authorization, syncs ADP workforce hierarchy, introduces an identity edge for LDAP/OIDC/SAML/SCIM, surfaces a unified `/platform/identity` workspace, and aligns HR/Finance coworkers with the same access model.
 
 **Architecture:** DPF remains the source of truth for principal identity, employee-manager hierarchy, route capabilities, and coworker grants. An incorporated identity edge runtime publishes standards surfaces. Delivery is phased so the platform first fixes its current auth seams, then adds workforce hierarchy and principal modeling, then layers federation and directory protocols on top.
 
-**Tech Stack:** Next.js 16, Auth.js, Prisma 7, PostgreSQL, Docker Compose, TypeScript, ADP MCP service, authentik (new service), LDAP/OIDC/SAML/SCIM.
+**Tech Stack:** Next.js 16, Auth.js, Prisma 7, PostgreSQL, Docker Compose, TypeScript, ADP MCP service, authentik (new service), Microsoft Entra (upstream optional authority), LDAP/OIDC/SAML/SCIM.
 
 **Authoritative spec:** [docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md](../specs/2026-04-22-enterprise-auth-directory-federation-design.md)
 
@@ -32,14 +32,24 @@ Expected files and responsibilities before task execution:
   - capability + scope evaluation
 - `apps/web/lib/identity/*`
   - new principal, alias, provisioning, and access-evaluator helpers
+- `apps/web/lib/tak/*`
+  - projected attestation and coworker trust helpers
 - `apps/web/lib/integrate/adp/*`
   - ADP workforce sync and hierarchy reconciliation
+- `apps/web/lib/integrate/entra/*`
+  - Entra authority connection and future sync helpers
 - `apps/web/app/api/integrations/adp/*`
   - ADP sync/test endpoints
-- `apps/web/app/(shell)/admin/settings/*` or adjacent settings routes
-  - admin UI for directory/federation settings
+- `apps/web/app/api/integrations/entra/*`
+  - Entra connect/test endpoints
+- `apps/web/app/(shell)/platform/identity/*`
+  - unified identity workspace routes
 - `apps/web/components/integrations/*`
   - UI panels for identity edge, federation, and app provisioning
+- `apps/web/components/platform/identity/*`
+  - identity workspace panels, nav, and object-detail surfaces
+- `apps/web/components/docs/*`
+  - clean docs links and embedded page help affordances
 - `docker-compose.yml`
   - add identity edge service
 - `tests` / `*.test.ts` / `*.test.tsx`
@@ -760,6 +770,184 @@ git commit -m "feat(coworkers): align HR and finance coworker access with manage
 
 ---
 
+## Chunk 9: Platform Identity Workspace
+
+### Task 9.1: Add the Identity & Access platform family and route shell
+
+**Files:**
+- Modify: `apps/web/components/platform/platform-nav.ts`
+- Modify: `apps/web/components/platform/PlatformTabNav.tsx`
+- Create: `apps/web/components/platform/identity/IdentityTabNav.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/layout.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/page.tsx`
+
+- [ ] **Step 1: Write the failing navigation tests**
+
+```ts
+it("renders Identity & Access in the platform family nav", () => {
+  expect(screen.getByText("Identity & Access")).toBeInTheDocument();
+});
+
+it("renders the identity workspace landing page", async () => {
+  const html = await renderRoute("/platform/identity");
+  expect(html).toContain("Identity & Access");
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+Run: `pnpm --filter web test apps/web/components/platform`
+
+- [ ] **Step 3: Implement the platform family and route shell**
+
+Add the new family and make `/platform/identity` the canonical authority workspace.
+
+- [ ] **Step 4: Re-run the tests**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/components/platform/platform-nav.ts apps/web/components/platform/PlatformTabNav.tsx apps/web/components/platform/identity/IdentityTabNav.tsx apps/web/app/(shell)/platform/identity/layout.tsx apps/web/app/(shell)/platform/identity/page.tsx
+git commit -m "feat(identity-ui): add platform identity workspace shell and nav"
+```
+
+### Task 9.2: Build the identity overview and management surfaces
+
+**Files:**
+- Create: `apps/web/app/(shell)/platform/identity/principals/page.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/groups/page.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/directory/page.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/federation/page.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/applications/page.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/authorization/page.tsx`
+- Create: `apps/web/app/(shell)/platform/identity/agents/page.tsx`
+- Create: `apps/web/components/platform/identity/IdentityOverviewPanel.tsx`
+- Create: `apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx`
+- Create: `apps/web/components/platform/identity/GroupMembershipPanel.tsx`
+- Create: `apps/web/components/platform/identity/DirectoryAuthoritiesPanel.tsx`
+- Create: `apps/web/components/platform/identity/ApplicationAssignmentsPanel.tsx`
+- Create: `apps/web/components/platform/identity/AuthorizationBundlePanel.tsx`
+- Create: `apps/web/components/platform/identity/AgentIdentityPanel.tsx`
+
+- [ ] **Step 1: Write the failing page/panel tests**
+
+```ts
+it("shows people, contractors, agents, and services on the principals page", () => {
+  expect(screen.getByText("Principals")).toBeInTheDocument();
+});
+
+it("shows route bundles and coworker associations on the authorization page", () => {
+  expect(screen.getByText("Authorization")).toBeInTheDocument();
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+- [ ] **Step 3: Implement the workspace surfaces**
+
+Keep the UI task-oriented:
+- overview and health first
+- objects and assignments second
+- protocol detail deeper in the page
+
+- [ ] **Step 4: Re-run the tests**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/app/(shell)/platform/identity apps/web/components/platform/identity
+git commit -m "feat(identity-ui): add identity workspace management surfaces"
+```
+
+### Task 9.3: Integrate Microsoft Entra as a first-class upstream authority
+
+**Files:**
+- Modify: `apps/web/app/(shell)/platform/identity/federation/page.tsx`
+- Modify: `apps/web/components/integrations/EntraConnectPanel.tsx`
+- Create: `apps/web/components/platform/identity/FederationAuthorityCard.tsx`
+- Create: `apps/web/components/platform/identity/FederationAuthorityCard.test.tsx`
+
+- [ ] **Step 1: Write the failing federation card tests**
+
+```ts
+it("renders Microsoft Entra as an available upstream authority", () => {
+  expect(screen.getByText("Microsoft Entra")).toBeInTheDocument();
+});
+
+it("shows connection state and mapping guidance for Entra", () => {
+  expect(screen.getByText("Upstream authority")).toBeInTheDocument();
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+- [ ] **Step 3: Implement the federation authority cards**
+
+Show:
+- connection health
+- last sync / connection state
+- what the authority owns upstream
+- what DPF still owns locally
+
+- [ ] **Step 4: Re-run the tests**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/app/(shell)/platform/identity/federation/page.tsx apps/web/components/integrations/EntraConnectPanel.tsx apps/web/components/platform/identity/FederationAuthorityCard.tsx apps/web/components/platform/identity/FederationAuthorityCard.test.tsx
+git commit -m "feat(identity-ui): add Entra-first federation authority experience"
+```
+
+### Task 9.4: Add clean docs links and first-use coworker guidance state
+
+**Files:**
+- Modify: `packages/db/prisma/schema.prisma`
+- Create: `packages/db/prisma/migrations/<timestamp>_add_page_guide_state/migration.sql`
+- Create: `apps/web/lib/identity/page-guide-state.ts`
+- Create: `apps/web/lib/identity/page-guide-state.test.ts`
+- Modify: `apps/web/components/docs/HelpLink.tsx`
+- Modify: `apps/web/components/agent/AgentCoworkerShell.tsx`
+- Create: `apps/web/components/platform/identity/IdentityWorkspaceHelp.tsx`
+
+- [ ] **Step 1: Write the failing guide-state tests**
+
+```ts
+it("stores first-seen and dismissed state per user and route", async () => {
+  const state = await markPageGuideSeen(sampleUserId, "/platform/identity", "identity-overview", "v1");
+  expect(state.firstSeenAt).toBeDefined();
+});
+
+it("auto-opens guidance only on first use or when the guide version changes", async () => {
+  expect(await shouldAutoOpenGuide(sampleUserId, "/platform/identity", "identity-overview", "v1")).toBe(true);
+});
+```
+
+- [ ] **Step 2: Run the tests**
+
+- [ ] **Step 3: Add the schema model and migration**
+
+Use a durable per-user, per-route, per-guide record so the experience survives across devices and sessions.
+
+- [ ] **Step 4: Implement the docs/help and coworker behavior**
+
+Requirements:
+- visible docs link opens a clean operator guide
+- coworker can use the deeper spec/design context privately
+- auto-open on first use
+- stay dismissed after dismissal
+- re-open or re-badge when guidance version changes materially
+
+- [ ] **Step 5: Re-run the tests**
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/db/prisma/schema.prisma packages/db/prisma/migrations apps/web/lib/identity/page-guide-state.ts apps/web/lib/identity/page-guide-state.test.ts apps/web/components/docs/HelpLink.tsx apps/web/components/agent/AgentCoworkerShell.tsx apps/web/components/platform/identity/IdentityWorkspaceHelp.tsx
+git commit -m "feat(identity-ui): add docs links and first-use coworker guidance state"
+```
+
+---
+
 ## Verification
 
 After each chunk, run the smallest relevant tests first. After each merged chunk, run the production build gate.
@@ -808,6 +996,10 @@ Minimum scenarios:
 - HR operator sees broader workforce views by role
 - ADP-connected manager can use scoped HR/Finance coworker queries
 - downstream app receives expected federated groups/claims
+- `/platform/identity` overview loads with the Identity & Access family nav
+- the docs link opens clean operator-facing guidance rather than raw spec text
+- the coworker auto-opens on first use and remains dismissed afterward
+- the federation page shows Microsoft Entra as an upstream authority option with setup guidance
 
 ---
 

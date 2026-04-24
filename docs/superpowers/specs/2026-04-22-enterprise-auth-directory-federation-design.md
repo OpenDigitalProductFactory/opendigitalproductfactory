@@ -431,6 +431,7 @@ The platform must distinguish three separate concerns:
 
 1. **Identity kind**
    - human
+   - contractor
    - service
    - agent
 
@@ -460,6 +461,88 @@ Examples:
 - a manager can view approved fields for direct reports, but not organization-wide payroll data
 - an HR operator can view workforce-wide data because of role, not because they happen to manage someone
 - a finance coworker may summarize payroll counts for a manager only over the manager’s allowed employee scope
+- a contractor accountant may access finance payables routes and approvals without gaining broad HR or platform admin visibility
+
+---
+
+## Platform Identity Workspace
+
+Identity and authorization should be operated from one platform workspace rather than being scattered across Admin, HR, AI, and integrations.
+
+### Canonical route family
+
+The canonical authority workspace should live under:
+
+- `/platform/identity`
+- `/platform/identity/principals`
+- `/platform/identity/groups`
+- `/platform/identity/directory`
+- `/platform/identity/federation`
+- `/platform/identity/applications`
+- `/platform/identity/authorization`
+- `/platform/identity/agents`
+
+This workspace becomes the operational home for:
+
+- principal inventory
+- groups and memberships
+- OU / directory publication structure
+- upstream federation authorities
+- downstream application federation
+- route bundles and authorization mappings
+- AI workforce identity projection and trust state
+
+### Workspace boundary
+
+The boundary should be explicit:
+
+- **Platform Identity owns authority**
+  - who exists
+  - principal type
+  - group membership
+  - app assignments
+  - route bundles
+  - trusted upstream authorities
+- **HR consumes authority**
+  - workforce operations
+  - org chart and people workflows
+  - approvals that depend on assigned authority
+- **AI Workforce consumes and extends authority**
+  - coworker identity projection
+  - `GAID`
+  - `TAK` trust markers
+  - model/runtime posture
+  - but not a separate parallel identity system
+
+This keeps HR adjacent but not authoritative for platform identity, while also ensuring AI coworkers are first-class principals inside the same control plane.
+
+### UX model
+
+The workspace should feel like an identity operations center rather than a raw directory schema editor.
+
+The best-in-class patterns to borrow are:
+
+- unified left-nav identity centers such as Microsoft Entra
+- task-oriented setup and connection health patterns such as WorkOS Admin Portal / Directory Sync
+- application assignment workflows where users, groups, and apps are managed together
+- progressive disclosure that keeps protocol detail available without making it the default operator experience
+
+The workspace should therefore optimize for:
+
+- **status-first overview**
+  - counts, broken syncs, validation issues, and pending setup work
+- **assignment-first workflows**
+  - principals to groups
+  - groups to routes/apps
+  - coworkers to approval or operating contexts
+- **object detail pages with relationship context**
+  - memberships, route access, app access, linked identities, and AI trust state in one place
+- **small-company operator simplicity**
+  - `Owner`
+  - `Admin`
+  - `Employee`
+
+Contractors and AI coworkers should be visible alongside employees, but clearly typed and filterable.
 
 ---
 
@@ -710,6 +793,54 @@ This keeps payroll/HRIS truth where it belongs without letting an HRIS define pl
 
 ---
 
+## Upstream Federation Authorities
+
+DPF should support more than one upstream identity authority while remaining the canonical platform authorization brain.
+
+### Authority categories
+
+The first categories to support are:
+
+- Microsoft Entra
+- LDAP / Active Directory
+- other compatible workforce authorities over time
+
+### Microsoft Entra
+
+Microsoft Entra should be treated as a **first-class optional upstream authority**, not as the canonical owner of DPF identity semantics.
+
+That means Entra may provide:
+
+- human sign-in bootstrap
+- upstream group and directory data
+- tenant identity starting point for companies already centered on Microsoft
+
+But DPF still owns:
+
+- platform-specific groups and memberships
+- route authorization
+- coworker associations
+- AI coworker identity, `GAID`, and `TAK` trust state
+- downstream application authorization semantics
+
+Operationally, Entra should appear as a guided path inside `/platform/identity/federation`, alongside LDAP/AD and other future directory sources.
+
+### Authority precedence
+
+To avoid conflicts:
+
+- upstream authorities may own source facts such as workforce identity, employment state, or baseline groups
+- DPF owns platform meaning:
+  - local groups
+  - route bundles
+  - coworker grants
+  - downstream app assignments
+- imported claims or groups must map into DPF-managed semantics rather than directly overriding them
+
+This preserves one coherent company authority model even when external identity systems are present.
+
+---
+
 ## Coworker, Skills, MCP, And Route Access
 
 HR and Finance coworkers should not bypass the enterprise identity model. They should consume it.
@@ -811,6 +942,70 @@ This is the bridge between enterprise auth and actual application behavior.
 
 ---
 
+## In-Product Documentation And First-Use Guidance
+
+The identity workspace should be self-explaining, but it should not expose raw specs by default.
+
+### Operator-facing docs
+
+The visible `Docs` affordance should open a clean operator-facing explanation that summarizes:
+
+- what this workspace manages
+- what DPF owns
+- what Entra / LDAP / other upstream authorities own
+- what the next likely setup step is
+
+This should use the same lightweight documentation affordance pattern already established by [apps/web/components/docs/HelpLink.tsx](../../../apps/web/components/docs/HelpLink.tsx).
+
+### AI coworker guidance model
+
+The AI coworker should use the deeper source material privately:
+
+- the clean page doc
+- the related spec(s)
+- route context
+- current tenant configuration state
+
+That lets the coworker behave like a knowledgeable implementation guide without forcing operators to read raw architecture documents.
+
+Recommended first-use behavior:
+
+- auto-open the coworker the first time a user lands on `/platform/identity` or one of its major sub-pages
+- provide a short role-aware summary
+- recommend the next likely setup action
+- stay dismissed after the user closes it
+- re-open or re-badge only when the guidance version changes materially
+
+### Per-user guide state
+
+This likely needs a durable per-user per-page guide-state model rather than local storage alone.
+
+Illustrative shape:
+
+```prisma
+model PageGuideState {
+  id              String   @id @default(cuid())
+  userId          String
+  routeKey        String
+  guideKey        String
+  guideVersion    String
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @updatedAt
+  summaryShownAt  DateTime?
+  autoOpenedAt    DateTime?
+  dismissedAt     DateTime?
+  completedAt     DateTime?
+  statePayload    Json?
+
+  @@unique([userId, routeKey, guideKey])
+  @@index([userId, routeKey])
+}
+```
+
+That model would let the platform remember what each user has already seen, while still allowing the coworker to re-engage when the page or setup posture has materially changed.
+
+---
+
 ## Security And Trust Boundaries
 
 ### Credential authority
@@ -870,12 +1065,19 @@ Long-term:
 - expose groups/role-as-group mappings
 - enable SCIM provisioning for downstream apps
 
-### Phase 6: External product federation
+### Phase 6: Identity workspace and guidance
+
+- introduce `/platform/identity` as the unified authority workspace
+- add principals, groups, directory, federation, applications, authorization, and agent identity pages
+- surface Entra as a first-class upstream authority option
+- add clean docs links and first-use coworker guidance state
+
+### Phase 7: External product federation
 
 - add downstream application registry and claim/group mapping
 - issue OIDC/SAML to external products
 
-### Phase 7: Coworker and MCP alignment
+### Phase 8: Coworker and MCP alignment
 
 - connect HR and Finance coworkers to manager-aware and route-aware auth context
 - gate ADP and future finance MCP tools through the new access evaluator
@@ -899,7 +1101,13 @@ Long-term:
 5. **Manager access is scope-driven, not role-only.**
    This is required for correct employee versus manager separation.
 
-6. **Coworkers consume the same authority model as humans.**
+6. **Identity and authorization live in one platform workspace.**
+   HR and AI operations consume that workspace; they do not replace it with parallel policy editors.
+
+7. **Microsoft Entra is a first-class optional upstream authority.**
+   It may bootstrap workforce identity and groups, but DPF remains the authority core.
+
+8. **Coworkers consume the same authority model as humans.**
    No parallel auth stack should be created for HR or Finance coworkers.
 
 ---
