@@ -1079,6 +1079,23 @@ model OAuthPendingFlow {
   createdAt    DateTime @default(now())
 }
 
+// Transient store for OAuth Device Flow (RFC 8628) sessions in flight.
+// Holds the device_code server-side so the browser only ever handles the
+// short user_code; deletes itself after consumption or on expiry sweep.
+// 15-minute TTL maps to GitHub's documented expires_in for device codes.
+model DeviceCodeSession {
+  id         String   @id @default(cuid())
+  deviceCode String   @unique
+  userCode   String
+  interval   Int
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  createdBy  String
+  consumed   Boolean  @default(false)
+
+  @@index([expiresAt])
+}
+
 model ModelProvider {
   id                       String         @id @default(cuid())
   providerId               String         @unique
