@@ -2,8 +2,8 @@
 title: "Connecting AI Providers"
 area: "ai-workforce"
 order: 2
-lastUpdated: "2026-03-22"
-updatedBy: "Claude (COO)"
+lastUpdated: "2026-04-24"
+updatedBy: "Codex"
 ---
 
 ## Overview
@@ -46,6 +46,30 @@ Supported providers: Docker Model Runner, Ollama.
 - If you are running models locally — use None (auto-detected).
 
 Some providers support both OAuth and API Key. You can switch between methods on the provider detail page at any time. Disconnecting an OAuth connection clears the stored token immediately.
+
+## Finance Bridge
+
+When a provider is configured successfully, the platform now seeds a Finance bridge for it automatically:
+
+- The provider is linked to a Finance supplier record
+- Finance gets a draft AI contract/profile even if the commercial plan details are incomplete
+- Missing commercial details become explicit finance work items instead of blocking technical setup
+- The provider detail page shows a Finance Bridge panel, and Finance exposes the same supplier through `/finance/spend/ai`
+
+This keeps provider authentication and finance ownership connected without forcing the setup user to complete every contract detail up front.
+
+## Where To Review It
+
+After provider setup, the finance-linked surfaces are:
+
+- `/platform/ai/providers/[providerId]`
+  Shows the Finance Bridge panel with supplier linkage, contract count, work-item count, and billing/usage links.
+
+- `/finance/spend/ai`
+  Shows the finance-owned AI spend workspace with committed spend, setup gaps, and utilization context.
+
+- `/finance/suppliers/[id]`
+  Shows AI Provider Finance Context when the supplier is linked to a configured provider.
 
 ## Troubleshooting
 
