@@ -13,17 +13,19 @@ import {
 import "@xyflow/react/dist/style.css";
 import "./process-graph.css";
 
-import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
 import { buildDependencyGraph } from "@/lib/integrate/task-dependency-graph";
 import {
   buildPhaseGraph,
   buildTaskGraph,
+  getPhaseNodeStatus,
   normalizeBuildSnapshot,
   getTaskNodeStatus,
   type ProcessNode,
   type ProcessEdge,
   type TaskNodeData,
+  type PhaseNodeData,
 } from "@/lib/build/process-graph-builder";
 
 import { PhaseNode } from "./PhaseNode";
@@ -31,6 +33,7 @@ import { TaskNode } from "./TaskNode";
 import { ForkJoinNode } from "./ForkJoinNode";
 import { AnimatedEdge } from "./AnimatedEdge";
 import { TaskInspector } from "./TaskInspector";
+import { WorkflowStageInspector } from "./WorkflowStageInspector";
 
 // ─── Node / Edge type registrations ────────────────────────────────────────
 
@@ -52,11 +55,12 @@ const TASK_GRAPH_Y_OFFSET = 130;
 
 type Props = {
   build: FeatureBuildRow;
+  workflowLabel: string | null;
 };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
-export function ProcessGraph({ build }: Props) {
+export function ProcessGraph({ build, workflowLabel }: Props) {
   // ─── Live running-task state via DOM CustomEvents ──────────────────────
   const [activeTaskTitles, setActiveTaskTitles] = useState<Set<string>>(
     new Set(),
@@ -155,9 +159,17 @@ export function ProcessGraph({ build }: Props) {
   const [inspectedTask, setInspectedTask] = useState<AssignedTask | null>(
     null,
   );
+  const [inspectedPhase, setInspectedPhase] = useState<BuildPhase | null>(null);
 
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      if (node.type === "processPhase" || node.type === "processForkJoin") {
+        const nodeData = node.data as PhaseNodeData;
+        setInspectedTask(null);
+        setInspectedPhase(nodeData.phase);
+        return;
+      }
+
       if (node.type !== "processTask") return;
 
       // Find the matching AssignedTask from the build plan
@@ -172,6 +184,7 @@ export function ProcessGraph({ build }: Props) {
       for (const phase of execPhases) {
         for (const assignedTask of phase.tasks) {
           if (assignedTask.title === nodeData.label) {
+            setInspectedPhase(null);
             setInspectedTask(assignedTask);
             return;
           }
@@ -183,6 +196,7 @@ export function ProcessGraph({ build }: Props) {
 
   const handleInspectorClose = useCallback(() => {
     setInspectedTask(null);
+    setInspectedPhase(null);
   }, []);
 
   // Compute inspector props
@@ -234,6 +248,16 @@ export function ProcessGraph({ build }: Props) {
           task={inspectedTask}
           status={inspectorStatus}
           result={inspectorResult}
+          onClose={handleInspectorClose}
+        />
+      )}
+
+      {inspectedPhase != null && (
+        <WorkflowStageInspector
+          build={build}
+          phase={inspectedPhase}
+          status={getPhaseNodeStatus(inspectedPhase, build)}
+          workflowLabel={workflowLabel}
           onClose={handleInspectorClose}
         />
       )}
