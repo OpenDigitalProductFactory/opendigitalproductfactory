@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dpf/integration-shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "postgres": "^3.4.5",
     "undici": "^7.0.0",

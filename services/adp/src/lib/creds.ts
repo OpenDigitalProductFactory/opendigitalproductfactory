@@ -1,7 +1,7 @@
 // Credential + token lifecycle management for adp MCP tools.
 // Shared across all tool handlers — load once, refresh-if-needed, cache.
 
-import { createHash } from "node:crypto";
+import { hashToolArgs } from "@dpf/integration-shared";
 import { decryptJson, encryptJson } from "./crypto.js";
 import {
   exchangeToken,
@@ -152,8 +152,7 @@ export async function recordToolCall(sql: Sql, input: AuditInput): Promise<void>
 }
 
 function hashArgs(args: unknown): string {
-  const canonical = JSON.stringify(args, Object.keys(args ?? {}).sort());
-  return createHash("sha256").update(canonical).digest("hex");
+  return hashToolArgs(args);
 }
 
 export { AdpAuthError };
