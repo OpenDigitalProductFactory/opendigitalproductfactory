@@ -57,11 +57,15 @@ export default defineConfig({
       },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },
       { find: "next/server", replacement: resolve(rootDir, "node_modules/next/server.js") },
-      { find: "react/jsx-dev-runtime", replacement: resolve(rootNodeModulesDir, "react/jsx-dev-runtime.js") },
-      { find: "react/jsx-runtime", replacement: resolve(rootNodeModulesDir, "react/jsx-runtime.js") },
-      { find: "react-dom/server", replacement: resolve(rootNodeModulesDir, "react-dom/server.node.js") },
-      { find: "react-dom", replacement: resolve(rootNodeModulesDir, "react-dom/index.js") },
-      { find: "react", replacement: resolve(rootNodeModulesDir, "react/index.js") },
+      { find: /^react\/jsx-dev-runtime$/, replacement: resolve(rootNodeModulesDir, "react/jsx-dev-runtime.js") },
+      { find: /^react\/jsx-runtime$/, replacement: resolve(rootNodeModulesDir, "react/jsx-runtime.js") },
+      { find: /^react-dom\/server$/, replacement: resolve(rootNodeModulesDir, "react-dom/server.node.js") },
+      // Use exact-match aliases for React packages. Prefix aliases like
+      // `find: "react-dom"` can accidentally rewrite `react-dom/server`
+      // and other subpaths, which breaks SSR rendering under Vitest on
+      // Linux/pnpm hoists (see vitejs/vite#18894).
+      { find: /^react-dom$/, replacement: resolve(rootNodeModulesDir, "react-dom/index.js") },
+      { find: /^react$/, replacement: resolve(rootNodeModulesDir, "react/index.js") },
     ],
   },
 });
