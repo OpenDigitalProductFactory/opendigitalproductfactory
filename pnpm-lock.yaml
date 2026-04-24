@@ -8395,8 +8395,8 @@ packages:
     resolution: {integrity: sha512-OZs6gsjF4vMp32qrCbiVSkrFmXtG/AZhY3t0iAMrMBiAZyV9oALtXO8hsrHbMXF9x6L3grlFuwW2oAz7cav+Gw==}
     engines: {node: '>= 0.6'}
 
-  typed-query-selector@2.12.1:
-    resolution: {integrity: sha512-uzR+FzI8qrUEIu96oaeBJmd9E7CFEiQ3goA5qCVgc4s5llSubcfGHq9yUstZx/k4s9dXHVKsE35YWoFyvEqEHA==}
+  typed-query-selector@2.12.2:
+    resolution: {integrity: sha512-EOPFbyIub4ngnEdqi2yOcNeDLaX/0jcE1JoAXQDDMIthap7FoN795lc/SHfIq2d416VufXpM8z/lD+WRm2gfOQ==}
 
   typescript@5.8.3:
     resolution: {integrity: sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ==}
@@ -17419,7 +17419,7 @@ snapshots:
       chromium-bidi: 0.11.0(devtools-protocol@0.0.1367902)
       debug: 4.4.3
       devtools-protocol: 0.0.1367902
-      typed-query-selector: 2.12.1
+      typed-query-selector: 2.12.2
       ws: 8.20.0
     transitivePeerDependencies:
       - bare-abort-controller
@@ -17436,7 +17436,7 @@ snapshots:
       cosmiconfig: 9.0.1(typescript@6.0.3)
       devtools-protocol: 0.0.1367902
       puppeteer-core: 23.11.1
-      typed-query-selector: 2.12.1
+      typed-query-selector: 2.12.2
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -18588,7 +18588,7 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.2
 
-  typed-query-selector@2.12.1: {}
+  typed-query-selector@2.12.2: {}
 
   typescript@5.8.3: {}
 
