@@ -8,6 +8,7 @@ type EmployeeScopeInput = {
 type EffectiveAuthContextInput = {
   user: Pick<DpfSession["user"], "id" | "type" | "platformRole" | "isSuperuser">;
   grantedCapabilities: string[];
+  principalId?: string | null;
   employeeProfile?: EmployeeScopeInput;
 };
 
@@ -31,12 +32,13 @@ function toPrincipalId(userId: string | null | undefined): string | null {
 export function buildEffectiveAuthContext({
   user,
   grantedCapabilities,
+  principalId,
   employeeProfile,
 }: EffectiveAuthContextInput): EffectiveAuthContext {
   const directReportIds = employeeProfile?.directReports?.map((report) => report.id) ?? [];
 
   return {
-    principalId: user.type === "admin" ? toPrincipalId(user.id) : null,
+    principalId: user.type === "admin" ? principalId ?? toPrincipalId(user.id) : null,
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
     employeeId: employeeProfile?.id ?? null,

@@ -12,13 +12,14 @@ describe("buildEffectiveAuthContext", () => {
         isSuperuser: false,
       },
       grantedCapabilities: ["view_admin", "view_employee"],
+      principalId: "PRN-000123",
       employeeProfile: {
         id: "emp-1",
         directReports: [],
       },
     });
 
-    expect(context.principalId).toBe("PRN-USER-user-1");
+    expect(context.principalId).toBe("PRN-000123");
     expect(context.platformRole).toBe("HR-300");
     expect(context.employeeId).toBe("emp-1");
     expect(context.grantedCapabilities).toEqual(["view_admin", "view_employee"]);

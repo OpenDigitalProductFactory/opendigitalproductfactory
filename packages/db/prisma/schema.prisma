@@ -186,6 +186,30 @@ model TeamMembership {
   @@index([userId])
 }
 
+model Principal {
+  id          String           @id @default(cuid())
+  principalId String           @unique
+  kind        String
+  status      String           @default("active")
+  displayName String
+  aliases     PrincipalAlias[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model PrincipalAlias {
+  id          String    @id @default(cuid())
+  principalId String
+  aliasType   String
+  aliasValue  String
+  issuer      String    @default("")
+  createdAt   DateTime  @default(now())
+  principal   Principal @relation(fields: [principalId], references: [id], onDelete: Cascade)
+
+  @@unique([aliasType, aliasValue, issuer])
+  @@index([principalId])
+}
+
 model EmployeeProfile {
   id                        String                  @id @default(cuid())
   employeeId                String                  @unique

@@ -13,6 +13,7 @@ import { prisma } from "@dpf/db";
 import type { DpfSession } from "../auth";
 import { auth } from "../auth";
 import { buildEffectiveAuthContext, type EffectiveAuthContext } from "../identity/effective-auth-context";
+import { resolvePrincipalIdForUser } from "../identity/principal-linking";
 import { getGrantedCapabilities } from "../permissions";
 import { verifyAccessToken } from "./jwt";
 import { apiError } from "./error";
@@ -78,9 +79,11 @@ export async function authenticateRequest(
       platformRole: sessionUser.platformRole,
       isSuperuser: sessionUser.isSuperuser,
     });
+    const principalId = await resolvePrincipalIdForUser(sessionUser.id);
     const authContext = buildEffectiveAuthContext({
       user: sessionUser,
       grantedCapabilities: capabilities,
+      principalId,
       employeeProfile: user.employeeProfile,
     });
 
@@ -99,6 +102,8 @@ export async function authenticateRequest(
     platformRole: sessionUser.platformRole,
     isSuperuser: sessionUser.isSuperuser,
   });
+  const principalId =
+    sessionUser.type === "admin" ? await resolvePrincipalIdForUser(sessionUser.id) : null;
   const workforceUser =
     sessionUser.type === "admin"
       ? await prisma.user.findUnique({
@@ -116,6 +121,7 @@ export async function authenticateRequest(
   const authContext = buildEffectiveAuthContext({
     user: sessionUser,
     grantedCapabilities: capabilities,
+    principalId,
     employeeProfile: workforceUser?.employeeProfile ?? undefined,
   });
 
