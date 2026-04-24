@@ -4,6 +4,8 @@ import type { BrandDesignSystem } from "@/lib/brand/types";
 const mocks = vi.hoisted(() => ({
   extractBrandDesignSystem: vi.fn(),
   pushThreadProgress: vi.fn(),
+  createTaskMessage: vi.fn(),
+  createTaskArtifact: vi.fn(),
   designSystemToThemeTokens: vi.fn(),
   taskRunUpdate: vi.fn(),
   organizationUpdate: vi.fn(),
@@ -18,6 +20,11 @@ vi.mock("@/lib/brand/extraction", () => ({
 
 vi.mock("@/lib/tak/thread-progress", () => ({
   pushThreadProgress: mocks.pushThreadProgress,
+}));
+
+vi.mock("@/lib/tak/task-records", () => ({
+  createTaskMessage: mocks.createTaskMessage,
+  createTaskArtifact: mocks.createTaskArtifact,
 }));
 
 vi.mock("@/lib/brand/apply", () => ({
@@ -89,6 +96,8 @@ describe("runBrandExtraction (core handler)", () => {
   beforeEach(() => {
     mocks.extractBrandDesignSystem.mockReset();
     mocks.pushThreadProgress.mockReset();
+    mocks.createTaskMessage.mockReset();
+    mocks.createTaskArtifact.mockReset();
     mocks.designSystemToThemeTokens.mockReset();
     mocks.taskRunUpdate.mockReset();
     mocks.organizationUpdate.mockReset();
@@ -101,6 +110,8 @@ describe("runBrandExtraction (core handler)", () => {
     mocks.brandingConfigUpsert.mockResolvedValue({});
     mocks.agentMessageCreate.mockResolvedValue({});
     mocks.agentAttachmentFindMany.mockResolvedValue([]);
+    mocks.createTaskMessage.mockResolvedValue({});
+    mocks.createTaskArtifact.mockResolvedValue({});
     mocks.designSystemToThemeTokens.mockReturnValue({ dark: {}, light: {} });
   });
 
@@ -163,10 +174,31 @@ describe("runBrandExtraction (core handler)", () => {
       sources: { url: "https://example.com" },
     });
 
-    expect(mocks.taskRunUpdate).toHaveBeenCalledWith(
+    expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { taskRunId: "run-1" },
+        data: expect.objectContaining({ status: "working" }),
+      }),
+    );
+    expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({
         where: { taskRunId: "run-1" },
         data: expect.objectContaining({ status: "completed" }),
+      }),
+    );
+    expect(mocks.taskRunUpdate.mock.calls[1]![0].data).not.toHaveProperty("state");
+    expect(mocks.createTaskArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: "run-1",
+        artifactType: "design-system",
+      }),
+    );
+    expect(mocks.createTaskMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: "run-1",
+        messageType: "status",
       }),
     );
     expect(mocks.agentMessageCreate).toHaveBeenCalled();
@@ -185,9 +217,24 @@ describe("runBrandExtraction (core handler)", () => {
       }),
     ).rejects.toThrow("URL timeout");
 
-    expect(mocks.taskRunUpdate).toHaveBeenCalledWith(
+    expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "working" }),
+      }),
+    );
+    expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({
         data: expect.objectContaining({ status: "failed" }),
+      }),
+    );
+    expect(mocks.taskRunUpdate.mock.calls[1]![0].data).not.toHaveProperty("state");
+    expect(mocks.createTaskMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: "run-1",
+        messageType: "status",
+        content: expect.stringContaining("URL timeout"),
       }),
     );
     expect(mocks.agentMessageCreate).toHaveBeenCalled();
@@ -209,5 +256,41 @@ describe("runBrandExtraction (core handler)", () => {
     });
 
     expect(mocks.agentMessageCreate).not.toHaveBeenCalled();
+  });
+
+  it("records extractor progress updates as task messages", async () => {
+    mocks.extractBrandDesignSystem.mockImplementation(async (_input, emit) => {
+      await emit({
+        stage: "scraping",
+        message: "Reading site",
+        percent: 10,
+      });
+      return {
+        designSystem: minimalDesignSystem(),
+        sourcesUsed: [{ kind: "url", ref: "https://example.com", capturedAt: "t" }],
+        durationMs: 5000,
+      };
+    });
+
+    await runBrandExtraction({
+      organizationId: "org-1",
+      taskRunId: "run-1",
+      userId: "user-1",
+      threadId: "thread-1",
+      sources: { url: "https://example.com" },
+    });
+
+    expect(mocks.createTaskMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: "run-1",
+        messageType: "progress",
+        content: "Reading site",
+        metadata: expect.objectContaining({
+          stage: "scraping",
+          percent: 10,
+          eventType: "brand:extract.progress",
+        }),
+      }),
+    );
   });
 });
