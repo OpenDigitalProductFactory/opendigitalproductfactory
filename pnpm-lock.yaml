@@ -428,8 +428,8 @@ importers:
         specifier: ^3.4.5
         version: 3.4.7
       undici:
-        specifier: ^7.0.0
-        version: 7.25.0
+        specifier: ^8.1.0
+        version: 8.1.0
       zod:
         specifier: ^3.23.8
         version: 3.23.8
