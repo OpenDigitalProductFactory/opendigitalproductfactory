@@ -3,7 +3,7 @@ name: email-campaign-builder
 description: "Draft complete, ready-to-send emails adapted to the business archetype"
 category: storefront
 assignTo: ["marketing-specialist"]
-capability: "view_storefront"
+capability: "view_marketing"
 taskType: "conversation"
 triggerPattern: "email|newsletter|send|subject line|campaign email"
 userInvocable: true

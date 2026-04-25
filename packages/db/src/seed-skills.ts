@@ -37,6 +37,7 @@ const ALL_AGENT_IDS = [
   "build-specialist",
   "admin-assistant",
   "marketing-specialist",
+  "storefront-advisor",
   "onboarding-coo",
   "coo",
   "compliance-officer",

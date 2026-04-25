@@ -1110,67 +1110,67 @@ model DeviceCodeSession {
 }
 
 model ModelProvider {
-  id                       String         @id @default(cuid())
-  providerId               String         @unique
+  id                       String                     @id @default(cuid())
+  providerId               String                     @unique
   name                     String
   families                 Json
-  status                   String         @default("unconfigured")
-  updatedAt                DateTime       @updatedAt
+  status                   String                     @default("unconfigured")
+  updatedAt                DateTime                   @updatedAt
   authHeader               String?
   computeWatts             Float?
   cliEngine                String? // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
-  costModel                String         @default("token")
+  costModel                String                     @default("token")
   electricityRateKwh       Float?
-  enabledFamilies          Json           @default("[]")
+  enabledFamilies          Json                       @default("[]")
   endpoint                 String?
   inputPricePerMToken      Float?
   outputPricePerMToken     Float?
-  category                 String         @default("direct")
+  category                 String                     @default("direct")
   baseUrl                  String?
-  authMethod               String         @default("api_key")
-  supportedAuthMethods     Json           @default("[\"api_key\"]")
+  authMethod               String                     @default("api_key")
+  supportedAuthMethods     Json                       @default("[\"api_key\"]")
   consoleUrl               String?
   docsUrl                  String?
-    billingLabel             String?
-    authorizeUrl             String?
-    tokenUrl                 String?
-    oauthClientId            String?
-    oauthRedirectUri         String?
-    costPerformanceNotes     String?
-    endpointType             String         @default("llm")
-    serviceKind              String?
-    sensitivityClearance     String[]       @default([])
-  capabilityTier           String         @default("basic")
-  costBand                 String         @default("free")
-  taskTags                 String[]       @default([])
+  billingLabel             String?
+  authorizeUrl             String?
+  tokenUrl                 String?
+  oauthClientId            String?
+  oauthRedirectUri         String?
+  costPerformanceNotes     String?
+  endpointType             String                     @default("llm")
+  serviceKind              String?
+  sensitivityClearance     String[]                   @default([])
+  capabilityTier           String                     @default("basic")
+  costBand                 String                     @default("free")
+  taskTags                 String[]                   @default([])
   mcpTransport             String?
   maxConcurrency           Int?
-  catalogVisibility        String         @default("visible")
+  catalogVisibility        String                     @default("visible")
   catalogEntry             Json?
   avgLatencyMs             Float?
-  codegen                  Int            @default(50)
-  contextRetention         Int            @default(50)
-  conversational           Int            @default(50)
-  customScores             Json           @default("{}")
-  evalCount                Int            @default(0)
-  instructionFollowing     Int            @default(50)
+  codegen                  Int                        @default(50)
+  contextRetention         Int                        @default(50)
+  conversational           Int                        @default(50)
+  customScores             Json                       @default("{}")
+  evalCount                Int                        @default(0)
+  instructionFollowing     Int                        @default(50)
   lastCallAt               DateTime?
   lastEvalAt               DateTime?
   maxContextTokens         Int?
   maxOutputTokens          Int?
-  modelRestrictions        String[]       @default([])
-  profileConfidence        String         @default("low")
-  profileSource            String         @default("seed")
-  reasoning                Int            @default(50)
-  recentFailureRate        Float          @default(0)
+  modelRestrictions        String[]                   @default([])
+  profileConfidence        String                     @default("low")
+  profileSource            String                     @default("seed")
+  reasoning                Int                        @default(50)
+  recentFailureRate        Float                      @default(0)
   retiredAt                DateTime?
   retiredReason            String?
-  structuredOutput         Int            @default(50)
-  supportedModalities      Json           @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
-  supportsStreaming        Boolean        @default(true)
-  supportsStructuredOutput Boolean        @default(false)
-  supportsToolUse          Boolean        @default(false)
-  toolFidelity             Int            @default(50)
+  structuredOutput         Int                        @default(50)
+  supportedModalities      Json                       @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
+  supportsStreaming        Boolean                    @default(true)
+  supportsStructuredOutput Boolean                    @default(false)
+  supportsToolUse          Boolean                    @default(false)
+  toolFidelity             Int                        @default(50)
   userFacingDescription    Json?
   authMode                 String?
   credentialOwnerMode      String?
@@ -2055,11 +2055,11 @@ model Activity {
 }
 
 model Organization {
-  id                    String                 @id @default(cuid())
-  orgId                 String                 @unique
+  id                    String                  @id @default(cuid())
+  orgId                 String                  @unique
   name                  String
   legalName             String?
-  slug                  String                 @unique
+  slug                  String                  @unique
   industry              String?
   website               String?
   email                 String?
@@ -2067,13 +2067,15 @@ model Organization {
   address               Json?
   logoUrl               String?
   designSystem          Json?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
   brandingConfig        BrandingConfig?
   storefrontConfig      StorefrontConfig?
   businessContext       BusinessContext?
+  marketingStrategy     MarketingStrategy?
+  marketingReviews      MarketingReview[]
   taxProfile            OrganizationTaxProfile?
-  platformSetupProgress PlatformSetupProgress? @relation("OrgSetupProgress")
+  platformSetupProgress PlatformSetupProgress?  @relation("OrgSetupProgress")
 }
 
 model BusinessContext {
@@ -2106,53 +2108,53 @@ model BusinessContext {
 }
 
 model OrganizationTaxProfile {
-  id               String   @id @default(cuid())
-  organizationId   String   @unique
-  setupMode        String   @default("unknown")
-  setupStatus      String   @default("draft")
-  homeCountryCode  String?
+  id                String    @id @default(cuid())
+  organizationId    String    @unique
+  setupMode         String    @default("unknown")
+  setupStatus       String    @default("draft")
+  homeCountryCode   String?
   primaryRegionCode String?
-  taxModel         String   @default("hybrid")
-  filingOwner      String   @default("business")
-  handoffMode      String   @default("dpf_readiness_only")
-  externalSystem   String?
-  footprintSummary String?
-  notes            String?
-  lastVerifiedAt   DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  taxModel          String    @default("hybrid")
+  filingOwner       String    @default("business")
+  handoffMode       String    @default("dpf_readiness_only")
+  externalSystem    String?
+  footprintSummary  String?
+  notes             String?
+  lastVerifiedAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   registrations TaxRegistration[]
   issues        TaxIssue[]
 }
 
 model TaxJurisdictionReference {
-  id                    String   @id @default(cuid())
-  jurisdictionRefId     String   @unique
-  countryCode           String
-  stateProvinceCode     String?
-  authorityName         String
-  authorityType         String
+  id                      String    @id @default(cuid())
+  jurisdictionRefId       String    @unique
+  countryCode             String
+  stateProvinceCode       String?
+  authorityName           String
+  authorityType           String
   parentJurisdictionRefId String?
-  taxTypes              String[]
-  localityModel         String
-  officialWebsiteUrl    String?
-  registrationUrl       String?
-  filingUrl             String?
-  paymentUrl            String?
-  helpUrl               String?
-  cadenceHints          String[]
-  filingNotes           String?
-  automationHints       Json?
-  sourceUrls            String[]
-  sourceKind            String   @default("official")
-  lastResearchedAt      DateTime?
-  lastVerifiedAt        DateTime?
-  confidence            String   @default("medium")
-  staleAfterDays        Int      @default(180)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  taxTypes                String[]
+  localityModel           String
+  officialWebsiteUrl      String?
+  registrationUrl         String?
+  filingUrl               String?
+  paymentUrl              String?
+  helpUrl                 String?
+  cadenceHints            String[]
+  filingNotes             String?
+  automationHints         Json?
+  sourceUrls              String[]
+  sourceKind              String    @default("official")
+  lastResearchedAt        DateTime?
+  lastVerifiedAt          DateTime?
+  confidence              String    @default("medium")
+  staleAfterDays          Int       @default(180)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   registrations TaxRegistration[]
 
@@ -2161,27 +2163,27 @@ model TaxJurisdictionReference {
 }
 
 model TaxRegistration {
-  id                       String   @id @default(cuid())
-  registrationId           String   @unique
+  id                       String    @id @default(cuid())
+  registrationId           String    @unique
   organizationTaxProfileId String
   jurisdictionReferenceId  String
   taxType                  String
   registrationNumber       String?
-  registrationStatus       String   @default("draft")
+  registrationStatus       String    @default("draft")
   filingFrequency          String
   filingBasis              String?
-  remitterRole             String   @default("business")
+  remitterRole             String    @default("business")
   effectiveFrom            DateTime
   effectiveTo              DateTime?
   firstPeriodStart         DateTime?
   portalAccountNotes       String?
   verifiedFromSourceUrl    String?
   lastVerifiedAt           DateTime?
-  confidence               String   @default("medium")
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  confidence               String    @default("medium")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
-  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  organizationTaxProfile OrganizationTaxProfile   @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
   jurisdictionReference  TaxJurisdictionReference @relation(fields: [jurisdictionReferenceId], references: [id], onDelete: Restrict)
   obligationPeriods      TaxObligationPeriod[]
   issues                 TaxIssue[]
@@ -2192,28 +2194,28 @@ model TaxRegistration {
 }
 
 model TaxObligationPeriod {
-  id                     String   @id @default(cuid())
-  periodId               String   @unique
+  id                     String    @id @default(cuid())
+  periodId               String    @unique
   registrationId         String
   periodStart            DateTime
   periodEnd              DateTime
   dueDate                DateTime
-  status                 String   @default("draft")
-  salesTaxAmount         Decimal  @default(0)
-  inputTaxAmount         Decimal  @default(0)
-  netTaxAmount           Decimal  @default(0)
-  manualAdjustmentAmount Decimal  @default(0)
-  exportStatus           String   @default("not_started")
+  status                 String    @default("draft")
+  salesTaxAmount         Decimal   @default(0)
+  inputTaxAmount         Decimal   @default(0)
+  netTaxAmount           Decimal   @default(0)
+  manualAdjustmentAmount Decimal   @default(0)
+  exportStatus           String    @default("not_started")
   filedAt                DateTime?
   paidAt                 DateTime?
   confirmationRef        String?
   dueSoonNotifiedAt      DateTime?
   overdueNotifiedAt      DateTime?
   preparedByAgentId      String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  registration TaxRegistration   @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registration TaxRegistration     @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   artifacts    TaxFilingArtifact[]
   issues       TaxIssue[]
 
@@ -2240,24 +2242,24 @@ model TaxFilingArtifact {
 }
 
 model TaxIssue {
-  id                       String   @id @default(cuid())
-  issueId                  String   @unique
+  id                       String    @id @default(cuid())
+  issueId                  String    @unique
   organizationTaxProfileId String
   registrationId           String?
   periodId                 String?
   issueType                String
-  severity                 String   @default("medium")
-  status                   String   @default("open")
+  severity                 String    @default("medium")
+  status                   String    @default("open")
   title                    String
   details                  String?
-  openedAt                 DateTime @default(now())
+  openedAt                 DateTime  @default(now())
   resolvedAt               DateTime?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
-  registration          TaxRegistration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
-  period                TaxObligationPeriod?   @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  registration           TaxRegistration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  period                 TaxObligationPeriod?   @relation(fields: [periodId], references: [id], onDelete: SetNull)
 
   @@index([organizationTaxProfileId])
   @@index([registrationId])
@@ -3184,24 +3186,24 @@ model PlatformConfig {
 }
 
 model PlatformDevConfig {
-  id                String    @id @default("singleton")
-  contributionMode  String    @default("selective")
+  id                   String    @id @default("singleton")
+  contributionMode     String    @default("selective")
   // Values: "fork_only" | "selective" | "contribute_all"
-  gitRemoteUrl      String? // Reserved for future git push capability
-  updatePending     Boolean   @default(false)
-  pendingVersion    String?
-  configuredAt      DateTime  @default(now())
-  configuredById    String?
-  configuredBy      User?     @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
-  dcoAcceptedAt     DateTime?
-  dcoAcceptedById   String?
-  dcoAcceptedBy     User?     @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
-  upstreamRemoteUrl String?
+  gitRemoteUrl         String? // Reserved for future git push capability
+  updatePending        Boolean   @default(false)
+  pendingVersion       String?
+  configuredAt         DateTime  @default(now())
+  configuredById       String?
+  configuredBy         User?     @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
+  dcoAcceptedAt        DateTime?
+  dcoAcceptedById      String?
+  dcoAcceptedBy        User?     @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
+  upstreamRemoteUrl    String?
   // Client identity — generated once at install, never changes.
   // Used as the git author for all agent commits so contributions are
   // indistinguishable by name but unique and traceable by email hash.
-  clientId          String? // UUID, generated at first seed
-  gitAgentEmail     String? // agent-<sha256(clientId)[:16]>@hive.dpf
+  clientId             String? // UUID, generated at first seed
+  gitAgentEmail        String? // agent-<sha256(clientId)[:16]>@hive.dpf
   // Which push model to use when contributionMode is selective | contribute_all.
   // null = unconfigured; explicit value required before contribute_to_hive runs.
   // "maintainer-direct" — push directly to upstream (legacy path, requires upstream write)
@@ -4559,32 +4561,90 @@ model StorefrontArchetype {
 }
 
 model StorefrontConfig {
-  id             String               @id @default(cuid())
-  organizationId String               @unique
-  archetypeId    String
-  tagline        String?
-  description    String?
-  heroImageUrl   String?
-  contactEmail   String?
-  contactPhone   String?
-  socialLinks    Json?
-  designSystem   Json?
-  isPublished    Boolean              @default(false)
-  customDomain   String?
-  timezone       String               @default("Europe/London")
-  portfolioId    String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  bookings       StorefrontBooking[]
-  archetype      StorefrontArchetype  @relation(fields: [archetypeId], references: [id])
-  organization   Organization         @relation(fields: [organizationId], references: [id])
-  donations      StorefrontDonation[]
-  inquiries      StorefrontInquiry[]
-  items          StorefrontItem[]
-  orders         StorefrontOrder[]
-  sections       StorefrontSection[]
-  providers      ServiceProvider[]
-  bookingHolds   BookingHold[]
+  id                  String               @id @default(cuid())
+  organizationId      String               @unique
+  archetypeId         String
+  tagline             String?
+  description         String?
+  heroImageUrl        String?
+  contactEmail        String?
+  contactPhone        String?
+  socialLinks         Json?
+  designSystem        Json?
+  isPublished         Boolean              @default(false)
+  customDomain        String?
+  timezone            String               @default("Europe/London")
+  portfolioId         String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  bookings            StorefrontBooking[]
+  archetype           StorefrontArchetype  @relation(fields: [archetypeId], references: [id])
+  organization        Organization         @relation(fields: [organizationId], references: [id])
+  donations           StorefrontDonation[]
+  inquiries           StorefrontInquiry[]
+  items               StorefrontItem[]
+  orders              StorefrontOrder[]
+  sections            StorefrontSection[]
+  providers           ServiceProvider[]
+  bookingHolds        BookingHold[]
+  marketingStrategies MarketingStrategy[]
+}
+
+model MarketingStrategy {
+  strategyId            String    @id @default(cuid())
+  organizationId        String    @unique
+  storefrontId          String?
+  status                String    @default("draft")
+  primaryGoal           String?
+  routeToMarket         String    @default("hybrid")
+  localityModel         String    @default("regional")
+  geographicScope       String?
+  serviceTerritories    Json?
+  targetSegments        Json?
+  idealCustomerProfiles Json?
+  entryOffers           Json?
+  primaryChannels       String[]  @default([])
+  secondaryChannels     String[]  @default([])
+  differentiators       String[]  @default([])
+  proofAssets           Json?
+  seasonalityNotes      String?
+  constraints           Json?
+  reviewCadence         String    @default("quarterly")
+  lastReviewedAt        DateTime?
+  nextReviewAt          DateTime?
+  sourceSummary         String?
+  specialistNotes       String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storefront   StorefrontConfig? @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+  reviews      MarketingReview[]
+
+  @@index([status])
+  @@index([storefrontId])
+  @@index([nextReviewAt])
+}
+
+model MarketingReview {
+  reviewId         String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  reviewType       String
+  summary          String
+  detectedChanges  Json?
+  funnelAssessment Json?
+  suggestedActions Json?
+  stalenessSignals Json?
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([reviewType])
 }
 
 model StorefrontSection {

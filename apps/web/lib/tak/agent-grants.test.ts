@@ -70,6 +70,35 @@ describe("TOOL_TO_GRANTS — Marketing entries", () => {
     expect(isToolAllowedByGrants("generate_custom_archetype", ["marketing_write"])).toBe(true);
     expect(isToolAllowedByGrants("generate_custom_archetype", ["marketing_read"])).toBe(false);
   });
+
+  it("customer-advisor's read-only marketing grant can use read marketing tools", () => {
+    const customerAdvisorGrants = [
+      "consumer_read",
+      "registry_read",
+      "backlog_read",
+      "backlog_write",
+      "marketing_read",
+    ];
+
+    expect(isToolAllowedByGrants("get_marketing_summary", customerAdvisorGrants)).toBe(true);
+    expect(isToolAllowedByGrants("suggest_campaign_ideas", customerAdvisorGrants)).toBe(true);
+    expect(isToolAllowedByGrants("analyze_seo_opportunity", customerAdvisorGrants)).toBe(true);
+    expect(isToolAllowedByGrants("generate_custom_archetype", customerAdvisorGrants)).toBe(false);
+  });
+
+  it("storefront-advisor grants do not permit marketing tools", () => {
+    const storefrontAdvisorGrants = [
+      "consumer_read",
+      "registry_read",
+      "backlog_read",
+      "backlog_write",
+    ];
+
+    expect(isToolAllowedByGrants("get_marketing_summary", storefrontAdvisorGrants)).toBe(false);
+    expect(isToolAllowedByGrants("suggest_campaign_ideas", storefrontAdvisorGrants)).toBe(false);
+    expect(isToolAllowedByGrants("analyze_seo_opportunity", storefrontAdvisorGrants)).toBe(false);
+    expect(isToolAllowedByGrants("generate_custom_archetype", storefrontAdvisorGrants)).toBe(false);
+  });
 });
 
 describe("TOOL_TO_GRANTS — Estate specialist entries", () => {

@@ -10,19 +10,38 @@ export default async function CustomerLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  if (
-    !session?.user ||
-    !can(
-      { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
-      "view_customer"
-    )
-  ) {
+  if (!session?.user) {
     notFound();
   }
 
+  const access = {
+    platformRole: session.user.platformRole,
+    isSuperuser: session.user.isSuperuser,
+  };
+  const canViewCustomer = can(access, "view_customer");
+  const canViewMarketing = can(access, "view_marketing");
+
+  if (!canViewCustomer && !canViewMarketing) {
+    notFound();
+  }
+
+  const tabs = [
+    ...(canViewCustomer
+      ? [
+          { label: "Accounts", href: "/customer" },
+          { label: "Engagements", href: "/customer/engagements" },
+          { label: "Pipeline", href: "/customer/opportunities" },
+          { label: "Quotes", href: "/customer/quotes" },
+          { label: "Orders", href: "/customer/sales-orders" },
+          { label: "Funnel", href: "/customer/funnel" },
+        ]
+      : []),
+    ...(canViewMarketing ? [{ label: "Marketing", href: "/customer/marketing" }] : []),
+  ];
+
   return (
     <div>
-      <CustomerTabNav />
+      <CustomerTabNav tabs={tabs} />
       {children}
     </div>
   );
