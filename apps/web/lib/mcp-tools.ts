@@ -7228,16 +7228,18 @@ export async function executeTool(
     }
 
     case "run_discovery_triage": {
-      const { runDiscoveryTriagePass } = await import("@/lib/discovery-triage-runner");
+      const { runDiscoveryTriageDaily } = await import("@/lib/discovery-triage-runner");
       const trigger = params["trigger"] === "volume" ? "volume" : "cadence";
-      const result = await runDiscoveryTriagePass(undefined, {
+      const result = await runDiscoveryTriageDaily(undefined, {
         trigger,
         actorType: "agent",
         actorId: context?.agentId ?? "discovery-steward",
       });
       return {
         success: true,
-        message: `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed.`,
+        message: result.skipped
+          ? result.skipReason ?? "Discovery triage skipped."
+          : `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed.`,
         data: result as unknown as Record<string, unknown>,
       };
     }

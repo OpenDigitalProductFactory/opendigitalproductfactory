@@ -90,6 +90,8 @@ export type DiscoveryEvidencePacket = {
   customerSensitive: boolean;
   hasSuitableTaxonomy: boolean;
   independentSignalCount: number;
+  runIdempotencyKey?: string | null;
+  triggerFamily?: "cadence" | "volume" | null;
 };
 
 export type DiscoveryTriageThresholds = {

@@ -1,17 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { runDiscoveryTriagePass } from "./discovery-triage-runner";
+import {
+  maybeTriggerDiscoveryTriageForVolume,
+  runDiscoveryTriageDaily,
+  runDiscoveryTriagePass,
+} from "./discovery-triage-runner";
 
 function createRunnerDb() {
   return {
     inventoryEntity: {
       findMany: vi.fn(),
+      count: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
     },
     portfolioQualityIssue: {
       findMany: vi.fn(),
     },
     discoveryTriageDecision: {
+      findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({}),
     },
   };
@@ -196,5 +202,91 @@ describe("runDiscoveryTriagePass", () => {
     });
     expect(result.metrics.needsMoreEvidence).toBe(1);
     expect(result.metrics.decisionsCreated).toBe(1);
+  });
+
+  it("skips duplicate daily runs when the same idempotency key already exists", async () => {
+    const db = createRunnerDb();
+    db.discoveryTriageDecision.findFirst.mockResolvedValue({
+      decisionId: "triage-existing",
+    });
+
+    const result = await runDiscoveryTriageDaily(db, {
+      trigger: "cadence",
+      actorId: "discovery-steward",
+      now: new Date("2026-04-25T13:00:00Z"),
+    });
+
+    expect(db.inventoryEntity.findMany).not.toHaveBeenCalled();
+    expect(db.discoveryTriageDecision.create).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(true);
+    expect(result.runIdempotencyKey).toBe("2026-04-25:discovery-steward:cadence");
+    expect(result.metrics.processed).toBe(0);
+  });
+
+  it("does not trigger volume triage below the threshold", async () => {
+    const db = createRunnerDb();
+    db.inventoryEntity.count.mockResolvedValue(12);
+
+    const result = await maybeTriggerDiscoveryTriageForVolume(db, {
+      threshold: 25,
+      actorId: "discovery-steward",
+      now: new Date("2026-04-25T13:00:00Z"),
+    });
+
+    expect(db.discoveryTriageDecision.findFirst).not.toHaveBeenCalled();
+    expect(db.inventoryEntity.findMany).not.toHaveBeenCalled();
+    expect(result.triggered).toBe(false);
+    expect(result.pendingCount).toBe(12);
+  });
+
+  it("triggers a volume run once the needs-review threshold is crossed", async () => {
+    const db = createRunnerDb();
+    db.inventoryEntity.count.mockResolvedValue(30);
+    db.inventoryEntity.findMany.mockResolvedValue([
+      {
+        id: "entity-5",
+        entityKey: "service:docker:runtime",
+        entityType: "service",
+        name: "docker",
+        firstSeenAt: new Date("2026-04-22T00:00:00Z"),
+        lastSeenAt: new Date("2026-04-25T00:00:00Z"),
+        manufacturer: "Docker",
+        productModel: "Engine",
+        attributionStatus: "needs_review",
+        candidateTaxonomy: [
+          {
+            nodeId: "foundational/platform_services/container_platform",
+            name: "Container Platform",
+            score: 0.96,
+          },
+        ],
+        properties: {
+          processName: "dockerd",
+          ports: [2375],
+          softwareEvidence: ["docker-engine"],
+        },
+      },
+    ]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([]);
+
+    const result = await maybeTriggerDiscoveryTriageForVolume(db, {
+      threshold: 25,
+      actorId: "discovery-steward",
+      now: new Date("2026-04-25T13:00:00Z"),
+    });
+
+    expect(db.discoveryTriageDecision.findFirst).toHaveBeenCalled();
+    expect(db.discoveryTriageDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inventoryEntityId: "entity-5",
+        outcome: "auto-attributed",
+        evidencePacket: expect.objectContaining({
+          runIdempotencyKey: "2026-04-25:discovery-steward:volume",
+        }),
+      }),
+    });
+    expect(result.triggered).toBe(true);
+    expect(result.pendingCount).toBe(30);
+    expect(result.result?.runIdempotencyKey).toBe("2026-04-25:discovery-steward:volume");
   });
 });
