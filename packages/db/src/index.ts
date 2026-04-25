@@ -125,3 +125,4 @@ export {
 export * from "./discovery-fingerprint-types";
 export * from "./discovery-fingerprint-redaction";
 export * from "./discovery-fingerprint-policy";
+export * from "./discovery-fingerprint-rules";
