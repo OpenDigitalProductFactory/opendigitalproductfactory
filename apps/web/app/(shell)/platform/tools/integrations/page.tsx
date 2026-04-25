@@ -5,13 +5,35 @@ export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
       where: {
-        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
+        provider: {
+          in: [
+            "adp",
+            "quickbooks",
+            "stripe",
+            "microsoft365",
+            "hubspot",
+            "google",
+            "facebook",
+            "mailchimp",
+          ],
+        },
         status: "connected",
       },
     }),
     prisma.integrationCredential.count({
       where: {
-        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
+        provider: {
+          in: [
+            "adp",
+            "quickbooks",
+            "stripe",
+            "microsoft365",
+            "hubspot",
+            "google",
+            "facebook",
+            "mailchimp",
+          ],
+        },
         status: "error",
       },
     }),
@@ -104,6 +126,16 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-warning)"
           metrics={[
             { label: "Category", value: "Localized Lead Capture" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Mailchimp Marketing"
+          description="Email marketing anchor for audiences, recent campaigns, and approved customer outreach context on the enterprise substrate."
+          href="/platform/tools/integrations/mailchimp"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Category", value: "Email Marketing" },
             { label: "Model", value: "Native" },
           ]}
         />
