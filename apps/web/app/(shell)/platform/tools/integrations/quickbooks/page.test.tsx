@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const { mockFindUnique, mockLoadPreview, mockAuth, mockCan } = vi.hoisted(() => ({
+const { mockFindUnique, mockAuth, mockCan } = vi.hoisted(() => ({
   mockFindUnique: vi.fn(),
-  mockLoadPreview: vi.fn(),
   mockAuth: vi.fn(),
   mockCan: vi.fn(),
 }));
@@ -34,10 +33,6 @@ vi.mock("@/lib/govern/credential-crypto", () => ({
   decryptJson: vi.fn((value: string) => JSON.parse(value)),
 }));
 
-vi.mock("@/lib/integrate/quickbooks/preview", () => ({
-  loadQuickBooksPreview: mockLoadPreview,
-}));
-
 vi.mock("@/components/integrations/QuickBooksConnectPanel", () => ({
   QuickBooksConnectPanel: ({
     initialState,
@@ -61,7 +56,7 @@ vi.mock("@/components/integrations/QuickBooksConnectPanel", () => ({
 }));
 
 describe("QuickBooksIntegrationPage", () => {
-  it("renders live QuickBooks preview data and refreshes the connection state", async () => {
+  it("renders the stored QuickBooks connection state", async () => {
     mockAuth.mockResolvedValue({
       user: { platformRole: "superadmin", isSuperuser: true },
     });
@@ -77,42 +72,13 @@ describe("QuickBooksIntegrationPage", () => {
         environment: "sandbox",
       }),
     });
-    mockLoadPreview.mockResolvedValue({
-      state: "available",
-      preview: {
-        companyInfo: { CompanyName: "Acme Services LLC", Country: "US" },
-        recentCustomers: [
-          { Id: "42", DisplayName: "Acme Managed IT" },
-          { Id: "84", DisplayName: "Northwind Services" },
-        ],
-        recentInvoices: [
-          { Id: "9001", DocNumber: "INV-9001", TotalAmt: 1250, Balance: 1250 },
-          { Id: "9002", DocNumber: "INV-9002", TotalAmt: 320, Balance: 0 },
-        ],
-        featuredInvoice: {
-          Id: "9001",
-          DocNumber: "INV-9001",
-          TotalAmt: 1250,
-          Balance: 1250,
-          CustomerRef: { value: "42", name: "Acme Managed IT" },
-          PrivateNote: "Monthly managed services retainer.",
-        },
-        loadedAt: "2026-04-24T06:00:00.000Z",
-      },
-    });
-
     const { default: QuickBooksIntegrationPage } = await import("./page");
     const html = renderToStaticMarkup(await QuickBooksIntegrationPage());
 
-    expect(mockLoadPreview).toHaveBeenCalledTimes(1);
     expect(html).toContain('data-component="quickbooks-connect-panel"');
-    expect(html).toContain('data-company="Acme Services LLC"');
+    expect(html).toContain('data-company="Old Company"');
     expect(html).toContain('data-status="connected"');
-    expect(html).toContain("Live accounting preview");
-    expect(html).toContain("Acme Services LLC");
-    expect(html).toContain("Acme Managed IT");
-    expect(html).toContain("INV-9001");
-    expect(html).toContain("Northwind Services");
-    expect(html).toContain("Monthly managed services retainer.");
+    expect(html).toContain("What this integration enables");
+    expect(html).toContain("QuickBooks Online");
   });
 });
