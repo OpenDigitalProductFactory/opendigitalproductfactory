@@ -1,5 +1,7 @@
 import { prisma } from "@dpf/db";
 
+import { auth } from "@/lib/auth";
+import { BindingBootstrapPanel } from "@/components/platform/authority/BindingBootstrapPanel";
 import { BootstrapBindingsButton } from "@/components/platform/authority/BootstrapBindingsButton";
 import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
 import { BindingFilters } from "@/components/platform/authority/BindingFilters";
@@ -13,7 +15,9 @@ import {
   listAuthorityBindings,
   parseAuthorityBindingFilters,
 } from "@/lib/authority/bindings";
+import { getAuthorityBindingBootstrapState } from "@/lib/authority/bootstrap-rollout";
 import { getGrantedCapabilities, getShellNavSections, type UserContext } from "@/lib/govern/permissions";
+import { can } from "@/lib/permissions";
 
 function makeRoleContext(roleId: string): UserContext {
   return {
@@ -34,6 +38,12 @@ type Props = {
 
 export default async function PlatformIdentityAuthorizationPage({ searchParams }: Props) {
   const query = await searchParams;
+  const session = await auth();
+  const user = session?.user;
+  const canWrite = !!user && can(
+    { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+    "manage_platform",
+  );
   const activeBindingId = typeof query.binding === "string" ? query.binding : null;
   const currentFilters = {
     status: typeof query.status === "string" ? query.status : undefined,
@@ -42,6 +52,12 @@ export default async function PlatformIdentityAuthorizationPage({ searchParams }
     subject: typeof query.subject === "string" ? query.subject : undefined,
   };
   const parsedFilters = parseAuthorityBindingFilters(currentFilters);
+  const hasActiveFilters = Object.keys(parsedFilters).length > 0;
+  const bootstrapState = await getAuthorityBindingBootstrapState({
+    canWrite,
+    hasActiveFilters,
+  });
+  const bootstrapAction = canWrite && !bootstrapState.report ? <BootstrapBindingsButton /> : null;
 
   const [platformRoles, roleAssignments, teams, agents, bindingRecords, bindingList, activeBinding, activeBindingEvidence] = await Promise.all([
     prisma.platformRole.findMany({
@@ -163,12 +179,19 @@ export default async function PlatformIdentityAuthorizationPage({ searchParams }
             access which governed surface.
           </p>
         </div>
+        {bootstrapState.report ? (
+          <BindingBootstrapPanel
+            autoApplied={bootstrapState.autoApplied}
+            totalBindings={bootstrapState.totalBindings}
+            report={bootstrapState.report}
+          />
+        ) : null}
         <BindingFilters
           actionHref="/platform/identity/authorization"
           currentFilters={currentFilters}
           options={bindingFilterOptions}
           resultCount={bindingList.rows.length}
-          actions={<BootstrapBindingsButton />}
+          actions={bootstrapAction}
         />
         <BindingList
           pivot="subject"
