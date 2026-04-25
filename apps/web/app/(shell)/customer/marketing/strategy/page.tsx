@@ -3,7 +3,7 @@ import {
   formatMarketingLabel,
   getMarketingWorkspaceSnapshot,
 } from "@/lib/marketing";
-import { MarketingCoworkerActions } from "@/components/customer-marketing/MarketingCoworkerActions";
+import { AgentWorkLauncher } from "@/components/agent/AgentWorkLauncher";
 import { MarketingStrategyOverview } from "@/components/customer-marketing/MarketingStrategyOverview";
 
 export default async function CustomerMarketingStrategyPage() {
@@ -20,28 +20,33 @@ export default async function CustomerMarketingStrategyPage() {
     );
   }
 
-  const strategyActions = [
+  const strategyTopics = [
     {
-      label: "Review",
-      title: "Challenge these assumptions",
+      id: "challenge-assumptions",
+      label: "Challenge assumptions",
       description: "Ask the strategist what is ready, what is weak, and what should change before campaigns launch.",
-      primary: true,
       prompt:
         "Review these marketing strategy assumptions. Translate them into marketer-friendly language, challenge what looks weak or generic, and ask me one focused question that would improve the acquisition plan.",
+      contextSummary: `State: ${formatMarketingLabel(snapshot.strategy.status)}. Sales motion: ${formatMarketingLabel(snapshot.strategy.routeToMarket)}.`,
+      expectedNextStep: "The strategist will identify the weakest assumption and ask one clarifying question.",
     },
     {
-      label: "Improve",
-      title: "Make this market-ready",
+      id: "market-ready-plan",
+      label: "Make market-ready",
       description: "Turn the current assumptions into positioning, audience, proof, and channel recommendations.",
       prompt:
         "Help me turn the current marketing strategy into a market-ready plan. Recommend positioning, audience, proof, and channels, and call out anything you need me to confirm.",
+      contextSummary: `Next check-in: ${formatMarketingDate(snapshot.strategy.nextReviewAt)}. Rhythm: ${formatMarketingLabel(snapshot.strategy.reviewCadence)}.`,
+      expectedNextStep: "The strategist will propose improvements and identify what needs your judgment.",
     },
     {
-      label: "Execute",
-      title: "Prepare the first campaign",
+      id: "first-campaign",
+      label: "Prepare first campaign",
       description: "Use this strategy as context and draft the first campaign path for review.",
       prompt:
         "Using the current strategy, prepare the first campaign path for review. Include audience, channel, offer, proof needed, and the first action to take.",
+      contextSummary: "Uses the current strategy detail page as the campaign brief source.",
+      expectedNextStep: "The strategist will draft a campaign path for review, not publish anything.",
     },
   ];
 
@@ -56,11 +61,6 @@ export default async function CustomerMarketingStrategyPage() {
           This is the working context the Marketing Strategist should challenge
           and refine with you before campaigns, outreach, or automation are prepared.
         </p>
-
-        <div className="mt-6">
-          <MarketingCoworkerActions actions={strategyActions} />
-        </div>
-
         <div className="mt-6 grid gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
             <p className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">State</p>
@@ -88,6 +88,12 @@ export default async function CustomerMarketingStrategyPage() {
           </div>
         </div>
       </div>
+
+      <AgentWorkLauncher
+        agentName="Marketing Strategist"
+        primaryActionLabel="Start strategy review"
+        topics={strategyTopics}
+      />
 
       <MarketingStrategyOverview snapshot={snapshot} mode="detail" />
 

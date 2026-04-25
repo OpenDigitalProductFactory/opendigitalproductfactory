@@ -4,7 +4,7 @@ import {
   formatMarketingLabel,
   getMarketingWorkspaceSnapshot,
 } from "@/lib/marketing";
-import { MarketingCoworkerActions } from "@/components/customer-marketing/MarketingCoworkerActions";
+import { AgentWorkLauncher } from "@/components/agent/AgentWorkLauncher";
 import { MarketingStrategyOverview } from "@/components/customer-marketing/MarketingStrategyOverview";
 
 export default async function CustomerMarketingPage() {
@@ -45,28 +45,33 @@ export default async function CustomerMarketingPage() {
   const proofFocus =
     snapshot.strategy.proofAssets[0]?.label ??
     "No proof asset chosen yet";
-  const coworkerActions = [
+  const launcherTopics = [
     {
-      label: "Start here",
-      title: "Run the first strategy review",
+      id: "strategy-review",
+      label: "Strategy review",
       description: "Have the strategist translate the current assumptions into plain language and ask the next useful question.",
-      primary: true,
       prompt:
-        "Run the first marketing strategy review for this business. Use plain marketing language, tell me what seems usable, what feels unproven, and ask me one focused question to clarify the market or audience before you suggest campaigns.",
+        "Run a marketing review for this business. Use the current business, storefront, customer, and strategy context. Start by telling me what you think the first marketing decision should be, then ask me one focused question before recommending campaigns.",
+      contextSummary: `Market: ${marketFocus}. Buyer: ${audienceFocus}. Motion: ${routeFocus}.`,
+      expectedNextStep: "The strategist will ask one focused question before suggesting campaigns.",
     },
     {
-      label: "Create demand",
-      title: "Draft campaign directions",
+      id: "campaign-directions",
+      label: "Campaign ideas",
       description: "Turn the current focus into practical campaign options for email, LinkedIn, events, outbound, or content.",
       prompt:
         "Suggest 3 practical campaign directions for this business based on the current strategy. Make them specific to the audience, market, route to market, and likely proof assets. Include the first step I should approve or change.",
+      contextSummary: `Channels: ${primaryChannels}. Proof: ${proofFocus}.`,
+      expectedNextStep: "The strategist will propose options and ask what you want to shape first.",
     },
     {
-      label: "Build trust",
-      title: "Plan proof of expertise",
+      id: "proof-plan",
+      label: "Proof of expertise",
       description: "Identify the proof, examples, or authority signals needed before we ask the market to act.",
       prompt:
         "Help me build a proof-of-expertise plan for this business. Identify the testimonials, case studies, outcomes, credentials, examples, or FAQs that would make campaigns more credible, and tell me what to collect first.",
+      contextSummary: `Current proof: ${proofFocus}. Buyer: ${audienceFocus}.`,
+      expectedNextStep: "The strategist will recommend the first proof asset to collect or draft.",
     },
   ];
 
@@ -94,10 +99,13 @@ export default async function CustomerMarketingPage() {
           </Link>
         </div>
 
-        <div className="mt-6">
-          <MarketingCoworkerActions actions={coworkerActions} />
-        </div>
       </div>
+
+      <AgentWorkLauncher
+        agentName="Marketing Strategist"
+        primaryActionLabel="Start marketing review"
+        topics={launcherTopics}
+      />
 
       <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
