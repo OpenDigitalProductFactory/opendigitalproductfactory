@@ -78,6 +78,21 @@ describe("resolveRouteContext", () => {
     expect(ctx.domainTools).toContain("suggest_campaign_ideas");
   });
 
+  it("returns route-aware docs for finance leaf routes", () => {
+    const ctx = resolveRouteContext("/finance/banking/acc-123/reconcile");
+    expect(ctx.docsPath).toBe("/docs/finance/banking-and-reconciliation");
+  });
+
+  it("returns route-aware docs for platform provider routes", () => {
+    const ctx = resolveRouteContext("/platform/ai/providers/provider-123");
+    expect(ctx.docsPath).toBe("/docs/ai-workforce/connecting-providers");
+  });
+
+  it("returns route-aware docs for storefront settings leaf routes", () => {
+    const ctx = resolveRouteContext("/storefront/settings/business");
+    expect(ctx.docsPath).toBe("/docs/storefront/settings-business-and-operations");
+  });
+
   it("returns correct sensitivity for /platform (confidential)", () => {
     const ctx = resolveRouteContext("/platform");
     expect(ctx.sensitivity).toBe("confidential");

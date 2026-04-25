@@ -2,6 +2,7 @@
 // Factual domain context definitions per route — replaces persona-based agent routing.
 
 import type { SensitivityLevel } from "./agent-router-types";
+import { resolveDocsPath } from "@/lib/docs-route-map";
 
 export type RouteContextDef = {
   routePrefix: string;
@@ -972,5 +973,9 @@ export function resolveRouteContext(pathname: string): RouteContextDef {
   const pageSkills = best.skills.filter((s) => s.label !== "Report an issue");
   const mergedSkills = [...UNIVERSAL_SKILLS, ...pageSkills, ...(reportIssue ? [reportIssue] : [])];
 
-  return { ...best, skills: mergedSkills };
+  return {
+    ...best,
+    docsPath: resolveDocsPath(pathname) ?? best.docsPath,
+    skills: mergedSkills,
+  };
 }
