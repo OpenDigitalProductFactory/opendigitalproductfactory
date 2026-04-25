@@ -4,8 +4,10 @@ exports[`consume barrel export > exports all public symbols 1`] = `
 [
   "buildOnboardingPrompt",
   "getChecklists",
+  "getDiscoveryTriageDecisionHistory",
   "getInventoryEntitiesForPage",
   "getInventoryEntitiesGroupedBySubnet",
+  "getInventoryTriageQueues",
   "getLatestDiscoveryRun",
   "getNeedsReviewEntities",
   "getOpenPortfolioQualityIssues",
