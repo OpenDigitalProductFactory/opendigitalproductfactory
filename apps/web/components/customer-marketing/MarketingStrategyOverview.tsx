@@ -17,8 +17,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-      <h2 className="mb-3 text-sm font-semibold text-[var(--dpf-text)]">{title}</h2>
+    <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      <h2 className="mb-3 text-base font-semibold text-[var(--dpf-text)]">{title}</h2>
       {children}
     </section>
   );
@@ -38,52 +38,60 @@ export function MarketingStrategyOverview({
 }: Props) {
   const isDetail = mode === "detail";
   const strategy = snapshot.strategy;
+  const territory =
+    strategy.geographicScope ?? snapshot.organization.addressSummary ?? "Market territory still needs a decision";
+  const constraintNotes = strategy.constraints
+    ? [
+        strategy.constraints.geography ? `Territory: ${strategy.constraints.geography}` : null,
+        strategy.constraints.capacity ? `Capacity: ${strategy.constraints.capacity}` : null,
+        strategy.constraints.compliance ? `Compliance: ${strategy.constraints.compliance}` : null,
+        strategy.constraints.productMaturity ? `Maturity: ${strategy.constraints.productMaturity}` : null,
+      ].filter((note): note is string => Boolean(note))
+    : [];
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Section title="Business Context">
+      <Section title="Market and buyer">
         <dl className="grid gap-3 text-sm">
           <div>
-            <dt className="text-[var(--dpf-muted)]">Organization</dt>
+            <dt className="text-[var(--dpf-muted)]">Business</dt>
             <dd className="text-[var(--dpf-text)]">{snapshot.organization.name}</dd>
           </div>
           <div>
-            <dt className="text-[var(--dpf-muted)]">Archetype</dt>
+            <dt className="text-[var(--dpf-muted)]">Business pattern</dt>
             <dd className="text-[var(--dpf-text)]">
               {snapshot.storefront.archetypeName ?? "Not set"}
             </dd>
           </div>
           <div>
-            <dt className="text-[var(--dpf-muted)]">Route to market</dt>
+            <dt className="text-[var(--dpf-muted)]">Sales motion</dt>
             <dd className="text-[var(--dpf-text)]">
               {formatMarketingLabel(strategy.routeToMarket)}
             </dd>
           </div>
           <div>
-            <dt className="text-[var(--dpf-muted)]">Geography</dt>
-            <dd className="text-[var(--dpf-text)]">
-              {strategy.geographicScope ?? snapshot.organization.addressSummary ?? "Needs review"}
-            </dd>
+            <dt className="text-[var(--dpf-muted)]">Where to win first</dt>
+            <dd className="text-[var(--dpf-text)]">{territory}</dd>
           </div>
           <div>
-            <dt className="text-[var(--dpf-muted)]">Locality model</dt>
+            <dt className="text-[var(--dpf-muted)]">Market shape</dt>
             <dd className="text-[var(--dpf-text)]">
               {formatMarketingLabel(strategy.localityModel)}
             </dd>
           </div>
           {strategy.primaryGoal && (
             <div>
-              <dt className="text-[var(--dpf-muted)]">Primary goal</dt>
+              <dt className="text-[var(--dpf-muted)]">Primary promise</dt>
               <dd className="text-[var(--dpf-text)]">{strategy.primaryGoal}</dd>
             </div>
           )}
         </dl>
       </Section>
 
-      <Section title="Channels and Proof">
+      <Section title="Channels and proof">
         <div className="mb-4">
           <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-            Primary channels
+            Likely channels
           </p>
           <div className="flex flex-wrap gap-2">
             {strategy.primaryChannels.length > 0 ? (
@@ -91,14 +99,16 @@ export function MarketingStrategyOverview({
                 <Pill key={channel}>{formatMarketingLabel(channel)}</Pill>
               ))
             ) : (
-              <span className="text-sm text-[var(--dpf-muted)]">No channels seeded yet.</span>
+              <span className="text-sm text-[var(--dpf-muted)]">
+                Ask the strategist which channel deserves the first test.
+              </span>
             )}
           </div>
         </div>
 
         <div>
           <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-            Proof assets
+            Credibility to build
           </p>
           {strategy.proofAssets.length > 0 ? (
             <ul className="space-y-2 text-sm text-[var(--dpf-text)]">
@@ -113,7 +123,7 @@ export function MarketingStrategyOverview({
             </ul>
           ) : (
             <p className="text-sm text-[var(--dpf-muted)]">
-              No proof assets captured yet.
+              Ask the strategist what proof would make the first campaign believable.
             </p>
           )}
         </div>
@@ -122,7 +132,7 @@ export function MarketingStrategyOverview({
       <Section title="Audience">
         <div className="mb-4">
           <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-            Target segments
+            Buyer groups
           </p>
           {strategy.targetSegments.length > 0 ? (
             <ul className="space-y-2 text-sm">
@@ -136,14 +146,16 @@ export function MarketingStrategyOverview({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-[var(--dpf-muted)]">No target segments defined yet.</p>
+            <p className="text-sm text-[var(--dpf-muted)]">
+              Ask the strategist to help choose the first buyer group.
+            </p>
           )}
         </div>
 
         {strategy.idealCustomerProfiles.length > 0 && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-              Ideal customer profiles
+              Best-fit customer profiles
             </p>
             <ul className="space-y-3 text-sm">
               {strategy.idealCustomerProfiles.map((profile) => (
@@ -166,35 +178,29 @@ export function MarketingStrategyOverview({
         )}
       </Section>
 
-      <Section title="Review Cadence">
+      <Section title="Review rhythm">
         <dl className="grid gap-3 text-sm">
           <div>
-            <dt className="text-[var(--dpf-muted)]">Cadence</dt>
+            <dt className="text-[var(--dpf-muted)]">Strategy check-in</dt>
             <dd className="text-[var(--dpf-text)]">
               {formatMarketingLabel(strategy.reviewCadence)}
             </dd>
           </div>
           <div>
-            <dt className="text-[var(--dpf-muted)]">Next review</dt>
+            <dt className="text-[var(--dpf-muted)]">Next check-in</dt>
             <dd className="text-[var(--dpf-text)]">
               {formatMarketingDate(strategy.nextReviewAt)}
             </dd>
           </div>
           <div>
-            <dt className="text-[var(--dpf-muted)]">Last review</dt>
+            <dt className="text-[var(--dpf-muted)]">Last strategist review</dt>
             <dd className="text-[var(--dpf-text)]">
               {formatMarketingDate(strategy.lastReviewedAt)}
             </dd>
           </div>
-          {strategy.sourceSummary && (
-            <div>
-              <dt className="text-[var(--dpf-muted)]">Source summary</dt>
-              <dd className="text-[var(--dpf-text)]">{strategy.sourceSummary}</dd>
-            </div>
-          )}
           {isDetail && strategy.serviceTerritories.length > 0 && (
             <div>
-              <dt className="text-[var(--dpf-muted)]">Service territories</dt>
+              <dt className="text-[var(--dpf-muted)]">Named territories</dt>
               <dd className="text-[var(--dpf-text)]">
                 {strategy.serviceTerritories.map((territory) => territory.name).join(", ")}
               </dd>
@@ -202,7 +208,7 @@ export function MarketingStrategyOverview({
           )}
           {isDetail && strategy.entryOffers.length > 0 && (
             <div>
-              <dt className="text-[var(--dpf-muted)]">Entry offers</dt>
+              <dt className="text-[var(--dpf-muted)]">Offers to lead with</dt>
               <dd className="space-y-2 text-[var(--dpf-text)]">
                 {strategy.entryOffers.map((offer) => (
                   <div key={offer.name}>
@@ -215,16 +221,13 @@ export function MarketingStrategyOverview({
               </dd>
             </div>
           )}
-          {isDetail && strategy.constraints && (
+          {isDetail && constraintNotes.length > 0 && (
             <div>
-              <dt className="text-[var(--dpf-muted)]">Constraints</dt>
+              <dt className="text-[var(--dpf-muted)]">Guardrails</dt>
               <dd className="space-y-1 text-[var(--dpf-text)]">
-                {strategy.constraints.compliance && <p>Compliance: {strategy.constraints.compliance}</p>}
-                {strategy.constraints.geography && <p>Geography: {strategy.constraints.geography}</p>}
-                {strategy.constraints.capacity && <p>Capacity: {strategy.constraints.capacity}</p>}
-                {strategy.constraints.productMaturity && (
-                  <p>Product maturity: {strategy.constraints.productMaturity}</p>
-                )}
+                {constraintNotes.map((note) => (
+                  <p key={note}>{note}</p>
+                ))}
               </dd>
             </div>
           )}

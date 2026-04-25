@@ -1,9 +1,10 @@
 import Link from "next/link";
 import {
-  formatMarketingDate,
+  formatMarketingGap,
   formatMarketingLabel,
   getMarketingWorkspaceSnapshot,
 } from "@/lib/marketing";
+import { MarketingCoworkerActions } from "@/components/customer-marketing/MarketingCoworkerActions";
 import { MarketingStrategyOverview } from "@/components/customer-marketing/MarketingStrategyOverview";
 
 export default async function CustomerMarketingPage() {
@@ -11,7 +12,7 @@ export default async function CustomerMarketingPage() {
 
   if (!snapshot) {
     return (
-      <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
+      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Marketing</h1>
         <p className="mt-2 text-sm text-[var(--dpf-muted)]">
           Marketing strategy becomes available once an organization has been configured.
@@ -24,82 +25,156 @@ export default async function CustomerMarketingPage() {
     snapshot.latestReview?.suggestedActions.length
       ? snapshot.latestReview.suggestedActions.map((action) => action.description)
       : snapshot.staleAreas.length > 0
-        ? snapshot.staleAreas
+        ? snapshot.staleAreas.map(formatMarketingGap)
         : [
-            "Review the seeded route-to-market assumptions with the marketing specialist.",
-            "Confirm the first channel mix to prioritize for acquisition.",
+            "Ask the Marketing Strategist to confirm the market focus before launching campaigns.",
+            "Choose the first audience and channel mix to test.",
           ];
+  const marketFocus = snapshot.strategy.geographicScope
+    ? `Focused on ${snapshot.strategy.geographicScope}`
+    : "Market territory still needs a decision";
+  const routeFocus = formatMarketingLabel(snapshot.strategy.routeToMarket);
+  const audienceFocus =
+    snapshot.strategy.targetSegments[0]?.name ??
+    snapshot.strategy.idealCustomerProfiles[0]?.name ??
+    "First buyer group not chosen yet";
+  const primaryChannels =
+    snapshot.strategy.primaryChannels.length > 0
+      ? snapshot.strategy.primaryChannels.map(formatMarketingLabel).slice(0, 3).join(", ")
+      : "No channel focus chosen yet";
+  const proofFocus =
+    snapshot.strategy.proofAssets[0]?.label ??
+    "No proof asset chosen yet";
+  const coworkerActions = [
+    {
+      label: "Start here",
+      title: "Run the first strategy review",
+      description: "Have the strategist translate the current assumptions into plain language and ask the next useful question.",
+      primary: true,
+      prompt:
+        "Run the first marketing strategy review for this business. Use plain marketing language, tell me what seems usable, what feels unproven, and ask me one focused question to clarify the market or audience before you suggest campaigns.",
+    },
+    {
+      label: "Create demand",
+      title: "Draft campaign directions",
+      description: "Turn the current focus into practical campaign options for email, LinkedIn, events, outbound, or content.",
+      prompt:
+        "Suggest 3 practical campaign directions for this business based on the current strategy. Make them specific to the audience, market, route to market, and likely proof assets. Include the first step I should approve or change.",
+    },
+    {
+      label: "Build trust",
+      title: "Plan proof of expertise",
+      description: "Identify the proof, examples, or authority signals needed before we ask the market to act.",
+      prompt:
+        "Help me build a proof-of-expertise plan for this business. Identify the testimonials, case studies, outcomes, credentials, examples, or FAQs that would make campaigns more credible, and tell me what to collect first.",
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
+      <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
               Customer Marketing
             </p>
             <h1 className="mt-2 text-2xl font-bold text-[var(--dpf-text)]">
-              Strategy first, campaigns next
+              Work with your Marketing Strategist
             </h1>
             <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
-              This workspace captures what we know about the business, market, locality,
-              channel fit, and proof needed before campaign execution.
+              Use the AI Coworker to shape the market, choose campaigns, and turn
+              rough business context into work that can acquire customers.
             </p>
           </div>
           <Link
             href="/customer/marketing/strategy"
-            className="rounded-full bg-[var(--dpf-accent)] px-4 py-2 text-sm font-medium text-white"
+            className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-2 text-sm font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
           >
-            Open strategy detail
+            View current assumptions
           </Link>
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">What we know</p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">
-              {snapshot.storefront.archetypeName ?? "Unspecified archetype"} serving{" "}
-              {snapshot.strategy.geographicScope ?? "an undefined geography"} via{" "}
-              {formatMarketingLabel(snapshot.strategy.routeToMarket)}.
-            </p>
-          </div>
-          <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">Needs review</p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">
-              {snapshot.staleAreas[0] ?? "No immediate stale areas detected."}
-            </p>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              Next review: {formatMarketingDate(snapshot.strategy.nextReviewAt)}
-            </p>
-          </div>
-          <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
-            <p className="text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
-              Specialist suggests next
-            </p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">{suggestions[0]}</p>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              {snapshot.latestReview
-                ? `Latest review: ${formatMarketingLabel(snapshot.latestReview.reviewType)}`
-                : "No review recorded yet"}
-            </p>
-          </div>
+        <div className="mt-6">
+          <MarketingCoworkerActions actions={coworkerActions} />
         </div>
       </div>
 
-      <MarketingStrategyOverview snapshot={snapshot} />
+      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+              Current working focus
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+              These are starting assumptions for the strategist to challenge,
+              refine, and turn into campaigns.
+            </p>
+          </div>
+          <p className="text-sm font-medium text-[var(--dpf-accent)]">
+            {snapshot.latestReview
+              ? formatMarketingLabel(snapshot.latestReview.reviewType)
+              : "First review pending"}
+          </p>
+        </div>
 
-      <section className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-        <h2 className="mb-3 text-sm font-semibold text-[var(--dpf-text)]">
-          Specialist next steps
-        </h2>
-        <ul className="space-y-2 text-sm text-[var(--dpf-text)]">
-          {suggestions.map((suggestion) => (
-            <li key={suggestion} className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
-              {suggestion}
-            </li>
-          ))}
-        </ul>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+              Market
+            </p>
+            <p className="mt-2 text-sm text-[var(--dpf-text)]">{marketFocus}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+              Buyer
+            </p>
+            <p className="mt-2 text-sm text-[var(--dpf-text)]">{audienceFocus}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+              Motion
+            </p>
+            <p className="mt-2 text-sm text-[var(--dpf-text)]">{routeFocus}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+              Channels
+            </p>
+            <p className="mt-2 text-sm text-[var(--dpf-text)]">{primaryChannels}</p>
+          </div>
+        </div>
       </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+            What to clarify with the strategist
+          </h2>
+          <ul className="mt-4 space-y-2 text-sm text-[var(--dpf-text)]">
+            {suggestions.map((suggestion) => (
+              <li key={suggestion} className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
+                {suggestion}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+            Proof before promotion
+          </h2>
+          <p className="mt-2 text-sm text-[var(--dpf-muted)]">
+            Campaigns will perform better when the offer is backed by credible
+            evidence. The strategist should help decide what proof to collect,
+            write, or publish first.
+          </p>
+          <p className="mt-4 rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)]">
+            {proofFocus}
+          </p>
+        </div>
+      </section>
+
+      <MarketingStrategyOverview snapshot={snapshot} />
     </div>
   );
 }

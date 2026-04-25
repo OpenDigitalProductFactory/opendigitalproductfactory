@@ -476,10 +476,80 @@ function determineStaleAreas(snapshot: {
 }
 
 export function formatMarketingLabel(value: string): string {
+  const friendlyLabels: Record<string, string> = {
+    active: "Active",
+    archived: "Archived",
+    draft: "Needs strategist review",
+    "direct-sales": "Sales-led outreach",
+    inbound: "Inbound demand",
+    outbound: "Outbound prospecting",
+    "channel-partner": "Partner-led growth",
+    marketplace: "Marketplace demand",
+    referral: "Referral motion",
+    hybrid: "Mixed route to market",
+    hyperlocal: "Local market",
+    regional: "Regional market",
+    national: "National market",
+    international: "International market",
+    "online-only": "Online-only market",
+    weekly: "Weekly",
+    monthly: "Monthly",
+    quarterly: "Quarterly",
+    annually: "Annual",
+    email: "Email",
+    linkedin: "LinkedIn",
+    facebook: "Facebook",
+    instagram: "Instagram",
+    x: "X",
+    youtube: "YouTube",
+    tiktok: "TikTok",
+    "outbound-mail": "Direct mail",
+    "event-attend": "Attend events",
+    "event-sponsor": "Sponsor events",
+    partner: "Partner",
+    "content-seo": "Search-led content",
+    "paid-search": "Paid search",
+    "paid-social": "Paid social",
+    podcast: "Podcast",
+    webinar: "Webinar",
+    phone: "Phone follow-up",
+    "case-study": "Case study",
+    testimonial: "Testimonial",
+    certification: "Certification",
+    outcome: "Outcome proof",
+    award: "Award",
+    press: "Press mention",
+    scheduled: "Scheduled review",
+    "ad-hoc": "Working session",
+    "ai-proactive": "Strategist suggestion",
+    "post-campaign": "Campaign review",
+  };
+
+  if (friendlyLabels[value]) return friendlyLabels[value];
+
   return value
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+export function formatMarketingGap(value: string): string {
+  const friendlyGaps: Record<string, string> = {
+    "Geographic scope needs review":
+      "Decide where we want to win customers first: local, regional, national, or international.",
+    "Target segments need definition":
+      "Name the buyer groups worth pursuing first.",
+    "Primary channels need definition":
+      "Choose the few channels that fit this business before creating campaigns.",
+    "Proof assets are still missing":
+      "Pick the proof that will make the offer credible: outcomes, testimonials, case studies, or credentials.",
+    "Strategy review cadence is overdue":
+      "Refresh the strategy before launching the next campaign.",
+    "Initial strategy review has not been recorded yet":
+      "Have the Marketing Strategist run the first strategy review.",
+  };
+
+  return friendlyGaps[value] ?? value;
 }
 
 export function formatMarketingDate(value: Date | null): string {
