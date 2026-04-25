@@ -1,8 +1,31 @@
 // Next.js instrumentation hook — runs once on server startup.
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
+/**
+ * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
+ * environment. Exported so the instrumentation module's startup behavior
+ * can be exercised by a unit test — invoking `register()` directly runs
+ * a long queue of setTimeouts and DB-bound work that the test does not
+ * care about.
+ */
+export function warnIfLegacyHiveTokenEnvSet(
+  logger: Pick<Console, "warn"> = console,
+): boolean {
+  if (!process.env.HIVE_CONTRIBUTION_TOKEN) return false;
+  logger.warn(
+    "[deprecation] HIVE_CONTRIBUTION_TOKEN is deprecated. Configure GitHub auth via\n" +
+      "Admin > Platform Development (OAuth Device Flow recommended once that phase ships).\n" +
+      "Support for this env var will be removed 60 days after the next release.",
+  );
+  return true;
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
+    // Fire the deprecation warning up front so operators see it on first
+    // boot rather than waiting for a contribution to trip it.
+    warnIfLegacyHiveTokenEnvSet();
+
     // Register ScheduledJob rows so the calendar shows discovery events.
     // Actual execution handled by Inngest cron functions (lib/queue/functions/).
     const { registerScheduledJobs } = await import("@/lib/operate/discovery-scheduler");
@@ -129,5 +152,14 @@ export async function register() {
         await pgPool.end().catch(() => {});
       }
     }, STARTUP_DELAY_MS);
+
+    // ── CREDENTIAL_ENCRYPTION_KEY fail-loud guard ──────────────────────────
+    // Refuses to boot in production when the credential store contains
+    // secrets but the encryption key is unset — that combination would cause
+    // silent plaintext storage (data-at-rest vulnerability).
+    // Dev mode short-circuits immediately; zero overhead outside production.
+    // See docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
+    const { assertCredentialEncryptionKeyIsSet } = await import("@/lib/govern/credential-crypto");
+    await assertCredentialEncryptionKeyIsSet();
   }
 }
