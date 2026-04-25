@@ -3,6 +3,7 @@
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { BindingBootstrapPanel } from "@/components/platform/authority/BindingBootstrapPanel";
 import { BootstrapBindingsButton } from "@/components/platform/authority/BootstrapBindingsButton";
 import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
 import { BindingFilters } from "@/components/platform/authority/BindingFilters";
@@ -14,6 +15,7 @@ import {
   listAuthorityBindingRecords,
   parseAuthorityBindingFilters,
 } from "@/lib/authority/bindings";
+import { getAuthorityBindingBootstrapState } from "@/lib/authority/bootstrap-rollout";
 import { can } from "@/lib/permissions";
 import { AgentModelAssignmentTable } from "@/components/platform/AgentModelAssignmentTable";
 import { listAuthorityBindings } from "@/lib/authority/bindings";
@@ -80,12 +82,18 @@ export default async function AssignmentsPage({ searchParams }: Props) {
     subject: typeof query.subject === "string" ? query.subject : undefined,
   };
   const parsedFilters = parseAuthorityBindingFilters(currentFilters);
+  const hasActiveFilters = Object.keys(parsedFilters).length > 0;
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can(
     { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
     "manage_platform",
   );
+  const bootstrapState = await getAuthorityBindingBootstrapState({
+    canWrite,
+    hasActiveFilters,
+  });
+  const bootstrapAction = canWrite && !bootstrapState.report ? <BootstrapBindingsButton /> : null;
 
   // Fetch data in parallel
   const [dbConfigs, providers, lastModels, toolGrantGroups, bindingRecords, bindingList, activeBinding, activeBindingEvidence] = await Promise.all([
@@ -240,12 +248,19 @@ export default async function AssignmentsPage({ searchParams }: Props) {
             Coworker-first view of where each coworker is applied and which subjects can reach that governed context.
           </p>
         </div>
+        {bootstrapState.report ? (
+          <BindingBootstrapPanel
+            autoApplied={bootstrapState.autoApplied}
+            totalBindings={bootstrapState.totalBindings}
+            report={bootstrapState.report}
+          />
+        ) : null}
         <BindingFilters
           actionHref="/platform/ai/assignments"
           currentFilters={currentFilters}
           options={bindingFilterOptions}
           resultCount={bindingList.rows.length}
-          actions={<BootstrapBindingsButton />}
+          actions={bootstrapAction}
         />
         <BindingList
           pivot="coworker"
