@@ -10,7 +10,9 @@ Thanks for wanting to contribute. This project is built to grow through communit
 4. CI gates typecheck, unit tests, and a production build. Keep them green.
 5. A maintainer reviews and merges once the checks pass.
 
-External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). Branch protection on `main` is active and enforced at the GitHub platform level: the required status checks `Typecheck`, `Production Build`, and `DCO` must all pass before merge; PR required; linear history; no force-push. `Unit Tests` runs informationally while the broken-test surface is being cleaned up.
+External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). The required CI checks (`Typecheck` and `Production Build`) must pass before merge; `Unit Tests` runs informationally while the broken-test surface is being cleaned up. GitHub branch protection activates automatically once the repo flips to public — until then, the workflow is maintained by discipline.
+
+If you're contributing from a running DPF install, see [Contributing from a running install](#contributing-from-a-running-install).
 
 ## Branch naming
 
@@ -27,36 +29,13 @@ One concern per branch, one concern per PR. If you find a refactor that's adjace
 
 ## Repo bootstrap (contributors)
 
-Running `pnpm install` in the repo root auto-configures the in-repo git hooks (Prisma migration guard + local typecheck gate) via a `postinstall` script. No manual setup is required for the typical `git clone && pnpm install` flow.
-
-If you cloned with `--no-scripts` or a tarball that doesn't run postinstall, set the hooks path manually:
+Once cloned, enable the in-repo git hooks so the Prisma migration guard runs locally:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-The installer scripts (`scripts/fresh-install.ps1`, `scripts/setup.ps1`, `scripts/setup.sh`) also configure this path when used.
-
-## Signing commits (DCO)
-
-Every commit in every PR must carry a `Signed-off-by:` trailer certifying the contribution under the [Developer Certificate of Origin](https://developercertificate.org/). This is a required status check on `main` — the `DCO` bot fails the PR until every commit has a matching trailer.
-
-The easiest way to add the trailer is the `-s` flag on `git commit`:
-
-```bash
-git commit -s -m "your message"
-```
-
-This appends `Signed-off-by: Your Name <your-email@example.com>` using your `user.name` and `user.email` git config. The email in the trailer must match the commit author's email.
-
-**If you forget and DCO fails your PR:**
-
-- Last commit only: `git commit --amend -s --no-edit && git push --force-with-lease`
-- Multiple commits: `git rebase --signoff main && git push --force-with-lease`
-
-Force-pushing to your own feature branch is fine — branch protection only blocks it on `main`.
-
-Dependabot PRs are auto-signed by a repo workflow; you don't need to do anything special for those.
+`scripts/fresh-install.ps1` and `scripts/setup.ps1` / `scripts/setup.sh` configure this automatically when you use them to set the repo up. Run the one-liner above manually if you cloned without those helpers.
 
 ## Before you start
 
@@ -103,6 +82,83 @@ pnpm test:e2e:demo      # Sandbox-preview demo profile
 - **Bugs:** open an issue using the bug template. Include the installer mode you used, your OS, the Docker Desktop version, and relevant logs.
 - **Security vulnerabilities:** do **not** open a public issue. Follow the process in [SECURITY.md](SECURITY.md).
 - **Feature requests:** use the feature template. Start by describing the problem you're trying to solve, not the implementation you have in mind.
+
+## Contributing from a running install
+
+DPF installs can ship features built in Build Studio back to the upstream repo through the platform's own contribution pipeline — fork, branch, commit, and PR all happen automatically once GitHub auth is configured once in Admin > Platform Development. This is distinct from the manual fork → branch → PR flow documented above, which remains the supported path for human contributors who don't run a DPF install.
+
+The setup below applies to anyone whose contributions originate from a running install (Build Studio features, hive contributions, scripted automation). The choice of tier determines only how the install authenticates to GitHub — the resulting PRs look identical from the upstream side.
+
+### Three setup tiers
+
+| Tier | Method | When to choose |
+|------|--------|----------------|
+| **1** | OAuth Device Flow (recommended) | Default. One-click in Admin > Platform Development. GitHub handles 2FA inline. No token to manage. |
+| **2** | Fine-grained PAT (advanced) | Policy-restricted environments; per-repo scope limits required. |
+| **3** | Classic PAT (emergency) | Air-gapped installs; legacy machine users; environments where browser-based OAuth isn't possible. |
+
+### Tier 1 — OAuth Device Flow
+
+1. Open Admin > Platform Development in your DPF install.
+2. Click **Connect GitHub**.
+3. The platform displays a short user code (e.g. `WDJB-MJHT`) and a verification URL (`github.com/login/device`).
+4. Open the URL in a browser where you're already signed in to GitHub. Type the user code, click Authorize.
+5. If you have 2FA enabled, GitHub handles the challenge inline.
+6. The platform polls in the background; when authorization completes, the form shows "Connected as @username".
+
+<!-- TODO(maintainer): add screenshot of Connect GitHub card; capture during a portal smoke test -->
+
+Notes:
+
+- Token has no expiry. Revocable any time at github.com/settings/applications.
+- Scope: `public_repo` only. The platform never requests broader access.
+- The token is encrypted at rest in your install's database.
+
+### Tier 2 — Fine-grained PAT
+
+1. Visit github.com/settings/personal-access-tokens.
+2. Click **Generate new token (fine-grained)**.
+3. Configure:
+   - **Expiration:** 90 days or longer (the platform refuses tokens with less than 30 days left)
+   - **Repository access:** Only your fork (or the repo you're contributing to)
+   - **Permissions → Contents:** Read and Write
+4. Generate. Copy the token (starts with `github_pat_`).
+5. In Admin > Platform Development, expand the **Advanced** disclosure.
+6. Paste into the **Fine-grained PAT** field. Save.
+
+<!-- TODO(maintainer): add screenshot of GitHub PAT settings + Advanced disclosure -->
+
+The platform reads the expiry from the GitHub probe response and surfaces an admin banner at 30/14/7 days remaining. Reconnect via Tier 1 or rotate the PAT before it expires.
+
+### Tier 3 — Classic PAT (emergency only)
+
+Classic PATs have no expiry and grant broad scope across every repo the account can reach. Prefer Tier 1 (no token to manage) or Tier 2 (per-repo scope) wherever possible. Use Tier 3 only when neither alternative is available — air-gapped installs without browser access, or legacy machine users that predate fine-grained PAT support.
+
+If you do need it, the steps mirror Tier 2 but at github.com/settings/tokens with `public_repo` scope, and pasted into the **Classic PAT** field in the same Advanced disclosure.
+
+### Pseudonymity tradeoff
+
+Install-based contributions carry two identities, and only one of them is hideable.
+
+- **Commit identity is pseudonymous.** Every commit is authored as `dpf-agent-<shortId>` (a stable per-install pseudonym) and carries a matching DCO `Signed-off-by` trailer. Two installs are distinguishable in commit history without revealing the human behind either.
+- **PR author identity is the GitHub account that authorized auth.** The fork owner is necessarily visible on github.com — whichever account authorized the OAuth App or owns the PAT shows up as the PR author. No platform-side mechanism can hide this; it's how GitHub displays PRs from forks.
+
+If your GitHub username can't appear on public PRs, authorize from a pseudonymous GitHub account (a separate account registered under a handle you're comfortable seeing on public PR pages). 2FA is required on that account too once GitHub's June 2026 mandate takes effect.
+
+This is the same tradeoff documented in the spec at `docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md` §Pseudonymity, and the matching admin-UI copy lives in `apps/web/lib/integrate/contribution-copy.ts` (`CONTRIBUTION_COPY.pseudonymityTradeoff`).
+
+### Machine-user pattern
+
+For organizations that want a dedicated identity for their install's contributions — separate from any individual employee's GitHub account — the recommended pattern is a machine user. Create a separate GitHub account (e.g. `acme-dpf-bot`), enable 2FA on it (required by the June 2026 mandate just like any human account), and either authorize Tier 1 from that account or mint a Tier 2/3 PAT under it. To GitHub it's just another user account; the platform doesn't need to know it's a machine user.
+
+The pre-existing **"I am using a dedicated machine-user GitHub account"** checkbox in the admin UI (shipped in PR #225) skips the "token-owner must match fork-owner" check when this pattern is in use, so the machine user can contribute on behalf of an organization-owned fork without tripping ownership validation.
+
+### Troubleshooting
+
+- **"Token revoked" error:** You revoked the OAuth App authorization at github.com/settings/applications, or the token was deleted. Reconnect via Admin > Platform Development.
+- **"Token expires in X days" banner:** Tier 2 only. Either reconnect via Tier 1 (Device Flow has no expiry) or generate a fresh fine-grained PAT.
+- **"This token can't access the fork repo" error:** Fine-grained PAT doesn't include the target repo or lacks Contents:Read+Write. Regenerate per the Tier 2 steps.
+- **"Wrong scope" error on classic PAT:** Token needs `public_repo` (or `repo` for private repos, though DPF only contributes to public). Regenerate with the right scope.
 
 ## License
 

@@ -8,7 +8,6 @@ describe("platform-nav", () => {
   it("defines the top-level platform workflow families", () => {
     expect(PLATFORM_FAMILIES.map((family) => family.label)).toEqual([
       "Overview",
-      "Identity & Access",
       "AI Operations",
       "Tools & Services",
       "Governance & Audit",
@@ -44,14 +43,18 @@ describe("platform-nav", () => {
     expect(toolsFamily.subItems.some((item) => item.label === "Discovery Operations")).toBe(true);
   });
 
-  it("includes Enterprise Integrations in the tools family", () => {
-    const toolsFamily = getPlatformFamily("/platform/tools/integrations/adp");
+it("includes Enterprise Integrations in the tools family", () => {
+  const toolsFamily = getPlatformFamily("/platform/tools/integrations");
 
     expect(toolsFamily.key).toBe("tools");
     expect(
-      toolsFamily.subItems.some((item) => item.label === "Enterprise Integrations"),
-    ).toBe(true);
-  });
+    toolsFamily.subItems.some(
+      (item) =>
+        item.label === "Enterprise Integrations" &&
+        item.href === "/platform/tools/integrations",
+    ),
+  ).toBe(true);
+});
 
   it("maps audit routes to the Governance & Audit family", () => {
     expect(getPlatformFamily("/platform/audit").key).toBe("audit");

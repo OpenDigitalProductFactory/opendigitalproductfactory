@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
+
+import { AdvancedTokenPaste } from "@/components/admin/AdvancedTokenPaste";
 import {
-  savePlatformDevConfig,
+  ConnectGitHubCard,
+  type ConnectedState,
+} from "@/components/admin/ConnectGitHubCard";
+import {
   acceptDco,
-  saveContributionSetup,
-  validateGitHubToken,
+  savePlatformDevConfig,
 } from "@/lib/actions/platform-dev-config";
 
 type ContributionMode = "fork_only" | "selective" | "contribute_all";
@@ -16,23 +20,30 @@ const MODE_OPTIONS: { value: ContributionMode; label: string; description: strin
   {
     value: "fork_only",
     label: "Keep everything here",
-    description: "Changes you make in Build Studio stay on your platform only. Nothing is shared externally.",
+    description:
+      "Changes you make in Build Studio stay on your platform only. Nothing is shared externally.",
   },
   {
     value: "selective",
     label: "Share selectively",
-    description: "After building a feature, the AI will ask if you'd like to share it with the community. You decide each time.",
+    description:
+      "After building a feature, the AI will ask if you'd like to share it with the community. You decide each time.",
   },
   {
     value: "contribute_all",
     label: "Share everything",
-    description: "Features you build are shared with the community by default. You can still keep individual ones private.",
+    description:
+      "Features you build are shared with the community by default. You can still keep individual ones private.",
   },
 ];
 
 // ─── Wizard Steps for Contribution Setup ────────────────────────────────────
-
-type WizardStep = "mode" | "explain" | "github-account" | "create-token" | "paste-token" | "dco" | "done";
+//
+// 2026-04-24 GitHub auth 2FA readiness spec (Phase 5): the create-token and
+// paste-token wizard steps are removed. Token acquisition now happens through
+// ConnectGitHubCard (Device Flow primary) or AdvancedTokenPaste (paste fallback)
+// surfaces, both rendered after DCO acceptance.
+type WizardStep = "mode" | "explain" | "github-account" | "connect" | "dco" | "done";
 
 // ─── DCO Items ──────────────────────────────────────────────────────────────
 
@@ -61,6 +72,13 @@ interface PlatformDevelopmentFormProps {
   hasGitCredential?: boolean;
   hasContributionToken?: boolean;
   pseudonym?: string | null;
+  /**
+   * Server-resolved snapshot of the current GitHub credential. Non-null only
+   * when the stored token is a Device-Flow token (`gho_` prefix) — paste-mode
+   * PATs are not surfaced as "connected as @user" because we don't proactively
+   * probe their owner. See the parent page for the resolution logic.
+   */
+  initialConnected?: ConnectedState | null;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -74,9 +92,6 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
   const isContributionMode = selected === "selective" || selected === "contribute_all";
   const isAlreadySetUp = isContributionMode && !!props.dcoAcceptedAt;
   const [wizardStep, setWizardStep] = useState<WizardStep>(isAlreadySetUp ? "done" : "mode");
-  const [token, setToken] = useState("");
-  const [tokenError, setTokenError] = useState<string | null>(null);
-  const [githubUsername, setGithubUsername] = useState<string | null>(null);
   const [dcoError, setDcoError] = useState<string | null>(null);
 
   // Fork-only git backup state
@@ -115,36 +130,11 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
     setWizardStep("explain");
   };
 
-  const handleValidateToken = () => {
-    setTokenError(null);
-    startTransition(async () => {
-      const result = await validateGitHubToken(token.trim());
-      if (result.valid) {
-        setGithubUsername(result.username ?? null);
-        setWizardStep("dco");
-      } else {
-        setTokenError(result.error ?? "Token validation failed.");
-      }
-    });
-  };
-
   const handleCompleteDco = () => {
     setDcoError(null);
     startTransition(async () => {
-      if (token.trim()) {
-        // Attributed mode: customer provided their own GitHub token
-        const setupResult = await saveContributionSetup({
-          token: token.trim(),
-          mode: selected,
-        });
-        if (!setupResult.success) {
-          setDcoError(setupResult.error ?? "Setup failed.");
-          return;
-        }
-      } else {
-        // Anonymous mode: no customer token needed — save mode only
-        await savePlatformDevConfig(selected);
-      }
+      // Persist contribution mode if not already saved.
+      await savePlatformDevConfig(selected);
 
       const dcoResult = await acceptDco();
       if (!dcoResult.accepted) {
@@ -157,16 +147,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
   };
 
   const handleReconfigure = () => {
-    // Reconfigure routes into the GitHub-token entry path so users who
-    // accepted DCO without setting up a token can add/rotate one later.
-    // Previously this jumped to the "explain" step whose Next button
-    // skipped straight to DCO — leaving no way to reach the paste-token
-    // input after initial setup. (Regression from pseudonymous-by-default
-    // rework, commit a232d0d6.)
-    setWizardStep("github-account");
-    setToken("");
-    setTokenError(null);
-    setGithubUsername(null);
+    // Route into the connect step so admins can rotate / replace their token.
+    setWizardStep("connect");
   };
 
   return (
@@ -177,7 +159,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
           Platform development policy
         </h2>
         <p className="text-xs text-[var(--dpf-muted)]">
-          This governs how features move from the shared development workspace into production and, if enabled, into community contribution workflows.
+          This governs how features move from the shared development workspace into production
+          and, if enabled, into community contribution workflows.
         </p>
       </div>
 
@@ -187,8 +170,9 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             Finish this before shipping features
           </h3>
           <p className="text-xs text-[var(--dpf-text)] leading-relaxed">
-            Build Studio and, in customizable installs, VS Code can both work in the same shared workspace before this is configured.
-            Production promotion and Hive Mind contribution stay blocked until you choose how this install should be governed.
+            Build Studio and, in customizable installs, VS Code can both work in the same shared
+            workspace before this is configured. Production promotion and Hive Mind contribution
+            stay blocked until you choose how this install should be governed.
           </p>
         </div>
       )}
@@ -215,10 +199,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             />
             <div>
               <span className="text-sm font-medium text-[var(--dpf-text)]">{opt.label}</span>
-            <p className="text-xs text-[var(--dpf-muted)] mt-0.5">{opt.description}</p>
-          </div>
-        </label>
-      ))}
+              <p className="text-xs text-[var(--dpf-muted)] mt-0.5">{opt.description}</p>
+            </div>
+          </label>
+        ))}
       </div>
 
       {/* ─── Fork Only: Git Backup ──────────────────────────────────────── */}
@@ -229,8 +213,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
               Backup your work (optional)
             </h3>
             <p className="text-xs text-[var(--dpf-muted)]">
-              Save completed features to an online repository for safekeeping.
-              If anything happens to your system, your work is protected.
+              Save completed features to an online repository for safekeeping. If anything happens
+              to your system, your work is protected.
             </p>
           </div>
 
@@ -241,7 +225,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             <input
               type="url"
               value={gitUrl}
-              onChange={(e) => { setGitUrl(e.target.value); setSaved(false); }}
+              onChange={(e) => {
+                setGitUrl(e.target.value);
+                setSaved(false);
+              }}
               placeholder="https://github.com/your-name/your-repo.git"
               className="w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-1.5 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none"
             />
@@ -255,7 +242,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
               <input
                 type="password"
                 value={gitToken}
-                onChange={(e) => { setGitToken(e.target.value); setSaved(false); }}
+                onChange={(e) => {
+                  setGitToken(e.target.value);
+                  setSaved(false);
+                }}
                 placeholder="ghp_... or glpat-..."
                 className="w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-1.5 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none"
               />
@@ -268,7 +258,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
           {!gitUrl && (props.untrackedFeatureCount ?? 0) > 0 && (
             <div className="rounded border border-amber-400/50 bg-amber-400/10 px-3 py-2">
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                {props.untrackedFeatureCount} completed feature{props.untrackedFeatureCount === 1 ? "" : "s"} not yet backed up.
+                {props.untrackedFeatureCount} completed feature
+                {props.untrackedFeatureCount === 1 ? "" : "s"} not yet backed up.
               </p>
             </div>
           )}
@@ -294,10 +285,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
       {/* ─── Contribution Modes: Guided Wizard ──────────────────────────── */}
       {isContributionMode && wizardStep === "mode" && !isAlreadySetUp && (
         <div className="rounded-lg border border-[var(--dpf-accent)]/30 bg-[var(--dpf-accent)]/5 p-4">
-            <p className="text-sm text-[var(--dpf-text)] mb-3">
-            To share features with the community, we need to connect your platform
-            to GitHub. Your code still lives in this install's shared workspace;
-            GitHub is only used when you choose to contribute governed changes upstream.
+          <p className="text-sm text-[var(--dpf-text)] mb-3">
+            To share features with the community, we need to connect your platform to GitHub. Your
+            code still lives in this install&apos;s shared workspace; GitHub is only used when you
+            choose to contribute governed changes upstream.
           </p>
           <button
             onClick={handleStartWizard}
@@ -310,32 +301,29 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
 
       {/* Step 1: Explain what contributions are */}
       {isContributionMode && wizardStep === "explain" && (
-        <WizardCard
-          step={1}
-          total={2}
-          title="How sharing works"
-        >
+        <WizardCard step={1} total={3} title="How sharing works">
           <div className="space-y-2 text-xs text-[var(--dpf-text)] leading-relaxed">
             <p>
-              When the AI Coworker finishes building a feature for you, it can
-              propose sharing that feature with the wider community of platform users.
-              The shared workspace for this install remains your system of local record.
+              When the AI Coworker finishes building a feature for you, it can propose sharing
+              that feature with the wider community of platform users. The shared workspace for
+              this install remains your system of local record.
             </p>
             <p>
-              Shared features are submitted as a <strong>proposed change</strong> to
-              the community repository. A maintainer reviews the proposal
-              before it becomes available to others.
+              Shared features are submitted as a <strong>proposed change</strong> to the community
+              repository. A maintainer reviews the proposal before it becomes available to others.
             </p>
             <p>
               Your contributions are <strong>pseudonymous</strong>
               {props.pseudonym ? (
-                <> — they appear on the community repository as <span className="font-mono text-[var(--dpf-accent)]">{props.pseudonym}</span>.</>
+                <>
+                  {" "}— they appear on the community repository as{" "}
+                  <span className="font-mono text-[var(--dpf-accent)]">{props.pseudonym}</span>.
+                </>
               ) : (
-                <> — they appear on the community repository under a stable handle derived from this install.</>
+                <> — they appear under a stable handle derived from this install.</>
               )}{" "}
-              The handle is the same across all your contributions so the community
-              can recognize repeat contributors, but reveals nothing about you or your
-              organization. No GitHub account is needed.
+              The handle is the same across all your contributions so the community can recognize
+              repeat contributors, but reveals nothing about you or your organization.
             </p>
             <p>
               {selected === "selective"
@@ -360,31 +348,19 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
         </WizardCard>
       )}
 
-      {/* Step 2: GitHub account */}
+      {/* Step 2: GitHub account info (informational only) */}
       {isContributionMode && wizardStep === "github-account" && (
-        <WizardCard
-          step={2}
-          total={4}
-          title="GitHub account"
-        >
+        <WizardCard step={2} total={3} title="GitHub account">
           <div className="space-y-3 text-xs text-[var(--dpf-text)] leading-relaxed">
             <p>
-              Contributions are submitted through <strong>GitHub</strong>, a free service
-              used by millions of developers to collaborate on software.
+              Contributions are submitted through <strong>GitHub</strong>. If you don&apos;t have
+              an account yet, create one first at{" "}
+              <span className="font-mono text-[var(--dpf-accent)]">github.com/signup</span>.
             </p>
             <p>
-              If you don't have an account yet, create one first:
+              Once you have an account, click <strong>Next</strong> to authorize this install via
+              GitHub&apos;s standard Device Flow — no copy-pasting tokens.
             </p>
-            <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-              <ol className="list-decimal list-inside space-y-1.5 text-xs">
-                <li>
-                  Go to{" "}
-                  <span className="font-mono text-[var(--dpf-accent)]">github.com/signup</span>
-                </li>
-                <li>Follow the steps to create a free account</li>
-                <li>Come back here when you're done</li>
-              </ol>
-            </div>
           </div>
           <div className="flex justify-between mt-4">
             <button
@@ -394,142 +370,19 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
               Back
             </button>
             <button
-              onClick={() => setWizardStep("create-token")}
+              onClick={() => setWizardStep("dco")}
               className="rounded px-4 py-1.5 text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-colors"
             >
-              I have a GitHub account
+              Next
             </button>
           </div>
         </WizardCard>
       )}
 
-      {/* Step 3: Create a token */}
-      {isContributionMode && wizardStep === "create-token" && (
-        <WizardCard
-          step={3}
-          total={4}
-          title="Create an access token"
-        >
-          <div className="space-y-3 text-xs text-[var(--dpf-text)] leading-relaxed">
-            <p>
-              GitHub uses <strong>personal access tokens</strong> instead of passwords.
-              This gives the platform permission to submit contributions on your behalf.
-            </p>
-            <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-              <ol className="list-decimal list-inside space-y-2 text-xs">
-                <li>
-                  Go to{" "}
-                  <span className="font-mono text-[var(--dpf-accent)]">github.com/settings/tokens/new</span>
-                  <br />
-                  <span className="text-[var(--dpf-muted)] ml-4">
-                    (or: GitHub menu &gt; Settings &gt; Developer settings &gt; Personal access tokens &gt; Tokens (classic) &gt; Generate new token)
-                  </span>
-                </li>
-                <li>
-                  Set the name to{" "}
-                  <span className="font-mono bg-[var(--dpf-bg)] px-1 rounded">Digital Product Factory</span>
-                </li>
-                <li>
-                  Under <strong>Select scopes</strong>, check the box next to{" "}
-                  <span className="font-mono bg-[var(--dpf-bg)] px-1 rounded">repo</span>
-                  <br />
-                  <span className="text-[var(--dpf-muted)] ml-4">(this allows creating branches and pull requests)</span>
-                </li>
-                <li>
-                  Click <strong>Generate token</strong> at the bottom of the page
-                </li>
-                <li>
-                  <strong>Copy the token</strong> (it starts with{" "}
-                  <span className="font-mono">ghp_</span>)
-                  <br />
-                  <span className="text-[var(--dpf-muted)] ml-4">
-                    GitHub only shows it once, so copy it before leaving the page
-                  </span>
-                </li>
-              </ol>
-            </div>
-          </div>
-          <div className="flex justify-between mt-4">
-            <button
-              onClick={() => setWizardStep("github-account")}
-              className="rounded px-3 py-1.5 text-sm font-medium border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-border)] transition-colors"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setWizardStep("paste-token")}
-              className="rounded px-4 py-1.5 text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-colors"
-            >
-              I've created a token
-            </button>
-          </div>
-        </WizardCard>
-      )}
-
-      {/* Step 3b: Paste the token */}
-      {isContributionMode && wizardStep === "paste-token" && (
-        <WizardCard
-          step={3}
-          total={4}
-          title="Paste your token"
-        >
-          <div className="space-y-3">
-            <p className="text-xs text-[var(--dpf-text)] leading-relaxed">
-              Paste the token you just created. It will be encrypted and stored securely
-              on your platform — it's never shared with anyone.
-            </p>
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => { setToken(e.target.value); setTokenError(null); }}
-              placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              className="w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-sm font-mono text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none"
-              autoFocus
-            />
-            {tokenError && (
-              <div className="rounded border border-red-400/50 bg-red-400/10 px-3 py-2">
-                <p className="text-xs text-red-600 dark:text-red-400">{tokenError}</p>
-              </div>
-            )}
-          </div>
-          <div className="flex justify-between mt-4">
-            <button
-              onClick={() => setWizardStep("create-token")}
-              className="rounded px-3 py-1.5 text-sm font-medium border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-border)] transition-colors"
-            >
-              Back
-            </button>
-            <button
-              onClick={handleValidateToken}
-              disabled={isPending || !token.trim()}
-              className={[
-                "rounded px-4 py-1.5 text-sm font-medium transition-colors",
-                isPending || !token.trim()
-                  ? "bg-[var(--dpf-border)] text-[var(--dpf-muted)] cursor-not-allowed"
-                  : "bg-[var(--dpf-accent)] text-white hover:opacity-90",
-              ].join(" ")}
-            >
-              {isPending ? "Checking..." : "Verify token"}
-            </button>
-          </div>
-        </WizardCard>
-      )}
-
-      {/* Step 2: DCO acceptance */}
+      {/* Step: DCO acceptance */}
       {isContributionMode && wizardStep === "dco" && (
-        <WizardCard
-          step={2}
-          total={2}
-          title="Contributor agreement"
-        >
+        <WizardCard step={3} total={3} title="Contributor agreement">
           <div className="space-y-3">
-            {githubUsername && (
-              <div className="rounded border border-green-500/50 bg-green-500/10 px-3 py-2">
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  Connected to GitHub as <strong>{githubUsername}</strong>
-                </p>
-              </div>
-            )}
             {props.pseudonym && (
               <div className="rounded border border-[var(--dpf-accent)]/40 bg-[var(--dpf-accent)]/5 px-3 py-2">
                 <p className="text-xs text-[var(--dpf-text)] leading-relaxed">
@@ -543,7 +396,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             </p>
             <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 space-y-2">
               {buildDcoItems(props.pseudonym ?? null).map((item, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs text-[var(--dpf-text)]">
+                <div
+                  key={i}
+                  className="flex items-start gap-2 text-xs text-[var(--dpf-text)]"
+                >
                   <span className="text-[var(--dpf-accent)] font-bold mt-0.5">{i + 1}.</span>
                   <span>{item}</span>
                 </div>
@@ -578,15 +434,27 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
         </WizardCard>
       )}
 
-      {/* Done state */}
+      {/* Step / state: Connect GitHub (Device Flow primary, Advanced paste fallback) */}
+      {isContributionMode && (wizardStep === "connect" || wizardStep === "done") && (
+        <div className="space-y-4" data-testid="github-connect-block">
+          {/* Anchor target for TokenExpiryBanner's "Reconnect GitHub" link. */}
+          <div id="connect-github">
+            <ConnectGitHubCard initialConnected={props.initialConnected ?? null} />
+          </div>
+          {/* Anchor target for TokenExpiryBanner's "Update token" link. */}
+          <div id="advanced-token">
+            <AdvancedTokenPaste mode={selected} />
+          </div>
+        </div>
+      )}
+
+      {/* Done state — sharing summary, configured by */}
       {isContributionMode && wizardStep === "done" && (
         <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4 space-y-3">
           <div className="flex items-start gap-2">
             <span className="text-green-500 text-lg leading-none">*</span>
             <div>
-              <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
-                Sharing is set up
-              </h3>
+              <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Sharing is set up</h3>
               <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
                 {selected === "selective"
                   ? "When the AI Coworker finishes building a feature, it will ask if you'd like to share it with the community."
@@ -604,32 +472,10 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
             </p>
           )}
 
-          {/* Prominent CTA when DCO is accepted but no token is on file.
-              Previously the only way back to the token entry step was the
-              small "Reconfigure sharing settings" text link below — too
-              easy to miss, and contribute_to_hive failed loudly at the
-              next PR attempt instead. Surfacing this up front closes the
-              gap between "sharing is set up" and "contributions actually
-              work." */}
-          {props.dcoAcceptedAt && props.hasContributionToken === false && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
-              <p className="text-xs font-semibold text-[var(--dpf-text)]">
-                Add a GitHub token to enable contributions
-              </p>
-              <p className="text-xs text-[var(--dpf-muted)]">
-                The contributor agreement is accepted but no token is on file
-                yet, so upstream pull requests will fail. Add one now — it
-                takes about a minute.
-              </p>
-              <button
-                onClick={handleReconfigure}
-                className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-              >
-                Add or rotate GitHub token
-              </button>
-            </div>
-          )}
-
+          {/* Lightweight reset hook for admins who want to walk through the
+              wizard again (mode change, DCO re-acceptance, etc). The Connect
+              card above is the primary token surface; this just gives an
+              escape hatch back to the explain step. */}
           <button
             onClick={handleReconfigure}
             className="text-xs text-[var(--dpf-accent)] hover:underline"
@@ -642,7 +488,8 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
       {/* Last configured info */}
       {props.configuredAt && (
         <p className="text-xs text-[var(--dpf-muted)]">
-          Last configured {new Date(props.configuredAt).toLocaleDateString()} by {props.configuredByEmail ?? "unknown"}
+          Last configured {new Date(props.configuredAt).toLocaleDateString()} by{" "}
+          {props.configuredByEmail ?? "unknown"}
         </p>
       )}
     </div>
@@ -660,9 +507,7 @@ function WizardCard(props: {
   return (
     <div className="rounded-lg border border-[var(--dpf-border)] p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
-          {props.title}
-        </h3>
+        <h3 className="text-sm font-semibold text-[var(--dpf-text)]">{props.title}</h3>
         <span className="text-xs text-[var(--dpf-muted)]">
           Step {props.step} of {props.total}
         </span>

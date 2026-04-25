@@ -190,11 +190,61 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
   // Final progress payload so reconnecting panels see completion.
   const summary = `Extracted your brand from ${result.sourcesUsed.length} source${result.sourcesUsed.length === 1 ? "" : "s"}. Primary color ${ds.palette.primary}, body font ${ds.typography.families.sans}. Confidence: ${(ds.confidence.overall * 100).toFixed(0)}%.`;
 
-  await pushThreadProgress(input.threadId, input.taskRunId, {
-    type: "brand:extract.complete",
+  const designSystemArtifact = await createTaskArtifact({
     taskRunId: input.taskRunId,
+    taskRunRecordId,
+    artifactType: "design-system",
+    name: "Extracted brand design system",
+    mimeType: "application/json",
     summary,
-  });
+    content: ds,
+    metadata: {
+      sourceCount: result.sourcesUsed.length,
+      sourcesUsed: result.sourcesUsed,
+      durationMs: result.durationMs,
+    },
+  }).catch(() => {});
+
+  if (designSystemArtifact) {
+    await pushThreadProgress(input.threadId, input.taskRunId, {
+      type: "task:artifact",
+      taskId: input.taskRunId,
+      contextId: input.threadId,
+      artifactId: designSystemArtifact.artifactId,
+      name: "Extracted brand design system",
+      artifactType: "design-system",
+      sourceEvent: "brand:extract.complete",
+      message: summary,
+    });
+  }
+
+  if (themeTokens) {
+    const themeArtifact = await createTaskArtifact({
+      taskRunId: input.taskRunId,
+      taskRunRecordId,
+      artifactType: "theme-tokens",
+      name: "Derived brand theme tokens",
+      mimeType: "application/json",
+      summary: "Runtime branding tokens derived from the extracted design system.",
+      content: themeTokens,
+      metadata: {
+        sourceArtifactType: "design-system",
+      },
+    }).catch(() => {});
+
+    if (themeArtifact) {
+      await pushThreadProgress(input.threadId, input.taskRunId, {
+        type: "task:artifact",
+        taskId: input.taskRunId,
+        contextId: input.threadId,
+        artifactId: themeArtifact.artifactId,
+        name: "Derived brand theme tokens",
+        artifactType: "theme-tokens",
+        sourceEvent: "brand:extract.complete",
+        message: "Runtime branding tokens derived from the extracted design system.",
+      });
+    }
+  }
 
   await createTaskMessage({
     taskRunId: input.taskRunId,
@@ -210,35 +260,11 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
     },
   }).catch(() => {});
 
-  await createTaskArtifact({
+  await pushThreadProgress(input.threadId, input.taskRunId, {
+    type: "brand:extract.complete",
     taskRunId: input.taskRunId,
-    taskRunRecordId,
-    artifactType: "design-system",
-    name: "Extracted brand design system",
-    mimeType: "application/json",
     summary,
-    content: ds,
-    metadata: {
-      sourceCount: result.sourcesUsed.length,
-      sourcesUsed: result.sourcesUsed,
-      durationMs: result.durationMs,
-    },
-  }).catch(() => {});
-
-  if (themeTokens) {
-    await createTaskArtifact({
-      taskRunId: input.taskRunId,
-      taskRunRecordId,
-      artifactType: "theme-tokens",
-      name: "Derived brand theme tokens",
-      mimeType: "application/json",
-      summary: "Runtime branding tokens derived from the extracted design system.",
-      content: themeTokens,
-      metadata: {
-        sourceArtifactType: "design-system",
-      },
-    }).catch(() => {});
-  }
+  });
 
   // Post a summary message to the thread so the coworker "returns" with results.
   if (input.threadId) {

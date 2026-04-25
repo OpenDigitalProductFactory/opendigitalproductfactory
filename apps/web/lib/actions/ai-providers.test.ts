@@ -7,6 +7,8 @@ const {
   mockGetProviderBearerToken,
   mockCan,
   mockAuth,
+  mockActivateProvider,
+  mockSeedAiProviderFinanceBridge,
 } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: {
@@ -19,6 +21,12 @@ const {
     },
     credentialEntry: {
       findUnique: vi.fn(),
+      upsert: vi.fn(),
+    },
+    platformConfig: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
@@ -26,6 +34,8 @@ const {
   mockGetProviderBearerToken: vi.fn(),
   mockCan: vi.fn(),
   mockAuth: vi.fn(),
+  mockActivateProvider: vi.fn(),
+  mockSeedAiProviderFinanceBridge: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -38,6 +48,14 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/permissions", () => ({
   can: mockCan,
+}));
+
+vi.mock("@/lib/govern/activate-provider", () => ({
+  activateProvider: mockActivateProvider,
+}));
+
+vi.mock("@/lib/finance/ai-provider-finance", () => ({
+  seedAiProviderFinanceBridge: mockSeedAiProviderFinanceBridge,
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
@@ -54,6 +72,7 @@ vi.mock("@/lib/ai-provider-internals", () => ({
 }));
 
 import {
+  configureProvider,
   discoverModels,
   runProviderCatalogReconciliationIfDue,
   testProviderAuth,
@@ -72,6 +91,10 @@ describe("testProviderAuth", () => {
     });
     mockCan.mockReturnValue(true);
     mockPrisma.modelProvider.update.mockResolvedValue({});
+    mockPrisma.credentialEntry.upsert.mockResolvedValue({});
+    mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+    mockPrisma.platformConfig.create.mockResolvedValue({});
+    mockPrisma.platformConfig.update.mockResolvedValue({});
     mockPrisma.scheduledJob.upsert.mockResolvedValue({
       jobId: "provider-catalog-reconciliation",
       schedule: "weekly",
@@ -80,6 +103,8 @@ describe("testProviderAuth", () => {
     });
     mockPrisma.scheduledJob.update.mockResolvedValue({});
     mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 1, profiled: 1 });
+    mockActivateProvider.mockResolvedValue({});
+    mockSeedAiProviderFinanceBridge.mockResolvedValue({});
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -133,7 +158,10 @@ describe("testProviderAuth", () => {
       "https://chatgpt.com/backend-api/codex/responses",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+    expect(mockActivateProvider).toHaveBeenCalledWith(
+      "codex",
+      expect.objectContaining({ trigger: "test_auth" }),
+    );
   });
 
   it("verifies the ChatGPT subscription backend through the responses path", async () => {
@@ -166,7 +194,10 @@ describe("testProviderAuth", () => {
       "https://chatgpt.com/backend-api/codex/responses",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("chatgpt");
+    expect(mockActivateProvider).toHaveBeenCalledWith(
+      "chatgpt",
+      expect.objectContaining({ trigger: "test_auth" }),
+    );
   });
 
   it("returns a reconnect hint when the OAuth token is missing Responses scope", async () => {
@@ -221,7 +252,7 @@ describe("testProviderAuth", () => {
       message:
         "OAuth token is missing Responses API scope (api.responses.write) — disconnect and sign in again",
     });
-    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+    expect(mockActivateProvider).not.toHaveBeenCalled();
   });
 
   it("triggers reconciliation for direct cloud providers after a successful auth test", async () => {
@@ -245,7 +276,10 @@ describe("testProviderAuth", () => {
       ok: true,
       message: "Connected — HTTP 200",
     });
-    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("openai");
+    expect(mockActivateProvider).toHaveBeenCalledWith(
+      "openai",
+      expect.objectContaining({ trigger: "test_auth" }),
+    );
   });
 
   it("does not trigger reconciliation when auth validation fails", async () => {
@@ -269,7 +303,7 @@ describe("testProviderAuth", () => {
       ok: false,
       message: "No API key configured",
     });
-    expect(mockAutoDiscoverAndProfile).not.toHaveBeenCalled();
+    expect(mockActivateProvider).not.toHaveBeenCalled();
   });
 });
 
@@ -293,6 +327,46 @@ describe("discoverModels", () => {
 
     expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
+  });
+});
+
+describe("configureProvider", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({
+      user: {
+        id: "user-1",
+        platformRole: "HR-000",
+        isSuperuser: true,
+      },
+    });
+    mockCan.mockReturnValue(true);
+    mockPrisma.modelProvider.update.mockResolvedValue({});
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "openai",
+      cliEngine: null,
+    });
+    mockActivateProvider.mockResolvedValue({});
+    mockSeedAiProviderFinanceBridge.mockResolvedValue({});
+  });
+
+  it("seeds finance ownership after successful provider configuration", async () => {
+    const result = await configureProvider({
+      providerId: "openai",
+      enabledFamilies: ["chat"],
+      endpoint: "https://api.openai.com/v1",
+    });
+
+    expect(result).toEqual({});
+    expect(mockActivateProvider).toHaveBeenCalledWith(
+      "openai",
+      expect.objectContaining({ trigger: "api_key_configure" }),
+    );
+    expect(mockSeedAiProviderFinanceBridge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "openai",
+      }),
+    );
   });
 });
 

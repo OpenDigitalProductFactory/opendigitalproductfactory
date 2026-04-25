@@ -13,6 +13,20 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     where: { buildId },
     include: {
       digitalProduct: { select: { productId: true, version: true } },
+      originator: {
+        select: {
+          id: true,
+          itemId: true,
+          title: true,
+          status: true,
+          triageOutcome: true,
+          effortSize: true,
+          proposedOutcome: true,
+          activeBuildId: true,
+          resolution: true,
+          abandonReason: true,
+        },
+      },
       activities: { orderBy: { createdAt: "desc" }, take: 50 },
       phaseHandoffs: { orderBy: { createdAt: "asc" }, select: { fromPhase: true, toPhase: true, fromAgentId: true, toAgentId: true, summary: true, decisionsMade: true, openIssues: true, userPreferences: true, compressedSummary: true, evidenceDigest: true, createdAt: true } },
     },
@@ -25,6 +39,7 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     brief: build.brief as FeatureBuildRow["brief"],
     plan: build.plan as FeatureBuildRow["plan"],
     phase: build.phase as FeatureBuildRow["phase"],
+    draftApprovedAt: build.draftApprovedAt,
     designDoc: build.designDoc as FeatureBuildRow["designDoc"],
     designReview: build.designReview as FeatureBuildRow["designReview"],
     buildPlan: build.buildPlan as FeatureBuildRow["buildPlan"],
@@ -38,6 +53,7 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     product: build.digitalProduct
       ? { productId: build.digitalProduct.productId, version: build.digitalProduct.version, backlogCount: 0 }
       : null,
+    originator: build.originator,
     phaseHandoffs: build.phaseHandoffs.map(h => ({
       ...h,
       evidenceDigest: h.evidenceDigest as Record<string, string>,
