@@ -5,10 +5,12 @@ import { DocRenderer } from "@/components/docs/DocRenderer";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
+  searchParams: Promise<{ sourceRoute?: string }>;
 };
 
-export default async function DocsPage({ params }: Props) {
+export default async function DocsPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { sourceRoute } = await searchParams;
   const allDocs = loadAllDocs();
   const index = buildDocsIndex(allDocs);
 
@@ -30,7 +32,7 @@ export default async function DocsPage({ params }: Props) {
   if (!slug || slug.length === 0) {
     return (
       <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems}>
-        <DocsHome index={index} />
+        <DocsHome index={index} sourceRoute={sourceRoute} />
       </DocsLayout>
     );
   }
@@ -44,14 +46,15 @@ export default async function DocsPage({ params }: Props) {
 
   return (
     <DocsLayout index={sidebarIndex} currentSlug={docSlug} searchItems={searchItems} headings={tocHeadings}>
-      <DocContent doc={doc} />
+      <DocContent doc={doc} sourceRoute={sourceRoute} />
     </DocsLayout>
   );
 }
 
-function DocsHome({ index }: { index: Record<string, unknown[]> }) {
+function DocsHome({ index, sourceRoute }: { index: Record<string, unknown[]>; sourceRoute?: string }) {
   return (
     <div>
+      {sourceRoute ? <ContextualSourceBanner sourceRoute={sourceRoute} /> : null}
       <h1 className="text-xl font-bold text-[var(--dpf-text)] mb-2">Documentation</h1>
       <p className="text-sm text-[var(--dpf-muted)] mb-6">
         Learn how to use every area of the platform.
@@ -83,10 +86,17 @@ function DocsHome({ index }: { index: Record<string, unknown[]> }) {
   );
 }
 
-function DocContent({ doc }: { doc: { title: string; content: string; lastUpdated: string; updatedBy: string; area: string } }) {
+function DocContent({
+  doc,
+  sourceRoute,
+}: {
+  doc: { title: string; content: string; lastUpdated: string; updatedBy: string; area: string };
+  sourceRoute?: string;
+}) {
   const areaLabel = AREA_META[doc.area]?.label ?? doc.area;
   return (
     <div>
+      {sourceRoute ? <ContextualSourceBanner sourceRoute={sourceRoute} /> : null}
       <div className="mb-2">
         <a href="/docs" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Docs</a>
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
@@ -99,6 +109,29 @@ function DocContent({ doc }: { doc: { title: string; content: string; lastUpdate
         Updated {doc.lastUpdated} by {doc.updatedBy}
       </p>
       <DocRenderer content={doc.content} currentArea={doc.area} />
+    </div>
+  );
+}
+
+function ContextualSourceBanner({ sourceRoute }: { sourceRoute: string }) {
+  if (!sourceRoute.startsWith("/")) return null;
+
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
+          Contextual Docs
+        </p>
+        <p className="text-sm text-[var(--dpf-text)]">
+          Opened from <span className="font-mono text-xs">{sourceRoute}</span>
+        </p>
+      </div>
+      <a
+        href={sourceRoute}
+        className="inline-flex items-center rounded-full border border-[var(--dpf-border)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)]"
+      >
+        Back to page
+      </a>
     </div>
   );
 }
