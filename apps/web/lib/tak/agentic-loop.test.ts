@@ -145,6 +145,26 @@ describe("detectFabrication", () => {
     expect(detectFabrication("SHIPPED TO STAGING. Feature live at /build.", 0, false)).toBe(true);
   });
 
+  it("detects plan-ready claims with zero tools executed", () => {
+    expect(
+      detectFabrication(
+        "Planning is done; the next required action is approving Start Implementation for FB-9B19098C in the product UI.",
+        0,
+        false,
+      ),
+    ).toBe(true);
+  });
+
+  it("detects plan-summary narration with zero tools executed", () => {
+    expect(
+      detectFabrication(
+        "I refined the plan to 5 small UI-only tasks across 4 existing files and the next approval in the product UI is Start Implementation for FB-9B19098C.",
+        0,
+        false,
+      ),
+    ).toBe(true);
+  });
+
   it("detects narration with only read tools (no build tools)", () => {
     expect(detectFabrication(
       "Here's the exact code to add to agent-routing.ts:\n```{ label: 'Analyze' }```",
