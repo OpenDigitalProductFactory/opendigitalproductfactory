@@ -127,6 +127,10 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | INV-05 | On `/portfolio/product/<known-id>/inventory`, inspect an estate card with discovery evidence only | Card shows identity label, identity confidence, support posture summary, advisory summary, and version source without inventing unsupported lifecycle certainty |
 | INV-06 | Navigate to `/platform/tools/catalog` | Connection Catalog loads with separate sections for MCP Catalog, Native Integrations, and Built-in Tools |
 | INV-07 | Navigate to `/platform/tools/built-ins` | Built-in Tools loads and Brave Search configuration appears only here, not under Admin settings |
+| INV-08 | On `/platform/tools/discovery`, review the triage workbench sections | Human Review, Needs More Evidence, Taxonomy Gaps, and Auto Attributed sections render with separate identity/taxonomy/evidence/reproducibility scores |
+| INV-09 | From the triage workbench, accept a recommendation for an item with a suggested taxonomy match | Item leaves the review queue after refresh, attribution status becomes attributed, and a new `DiscoveryTriageDecision` audit row is recorded for the human acceptance |
+| INV-10 | From the triage workbench, choose Request evidence for an ambiguous item | The entity remains discoverable, a `needs-more-evidence` decision row is written, and the queue reflects the updated outcome after refresh |
+| INV-11 | From the triage workbench, mark an unmapped item as a taxonomy gap | A `taxonomy-gap` decision row is recorded with human review required and the item appears under the taxonomy-gap section after refresh |
 
 ## Phase 9: EA Modeler
 
@@ -217,6 +221,8 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | AI-12 | **(Coworker)** On `/platform/tools/discovery`, ask "What breaks if this fails?" about an attributed item | Response focuses on dependency impact and blast radius, not just raw scanner output |
 | AI-13 | **(Incomplete info)** On `/platform/tools/discovery`, ask for version confidence without identifying an item | Agent asks for the missing item/context instead of inventing details |
 | AI-14 | **(Coworker)** On `/platform/tools/discovery`, ask "Review the identity evidence for this item" about an attributed item | Response explains likely identity, vendor, evidence confidence, and what still needs review using shared estate context |
+| AI-15 | **(Coworker)** On `/platform/tools/discovery`, ask why a triage-row item needs human review | Response distinguishes device identity confidence from taxonomy confidence and cites the missing or conflicting evidence instead of collapsing them into one score |
+| AI-16 | **(Incomplete info)** On `/platform/tools/discovery`, ask the coworker to classify an unknown item without naming the entity or evidence packet | Agent asks which item to inspect and what evidence is available rather than inventing a taxonomy placement |
 
 ## Phase 13: Admin & Settings
 
