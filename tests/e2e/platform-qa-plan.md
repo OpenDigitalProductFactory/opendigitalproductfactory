@@ -253,6 +253,9 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | AUTH-GOV-12 | **(RBAC)** Log in as HR-400 (ITFM Director), open `/ops` | Coworker tools filtered by both user role AND agent grants — tools outside agent grants not offered |
 | AUTH-GOV-13 | **(RBAC)** Log in as HR-300 (Enterprise Architect), open `/platform` | Coworker offers "Evaluate tool" skill (requires manage_tool_evaluations capability) |
 | AUTH-GOV-14 | **(Incomplete info)** Ask coworker to evaluate a tool without specifying type | Coworker asks for tool type before proceeding |
+| AUTH-GOV-15 | Navigate to `/platform/identity/authorization?binding=AB-DEMO-FINANCE-CONTROLLER` | Shared binding editor renders inline above the human-first list, showing the selected binding summary, subjects, coworker application, and save controls |
+| AUTH-GOV-16 | Navigate to `/platform/ai/assignments?binding=AB-DEMO-FINANCE-CONTROLLER` | The same binding record renders inline from the coworker-first surface with the same source-of-truth fields and no duplicated editor model |
+| AUTH-GOV-17 | Navigate to `/platform/audit/authority`, select `HR-400` and `finance-controller`, then use the route-aware inspector link | Effective Permissions shows `/finance` route context, names binding `AB-DEMO-FINANCE-CONTROLLER`, and `Open binding` deep-links to `/platform/identity/authorization?binding=AB-DEMO-FINANCE-CONTROLLER` |
 
 ---
 

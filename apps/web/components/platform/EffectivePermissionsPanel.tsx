@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  explainEffectiveAuthority,
+  type EffectiveAuthorityBinding,
+} from "@/lib/authority/effective-authority";
 
 type AgentInfo = {
   agentId: string;
@@ -36,8 +41,10 @@ type EffectivePermissionsProps = {
   agents: AgentInfo[];
   roles: RoleInfo[];
   tools: ToolInfo[];
-  permissions: Record<string, string[]>; // capability -> roles that have it
+  permissions: Record<string, string[]>;
   products?: ProductBmr[];
+  bindings?: EffectiveAuthorityBinding[];
+  bindingHrefBase?: string;
 };
 
 /**
@@ -45,24 +52,20 @@ type EffectivePermissionsProps = {
  * Mirrors TOOL_TO_GRANTS from agent-grants.ts for client-side evaluation.
  */
 const TOOL_TO_GRANTS: Record<string, string[]> = {
-  // Backlog
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
-  // Registry / Products
   create_digital_product: ["registry_read", "backlog_write"],
   update_lifecycle: ["backlog_write"],
   search_portfolio_context: ["portfolio_read", "registry_read"],
   register_digital_product_from_build: ["registry_read", "backlog_write"],
   create_build_epic: ["backlog_write"],
-  // Web / External
   search_public_web: ["web_search"],
   fetch_public_website: ["web_search"],
   analyze_public_website_branding: ["web_search"],
   search_integrations: ["external_registry_search", "registry_read"],
   search_knowledge: ["registry_read"],
-  // Build / Sandbox
   launch_sandbox: ["sandbox_execute"],
   generate_code: ["sandbox_execute"],
   iterate_sandbox: ["sandbox_execute"],
@@ -80,7 +83,6 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   saveBuildEvidence: ["backlog_write"],
   reviewDesignDoc: ["architecture_read"],
   reviewBuildPlan: ["build_plan_write"],
-  // Deploy / Release
   deploy_feature: ["iac_execute"],
   check_deployment_windows: ["deployment_plan_create"],
   schedule_promotion: ["deployment_plan_create"],
@@ -88,11 +90,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_release_gate: ["release_gate_create"],
   schedule_release_bundle: ["release_plan_create"],
   get_release_status: ["release_plan_read"],
-  // UX / Page evaluation
   evaluate_page: ["file_read"],
   generate_ux_test: ["file_read"],
   run_ux_test: ["file_read"],
-  // Codebase access
   list_project_directory: ["file_read"],
   read_project_file: ["file_read"],
   search_project_files: ["file_read"],
@@ -105,21 +105,15 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   compare_versions: ["file_read"],
   propose_file_change: ["file_read"],
   propose_improvement: ["decision_record_create"],
-  // Provider management
   add_provider: ["agent_control_read"],
   update_provider_category: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
-  // Employee / HR
   create_employee: ["consumer_write"],
   transition_employee_status: ["consumer_write"],
   propose_leave_policy: ["policy_write"],
-  // Feedback
   submit_feedback: ["backlog_write"],
-  // Brand
   analyze_brand_document: ["file_read"],
-  // Compliance
   prefill_onboarding_wizard: ["data_governance_validate"],
-  // Tool evaluation
   evaluate_tool: ["tool_evaluation_create"],
 };
 
@@ -139,9 +133,8 @@ function Dot({ color }: { color: string }) {
 
 function isAgentAllowed(toolName: string, agentGrants: string[]): boolean {
   const required = TOOL_TO_GRANTS[toolName];
-  // Tools not in mapping are allowed by default
   if (!required) return true;
-  return required.some((g) => agentGrants.includes(g));
+  return required.some((grant) => agentGrants.includes(grant));
 }
 
 function isUserAllowed(
@@ -149,7 +142,6 @@ function isUserAllowed(
   roleId: string,
   permissions: Record<string, string[]>,
 ): boolean {
-  // No capability required = always allowed
   if (!requiredCapability) return true;
   const allowedRoles = permissions[requiredCapability];
   if (!allowedRoles) return false;
@@ -158,7 +150,7 @@ function isUserAllowed(
 
 const HITL_COLOURS_EP: Record<number, string> = {
   0: "var(--dpf-error)",
-  1: "#f97316",
+  1: "var(--dpf-accent)",
   2: "var(--dpf-info)",
   3: "var(--dpf-success)",
 };
@@ -172,42 +164,99 @@ const ESCALATION_LABELS_EP: Record<string, string> = {
   "HR-500": "Ops Mgr",
 };
 
+function getFirstRouteForAgent(bindings: EffectiveAuthorityBinding[], agentId: string) {
+  return bindings.find((binding) => binding.appliedAgentId === agentId)?.resourceRef ?? "";
+}
+
 export function EffectivePermissionsPanel({
   agents,
   roles,
   tools,
   permissions,
   products,
+  bindings = [],
+  bindingHrefBase = "/platform/identity/authorization",
 }: EffectivePermissionsProps) {
   const [selectedRole, setSelectedRole] = useState(roles[0]?.roleId ?? "");
   const [selectedAgent, setSelectedAgent] = useState(agents[0]?.agentId ?? "");
   const [selectedProduct, setSelectedProduct] = useState(products?.[0]?.productId ?? "");
+  const [selectedRoute, setSelectedRoute] = useState(() =>
+    getFirstRouteForAgent(bindings, agents[0]?.agentId ?? ""),
+  );
 
   const selectedAgentData = useMemo(
-    () => agents.find((a) => a.agentId === selectedAgent),
+    () => agents.find((agent) => agent.agentId === selectedAgent),
     [agents, selectedAgent],
+  );
+
+  const routeOptions = useMemo(() => {
+    const routes = bindings
+      .filter((binding) => binding.appliedAgentId === selectedAgent)
+      .map((binding) => binding.resourceRef);
+
+    return Array.from(new Set(routes));
+  }, [bindings, selectedAgent]);
+
+  useEffect(() => {
+    if (routeOptions.length === 0) {
+      if (selectedRoute !== "") {
+        setSelectedRoute("");
+      }
+      return;
+    }
+
+    if (!routeOptions.includes(selectedRoute)) {
+      setSelectedRoute(routeOptions[0] ?? "");
+    }
+  }, [routeOptions, selectedRoute]);
+
+  const selectedBinding = useMemo(
+    () =>
+      bindings.find(
+        (binding) =>
+          binding.appliedAgentId === selectedAgent &&
+          binding.resourceRef === (selectedRoute || getFirstRouteForAgent(bindings, selectedAgent)),
+      ) ?? null,
+    [bindings, selectedAgent, selectedRoute],
   );
 
   const evaluatedTools = useMemo(() => {
     const agentGrants = selectedAgentData?.grants ?? [];
 
     return tools.map((tool) => {
-      const userOk = isUserAllowed(tool.requiredCapability, selectedRole, permissions);
-      const agentOk = isAgentAllowed(tool.toolName, agentGrants);
-      const effective = userOk && agentOk;
-      const mode = tool.sideEffect ? "proposal" : "immediate";
+      const userAllowed = isUserAllowed(tool.requiredCapability, selectedRole, permissions);
+      const agentAllowed = isAgentAllowed(tool.toolName, agentGrants);
+      const authority = explainEffectiveAuthority({
+        roleId: selectedRole,
+        agentId: selectedAgent,
+        resourceRef: selectedRoute,
+        actionKey: tool.toolName,
+        userAllowed,
+        agentAllowed,
+        bindings,
+        toolGrantRequirements: TOOL_TO_GRANTS,
+      });
+
+      const effective = authority.decision !== "deny";
+      const mode =
+        authority.decision === "require-approval"
+          ? "approval"
+          : tool.sideEffect
+            ? "proposal"
+            : "immediate";
 
       return {
         ...tool,
-        userAllowed: userOk,
-        agentAllowed: agentOk,
+        userAllowed,
+        agentAllowed,
         effective,
         mode,
+        authority,
       };
     });
-  }, [tools, selectedRole, selectedAgentData, permissions]);
+  }, [bindings, permissions, selectedAgent, selectedAgentData, selectedRole, selectedRoute, tools]);
 
-  const allowedCount = evaluatedTools.filter((t) => t.effective).length;
+  const allowedCount = evaluatedTools.filter((tool) => tool.effective).length;
   const totalCount = evaluatedTools.length;
 
   const selectClass = "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]";
@@ -222,25 +271,31 @@ export function EffectivePermissionsPanel({
         padding: 16,
       }}
     >
-      {/* Header */}
       <div style={{ marginBottom: 12 }}>
         <h2 style={{ fontSize: 13, fontWeight: 600, color: "var(--dpf-text)", margin: 0 }}>
           Effective Permissions
         </h2>
         <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: "4px 0 0 0" }}>
-          Select a user role and agent to see which platform tools are accessible.
+          Select a user role and agent to see what tools the combination can actually use.
         </p>
       </div>
 
-      {/* Dropdowns */}
       <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <label style={{ fontSize: 9, fontWeight: 600, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <label
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              color: "var(--dpf-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
             User Role
           </label>
           <select
             value={selectedRole}
-            onChange={(e) => setSelectedRole(e.target.value)}
+            onChange={(event) => setSelectedRole(event.target.value)}
             className={selectClass}
             style={{
               border: "1px solid var(--dpf-border)",
@@ -249,21 +304,29 @@ export function EffectivePermissionsPanel({
               borderRadius: 4,
             }}
           >
-            {roles.map((r) => (
-              <option key={r.roleId} value={r.roleId} className={optionClass}>
-                {r.roleId} - {r.roleName}
+            {roles.map((role) => (
+              <option key={role.roleId} value={role.roleId} className={optionClass}>
+                {role.roleId} - {role.roleName}
               </option>
             ))}
           </select>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <label style={{ fontSize: 9, fontWeight: 600, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          <label
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              color: "var(--dpf-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
             Agent
           </label>
           <select
             value={selectedAgent}
-            onChange={(e) => setSelectedAgent(e.target.value)}
+            onChange={(event) => setSelectedAgent(event.target.value)}
             className={selectClass}
             style={{
               border: "1px solid var(--dpf-border)",
@@ -272,22 +335,30 @@ export function EffectivePermissionsPanel({
               borderRadius: 4,
             }}
           >
-            {agents.map((a) => (
-              <option key={a.agentId} value={a.agentId} className={optionClass}>
-                {a.agentId} - {a.agentName}
+            {agents.map((agent) => (
+              <option key={agent.agentId} value={agent.agentId} className={optionClass}>
+                {agent.agentId} - {agent.agentName}
               </option>
             ))}
           </select>
         </div>
 
-        {products && products.length > 0 && (
+        {bindings.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <label style={{ fontSize: 9, fontWeight: 600, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Product (BMR)
+            <label
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "var(--dpf-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Route Context
             </label>
             <select
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
+              value={selectedRoute}
+              onChange={(event) => setSelectedRoute(event.target.value)}
               className={selectClass}
               style={{
                 border: "1px solid var(--dpf-border)",
@@ -296,10 +367,51 @@ export function EffectivePermissionsPanel({
                 borderRadius: 4,
               }}
             >
-              <option value="" className={optionClass}>— none —</option>
-              {products.map((p) => (
-                <option key={p.productId} value={p.productId} className={optionClass}>
-                  {p.productName}
+              {routeOptions.length === 0 ? (
+                <option value="" className={optionClass}>
+                  No route binding
+                </option>
+              ) : (
+                routeOptions.map((route) => (
+                  <option key={route} value={route} className={optionClass}>
+                    {route}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        )}
+
+        {products && products.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <label
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "var(--dpf-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Product (BMR)
+            </label>
+            <select
+              value={selectedProduct}
+              onChange={(event) => setSelectedProduct(event.target.value)}
+              className={selectClass}
+              style={{
+                border: "1px solid var(--dpf-border)",
+                fontSize: 11,
+                padding: "5px 8px",
+                borderRadius: 4,
+              }}
+            >
+              <option value="" className={optionClass}>
+                — none —
+              </option>
+              {products.map((product) => (
+                <option key={product.productId} value={product.productId} className={optionClass}>
+                  {product.productName}
                 </option>
               ))}
             </select>
@@ -307,7 +419,54 @@ export function EffectivePermissionsPanel({
         )}
       </div>
 
-      {/* Summary stats */}
+      {selectedBinding && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 6,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "var(--dpf-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Route Context
+            </span>
+            <span style={{ fontSize: 11, color: "var(--dpf-text)", fontWeight: 600 }}>
+              {selectedBinding.resourceRef}
+            </span>
+            <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+              Binding {selectedBinding.bindingId} · Approval {selectedBinding.approvalMode}
+            </span>
+          </div>
+          <a
+            href={`${bindingHrefBase}?binding=${selectedBinding.bindingId}`}
+            style={{
+              alignSelf: "center",
+              fontSize: 10,
+              fontWeight: 600,
+              color: "var(--dpf-accent)",
+              textDecoration: "none",
+            }}
+          >
+            Open binding
+          </a>
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
@@ -330,13 +489,11 @@ export function EffectivePermissionsPanel({
           <Dot color="var(--dpf-error)" /> Blocked
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--dpf-muted)" }}>
-          <Dot color="#6b7280" /> N/A
+          <Dot color="var(--dpf-muted)" /> N/A
         </span>
       </div>
 
-      {/* Table */}
       <div style={{ overflowX: "auto" }}>
-        {/* Table header */}
         <div
           style={{
             display: "grid",
@@ -358,7 +515,6 @@ export function EffectivePermissionsPanel({
           <span style={{ textAlign: "center" }}>Mode</span>
         </div>
 
-        {/* Table rows */}
         <div style={{ display: "flex", flexDirection: "column" }}>
           {evaluatedTools.map((tool) => (
             <div
@@ -376,20 +532,21 @@ export function EffectivePermissionsPanel({
               }}
               title={tool.description}
             >
-              {/* Tool name + description */}
               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                <span style={{ fontFamily: "monospace", fontSize: 10 }}>
-                  {tool.toolName}
-                </span>
+                <span style={{ fontFamily: "monospace", fontSize: 10 }}>{tool.toolName}</span>
                 <span style={{ fontSize: 9, color: "var(--dpf-muted)", lineHeight: "12px" }}>
                   {tool.description}
                 </span>
+                {tool.authority.binding && (
+                  <span style={{ fontSize: 9, color: "var(--dpf-muted)", lineHeight: "12px" }}>
+                    {tool.authority.binding.bindingId} · {tool.authority.reasonCode}
+                  </span>
+                )}
               </div>
 
-              {/* User allowed */}
               <span style={{ textAlign: "center" }}>
                 {tool.requiredCapability === null ? (
-                  <Dot color="#6b7280" />
+                  <Dot color="var(--dpf-muted)" />
                 ) : tool.userAllowed ? (
                   <Dot color="var(--dpf-success)" />
                 ) : (
@@ -397,10 +554,9 @@ export function EffectivePermissionsPanel({
                 )}
               </span>
 
-              {/* Agent allowed */}
               <span style={{ textAlign: "center" }}>
                 {!TOOL_TO_GRANTS[tool.toolName] ? (
-                  <Dot color="#6b7280" />
+                  <Dot color="var(--dpf-muted)" />
                 ) : tool.agentAllowed ? (
                   <Dot color="var(--dpf-success)" />
                 ) : (
@@ -408,7 +564,6 @@ export function EffectivePermissionsPanel({
                 )}
               </span>
 
-              {/* Effective */}
               <span style={{ textAlign: "center" }}>
                 {tool.effective ? (
                   <Dot color="var(--dpf-success)" />
@@ -417,13 +572,15 @@ export function EffectivePermissionsPanel({
                 )}
               </span>
 
-              {/* Mode */}
               <span
                 style={{
                   textAlign: "center",
                   fontSize: 9,
-                  color: tool.mode === "proposal" ? "#f97316" : "var(--dpf-muted)",
-                  fontWeight: tool.mode === "proposal" ? 600 : 400,
+                  color:
+                    tool.mode === "approval" || tool.mode === "proposal"
+                      ? "var(--dpf-accent)"
+                      : "var(--dpf-muted)",
+                  fontWeight: tool.mode === "approval" || tool.mode === "proposal" ? 600 : 400,
                 }}
               >
                 {tool.mode}
@@ -433,7 +590,6 @@ export function EffectivePermissionsPanel({
         </div>
       </div>
 
-      {/* Footer summary */}
       <div
         style={{
           marginTop: 10,
@@ -448,49 +604,54 @@ export function EffectivePermissionsPanel({
         }}
       >
         <span>
-          Proposals: {evaluatedTools.filter((t) => t.effective && t.mode === "proposal").length}
+          Approval required: {evaluatedTools.filter((tool) => tool.effective && tool.mode === "approval").length}
         </span>
         <span>
-          Immediate: {evaluatedTools.filter((t) => t.effective && t.mode === "immediate").length}
+          Proposals: {evaluatedTools.filter((tool) => tool.effective && tool.mode === "proposal").length}
         </span>
         <span>
-          Blocked by role: {evaluatedTools.filter((t) => !t.userAllowed && t.requiredCapability !== null).length}
+          Immediate: {evaluatedTools.filter((tool) => tool.effective && tool.mode === "immediate").length}
         </span>
         <span>
-          Blocked by grants: {evaluatedTools.filter((t) => !t.agentAllowed && !!TOOL_TO_GRANTS[t.toolName]).length}
+          Blocked by role: {evaluatedTools.filter((tool) => !tool.userAllowed && tool.requiredCapability !== null).length}
+        </span>
+        <span>
+          Blocked by grants: {evaluatedTools.filter((tool) => !tool.agentAllowed && !!TOOL_TO_GRANTS[tool.toolName]).length}
         </span>
       </div>
 
-      {/* BMR authority domain section */}
       {products && selectedProduct && (() => {
-        const product = products.find((p) => p.productId === selectedProduct);
+        const product = products.find((item) => item.productId === selectedProduct);
         if (!product || product.roles.length === 0) return null;
         return (
           <div style={{ marginTop: 16 }}>
-            <div style={{
-              fontSize: 10,
-              fontWeight: 600,
-              color: "var(--dpf-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              marginBottom: 8,
-            }}>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: "var(--dpf-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 8,
+              }}
+            >
               BMR Authority Domains — {product.productName}
             </div>
 
-            {/* Header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 60px 80px 1fr",
-              gap: 8,
-              padding: "5px 10px",
-              fontSize: 9,
-              fontWeight: 600,
-              color: "var(--dpf-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              borderBottom: "1px solid var(--dpf-border)",
-            }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 60px 80px 1fr",
+                gap: 8,
+                padding: "5px 10px",
+                fontSize: 9,
+                fontWeight: 600,
+                color: "var(--dpf-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                borderBottom: "1px solid var(--dpf-border)",
+              }}
+            >
               <span>Role</span>
               <span>Authority Domain</span>
               <span style={{ textAlign: "center" }}>HITL</span>
@@ -498,14 +659,15 @@ export function EffectivePermissionsPanel({
               <span>Assigned To</span>
             </div>
 
-            {product.roles.map((r, i) => {
-              const tierColour = HITL_COLOURS_EP[r.hitlTierDefault] ?? "var(--dpf-muted)";
-              const escLabel = r.escalatesTo
-                ? (ESCALATION_LABELS_EP[r.escalatesTo] ?? r.escalatesTo)
+            {product.roles.map((role, index) => {
+              const tierColour = HITL_COLOURS_EP[role.hitlTierDefault] ?? "var(--dpf-muted)";
+              const escalationLabel = role.escalatesTo
+                ? (ESCALATION_LABELS_EP[role.escalatesTo] ?? role.escalatesTo)
                 : "—";
+
               return (
                 <div
-                  key={i}
+                  key={`${role.roleName}-${index}`}
                   style={{
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr 60px 80px 1fr",
@@ -517,24 +679,32 @@ export function EffectivePermissionsPanel({
                     alignItems: "center",
                   }}
                 >
-                  <span>{r.roleName}</span>
+                  <span>{role.roleName}</span>
                   <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>
-                    {r.authorityDomain ?? "—"}
+                    {role.authorityDomain ?? "—"}
                   </span>
                   <span style={{ textAlign: "center" }}>
-                    <span style={{
-                      fontSize: 9,
-                      background: `${tierColour}20`,
-                      color: tierColour,
-                      borderRadius: 3,
-                      padding: "1px 5px",
-                    }}>
-                      {r.hitlTierDefault}
+                    <span
+                      style={{
+                        fontSize: 9,
+                        background: `${tierColour}20`,
+                        color: tierColour,
+                        borderRadius: 3,
+                        padding: "1px 5px",
+                      }}
+                    >
+                      {role.hitlTierDefault}
                     </span>
                   </span>
-                  <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escLabel}</span>
-                  <span style={{ fontSize: 9, color: r.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: r.assignee ? "normal" : "italic" }}>
-                    {r.assignee ?? "unassigned"}
+                  <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escalationLabel}</span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: role.assignee ? "var(--dpf-text)" : "var(--dpf-muted)",
+                      fontStyle: role.assignee ? "normal" : "italic",
+                    }}
+                  >
+                    {role.assignee ?? "unassigned"}
                   </span>
                 </div>
               );
