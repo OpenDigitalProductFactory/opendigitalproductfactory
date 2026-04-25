@@ -19,6 +19,10 @@ vi.mock("@/lib/authority/bindings", () => ({
   parseAuthorityBindingFilters: vi.fn(),
 }));
 
+vi.mock("@/lib/authority/bootstrap-rollout", () => ({
+  getAuthorityBindingBootstrapState: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     agentModelConfig: {
@@ -43,6 +47,7 @@ import {
   listAuthorityBindings,
   parseAuthorityBindingFilters,
 } from "@/lib/authority/bindings";
+import { getAuthorityBindingBootstrapState } from "@/lib/authority/bootstrap-rollout";
 
 describe("AssignmentsPage", () => {
   it("renders coworker bindings without replacing model assignment", async () => {
@@ -82,6 +87,11 @@ describe("AssignmentsPage", () => {
     });
     vi.mocked(getAuthorityBinding).mockResolvedValue(null);
     vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+    vi.mocked(getAuthorityBindingBootstrapState).mockResolvedValue({
+      autoApplied: false,
+      totalBindings: 1,
+      report: null,
+    });
 
     const { default: AssignmentsPage } = await import("./page");
     const html = renderToStaticMarkup(await AssignmentsPage({ searchParams: Promise.resolve({}) }));
@@ -127,6 +137,11 @@ describe("AssignmentsPage", () => {
       grants: [],
     } as never);
     vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+    vi.mocked(getAuthorityBindingBootstrapState).mockResolvedValue({
+      autoApplied: false,
+      totalBindings: 1,
+      report: null,
+    });
 
     const { default: AssignmentsPage } = await import("./page");
     const html = renderToStaticMarkup(
@@ -135,5 +150,41 @@ describe("AssignmentsPage", () => {
 
     expect(html).toContain("Editing binding AB-000001");
     expect(html).toContain("Save changes");
+  });
+
+  it("shows low-confidence review guidance from the coworker-first surface", async () => {
+    vi.mocked(prisma.agentModelConfig.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
+    vi.mocked(prisma.agentToolGrant.groupBy).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindingRecords).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindings).mockResolvedValue({ pivot: "coworker", rows: [] });
+    vi.mocked(parseAuthorityBindingFilters).mockReturnValue({});
+    vi.mocked(getAuthorityBindingFilterOptions).mockReturnValue({
+      statuses: [],
+      resourceRefs: [],
+      appliedAgents: [],
+      subjectRefs: [],
+    });
+    vi.mocked(getAuthorityBinding).mockResolvedValue(null);
+    vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+    vi.mocked(getAuthorityBindingBootstrapState).mockResolvedValue({
+      autoApplied: false,
+      totalBindings: 0,
+      report: {
+        created: 0,
+        skippedExisting: 0,
+        wouldCreate: 0,
+        candidates: [],
+        lowConfidence: [{ resourceRef: "/setup", agentId: "onboarding-coo", reason: "ungated-route" }],
+      },
+    });
+
+    const { default: AssignmentsPage } = await import("./page");
+    const html = renderToStaticMarkup(await AssignmentsPage({ searchParams: Promise.resolve({}) }));
+
+    expect(html).toContain("Bootstrap coverage");
+    expect(html).toContain("No authority bindings are active yet");
+    expect(html).toContain("/setup");
   });
 });
