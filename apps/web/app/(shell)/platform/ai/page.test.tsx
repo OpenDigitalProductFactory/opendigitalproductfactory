@@ -79,6 +79,10 @@ describe("PlatformAiPage", () => {
     const { default: PlatformAiPage } = await import("./page");
     const html = renderToStaticMarkup(await PlatformAiPage());
 
+    expect(html).toContain("AI Operations");
+    expect(html).toContain(
+      "Workforce overview for assignments, skills, providers, routing, and build runtime.",
+    );
     expect(html).toContain("HR Specialist");
     expect(html).toContain("gaid:priv:dpf.internal:hr-specialist");
   });

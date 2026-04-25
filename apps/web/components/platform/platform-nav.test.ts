@@ -38,19 +38,34 @@ describe("platform-nav", () => {
     expect(getPlatformFamily("/platform/services").key).toBe("tools");
   });
 
-  it("includes discovery operations in the tools family", () => {
+  it("renames discovery operations to estate discovery in the tools family", () => {
     const toolsFamily = getPlatformFamily("/platform/tools/discovery");
 
-    expect(toolsFamily.subItems.some((item) => item.label === "Discovery Operations")).toBe(true);
+    expect(toolsFamily.subItems.some((item) => item.label === "Estate Discovery")).toBe(true);
+    expect(toolsFamily.subItems.some((item) => item.label === "Discovery Operations")).toBe(
+      false,
+    );
   });
 
-  it("includes Enterprise Integrations in the tools family", () => {
+  it("renames enterprise integrations and targets the integrations index", () => {
     const toolsFamily = getPlatformFamily("/platform/tools/integrations/adp");
+    const nativeIntegrations = toolsFamily.subItems.find(
+      (item) => item.label === "Native Integrations",
+    );
 
     expect(toolsFamily.key).toBe("tools");
+    expect(nativeIntegrations?.href).toBe("/platform/tools/integrations");
     expect(
       toolsFamily.subItems.some((item) => item.label === "Enterprise Integrations"),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("removes redirect-only audit items from the AI family", () => {
+    const aiFamily = getPlatformFamily("/platform/ai");
+
+    expect(aiFamily.subItems.some((item) => item.label === "Operations")).toBe(false);
+    expect(aiFamily.subItems.some((item) => item.label === "Authority")).toBe(false);
+    expect(aiFamily.subItems.some((item) => item.label === "Providers & Routing")).toBe(true);
   });
 
   it("maps audit routes to the Governance & Audit family", () => {

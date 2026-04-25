@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { label: "Catalog", href: "/platform/tools/catalog" },
-  { label: "Services", href: "/platform/tools/services" },
+  { label: "MCP Catalog", href: "/platform/tools/catalog" },
+  { label: "MCP Services", href: "/platform/tools/services" },
+  { label: "Native Integrations", href: "/platform/tools/integrations" },
+  { label: "Estate Discovery", href: "/platform/tools/discovery" },
   { label: "Capability Inventory", href: "/platform/tools/inventory" },
 ];
 

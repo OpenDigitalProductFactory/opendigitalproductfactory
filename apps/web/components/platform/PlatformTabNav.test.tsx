@@ -45,10 +45,15 @@ describe("PlatformTabNav", () => {
 
     expect(html).toContain('href="/platform/tools"');
     expect(html).toContain('href="/platform/tools/catalog"');
+    expect(html).toContain('href="/platform/tools/integrations"');
     expect(html).toContain('href="/platform/tools/discovery"');
     expect(html).toContain('href="/platform/tools/services"');
     expect(html).toContain('href="/platform/tools/inventory"');
-    expect(html).toContain(">Discovery Operations<");
+    expect(html).toContain(">MCP Catalog<");
+    expect(html).toContain(">MCP Services<");
+    expect(html).toContain(">Native Integrations<");
+    expect(html).toContain(">Estate Discovery<");
+    expect(html).not.toContain(">Discovery Operations<");
     expect(html).not.toContain('href="/platform/ai/providers"');
     expect(html).not.toContain('href="/platform/audit/ledger"');
   });
