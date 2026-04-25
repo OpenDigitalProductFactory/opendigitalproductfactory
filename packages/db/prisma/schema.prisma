@@ -2597,6 +2597,18 @@ model Notification {
   @@index([createdAt])
 }
 
+model PlatformNotification {
+  id         String    @id @default(cuid())
+  severity   String    // "info" | "warning" | "critical" | "expired"
+  category   String    // e.g. "token-expiry"
+  subjectId  String?   // e.g. CredentialEntry.providerId
+  message    String    @db.Text
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([category, resolvedAt])
+}
+
 model PushDeviceRegistration {
   id        String   @id @default(cuid())
   userId    String
