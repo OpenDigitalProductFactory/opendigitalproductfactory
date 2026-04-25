@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/platform/ai/operations/page.tsx
-// Moved to /platform/audit/operations — redirect to new canonical URL.
+// Legacy alias: keep old AI Operations links inside the AI family.
 import { permanentRedirect } from "next/navigation";
 
 export default function OperationsRedirect() {
-  permanentRedirect("/platform/audit/operations");
+  permanentRedirect("/platform/ai/build-studio");
 }
