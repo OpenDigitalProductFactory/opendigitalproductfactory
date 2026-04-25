@@ -11,21 +11,48 @@ export default async function ToolsHubPage() {
     integrationErrors,
     activeDiscoveryConnections,
     needsReviewCount,
-  ] =
-    await Promise.all([
-      prisma.mcpIntegration.count({ where: { status: "active" } }),
-      prisma.mcpServer.count({ where: { status: "active" } }),
-      prisma.mcpServer.count({ where: { status: "unconfigured" } }),
-      prisma.mcpServerTool.count({ where: { isEnabled: true } }),
-      prisma.integrationCredential.count({
-        where: { provider: { in: ["adp", "quickbooks"] }, status: "connected" },
-      }),
-      prisma.integrationCredential.count({
-        where: { provider: { in: ["adp", "quickbooks"] }, status: "error" },
-      }),
-      prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
-      prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
-    ]);
+  ] = await Promise.all([
+    prisma.mcpIntegration.count({ where: { status: "active" } }),
+    prisma.mcpServer.count({ where: { status: "active" } }),
+    prisma.mcpServer.count({ where: { status: "unconfigured" } }),
+    prisma.mcpServerTool.count({ where: { isEnabled: true } }),
+    prisma.integrationCredential.count({
+      where: {
+        provider: {
+          in: [
+            "adp",
+            "quickbooks",
+            "stripe",
+            "microsoft365",
+            "hubspot",
+            "google",
+            "facebook",
+            "mailchimp",
+          ],
+        },
+        status: "connected",
+      },
+    }),
+    prisma.integrationCredential.count({
+      where: {
+        provider: {
+          in: [
+            "adp",
+            "quickbooks",
+            "stripe",
+            "microsoft365",
+            "hubspot",
+            "google",
+            "facebook",
+            "mailchimp",
+          ],
+        },
+        status: "error",
+      },
+    }),
+    prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
+    prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+  ]);
 
   return (
     <div className="space-y-6">

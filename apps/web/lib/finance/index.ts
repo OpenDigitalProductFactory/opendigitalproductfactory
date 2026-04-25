@@ -6,4 +6,6 @@ export * from "./expense-validation";
 export * from "./recurring-validation";
 export * from "./ap-validation";
 export * from "./asset-validation";
+export * from "./ai-provider-finance";
+export * from "./ai-provider-finance-validation";
 export * from "./currency-symbol";

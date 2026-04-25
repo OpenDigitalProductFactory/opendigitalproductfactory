@@ -17,18 +17,7 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: ["**/*.test.{ts,tsx}"],
-    exclude: ["node_modules", ".next", "tests/**"],
-    server: {
-      deps: {
-        // Force react/react-dom through Vite's SSR transform so the
-        // `resolve.alias` entries below reach CJS `require("react")`
-        // calls inside react-dom/server. Without this, CI's hoisted
-        // pnpm layout can hand react-dom-server a different React copy
-        // than the one the component imports, leaving the shared-
-        // internals dispatcher null at hook call time (see #219).
-        inline: [/^react(?:-dom)?(?:\/.*)?$/],
-      },
-    },
+    exclude: ["node_modules", ".next"],
   },
   resolve: {
     dedupe: ["react", "react-dom"],

@@ -3,6 +3,7 @@ import { getAgentGrantSummaries } from "@/lib/agent-grants";
 import { AuthorityMatrixPanel, type BmrRoleRow } from "@/components/platform/AuthorityMatrixPanel";
 import { DelegationChainPanel, type BmrNode } from "@/components/platform/DelegationChainPanel";
 import { EffectivePermissionsPanel, type ProductBmr } from "@/components/platform/EffectivePermissionsPanel";
+import { listAuthorityBindingRecords } from "@/lib/authority/bindings";
 // mcp-tools is imported dynamically inside the component to avoid NFT whole-project tracing
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -18,7 +19,7 @@ const ROLES = [
 ];
 
 export default async function AuditAuthorityPage() {
-  const [rawBmrData] = await Promise.all([
+  const [rawBmrData, bindingRecords] = await Promise.all([
     prisma.productBusinessModel.findMany({
       select: {
         product: { select: { id: true, name: true } },
@@ -47,6 +48,7 @@ export default async function AuditAuthorityPage() {
       },
       orderBy: [{ product: { name: "asc" } }],
     }),
+    listAuthorityBindingRecords({ statuses: ["active"] }),
   ]);
   const agentSummaries = await getAgentGrantSummaries();
 
@@ -92,6 +94,14 @@ export default async function AuditAuthorityPage() {
     });
   }
   const productBmrList: ProductBmr[] = Array.from(bmrByProduct.values());
+  const effectiveBindings = bindingRecords.map((binding) => ({
+    bindingId: binding.bindingId,
+    resourceRef: binding.resourceRef,
+    appliedAgentId: binding.appliedAgentId,
+    approvalMode: binding.approvalMode,
+    subjects: binding.subjects,
+    grants: binding.grants,
+  }));
 
   // Build tools list for effective permissions (serializable subset)
   const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
@@ -156,6 +166,8 @@ export default async function AuditAuthorityPage() {
           tools={toolsList}
           permissions={permissionsMap}
           products={productBmrList}
+          bindings={effectiveBindings}
+          bindingHrefBase="/platform/identity/authorization"
         />
       </div>
     </div>

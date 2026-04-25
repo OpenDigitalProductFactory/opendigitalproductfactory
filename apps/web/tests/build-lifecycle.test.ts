@@ -17,6 +17,9 @@ import { executeTool } from "@/lib/mcp-tools";
 import { generateBuildId } from "@/lib/feature-build-types";
 import type { BuildPhase } from "@/lib/feature-build-types";
 
+const describeBuildLifecycle =
+  process.env.RUN_BUILD_LIFECYCLE_TESTS === "1" ? describe : describe.skip;
+
 // ─── Test fixtures ──────────────────────────────────────────────────────────
 
 const TEST_CONTEXT = { routeContext: "/build", agentId: "AGT-TEST", threadId: "test-lifecycle" };
@@ -104,7 +107,7 @@ async function callTool(name: string, params: Record<string, unknown> = {}) {
 
 // ─── Test Suite ─────────────────────────────────────────────────────────────
 
-describe("Build Studio full lifecycle", () => {
+describeBuildLifecycle("Build Studio full lifecycle", () => {
   beforeAll(async () => {
     const existingUser = await prisma.user.findFirst({
       where: { email: TEST_USER_EMAIL },
