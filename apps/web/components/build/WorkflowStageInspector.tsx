@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
 import type { NodeStatus } from "@/lib/build/process-graph-builder";
+import { WorkflowDetailPanel } from "./WorkflowDetailPanel";
 
 type Props = {
   build: FeatureBuildRow;
@@ -13,11 +14,26 @@ type Props = {
   onClose: () => void;
 };
 
-const STATUS_CONFIG: Record<NodeStatus, { label: string; colorVar: string }> = {
-  pending: { label: "Pending", colorVar: "var(--dpf-muted)" },
-  running: { label: "In Progress", colorVar: "var(--dpf-accent)" },
-  done: { label: "Done", colorVar: "var(--dpf-success)" },
-  error: { label: "Blocked", colorVar: "var(--dpf-error)" },
+const STATUS_CONFIG: Record<NodeStatus, { label: string; toneClassName: string }> = {
+  pending: {
+    label: "Pending",
+    toneClassName: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+  },
+  running: {
+    label: "In Progress",
+    toneClassName:
+      "border-[color-mix(in_srgb,var(--dpf-accent)_30%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-accent)_12%,var(--dpf-surface-1))] text-[var(--dpf-accent)]",
+  },
+  done: {
+    label: "Done",
+    toneClassName:
+      "border-[color-mix(in_srgb,var(--dpf-success)_30%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-success)_12%,var(--dpf-surface-1))] text-[var(--dpf-success)]",
+  },
+  error: {
+    label: "Blocked",
+    toneClassName:
+      "border-[color-mix(in_srgb,var(--dpf-error)_30%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-error)_12%,var(--dpf-surface-1))] text-[var(--dpf-error)]",
+  },
 };
 
 function getStageSummary(phase: BuildPhase, build: FeatureBuildRow): string {
@@ -118,7 +134,6 @@ export function WorkflowStageInspector({
   workflowLabel,
   onClose,
 }: Props) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const statusCfg = STATUS_CONFIG[status];
   const stageLabel = PHASE_LABELS[phase] ?? phase;
   const artifacts = getArtifactLines(phase, build);
@@ -133,175 +148,82 @@ export function WorkflowStageInspector({
   }, [handleKeyDown]);
 
   return (
-    <>
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "color-mix(in srgb, var(--dpf-bg) 85%, transparent)",
-          zIndex: 998,
-          cursor: "pointer",
-        }}
-      />
-
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-label={`Workflow stage: ${stageLabel}`}
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 360,
-          background: "var(--dpf-surface-1)",
-          borderLeft: "1px solid var(--dpf-border)",
-          zIndex: 999,
-          display: "flex",
-          flexDirection: "column",
-          overflowY: "auto",
-          boxShadow: "-4px 0 20px color-mix(in srgb, var(--dpf-bg) 50%, transparent)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "14px 16px",
-            borderBottom: "1px solid var(--dpf-border)",
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
-            Workflow Stage
-          </span>
-          <button
-            onClick={onClose}
-            aria-label="Close inspector"
-            style={{
-              width: 28,
-              height: 28,
-              minWidth: 44,
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "transparent",
-              border: "1px solid var(--dpf-border)",
-              borderRadius: 4,
-              color: "var(--dpf-muted)",
-              fontSize: 14,
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            {"\u2715"}
-          </button>
-        </div>
-
-        <div style={{ padding: "16px", flex: 1 }}>
-          <h3
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "var(--dpf-text)",
-              margin: "0 0 10px 0",
-            }}
-          >
-            {stageLabel}
-          </h3>
-
-          <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <WorkflowDetailPanel
+      eyebrow="Workflow Stage"
+      title={stageLabel}
+      subtitle="Inspect what happened in this stage, the related artifacts, and the approval needed to keep moving."
+      onClose={onClose}
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
             <span
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                padding: "2px 8px",
-                borderRadius: 4,
-                background: `color-mix(in srgb, ${statusCfg.colorVar} 15%, transparent)`,
-                color: statusCfg.colorVar,
-                border: `1px solid color-mix(in srgb, ${statusCfg.colorVar} 30%, transparent)`,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-              }}
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] ${statusCfg.toneClassName}`}
             >
               {statusCfg.label}
             </span>
-            {workflowLabel && (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  background: "var(--dpf-surface-2)",
-                  color: "var(--dpf-text)",
-                  border: "1px solid var(--dpf-border)",
-                }}
-              >
+            {workflowLabel ? (
+              <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--dpf-text)]">
                 {workflowLabel}
               </span>
-            )}
+            ) : null}
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <div style={sectionLabelStyle}>What Happened</div>
-            <div style={bodyTextStyle}>{getStageSummary(phase, build)}</div>
-          </div>
+          <InfoSection label="What Happened">
+            <p className="text-sm leading-relaxed text-[var(--dpf-text)]">
+              {getStageSummary(phase, build)}
+            </p>
+          </InfoSection>
 
-          <div style={{ marginBottom: 16 }}>
-            <div style={sectionLabelStyle}>Next Approval</div>
-            <div style={bodyTextStyle}>{getNextApproval(phase, build, workflowLabel)}</div>
-          </div>
+          <InfoSection label="Next Approval">
+            <p className="text-sm leading-relaxed text-[var(--dpf-text)]">
+              {getNextApproval(phase, build, workflowLabel)}
+            </p>
+          </InfoSection>
+        </div>
 
-          {artifacts.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={sectionLabelStyle}>Related Artifacts</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="space-y-4">
+          {artifacts.length > 0 ? (
+            <InfoSection label="Related Artifacts">
+              <div className="space-y-2">
                 {artifacts.map((line) => (
                   <div
                     key={line}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      background: "var(--dpf-surface-2)",
-                      border: "1px solid var(--dpf-border)",
-                      fontSize: 11,
-                      color: "var(--dpf-text)",
-                    }}
+                    className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)]"
                   >
                     {line}
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            </InfoSection>
+          ) : null}
 
-          {build.originator?.resolution && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={sectionLabelStyle}>Decision Context</div>
-              <div style={bodyTextStyle}>{build.originator.resolution}</div>
-            </div>
-          )}
+          {build.originator?.resolution ? (
+            <InfoSection label="Decision Context">
+              <p className="text-sm leading-relaxed text-[var(--dpf-text)]">
+                {build.originator.resolution}
+              </p>
+            </InfoSection>
+          ) : null}
         </div>
       </div>
-    </>
+    </WorkflowDetailPanel>
   );
 }
 
-const sectionLabelStyle: React.CSSProperties = {
-  fontSize: 9,
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  color: "var(--dpf-muted)",
-  marginBottom: 6,
-};
-
-const bodyTextStyle: React.CSSProperties = {
-  fontSize: 11,
-  lineHeight: 1.5,
-  color: "var(--dpf-text)",
-  whiteSpace: "pre-wrap",
-};
+function InfoSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--dpf-muted)]">
+        {label}
+      </div>
+      {children}
+    </section>
+  );
+}

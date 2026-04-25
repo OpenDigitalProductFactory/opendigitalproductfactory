@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
 import type {
   NodeStatus,
   NormalizedStoredTaskResult,
 } from "@/lib/build/process-graph-builder";
+import { WorkflowDetailPanel } from "./WorkflowDetailPanel";
 
 type Props = {
   task: AssignedTask;
@@ -14,14 +15,26 @@ type Props = {
   onClose: () => void;
 };
 
-const STATUS_CONFIG: Record<
-  NodeStatus,
-  { label: string; colorVar: string }
-> = {
-  pending: { label: "Pending", colorVar: "var(--dpf-muted)" },
-  running: { label: "Running", colorVar: "var(--dpf-accent)" },
-  done: { label: "Done", colorVar: "var(--dpf-success)" },
-  error: { label: "Error", colorVar: "var(--dpf-error)" },
+const STATUS_CONFIG: Record<NodeStatus, { label: string; toneClassName: string }> = {
+  pending: {
+    label: "Pending",
+    toneClassName: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+  },
+  running: {
+    label: "Running",
+    toneClassName:
+      "border-[color-mix(in_srgb,var(--dpf-accent)_30%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-accent)_12%,var(--dpf-surface-1))] text-[var(--dpf-accent)]",
+  },
+  done: {
+    label: "Done",
+    toneClassName:
+      "border-[color-mix(in_srgb,var(--dpf-success)_30%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-success)_12%,var(--dpf-surface-1))] text-[var(--dpf-success)]",
+  },
+  error: {
+    label: "Error",
+    toneClassName:
+      "border-[color-mix(in_srgb,var(--dpf-error)_30%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-error)_12%,var(--dpf-surface-1))] text-[var(--dpf-error)]",
+  },
 };
 
 function formatDuration(ms: number): string {
@@ -33,18 +46,12 @@ function formatDuration(ms: number): string {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-/**
- * 320px slide-in panel on task click.
- * Shows task details, file list, and result output.
- */
 export function TaskInspector({ task, status, result, onClose }: Props) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const statusCfg = STATUS_CONFIG[status];
 
-  // Close on Escape key
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     },
     [onClose],
   );
@@ -55,270 +62,99 @@ export function TaskInspector({ task, status, result, onClose }: Props) {
   }, [handleKeyDown]);
 
   return (
-    <>
-      {/* Dim overlay */}
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "color-mix(in srgb, var(--dpf-bg) 85%, transparent)",
-          zIndex: 998,
-          cursor: "pointer",
-        }}
-      />
-
-      {/* Slide-in panel */}
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-label={`Task: ${task.title}`}
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 320,
-          background: "var(--dpf-surface-1)",
-          borderLeft: "1px solid var(--dpf-border)",
-          zIndex: 999,
-          display: "flex",
-          flexDirection: "column",
-          overflowY: "auto",
-          boxShadow: "-4px 0 20px color-mix(in srgb, var(--dpf-bg) 50%, transparent)",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "14px 16px",
-            borderBottom: "1px solid var(--dpf-border)",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--dpf-text)",
-            }}
-          >
-            Task Inspector
-          </span>
-          <button
-            onClick={onClose}
-            aria-label="Close inspector"
-            style={{
-              width: 28,
-              height: 28,
-              minWidth: 44,
-              minHeight: 44,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "transparent",
-              border: "1px solid var(--dpf-border)",
-              borderRadius: 4,
-              color: "var(--dpf-muted)",
-              fontSize: 14,
-              cursor: "pointer",
-              transition: "color 200ms, border-color 200ms",
-              padding: 0,
-            }}
-          >
-            {"\u2715"}
-          </button>
-        </div>
-
-        {/* Content */}
-        <div style={{ padding: "16px", flex: 1 }}>
-          {/* Task title */}
-          <h3
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: "var(--dpf-text)",
-              margin: "0 0 10px 0",
-              lineHeight: 1.4,
-            }}
-          >
-            {task.title}
-          </h3>
-
-          {/* Status badge */}
-          <div style={{ marginBottom: 16 }}>
+    <WorkflowDetailPanel
+      eyebrow="Task Details"
+      title={task.title}
+      subtitle="Review the assigned specialist, touched files, and recorded execution result without leaving the workflow."
+      onClose={onClose}
+    >
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
             <span
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                padding: "2px 8px",
-                borderRadius: 4,
-                background: `color-mix(in srgb, ${statusCfg.colorVar} 15%, transparent)`,
-                color: statusCfg.colorVar,
-                border: `1px solid color-mix(in srgb, ${statusCfg.colorVar} 30%, transparent)`,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-              }}
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] ${statusCfg.toneClassName}`}
             >
               {statusCfg.label}
             </span>
-          </div>
-
-          {/* Specialist */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={sectionLabelStyle}>Specialist</div>
-            <div
-              style={{
-                fontSize: 11,
-                color: "var(--dpf-text-secondary)",
-              }}
-            >
+            <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--dpf-text)]">
               {task.specialist
                 .split("-")
-                .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(" ")}
-            </div>
+            </span>
           </div>
 
-          {/* Task description */}
-          {task.task.implement && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={sectionLabelStyle}>Implementation</div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "var(--dpf-text-secondary)",
-                  lineHeight: 1.5,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                }}
-              >
+          {task.task.implement ? (
+            <InfoSection label="Implementation">
+              <p className="text-sm leading-relaxed text-[var(--dpf-text)]">
                 {task.task.implement}
-              </div>
-            </div>
-          )}
+              </p>
+            </InfoSection>
+          ) : null}
 
-          {/* Files list */}
-          {task.files.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={sectionLabelStyle}>
-                Files ({task.files.length})
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}
-              >
+          {task.task.verify ? (
+            <InfoSection label="Verification">
+              <p className="text-sm leading-relaxed text-[var(--dpf-text)]">
+                {task.task.verify}
+              </p>
+            </InfoSection>
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          {task.files.length > 0 ? (
+            <InfoSection label={`Files (${task.files.length})`}>
+              <div className="space-y-2">
                 {task.files.map((file) => (
                   <div
                     key={file.path}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "4px 6px",
-                      borderRadius: 4,
-                      background: "var(--dpf-surface-2)",
-                    }}
+                    className="flex items-center gap-2 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2"
                   >
-                    <span
-                      style={{
-                        fontSize: 8,
-                        fontWeight: 600,
-                        padding: "1px 4px",
-                        borderRadius: 2,
-                        background:
-                          file.action === "create"
-                            ? "color-mix(in srgb, var(--dpf-success) 15%, transparent)"
-                            : "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
-                        color:
-                          file.action === "create"
-                            ? "var(--dpf-success)"
-                            : "var(--dpf-accent)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.04em",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {file.action === "create" ? "NEW" : "MOD"}
+                    <span className="inline-flex min-w-[42px] items-center justify-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--dpf-text)]">
+                      {file.action === "create" ? "New" : "Mod"}
                     </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        color: "var(--dpf-text-secondary)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontFamily: "monospace",
-                      }}
-                      title={file.path}
-                    >
+                    <span className="truncate font-mono text-xs text-[var(--dpf-text)]" title={file.path}>
                       {file.path}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            </InfoSection>
+          ) : null}
 
-          {/* Result output */}
-          {result != null && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={sectionLabelStyle}>Result</div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color:
-                        result.outcome === "DONE" ||
-                        result.outcome === "DONE_WITH_CONCERNS"
-                          ? "var(--dpf-success)"
-                          : "var(--dpf-error)",
-                    }}
-                  >
+          {result ? (
+            <InfoSection label="Result">
+              <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-[var(--dpf-text)]">
                     {result.outcome}
                   </span>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: "var(--dpf-muted)",
-                    }}
-                  >
+                  <span className="text-xs text-[var(--dpf-muted)]">
                     {formatDuration(result.durationMs)}
                   </span>
                 </div>
               </div>
-            </div>
-          )}
+            </InfoSection>
+          ) : null}
         </div>
       </div>
-    </>
+    </WorkflowDetailPanel>
   );
 }
 
-const sectionLabelStyle: React.CSSProperties = {
-  fontSize: 9,
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  color: "var(--dpf-muted)",
-  marginBottom: 6,
-};
+function InfoSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--dpf-muted)]">
+        {label}
+      </div>
+      {children}
+    </section>
+  );
+}

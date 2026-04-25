@@ -34,6 +34,10 @@ import { ForkJoinNode } from "./ForkJoinNode";
 import { AnimatedEdge } from "./AnimatedEdge";
 import { TaskInspector } from "./TaskInspector";
 import { WorkflowStageInspector } from "./WorkflowStageInspector";
+import { ReleaseForkNode } from "./ReleaseForkNode";
+import { ReleaseDecisionInspector } from "./ReleaseDecisionInspector";
+import type { BuildFlowState } from "@/lib/build-flow-state";
+import type { ReleaseForkNodeData } from "@/lib/build/process-graph-builder";
 
 // ─── Node / Edge type registrations ────────────────────────────────────────
 
@@ -41,6 +45,7 @@ const NODE_TYPES = {
   processPhase: PhaseNode,
   processTask: TaskNode,
   processForkJoin: ForkJoinNode,
+  processReleaseFork: ReleaseForkNode,
 } as const;
 
 const EDGE_TYPES = {
@@ -56,11 +61,12 @@ const TASK_GRAPH_Y_OFFSET = 130;
 type Props = {
   build: FeatureBuildRow;
   workflowLabel: string | null;
+  flowState: BuildFlowState | null;
 };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
-export function ProcessGraph({ build, workflowLabel }: Props) {
+export function ProcessGraph({ build, workflowLabel, flowState }: Props) {
   // ─── Live running-task state via DOM CustomEvents ──────────────────────
   const [activeTaskTitles, setActiveTaskTitles] = useState<Set<string>>(
     new Set(),
@@ -103,7 +109,7 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
   );
 
   // ─── Build phase graph (level 1) ─────────────────────────────────────
-  const phaseGraph = useMemo(() => buildPhaseGraph(build), [build]);
+  const phaseGraph = useMemo(() => buildPhaseGraph(build, flowState), [build, flowState]);
 
   // ─── Build task graph (level 2) ───────────────────────────────────────
   const taskGraph = useMemo(
@@ -160,12 +166,22 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
     null,
   );
   const [inspectedPhase, setInspectedPhase] = useState<BuildPhase | null>(null);
+  const [inspectedReleaseFork, setInspectedReleaseFork] = useState<"upstream" | "promote" | null>(null);
 
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      if (node.type === "processReleaseFork") {
+        const nodeData = node.data as ReleaseForkNodeData;
+        setInspectedTask(null);
+        setInspectedPhase(null);
+        setInspectedReleaseFork(nodeData.forkKind);
+        return;
+      }
+
       if (node.type === "processPhase" || node.type === "processForkJoin") {
         const nodeData = node.data as PhaseNodeData;
         setInspectedTask(null);
+        setInspectedReleaseFork(null);
         setInspectedPhase(nodeData.phase);
         return;
       }
@@ -185,6 +201,7 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
         for (const assignedTask of phase.tasks) {
           if (assignedTask.title === nodeData.label) {
             setInspectedPhase(null);
+            setInspectedReleaseFork(null);
             setInspectedTask(assignedTask);
             return;
           }
@@ -197,6 +214,7 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
   const handleInspectorClose = useCallback(() => {
     setInspectedTask(null);
     setInspectedPhase(null);
+    setInspectedReleaseFork(null);
   }, []);
 
   // Compute inspector props
@@ -208,51 +226,51 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
     : undefined;
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative" }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick}
-        nodeTypes={NODE_TYPES}
-        edgeTypes={EDGE_TYPES}
-        fitView
-        nodesDraggable={false}
-        nodesConnectable={false}
-        panOnDrag
-        zoomOnScroll
-        colorMode="dark"
-        minZoom={0.1}
-        maxZoom={3}
-      >
-        <Background color="#2a2a40" gap={20} />
-        <Controls
-          style={{
-            background: "var(--dpf-surface-1)",
-            border: "1px solid var(--dpf-border)",
-          }}
-        />
-        <MiniMap
-          style={{
-            background: "var(--dpf-surface-1)",
-            border: "1px solid var(--dpf-border)",
-          }}
-          maskColor="color-mix(in srgb, var(--dpf-bg) 70%, transparent)"
-          nodeColor="#3a3a5a"
-        />
-      </ReactFlow>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex min-h-[360px] flex-1 overflow-hidden rounded-[22px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={handleNodeClick}
+          nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
+          fitView
+          nodesDraggable={false}
+          nodesConnectable={false}
+          panOnDrag
+          zoomOnScroll
+          colorMode="dark"
+          minZoom={0.1}
+          maxZoom={3}
+        >
+          <Background color="var(--dpf-border)" gap={20} />
+          <Controls
+            style={{
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+            }}
+          />
+          <MiniMap
+            style={{
+              background: "var(--dpf-surface-1)",
+              border: "1px solid var(--dpf-border)",
+            }}
+            maskColor="color-mix(in srgb, var(--dpf-bg) 70%, transparent)"
+            nodeColor="var(--dpf-surface-1)"
+          />
+        </ReactFlow>
+      </div>
 
-      {inspectedTask != null && (
+      {inspectedTask != null ? (
         <TaskInspector
           task={inspectedTask}
           status={inspectorStatus}
           result={inspectorResult}
           onClose={handleInspectorClose}
         />
-      )}
-
-      {inspectedPhase != null && (
+      ) : inspectedPhase != null ? (
         <WorkflowStageInspector
           build={build}
           phase={inspectedPhase}
@@ -260,6 +278,35 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
           workflowLabel={workflowLabel}
           onClose={handleInspectorClose}
         />
+      ) : inspectedReleaseFork != null && flowState != null ? (
+        <ReleaseDecisionInspector
+          build={build}
+          flowState={flowState}
+          forkKind={inspectedReleaseFork}
+          onClose={handleInspectorClose}
+        />
+      ) : (
+        <section className="rounded-[22px] border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--dpf-muted)]">
+                Workflow Details
+              </div>
+              <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
+                Select a stage, task, or release lane to inspect what happened.
+              </p>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--dpf-muted)]">
+                Details stay inside Build Studio so you can compare workflow state with the AI coworker, release status, and artifacts without losing the rest of the screen.
+              </p>
+            </div>
+
+            {workflowLabel ? (
+              <div className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--dpf-text)]">
+                {workflowLabel}
+              </div>
+            ) : null}
+          </div>
+        </section>
       )}
     </div>
   );

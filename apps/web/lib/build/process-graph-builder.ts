@@ -6,10 +6,16 @@ import type {
   BuildPhase,
   FeatureBuildRow,
 } from "@/lib/explore/feature-build-types";
+import type { BuildFlowState } from "@/lib/build-flow-state";
 import {
   PHASE_LABELS,
   VISIBLE_PHASES,
 } from "@/lib/explore/feature-build-types";
+import {
+  describePromoteFork,
+  describeUpstreamFork,
+  type ReleaseDecisionTone,
+} from "@/lib/build/release-decision";
 import {
   buildDependencyGraph,
   type AssignedTask,
@@ -86,6 +92,16 @@ export type TaskNodeData = {
   taskIndex: number;
 };
 
+export type ReleaseForkNodeData = {
+  label: string;
+  status: NodeStatus;
+  tone: ReleaseDecisionTone;
+  statusLabel: string;
+  detail: string;
+  href?: string;
+  forkKind: "upstream" | "promote";
+};
+
 export type PhaseProcessNode = {
   id: string;
   type: "processPhase";
@@ -107,7 +123,14 @@ export type ForkJoinProcessNode = {
   data: PhaseNodeData;
 };
 
-export type ProcessNode = PhaseProcessNode | TaskProcessNode | ForkJoinProcessNode;
+export type ReleaseForkProcessNode = {
+  id: string;
+  type: "processReleaseFork";
+  position: { x: number; y: number };
+  data: ReleaseForkNodeData;
+};
+
+export type ProcessNode = PhaseProcessNode | TaskProcessNode | ForkJoinProcessNode | ReleaseForkProcessNode;
 
 export type ProcessEdge = {
   id: string;
@@ -214,12 +237,14 @@ function getFailedPhaseStatus(
 
 const PHASE_X_SPACING = 280;
 const PHASE_Y = 0;
+const RELEASE_FORK_Y = 120;
+const RELEASE_FORK_OFFSET = 140;
 
 /**
  * Build a ReactFlow graph of the 5 visible build phases.
  * Nodes are positioned left-to-right with PHASE_X_SPACING between them.
  */
-export function buildPhaseGraph(build: FeatureBuildRow): GraphOutput {
+export function buildPhaseGraph(build: FeatureBuildRow, flowState?: BuildFlowState | null): GraphOutput {
   const nodes: ProcessNode[] = [];
   const edges: ProcessEdge[] = [];
 
@@ -266,7 +291,74 @@ export function buildPhaseGraph(build: FeatureBuildRow): GraphOutput {
     }
   }
 
+  if (flowState && shouldShowReleaseForks(flowState)) {
+    const shipX = (VISIBLE_PHASES.length - 1) * PHASE_X_SPACING;
+    const upstream = describeUpstreamFork(flowState.upstream);
+    const promote = describePromoteFork(flowState.promote);
+
+    nodes.push({
+      id: "release-upstream",
+      type: "processReleaseFork",
+      position: { x: shipX - RELEASE_FORK_OFFSET, y: RELEASE_FORK_Y },
+      data: {
+        label: upstream.title,
+        status: nodeStatusFromForkTone(upstream.tone),
+        tone: upstream.tone,
+        statusLabel: upstream.statusLabel,
+        detail: upstream.detail,
+        href: upstream.href,
+        forkKind: "upstream",
+      },
+    });
+
+    nodes.push({
+      id: "release-promote",
+      type: "processReleaseFork",
+      position: { x: shipX + RELEASE_FORK_OFFSET, y: RELEASE_FORK_Y },
+      data: {
+        label: promote.title,
+        status: nodeStatusFromForkTone(promote.tone),
+        tone: promote.tone,
+        statusLabel: promote.statusLabel,
+        detail: promote.detail,
+        forkKind: "promote",
+      },
+    });
+
+    edges.push({
+      id: "edge-phase-ship-release-upstream",
+      source: "phase-ship",
+      target: "release-upstream",
+      animated: flowState.upstream.state === "in_progress",
+    });
+    edges.push({
+      id: "edge-phase-ship-release-promote",
+      source: "phase-ship",
+      target: "release-promote",
+      animated: flowState.promote.state === "in_progress",
+    });
+  }
+
   return { nodes, edges };
+}
+
+function shouldShowReleaseForks(flowState: BuildFlowState): boolean {
+  return flowState.upstream.state !== "pending" || flowState.promote.state !== "pending";
+}
+
+function nodeStatusFromForkTone(tone: ReleaseDecisionTone): NodeStatus {
+  switch (tone) {
+    case "success":
+      return "done";
+    case "danger":
+      return "error";
+    case "info":
+    case "warning":
+      return "running";
+    case "neutral":
+    default:
+      return "pending";
+  }
 }
 
 function statusToColor(status: NodeStatus): string {

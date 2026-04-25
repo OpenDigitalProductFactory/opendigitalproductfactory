@@ -1,6 +1,7 @@
 "use client";
 
 import type { UpstreamFork, PromoteFork } from "@/lib/build-flow-state";
+import { describePromoteFork, describeUpstreamFork } from "@/lib/build/release-decision";
 
 // ─── Color tokens ───────────────────────────────────────────────────────────
 
@@ -20,31 +21,6 @@ const STATE_COLOURS: Record<string, { ring: string; label: string; edge: string 
   skipped:            { ring: "var(--dpf-border)", label: "var(--dpf-muted)", edge: "var(--dpf-border)" },
   pending:            { ring: "var(--dpf-border)", label: "var(--dpf-muted)", edge: "var(--dpf-border)" },
 };
-
-// ─── Label generation ───────────────────────────────────────────────────────
-
-function upstreamLabel(fork: UpstreamFork): { primary: string; secondary?: string } {
-  switch (fork.state) {
-    case "pending":           return { primary: "Upstream PR" };
-    case "skipped":           return { primary: "Upstream PR", secondary: "Kept local" };
-    case "in_progress":       return { primary: "Upstream PR", secondary: "Opening…" };
-    case "shipped":           return { primary: "Upstream PR", secondary: fork.prNumber ? `PR #${fork.prNumber} open` : "PR open" };
-    case "errored":           return { primary: "Upstream PR", secondary: `Failed: ${fork.errorMessage?.slice(0, 60) ?? "see logs"}` };
-  }
-}
-
-function promoteLabel(fork: PromoteFork): { primary: string; secondary?: string } {
-  switch (fork.state) {
-    case "pending":             return { primary: "Promote to Prod" };
-    case "skipped":             return { primary: "Promote to Prod", secondary: "Not applicable" };
-    case "in_progress":         return { primary: "Promote to Prod", secondary: "Deploying…" };
-    case "scheduled":           return { primary: "Promote to Prod", secondary: fork.scheduleDescription ? `Scheduled — ${fork.scheduleDescription}` : "Scheduled" };
-    case "awaiting_operator":   return { primary: "Promote to Prod", secondary: "Operator action required" };
-    case "shipped":             return { primary: "Promote to Prod", secondary: fork.deployedAt ? `Deployed ${fork.deployedAt.toISOString().slice(0, 10)}` : "Deployed" };
-    case "rolled_back":         return { primary: "Promote to Prod", secondary: `Rolled back: ${fork.rollbackReason?.slice(0, 60) ?? "see logs"}` };
-    case "errored":             return { primary: "Promote to Prod", secondary: fork.errorMessage ? `Failed: ${fork.errorMessage.slice(0, 60)}` : "Failed" };
-  }
-}
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
 
@@ -109,26 +85,26 @@ function iconForState(state: string): string {
 // ─── Public fork components ─────────────────────────────────────────────────
 
 export function UpstreamForkNode({ fork }: { fork: UpstreamFork }) {
-  const { primary, secondary } = upstreamLabel(fork);
+  const summary = describeUpstreamFork(fork);
   return (
     <ForkNodeView
       kind="upstream"
       state={fork.state}
-      primary={primary}
-      secondary={secondary}
+      primary="Upstream PR"
+      secondary={summary.statusLabel}
       href={fork.prUrl ?? undefined}
     />
   );
 }
 
 export function PromoteForkNode({ fork }: { fork: PromoteFork }) {
-  const { primary, secondary } = promoteLabel(fork);
+  const summary = describePromoteFork(fork);
   return (
     <ForkNodeView
       kind="promote"
       state={fork.state}
-      primary={primary}
-      secondary={secondary}
+      primary="Promote to Prod"
+      secondary={summary.statusLabel}
     />
   );
 }

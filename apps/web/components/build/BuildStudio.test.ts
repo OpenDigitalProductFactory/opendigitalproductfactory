@@ -15,14 +15,15 @@ describe("build-studio-layout", () => {
   });
 
   it("keeps the graph panel container-driven instead of using old fullscreen math", () => {
-    expect(getBuildStudioGraphPanelClassName()).toContain("min-h-[420px]");
+    expect(getBuildStudioGraphPanelClassName()).toContain("min-h-0");
     expect(getBuildStudioGraphPanelClassName()).toContain("flex-1");
+    expect(getBuildStudioGraphPanelClassName()).toContain("flex-col");
     expect(getBuildStudioGraphPanelClassName()).not.toContain("100vh");
   });
 
   it("uses narrower desktop sidebar widths and stable shell test ids", () => {
-    expect(getBuildStudioSidebarClassName(true)).toContain("xl:w-[320px]");
-    expect(getBuildStudioSidebarClassName(true)).not.toContain("lg:w-[360px]");
+    expect(getBuildStudioSidebarClassName(true)).toContain("xl:w-[272px]");
+    expect(getBuildStudioSidebarClassName(true)).not.toContain("xl:w-[320px]");
     expect(getBuildStudioSidebarClassName(false)).toContain("w-0");
     expect(BUILD_STUDIO_TEST_IDS.shell).toBe("build-studio-shell");
     expect(BUILD_STUDIO_TEST_IDS.graphPanel).toBe("build-studio-graph-panel");

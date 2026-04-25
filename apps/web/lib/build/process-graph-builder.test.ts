@@ -8,10 +8,12 @@ import {
   type GraphOutput,
   type NormalizedBuildProcessSnapshot,
   type PhaseNodeData,
+  type ReleaseForkNodeData,
   type TaskNodeData,
   type ProcessActorKind,
   type NodeStatus,
 } from "./process-graph-builder";
+import type { BuildFlowState } from "@/lib/build-flow-state";
 import {
   normalizeHappyPathState,
   type FeatureBuildRow,
@@ -153,6 +155,54 @@ describe("buildPhaseGraph", () => {
     const { edges } = buildPhaseGraph(row);
     expect(edges[0]?.source).toBe("phase-ideate");
     expect(edges[0]?.target).toBe("phase-plan");
+  });
+
+  it("adds release fork nodes to the main workflow when ship outcomes exist", () => {
+    const row = makeRow({ phase: "ship" });
+    const flowState: BuildFlowState = {
+      buildId: row.buildId,
+      currentPhase: "ship",
+      mainTrack: [
+        { phase: "ideate", label: "Ideate", stepsCompleted: 3, stepsTotal: 3, state: "done" },
+        { phase: "plan", label: "Plan", stepsCompleted: 2, stepsTotal: 2, state: "done" },
+        { phase: "build", label: "Build", stepsCompleted: 4, stepsTotal: 4, state: "done" },
+        { phase: "review", label: "Review", stepsCompleted: 5, stepsTotal: 5, state: "done" },
+        { phase: "ship", label: "Ready to Ship", stepsCompleted: 1, stepsTotal: 2, state: "active" },
+      ],
+      upstream: {
+        state: "shipped",
+        prUrl: "https://github.com/dpf/repo/pull/42",
+        prNumber: 42,
+        packId: "FP-1",
+        errorMessage: null,
+      },
+      promote: {
+        state: "scheduled",
+        promotionId: "CP-1",
+        deployedAt: null,
+        scheduleDescription: "Tonight at 8pm",
+        rollbackReason: null,
+        errorMessage: null,
+      },
+      allApplicableForksTerminal: true,
+    };
+
+    const { nodes, edges } = buildPhaseGraph(row, flowState);
+    const upstream = nodes.find((n) => n.id === "release-upstream");
+    const promote = nodes.find((n) => n.id === "release-promote");
+
+    expect(upstream?.type).toBe("processReleaseFork");
+    expect(promote?.type).toBe("processReleaseFork");
+    expect((upstream?.data as ReleaseForkNodeData | undefined)?.label).toBe("Community Sharing");
+    expect((upstream?.data as ReleaseForkNodeData | undefined)?.statusLabel).toContain("PR #42");
+    expect((promote?.data as ReleaseForkNodeData | undefined)?.label).toBe("Deployment Timing");
+    expect((promote?.data as ReleaseForkNodeData | undefined)?.statusLabel).toContain("Scheduled");
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "phase-ship", target: "release-upstream" }),
+        expect.objectContaining({ source: "phase-ship", target: "release-promote" }),
+      ]),
+    );
   });
 });
 

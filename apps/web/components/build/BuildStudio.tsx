@@ -9,6 +9,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
+import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { approveBuildStart, createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
@@ -49,7 +50,7 @@ export function BuildStudio({
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
+  const [buildView, setBuildView] = useState<"preview" | "docs" | "workflow">("workflow");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [approvingStart, setApprovingStart] = useState(false);
   const isDevEnvironment = dpfEnvironment === "dev";
@@ -539,14 +540,14 @@ export function BuildStudio({
                 <div role="tablist" aria-label="Workflow view tabs" className="flex gap-1 px-4 pt-3 pb-0">
                   <button
                     role="tab"
-                    aria-selected={buildView === "graph"}
-                    aria-controls="panel-graph"
-                    onClick={() => setBuildView("graph")}
+                    aria-selected={buildView === "workflow"}
+                    aria-controls="panel-workflow"
+                    onClick={() => setBuildView("workflow")}
                     className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
                     style={{
-                      background: buildView === "graph" ? "var(--dpf-surface-2)" : "transparent",
-                      color: buildView === "graph" ? "var(--dpf-text)" : "var(--dpf-muted)",
-                      borderBottom: buildView === "graph" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+                      background: buildView === "workflow" ? "var(--dpf-surface-2)" : "transparent",
+                      color: buildView === "workflow" ? "var(--dpf-text)" : "var(--dpf-muted)",
+                      borderBottom: buildView === "workflow" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
                     }}
                   >
                     Workflow
@@ -583,18 +584,38 @@ export function BuildStudio({
                     </button>
                   )}
                 </div>
-                {buildView === "graph" && (
+                {buildView === "workflow" && (
                   <div
                     className={getBuildStudioGraphPanelClassName()}
                     data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                   >
-                    <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
-                      Select any stage or task to inspect what happened, related artifacts, and the next approval gate.
+                    {(activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") && (
+                      <ReleaseDecisionPanel build={activeBuild} flowState={flowState} />
+                    )}
+                    <div className="rounded-[20px] border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--dpf-muted)]">
+                            Workflow
+                          </div>
+                          <p className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
+                            Follow the build from draft through release without leaving the studio.
+                          </p>
+                          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--dpf-muted)]">
+                            Select any stage, task, or end node to inspect evidence, approvals, and related artifacts below the workflow.
+                          </p>
+                        </div>
+                        {activeLifecycleLabel && (
+                          <span className="inline-flex items-center self-start rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--dpf-text)]">
+                            {activeLifecycleLabel}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <ProcessGraph build={activeBuild} workflowLabel={activeLifecycleLabel} />
+                    <ProcessGraph build={activeBuild} workflowLabel={activeLifecycleLabel} flowState={flowState} />
                   </div>
                 )}
-                {buildView !== "graph" && (
+                {buildView !== "workflow" && (
                   <div className="flex min-h-0 flex-1 gap-4 p-4">
                     {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
                       <PreviewUrlCard
@@ -649,7 +670,7 @@ export function BuildStudio({
         </div>
       </div>
 
-      {activeBuild && buildView !== "graph" && (
+      {activeBuild && buildView !== "workflow" && (
         <PhaseIndicator currentPhase={activeBuild.phase} flowState={flowState} />
       )}
     </div>

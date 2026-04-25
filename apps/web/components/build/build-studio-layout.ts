@@ -21,10 +21,10 @@ export function getBuildStudioSidebarClassName(sidebarOpen: boolean) {
   const base = "border-r border-[var(--dpf-border)] flex flex-col bg-[var(--dpf-surface-1)] transition-all duration-200";
 
   return sidebarOpen
-    ? `${base} w-[280px] xl:w-[320px]`
+    ? `${base} w-[244px] xl:w-[272px]`
     : `${base} w-0 overflow-hidden border-r-0`;
 }
 
 export function getBuildStudioGraphPanelClassName() {
-  return "flex min-h-[420px] flex-1 overflow-hidden px-4 pb-4 pt-3";
+  return "flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 pt-3 lg:px-4 lg:pb-4";
 }
