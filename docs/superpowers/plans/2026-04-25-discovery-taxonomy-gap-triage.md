@@ -39,6 +39,14 @@ Open implementation blocker:
 
 - The spec marks daily-owner selection as approval-needed. Default to `agentId: "discovery-steward"` in code behind a single constant, but do not seed it into production data until Mark confirms the owner. If execution starts before confirmation, implement the code path and leave the seed guarded by a TODO/backlog note.
 
+Cross-package boundary rule:
+
+- `@dpf/db` cannot import from `apps/web`. Canonical enum source-of-truth files live in `packages/db/src/discovery-triage-enums.ts` and are **re-exported** from `apps/web/lib/discovery-triage.ts`. Do not duplicate the `as const` arrays.
+
+Runner-to-coworker bridge:
+
+- The seeded `ScheduledAgentTask` fires the coworker with the prompt — it does not directly invoke `runDiscoveryTriageDaily()`. The bridge is an MCP tool, `run_discovery_triage`, that the coworker calls from inside the prompt. Without that tool, the seeded task is a no-op. See Task 7b.
+
 ---
 
 ## File Map
@@ -56,18 +64,19 @@ Open implementation blocker:
   - Preserve legacy attribution status values.
 - Modify: `packages/db/src/discovery-attribution.test.ts`
   - Cover hyphenated `ai-proposed` where relevant.
+- Create: `packages/db/src/discovery-triage-enums.ts`
+  - Canonical `as const` arrays + union types per spec §10.1. **Source of truth.** `apps/web` re-exports from here.
 - Create: `packages/db/src/discovery-triage.ts`
   - Domain logic for evidence packets, scoring, routing, decision payloads, metrics, and auto-apply decision shaping.
 - Create: `packages/db/src/discovery-triage.test.ts`
   - Unit tests for threshold routing, ambiguity, evidence completeness, taxonomy gap, proposed rule JSON, and metrics.
 - Modify: `packages/db/src/index.ts`
-  - Export triage helpers.
+  - Export triage helpers and enums.
 
 ### Web Domain And Actions
 
 - Create: `apps/web/lib/discovery-triage.ts`
-  - Canonical `as const` enum arrays and web-facing types.
-  - Re-export or mirror DB constants if package boundaries allow.
+  - **Re-exports** the `as const` arrays and union types from `@dpf/db` (`discovery-triage-enums`). Do not redeclare them.
 - Create: `apps/web/lib/discovery-triage-runner.ts`
   - Server-side orchestrator for daily/volume-triggered triage.
 - Create: `apps/web/lib/discovery-triage-runner.test.ts`
@@ -78,9 +87,9 @@ Open implementation blocker:
 - Modify: `apps/web/lib/actions/inventory.test.ts`
   - Cover new actions and unchanged existing actions.
 - Modify: `apps/web/lib/consume/discovery-data.ts`
-  - Expose grouped triage queue and decision history.
+  - Add `getInventoryTriageQueues()` that **composes with** the existing `getNeedsReviewEntities()` — do not introduce a parallel data path. Add decision-history accessors alongside.
 - Modify: `apps/web/lib/mcp-tools.ts`
-  - Only if triage fields are exposed through MCP tools; mirror enum arrays exactly.
+  - Add the `run_discovery_triage` MCP tool (Task 7b) and its handler. Mirror any exposed enum arrays exactly from `discovery-triage-enums`.
 
 ### Scheduler, Prompt, And Agent Registry
 
@@ -99,8 +108,8 @@ Open implementation blocker:
 
 - Modify: `apps/web/components/inventory/InventoryExceptionQueue.tsx`
   - Evolve into a compact triage workbench using theme-aware CSS variables.
-- Modify: `apps/web/components/inventory/InventoryExceptionQueue.test.tsx`
-  - Extend server-render tests if existing pattern supports it.
+- Create: `apps/web/components/inventory/InventoryExceptionQueue.test.tsx`
+  - This file does **not** exist today (verified 2026-04-25). Create it; do not assume an existing pattern.
 - Modify: `apps/web/app/(shell)/inventory/page.tsx`
   - Wire grouped triage data into the component if not already passed.
 - Modify: `apps/web/app/(shell)/inventory/page.test.tsx`
@@ -118,18 +127,23 @@ Open implementation blocker:
 
 ### Task 1: Add canonical triage constants
 
-**Files:**
-- Create: `apps/web/lib/discovery-triage.ts`
-- Create or modify: `apps/web/lib/discovery-triage.test.ts`
+The canonical `as const` arrays live in `@dpf/db` because `apps/web` may import from `@dpf/db` but not vice versa. The web file is a thin re-export.
 
-- [ ] **Step 1: Write the constants test**
+**Files:**
+- Create: `packages/db/src/discovery-triage-enums.ts`
+- Create: `packages/db/src/discovery-triage-enums.test.ts`
+- Create: `apps/web/lib/discovery-triage.ts`
+- Create: `apps/web/lib/discovery-triage.test.ts`
+- Modify: `packages/db/src/index.ts`
+
+- [ ] **Step 1: Write the constants test (DB side)**
 
 ```ts
 import {
   TRIAGE_ACTOR_TYPES,
   TRIAGE_OUTCOMES,
   TRIAGE_QUALITY_ISSUE_TYPES,
-} from "@/lib/discovery-triage";
+} from "./discovery-triage-enums";
 
 describe("discovery triage constants", () => {
   it("uses canonical hyphenated values", () => {
@@ -148,13 +162,14 @@ describe("discovery triage constants", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter web vitest run apps/web/lib/discovery-triage.test.ts`
+Run: `pnpm --filter @dpf/db vitest run packages/db/src/discovery-triage-enums.test.ts`
 
-Expected: FAIL because `apps/web/lib/discovery-triage.ts` does not exist.
+Expected: FAIL because the file does not exist.
 
-- [ ] **Step 3: Add constants and union types**
+- [ ] **Step 3: Add constants and union types in `@dpf/db`**
 
 ```ts
+// packages/db/src/discovery-triage-enums.ts
 export const TRIAGE_ACTOR_TYPES = ["agent", "human", "system"] as const;
 export type TriageActorType = (typeof TRIAGE_ACTOR_TYPES)[number];
 
@@ -175,18 +190,63 @@ export const TRIAGE_QUALITY_ISSUE_TYPES = [
 export type TriageQualityIssueType = (typeof TRIAGE_QUALITY_ISSUE_TYPES)[number];
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+Add re-exports to `packages/db/src/index.ts`.
 
-Run: `pnpm --filter web vitest run apps/web/lib/discovery-triage.test.ts`
+- [ ] **Step 4: Add the web-side re-export**
+
+```ts
+// apps/web/lib/discovery-triage.ts
+export {
+  TRIAGE_ACTOR_TYPES,
+  TRIAGE_OUTCOMES,
+  TRIAGE_QUALITY_ISSUE_TYPES,
+  type TriageActorType,
+  type TriageOutcome,
+  type TriageQualityIssueType,
+} from "@dpf/db";
+```
+
+Web-side test asserts the re-export works:
+
+```ts
+// apps/web/lib/discovery-triage.test.ts
+import { TRIAGE_OUTCOMES } from "@/lib/discovery-triage";
+
+it("re-exports the canonical outcome enum from @dpf/db", () => {
+  expect(TRIAGE_OUTCOMES).toContain("auto-attributed");
+});
+```
+
+- [ ] **Step 5: Run both test files to verify they pass**
+
+Run:
+
+```bash
+pnpm --filter @dpf/db vitest run packages/db/src/discovery-triage-enums.test.ts
+pnpm --filter web vitest run apps/web/lib/discovery-triage.test.ts
+```
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
+
+`git commit -s` adds the `Signed-off-by:` trailer required by the DCO bot — do not omit `-s` on any commit.
+
+PowerShell (default for this Windows install):
 
 ```powershell
 $branch = git branch --show-current
 if ($branch -eq "main") { throw "ERROR: on main - abort" }
-git add apps/web/lib/discovery-triage.ts apps/web/lib/discovery-triage.test.ts
+git add packages/db/src/discovery-triage-enums.ts packages/db/src/discovery-triage-enums.test.ts packages/db/src/index.ts apps/web/lib/discovery-triage.ts apps/web/lib/discovery-triage.test.ts
+git commit -s -m "feat(discovery): add triage enum constants"
+```
+
+Bash equivalent:
+
+```bash
+branch=$(git branch --show-current)
+[ "$branch" = "main" ] && { echo "ERROR: on main - abort"; exit 1; }
+git add packages/db/src/discovery-triage-enums.ts packages/db/src/discovery-triage-enums.test.ts packages/db/src/index.ts apps/web/lib/discovery-triage.ts apps/web/lib/discovery-triage.test.ts
 git commit -s -m "feat(discovery): add triage enum constants"
 ```
 
@@ -230,13 +290,15 @@ model DiscoveryTriageDecision {
 
 - [ ] **Step 2: Generate a migration**
 
-Run: `pnpm migrate`
+Run: `pnpm --filter @dpf/db exec prisma migrate dev --name add_discovery_triage_decisions`
 
-Expected: a new migration directory is created.
+Per CLAUDE.md: never `npx prisma`; never `pnpm migrate` (no such root script — `pnpm db:migrate` exists but `prisma migrate dev` without `--name` prompts interactively, which deadlocks agentic runs). Migration timestamps must be unique — Prisma generates a new one automatically; do not reuse a directory name from an existing migration.
+
+Expected: a new migration directory `packages/db/prisma/migrations/<unique-timestamp>_add_discovery_triage_decisions/` is created.
 
 - [ ] **Step 3: Add data update SQL inside the migration**
 
-Append a forward-only data update:
+Append a forward-only data update to the generated `migration.sql`:
 
 ```sql
 UPDATE "InventoryEntity"
@@ -244,15 +306,19 @@ SET "attributionMethod" = 'ai-proposed'
 WHERE "attributionMethod" = 'ai_proposed';
 ```
 
+(Lumping schema + data update in one migration is a deliberate choice for slice 1: the rename is small and the rollback story is "drop the table + revert code." If the diff grows, split into a second `_normalize_attribution_method` migration.)
+
 - [ ] **Step 4: Re-run migration apply**
 
-Run: `pnpm migrate`
+Run: `pnpm --filter @dpf/db exec prisma migrate dev` (no `--name` — re-runs apply only when the schema is unchanged).
 
 Expected: migration applies cleanly without drift.
 
 - [ ] **Step 5: Generate Prisma client if needed**
 
-Run: `pnpm --filter @dpf/db prisma generate`
+Run: `pnpm --filter @dpf/db generate`
+
+(This invokes the `generate` script which wraps `prisma generate` with the workspace-pinned version. Do not run `npx prisma generate`.)
 
 Expected: generated client updates cleanly.
 
@@ -274,7 +340,7 @@ git commit -s -m "feat(discovery): add triage decision log"
 
 - [ ] **Step 1: Search current usage**
 
-Run: `Get-ChildItem -Recurse -File -Include *.ts,*.tsx,*.json,*.md | Select-String -Pattern 'ai_proposed'`
+Use the Grep tool (ripgrep-backed) for `ai_proposed` across `*.ts`, `*.tsx`, `*.json`, `*.md`. PowerShell `Get-ChildItem | Select-String` is the fallback only if Grep is unavailable.
 
 Expected: at least `packages/db/src/discovery-attribution.ts` is found.
 
@@ -320,8 +386,9 @@ git commit -s -m "fix(discovery): use canonical ai-proposed attribution"
 **Files:**
 - Create: `packages/db/src/discovery-triage.ts`
 - Create: `packages/db/src/discovery-triage.test.ts`
-- Create: `packages/db/src/__fixtures__/discovery-triage/windows-host.json`
 - Modify: `packages/db/src/index.ts`
+
+(Fixture files under `packages/db/src/__fixtures__/discovery-triage/` are deferred to slice 2 when rule synthesis lands. Slice-1 tests synthesize evidence inline.)
 
 - [ ] **Step 1: Write failing evidence packet test**
 
@@ -374,7 +441,7 @@ Expected: PASS.
 ```powershell
 $branch = git branch --show-current
 if ($branch -eq "main") { throw "ERROR: on main - abort" }
-git add packages/db/src/discovery-triage.ts packages/db/src/discovery-triage.test.ts packages/db/src/__fixtures__/discovery-triage packages/db/src/index.ts
+git add packages/db/src/discovery-triage.ts packages/db/src/discovery-triage.test.ts packages/db/src/index.ts
 git commit -s -m "feat(discovery): build triage evidence packets"
 ```
 
@@ -540,11 +607,12 @@ export async function maybeTriggerDiscoveryTriageForVolume(): Promise<{
 
 Important:
 
-- idempotency key: date + agentId + trigger family
+- **Idempotency.** Compose the key as `${YYYY-MM-DD}:${agentId}:${triggerFamily}` and check it against a same-day `DiscoveryTriageDecision` row whose `evidencePacket.runIdempotencyKey` matches before doing any work. (This avoids adding a new model just for a dedupe row in slice 1; if same-day collisions become common, slice 2 introduces a `DiscoveryTriageRun` aggregate.) Trigger families: `"cadence"`, `"volume"`.
 - query `InventoryEntity` with `attributionStatus = "needs_review"` first
 - include low-confidence attributed records only if query cost is reasonable
 - do not auto-contribute externally
 - keep `redactionStatus: "unverified"`
+- The runner is invoked from the MCP tool added in Task 7b. It is also exported from `apps/web/lib/discovery-triage-runner.ts` so the volume-trigger entry point can call it directly without going through the coworker prompt.
 
 - [ ] **Step 4: Implement auto-apply update**
 
@@ -588,6 +656,56 @@ git add apps/web/lib/discovery-triage-runner.ts apps/web/lib/discovery-triage-ru
 git commit -s -m "feat(discovery): run scheduled taxonomy triage"
 ```
 
+### Task 7b: Add the `run_discovery_triage` MCP tool
+
+Without this tool the seeded `ScheduledAgentTask` is a no-op: it fires the coworker with the prompt, but no code path inside the prompt invokes `runDiscoveryTriageDaily()`.
+
+**Files:**
+- Modify: `apps/web/lib/mcp-tools.ts`
+- Modify: `apps/web/lib/mcp-tools.test.ts` (or the nearest existing tool-handler test)
+- Modify: `packages/db/data/agent_registry.json` — grant the chosen owner coworker access to the new tool
+
+- [ ] **Step 1: Define the tool**
+
+```ts
+// inside mcp-tools.ts, alongside existing tool definitions
+{
+  name: "run_discovery_triage",
+  description: "Run a single triage pass over needs_review and weakly-resolved inventory. Returns the daily summary metrics from the run.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      trigger: { type: "string", enum: ["cadence", "volume"], default: "cadence" },
+    },
+  },
+}
+```
+
+The handler calls `runDiscoveryTriageDaily({ trigger, actorId: ctx.agentId })` and returns the `DiscoveryTriageRunSummary` JSON.
+
+- [ ] **Step 2: Write a handler test**
+
+Mock the runner; assert the tool definition is exposed, the handler forwards `trigger`, and the summary shape matches the runner's return type.
+
+- [ ] **Step 3: Grant the tool**
+
+Add `"run_discovery_triage"` to the owner coworker's `allowedTools` in `agent_registry.json`. Per the agent-grant invariant guard, missing grants cause silent denial — verify with the existing grant-coverage check after seeding.
+
+- [ ] **Step 4: Run tests**
+
+Run: `pnpm --filter web vitest run apps/web/lib/mcp-tools.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+$branch = git branch --show-current
+if ($branch -eq "main") { throw "ERROR: on main - abort" }
+git add apps/web/lib/mcp-tools.ts apps/web/lib/mcp-tools.test.ts packages/db/data/agent_registry.json
+git commit -s -m "feat(discovery): expose run_discovery_triage MCP tool"
+```
+
 ### Task 8: Add prompt and seed hook
 
 **Files:**
@@ -610,6 +728,7 @@ Prompt requirements:
 - identity: "I'm Discovery Steward." or selected role
 - capabilities: triage discovery gaps, explain evidence, propose taxonomy/device recognition actions
 - skills hint: standard DPF greeting language
+- **must** invoke `run_discovery_triage` (Task 7b) on each fire and report its summary back to the user/log
 - strict rules: no taxonomy invention without review, no external fingerprint contribution, log every decision
 
 - [ ] **Step 3: Seed scheduled task idempotently**
@@ -617,10 +736,21 @@ Prompt requirements:
 Seed only after owner is resolved:
 
 - `taskId = discovery-taxonomy-gap-triage-daily`
+- `agentId = <resolved owner>` (default `discovery-steward`)
 - `schedule = 0 8 * * *`
 - `routeContext = enterprise/discovery`
-- `timezone = install timezone || UTC`
-- `ownerUserId = first superuser`
+- `timezone = process.env.INSTALL_TIMEZONE ?? "UTC"`
+- `ownerUserId` — resolved at seed time, not hard-coded. The "first superuser" pattern is not yet established in `seed.ts`; use:
+
+  ```ts
+  const owner = await prisma.user.findFirst({
+    where: { role: "superuser" },  // verify the actual role field/value before relying on this
+    orderBy: { createdAt: "asc" },
+  });
+  if (!owner) throw new Error("seed: no superuser found — cannot seed discovery triage scheduled task");
+  ```
+
+  Verify the role field name and value against the `User` model before merging — it may be `role`, `isSuperuser`, or `Membership.role`.
 
 - [ ] **Step 4: Run seed/migration verification**
 
@@ -654,21 +784,21 @@ Test grouping by:
 - `needs-more-evidence`
 - `taxonomy-gap`
 
-- [ ] **Step 2: Implement `getInventoryTriageQueues()`**
+- [ ] **Step 2: Implement `getInventoryTriageQueues()` by composing with the existing helper**
 
-Return:
+The file already exports `getNeedsReviewEntities()` ([apps/web/lib/consume/discovery-data.ts:42](apps/web/lib/consume/discovery-data.ts#L42)). Do not introduce a parallel data path — the new function calls into it (or shares the same underlying query) and groups the result by `DiscoveryTriageDecision.outcome`:
 
 ```ts
-{
-  autoApplied: [],
-  humanReview: [],
-  needsMoreEvidence: [],
-  taxonomyGaps: [],
-  metrics: {...}
-}
+export async function getInventoryTriageQueues(): Promise<{
+  autoApplied: TriageRow[];
+  humanReview: TriageRow[];
+  needsMoreEvidence: TriageRow[];
+  taxonomyGaps: TriageRow[];
+  metrics: TriageMetrics;
+}>;
 ```
 
-Include latest decision history per entity.
+Each `TriageRow` carries the entity plus its latest `DiscoveryTriageDecision`. Decision history (older decisions for the same `inventoryEntityId`) is exposed via a separate `getDiscoveryTriageDecisionHistory(entityId)` accessor, so the workbench list isn't bloated with history per row.
 
 - [ ] **Step 3: Run tests**
 
@@ -689,7 +819,7 @@ git commit -s -m "feat(discovery): expose triage queues"
 
 **Files:**
 - Modify: `apps/web/components/inventory/InventoryExceptionQueue.tsx`
-- Modify: `apps/web/components/inventory/InventoryExceptionQueue.test.tsx`
+- Create: `apps/web/components/inventory/InventoryExceptionQueue.test.tsx` *(does not exist today — verified 2026-04-25)*
 - Modify: `apps/web/app/(shell)/inventory/page.tsx`
 
 - [ ] **Step 1: Write failing render test**
@@ -837,7 +967,7 @@ git commit -s -m "feat(discovery): summarize triage learning metrics"
 
 - [ ] **Step 1: Find the inventory/platform operations phase**
 
-Run: `Select-String -Path tests/e2e/platform-qa-plan.md -Pattern 'Inventory|Discovery|Operate|AI Coworker' -Context 2,4`
+Use the Grep tool against `tests/e2e/platform-qa-plan.md` for `Inventory|Discovery|Operate|AI Coworker` with `-C 2`. PowerShell `Select-String` is the fallback only if Grep is unavailable.
 
 - [ ] **Step 2: Add affected test cases**
 
@@ -874,7 +1004,9 @@ Expected: PASS or document pre-existing failures with evidence.
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `pnpm --filter web typecheck`
+The migration touches `@dpf/db` so run the workspace-wide check, not just `web`.
+
+Run: `pnpm typecheck`
 
 Expected: PASS.
 
@@ -908,7 +1040,12 @@ Expected: only intended feature files plus docs/QA changes.
 
 - [ ] **Step 6: Prepare PR**
 
-Push branch and open PR against `main` after all gates pass.
+Push the branch and open a PR against `main` after all gates pass. Per CLAUDE.md branch protection:
+
+- merge-blocking checks: **Typecheck**, **Production Build**, **DCO**
+- every commit must carry `Signed-off-by:` (the `git commit -s` flag) — the DCO bot blocks merge otherwise
+- merge mode is squash-merge; do not force-push to `main`
+- branch name follows the `feat/*` / `fix/*` convention (one concern per PR)
 
 ---
 
@@ -917,6 +1054,8 @@ Push branch and open PR against `main` after all gates pass.
 - Do not edit committed migration files after commit.
 - Do not use `seed.ts` to represent runtime changes. Only seed bootstrap defaults and the scheduled task definition if owner decision is resolved.
 - Keep the sibling fingerprint contribution pipeline out of this PR except for the `proposedRule` JSON placeholder and explicit blocked backlog dependency.
-- Preserve legacy `needs_review` until a separate enum hygiene decision is made.
+- Preserve legacy `attributionStatus = "needs_review"` (with underscore) until a separate enum hygiene decision is made — see spec §16 Q7. New enum values added by this plan use hyphens.
 - Avoid hardcoded UI colors in the workbench. The current component already has some `yellow-500` and `green-600` classes; the implementation should clean those up while touching the file.
-- If `rg` fails in this Windows environment, use PowerShell `Get-ChildItem` / `Select-String`.
+- The seeded `ScheduledAgentTask` is inert without the `run_discovery_triage` MCP tool from Task 7b — order tasks 7 → 7b → 8 strictly.
+- Default to bash for shell commands; PowerShell variants are provided for the Windows environment. Use the Grep tool for code search, not `Get-ChildItem | Select-String`.
+- DCO: every commit must carry `git commit -s` to attach the `Signed-off-by:` trailer. Never use `--no-verify` or `--no-gpg-sign`.
