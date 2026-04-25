@@ -841,6 +841,7 @@ model TaxonomyNode {
   backlogItems           BacklogItem[]
   products               DigitalProduct[]
   eaElements             EaElement[]
+  fingerprintRules       DiscoveryFingerprintRule[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
   parent                 TaxonomyNode?           @relation("TaxonomyTree", fields: [parentId], references: [id])
@@ -2298,6 +2299,7 @@ model DiscoveryRun {
   notes               Json?
   discoveredItems     DiscoveredItem[]
   discoveredRelations DiscoveredRelationship[]
+  fingerprintObservations DiscoveryFingerprintObservation[]
   confirmedEntities   InventoryEntity[]        @relation("InventoryEntityConfirmedRun")
   confirmedRelations  InventoryRelationship[]  @relation("InventoryRelationshipConfirmedRun")
 }
@@ -2346,6 +2348,110 @@ model DiscoveredSoftwareEvidence {
 
   @@index([inventoryEntityId])
   @@index([normalizationStatus])
+}
+
+model DiscoveryFingerprintObservation {
+  id                 String   @id @default(cuid())
+  observationKey     String   @unique
+  inventoryEntityId  String?
+  discoveryRunId     String?
+  sourceKind         String
+  signalClass        String
+  protocol           String?
+  rawEvidenceLocal   Json?
+  normalizedEvidence Json
+  redactionStatus    String   @default("not_required")
+  evidenceFamilies   String[] @default([])
+  identityCandidates Json     @default("[]")
+  taxonomyCandidates Json     @default("[]")
+  identityConfidence Float?
+  taxonomyConfidence Float?
+  candidateMargin    Float?
+  blastRadiusTier    String   @default("medium")
+  decisionStatus     String   @default("pending")
+  reviewReason       String?
+  approvedRuleId     String?
+  firstSeenAt        DateTime @default(now())
+  lastSeenAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  inventoryEntity InventoryEntity?              @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  discoveryRun    DiscoveryRun?                 @relation(fields: [discoveryRunId], references: [id], onDelete: SetNull)
+  approvedRule    DiscoveryFingerprintRule?     @relation("ApprovedFingerprintRule", fields: [approvedRuleId], references: [id], onDelete: SetNull)
+  reviews         DiscoveryFingerprintReview[]
+
+  @@index([sourceKind])
+  @@index([signalClass])
+  @@index([redactionStatus])
+  @@index([decisionStatus])
+  @@index([blastRadiusTier])
+  @@index([inventoryEntityId])
+  @@index([discoveryRunId])
+}
+
+model DiscoveryFingerprintReview {
+  id             String   @id @default(cuid())
+  observationId  String
+  reviewerType   String
+  reviewerId     String?
+  decision       String
+  reason         String?
+  previousStatus String?
+  nextStatus     String
+  auditPayload   Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  observation DiscoveryFingerprintObservation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  @@index([observationId])
+  @@index([decision])
+  @@index([reviewerType])
+}
+
+model DiscoveryFingerprintRule {
+  id                       String   @id @default(cuid())
+  ruleKey                  String   @unique
+  catalogVersionId         String?
+  status                   String   @default("draft")
+  scope                    String   @default("global")
+  matchExpression          Json
+  requiredEvidenceFamilies String[] @default([])
+  excludedSignals          Json     @default("[]")
+  resolvedIdentity         Json
+  taxonomyNodeId           String?
+  identityConfidence       Float
+  taxonomyConfidence       Float
+  source                   String   @default("manual")
+  redactionReport          Json     @default("{}")
+  fixtureRefs              String[] @default([])
+  sourceObservationIds     String[] @default([])
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  catalogVersion       DiscoveryFingerprintCatalogVersion? @relation(fields: [catalogVersionId], references: [id], onDelete: SetNull)
+  taxonomyNode         TaxonomyNode?                       @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  approvedObservations DiscoveryFingerprintObservation[]    @relation("ApprovedFingerprintRule")
+
+  @@index([status])
+  @@index([scope])
+  @@index([taxonomyNodeId])
+  @@index([catalogVersionId])
+}
+
+model DiscoveryFingerprintCatalogVersion {
+  id            String   @id @default(cuid())
+  catalogKey    String
+  version       String
+  schemaVersion String
+  source        String   @default("repo")
+  importedAt    DateTime @default(now())
+  changelog     String?
+  validation    Json     @default("{}")
+
+  rules DiscoveryFingerprintRule[]
+
+  @@unique([catalogKey, version])
 }
 
 model DiscoveredRelationship {
@@ -2404,6 +2510,7 @@ model InventoryEntity {
   qualityIssues               PortfolioQualityIssue[]
   changeItems                 ChangeItem[]
   softwareEvidence            DiscoveredSoftwareEvidence[]
+  fingerprintObservations     DiscoveryFingerprintObservation[]
   discoveryConnectionGateways DiscoveryConnection[]        @relation("DiscoveryConnectionGateway")
   discoveredViaConnectionId   String?
   discoveredViaConnection     DiscoveryConnection?         @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
