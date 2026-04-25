@@ -10,6 +10,7 @@ import {
   fetchPublicWebsiteEvidence,
   searchPublicWeb,
 } from "@/lib/public-web-tools";
+import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import {
@@ -241,6 +242,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         size: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "T-shirt size estimate" },
       },
       required: ["itemId", "size"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "process_backlog_for_build_studio",
+    description: "Queue an on-demand governed backlog sweep that prepares eligible Build Studio drafts without auto-starting execution.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Optional cap for this on-demand sweep. Still constrained by the platform daily cap." },
+      },
+      required: [],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -2429,46 +2443,12 @@ export async function executeTool(
       const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
 
       const result = await prisma.$transaction(async (tx) => {
-        const item = await tx.backlogItem.findUnique({ where: { itemId } });
-        if (!item) {
-          return { kind: "error" as const, error: "Item not found", message: `Item ${itemId} not found` };
-        }
-        if (item.status !== "open" || item.triageOutcome !== "build") {
-          return {
-            kind: "error" as const,
-            error: "Item is not eligible for Build Studio promotion",
-            message: `Item ${itemId} must be open with triageOutcome=build`,
-          };
-        }
-        if (item.activeBuildId) {
-          return {
-            kind: "error" as const,
-            error: "Item already has an active build",
-            message: `Item ${itemId} already has an active build`,
-          };
-        }
-
-        const created = await tx.featureBuild.create({
-          data: {
-            buildId: generateBuildId(),
-            title: item.title,
-            ...(item.body ? { description: item.body } : {}),
-            createdById: userId,
-            digitalProductId: item.digitalProductId ?? null,
-            originatingBacklogItemId: item.id,
-            draftApprovedAt: null,
-          },
+        return promoteBacklogItemToBuildDraft({
+          tx,
+          itemId,
+          userId,
+          governedBacklogEnabled,
         });
-
-        await tx.backlogItem.update({
-          where: { itemId },
-          data: {
-            activeBuildId: created.id,
-            status: governedBacklogEnabled ? "open" : "in-progress",
-          },
-        });
-
-        return { kind: "success" as const, build: created };
       });
 
       if (result.kind === "error") {
@@ -2482,6 +2462,51 @@ export async function executeTool(
         data: {
           buildId: result.build.buildId,
           backlogItemId: itemId,
+        },
+      };
+    }
+
+    case "process_backlog_for_build_studio": {
+      const governedConfig = await prisma.platformDevConfig.findUnique({
+        where: { id: "singleton" },
+        select: {
+          governedBacklogEnabled: true,
+          backlogTeeUpDailyCap: true,
+        },
+      });
+
+      if (governedConfig?.governedBacklogEnabled !== true) {
+        return {
+          success: false,
+          error: "Governed backlog mode is disabled",
+          message: "Governed backlog mode must be enabled before backlog processing can be queued.",
+        };
+      }
+
+      const requestedLimitRaw = Number(params["limit"]);
+      const configuredCap = governedConfig.backlogTeeUpDailyCap ?? 3;
+      const limit = Number.isFinite(requestedLimitRaw)
+        ? Math.min(Math.max(0, Math.floor(requestedLimitRaw)), configuredCap)
+        : configuredCap;
+
+      const { inngest } = await import("@/lib/queue/inngest-client");
+      await inngest.send({
+        name: "build/backlog-tee-up.requested",
+        data: {
+          userId,
+          limit,
+          routeContext: context?.routeContext ?? null,
+          threadId: context?.threadId ?? null,
+          requestedByAgentId: context?.agentId ?? null,
+        },
+      });
+
+      return {
+        success: true,
+        message: "Queued an on-demand backlog sweep for Build Studio draft tee-up.",
+        data: {
+          status: "queued",
+          limit,
         },
       };
     }

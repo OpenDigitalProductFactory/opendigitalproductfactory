@@ -12,6 +12,10 @@ import { hiveScoutIngest } from "./hive-scout-ingest";
 import { brandExtract } from "./brand-extract";
 import { buildReviewVerification } from "./build-review-verification";
 import { deliberationRun } from "./deliberation-run";
+import {
+  governedBacklogTeeUpRequested,
+  governedBacklogTeeUpScheduled,
+} from "./governed-backlog-tee-up";
 
 export const allFunctions = [
   prometheusPoll,
@@ -31,4 +35,6 @@ export const allFunctions = [
   brandExtract,
   buildReviewVerification,
   deliberationRun,
+  governedBacklogTeeUpScheduled,
+  governedBacklogTeeUpRequested,
 ];
