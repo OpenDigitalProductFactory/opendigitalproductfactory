@@ -1,9 +1,15 @@
-import { PlatformKeysPanel, PLATFORM_KEY_CONFIGS } from "@/components/admin/PlatformKeysPanel";
+import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { getBuiltInToolsOverview } from "@/lib/actions/built-in-tools";
 
-const BRAVE_SEARCH_CONFIG = PLATFORM_KEY_CONFIGS.filter(
-  (config) => config.key === "brave_search_api_key",
-);
+const BRAVE_SEARCH_CONFIG = [
+  {
+    key: "brave_search_api_key",
+    label: "Brave Search API Key",
+    description: "Enables the AI Coworker to search the web when External Access is on. Get a free key at brave.com/search/api.",
+    placeholder: "BSA-xxxxxxxxxxxxxxxx",
+    isSecret: true,
+  },
+];
 
 export default async function BuiltInToolsPage() {
   const { tools, keyData } = await getBuiltInToolsOverview();
