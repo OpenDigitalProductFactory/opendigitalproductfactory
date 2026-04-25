@@ -4,12 +4,15 @@ import { useCallback, useEffect, useRef } from "react";
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
 import type { NodeStatus } from "@/lib/build/process-graph-builder";
+import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
+import { deriveWorkflowStageGuidance } from "./build-studio-workflow-actions";
 
 type Props = {
   build: FeatureBuildRow;
   phase: BuildPhase;
   status: NodeStatus;
   workflowLabel: string | null;
+  governedBacklogEnabled: boolean;
   onClose: () => void;
 };
 
@@ -39,30 +42,6 @@ function getStageSummary(phase: BuildPhase, build: FeatureBuildRow): string {
     default:
       return "This workflow stage is being tracked by Build Studio.";
   }
-}
-
-function getNextApproval(phase: BuildPhase, build: FeatureBuildRow, workflowLabel: string | null): string {
-  if (workflowLabel === "Prepared Draft") {
-    return "Approve Start to let Build Studio move from draft preparation into active execution.";
-  }
-
-  if (workflowLabel === "Ready to Start") {
-    return "Start execution when the request, assumptions, and draft effort all look correct.";
-  }
-
-  if (phase === "review") {
-    return "Review the sandbox evidence and decide whether the feature is ready to move into release readiness.";
-  }
-
-  if (phase === "ship") {
-    return "Decide separately on community sharing, release timing, and production promotion.";
-  }
-
-  if (build.phase === "failed") {
-    return "Resolve the blocking issue before advancing the workflow.";
-  }
-
-  return "No additional approval is required at this stage yet.";
 }
 
 function getArtifactLines(phase: BuildPhase, build: FeatureBuildRow): string[] {
@@ -116,12 +95,19 @@ export function WorkflowStageInspector({
   phase,
   status,
   workflowLabel,
+  governedBacklogEnabled,
   onClose,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const statusCfg = STATUS_CONFIG[status];
   const stageLabel = PHASE_LABELS[phase] ?? phase;
   const artifacts = getArtifactLines(phase, build);
+  const stageGuidance = deriveWorkflowStageGuidance({
+    build,
+    phase,
+    workflowLabel,
+    governedBacklogEnabled,
+  });
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === "Escape") onClose();
@@ -252,7 +238,15 @@ export function WorkflowStageInspector({
 
           <div style={{ marginBottom: 16 }}>
             <div style={sectionLabelStyle}>Next Approval</div>
-            <div style={bodyTextStyle}>{getNextApproval(phase, build, workflowLabel)}</div>
+            <div style={bodyTextStyle}>{stageGuidance.nextApproval}</div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <BuildStudioWorkflowActionCard
+              build={build}
+              action={stageGuidance.workflowAction}
+              compact
+            />
           </div>
 
           {artifacts.length > 0 && (

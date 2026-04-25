@@ -85,9 +85,16 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
 
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
-  if (build.phase !== "ideate") throw new Error("Start approval is only available during Ideate");
-  if (devConfig?.governedBacklogEnabled !== true || !build.originatingBacklogItemId) {
-    throw new Error("Only governed backlog drafts require start approval");
+  if (build.phase !== "ideate" && build.phase !== "plan") {
+    throw new Error("Start approval is only available before implementation begins");
+  }
+  if (!build.originatingBacklogItemId) {
+    throw new Error("Only backlog-linked drafts require start approval");
+  }
+  if (devConfig?.governedBacklogEnabled !== true && build.phase === "ideate") {
+    // Allow already-linked drafts to record approval even if the flag later
+    // drifts off, but keep plain ideate builds out of the approval path.
+    throw new Error("This build is not using the governed backlog workflow");
   }
 
   const approvedAt = build.draftApprovedAt ?? new Date();
@@ -169,14 +176,19 @@ export async function advanceBuildPhase(
   });
 
   const requiresStartApproval =
-    currentPhase === "ideate"
-    && targetPhase === "plan"
-    && governedConfig?.governedBacklogEnabled === true
-    && build.originatingBacklogItemId != null
-    && build.draftApprovedAt == null;
+    build.originatingBacklogItemId != null
+    && build.draftApprovedAt == null
+    && (
+      (currentPhase === "ideate" && targetPhase === "plan")
+      || (currentPhase === "plan" && targetPhase === "build")
+    );
 
   if (requiresStartApproval) {
-    throw new Error("Approve Start before moving this governed backlog draft into planning.");
+    throw new Error(
+      currentPhase === "ideate"
+        ? "Approve Start before moving this governed backlog draft into planning."
+        : "Approve Start before moving this backlog-linked draft into implementation.",
+    );
   }
 
   if (!canTransitionPhase(currentPhase, targetPhase)) {
