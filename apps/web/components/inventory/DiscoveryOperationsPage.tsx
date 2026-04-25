@@ -4,8 +4,8 @@ import { prisma } from "@dpf/db";
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 import {
   getInventoryEntitiesGroupedBySubnet,
+  getInventoryTriageQueues,
   getLatestDiscoveryRun,
-  getNeedsReviewEntities,
   getOpenPortfolioQualityIssues,
   summarizeDiscoveryHealth,
 } from "@/lib/discovery-data";
@@ -34,7 +34,7 @@ export async function DiscoveryOperationsPage({
     products,
     latestRun,
     groupedInventory,
-    needsReview,
+    triageQueues,
     openIssues,
     graphData,
     connectionCount,
@@ -52,7 +52,7 @@ export async function DiscoveryOperationsPage({
     }),
     getLatestDiscoveryRun(),
     getInventoryEntitiesGroupedBySubnet(),
-    getNeedsReviewEntities(),
+    getInventoryTriageQueues(),
     getOpenPortfolioQualityIssues(),
     getFullGraphData(),
     prisma.discoveryConnection.count(),
@@ -130,7 +130,7 @@ export async function DiscoveryOperationsPage({
           </div>
           <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
             <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">Needs review</p>
-            <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{needsReview.length}</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{triageQueues.metrics.total}</p>
           </div>
         </section>
       </div>
@@ -138,7 +138,7 @@ export async function DiscoveryOperationsPage({
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
         {connectionCount === 0 && <AddDiscoveryConnection detectedGateway={realGatewayIp} />}
-        <InventoryExceptionQueue entities={needsReview} />
+        <InventoryExceptionQueue queues={triageQueues} />
         <SubnetGroupedInventoryPanel groups={groupedInventory} />
         <PortfolioQualityIssuesPanel issues={openIssues} />
       </div>
