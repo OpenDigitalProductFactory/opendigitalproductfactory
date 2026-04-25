@@ -198,6 +198,16 @@ The coworker should not just chat. Its useful outputs should become structured w
 
 Campaigns, public messages, customer-facing content, and automations must remain reviewable. The Marketing Strategist may draft, organize, and recommend; it must not silently publish.
 
+### 3.8 Page Body Has a Job
+
+The main page body should not become the chat conversation. It has different jobs at different route levels:
+
+- **Higher-level overview pages** summarize the area, show current state, expose key signals, and help the user decide where to go next.
+- **Detail/configuration pages** show the editable facts, settings, and records that define the area.
+- **Coworker launch surfaces** start guided specialist work from either an overview or detail page, but only after explicit user confirmation.
+
+For marketing, this means `/customer/marketing` is primarily an overview and orientation page. `/customer/marketing/strategy` is where the user should inspect and eventually change strategy details. The Marketing Strategist is available from both, but the body should not be replaced by a pile of prompts or chat messages.
+
 ## 4. Proposed UX Pattern: AI Work Launcher
 
 ### 4.1 Pattern Summary
@@ -283,6 +293,8 @@ The current working context should use marketing language:
 
 It should not lead with data model labels or raw stale-area strings.
 
+This page is not where detailed strategy editing happens. It should show enough context to orient the user and help them choose the next marketing activity. Detailed configuration belongs in sub-routes such as `/customer/marketing/strategy`, and future campaign, funnel, and automation detail routes.
+
 ### 5.2 First Interaction
 
 Default first prompt:
@@ -307,6 +319,26 @@ Then show the next decision in human language:
 - "Which buyer group should we pursue first?"
 - "What proof can we use to make the offer credible?"
 
+### 5.4 Strategy Detail Page Shape
+
+`/customer/marketing/strategy` should be a detail and configuration page, not another overview.
+
+It should:
+
+- show current strategy facts in editable or reviewable sections
+- make ownership and review state clear
+- let the user inspect or change market, buyer, sales motion, channels, proof, constraints, and review rhythm
+- offer a coworker launcher for strategy review or assisted editing
+- avoid sending prompts when the user clicks into fields, sections, or cards
+
+Future detail pages should follow the same split:
+
+- `/customer/marketing/campaigns` for campaign records, planning, approvals, and changes
+- `/customer/marketing/funnel` for analysis and filters
+- `/customer/marketing/automation` for automation state, integration readiness, and reviewable activation
+
+The coworker assists these pages; it does not replace their ability to inspect and configure details.
+
 ## 6. Interaction Rules
 
 ### 6.1 Allowed Without Confirmation
@@ -316,6 +348,9 @@ Then show the next decision in human language:
 - Opening the coworker panel without sending text
 - Viewing prompt preview
 - Navigating to strategy details
+- Editing local form fields before save/submit
+- Opening a configuration section
+- Reading or filtering page data
 
 ### 6.2 Requires Confirmation
 
@@ -323,6 +358,7 @@ Then show the next decision in human language:
 - Starting a guided review
 - Asking the coworker to draft campaign copy
 - Asking the coworker to create a backlog item, proposal, or other persisted work product
+- Saving strategy, campaign, funnel, or automation configuration changes
 
 ### 6.3 Requires Later Explicit Approval
 
@@ -366,6 +402,8 @@ Recommended.
 ### UX
 
 - The marketing page has one clear primary start action.
+- The marketing overview body summarizes state and next direction; it does not pretend to be the conversation.
+- Strategy and future child routes are responsible for detailed configuration and changes.
 - Clicking informational areas never sends a prompt.
 - Selecting a topic shows a preview, expected next step, and context summary.
 - Prompt send requires explicit confirmation.
@@ -398,7 +436,9 @@ Recommended.
    - data/context
    - selectable topic
    - confirmed AI action
-7. Keep the hotfix isolated to `/customer/marketing` first, then generalize the launcher once the pattern feels right.
+7. Keep `/customer/marketing` focused on overview and routing to the next useful work.
+8. Move detailed strategy inspection and future edits to `/customer/marketing/strategy`.
+9. Keep the hotfix isolated to `/customer/marketing` first, then generalize the launcher once the pattern feels right.
 
 ## 10. Follow-On Design Work
 
@@ -417,4 +457,5 @@ Implement Option C for `/customer/marketing` as the next patch, with a narrow sc
 1. Replace auto-send action cards.
 2. Add topic selection and prompt preview.
 3. Send exactly one prompt only after explicit confirmation.
-4. Verify via tests and browser QA that accidental clicking cannot spam the coworker.
+4. Preserve the overview/detail split: overview summarizes, strategy detail configures.
+5. Verify via tests and browser QA that accidental clicking cannot spam the coworker.
