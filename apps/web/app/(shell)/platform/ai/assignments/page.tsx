@@ -3,9 +3,17 @@
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { BootstrapBindingsButton } from "@/components/platform/authority/BootstrapBindingsButton";
 import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
+import { BindingFilters } from "@/components/platform/authority/BindingFilters";
 import { BindingList } from "@/components/platform/authority/BindingList";
-import { getAuthorityBinding, getAuthorityBindingEvidence } from "@/lib/authority/bindings";
+import {
+  getAuthorityBinding,
+  getAuthorityBindingEvidence,
+  getAuthorityBindingFilterOptions,
+  listAuthorityBindingRecords,
+  parseAuthorityBindingFilters,
+} from "@/lib/authority/bindings";
 import { can } from "@/lib/permissions";
 import { AgentModelAssignmentTable } from "@/components/platform/AgentModelAssignmentTable";
 import { listAuthorityBindings } from "@/lib/authority/bindings";
@@ -55,12 +63,23 @@ const AGENT_NAMES: Record<string, string> = {
 type Props = {
   searchParams: Promise<{
     binding?: string;
+    status?: string;
+    resource?: string;
+    coworker?: string;
+    subject?: string;
   }>;
 };
 
 export default async function AssignmentsPage({ searchParams }: Props) {
   const query = await searchParams;
   const activeBindingId = typeof query.binding === "string" ? query.binding : null;
+  const currentFilters = {
+    status: typeof query.status === "string" ? query.status : undefined,
+    resource: typeof query.resource === "string" ? query.resource : undefined,
+    coworker: typeof query.coworker === "string" ? query.coworker : undefined,
+    subject: typeof query.subject === "string" ? query.subject : undefined,
+  };
+  const parsedFilters = parseAuthorityBindingFilters(currentFilters);
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can(
@@ -69,7 +88,7 @@ export default async function AssignmentsPage({ searchParams }: Props) {
   );
 
   // Fetch data in parallel
-  const [dbConfigs, providers, lastModels, toolGrantGroups, bindingList, activeBinding, activeBindingEvidence] = await Promise.all([
+  const [dbConfigs, providers, lastModels, toolGrantGroups, bindingRecords, bindingList, activeBinding, activeBindingEvidence] = await Promise.all([
     prisma.agentModelConfig.findMany().catch(() => [] as any[]),
     prisma.modelProvider.findMany({
       where: { status: { in: ["active", "degraded"] } },
@@ -96,10 +115,12 @@ export default async function AssignmentsPage({ searchParams }: Props) {
       by: ["agentId"],
       _count: { grantKey: true },
     }).catch(() => [] as any[]),
-    listAuthorityBindings({ pivot: "coworker" }),
+    listAuthorityBindingRecords(),
+    listAuthorityBindings({ pivot: "coworker", filters: parsedFilters }),
     activeBindingId ? getAuthorityBinding(activeBindingId) : Promise.resolve(null),
     activeBindingId ? getAuthorityBindingEvidence(activeBindingId) : Promise.resolve([]),
   ]);
+  const bindingFilterOptions = getAuthorityBindingFilterOptions(bindingRecords);
 
   // Build provider name lookup
   const providerNames: Record<string, string> = {};
@@ -219,6 +240,13 @@ export default async function AssignmentsPage({ searchParams }: Props) {
             Coworker-first view of where each coworker is applied and which subjects can reach that governed context.
           </p>
         </div>
+        <BindingFilters
+          actionHref="/platform/ai/assignments"
+          currentFilters={currentFilters}
+          options={bindingFilterOptions}
+          resultCount={bindingList.rows.length}
+          actions={<BootstrapBindingsButton />}
+        />
         <BindingList
           pivot="coworker"
           rows={bindingList.rows}

@@ -1,5 +1,8 @@
 import { prisma } from "@dpf/db";
 
+import { PERMISSIONS } from "@/lib/govern/permissions";
+import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
+
 type AuthorityBindingSubjectInput = {
   subjectType: string;
   subjectRef: string;
@@ -36,6 +39,20 @@ export type AuthorityBindingCandidate = {
   sensitivityCeiling?: string | null;
   subjects: AuthorityBindingSubjectInput[];
   grants: AuthorityBindingGrantInput[];
+};
+
+export type BootstrapAuthorityBindingWarning = {
+  resourceRef: string;
+  agentId: string | null;
+  reason: "ungated-route" | "missing-agent" | "missing-subjects";
+};
+
+export type BootstrapAuthorityBindingsReport = {
+  created: number;
+  skippedExisting: number;
+  wouldCreate: number;
+  candidates: AuthorityBindingCandidate[];
+  lowConfidence: BootstrapAuthorityBindingWarning[];
 };
 
 function slugify(value: string) {
@@ -121,6 +138,22 @@ export async function materializeAuthorityBindings(
   });
 
   const existingIds = new Set(existing.map((binding) => binding.bindingId));
+  const agentIds = Array.from(
+    new Set(candidates.map((candidate) => candidate.appliedAgentId).filter((value): value is string => !!value)),
+  );
+  const agents = await prisma.agent.findMany({
+    where: {
+      agentId: {
+        in: agentIds,
+      },
+    },
+    select: {
+      id: true,
+      agentId: true,
+    },
+  });
+  const agentRowIds = new Map(agents.map((agent) => [agent.agentId, agent.id]));
+
   let created = 0;
   let skippedExisting = 0;
   let wouldCreate = 0;
@@ -146,6 +179,13 @@ export async function materializeAuthorityBindings(
         resourceRef: candidate.resourceRef,
         approvalMode: candidate.approvalMode,
         sensitivityCeiling: candidate.sensitivityCeiling ?? null,
+        appliedAgentId: candidate.appliedAgentId ? (agentRowIds.get(candidate.appliedAgentId) ?? null) : null,
+        subjects: {
+          create: candidate.subjects,
+        },
+        grants: {
+          create: candidate.grants,
+        },
       },
     });
     created += 1;
@@ -155,5 +195,106 @@ export async function materializeAuthorityBindings(
     created,
     skippedExisting,
     wouldCreate,
+  };
+}
+
+export async function bootstrapAuthorityBindings(options?: {
+  writeMode?: "dry-run" | "commit";
+}): Promise<BootstrapAuthorityBindingsReport> {
+  const routeEntries = ROUTE_AGENT_MAP_ENTRIES;
+  const routeAgentIds = Array.from(new Set(routeEntries.map(([, entry]) => entry.agentId)));
+  const agents = await prisma.agent.findMany({
+    where: {
+      agentId: {
+        in: routeAgentIds,
+      },
+    },
+    select: {
+      id: true,
+      agentId: true,
+      name: true,
+      ownerships: {
+        select: {
+          team: {
+            select: {
+              teamId: true,
+              slug: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const agentMap = new Map(agents.map((agent) => [agent.agentId, agent]));
+  const lowConfidence: BootstrapAuthorityBindingWarning[] = [];
+  const inferenceInputs: AuthorityBindingInferenceInput[] = [];
+
+  for (const [resourceRef, entry] of routeEntries) {
+    if (!entry.capability) {
+      lowConfidence.push({
+        resourceRef,
+        agentId: entry.agentId,
+        reason: "ungated-route",
+      });
+      continue;
+    }
+
+    const agent = agentMap.get(entry.agentId);
+    if (!agent) {
+      lowConfidence.push({
+        resourceRef,
+        agentId: entry.agentId,
+        reason: "missing-agent",
+      });
+      continue;
+    }
+
+    const allowedRoles = PERMISSIONS[entry.capability]?.roles ?? [];
+    const ownerTeams = agent.ownerships.map((ownership) => ownership.team);
+    const subjects = dedupeSubjects([
+      ...allowedRoles.map((roleId) => ({
+        subjectType: "platform-role",
+        subjectRef: roleId,
+        relation: "allowed",
+      })),
+      ...ownerTeams.map((team) => ({
+        subjectType: "team",
+        subjectRef: team.teamId,
+        relation: "owner",
+      })),
+    ]);
+
+    if (subjects.length === 0) {
+      lowConfidence.push({
+        resourceRef,
+        agentId: entry.agentId,
+        reason: "missing-subjects",
+      });
+      continue;
+    }
+
+    inferenceInputs.push({
+      resourceType: "route",
+      resourceRef,
+      appliedAgentId: entry.agentId,
+      approvalMode: "none",
+      scopeType: "route",
+      status: "active",
+      subjects,
+      grants: [],
+    });
+  }
+
+  const candidates = inferAuthorityBindings(inferenceInputs);
+  const materialized = await materializeAuthorityBindings(candidates, {
+    dryRun: options?.writeMode !== "commit",
+  });
+
+  return {
+    ...materialized,
+    candidates,
+    lowConfidence,
   };
 }

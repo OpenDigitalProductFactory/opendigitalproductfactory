@@ -50,6 +50,77 @@ export type AuthorityBindingListFilters = {
   subjectRefs?: string[];
 };
 
+export type AuthorityBindingSearchParams = Partial<{
+  status: string | string[];
+  resource: string | string[];
+  coworker: string | string[];
+  subject: string | string[];
+}>;
+
+export type AuthorityBindingFilterOptions = {
+  statuses: string[];
+  resourceRefs: string[];
+  appliedAgents: Array<{
+    agentId: string;
+    agentName: string;
+  }>;
+  subjectRefs: string[];
+};
+
+function normalizeSearchParamValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+}
+
+export function parseAuthorityBindingFilters(searchParams: AuthorityBindingSearchParams): AuthorityBindingListFilters {
+  const statuses = normalizeSearchParamValue(searchParams.status);
+  const resourceRefs = normalizeSearchParamValue(searchParams.resource);
+  const appliedAgentIds = normalizeSearchParamValue(searchParams.coworker);
+  const subjectRefs = normalizeSearchParamValue(searchParams.subject);
+
+  return {
+    ...(statuses.length > 0 ? { statuses } : {}),
+    ...(resourceRefs.length > 0 ? { resourceRefs } : {}),
+    ...(appliedAgentIds.length > 0 ? { appliedAgentIds } : {}),
+    ...(subjectRefs.length > 0 ? { subjectRefs } : {}),
+  };
+}
+
+export function getAuthorityBindingFilterOptions(records: AuthorityBindingRecord[]): AuthorityBindingFilterOptions {
+  const statuses = Array.from(new Set(records.map((record) => record.status))).sort();
+  const resourceRefs = Array.from(new Set(records.map((record) => record.resourceRef))).sort();
+  const subjectRefs = Array.from(
+    new Set(records.flatMap((record) => record.subjects.map((subject) => subject.subjectRef))),
+  ).sort();
+  const appliedAgents = Array.from(
+    new Map(
+      records
+        .filter((record) => record.appliedAgentId && record.appliedAgentName)
+        .map((record) => [
+          record.appliedAgentId as string,
+          {
+            agentId: record.appliedAgentId as string,
+            agentName: record.appliedAgentName as string,
+          },
+        ]),
+    ).values(),
+  ).sort((left, right) => left.agentName.localeCompare(right.agentName));
+
+  return {
+    statuses,
+    resourceRefs,
+    appliedAgents,
+    subjectRefs,
+  };
+}
+
 export function shapeAuthorityBindingRows(
   records: AuthorityBindingRecord[],
   pivot: AuthorityBindingPivot,

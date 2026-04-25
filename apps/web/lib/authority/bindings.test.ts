@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { shapeAuthorityBindingRows, type AuthorityBindingRecord } from "./bindings";
+import {
+  getAuthorityBindingFilterOptions,
+  parseAuthorityBindingFilters,
+  shapeAuthorityBindingRows,
+  type AuthorityBindingRecord,
+} from "./bindings";
 
 const SAMPLE_RECORDS: AuthorityBindingRecord[] = [
   {
@@ -48,5 +53,38 @@ describe("shapeAuthorityBindingRows", () => {
         subjectLabels: ["HR-400", "finance"],
       }),
     ]);
+  });
+});
+
+describe("parseAuthorityBindingFilters", () => {
+  it("normalizes string and array search params into binding filters", () => {
+    expect(
+      parseAuthorityBindingFilters({
+        status: "active",
+        resource: ["/finance", "/workspace"],
+        coworker: "finance-controller",
+        subject: "HR-400",
+      }),
+    ).toEqual({
+      statuses: ["active"],
+      resourceRefs: ["/finance", "/workspace"],
+      appliedAgentIds: ["finance-controller"],
+      subjectRefs: ["HR-400"],
+    });
+  });
+
+  it("omits empty filter dimensions", () => {
+    expect(parseAuthorityBindingFilters({ status: "", resource: undefined })).toEqual({});
+  });
+});
+
+describe("getAuthorityBindingFilterOptions", () => {
+  it("derives sorted filter options from binding records", () => {
+    expect(getAuthorityBindingFilterOptions(SAMPLE_RECORDS)).toEqual({
+      statuses: ["active"],
+      resourceRefs: ["/finance"],
+      appliedAgents: [{ agentId: "AGT-400", agentName: "Finance Controller" }],
+      subjectRefs: ["HR-400", "finance"],
+    });
   });
 });

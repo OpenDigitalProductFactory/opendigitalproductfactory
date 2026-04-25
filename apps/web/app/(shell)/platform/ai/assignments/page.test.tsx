@@ -12,8 +12,11 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/authority/bindings", () => ({
   listAuthorityBindings: vi.fn(),
+  listAuthorityBindingRecords: vi.fn(),
   getAuthorityBinding: vi.fn(),
   getAuthorityBindingEvidence: vi.fn(),
+  getAuthorityBindingFilterOptions: vi.fn(),
+  parseAuthorityBindingFilters: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -32,7 +35,14 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { getAuthorityBinding, getAuthorityBindingEvidence, listAuthorityBindings } from "@/lib/authority/bindings";
+import {
+  getAuthorityBinding,
+  getAuthorityBindingEvidence,
+  getAuthorityBindingFilterOptions,
+  listAuthorityBindingRecords,
+  listAuthorityBindings,
+  parseAuthorityBindingFilters,
+} from "@/lib/authority/bindings";
 
 describe("AssignmentsPage", () => {
   it("renders coworker bindings without replacing model assignment", async () => {
@@ -40,6 +50,7 @@ describe("AssignmentsPage", () => {
     vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
     vi.mocked(prisma.agentToolGrant.groupBy).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindingRecords).mockResolvedValue([] as never);
     vi.mocked(listAuthorityBindings).mockResolvedValue({
       pivot: "coworker",
       rows: [
@@ -62,6 +73,13 @@ describe("AssignmentsPage", () => {
         },
       ],
     });
+    vi.mocked(parseAuthorityBindingFilters).mockReturnValue({});
+    vi.mocked(getAuthorityBindingFilterOptions).mockReturnValue({
+      statuses: ["active"],
+      resourceRefs: ["/finance"],
+      appliedAgents: [{ agentId: "finance-controller", agentName: "Finance Controller" }],
+      subjectRefs: ["HR-400"],
+    });
     vi.mocked(getAuthorityBinding).mockResolvedValue(null);
     vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
 
@@ -70,6 +88,8 @@ describe("AssignmentsPage", () => {
 
     expect(html).toContain("AI Coworker Model Assignment");
     expect(html).toContain("Resource Bindings");
+    expect(html).toContain("Filter bindings");
+    expect(html).toContain("Refresh inferred bindings");
     expect(html).toContain("Finance Controller");
     expect(html).toContain("/finance");
   });
@@ -79,7 +99,15 @@ describe("AssignmentsPage", () => {
     vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
     vi.mocked(prisma.agentToolGrant.groupBy).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindingRecords).mockResolvedValue([] as never);
     vi.mocked(listAuthorityBindings).mockResolvedValue({ pivot: "coworker", rows: [] });
+    vi.mocked(parseAuthorityBindingFilters).mockReturnValue({});
+    vi.mocked(getAuthorityBindingFilterOptions).mockReturnValue({
+      statuses: [],
+      resourceRefs: [],
+      appliedAgents: [],
+      subjectRefs: [],
+    });
     vi.mocked(getAuthorityBinding).mockResolvedValue({
       bindingId: "AB-000001",
       name: "Finance workspace controller",
