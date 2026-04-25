@@ -3,8 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("@/lib/authority/bindings", () => ({
   listAuthorityBindings: vi.fn(),
+  listAuthorityBindingRecords: vi.fn(),
   getAuthorityBinding: vi.fn(),
   getAuthorityBindingEvidence: vi.fn(),
+  getAuthorityBindingFilterOptions: vi.fn(),
+  parseAuthorityBindingFilters: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -25,7 +28,14 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { getAuthorityBinding, getAuthorityBindingEvidence, listAuthorityBindings } from "@/lib/authority/bindings";
+import {
+  getAuthorityBinding,
+  getAuthorityBindingEvidence,
+  getAuthorityBindingFilterOptions,
+  listAuthorityBindingRecords,
+  listAuthorityBindings,
+  parseAuthorityBindingFilters,
+} from "@/lib/authority/bindings";
 
 describe("PlatformIdentityAuthorizationPage", () => {
   it("shows role bundles, assignments, teams, and coworker authority coverage", async () => {
@@ -151,6 +161,14 @@ describe("PlatformIdentityAuthorizationPage", () => {
         },
       ],
     });
+    vi.mocked(listAuthorityBindingRecords).mockResolvedValue([] as never);
+    vi.mocked(parseAuthorityBindingFilters).mockReturnValue({});
+    vi.mocked(getAuthorityBindingFilterOptions).mockReturnValue({
+      statuses: ["active"],
+      resourceRefs: ["/finance"],
+      appliedAgents: [{ agentId: "AGT-FIN-001", agentName: "Finance Specialist" }],
+      subjectRefs: ["HR-200"],
+    });
     vi.mocked(getAuthorityBinding).mockResolvedValue(null);
     vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
 
@@ -161,6 +179,8 @@ describe("PlatformIdentityAuthorizationPage", () => {
 
     expect(html).toContain("Authorization");
     expect(html).toContain("Authorization Bindings");
+    expect(html).toContain("Filter bindings");
+    expect(html).toContain("Refresh inferred bindings");
     expect(html).toContain("Role bundles");
     expect(html).toContain("Current human assignments");
     expect(html).toContain("Team memberships");
@@ -177,7 +197,15 @@ describe("PlatformIdentityAuthorizationPage", () => {
     vi.mocked(prisma.userGroup.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.team.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindingRecords).mockResolvedValue([] as never);
     vi.mocked(listAuthorityBindings).mockResolvedValue({ pivot: "subject", rows: [] });
+    vi.mocked(parseAuthorityBindingFilters).mockReturnValue({});
+    vi.mocked(getAuthorityBindingFilterOptions).mockReturnValue({
+      statuses: [],
+      resourceRefs: [],
+      appliedAgents: [],
+      subjectRefs: [],
+    });
     vi.mocked(getAuthorityBinding).mockResolvedValue({
       bindingId: "AB-000001",
       name: "Finance workspace controller",

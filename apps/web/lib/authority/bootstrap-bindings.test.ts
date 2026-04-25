@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    agent: {
+      findMany: vi.fn(),
+    },
     authorityBinding: {
       findMany: vi.fn(),
       create: vi.fn(),
@@ -9,8 +12,45 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+vi.mock("@/lib/govern/permissions", () => ({
+  PERMISSIONS: {
+    view_finance: { roles: ["HR-000", "HR-200"] },
+    view_platform: { roles: ["HR-000", "HR-300"] },
+  },
+}));
+
+vi.mock("@/lib/tak/agent-routing", () => ({
+  ROUTE_AGENT_MAP_ENTRIES: [
+    [
+      "/finance",
+      {
+        agentId: "finance-controller",
+        agentName: "Finance Controller",
+        capability: "view_finance",
+      },
+    ],
+    [
+      "/workspace",
+      {
+        agentId: "coo",
+        agentName: "COO",
+        capability: "view_platform",
+      },
+    ],
+    [
+      "/setup",
+      {
+        agentId: "onboarding-coo",
+        agentName: "Onboarding COO",
+        capability: null,
+      },
+    ],
+  ],
+}));
+
 import { prisma } from "@dpf/db";
 import {
+  bootstrapAuthorityBindings,
   inferAuthorityBindings,
   materializeAuthorityBindings,
   type AuthorityBindingInferenceInput,
@@ -58,6 +98,7 @@ describe("materializeAuthorityBindings", () => {
 
   it("supports dry run without writing bindings", async () => {
     vi.mocked(prisma.authorityBinding.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
 
     const result = await materializeAuthorityBindings(
       [
@@ -89,6 +130,7 @@ describe("materializeAuthorityBindings", () => {
     vi.mocked(prisma.authorityBinding.findMany).mockResolvedValue([
       { bindingId: "AB-ROUTE-FINANCE-FINANCE-CONTROLLER" },
     ] as never);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
 
     const result = await materializeAuthorityBindings(
       [
@@ -110,5 +152,87 @@ describe("materializeAuthorityBindings", () => {
 
     expect(result.skippedExisting).toBe(1);
     expect(prisma.authorityBinding.create).not.toHaveBeenCalled();
+  });
+
+  it("writes nested subjects and resolves the applied coworker row id", async () => {
+    vi.mocked(prisma.authorityBinding.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        id: "agent-row-1",
+        agentId: "finance-controller",
+      },
+    ] as never);
+
+    await materializeAuthorityBindings(
+      [
+        {
+          bindingId: "AB-ROUTE-FINANCE-FINANCE-CONTROLLER",
+          name: "Finance controller on /finance",
+          scopeType: "route",
+          status: "active",
+          resourceType: "route",
+          resourceRef: "/finance",
+          approvalMode: "none",
+          appliedAgentId: "finance-controller",
+          subjects: [{ subjectType: "platform-role", subjectRef: "HR-200", relation: "allowed" }],
+          grants: [],
+        },
+      ],
+      { dryRun: false },
+    );
+
+    expect(prisma.authorityBinding.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          appliedAgentId: "agent-row-1",
+          subjects: {
+            create: [{ subjectType: "platform-role", subjectRef: "HR-200", relation: "allowed" }],
+          },
+        }),
+      }),
+    );
+  });
+});
+
+describe("bootstrapAuthorityBindings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("derives high-confidence route bindings from the route map and permission subjects", async () => {
+    vi.mocked(prisma.authorityBinding.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        id: "agent-row-1",
+        agentId: "finance-controller",
+        name: "Finance Controller",
+        ownerships: [],
+      },
+      {
+        id: "agent-row-2",
+        agentId: "coo",
+        name: "COO",
+        ownerships: [],
+      },
+    ] as never);
+
+    const report = await bootstrapAuthorityBindings({ writeMode: "dry-run" });
+
+    expect(report.wouldCreate).toBe(2);
+    expect(report.lowConfidence).toContainEqual(
+      expect.objectContaining({
+        resourceRef: "/setup",
+        reason: "ungated-route",
+      }),
+    );
+    expect(report.candidates).toContainEqual(
+      expect.objectContaining({
+        bindingId: "AB-ROUTE-FINANCE-FINANCE-CONTROLLER",
+        subjects: [
+          { subjectType: "platform-role", subjectRef: "HR-000", relation: "allowed" },
+          { subjectType: "platform-role", subjectRef: "HR-200", relation: "allowed" },
+        ],
+      }),
+    );
   });
 });
