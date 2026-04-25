@@ -15,7 +15,7 @@ export default async function ToolsServicesPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Services</h1>
+          <h1 className="text-2xl font-bold">MCP Services</h1>
           <p className="text-muted-foreground text-sm">
             {registered.length} registered MCP service{registered.length !== 1 ? "s" : ""}
           </p>
@@ -54,7 +54,7 @@ export default async function ToolsServicesPage() {
         <p className="text-muted-foreground text-sm py-12 text-center">
           No registered services yet. Browse the{" "}
           <Link href="/platform/tools/catalog" className="text-primary hover:underline">
-            Integrations Catalog
+            MCP Catalog
           </Link>{" "}
           to find services to activate.
         </p>

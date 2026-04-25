@@ -7,6 +7,7 @@ const TABS = [
   { label: "MCP Catalog", href: "/platform/tools/catalog" },
   { label: "MCP Services", href: "/platform/tools/services" },
   { label: "Native Integrations", href: "/platform/tools/integrations" },
+  { label: "Built-in Tools", href: "/platform/tools/built-ins" },
   { label: "Estate Discovery", href: "/platform/tools/discovery" },
   { label: "Capability Inventory", href: "/platform/tools/inventory" },
 ];

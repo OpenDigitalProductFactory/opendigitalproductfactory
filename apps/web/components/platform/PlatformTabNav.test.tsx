@@ -52,6 +52,7 @@ describe("PlatformTabNav", () => {
     expect(html).toContain(">MCP Catalog<");
     expect(html).toContain(">MCP Services<");
     expect(html).toContain(">Native Integrations<");
+    expect(html).toContain(">Built-in Tools<");
     expect(html).toContain(">Estate Discovery<");
     expect(html).not.toContain(">Discovery Operations<");
     expect(html).not.toContain('href="/platform/ai/providers"');

@@ -78,6 +78,16 @@ export default async function ToolsHubPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Built-in Tools"
+          description="Configure first-party platform tools such as Brave Search and other shipped utilities."
+          href="/platform/tools/built-ins"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Model", value: "Built-in" },
+            { label: "Initial focus", value: "Brave Search" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Capability Inventory"
           description="See the runtime inventory of tools and capabilities already available to agents, not the setup catalog."
           href="/platform/tools/inventory"
@@ -95,7 +105,7 @@ export default async function ToolsHubPage() {
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
           Start in the MCP catalog when you are researching options, move to estate discovery when you need to understand what was found and why it matters,
-          then use MCP services, native integrations, and capability inventory to manage the tooling the AI workforce relies on.
+          then use MCP services, native integrations, built-in tools, and capability inventory to manage the tooling the AI workforce relies on.
         </p>
       </div>
     </div>

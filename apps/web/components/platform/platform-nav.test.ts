@@ -58,6 +58,7 @@ describe("platform-nav", () => {
     expect(
       toolsFamily.subItems.some((item) => item.label === "Enterprise Integrations"),
     ).toBe(false);
+    expect(toolsFamily.subItems.some((item) => item.label === "Built-in Tools")).toBe(true);
   });
 
   it("removes redirect-only audit items from the AI family", () => {

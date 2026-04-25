@@ -11,7 +11,7 @@ type KeyConfig = {
   isSecret: boolean;
 };
 
-const PLATFORM_KEYS: KeyConfig[] = [
+export const PLATFORM_KEY_CONFIGS: KeyConfig[] = [
   {
     key: "brave_search_api_key",
     label: "Brave Search API Key",
@@ -32,6 +32,9 @@ type KeyData = { configured: boolean; currentValue: string | null };
 
 type Props = {
   keyData: Record<string, KeyData>;
+  title?: string;
+  description?: string;
+  configs?: KeyConfig[];
 };
 
 function maskSecret(value: string): string {
@@ -39,7 +42,12 @@ function maskSecret(value: string): string {
   return value.slice(0, 4) + "\u2022".repeat(Math.min(value.length - 4, 12));
 }
 
-export function PlatformKeysPanel({ keyData }: Props) {
+export function PlatformKeysPanel({
+  keyData,
+  title = "Platform Settings",
+  description = "External service keys and paths used by the platform.",
+  configs = PLATFORM_KEY_CONFIGS,
+}: Props) {
   const [isPending, startTransition] = useTransition();
   const [values, setValues] = useState<Record<string, string>>({});
   const [savedValues, setSavedValues] = useState<Record<string, string>>({});
@@ -56,13 +64,11 @@ export function PlatformKeysPanel({ keyData }: Props) {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">Platform Settings</h2>
-      <p className="text-sm text-[var(--dpf-muted)] mb-4">
-        External service keys and paths used by the platform.
-      </p>
+      <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">{title}</h2>
+      <p className="text-sm text-[var(--dpf-muted)] mb-4">{description}</p>
 
       <div className="space-y-3">
-        {PLATFORM_KEYS.map((cfg) => {
+        {configs.map((cfg) => {
           const data = keyData[cfg.key];
           const displayValue = savedValues[cfg.key] ?? data?.currentValue ?? null;
           const isConfigured = !!displayValue;
