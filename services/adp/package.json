@@ -14,14 +14,14 @@
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "postgres": "^3.4.5",
+    "postgres": "^3.4.9",
     "undici": "^8.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.0"
   }
 }
