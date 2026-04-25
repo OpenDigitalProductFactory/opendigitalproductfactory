@@ -861,6 +861,14 @@ model BacklogItem {
   taxonomyNodeId        String?
   epicId                String?
   source                String?
+  triageOutcome         String?
+  effortSize            String?
+  proposedOutcome       String?
+  activeBuildId         String?          @unique
+  duplicateOfId         String?
+  resolution            String?
+  abandonReason         String?
+  stalenessDetectedAt   DateTime?
   occurrenceCount       Int              @default(1)
   lastSeenAt            DateTime?
   submittedById         String?
@@ -875,8 +883,12 @@ model BacklogItem {
   upstreamIssueUrl      String?
   upstreamSyncedAt      DateTime?
   accountableEmployee   EmployeeProfile? @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  activeBuild           FeatureBuild?    @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
   digitalProduct        DigitalProduct?  @relation(fields: [digitalProductId], references: [id])
+  duplicateOf           BacklogItem?     @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates            BacklogItem[]    @relation("BacklogItemDuplicates")
   epic                  Epic?            @relation(fields: [epicId], references: [id])
+  featureBuilds         FeatureBuild[]   @relation("BacklogItemOriginator")
   submittedBy           User?            @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   taxonomyNode          TaxonomyNode?    @relation(fields: [taxonomyNodeId], references: [id])
 }
@@ -2684,6 +2696,7 @@ model FeatureBuild {
   title                 String
   description           String?
   portfolioId           String?
+  originatingBacklogItemId String?
   brief                 Json?
   plan                  Json?
   phase                 String            @default("ideate")
@@ -2719,11 +2732,16 @@ model FeatureBuild {
   taxonomyAttribution   Json?
   releaseBundleId       String?
   calendarEventId       String?
+  abandonedAt           DateTime?
+  abandonReason         String?
+  draftApprovedAt       DateTime?
   activities            BuildActivity[]
   phaseHandoffs         PhaseHandoff[]
+  activeForBacklogItem  BacklogItem?      @relation("BacklogItemActiveBuild")
   accountableEmployee   EmployeeProfile?  @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy             User              @relation(fields: [createdById], references: [id])
   digitalProduct        DigitalProduct?   @relation(fields: [digitalProductId], references: [id])
+  originator            BacklogItem?      @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
   releaseBundle         ReleaseBundle?    @relation(fields: [releaseBundleId], references: [id])
   productVersions       ProductVersion[]
   promotionBackups      PromotionBackup[]
@@ -2731,6 +2749,7 @@ model FeatureBuild {
   @@index([phase])
   @@index([createdById])
   @@index([digitalProductId])
+  @@index([originatingBacklogItemId])
   @@index([releaseBundleId])
 }
 
@@ -3015,6 +3034,8 @@ model PlatformDevConfig {
   contributorForkOwner String?
   contributorForkRepo  String?
   forkVerifiedAt       DateTime?
+  backlogTeeUpDailyCap Int       @default(3)
+  governedBacklogEnabled Boolean @default(false)
 }
 
 model EaNotation {

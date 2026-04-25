@@ -3,7 +3,8 @@ import { can, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
-import { mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
+import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
+import { BACKLOG_STATUS_VALUES } from "@/lib/explore/backlog";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -252,7 +253,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {
         itemId: { type: "string", description: "The item ID (e.g., BI-PORT-001)" },
         title: { type: "string", description: "New title" },
-        status: { type: "string", enum: ["open", "in-progress", "done", "deferred"] },
+        status: { type: "string", enum: [...BACKLOG_STATUS_VALUES] },
         priority: { type: "number", description: "Priority number" },
         body: { type: "string", description: "Updated description" },
       },
@@ -298,7 +299,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", enum: ["open", "in-progress", "done", "deferred"], description: "Filter by status (optional)" },
+        status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Filter by status (optional)" },
         epicId: { type: "string", description: "Filter by epic ID (optional)" },
         limit: { type: "number", description: "Max results (default 20)" },
       },
@@ -2353,6 +2354,138 @@ export async function executeTool(
       return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
     }
 
+    case "triage_backlog_item": {
+      const itemId = String(params["itemId"] ?? "");
+      const outcome = String(params["outcome"] ?? "");
+      const rationale = String(params["rationale"] ?? "").trim();
+      const item = await prisma.backlogItem.findUnique({ where: { itemId } });
+      if (!item) {
+        return { success: false, error: "Item not found", message: `Item ${itemId} not found` };
+      }
+      if (item.status !== "triaging") {
+        return { success: false, error: "Item is not in triaging status", message: `Item ${itemId} is not in triaging status` };
+      }
+      if (!rationale) {
+        return { success: false, error: "Rationale is required", message: "Rationale is required" };
+      }
+      if (outcome === "build" && typeof params["effortSize"] !== "string") {
+        return { success: false, error: "effortSize is required for build outcomes", message: "effortSize is required for build outcomes" };
+      }
+      if (outcome === "duplicate" && typeof params["duplicateOfId"] !== "string") {
+        return { success: false, error: "duplicateOfId is required for duplicate outcomes", message: "duplicateOfId is required for duplicate outcomes" };
+      }
+      if ((outcome === "defer" || outcome === "discard") && typeof params["reason"] !== "string") {
+        return { success: false, error: "reason is required for defer/discard outcomes", message: "reason is required for defer/discard outcomes" };
+      }
+
+      const nextStatus =
+        outcome === "build" || outcome === "runbook" || outcome === "coworker-task"
+          ? "open"
+          : "deferred";
+
+      await prisma.backlogItem.update({
+        where: { itemId },
+        data: {
+          status: nextStatus,
+          triageOutcome: outcome,
+          effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : null,
+          duplicateOfId: typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"] : null,
+          resolution: rationale,
+          abandonReason: typeof params["reason"] === "string" ? params["reason"] : null,
+        },
+      });
+
+      return {
+        success: true,
+        entityId: itemId,
+        message: `Triaged ${itemId} as ${outcome}`,
+      };
+    }
+
+    case "size_backlog_item": {
+      const itemId = String(params["itemId"] ?? "");
+      const size = String(params["size"] ?? "");
+      const item = await prisma.backlogItem.findUnique({ where: { itemId } });
+      if (!item) {
+        return { success: false, error: "Item not found", message: `Item ${itemId} not found` };
+      }
+      await prisma.backlogItem.update({
+        where: { itemId },
+        data: { effortSize: size },
+      });
+      return {
+        success: true,
+        entityId: itemId,
+        message: `Sized ${itemId} as ${size}`,
+      };
+    }
+
+    case "promote_to_build_studio": {
+      const itemId = String(params["itemId"] ?? "");
+      const governedConfig = await prisma.platformDevConfig.findUnique({
+        where: { id: "singleton" },
+        select: { governedBacklogEnabled: true },
+      });
+      const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const item = await tx.backlogItem.findUnique({ where: { itemId } });
+        if (!item) {
+          return { kind: "error" as const, error: "Item not found", message: `Item ${itemId} not found` };
+        }
+        if (item.status !== "open" || item.triageOutcome !== "build") {
+          return {
+            kind: "error" as const,
+            error: "Item is not eligible for Build Studio promotion",
+            message: `Item ${itemId} must be open with triageOutcome=build`,
+          };
+        }
+        if (item.activeBuildId) {
+          return {
+            kind: "error" as const,
+            error: "Item already has an active build",
+            message: `Item ${itemId} already has an active build`,
+          };
+        }
+
+        const created = await tx.featureBuild.create({
+          data: {
+            buildId: generateBuildId(),
+            title: item.title,
+            ...(item.body ? { description: item.body } : {}),
+            createdById: userId,
+            digitalProductId: item.digitalProductId ?? null,
+            originatingBacklogItemId: item.id,
+            draftApprovedAt: null,
+          },
+        });
+
+        await tx.backlogItem.update({
+          where: { itemId },
+          data: {
+            activeBuildId: created.id,
+            status: governedBacklogEnabled ? "open" : "in-progress",
+          },
+        });
+
+        return { kind: "success" as const, build: created };
+      });
+
+      if (result.kind === "error") {
+        return { success: false, error: result.error, message: result.message };
+      }
+
+      return {
+        success: true,
+        entityId: result.build.buildId,
+        message: `Promoted ${itemId} to Build Studio`,
+        data: {
+          buildId: result.build.buildId,
+          backlogItemId: itemId,
+        },
+      };
+    }
+
     case "update_backlog_item": {
       const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
       if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
@@ -3312,6 +3445,8 @@ export async function executeTool(
           where: { buildId },
           select: {
             phase: true,
+            originatingBacklogItemId: true,
+            draftApprovedAt: true,
             designDoc: true,
             designReview: true,
             plan: true,
@@ -3323,6 +3458,24 @@ export async function executeTool(
         });
 
         if (updatedBuild && updatedBuild.phase === "ideate" && canTransitionPhase("ideate", "plan")) {
+          const governedConfig = await prisma.platformDevConfig.findUnique({
+            where: { id: "singleton" },
+            select: { governedBacklogEnabled: true },
+          });
+          const requiresStartApproval =
+            governedConfig?.governedBacklogEnabled === true
+            && updatedBuild.originatingBacklogItemId != null
+            && updatedBuild.draftApprovedAt == null;
+
+          if (requiresStartApproval) {
+            logBuildActivity(buildId, "phase:gate-blocked", "Approve Start is required before ideate can advance to plan.");
+            return {
+              success: true,
+              message: `Design review: ${review.decision}. ${review.summary} This governed backlog draft is prepared and now waiting for Approve Start before planning can begin.`,
+              data: { review, blocked: true, action: "approve_start" },
+            };
+          }
+
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           let happyPathState = normalizeHappyPathState(plan.happyPathState);
 

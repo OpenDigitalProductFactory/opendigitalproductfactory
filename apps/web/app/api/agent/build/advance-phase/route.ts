@@ -42,6 +42,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     where: { buildId },
     select: {
       phase: true,
+      originatingBacklogItemId: true,
+      draftApprovedAt: true,
       designDoc: true,
       designReview: true,
       buildPlan: true,
@@ -57,6 +59,24 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   const currentPhase = build.phase as BuildPhase;
+  const devConfig = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { governedBacklogEnabled: true },
+  });
+
+  const requiresStartApproval =
+    currentPhase === "ideate"
+    && targetPhase === "plan"
+    && devConfig?.governedBacklogEnabled === true
+    && build.originatingBacklogItemId != null
+    && build.draftApprovedAt == null;
+
+  if (requiresStartApproval) {
+    return NextResponse.json(
+      { error: "Approve Start before moving this governed backlog draft into planning." },
+      { status: 422 },
+    );
+  }
 
   if (!canTransitionPhase(currentPhase, targetPhase)) {
     return NextResponse.json(

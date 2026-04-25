@@ -65,6 +65,7 @@ export default async function BuildPage() {
       <BuildStudio
         builds={builds}
         portfolios={portfolios}
+        governedBacklogEnabled={devConfig.governedBacklogEnabled}
         dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"}
         projectBranch={projectBranch}
         submissionBranchShortId={submissionBranchShortId}

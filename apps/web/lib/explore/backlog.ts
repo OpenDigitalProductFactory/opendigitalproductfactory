@@ -3,7 +3,7 @@
 export type BacklogItemInput = {
   title: string;
   type: "product" | "portfolio";
-  status: "open" | "in-progress" | "done" | "deferred";
+  status: BacklogStatus;
   priority?: number;
   body?: string;
   taxonomyNodeId?: string;
@@ -95,6 +95,15 @@ export function validateBacklogInput(input: BacklogItemInput): string | null {
 
 export const EPIC_STATUSES = ["open", "in-progress", "done"] as const;
 export type EpicStatus = typeof EPIC_STATUSES[number];
+
+export const BACKLOG_STATUS_VALUES = [
+  "triaging",
+  "open",
+  "in-progress",
+  "done",
+  "deferred",
+] as const;
+export type BacklogStatus = (typeof BACKLOG_STATUS_VALUES)[number];
 
 export const BACKLOG_TRIAGE_OUTCOMES = [
   "build",

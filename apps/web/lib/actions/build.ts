@@ -64,6 +64,49 @@ export async function createFeatureBuild(input: {
   return { buildId };
 }
 
+export async function approveBuildStart(buildId: string): Promise<{ approvedAt: Date }> {
+  const userId = await requireBuildAccess();
+
+  const [build, devConfig] = await Promise.all([
+    prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: {
+        createdById: true,
+        phase: true,
+        originatingBacklogItemId: true,
+        draftApprovedAt: true,
+      },
+    }),
+    prisma.platformDevConfig.findUnique({
+      where: { id: "singleton" },
+      select: { governedBacklogEnabled: true },
+    }),
+  ]);
+
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (build.phase !== "ideate") throw new Error("Start approval is only available during Ideate");
+  if (devConfig?.governedBacklogEnabled !== true || !build.originatingBacklogItemId) {
+    throw new Error("Only governed backlog drafts require start approval");
+  }
+
+  const approvedAt = build.draftApprovedAt ?? new Date();
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: { draftApprovedAt: approvedAt },
+  });
+
+  prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "approve_start",
+      summary: `Start approved for governed backlog draft at ${approvedAt.toISOString()}`,
+    },
+  }).catch(() => {});
+
+  return { approvedAt };
+}
+
 // ─── Update Feature Brief ────────────────────────────────────────────────────
 
 export async function updateFeatureBrief(
@@ -101,6 +144,8 @@ export async function advanceBuildPhase(
       id: true,
       phase: true,
       createdById: true,
+      originatingBacklogItemId: true,
+      draftApprovedAt: true,
       designDoc: true,
       designReview: true,
       plan: true,
@@ -118,6 +163,22 @@ export async function advanceBuildPhase(
   if (build.createdById !== userId) throw new Error("Forbidden");
 
   const currentPhase = build.phase as BuildPhase;
+  const governedConfig = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { governedBacklogEnabled: true },
+  });
+
+  const requiresStartApproval =
+    currentPhase === "ideate"
+    && targetPhase === "plan"
+    && governedConfig?.governedBacklogEnabled === true
+    && build.originatingBacklogItemId != null
+    && build.draftApprovedAt == null;
+
+  if (requiresStartApproval) {
+    throw new Error("Approve Start before moving this governed backlog draft into planning.");
+  }
+
   if (!canTransitionPhase(currentPhase, targetPhase)) {
     throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
   }
