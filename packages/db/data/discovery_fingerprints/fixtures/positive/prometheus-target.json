@@ -1,0 +1,12 @@
+{
+  "name": "prometheus node exporter target",
+  "evidenceFamilies": [
+    "prometheus_target",
+    "process_name"
+  ],
+  "normalizedEvidence": {
+    "job": "node-exporter",
+    "process": "node_exporter",
+    "listenAddress": "0.0.0.0:9100"
+  }
+}
