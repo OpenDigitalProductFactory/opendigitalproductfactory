@@ -1,13 +1,13 @@
 # Discovery Taxonomy Gap Triage Design
 
 | Field | Value |
-|-------|-------|
+| --- | --- |
 | Status | Draft |
 | Date | 2026-04-25 |
 | Author | OpenAI Codex with Mark Bodman |
 | Scope | Daily AI coworker process for closing discovered-infrastructure taxonomy and identity gaps |
-| Related specs | `2026-03-14-discovery-taxonomy-attribution-design.md`, `2026-04-02-infrastructure-auto-discovery-design.md`, `2026-04-14-taxonomy-to-action-v4-v5-design.md` |
-| Separate sibling thread | Discovery fingerprint contribution pipeline and hive-mind catalog governance |
+| Related specs | `2026-03-14-discovery-taxonomy-attribution-design.md`, `2026-04-02-infrastructure-auto-discovery-design.md`, `2026-04-14-taxonomy-to-action-v4-v5-design.md`, `2026-03-26-hive-mind-contribution-assessment-design.md` |
+| Separate sibling thread | Discovery fingerprint contribution pipeline and hive-mind catalog governance — see §13.1 for boundary with the existing hive-mind contribution-assessment spec |
 
 ## 1. Problem Statement
 
@@ -64,7 +64,7 @@ Rejected pattern:
 
 - DPF should not require a full proprietary pattern designer before it can learn simple fingerprints.
 
-Reference: https://www.servicenow.com/docs/r/xanadu/it-operations-management/discovery-and-service-mapping-patterns/c_MappingPatternsCustomization.html
+Reference: [ServiceNow Mapping Patterns Customization](https://www.servicenow.com/docs/r/xanadu/it-operations-management/discovery-and-service-mapping-patterns/c_MappingPatternsCustomization.html)
 
 ### 3.2 BMC Discovery TKU / TPL
 
@@ -80,7 +80,7 @@ Rejected pattern:
 
 - DPF should not create a heavyweight pattern language before the first useful loop exists.
 
-Reference: https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/Configipedia/Getting-started/
+Reference: [BMC Discovery Configipedia — Getting Started](https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/Configipedia/Getting-started/)
 
 ### 3.3 Lansweeper / Fing Device Recognition
 
@@ -96,7 +96,7 @@ Rejected pattern:
 
 - DPF should not send customer-sensitive fingerprints to any shared catalog without explicit redaction and contribution policy.
 
-Reference: https://developer.lansweeper.com/docs/device-recognition-api/get-started/welcome/
+Reference: [Lansweeper Device Recognition API](https://developer.lansweeper.com/docs/device-recognition-api/get-started/welcome/)
 
 ### 3.4 Nmap Fingerprint Submission
 
@@ -112,7 +112,7 @@ Rejected pattern:
 
 - DPF should not allow raw, unredacted internal network evidence to be contributed automatically.
 
-Reference: https://nmap.org/book/vscan.html
+Reference: [Nmap Service and Application Version Detection](https://nmap.org/book/vscan.html)
 
 ## 4. Goals
 
@@ -147,24 +147,43 @@ The daily coworker may act automatically only when both questions clear policy t
 
 ## 7. Operating Model
 
-### 7.1 Daily Scheduled Activity
+### 7.1 Scheduled Triage Activity
 
-A `ScheduledAgentTask` should run daily under the appropriate infrastructure/portfolio governance coworker. The task should:
+A `ScheduledAgentTask` row drives the triage loop. The activity fires on a cadence-or-volume trigger:
+
+- **Cadence:** daily at 08:00 in the install timezone (cron `0 8 * * *`). Discovery cadence is bursty; daily-only would let a bad-collector morning flood the queue for 24 h before the next sweep.
+- **Volume override:** an `inventory.needsReview.threshold` event handler additionally fires the same task when the count of `attributionStatus = "needs_review"` entities crosses a configurable floor (initial default `25`). The two triggers share idempotency on `(date, agentId)` so a same-day cadence run after a volume-fire is a no-op.
+
+`ScheduledAgentTask` row fields ([packages/db/prisma/schema.prisma:3632](packages/db/prisma/schema.prisma#L3632) is the source of truth — every field below is required):
+
+| Field | Initial value | Notes |
+| --- | --- | --- |
+| `taskId` | `discovery-taxonomy-gap-triage-daily` | Stable slug for idempotent seeding |
+| `agentId` | `discovery-steward` (proposed default — see §16 Q1) | New coworker; falls back to `enterprise-architecture` if Q1 resolves there |
+| `title` | `Discovery taxonomy gap triage` | |
+| `prompt` | Loaded from `prompts/specialist/discovery-taxonomy-gap-triage.prompt.md` | Per the project rule that prompts live in DB seeded from `.prompt.md` files |
+| `routeContext` | `enterprise/discovery` | |
+| `schedule` | `0 8 * * *` | Cron, not a "daily" flag |
+| `timezone` | Install timezone (defaults to `UTC`) | |
+| `ownerUserId` | First user with role `superuser` | Resolved at seed time, not hard-coded |
+
+The task should:
 
 1. Find unresolved and weakly resolved inventory:
    - `attributionStatus = "needs_review"`
-   - attribution confidence below the automatic threshold
-   - repeated unknown signatures across discovery runs
-   - quality issues related to attribution, stale identity, or missing taxonomy placement
-2. Build an evidence packet for each candidate.
-3. Compute identity confidence and taxonomy confidence.
-4. Choose one of five outcomes:
-   - auto-accept existing taxonomy candidate
-   - auto-create deterministic recognition rule for an existing taxonomy node
-   - propose taxonomy extension for human review
-   - request more discovery evidence
-   - dismiss or suppress as non-actionable noise
-5. Persist a decision log entry.
+   - `attributionConfidence` below the configured `auto-apply` threshold
+   - **repeated unknown signatures** — defined as `attributionStatus IN ("needs_review", "unmapped") AND lastConfirmedRunId IS NOT NULL AND (lastSeenAt - firstSeenAt) >= INTERVAL '3 days' AND COUNT(DISTINCT lastConfirmedRunId across DiscoveredItem) >= 3`. Slice 1 derives this from existing fields; if the cost is non-trivial under load, slice 2 adds an `unresolvedRunCount: Int` denormalization on `InventoryEntity` plus a backfill migration.
+   - open `PortfolioQualityIssue` records with `issueType IN ("attribution", "stale-identity", "missing-taxonomy")`
+2. Build an evidence packet for each candidate (§7.2).
+3. Compute identity confidence and taxonomy confidence (§7.3).
+4. Choose one canonical outcome from §10's `TRIAGE_OUTCOMES` enum. The mapping from §7.1 reasoning to enum value:
+   - existing-taxonomy match clears auto-apply thresholds → `auto-attributed`
+   - taxonomy match clears thresholds AND a stable fingerprint can be synthesized → `auto-attributed` plus a `proposedRule` payload (rule synthesis is bookkeeping, not a separate outcome)
+   - identity clear but no suitable taxonomy node → `taxonomy-gap`
+   - either confidence falls in the human-review band → `human-review`
+   - evidence is incomplete or non-reproducible → `needs-more-evidence`
+   - signal is repeatedly noise (e.g., transient probe artifact) → `dismissed`
+5. Persist a `DiscoveryTriageDecision` log entry.
 6. Update inventory, quality issues, and backlog/review surfaces as needed.
 
 ### 7.2 Evidence Packet
@@ -192,31 +211,36 @@ The evidence packet should be stored as structured JSON and should include:
   - UPnP descriptors
   - NetBIOS names
 - evidence freshness and reproducibility
-- redaction status
+- redaction status — slice 1 sets every packet to `redactionStatus: "unverified"` and the auto-decision rules in §7.4 block any path that would contribute or publish externally. Defining the redaction policy itself is owned by the sibling fingerprint-contribution thread (§13.1, §16 Q3).
 
 The packet must preserve enough raw evidence for later re-scoring without requiring a new discovery run.
 
 ### 7.3 Confidence Scores
 
-The triage process should compute:
+The triage process computes four scores per candidate:
 
 - `identityConfidence`: confidence that the entity identity is known
 - `taxonomyConfidence`: confidence that the selected taxonomy node is correct
 - `evidenceCompleteness`: whether enough evidence types are present for the entity class
 - `reproducibilityScore`: whether the same signature has appeared consistently across runs
-- `policyRisk`: whether automatic action is safe
 
-Suggested initial thresholds:
+A fifth signal, `policyRisk`, is evaluated as a boolean gate in §7.4 rather than a numeric threshold here.
 
-| Outcome | Identity | Taxonomy | Evidence | Action |
-|---------|----------|----------|----------|--------|
-| Auto-apply rule match | >= 0.95 | >= 0.95 | complete/reproducible | Apply and log |
-| Auto-apply coworker proposal | >= 0.90 | >= 0.90 | complete/reproducible | Apply, create pending reusable pattern |
-| Human review | 0.60-0.89 | any | partial or ambiguous | Create review item |
-| More evidence needed | < 0.60 | any | incomplete | Request targeted discovery |
-| Taxonomy gap review | >= 0.85 | no suitable node | complete | Propose taxonomy extension |
+**Existing `InventoryEntity` confidence fields.** `InventoryEntity` already carries two floats: `confidence` (set by some collectors at discovery time, semantics inherited from the auto-discovery spec) and `attributionConfidence` (set during attribution). This spec writes only to `attributionConfidence`. `confidence` is left as-is for now; the question of whether to fold it into `identityConfidence` or deprecate it is tracked as a follow-up in §16 Q6.
 
-The initial thresholds should be configuration-backed, not hard-coded in UI components.
+**Threshold table (closed bands — both Identity AND Taxonomy must clear the row, otherwise the next-most-permissive row applies).**
+
+| Outcome | Identity | Taxonomy | Evidence | Decision enum |
+| --- | --- | --- | --- | --- |
+| Auto-apply, deterministic rule match | >= 0.95 | >= 0.95 | complete and reproducible | `auto-attributed` |
+| Auto-apply, coworker proposal | >= 0.90 | >= 0.90 | complete and reproducible | `auto-attributed` (with `proposedRule`) |
+| Taxonomy gap (identity clear, no node fits) | >= 0.85 | no suitable node | complete | `taxonomy-gap` |
+| Human review | >= 0.60 AND < 0.90 | any | partial or ambiguous | `human-review` |
+| More evidence needed | < 0.60 | any | incomplete | `needs-more-evidence` |
+
+**Resolution rule.** Rows are evaluated top-to-bottom; the first row whose Identity and Taxonomy bands both match wins. This closes the prior gap where an entity at Identity 0.85 + Taxonomy 0.95 fell through.
+
+The initial thresholds are configuration-backed (`platform_settings.discovery_triage.thresholds`), not hard-coded in UI components.
 
 ### 7.4 Automatic Decision Rules
 
@@ -224,9 +248,9 @@ The coworker may auto-apply a decision only when all are true:
 
 - identity and taxonomy scores clear the configured threshold
 - at least two independent evidence signals support the decision, unless a deterministic rule explicitly allows one strong signal
-- no conflicting candidate is within the ambiguity margin
+- no conflicting candidate is within the **ambiguity margin** — defined as `score(leader) - score(runner-up) >= 0.05` on the same axis (identity or taxonomy). Candidates inside the margin force `human-review`.
 - the selected taxonomy node already exists
-- the action does not introduce a new external contribution
+- the action does not introduce a new external contribution (slice 1 always satisfies this — see §7.2 redaction default)
 - the fingerprint has passed redaction checks
 - the affected entity is not marked customer-sensitive or proprietary-only
 
@@ -277,15 +301,15 @@ Accepted decisions should become durable patterns through a rule synthesis step:
    - identity target
    - confidence floor
 3. Add or update the deterministic recognition catalog.
-4. Add regression tests using sanitized evidence fixtures.
+4. Add regression tests using sanitized evidence fixtures under `packages/db/src/__fixtures__/discovery-triage/`.
 5. Re-run attribution against affected unresolved entities.
 6. Record the decision and pattern version.
 
 This is the bridge from AI-assisted triage to perpetual process. AI can discover the rule, but future discovery should prefer deterministic matching.
 
-## 10. Audit And Activity Log
+## 10. Audit and activity log
 
-Every triage attempt and decision should be logged. The log should support answering:
+Every triage attempt and decision is logged. The log answers:
 
 - what entity was evaluated
 - what evidence was used
@@ -297,7 +321,21 @@ Every triage attempt and decision should be logged. The log should support answe
 - whether the decision was automatic or human-approved
 - whether the fingerprint was contributed to the hive-mind catalog
 
-Recommended new model:
+### 10.1 Canonical string enums (mandatory compliance)
+
+Per CLAUDE.md ("Strongly-Typed String Enums — MANDATORY COMPLIANCE"), the new enum-valued fields below are canonical even though the DB column is `String`. Hyphens, not underscores. Source-of-truth file: `apps/web/lib/discovery-triage.ts` exporting `as const` arrays plus the matching TypeScript union types. Any MCP tool that exposes these fields must mirror the same `enum:` arrays in `apps/web/lib/mcp-tools.ts`.
+
+| Field | Canonical values |
+| --- | --- |
+| `DiscoveryTriageDecision.actorType` | `"agent"` `"human"` `"system"` |
+| `DiscoveryTriageDecision.outcome` | `"auto-attributed"` `"human-review"` `"needs-more-evidence"` `"taxonomy-gap"` `"dismissed"` |
+| `PortfolioQualityIssue.issueType` (new values added by this spec) | `"attribution"` `"stale-identity"` `"missing-taxonomy"` |
+
+Legacy enum values (`InventoryEntity.attributionStatus = "needs_review" \| "unmapped" \| ...`) predate the hyphen rule and are intentionally untouched in this spec — see §16 Q7.
+
+**Existing-code fix included in the same change set.** [packages/db/src/discovery-attribution.ts:57](packages/db/src/discovery-attribution.ts#L57) currently uses `attributionMethod: "ai_proposed"` — underscored. The migration in slice 1 also renames this to `"ai-proposed"` (forward-only data update; same commit) so the codebase converges on the hyphen rule.
+
+### 10.2 Recommended new model
 
 ```prisma
 model DiscoveryTriageDecision {
@@ -305,9 +343,9 @@ model DiscoveryTriageDecision {
   decisionId            String   @unique
   inventoryEntityId     String?
   qualityIssueId        String?
-  actorType             String   // agent | human | system
+  actorType             String   // see §10.1 — "agent" | "human" | "system"
   actorId               String?
-  outcome               String   // auto_attributed | human_review | needs_more_evidence | taxonomy_gap | dismissed
+  outcome               String   // see §10.1 canonical values
   identityConfidence    Float?
   taxonomyConfidence    Float?
   evidenceCompleteness  Float?
@@ -315,15 +353,32 @@ model DiscoveryTriageDecision {
   selectedTaxonomyNodeId String?
   selectedIdentity      Json?
   evidencePacket        Json
-  proposedRule          Json?
-  appliedRuleId         String?
+  proposedRule          Json?    // slice 1 stores synthesized rules here only — see §13.2
+  appliedRuleId         String?  // null until the deterministic-rule catalog ships in a later slice
   requiresHumanReview   Boolean  @default(false)
   humanReviewedAt       DateTime?
   createdAt             DateTime @default(now())
+
+  @@index([outcome])
+  @@index([inventoryEntityId])
+  @@index([requiresHumanReview, createdAt])
 }
 ```
 
-This model can coexist with `ToolExecution`, `PortfolioQualityIssue`, and `AdminActivity`. `ToolExecution` records the tool call. `DiscoveryTriageDecision` records the domain decision.
+This model coexists with `ToolExecution`, `PortfolioQualityIssue`, and `AdminActivity`. `ToolExecution` records the tool call. `DiscoveryTriageDecision` records the domain decision.
+
+### 10.3 Operational metrics
+
+Per-decision logs are not enough on their own — the recursive-self-improvement loop only works if Mark and the responsible coworker can see whether triage is actually learning. The following aggregates are computed daily from `DiscoveryTriageDecision` and surfaced on the inventory triage workbench:
+
+- **Auto-rate** — share of last 7 days' decisions with `outcome = "auto-attributed"`. Target ≥ 60% once the rule catalog is populated; ≤ 30% at slice 1 launch is expected.
+- **Escalation queue depth** — open decisions with `requiresHumanReview = true`. Alerts when depth exceeds the volume-trigger floor (default 25, §7.1).
+- **Time-to-rule-synthesis** — median hours between an `auto-attributed` decision being recorded and an entry appearing in the deterministic-rule catalog (or in `proposedRule` during slice 1).
+- **Pattern reuse rate** — share of new discoveries in the last 7 days that matched an existing rule (`appliedRuleId IS NOT NULL`) rather than being scored from scratch.
+- **Repeat-unresolved count** — entities matching the §7.1 "repeated unknown signature" predicate. Rising = the loop is failing to learn.
+- **Taxonomy-gap proposals** — count of `outcome = "taxonomy-gap"` per week, broken down by parent portfolio.
+
+Slice 1 emits these as a daily structured summary in the `ScheduledAgentTask.lastError` / `lastStatus` channel and as a JSON payload attached to the daily summary thread; the dashboard tile is a follow-on task.
 
 ## 11. UI / UX Requirements
 
@@ -371,39 +426,61 @@ The coworker should not:
 
 ## 13. Integration Points
 
-Implementation should extend:
+### 13.1 Boundary with the existing hive-mind contribution-assessment spec
+
+[`2026-03-26-hive-mind-contribution-assessment-design.md`](2026-03-26-hive-mind-contribution-assessment-design.md) already defines a contribution-assessment pipeline for shipped Build Studio features (FeaturePack, `ImprovementProposal.contributionStatus`, DCO attestation). That pipeline assesses **features**; this spec produces **fingerprints / deterministic recognition rules**. To prevent two contribution surfaces from drifting:
+
+- **Reuse, do not duplicate, the contribution-assessment pipeline.** When the sibling fingerprint-contribution thread lands, an approved fingerprint is packaged as a `FeaturePack` of category `discovery-rule` (or equivalent) and flows through the existing contribution machinery — same DCO attestation, same `ImprovementProposal` lifecycle, same proprietary-sensitivity check.
+- **What this spec owns:** the per-install triage loop, the `DiscoveryTriageDecision` log, and the `proposedRule` payload. It does not define the contribution model, the FeaturePack manifest extensions, or the assessment criteria for a discovery rule.
+- **What the sibling thread owns:** the deterministic-rule catalog model (see §13.2), the redaction policy (§7.2, §16 Q3), the contribution UX, and the FeaturePack-shape extension for rules.
+
+### 13.2 Files to extend
 
 - `packages/db/src/discovery-attribution.ts`
   - add confidence-gated result types and deterministic fingerprint rule matching
+  - rename `attributionMethod: "ai_proposed"` → `"ai-proposed"` per §10.1
 - `packages/db/src/discovery-sync.ts`
   - persist triage-relevant evidence and preserve candidate history
 - `apps/web/lib/actions/inventory.ts`
   - add review outcomes beyond accept/dismiss
+- `apps/web/lib/discovery-triage.ts` *(new)*
+  - export `TRIAGE_OUTCOMES`, `TRIAGE_ACTOR_TYPES`, `TRIAGE_QUALITY_ISSUE_TYPES` `as const` arrays plus union types — source of truth per §10.1
 - `apps/web/lib/consume/discovery-data.ts`
   - expose triage decision history and grouped review queues
 - `apps/web/components/inventory/InventoryExceptionQueue.tsx`
   - evolve to triage workbench
 - `packages/db/prisma/schema.prisma`
-  - add `DiscoveryTriageDecision` and likely a rule/catalog model once the fingerprint thread finalizes the shape
+  - add `DiscoveryTriageDecision`
+  - **Rule-catalog dependency.** The deterministic-rule catalog model is owned by the sibling fingerprint-contribution thread. Until that ships, slice 1 stores synthesized rules only as the `proposedRule: Json` field on `DiscoveryTriageDecision`. `appliedRuleId` is reserved as a forward-compatible nullable string. Backlog items 7 and 8 in §14 are explicitly blocked on the sibling spec.
 - `packages/db/data/agent_registry.json`
   - ensure the responsible coworker has grants for discovery triage, backlog proposal, and inventory attribution
+- `prompts/specialist/discovery-taxonomy-gap-triage.prompt.md` *(new)*
+  - the daily-task prompt seeded into `PromptTemplate`, per the project rule that prompts live in DB seeded from `.prompt.md` files
 
 ## 14. Backlog Recommendation
 
-Create a new epic:
+Create a new epic: **Discovery Taxonomy Gap Triage and Pattern Operationalization**.
 
-**Discovery Taxonomy Gap Triage & Pattern Operationalization**
+Suggested backlog items with acceptance criteria. Detailed task decomposition is owned by writing-plans; the acceptance criteria here are the spec-level "done when" gates.
 
-Suggested backlog items:
+1. **Discovery triage decision log schema and migration**
+   - Done when: `DiscoveryTriageDecision` model lands per §10.2, migration applies on a fresh install, and the `ai_proposed` → `ai-proposed` rename in §13.2 is included in the same commit.
+2. **Scheduled coworker triage task seeded**
+   - Done when: a `ScheduledAgentTask` row matching the §7.1 field table exists after seed, the cron triggers fire in the install timezone, and the volume-override event handler is wired.
+3. **Confidence scoring for identity, taxonomy, evidence completeness, reproducibility**
+   - Done when: the four scores are computed for every triage candidate, persisted on `DiscoveryTriageDecision`, and unit-tested per §15.
+4. **Inventory triage workbench**
+   - Done when: `InventoryExceptionQueue.tsx` is replaced/evolved per §11, queues are grouped by `outcome`, evidence packets render with confidence indicators, and the existing accept/reassign/dismiss actions remain functional.
+5. **Automatic application path for high-confidence existing taxonomy matches**
+   - Done when: an entity satisfying §7.4's auto-apply rules and the §7.3 top two threshold rows is updated to `attributionStatus = "attributed"` with `attributionMethod = "ai-proposed"` and a `DiscoveryTriageDecision` row of `outcome = "auto-attributed"`.
+6. **Human escalation path**
+   - Done when: any candidate whose scores fall in the human-review band, or whose ambiguity margin is < 0.05, or whose taxonomy placement requires a new node, results in `outcome IN ("human-review", "taxonomy-gap")` with `requiresHumanReview = true` and a workbench card.
+7. **Deterministic rule synthesis (`proposedRule` payload only — slice-1 scope)**
+   - Done when: every `auto-attributed` decision writes a synthesized `proposedRule` JSON payload per §9, fixtures live under `packages/db/src/__fixtures__/discovery-triage/`, and regression tests replay the rule against the original packet. Persistent rule-catalog row creation is **out of scope** until the sibling thread ships (§13.1).
+8. **Connect approved reusable fingerprints to the sibling hive-mind contribution pipeline**
+   - **Blocked** on the sibling fingerprint-contribution spec (§13.1). Tracked in this epic as a placeholder so the dependency is visible.
 
-1. Define discovery triage decision log schema and migration.
-2. Implement daily scheduled coworker triage over unresolved `InventoryEntity` records.
-3. Add confidence scoring for identity, taxonomy placement, evidence completeness, and reproducibility.
-4. Extend inventory review UX into a triage workbench with evidence packets and decision history.
-5. Add automatic application path for high-confidence existing taxonomy matches.
-6. Add human escalation path for ambiguous, low-confidence, and taxonomy-gap cases.
-7. Add deterministic rule synthesis for accepted decisions using sanitized fixtures.
-8. Connect approved reusable fingerprints to the sibling hive-mind contribution pipeline.
+Each item carries the §15 verification gates as part of its done-when.
 
 ## 15. Testing Strategy
 
@@ -436,30 +513,35 @@ Run the inventory triage surface against the real app:
 
 ### Production Verification
 
-Before this feature is considered done:
+Developer-side gates before opening a PR:
 
-- run affected unit tests
+- run affected unit tests (informational; not merge-blocking — see CLAUDE.md "broken tests tracking")
 - run `pnpm --filter web typecheck`
-- run `cd apps/web && npx next build`
+- run `pnpm --filter web exec next build` (avoid `npx next` per CLAUDE.md — npx ignores the workspace-pinned version)
 - run affected browser QA against the production-served app
+
+CI merge-blocking gates per [`CLAUDE.md`](../../../CLAUDE.md) branch protection: **Typecheck**, **Production Build**, **DCO**. Unit tests run on every PR but are temporarily informational.
 
 ## 16. Open Questions
 
-1. Which coworker should own daily triage: Monitoring, Enterprise Architecture, AI Workforce Governance, or a new Discovery Steward?
-2. Should high-confidence taxonomy enrichment changes require human approval even when identity and placement are strong?
-3. What is the first approved privacy/redaction policy for fingerprints before hive-mind contribution?
+1. **Approval needed (blocks seeding).** Which coworker should own daily triage? Proposed default: a new **Discovery Steward** coworker (`agentId: "discovery-steward"`), seeded with grants for discovery triage, backlog proposal, and inventory attribution. Fallback if a new coworker is rejected: assign to `enterprise-architecture`. The §7.1 `ScheduledAgentTask` row cannot be seeded until this is resolved.
+2. Should high-confidence taxonomy-enrichment changes require human approval even when identity and placement are strong?
+3. What is the first approved privacy/redaction policy for fingerprints before hive-mind contribution? (Owned by sibling thread per §13.1.)
 4. Should customer-managed estate discoveries use the same triage queue as platform infrastructure, or a tenant-scoped queue?
-5. Which fields should count as sensitive by default in protocol evidence?
+5. Which fields count as sensitive by default in protocol evidence?
+6. Should `InventoryEntity.confidence` be folded into the new `identityConfidence` score, deprecated, or kept with distinct semantics? (Touched in §7.3.)
+7. The existing `attributionStatus` values `"needs_review"`, `"unmapped"`, `"attributed"`, `"stale"` predate the CLAUDE.md hyphen rule. Renaming `"needs_review"` is a wider migration (collectors, seed, every Postgres row) and is intentionally **out of scope** for this spec. Track as: should this legacy rename be folded into the slice-1 migration, deferred to a hygiene PR, or left until a broader enum-audit sweep?
 
 ## 17. Smallest Implementation Slice
 
-The first slice should avoid building the full contribution pipeline. It should:
+The first slice avoids building the full contribution pipeline. It is bounded by §13.1 (no rule catalog, no contribution UX) and §7.2 (every packet `redactionStatus: "unverified"`, no auto-contribution paths).
 
-1. Add `DiscoveryTriageDecision`.
-2. Add a daily scheduled coworker task that reads current `needs_review` entities.
-3. Compute identity/taxonomy confidence using existing candidate taxonomy and evidence.
-4. Persist a decision log entry.
-5. Auto-apply only existing taxonomy-node matches over the configured threshold.
+1. Add `DiscoveryTriageDecision` per §10.2 plus the canonical-enum source-of-truth file per §10.1.
+2. Add the scheduled coworker task per §7.1 (cron + volume override) reading current `attributionStatus = "needs_review"` entities.
+3. Compute identity/taxonomy/evidence/reproducibility confidence using existing candidate taxonomy and evidence.
+4. Persist a decision log entry. Synthesized rules live only in `proposedRule: Json` until the sibling thread ships the catalog model.
+5. Auto-apply only existing taxonomy-node matches that clear the §7.3 top two threshold rows AND every §7.4 gate.
 6. Route all other cases to the inventory review surface with a structured evidence packet.
+7. Emit the §10.3 daily metrics summary as a JSON payload on the scheduled-task thread.
 
-That creates the perpetual operating loop. The sibling fingerprint-contribution thread can then plug approved reusable patterns into the same decision log and rule synthesis path.
+That creates the perpetual operating loop. The sibling fingerprint-contribution thread plugs approved reusable patterns into the same decision log and rule-synthesis path via the FeaturePack pipeline described in §13.1.
