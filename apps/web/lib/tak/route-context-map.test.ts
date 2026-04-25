@@ -70,6 +70,14 @@ describe("resolveRouteContext", () => {
     expect(ctx.sensitivity).toBe("confidential");
   });
 
+  it("matches customer marketing routes ahead of the broader customer context", () => {
+    const ctx = resolveRouteContext("/customer/marketing/strategy");
+    expect(ctx.domain).toBe("Customer Marketing");
+    expect(ctx.routePrefix).toBe("/customer/marketing");
+    expect(ctx.domainTools).toContain("get_marketing_summary");
+    expect(ctx.domainTools).toContain("suggest_campaign_ideas");
+  });
+
   it("returns correct sensitivity for /platform (confidential)", () => {
     const ctx = resolveRouteContext("/platform");
     expect(ctx.sensitivity).toBe("confidential");
@@ -88,6 +96,8 @@ describe("ROUTE_CONTEXT_MAP", () => {
       "/ea",
       "/employee",
       "/customer",
+      "/customer/marketing",
+      "/storefront",
       "/ops",
       "/build",
       "/platform",
@@ -154,6 +164,13 @@ describe("ROUTE_CONTEXT_MAP", () => {
     expect(discoveryRoute.domainTools).toContain("review_estate_identity");
     expect(productRoute.skills.some((skill) => skill.label === "Review item identity")).toBe(true);
     expect(discoveryRoute.skills.some((skill) => skill.label === "Review item identity")).toBe(true);
+  });
+
+  it("keeps the storefront context focused on portal operations instead of marketing strategy", () => {
+    const storefrontRoute = ROUTE_CONTEXT_MAP["/storefront"]!;
+    expect(storefrontRoute.domain).toBe("Storefront Operations");
+    expect(storefrontRoute.domainTools).not.toContain("get_marketing_summary");
+    expect(storefrontRoute.domainTools).not.toContain("suggest_campaign_ideas");
   });
 });
 

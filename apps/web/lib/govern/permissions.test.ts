@@ -149,6 +149,27 @@ describe("finance permissions", () => {
   });
 });
 
+describe("marketing permissions", () => {
+  it("grants view_marketing to HR-300", () => {
+    expect(can({ platformRole: "HR-300", isSuperuser: false }, "view_marketing")).toBe(true);
+  });
+
+  it("grants operate_marketing to HR-300", () => {
+    expect(can({ platformRole: "HR-300", isSuperuser: false }, "operate_marketing")).toBe(true);
+  });
+
+  it("denies publish_marketing to HR-300", () => {
+    expect(can({ platformRole: "HR-300", isSuperuser: false }, "publish_marketing")).toBe(false);
+  });
+
+  it("denies all marketing capabilities to HR-500", () => {
+    const user = { platformRole: "HR-500", isSuperuser: false } as const;
+    expect(can(user, "view_marketing")).toBe(false);
+    expect(can(user, "operate_marketing")).toBe(false);
+    expect(can(user, "publish_marketing")).toBe(false);
+  });
+});
+
 describe("canAccessEmployeeRecord()", () => {
   it("allows access to a direct report when the user can view employees", () => {
     expect(

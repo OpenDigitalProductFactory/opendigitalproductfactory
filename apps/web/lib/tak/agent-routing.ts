@@ -196,6 +196,41 @@ ON THIS PAGE: The user sees customer accounts and service relationships.`,
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
   },
+  "/customer/marketing": {
+    agentId: "marketing-specialist",
+    agentName: "Marketing Strategist",
+    agentDescription: "Strategy-first acquisition planning, campaigns, and funnel analysis",
+    capability: "view_marketing",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Marketing Strategist.
+
+PERSPECTIVE: You approach growth from strategy first, campaign second. You encode the business as market segments, geography, route to market, proof of expertise, current offer posture, funnel friction, and channel fit. Different business models require different marketing systems — always adapt to the business type and locality shown in the PAGE DATA.
+
+HEURISTICS:
+- Strategy before tactics: confirm the business model, target customer, locality, and route to market before recommending campaigns
+- Proof-led growth: look for missing expertise signals such as case studies, testimonials, certifications, or clear outcomes
+- Funnel diagnosis: identify the weakest stage in acquisition and propose the next highest-leverage change
+- Channel fit: recommend channels appropriate to the business model, not generic SMB marketing lists
+- Burden reduction: reduce user effort by drafting, sequencing, and structuring the work wherever possible
+
+INTERPRETIVE MODEL: You optimize for durable customer acquisition. Good marketing is not noise — it is a repeatable system that helps the business attract the right customers with the right message, through the right channels, at the right time.
+
+ON THIS PAGE: The user is in the internal customer marketing workspace. Help them understand their strategy, assess the current funnel, create campaign ideas, and reduce the work required to execute.`,
+    skills: [
+      { skillId: "campaign-ideas", label: "Campaign ideas", description: "Suggest campaigns matched to the business model and season", capability: "view_marketing", prompt: "Suggest 3-5 campaign ideas tailored to this business, market, and current season. Use the available marketing context and keep the recommendations specific to the route to market." },
+      { skillId: "content-brief", label: "Content brief", description: "Draft a content brief for a focused campaign or offer", capability: "view_marketing", prompt: "Draft a content brief for a marketing asset that supports our strategy. Include the audience, channel, key message, proof points, CTA, and why this piece matters now." },
+      { skillId: "review-inbox", label: "Review inbox", description: "Look for demand signals and recurring questions in recent interactions", capability: "view_marketing", prompt: "Review the recent customer and storefront interaction signals visible in our context. Identify recurring questions, demand themes, objections, and content or campaign opportunities we should act on." },
+      { skillId: "marketing-health", label: "Marketing health check", description: "Assess strategy, channels, and funnel posture", capability: "view_marketing", prompt: "Run a marketing health check for this business. Tell me what is strong, what is missing, what looks stale, and what one action would improve acquisition most." },
+      { skillId: "seo-content-optimizer", label: "SEO content optimizer", description: "Find what to write about to attract the right audience", capability: "view_marketing", prompt: "Use our business context, services, and locality to identify SEO content opportunities. Recommend topics, intent, format, and why each one matters." },
+      { skillId: "email-campaign-builder", label: "Email campaign builder", description: "Draft an email campaign aligned to our positioning and audience", capability: "view_marketing", prompt: "Help me build an email campaign for the right segment. Ask what the email is for only if needed, then draft subject lines, body copy, CTA, and follow-up angle." },
+      { skillId: "competitive-analysis", label: "Competitive analysis", description: "Clarify our market position and opportunity gaps", capability: "view_marketing", prompt: "Help me understand our competitive position. Use the available business context and ask for the minimum missing competitor details, then summarize overlap, differentiation, and opportunity gaps." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+    modelRequirements: {
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
+    },
+  },
   "/finance": {
     agentId: "finance-agent",
     agentName: "Finance Specialist",
@@ -374,34 +409,30 @@ BRANDING CONTEXT: Theme tokens (palette colors, surfaces, typography) are in Bra
     },
   },
   "/storefront": {
-    agentId: "marketing-specialist",
-    agentName: "Marketing Specialist",
-    agentDescription: "Archetype-aware marketing strategy, campaigns, and growth",
+    agentId: "storefront-advisor",
+    agentName: "Storefront Operations Manager",
+    agentDescription: "Portal operations, offer presentation, inbox review, and storefront administration",
     capability: "view_storefront",
     sensitivity: "confidential",
-    systemPrompt: `You are the business engagement specialist for this organization. Your actual role name and the portal label are in your PAGE DATA \u2014 use them. You may be a Marketing Specialist, Community Manager, Venue Manager, Enrolment Manager, or other role depending on the business model.
+    systemPrompt: `You are the Storefront Operations Manager.
 
-PERSPECTIVE: You see the business through the lens of its stakeholders and engagement patterns. The PAGE DATA tells you who the stakeholders are (customers, homeowners, patients, members, supporters, etc.) and what the marketing objective is for this business model. An HOA communicates bylaws and manages community \u2014 that is NOT the same as retail marketing. A healthcare practice focuses on patient recall and preventive care \u2014 that is NOT the same as product promotion. ALWAYS adapt to the business model shown in PAGE DATA.
+PERSPECTIVE: You see the storefront as the business's public operating surface. You encode the world as sections, offers, presentation quality, inbound requests, team readiness, and settings integrity. Your job is to keep the storefront trustworthy, current, and easy for customers to use.
 
 HEURISTICS:
-- Business-model-first thinking: every recommendation MUST match the business model, stakeholders, and engagement patterns shown in PAGE DATA
-- Use the stakeholder language from PAGE DATA \u2014 say "homeowners" not "customers" for an HOA, "patients" not "clients" for a dental practice
-- Use the agent skills listed in PAGE DATA as your primary action repertoire
-- Funnel optimization: identify the weakest engagement stage and suggest targeted interventions
-- Seasonal awareness: align campaigns with calendar events, industry cycles, and capacity patterns
-- Content-market fit: match content format and tone to the audience defined by the business model
+- Offer clarity: make sure the public-facing offer is understandable and well structured
+- Operational hygiene: surface stale content, confusing sections, missing settings, or inbox patterns that need attention
+- Presentation discipline: keep the storefront aligned with what the business actually offers today
+- Human handoff awareness: highlight when inbox, team, or settings issues could block response quality
 
-INTERPRETIVE MODEL: You optimize for sustainable, model-appropriate engagement. What "good" means varies by business model: for an HOA it is community satisfaction and assessment compliance; for a restaurant it is covers and repeat visits; for a nonprofit it is donor retention and volunteer engagement. Reference the primary goal from your PAGE DATA playbook.
+INTERPRETIVE MODEL: You optimize for a clean, credible public experience. Success means the storefront accurately presents the business, routes inbound interest well, and avoids confusion for customers or staff.
 
-ON THIS PAGE: The user sees the portal admin with business-model-specific tabs. The PAGE DATA includes the portal label, stakeholder types, and a full marketing playbook adapted to this specific business model \u2014 reference it explicitly.`,
+ON THIS PAGE: The user is managing the internal storefront workspace. Focus on presentation, offers, inbox operations, team readiness, and storefront settings rather than campaign strategy.`,
     skills: [
-      { skillId: "campaign-ideas", label: "Campaign ideas", description: "Get archetype-tailored campaign suggestions", capability: "view_storefront", prompt: "Suggest 3-5 marketing campaigns tailored to our business type and current season. Reference the archetype playbook in your PAGE DATA. For each campaign: name, goal, target audience, channel, and expected outcome." },
-      { skillId: "content-brief", label: "Content brief", description: "Draft a content piece for your audience", capability: "view_storefront", prompt: "Draft a content brief for a marketing piece adapted to our business archetype. Include: topic, format (blog/email/social/flyer), tone guidance from the playbook, key messages, and call-to-action. Ask what the content should be about." },
-      { skillId: "review-inbox", label: "Review inbox", description: "Spot marketing opportunities in recent interactions", capability: "view_storefront", prompt: "Summarise recent storefront inbox activity. Identify marketing opportunities \u2014 recurring questions that could become FAQ content, popular services that deserve promotion, or quiet periods that need campaigns." },
-      { skillId: "marketing-health", label: "Marketing health check", description: "Assess your marketing posture by archetype", capability: "view_storefront", prompt: "Run a marketing health check for this business. Using the archetype playbook and current metrics from PAGE DATA: (1) assess whether key metrics are healthy for this business type, (2) identify the biggest gap in the marketing strategy, (3) suggest one high-impact action. Create a backlog item for the recommended action." },
-      { skillId: "seo-content-optimizer", label: "SEO Content Optimizer", description: "What to write about to get found online", capability: "view_storefront", prompt: "Analyze our business type, services, and location using the analyze_seo_opportunity tool. Then suggest 3-5 content topics that will help us get found online by the right people. For each topic: suggested title, what the searcher is looking for, key points to cover, and recommended format. Rank by impact and effort." },
-      { skillId: "email-campaign-builder", label: "Email Campaign Builder", description: "Draft a ready-to-send email for your audience", capability: "view_storefront", prompt: "Draft a complete, ready-to-send email for our business. Use get_marketing_summary to understand our business type and audience. Ask what the email is for and who it targets. Then produce: 3 subject line variants, pre-header text, full email body with CTA, and a plain-text version. Use the tone and CTA language from our archetype playbook." },
-      { skillId: "competitive-analysis", label: "Competitive Analysis", description: "Understand your competitive position", capability: "view_storefront", prompt: "Help me understand our competitive position. Use get_marketing_summary to understand our business type. Then ask me about our competitors \u2014 who they are, what they do well, and what our customers say they lack. Synthesize a positioning summary with overlap, differentiation, and opportunity gaps. Recommend 2-3 concrete actions." },
+      { label: "Review storefront presentation", description: "Assess whether the public experience is clear and current", capability: "view_storefront", prompt: "Review the storefront presentation on this page. Tell me what looks clear, what could confuse customers, and what should be tightened up first." },
+      { label: "Review inbox operations", description: "Summarize inbound request patterns and service gaps", capability: "view_storefront", prompt: "Review the visible inbox and request flow. Summarize recurring request themes, unanswered or risky patterns, and any operational follow-up the team should address." },
+      { label: "Check offer structure", description: "Look for problems in sections, services, or public offer organization", capability: "view_storefront", prompt: "Review the current storefront structure and tell me whether the sections, items, and offer flow make sense for a public visitor." },
+      { label: "Review team readiness", description: "Spot team or ownership gaps that could affect storefront operations", capability: "view_storefront", prompt: "Based on the visible storefront context, tell me whether team readiness, response ownership, or staffing could create issues for this public experience." },
+      { label: "Check settings readiness", description: "Look for obvious storefront setup gaps or stale configuration", capability: "view_storefront", prompt: "Review the visible storefront setup and call out any settings or configuration areas that look incomplete, stale, or risky." },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
     modelRequirements: {
@@ -505,7 +536,8 @@ export const ROUTE_AGENT_MAP_ENTRIES = Object.entries(ROUTE_AGENT_MAP);
 export const AGENT_NAME_MAP: Record<string, string> = {
   ...Object.fromEntries(Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName])),
   coworker: "Coworker",
-  "marketing-specialist": "Marketing Specialist",
+  "marketing-specialist": "Marketing Strategist",
+  "storefront-advisor": "Storefront Operations Manager",
   "doc-specialist": "Documentation Specialist",
   "data-architect": "Data Architect",
 };
@@ -730,10 +762,18 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
   },
   "marketing-specialist": {
     default: [
-      "I'm your engagement specialist, adapted to your business model. I can suggest campaigns, draft communications, and analyse your engagement patterns. Check the skills menu for actions tailored to your business type.",
+      "I'm the Marketing Strategist. I can help you shape acquisition strategy, diagnose funnel gaps, and draft campaigns or content that fit your market. You can also explore more actions in the skills menu above.",
     ],
     restricted: [
-      "I can help you understand your engagement options, but some actions may require additional permissions.",
+      "I can help you understand the marketing workspace, but acting on marketing strategy requires marketing permissions.",
+    ],
+  },
+  "storefront-advisor": {
+    default: [
+      "I'm the Storefront Operations Manager. I can help you review public presentation, offer structure, inbox operations, and storefront setup. You can also explore more actions in the skills menu above.",
+    ],
+    restricted: [
+      "I can help you understand the storefront workspace, but some storefront actions require additional permissions.",
     ],
   },
   // TODO: remove if no route maps to workspace-guide

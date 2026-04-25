@@ -335,7 +335,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       },
       required: [],
     },
-    requiredCapability: "view_storefront",
+    requiredCapability: "view_marketing",
     sideEffect: false,
   },
   {
@@ -346,7 +346,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {},
       required: [],
     },
-    requiredCapability: "view_storefront",
+    requiredCapability: "view_marketing",
     sideEffect: false,
   },
   {
@@ -357,7 +357,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       properties: {},
       required: [],
     },
-    requiredCapability: "view_storefront",
+    requiredCapability: "view_marketing",
     sideEffect: false,
   },
   {

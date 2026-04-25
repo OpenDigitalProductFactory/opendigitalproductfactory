@@ -358,6 +358,74 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  "/customer/marketing": {
+    routePrefix: "/customer/marketing",
+    domain: "Customer Marketing",
+    sensitivity: "confidential",
+    domainContext:
+      "This page is the internal marketing workspace for customer acquisition. Data here is classified as confidential — it can include customer segments, market assumptions, funnel diagnostics, offer positioning, and campaign planning. Users work strategy first, then campaigns, funnel analysis, and automation planning.",
+    domainTools: [
+      "get_marketing_summary",
+      "suggest_campaign_ideas",
+      "analyze_seo_opportunity",
+      "create_backlog_item",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/customers/index",
+    skills: [
+      {
+        label: "Campaign ideas",
+        description: "Generate strategy-aware campaign suggestions",
+        capability: "view_marketing",
+        prompt: "Suggest 3-5 campaign ideas tailored to this business, market, and current season. Keep the recommendations specific to the route to market and likely customer segment.",
+      },
+      {
+        label: "Content brief",
+        description: "Draft a brief for a campaign asset or offer",
+        capability: "view_marketing",
+        prompt: "Draft a content brief that supports our acquisition strategy. Include audience, message, channel, proof points, CTA, and why this piece matters now.",
+      },
+      {
+        label: "Review inbox",
+        description: "Look for demand signals in recent interactions",
+        capability: "view_marketing",
+        prompt: "Review the recent interaction signals in our marketing context. Identify recurring questions, objections, interest themes, and content or campaign opportunities we should act on.",
+      },
+      {
+        label: "Marketing health check",
+        description: "Assess strategy, channels, and funnel posture",
+        capability: "view_marketing",
+        taskType: "analysis" as const,
+        prompt: "Run a marketing health check for this business. Tell me what is strong, what is missing, what looks stale, and which one action would improve acquisition most.",
+      },
+      {
+        label: "SEO content optimizer",
+        description: "Find what to write about to attract the right audience",
+        capability: "view_marketing",
+        prompt: "Use our business context, services, and locality to identify SEO content opportunities. Recommend topics, intent, format, and why each one matters.",
+      },
+      {
+        label: "Email campaign builder",
+        description: "Draft an email campaign aligned to our market and offer",
+        capability: "view_marketing",
+        prompt: "Help me build an email campaign for the right segment. Ask what the email is for only if needed, then draft subject lines, body copy, CTA, and a follow-up angle.",
+      },
+      {
+        label: "Competitive analysis",
+        description: "Clarify our market position and opportunity gaps",
+        capability: "view_marketing",
+        prompt: "Help me understand our competitive position. Use the available business context and ask for the minimum missing competitor details, then summarize overlap, differentiation, and opportunity gaps.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/ops": {
     routePrefix: "/ops",
     domain: "Operations",
@@ -704,63 +772,54 @@ When generating or reviewing UI code, enforce these rules:
 
   "/storefront": {
     routePrefix: "/storefront",
-    domain: "Business Portal & Engagement",
+    domain: "Storefront Operations",
     sensitivity: "confidential",
     domainContext:
-      "This page manages the business portal and engagement strategy. " +
-      "The portal adapts to the business model \u2014 it may be a Storefront, Community Portal, Client Portal, Patient Portal, etc. " +
-      "The PAGE DATA contains the portal label, stakeholder types, and a marketing playbook specific to this business model \u2014 " +
-      "reference them in every recommendation. Use stakeholder-appropriate language (homeowners, patients, members, etc.). " +
-      "Users manage sections, items/services/campaigns, team/staff, inbox/requests, and settings.",
+      "This page manages the public storefront experience and operational setup. " +
+      "Data here is classified as confidential because it includes the live offer structure, inbound request handling, team readiness, and business configuration. " +
+      "Users manage sections, items or services, inbox requests, team setup, and storefront settings.",
     domainTools: [
-      "get_marketing_summary",
-      "suggest_campaign_ideas",
-      "generate_custom_archetype",
-      "assess_archetype_refinement",
       "create_backlog_item",
       "search_knowledge",
       "search_knowledge_base",
     ],
     skills: [
       {
-        label: "Campaign ideas",
-        description: "Get archetype-tailored campaign suggestions",
+        label: "Review storefront presentation",
+        description: "Assess whether the public experience is clear and current",
         capability: "view_storefront",
         prompt:
-          "Suggest 3-5 marketing campaigns tailored to our business type and current season. Reference the archetype playbook in your PAGE DATA. For each campaign: name, goal, target audience, channel, and expected outcome.",
+          "Review the storefront presentation on this page. Tell me what looks clear, what could confuse customers, and what should be tightened up first.",
       },
       {
-        label: "Content brief",
-        description: "Draft a content piece for your audience",
+        label: "Review inbox operations",
+        description: "Summarize inbound request patterns and service gaps",
         capability: "view_storefront",
         prompt:
-          "Draft a content brief for a marketing piece adapted to our business archetype. Include: topic, format (blog/email/social/flyer), tone guidance from the playbook, key messages, and call-to-action. Ask what the content should be about.",
+          "Review the visible inbox and request flow. Summarize recurring request themes, unanswered or risky patterns, and any operational follow-up the team should address.",
       },
       {
-        label: "Review inbox",
-        description: "Spot marketing opportunities in recent interactions",
+        label: "Check offer structure",
+        description: "Look for problems in sections, services, or public offer organization",
         capability: "view_storefront",
         prompt:
-          "Summarise recent storefront inbox activity. Identify marketing opportunities \u2014 recurring questions that could become FAQ content, popular services that deserve promotion, or quiet periods that need campaigns.",
+          "Review the current storefront structure and tell me whether the sections, items, and offer flow make sense for a public visitor.",
       },
       {
-        label: "Marketing health check",
-        description: "Assess your marketing posture by archetype",
+        label: "Review team readiness",
+        description: "Spot team or ownership gaps that could affect storefront operations",
         capability: "view_storefront",
         taskType: "analysis" as const,
         prompt:
-          "Run a marketing health check for this business. Using the archetype playbook and current metrics from PAGE DATA: (1) assess whether key metrics are healthy for this business type, (2) identify the biggest gap in the marketing strategy, (3) suggest one high-impact action. Create a backlog item for the recommended action.",
+          "Based on the visible storefront context, tell me whether team readiness, response ownership, or staffing could create issues for this public experience.",
       },
       {
-        label: "Improve template",
-        description: "Review how your config differs from the original template and contribute improvements",
+        label: "Check settings readiness",
+        description: "Look for obvious storefront setup gaps or stale configuration",
         capability: "view_storefront",
         taskType: "analysis" as const,
         prompt:
-          "Use assess_archetype_refinement to compare my current portal configuration against the original archetype template. " +
-          "Show me what I've changed (added items, removed sections, new categories). " +
-          "Then tell me whether these refinements could improve the template for future users of the same business type. " +
-          "If contribution mode is enabled, offer to contribute the improvements back via Hive Mind.",
+          "Review the visible storefront setup and call out any settings or configuration areas that look incomplete, stale, or risky.",
       },
       {
         label: "Report an issue",

@@ -13,6 +13,7 @@ CMD ["sh", "-c", "pnpm install && pnpm --filter @dpf/db exec prisma generate && 
 # ─── Stage 2: deps ────────────────────────────────────────────────────────────
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/db/prisma/schema.prisma ./packages/db/prisma/

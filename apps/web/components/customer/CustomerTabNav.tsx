@@ -3,26 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
-  { label: "Accounts", href: "/customer" },
-  { label: "Engagements", href: "/customer/engagements" },
-  { label: "Pipeline", href: "/customer/opportunities" },
-  { label: "Quotes", href: "/customer/quotes" },
-  { label: "Orders", href: "/customer/sales-orders" },
-  { label: "Funnel", href: "/customer/funnel" },
-] as const;
+export type CustomerTabNavItem = {
+  label: string;
+  href: string;
+};
 
-export function CustomerTabNav() {
+type Props = {
+  tabs: CustomerTabNavItem[];
+};
+
+export function CustomerTabNav({ tabs }: Props) {
   const pathname = usePathname();
 
   function isActive(href: string) {
     if (href === "/customer") return pathname === "/customer";
-    return pathname.startsWith(href);
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
+
+  if (tabs.length === 0) return null;
 
   return (
     <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
-      {TABS.map((t) => (
+      {tabs.map((t) => (
         <Link
           key={t.href}
           href={t.href}
