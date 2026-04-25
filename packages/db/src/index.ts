@@ -118,6 +118,14 @@ export {
   type PromotionSummary,
 } from "./discovery-promotion";
 export {
+  TRIAGE_ACTOR_TYPES,
+  TRIAGE_OUTCOMES,
+  TRIAGE_QUALITY_ISSUE_TYPES,
+  type TriageActorType,
+  type TriageOutcome,
+  type TriageQualityIssueType,
+} from "./discovery-triage-enums";
+export {
   inferCrossCollectorRelationships,
   inferProductDependencies,
   type InferenceSummary,
