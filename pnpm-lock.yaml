@@ -423,7 +423,7 @@ importers:
         version: link:../../packages/integration-shared
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
-        version: 1.29.0(zod@3.23.8)
+        version: 1.29.0(zod@4.3.6)
       postgres:
         specifier: ^3.4.5
         version: 3.4.7
@@ -431,8 +431,8 @@ importers:
         specifier: ^8.1.0
         version: 8.1.0
       zod:
-        specifier: ^3.23.8
-        version: 3.23.8
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^25.0.0
@@ -10681,7 +10681,7 @@ snapshots:
     dependencies:
       langium: 4.2.1
 
-  '@modelcontextprotocol/sdk@1.29.0(zod@3.23.8)':
+  '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.13(hono@4.12.14)
       ajv: 8.18.0
@@ -10698,8 +10698,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 3.23.8
-      zod-to-json-schema: 3.25.2(zod@3.23.8)
+      zod: 4.3.6
+      zod-to-json-schema: 3.25.2(zod@4.3.6)
     transitivePeerDependencies:
       - supports-color
 
@@ -19055,9 +19055,9 @@ snapshots:
       grammex: 3.1.12
       graphmatch: 1.1.1
 
-  zod-to-json-schema@3.25.2(zod@3.23.8):
+  zod-to-json-schema@3.25.2(zod@4.3.6):
     dependencies:
-      zod: 3.23.8
+      zod: 4.3.6
 
   zod@3.23.8: {}
 
