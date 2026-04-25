@@ -253,6 +253,7 @@ export default async function AssignmentsPage({ searchParams }: Props) {
             autoApplied={bootstrapState.autoApplied}
             totalBindings={bootstrapState.totalBindings}
             report={bootstrapState.report}
+            detailQueryBase="/platform/ai/assignments"
           />
         ) : null}
         <BindingFilters

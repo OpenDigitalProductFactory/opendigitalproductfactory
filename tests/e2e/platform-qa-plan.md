@@ -266,6 +266,7 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | AUTH-GOV-17 | Navigate to `/platform/audit/authority`, select `HR-400` and `finance-controller`, then use the route-aware inspector link | Effective Permissions shows `/finance` route context, names binding `AB-DEMO-FINANCE-CONTROLLER`, and `Open binding` deep-links to `/platform/identity/authorization?binding=AB-DEMO-FINANCE-CONTROLLER` |
 | AUTH-GOV-18 | In an environment with zero `AuthorityBinding` rows, open `/platform/identity/authorization` as a platform editor | The page auto-applies the initial bootstrap once, shows a `Bootstrap coverage` panel, and the human-first list populates without requiring a manual refresh first |
 | AUTH-GOV-19 | Open `/platform/ai/assignments` after bootstrap when at least one route mapping was skipped as low-confidence | The coworker-first page shows the shared `Bootstrap coverage` panel, lists each skipped route with a human-readable reason, and still offers `Refresh inferred bindings` without hiding the existing model-assignment surface |
+| AUTH-GOV-20 | From a low-confidence row such as `/setup` in either bootstrap coverage panel, click `Create draft binding` | A draft authority binding is created or reused idempotently, and the page opens the shared binding editor on that draft using the same admin surface the user started from |
 
 ---
 

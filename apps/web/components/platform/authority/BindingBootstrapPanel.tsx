@@ -1,10 +1,12 @@
 import { BootstrapBindingsButton } from "./BootstrapBindingsButton";
+import { CreateDraftBindingButton } from "./CreateDraftBindingButton";
 import type { BootstrapAuthorityBindingsReport } from "@/lib/authority/bootstrap-bindings";
 
 type BindingBootstrapPanelProps = {
   autoApplied: boolean;
   totalBindings?: number | null;
   report: BootstrapAuthorityBindingsReport;
+  detailQueryBase?: string;
 };
 
 const WARNING_REASON_COPY: Record<string, string> = {
@@ -17,6 +19,7 @@ export function BindingBootstrapPanel({
   autoApplied,
   totalBindings,
   report,
+  detailQueryBase,
 }: BindingBootstrapPanelProps) {
   const isEmpty = (totalBindings ?? 0) === 0 && report.created === 0;
   const hasLowConfidence = report.lowConfidence.length > 0;
@@ -80,6 +83,7 @@ export function BindingBootstrapPanel({
                   <th className="px-3 py-2 font-medium">Resource</th>
                   <th className="px-3 py-2 font-medium">Coworker</th>
                   <th className="px-3 py-2 font-medium">Reason</th>
+                  {detailQueryBase ? <th className="px-3 py-2 font-medium text-right">Next step</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -90,6 +94,11 @@ export function BindingBootstrapPanel({
                     <td className="px-3 py-2 text-[var(--dpf-muted)]">
                       {WARNING_REASON_COPY[warning.reason] ?? warning.reason}
                     </td>
+                    {detailQueryBase ? (
+                      <td className="px-3 py-2 text-right">
+                        <CreateDraftBindingButton detailQueryBase={detailQueryBase} warning={warning} />
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
