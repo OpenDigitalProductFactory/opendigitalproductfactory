@@ -237,4 +237,38 @@ describe("createBranchAndPR head/base split", () => {
     );
     expect(labelPost!.body!.labels).toEqual(["ai-contributed", "build-studio"]);
   });
+
+  it("sets commit author and committer to the provided DCO identity", async () => {
+    const { calls } = setupFetchMock();
+
+    await createBranchAndPR({
+      headOwner: "upstream-org",
+      headRepo: "upstream-repo",
+      baseOwner: "upstream-org",
+      baseRepo: "upstream-repo",
+      baseBranch: "main",
+      branchName: "feat/tiny",
+      commitMessage: "feat: tiny\n\nSigned-off-by: dpf-agent-12345678 <agent-12345678@hive.dpf>",
+      diff: TINY_DIFF,
+      prTitle: "feat: tiny",
+      prBody: "body",
+      labels: [],
+      token: "ghp_test",
+      commitAuthor: {
+        name: "dpf-agent-12345678",
+        email: "agent-12345678@hive.dpf",
+      },
+    });
+
+    const commitPost = calls.find((c) => c.method === "POST" && c.url.endsWith("/git/commits"));
+    expect(commitPost, "commit POST must happen").toBeDefined();
+    expect(commitPost!.body!.author).toEqual({
+      name: "dpf-agent-12345678",
+      email: "agent-12345678@hive.dpf",
+    });
+    expect(commitPost!.body!.committer).toEqual({
+      name: "dpf-agent-12345678",
+      email: "agent-12345678@hive.dpf",
+    });
+  });
 });

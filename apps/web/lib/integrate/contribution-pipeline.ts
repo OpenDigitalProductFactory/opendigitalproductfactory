@@ -157,6 +157,18 @@ function generateCommitMessage(input: {
   return lines.join("\n");
 }
 
+function extractSignoffIdentity(
+  dcoSignoff?: string,
+): { name: string; email: string } | null {
+  if (!dcoSignoff) return null;
+  const match = dcoSignoff.match(/^Signed-off-by:\s*(.+?)\s*<([^>]+)>$/i);
+  if (!match) return null;
+  return {
+    name: redactHostnames(match[1].trim()),
+    email: match[2].trim(),
+  };
+}
+
 // ─── GitHub API ─────────────────────────────────────────────────────────────
 
 /**
@@ -292,6 +304,7 @@ export async function submitBuildAsPR(
       authorName: input.authorName,
       dcoSignoff: input.dcoSignoff,
     });
+    const commitAuthor = extractSignoffIdentity(input.dcoSignoff);
 
     const labels = ["ai-contributed"];
     if (input.impactReport) labels.push(`risk:${input.impactReport.riskLevel}`);
@@ -309,6 +322,7 @@ export async function submitBuildAsPR(
         baseRepo: base.repo,
         branchName,
         commitMessage,
+        ...(commitAuthor ? { commitAuthor } : {}),
         diff: input.diffPatch,
         prTitle,
         prBody,

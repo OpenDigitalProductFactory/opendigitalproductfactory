@@ -55,6 +55,11 @@ export interface GitHubCommitResult {
   prNumber: number | null;
 }
 
+export interface GitHubCommitIdentity {
+  name: string;
+  email: string;
+}
+
 // ─── Diff Parsing ───────────────────────────────────────────────────────────
 
 /**
@@ -250,6 +255,7 @@ export async function createBranchAndPR(input: {
   baseBranch?: string;
   branchName: string;
   commitMessage: string;
+  commitAuthor?: GitHubCommitIdentity;
   diff: string;
   prTitle: string;
   prBody: string;
@@ -263,6 +269,7 @@ export async function createBranchAndPR(input: {
     baseRepo,
     branchName,
     commitMessage,
+    commitAuthor,
     diff,
     prTitle,
     prBody,
@@ -355,6 +362,7 @@ export async function createBranchAndPR(input: {
       message: commitMessage,
       tree: tree.sha,
       parents: [baseSha],
+      ...(commitAuthor ? { author: commitAuthor, committer: commitAuthor } : {}),
     },
     token,
   );

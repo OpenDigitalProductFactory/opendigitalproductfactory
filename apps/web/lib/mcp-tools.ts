@@ -4713,6 +4713,10 @@ export async function executeTool(
         baseRepo: repoName,
         branchName,
         commitMessage,
+        commitAuthor: {
+          name: platformId.authorName,
+          email: platformId.authorEmail,
+        },
         diff,
         prTitle,
         prBody,
@@ -5681,6 +5685,10 @@ export async function executeTool(
               baseRepo: upstreamMatch[2],
               branchName,
               commitMessage,
+              commitAuthor: {
+                name: platformId.authorName,
+                email: platformId.authorEmail,
+              },
               diff,
               prTitle,
               prBody,
