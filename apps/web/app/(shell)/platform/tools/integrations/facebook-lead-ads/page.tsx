@@ -190,7 +190,7 @@ function FacebookLeadAdsPreviewSection({
           <PreviewList
             items={previewData.recentLeads.map((lead) => ({
               primary: lead.id,
-              secondary: lead.formId ?? lead.adId ?? null,
+              secondary: formatLeadSecondary(lead),
             }))}
           />
         </PreviewCard>
@@ -273,4 +273,19 @@ function formatDateTime(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function formatLeadSecondary(lead: {
+  formId: string | null;
+  adId: string | null;
+  fieldNames: string[];
+}): string | null {
+  const context = lead.formId ?? lead.adId;
+  const fields = lead.fieldNames.length > 0 ? lead.fieldNames.join(", ") : null;
+
+  if (context && fields) {
+    return `${context} • ${fields}`;
+  }
+
+  return context ?? fields;
 }
