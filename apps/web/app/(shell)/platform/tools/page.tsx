@@ -59,14 +59,14 @@ export default async function ToolsHubPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Tools &amp; Services</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Discover integrations, run discovery operations, activate MCP services, and confirm what tools are really available to agents.
+          Research connection options, operate MCP services, manage native integrations, and confirm what agents can actually use at runtime.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PlatformSummaryCard
-          title="Catalog"
-          description="Browse the integration registry and decide what is worth activating."
+          title="MCP Catalog"
+          description="Browse the current MCP registry while the broader connection catalog is still being unified."
           href="/platform/tools/catalog"
           accent="var(--dpf-info)"
           metrics={[
@@ -75,7 +75,7 @@ export default async function ToolsHubPage() {
           ]}
         />
         <PlatformSummaryCard
-          title="Discovery Operations"
+          title="Estate Discovery"
           description="Turn raw network findings into purpose-aware estate evidence with attribution and dependency review."
           href="/platform/tools/discovery"
           accent="var(--dpf-warning)"
@@ -85,7 +85,7 @@ export default async function ToolsHubPage() {
           ]}
         />
         <PlatformSummaryCard
-          title="Services"
+          title="MCP Services"
           description="Register and maintain the MCP services the platform depends on."
           href="/platform/tools/services"
           accent="var(--dpf-success)"
@@ -95,7 +95,7 @@ export default async function ToolsHubPage() {
           ]}
         />
         <PlatformSummaryCard
-          title="Enterprise Integrations"
+          title="Native Integrations"
           description="Configure native business-system anchors that run on the shared credential and governance substrate."
           href="/platform/tools/integrations"
           accent="var(--dpf-accent)"
@@ -105,8 +105,18 @@ export default async function ToolsHubPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Built-in Tools"
+          description="Configure first-party platform tools such as Brave Search and other shipped utilities."
+          href="/platform/tools/built-ins"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Model", value: "Built-in" },
+            { label: "Initial focus", value: "Brave Search" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Capability Inventory"
-          description="See the merged inventory of built-in tools, MCP tools, and provider-facing capabilities."
+          description="See the runtime inventory of tools and capabilities already available to agents, not the setup catalog."
           href="/platform/tools/inventory"
           accent="var(--dpf-info)"
           metrics={[
@@ -121,8 +131,8 @@ export default async function ToolsHubPage() {
           Recommended Flow
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          Start in the catalog when you are researching options, move to discovery operations when you need to understand what was found and why it matters,
-          then use services and capability inventory to manage the platform tooling the AI workforce relies on.
+          Start in the MCP catalog when you are researching options, move to estate discovery when you need to understand what was found and why it matters,
+          then use MCP services, native integrations, built-in tools, and capability inventory to manage the tooling the AI workforce relies on.
         </p>
       </div>
     </div>

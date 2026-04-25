@@ -316,8 +316,8 @@ Current admin tabs include both "Business Models" and "Settings" without clear h
 | Portal | `/storefront` | Customer-facing portal config |
 | Operating Hours | `/storefront/settings/operations` | Business hours, deployment windows |
 | Platform Dev | `/admin/platform-development` | Contribution mode |
-| Prompts | `/admin/prompts` | AI prompt management |
-| Skills | `/admin/skills` | Skill definitions |
+| Prompts | `/platform/ai/prompts` | AI prompt management (with `/admin/prompts` kept only as a legacy redirect) |
+| Skills | `/platform/ai/skills` | Skill definitions and observability (with `/admin/skills` kept only as a legacy redirect) |
 | Issue Reports | `/admin/issue-reports` | Issue tracking |
 
 **Note:** "Storefront" tab label should be dynamic per portal vocabulary spec (EP-STORE-006). For now, "Portal" is a safer default than "Storefront" given the vocabulary design already in progress.

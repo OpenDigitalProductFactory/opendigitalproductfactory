@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/platform/ai/routing/page.tsx
-// Moved to /platform/audit/routes — redirect to new canonical URL.
+// Legacy alias: keep old routing links inside the AI Operations family.
 import { permanentRedirect } from "next/navigation";
 
 export default function RoutingRedirect() {
-  permanentRedirect("/platform/audit/routes");
+  permanentRedirect("/platform/ai/providers");
 }
