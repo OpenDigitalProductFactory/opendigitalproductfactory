@@ -65,15 +65,21 @@ export async function POST(request: NextRequest): Promise<Response> {
   });
 
   const requiresStartApproval =
-    currentPhase === "ideate"
-    && targetPhase === "plan"
-    && devConfig?.governedBacklogEnabled === true
-    && build.originatingBacklogItemId != null
-    && build.draftApprovedAt == null;
+    build.originatingBacklogItemId != null
+    && build.draftApprovedAt == null
+    && (
+      (currentPhase === "ideate" && targetPhase === "plan")
+      || (currentPhase === "plan" && targetPhase === "build")
+    );
 
   if (requiresStartApproval) {
     return NextResponse.json(
-      { error: "Approve Start before moving this governed backlog draft into planning." },
+      {
+        error:
+          currentPhase === "ideate"
+            ? "Approve Start before moving this governed backlog draft into planning."
+            : "Approve Start before moving this backlog-linked draft into implementation.",
+      },
       { status: 422 },
     );
   }
