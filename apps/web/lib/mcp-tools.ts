@@ -1928,6 +1928,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "run_discovery_triage",
+    description: "Run a single discovery triage pass over needs-review and weakly resolved inventory, applying safe high-confidence matches and returning a summary of the run.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trigger: { type: "string", enum: ["cadence", "volume"], default: "cadence" },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "attribute_entity_to_product",
     description: "Link a discovered inventory entity to a portfolio taxonomy node so it counts toward the managed product estate. Use to resolve catalog_match_ambiguous or attribution_gap quality issues.",
     inputSchema: {
@@ -7210,6 +7224,21 @@ export async function executeTool(
         success: true,
         message: `Discovery sweep completed: ${result.summary.createdEntities + result.summary.updatedEntities} entities refreshed and ${result.summary.createdRelationships + result.summary.updatedRelationships} relationships refreshed.`,
         data: result.summary as Record<string, unknown>,
+      };
+    }
+
+    case "run_discovery_triage": {
+      const { runDiscoveryTriagePass } = await import("@/lib/discovery-triage-runner");
+      const trigger = params["trigger"] === "volume" ? "volume" : "cadence";
+      const result = await runDiscoveryTriagePass(undefined, {
+        trigger,
+        actorType: "agent",
+        actorId: context?.agentId ?? "discovery-steward",
+      });
+      return {
+        success: true,
+        message: `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed.`,
+        data: result as unknown as Record<string, unknown>,
       };
     }
 
