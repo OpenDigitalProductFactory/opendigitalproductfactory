@@ -8,6 +8,7 @@ describe("BindingBootstrapPanel", () => {
     const html = renderToStaticMarkup(
       <BindingBootstrapPanel
         autoApplied
+        detailQueryBase="/platform/identity/authorization"
         report={{
           created: 3,
           skippedExisting: 0,
@@ -26,6 +27,7 @@ describe("BindingBootstrapPanel", () => {
     expect(html).toContain("/setup");
     expect(html).toContain("Route is not capability-gated yet");
     expect(html).toContain("Subject mapping could not be inferred");
+    expect(html).toContain("Create draft binding");
   });
 
   it("renders empty-state guidance when there are still no bindings after review", () => {

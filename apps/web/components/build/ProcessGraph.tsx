@@ -56,11 +56,12 @@ const TASK_GRAPH_Y_OFFSET = 130;
 type Props = {
   build: FeatureBuildRow;
   workflowLabel: string | null;
+  governedBacklogEnabled: boolean;
 };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
-export function ProcessGraph({ build, workflowLabel }: Props) {
+export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: Props) {
   // ─── Live running-task state via DOM CustomEvents ──────────────────────
   const [activeTaskTitles, setActiveTaskTitles] = useState<Set<string>>(
     new Set(),
@@ -258,6 +259,7 @@ export function ProcessGraph({ build, workflowLabel }: Props) {
           phase={inspectedPhase}
           status={getPhaseNodeStatus(inspectedPhase, build)}
           workflowLabel={workflowLabel}
+          governedBacklogEnabled={governedBacklogEnabled}
           onClose={handleInspectorClose}
         />
       )}

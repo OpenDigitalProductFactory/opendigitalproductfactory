@@ -122,3 +122,9 @@ export {
   inferProductDependencies,
   type InferenceSummary,
 } from "./discovery-inference";
+export * from "./discovery-fingerprint-types";
+export * from "./discovery-fingerprint-redaction";
+export * from "./discovery-fingerprint-policy";
+export * from "./discovery-fingerprint-rules";
+export * from "./discovery-fingerprint-catalog";
+export * from "./discovery-fingerprint-store";
