@@ -18,6 +18,7 @@ vi.mock("@dpf/db", () => ({
     },
     credentialEntry: {
       upsert: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -43,7 +44,7 @@ import {
   requestDeviceCode,
 } from "@/lib/integrate/github-oauth";
 import { validateGitHubToken } from "@/lib/actions/platform-dev-config";
-import { initiateDeviceFlow, pollDeviceFlow } from "./github-device-flow";
+import { disconnectGitHub, initiateDeviceFlow, pollDeviceFlow } from "./github-device-flow";
 
 // Convenience helper: mock the auth() call shape — vitest's mocked() chain is
 // type-noisy on the NextAuth type, so we cast through unknown once here.
@@ -323,5 +324,48 @@ describe("pollDeviceFlow", () => {
     });
     expect(prisma.credentialEntry.upsert).not.toHaveBeenCalled();
     expect(prisma.deviceCodeSession.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("disconnectGitHub", () => {
+  it("returns Not authenticated when no session", async () => {
+    setAuth(null);
+    const result = await disconnectGitHub();
+    expect(result).toEqual({ success: false, error: "Not authenticated" });
+    expect(prisma.credentialEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns Unauthorized when caller lacks manage_platform", async () => {
+    vi.mocked(can).mockReturnValueOnce(false);
+    const result = await disconnectGitHub();
+    expect(result).toEqual({ success: false, error: "Unauthorized" });
+    expect(prisma.credentialEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("clears the hive-contribution credential and returns success", async () => {
+    vi.mocked(prisma.credentialEntry.updateMany).mockResolvedValueOnce({ count: 1 });
+
+    const result = await disconnectGitHub();
+
+    expect(prisma.credentialEntry.updateMany).toHaveBeenCalledWith({
+      where: { providerId: "hive-contribution" },
+      data: {
+        secretRef: null,
+        status: "unconfigured",
+        scope: null,
+        tokenExpiresAt: null,
+        cachedToken: null,
+      },
+    });
+    expect(result).toEqual({ success: true });
+  });
+
+  it("succeeds quietly when the credential row does not exist", async () => {
+    // updateMany on a non-existent row resolves with count: 0 — no throw.
+    vi.mocked(prisma.credentialEntry.updateMany).mockResolvedValueOnce({ count: 0 });
+
+    const result = await disconnectGitHub();
+
+    expect(result).toEqual({ success: true });
   });
 });

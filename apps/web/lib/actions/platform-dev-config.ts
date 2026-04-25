@@ -221,6 +221,56 @@ export async function getStoredGitHubToken(): Promise<string | null> {
   }
 }
 
+/**
+ * Resolve the "Connected as @username, since <date>" snapshot for the admin
+ * UI's Connect GitHub card.
+ *
+ * Returns non-null only when the stored hive-contribution credential is a
+ * Device-Flow OAuth token (`gho_` prefix). Paste-mode PATs are deliberately
+ * not surfaced as "connected" — we don't want to imply Device-Flow-equivalent
+ * status for tokens whose owner we never verified at save time.
+ *
+ * Probes GET /user to read the authenticated username. If the probe fails
+ * (token revoked, network unreachable), returns null so the UI falls back to
+ * the disconnected state — safer than misreporting a stale username.
+ */
+export async function getGitHubConnectedState(): Promise<{
+  username: string;
+  connectedAt: Date;
+} | null> {
+  const cred = await prisma.credentialEntry.findUnique({
+    where: { providerId: "hive-contribution" },
+    select: { secretRef: true, status: true, updatedAt: true },
+  });
+  if (!cred || cred.status !== "active" || !cred.secretRef) return null;
+
+  let token: string | null;
+  try {
+    const { decryptSecret } = await import("@/lib/credential-crypto");
+    token = decryptSecret(cred.secretRef);
+  } catch {
+    return null;
+  }
+
+  if (!token || !token.startsWith("gho_")) return null;
+
+  try {
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { login?: string };
+    if (!data.login) return null;
+    return { username: data.login, connectedAt: cred.updatedAt };
+  } catch {
+    return null;
+  }
+}
+
 // ─── GitHub token validation ─────────────────────────────────────────────────
 //
 // Extended validator for the 2026-04-24 GitHub auth 2FA readiness spec. The

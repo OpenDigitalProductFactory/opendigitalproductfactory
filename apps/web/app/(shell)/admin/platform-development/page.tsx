@@ -3,6 +3,7 @@ import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import {
+  getGitHubConnectedState,
   getPlatformDevConfig,
   getUntrackedFeatureCount,
   hasContributionToken,
@@ -23,6 +24,10 @@ export default async function AdminPlatformDevelopmentPage() {
   // Pseudonym is only defined once the install has seeded its client identity.
   // Catch: during the first boot the identity may not be ready yet.
   const pseudonym = await getDisplayPseudonym().catch(() => null);
+  // initialConnected is non-null only for `gho_`-prefixed Device Flow tokens;
+  // paste-mode PATs are surfaced via the Advanced disclosure but not as
+  // "Connected as @user" since we don't proactively verify their owner.
+  const initialConnected = await getGitHubConnectedState().catch(() => null);
 
   return (
     <div>
@@ -51,6 +56,7 @@ export default async function AdminPlatformDevelopmentPage() {
         hasGitCredential={hasCredential}
         hasContributionToken={hasContribToken}
         pseudonym={pseudonym}
+        initialConnected={initialConnected}
       />
     </div>
   );
