@@ -2,6 +2,7 @@ import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
+import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
   getGitHubConnectedState,
   getPlatformDevConfig,
@@ -36,6 +37,7 @@ export default async function AdminPlatformDevelopmentPage() {
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">Platform Development</p>
       </div>
       <AdminTabNav />
+      <TokenExpiryBanner />
       <LegacyTokenOverrideBanner />
       <ForkSetupPanel
         enabled={isContributionModelEnabled()}
