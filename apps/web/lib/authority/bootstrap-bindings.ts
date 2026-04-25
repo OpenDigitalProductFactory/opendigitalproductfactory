@@ -63,6 +63,10 @@ function slugify(value: string) {
     .toUpperCase();
 }
 
+export function buildAuthorityBindingId(resourceType: string, resourceRef: string, agentToken: string) {
+  return `AB-${resourceType.toUpperCase()}-${slugify(resourceRef)}-${slugify(agentToken)}`;
+}
+
 function dedupeSubjects(subjects: AuthorityBindingSubjectInput[]) {
   const seen = new Set<string>();
   const result: AuthorityBindingSubjectInput[] = [];
@@ -94,9 +98,7 @@ export function inferAuthorityBindings(inputs: AuthorityBindingInferenceInput[])
   const byKey = new Map<string, AuthorityBindingCandidate>();
 
   for (const input of inputs) {
-    const resourceToken = slugify(input.resourceRef);
-    const agentToken = slugify(input.appliedAgentId ?? "unassigned");
-    const bindingId = `AB-${input.resourceType.toUpperCase()}-${resourceToken}-${agentToken}`;
+    const bindingId = buildAuthorityBindingId(input.resourceType, input.resourceRef, input.appliedAgentId ?? "unassigned");
     const key = `${input.resourceType}:${input.resourceRef}:${input.appliedAgentId ?? ""}`;
     const existing = byKey.get(key);
 
@@ -122,6 +124,97 @@ export function inferAuthorityBindings(inputs: AuthorityBindingInferenceInput[])
   }
 
   return Array.from(byKey.values());
+}
+
+type DraftBindingCandidate = {
+  bindingId: string;
+  name: string;
+  scopeType: string;
+  status: string;
+  resourceType: string;
+  resourceRef: string;
+  approvalMode: string;
+  appliedAgentId: string | null;
+  subjects: AuthorityBindingSubjectInput[];
+  grants: AuthorityBindingGrantInput[];
+  authorityScope: {
+    bootstrapWarning: {
+      reason: BootstrapAuthorityBindingWarning["reason"];
+      requestedAgentId: string | null;
+      source: "authority-bootstrap";
+    };
+  };
+};
+
+async function getDraftSubjectContext(resourceRef: string, requestedAgentId: string | null) {
+  const routeEntry = ROUTE_AGENT_MAP_ENTRIES.find(([routeRef]) => routeRef === resourceRef)?.[1] ?? null;
+  const agentRows = requestedAgentId
+    ? await prisma.agent.findMany({
+        where: {
+          agentId: {
+            in: [requestedAgentId],
+          },
+        },
+        select: {
+          agentId: true,
+          ownerships: {
+            select: {
+              team: {
+                select: {
+                  teamId: true,
+                },
+              },
+            },
+          },
+        },
+      })
+    : [];
+  const agent = requestedAgentId ? agentRows.find((row) => row.agentId === requestedAgentId) ?? null : null;
+  const allowedRoles = routeEntry?.capability ? PERMISSIONS[routeEntry.capability]?.roles ?? [] : [];
+  const ownerTeams = agent?.ownerships.map((ownership) => ownership.team) ?? [];
+
+  return {
+    resolvedAgentId: agent?.agentId ?? null,
+    subjects: dedupeSubjects([
+      ...allowedRoles.map((roleId) => ({
+        subjectType: "platform-role",
+        subjectRef: roleId,
+        relation: "allowed",
+      })),
+      ...ownerTeams.map((team) => ({
+        subjectType: "team",
+        subjectRef: team.teamId,
+        relation: "owner",
+      })),
+    ]),
+  };
+}
+
+export async function buildDraftAuthorityBindingFromWarning(
+  warning: BootstrapAuthorityBindingWarning,
+): Promise<DraftBindingCandidate> {
+  const subjectContext = await getDraftSubjectContext(warning.resourceRef, warning.agentId);
+  const bindingId = buildAuthorityBindingId("route", warning.resourceRef, warning.agentId ?? "unassigned");
+
+  return {
+    bindingId,
+    name: `Review ${warning.resourceRef} authority binding`,
+    scopeType: "route",
+    status: "draft",
+    resourceType: "route",
+    resourceRef: warning.resourceRef,
+    approvalMode: "none",
+    appliedAgentId: subjectContext.resolvedAgentId,
+    subjects: subjectContext.subjects,
+    grants: [],
+    authorityScope: {
+      bootstrapWarning: {
+        reason: warning.reason,
+        requestedAgentId: warning.agentId,
+        source: "authority-bootstrap",
+      },
+    },
+  };
 }
 
 export async function materializeAuthorityBindings(

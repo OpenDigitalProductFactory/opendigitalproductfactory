@@ -184,6 +184,7 @@ export default async function PlatformIdentityAuthorizationPage({ searchParams }
             autoApplied={bootstrapState.autoApplied}
             totalBindings={bootstrapState.totalBindings}
             report={bootstrapState.report}
+            detailQueryBase="/platform/identity/authorization"
           />
         ) : null}
         <BindingFilters

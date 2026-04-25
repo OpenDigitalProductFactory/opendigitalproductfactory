@@ -51,6 +51,7 @@ vi.mock("@/lib/tak/agent-routing", () => ({
 import { prisma } from "@dpf/db";
 import {
   bootstrapAuthorityBindings,
+  buildDraftAuthorityBindingFromWarning,
   inferAuthorityBindings,
   materializeAuthorityBindings,
   type AuthorityBindingInferenceInput,
@@ -214,6 +215,20 @@ describe("bootstrapAuthorityBindings", () => {
         name: "COO",
         ownerships: [],
       },
+      {
+        id: "agent-row-3",
+        agentId: "onboarding-coo",
+        name: "Onboarding COO",
+        ownerships: [
+          {
+            team: {
+              teamId: "TEAM-ONBOARD",
+              slug: "onboarding",
+              name: "Onboarding",
+            },
+          },
+        ],
+      },
     ] as never);
 
     const report = await bootstrapAuthorityBindings({ writeMode: "dry-run" });
@@ -232,6 +247,42 @@ describe("bootstrapAuthorityBindings", () => {
           { subjectType: "platform-role", subjectRef: "HR-000", relation: "allowed" },
           { subjectType: "platform-role", subjectRef: "HR-200", relation: "allowed" },
         ],
+      }),
+    );
+  });
+
+  it("builds a draft binding candidate from a low-confidence warning", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        id: "agent-row-3",
+        agentId: "onboarding-coo",
+        name: "Onboarding COO",
+        ownerships: [
+          {
+            team: {
+              teamId: "TEAM-ONBOARD",
+              slug: "onboarding",
+              name: "Onboarding",
+            },
+          },
+        ],
+      },
+    ] as never);
+
+    const candidate = await buildDraftAuthorityBindingFromWarning({
+      resourceRef: "/setup",
+      agentId: "onboarding-coo",
+      reason: "ungated-route",
+    });
+
+    expect(candidate).toEqual(
+      expect.objectContaining({
+        bindingId: "AB-ROUTE-SETUP-ONBOARDING-COO",
+        name: "Review /setup authority binding",
+        status: "draft",
+        resourceRef: "/setup",
+        appliedAgentId: "onboarding-coo",
+        subjects: [{ subjectType: "team", subjectRef: "TEAM-ONBOARD", relation: "owner" }],
       }),
     );
   });
