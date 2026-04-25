@@ -125,10 +125,15 @@ export function detectFabrication(
   // If no tools were called at all, any completion claim is fabrication
   if (executedToolCount === 0) return COMPLETION_CLAIM_PATTERN.test(response);
 
-  // If tools were called but none were BUILD tools (only read/search), and the
-  // response narrates code for the user — that's still fabrication
+  // If tools were called but none were BUILD tools (only read/search), the
+  // agent still cannot claim completion or narrate implementation as if it
+  // persisted build-state evidence. Read-only investigation is not enough to
+  // say a plan is ready, implementation started, or code was changed.
   const usedBuildTool = executedToolNames?.some((n) => BUILD_TOOL_NAMES.has(n)) ?? false;
-  if (!usedBuildTool && NARRATION_PATTERN.test(response)) return true;
+  if (!usedBuildTool && (
+    COMPLETION_CLAIM_PATTERN.test(response) ||
+    NARRATION_PATTERN.test(response)
+  )) return true;
 
   return false;
 }
@@ -717,13 +722,22 @@ export async function runAgenticLoop(params: {
         }
       }
 
-      if (shouldNudgeNow) {
-        // Preserve the best text-only response before nudging, in case the
-        // nudge produces an empty response (common with ChatGPT/gpt-5.4).
-        if (trimmed.length > bestPreNudgeContent.length) {
-          bestPreNudgeContent = trimmed;
-        }
-        continuationNudges++;
+        if (shouldNudgeNow) {
+          // Preserve the best text-only response before nudging, in case the
+          // nudge produces an empty response (common with ChatGPT/gpt-5.4).
+          // Never preserve content that already looks fabricated — otherwise a
+          // later empty retry can resurrect an ungrounded "plan ready" / "built"
+          // claim as the fallback response.
+          const looksFabricated = detectFabrication(
+            trimmed,
+            executedTools.length,
+            false,
+            executedTools.map((t) => t.name),
+          );
+          if (!looksFabricated && trimmed.length > bestPreNudgeContent.length) {
+            bestPreNudgeContent = trimmed;
+          }
+          continuationNudges++;
 
         // Permission-seeking gets a specific nudge — tell it to act, not ask.
         // Allow up to 3 permission nudges (not just 1) since models persist.

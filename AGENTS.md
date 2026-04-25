@@ -62,6 +62,8 @@ Epics must be actively managed — not just created and forgotten.
 - **All changes land via a pull request against `main` — including the maintainer's.** No direct pushes to `main`.
 - Branch from `main` with a short-lived topic branch named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. One concern per branch, one concern per PR.
 - Open the PR with `gh pr create --base main`. Keep `Typecheck` and `Production Build` green before requesting merge. `Unit Tests` runs informationally while the broken-test surface is being cleaned up.
+- A PR is the delivery vehicle for a completed change slice, not a status label for the entire body of work. If the slice in the branch is ready for review and CI, open a normal PR even if adjacent follow-up work will happen in later PRs.
+- Do not open a draft PR merely to signal that broader work remains. If the branch's slice is not ready for review yet, keep working privately until it is; if it is ready, open or convert it to a normal ready-for-review PR and note any separate follow-up slices in the PR body.
 - Merge via squash-and-delete once CI passes: `gh pr merge <n> --squash --delete-branch`.
 - Always push after committing — local-only commits are invisible to CI.
 
