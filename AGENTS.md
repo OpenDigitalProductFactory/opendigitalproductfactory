@@ -65,6 +65,19 @@ Epics must be actively managed — not just created and forgotten.
 - Merge via squash-and-delete once CI passes: `gh pr merge <n> --squash --delete-branch`.
 - Always push after committing — local-only commits are invisible to CI.
 
+### DCO Rule (mandatory every commit)
+
+- Every commit that will be pushed must include a `Signed-off-by:` trailer.
+- Use `git commit -s`, not plain `git commit`.
+- If you amend or rebase commits, preserve the signoff on every rewritten commit.
+- Before pushing a branch, sanity-check with:
+
+```sh
+git log -n 5 --format="%h %s%n%b" | cat
+```
+
+- If a PR fails the `DCO` check, fix it immediately before doing more feature work.
+
 ### Why
 
 - The repo is public on GitHub. Branch protection on `main` enforces the PR flow at the platform level: required checks are `Typecheck`, `Production Build`, and `DCO`; linear history; no force-push; admins included.
@@ -125,23 +138,66 @@ The platform's own Build Studio feature-building lifecycle must apply the same g
 
 Together these mean a Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox.
 
-### Concurrent Sessions — Per-Thread Worktree (mandatory when >1 session)
+**Implementation status — NOT YET LANDED (audited 2026-04-24):**
 
-Two Claude Code sessions editing the same working tree at `d:\DPF` fight over `HEAD`, the index, and the working tree — even if they target different branches. Observed symptoms: commits land on `main` instead of the intended feature branch; `git reflog` shows unexpected `checkout: moving from <feature> to main` entries; one session's staged files sweep into another's commit.
+- Per-task verification does **not** run typecheck or build. Instead, [apps/web/lib/integrate/build-orchestrator.ts:375-401](apps/web/lib/integrate/build-orchestrator.ts#L375-L401) classifies outcome by string-matching the CLI's stdout for keywords like `"error"` / `"typecheck.*fail"`. A task whose CLI summary omits those words can silently pass even if typecheck is red. The landing spot for the real gate is after [`classifyOutcome()` returns at build-orchestrator.ts:583](apps/web/lib/integrate/build-orchestrator.ts#L583): before writing status `"DONE"`, exec the two `pnpm --filter web …` commands inside the sandbox container and override to `"BLOCKED"` on non-zero exit.
+- Pre-ship verification in [apps/web/lib/queue/functions/build-review-verification.ts](apps/web/lib/queue/functions/build-review-verification.ts) runs browser-use UX tests only. Typecheck + production build must be added as sibling `step.run(...)` blocks, with failures persisted alongside `uxTestResults` and `checkPhaseGate` extended to block ship until both are green.
 
-**The fix is a git worktree per session, not just a branch per session.**
+Until both are implemented, a Build Studio PR can still be typecheck-red or build-red when it leaves the sandbox. CI catches it on the PR (the merge gates on `main` hold), but the stated goal is to catch it at the sandbox boundary, not at merge time. Tracked in the repo's issue tracker.
+
+### Concurrent Sessions — Per-Thread Branch + Worktree (mandatory always)
+
+**Default rule: one user thread = one branch + one worktree.** This is not only a "when two sessions happen to overlap" safeguard; it is the standard operating model for all active work.
+
+Two Claude Code sessions editing the same working tree at `d:\DPF` fight over `HEAD`, the index, and the working tree — even if they target different branches. Observed symptoms: commits land on the wrong branch, `git reflog` shows unexpected checkout hops, one thread's staged files sweep into another thread's commit, and unrelated local changes linger in a worktree long after the original task is done.
+
+**The fix is a dedicated git worktree per thread, not just a branch per thread.**
+
+**Mandatory workflow for every new thread or materially new topic:**
+
+1. Start from `main`
+2. Create a fresh branch for that thread only
+3. Create or reuse a dedicated worktree bound to that branch
+4. Point the Claude session's primary working directory at that worktree
+5. Do not continue a new ask on an existing branch unless it is clearly the same delivery thread
 
 **Setup (per topic, run from `d:\DPF`):**
 
 ```sh
-git worktree add ../DPF-<topic> -b feat/<topic>-work
+git worktree add ../DPF-<topic> -b feat/<topic>
 ```
 
-Each worktree gets its own working directory, HEAD, branch, and index. The `.git` object database is shared — disk-efficient, concurrency-safe. Open each Claude Code session with its **Primary working directory** pointed at the matching worktree path. One worktree stays on `main` for merges/releases/global inspection; agents never work in that one.
+For docs or fixes, use the appropriate branch prefix instead of `feat/`, for example:
+
+```sh
+git worktree add ../DPF-<topic> -b doc/<topic>
+git worktree add ../DPF-<topic> -b fix/<topic>
+```
+
+Each worktree gets its own working directory, `HEAD`, branch, and index. The `.git` object database is shared — disk-efficient and concurrency-safe.
+
+**Reserved worktree rule:**
+
+- Keep one checkout on `main` for merge/release/global inspection only
+- Do not implement feature work in that root checkout
+- Treat the root `d:\DPF` checkout as read-only unless the thread is specifically about merge, release, or repo-wide inspection
+
+**When to split into a new thread branch immediately:**
+
+- The user changes domains or asks for a distinct deliverable
+- The current worktree already contains unrelated modified files
+- A second thread would need a different PR title or review scope
+- You catch yourself saying "while I'm here" about another concern
 
 **Cleanup after merge:** `git worktree remove ../DPF-<topic>` — prunes the checkout; the branch ref survives until explicitly deleted via `git branch -d`.
 
-**Signal that this rule is being violated:** a session notices its checkout flipped from a feature branch back to `main` between commands. That means another session is sharing the worktree. Stop, flag to Mark, move to a dedicated worktree before continuing.
+**Signal that this rule is being violated:**
+
+- A session notices its checkout flipped unexpectedly
+- `git status` shows files from more than one thread/domain
+- A branch name no longer matches the files being changed
+
+If any of those happen, stop, tell the user, and move the work to a dedicated worktree before continuing.
 
 **Belt-and-suspenders branch guard in every commit command:**
 
