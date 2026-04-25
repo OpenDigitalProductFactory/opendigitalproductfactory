@@ -844,6 +844,7 @@ async function seedMcpServers(): Promise<void> {
       update: {
         name: server.name,
         endpointType: "service",
+        serviceKind: "mcp",
         category: "mcp-subscribed",
         status: "active",
       },
@@ -851,6 +852,7 @@ async function seedMcpServers(): Promise<void> {
         providerId: server.serverId,
         name: server.name,
         endpointType: "service",
+        serviceKind: "mcp",
         category: "mcp-subscribed",
         sensitivityClearance: ["public", "internal"],
         capabilityTier: "basic",
@@ -1232,9 +1234,20 @@ async function seedProviderRegistry(): Promise<void> {
   let added = 0;
   let updated = 0;
 
+  function inferServiceKind(entry: Record<string, unknown>): "mcp" | "built_in" | undefined {
+    if (entry.endpointType !== "service") return undefined;
+    const explicit = entry.serviceKind;
+    if (explicit === "mcp" || explicit === "built_in") return explicit;
+    if (["brave-search", "public-fetch", "public-web-fetch", "branding-analyzer"].includes(String(entry.providerId))) {
+      return "built_in";
+    }
+    return "mcp";
+  }
+
   for (const entry of entries) {
     const providerId = entry.providerId as string;
     if (!providerId) continue;
+    const serviceKind = inferServiceKind(entry);
 
     const existing = await prisma.modelProvider.findUnique({ where: { providerId } });
     if (existing) {
@@ -1260,6 +1273,7 @@ async function seedProviderRegistry(): Promise<void> {
           ...(entry.costPerformanceNotes !== undefined && { costPerformanceNotes: entry.costPerformanceNotes as string }),
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility as string }),
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
+          ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
           ...(entry.authorizeUrl !== undefined && { authorizeUrl: (entry.authorizeUrl as string) ?? null }),
           ...(entry.tokenUrl !== undefined && { tokenUrl: (entry.tokenUrl as string) ?? null }),
@@ -1292,6 +1306,7 @@ async function seedProviderRegistry(): Promise<void> {
           costPerformanceNotes: (entry.costPerformanceNotes as string) ?? null,
           catalogVisibility: (entry.catalogVisibility as string) ?? "visible",
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType as string }),
+          ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.supportsToolUse !== undefined && { supportsToolUse: entry.supportsToolUse as boolean }),
           authorizeUrl: (entry.authorizeUrl as string) ?? null,
           tokenUrl: (entry.tokenUrl as string) ?? null,

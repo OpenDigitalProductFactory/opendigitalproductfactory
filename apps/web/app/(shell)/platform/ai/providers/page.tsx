@@ -51,6 +51,7 @@ export default async function ProvidersPage() {
     detectMcpServers(),
     getProviderModelSummaries(),
   ]);
+  const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
 
@@ -59,7 +60,7 @@ export default async function ProvidersPage() {
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Providers &amp; Routing</h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          {providers.length} provider{providers.length !== 1 ? "s" : ""} registered
+          {aiProviders.length} provider{aiProviders.length !== 1 ? "s" : ""} registered
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
       </div>
@@ -87,15 +88,15 @@ export default async function ProvidersPage() {
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            External Services
+            Providers
           </div>
           {canWrite && <SyncProvidersButton lastSyncAt={lastSync ?? null} />}
         </div>
 
-        {providers.length === 0 ? (
-          <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>No services registered. Click &quot;Update Providers&quot; to import.</p>
+        {aiProviders.length === 0 ? (
+          <p style={{ color: "var(--dpf-muted)", fontSize: 11 }}>No providers registered. Click &quot;Update Providers&quot; to import.</p>
         ) : (
-          groupByEndpointTypeAndCategory(providers).map((group) => (
+          groupByEndpointTypeAndCategory(aiProviders).map((group) => (
             <ServiceSection
               key={`${group.endpointType}:${group.category}`}
               endpointType={group.endpointType}

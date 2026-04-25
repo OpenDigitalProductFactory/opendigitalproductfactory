@@ -49,6 +49,15 @@ async function requireSession(): Promise<void> {
 
 function getRegistryPath() { return lazyPath().join(process.cwd(), "..", "..", "packages", "db", "data", "providers-registry.json"); }
 
+function inferServiceKindFromRegistryEntry(entry: RegistryProviderEntry): "mcp" | "built_in" | undefined {
+  if (entry.endpointType !== "service") return undefined;
+  if (entry.serviceKind) return entry.serviceKind;
+  if (["brave-search", "public-fetch", "public-web-fetch", "branding-analyzer"].includes(entry.providerId)) {
+    return "built_in";
+  }
+  return "mcp";
+}
+
 /**
  * Sync provider registry from local JSON file. No auth guard — called from
  * server component on page load for any view_platform holder. Use
@@ -77,6 +86,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
   let updated = 0;
 
   for (const entry of entries) {
+    const serviceKind = inferServiceKindFromRegistryEntry(entry);
     const existing = await prisma.modelProvider.findUnique({ where: { providerId: entry.providerId } });
     if (existing) {
       await prisma.modelProvider.update({
@@ -101,6 +111,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           ...(entry.modelRestrictions !== undefined && { modelRestrictions: entry.modelRestrictions }),
           ...(entry.catalogVisibility !== undefined && { catalogVisibility: entry.catalogVisibility }),
           ...(entry.endpointType !== undefined      && { endpointType:      entry.endpointType }),
+          ...(serviceKind !== undefined             && { serviceKind }),
           ...(entry.catalogEntry !== undefined      && { catalogEntry:      entry.catalogEntry ?? undefined }),
           ...(entry.authorizeUrl !== undefined      && { authorizeUrl:      entry.authorizeUrl ?? null }),
           ...(entry.tokenUrl !== undefined          && { tokenUrl:          entry.tokenUrl ?? null }),
@@ -134,6 +145,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
           modelRestrictions:    entry.modelRestrictions ?? [],
           catalogVisibility:    entry.catalogVisibility ?? "visible",
           ...(entry.endpointType !== undefined && { endpointType: entry.endpointType }),
+          ...(serviceKind !== undefined && { serviceKind }),
           ...(entry.catalogEntry !== undefined && entry.catalogEntry !== null && { catalogEntry: entry.catalogEntry }),
           authorizeUrl:         entry.authorizeUrl ?? null,
           tokenUrl:             entry.tokenUrl ?? null,
@@ -856,6 +868,7 @@ export async function registerMcpService(input: {
     update: {
       name: input.name,
       endpointType: "service",
+      serviceKind: "mcp",
       category: "mcp-subscribed",
       sensitivityClearance: input.sensitivityClearance,
       capabilityTier: input.capabilityTier,
@@ -867,6 +880,7 @@ export async function registerMcpService(input: {
       providerId: input.providerId,
       name: input.name,
       endpointType: "service",
+      serviceKind: "mcp",
       category: "mcp-subscribed",
       sensitivityClearance: input.sensitivityClearance,
       capabilityTier: input.capabilityTier,
