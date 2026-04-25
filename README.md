@@ -2,15 +2,15 @@
 
 **The platform that builds itself.**
 
-An open-source, AI-native digital product management platform that gives any organization, from a single person startup to a regulated enterprise, the same capabilities that the largest companies would have. This is an AI first platofrm, built by AI, with an eimbedded AI workforce. The AI agents don't just answer questions: they help manage your business. They model your architecture, execute your backlog, interacti with customer, do your marketing, help with invoices, end even improve the platform itself.  All actions require human approval at every step, and are recorded to make sure you can see what happened, and produce evidence for regulatory audits. 
+An open-source, AI-native digital product management platform that gives any organization — from a 5-person startup to a regulated enterprise — the same capabilities that only the largest tech companies have today. Built-in AI agents don't just answer questions: they manage your portfolio, model your architecture, execute your backlog, and eventually write the features you need — all with human approval at every step.
 
-No vendor lock-in. No consultants. No million-dollar license. One installer to run on you own hardware. Your AI workforce starts working immediately.
+No vendor lock-in. No consultants. No million-dollar license. One installer to run. Your AI workforce starts working immediately.
 
 ---
 
 ## AI Agent Standards
 
-Another reason for me to create this project is to exercise new standards in ensuring we can manage trustworthy AI agents at scale. The Digital Product Facotry is the first implementation of what I'm calling GAID (Global AI Idendity) and TAK (Trusted AI Kernel) the harless and that LLMs need to be productive, and for the world to be safe from un-intended use or abuse.
+This repository now includes a draft standards family for trustworthy AI agent operation and identity, using `DPF` as the first implementation and conformance case.
 
 - [Trusted AI Kernel (TAK) - Markdown](docs/architecture/trusted-ai-kernel.md)
 - [Trusted AI Kernel (TAK) - Word](docs/architecture/Trusted-AI-Kernel-Architecture.docx)
@@ -33,17 +33,17 @@ These documents are intended to be read together:
 
 Enterprise software — portfolio management, enterprise architecture, backlog tracking, lifecycle governance — has traditionally been locked behind expensive platforms that require specialized teams to operate. The advent of capable AI agents changes the economics: the know-how of the professionals can be commoditized into a limitless workforce, as long as the governance keeps humans in the loop.
 
-**My question was: What if an enterprise grade platform could operate itself?**
+**What if the platform could operate itself?**
 
-The Open Digital Product Factory is built on a premise: **AI agents should be first-class participants in the workforce**, not bolt-on assistants. Every screen has a context-aware AI coworker. Every action an agent proposes goes through human-in-the-loop governance, and proper RBAC authentication and authorization. Every decision is audit-logged. Any issue is added to our backlog to fix. The platform knows what hardware it's running on, what models are available, and how to optimize its own AI workforce.  It knows you company, and each AI Coworker will do it's best to make you successfull. 
+The Open Digital Product Factory is built on a premise: **AI agents should be first-class participants in the work**, not bolt-on assistants. Every screen has a context-aware AI coworker. Every action an agent proposes goes through human-in-the-loop governance. Every decision is audit-logged. The platform knows what hardware it's running on, what models are available, and how to optimize its own AI workforce.
 
-Because this is an open source and self-contained platform — it runs entirely on your hardware.  It will default to Gemma 4 on your hardware. There  are **no data privacy concerns, no cloud dependency, and no subscription fees** unless you choose to use external LLM providers. Either Claude Code or Codex are recommended for building new features using Build Studio. 
+Because it's open source and self-contained — runs entirely on your hardware, with a built-in local AI engine — there are **no data privacy concerns, no cloud dependency, and no subscription fees** unless you choose to use external providers.
 
 ### The Vision: A Self-Evolving Platform
 
-Today the platform manages your digital products. Tomorrow it will write the new features you need in a governed, reviewable way, no developer required on the hot path. A sandbox holds each change. Humans review the design and user experience. Approved changes deploy automatically. The platform grows from within, on your hardware, on your terms.
+Today the platform manages your digital products. Tomorrow it writes new features you need — in a governed, reviewable way, no developer required on the hot path. A sandbox holds each change. Humans review the design and user experience. Approved changes deploy automatically. The platform grows from within, on your hardware, on your terms.
 
-> **Hive Mind (opt-in):** Each installation of this project is a potential contributer to make it better. You can share what you develop with the community, pull in what others have built, and let the platform grow through working together, even if you are not a developer and don't have time to figure it out. Simply answer answer the question for each new feature you build should be donated back to this project. Sharing is purely opt-in feature by feature.
+> **Hive Mind (opt-in):** Each installation is a node. You can share what you develop with the community, pull in what other installations have built, and let the platform grow through humans and agents working together. Sharing is always opt-in.
 
 ---
 
@@ -53,33 +53,32 @@ Today the platform manages your digital products. Tomorrow it will write the new
 - **Regulated industries** (healthcare, finance, insurance) that need audit trails, human approval chains, and compliance evidence — built in, not bolted on
 - **IT leaders** who want to model their architecture, manage their portfolio, and track their backlog in one governed platform
 - **Developers and architects** who want to extend and contribute to an open platform that treats AI as a core capability, not a chatbot sidebar
-- **AI researchers looking to test MCP, A2A, TAK and GAID in a real platform situation, doing real work
 
 ---
 
 ## Installation
 
-The installer will asks one question: **Ready to go** or **Customizable**.
+The installer asks one question: **Ready to go** or **Customizable**.
 
 | Mode | Who it's for | What happens |
 | ---- | ------------ | ------------ |
-| **Ready to go** | Non-Technical business users who wants to run the platform for thier business | Pulls pre-built images. Build Studio is the guided interface for extending the platform. |
-| **Customizable** | Developers and power users who want more controll to modify the platform | Clones the full source and builds locally. Build Studio and VS Code use the same shared workspace. |
+| **Ready to go** | Business users, anyone who wants to run it | Pulls pre-built images. Build Studio is the guided interface for extending the platform. |
+| **Customizable** | Developers, power users who want to modify the platform | Clones the full source and builds locally. Build Studio and VS Code use the same shared workspace. |
 
-Both modes include the full platform with AI coworkers, Build Studio sandbox, and all features. The main difference is that for developers working in VS Code you have greater access to the source code and details that make up this platform.
+Both modes include the full platform with AI coworkers, Build Studio sandbox, and all features. The difference is whether direct VS Code access is part of the supported workflow.
 
 ### Quick Start (Windows)
 
-To install, Open PowerShell as ADMIN and paste:
+Open PowerShell and paste:
 
 ```powershell
 gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" > install-dpf.ps1
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 
-Choose your mode when prompted. The installer handles installing GIT, Docker Desktop, WSL2, hardware detection, best AI model selection, credential generation, and auto-start. Expect 5–10 minutes for the platform itself, plus additional time for the initial AI model download (varies by model size and connection speed).
+Choose your mode when prompted. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. Expect 5–10 minutes for the platform itself, plus additional time for the initial AI model download (varies by model size and connection speed).
 
-**Login credentials** are shown at the end of installation and saved to `.env` in your install directory, by default C:/DPF. The initial email is  `admin@dpf.local`; the password is randomly generated and unique to your install, change it when you first login.
+**Login credentials** are shown at the end of installation and saved to `.admin-credentials` in your install directory. The email is always `admin@dpf.local`; the password is randomly generated and unique to your install. Change it after first login.
 
 **After installation:**
 
@@ -119,7 +118,7 @@ If you want to contribute to the codebase rather than just run it:
 
 ---
 
-## What's included in this platform
+## What's Inside
 
 ### Core Platform
 

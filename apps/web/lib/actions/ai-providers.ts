@@ -28,6 +28,7 @@ import {
   summarizeCatalogSignal,
 } from "@/lib/provider-catalog-reconciliation";
 import { activateProvider } from "@/lib/govern/activate-provider";
+import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -264,6 +265,31 @@ export async function configureProvider(input: {
     trigger: "api_key_configure",
     authMethod: input.authMethod,
   });
+
+  const providerForFinance = await prisma.modelProvider.findUnique({
+    where: { providerId: input.providerId },
+    select: {
+      providerId: true,
+      name: true,
+      consoleUrl: true,
+      docsUrl: true,
+      inputPricePerMToken: true,
+      outputPricePerMToken: true,
+    },
+  });
+
+  if (providerForFinance) {
+    seedAiProviderFinanceBridge({
+      providerId: providerForFinance.providerId,
+      providerName: providerForFinance.name,
+      billingUrl: providerForFinance.consoleUrl ?? undefined,
+      usageUrl: providerForFinance.consoleUrl ?? providerForFinance.docsUrl ?? undefined,
+    }).catch((error) => {
+      console.warn(
+        `[ai-provider-finance] failed to seed finance bridge for ${input.providerId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
 
   // Auto-configure Build Studio dispatch if no explicit config exists yet.
   // When a user configures a provider, the build system should automatically

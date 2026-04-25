@@ -14,6 +14,20 @@ const SCALE_KEYS: Array<keyof BrandDesignSystem["typography"]["scale"]> = [
   "xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl",
 ];
 
+const EXTRACTED_AT_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "UTC",
+  timeZoneName: "short",
+});
+
+function formatExtractedAt(value: string) {
+  return EXTRACTED_AT_FORMATTER.format(new Date(value));
+}
+
 function ConfidenceBadge({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const color = value >= 0.8 ? "#10b981" : value >= 0.5 ? "#f59e0b" : "#ef4444";
@@ -77,7 +91,7 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
           <ConfidenceBadge value={confidence} />
         </div>
         <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "4px 0 0 0" }}>
-          Extracted {new Date(system.extractedAt).toLocaleString()} from {system.sources.length}{" "}
+          Extracted {formatExtractedAt(system.extractedAt)} from {system.sources.length}{" "}
           source{system.sources.length === 1 ? "" : "s"}.
         </p>
         {system.gaps.length > 0 && (

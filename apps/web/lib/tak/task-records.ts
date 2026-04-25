@@ -77,14 +77,14 @@ export async function createTaskArtifact(input: {
   metadata?: unknown;
   producerAgentId?: string | null;
   producerNodeId?: string | null;
-}): Promise<void> {
+}): Promise<{ id: string; artifactId: string }> {
   const taskRun = await resolveTaskRunRecord({
     publicTaskRunId: input.taskRunId,
     taskRunRecordId: input.taskRunRecordId,
   });
   const metadata = toTaskJson(input.metadata);
 
-  await prisma.taskArtifact.create({
+  const created = await prisma.taskArtifact.create({
     data: {
       id: randomUUID(),
       artifactId: `ta_${randomUUID()}`,
@@ -102,5 +102,11 @@ export async function createTaskArtifact(input: {
       producerNodeId: input.producerNodeId ?? null,
       ...(metadata !== null ? { metadata } : {}),
     },
+    select: {
+      id: true,
+      artifactId: true,
+    },
   });
+
+  return created;
 }

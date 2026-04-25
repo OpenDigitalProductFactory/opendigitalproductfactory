@@ -1,4 +1,0 @@
--- Historical stub restored from live migration history.
--- A later tax remittance foundation migration is the canonical schema
--- source in this checkout. This placeholder preserves continuity for
--- environments whose _prisma_migrations table recorded the earlier name.

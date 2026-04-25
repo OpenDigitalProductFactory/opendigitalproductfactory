@@ -213,6 +213,7 @@ export type FeatureBuildRow = {
   title: string;
   description: string | null;
   portfolioId: string | null;
+  originatingBacklogItemId: string | null;
   brief: FeatureBrief | null;
   plan: Record<string, unknown> | null;
   phase: BuildPhase;
@@ -227,6 +228,7 @@ export type FeatureBuildRow = {
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
+  draftApprovedAt: Date | null;
   designDoc: BuildDesignDoc | null;
   designReview: ReviewResult | null;
   buildPlan: BuildPlanDoc | null;
@@ -237,19 +239,24 @@ export type FeatureBuildRow = {
   scoutFindings: ScoutResult | null;
   uxTestResults: Array<{ step: string; passed: boolean; screenshotUrl: string | null; error: string | null }> | null;
   uxVerificationStatus: UxVerificationStatus | null;
-  sandboxVerification: {
-    typecheck: { name: "typecheck"; command: string; passed: boolean; exitCode: number | null; stdoutTail: string; durationMs: number; skipped?: boolean };
-    build: { name: "build"; command: string; passed: boolean; exitCode: number | null; stdoutTail: string; durationMs: number; skipped?: boolean };
-    allPassed: boolean;
-    ranAt: string;
-  } | null;
-  sandboxVerificationStatus: "running" | "complete" | "failed" | null;
   accountableEmployeeId: string | null;
   claimedByAgentId: string | null;
   claimedAt: Date | null;
   claimStatus: string | null;
   buildExecState: BuildExecutionState | null;
   deliberationSummary: BuildDeliberationSummary | null;
+  originator: {
+    id: string;
+    itemId: string;
+    title: string;
+    status: string;
+    triageOutcome: string | null;
+    effortSize: string | null;
+    proposedOutcome: string | null;
+    activeBuildId: string | null;
+    resolution: string | null;
+    abandonReason: string | null;
+  } | null;
   phaseHandoffs: Array<{
     fromPhase: string;
     toPhase: string;
@@ -559,31 +566,6 @@ export function checkPhaseGate(
           reason: `UX verification failed: ${stepNames || `${failed.length} step(s)`}. Fix issues before shipping.`,
         };
       }
-    }
-
-    // Sandbox typecheck + build gate — pre-ship half of #212. Set by the
-    // build-review-verification Inngest function at review-phase entry.
-    const sbvStatus = evidence.sandboxVerificationStatus as
-      | "running" | "complete" | "failed" | null | undefined;
-    if (sbvStatus === "running") {
-      return { allowed: false, reason: "Sandbox typecheck + build is still running. Retry in a moment." };
-    }
-    if (sbvStatus === null || sbvStatus === undefined) {
-      return { allowed: false, reason: "Sandbox typecheck + build has not run. Re-enter the review phase to trigger it." };
-    }
-    if (sbvStatus === "failed") {
-      const sbv = evidence.sandboxVerification as
-        | { typecheck?: { passed?: boolean }; build?: { passed?: boolean } }
-        | null
-        | undefined;
-      const failures: string[] = [];
-      if (sbv?.typecheck && sbv.typecheck.passed === false) failures.push("typecheck");
-      if (sbv?.build && sbv.build.passed === false) failures.push("build");
-      const suffix = failures.length > 0 ? ` (${failures.join(" + ")})` : "";
-      return {
-        allowed: false,
-        reason: `Sandbox verification failed${suffix}. Fix the errors in the sandbox before shipping.`,
-      };
     }
     return { allowed: true };
   }

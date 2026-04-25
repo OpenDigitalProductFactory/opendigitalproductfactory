@@ -162,13 +162,49 @@ export function generatePrivateBranchName(
 // ─── Hive Token Resolution ──────────────────────────────────────────────────
 
 /**
+ * Opportunistic re-encryption: if a stored credential is plaintext (no
+ * `enc:` prefix) AND `CREDENTIAL_ENCRYPTION_KEY` is set, re-write it
+ * encrypted on the next read. The `updateMany` guard clause (`NOT secretRef
+ * starts-with "enc:"`) makes this concurrent-safe — a simultaneous second
+ * write lands a count=0 no-op rather than double-encrypting.
+ */
+async function maybeReencryptInPlace(
+  providerId: "hive-contribution" | "git-backup",
+  storedValue: string,
+  decryptedValue: string,
+): Promise<void> {
+  if (storedValue.startsWith("enc:")) return;
+  if (!process.env.CREDENTIAL_ENCRYPTION_KEY) return;
+
+  const { encryptSecret } = await import("@/lib/govern/credential-crypto");
+  const encrypted = encryptSecret(decryptedValue);
+  // encryptSecret returns plaintext when no key is set — belt-and-braces
+  // against a race between the env-check and the key read.
+  if (!encrypted.startsWith("enc:")) return;
+
+  await prisma.credentialEntry.updateMany({
+    where: {
+      providerId,
+      NOT: { secretRef: { startsWith: "enc:" } },
+    },
+    data: { secretRef: encrypted },
+  });
+}
+
+/**
  * Resolve the token for pushing branches to the upstream hive repo.
  *
  * Priority:
- *   1. HIVE_CONTRIBUTION_TOKEN env var (explicit hive token)
+ *   1. HIVE_CONTRIBUTION_TOKEN env var (explicit hive token — DEPRECATED,
+ *      removal planned 60 days after the next release)
  *   2. hive-contribution CredentialEntry (seeded or admin-configured)
  *   3. GITHUB_TOKEN env var (legacy fallback)
  *   4. git-backup CredentialEntry (customer's own PAT — fork_only backup)
+ *
+ * When a DB credential is read as plaintext and `CREDENTIAL_ENCRYPTION_KEY`
+ * is set, the row is opportunistically re-encrypted in place. This lets
+ * installs that predate encryption migrate transparently without a
+ * dedicated backfill step.
  *
  * Returns null if no token is available.
  */
@@ -184,13 +220,12 @@ export async function resolveHiveToken(): Promise<string | null> {
     select: { secretRef: true, status: true },
   });
   if (hiveCred?.status === "active" && hiveCred.secretRef) {
-    // May be encrypted — try decryption, fall back to raw
-    try {
-      const { decryptSecret } = await import("@/lib/credential-crypto");
-      return decryptSecret(hiveCred.secretRef);
-    } catch {
-      return hiveCred.secretRef;
-    }
+    const stored = hiveCred.secretRef;
+    const { decryptSecret } = await import("@/lib/govern/credential-crypto");
+    const decrypted = stored.startsWith("enc:") ? decryptSecret(stored) : stored;
+    if (decrypted === null) return null; // key rotated — cannot decrypt
+    await maybeReencryptInPlace("hive-contribution", stored, decrypted);
+    return decrypted;
   }
 
   // 3. GITHUB_TOKEN env var (legacy)
@@ -204,12 +239,12 @@ export async function resolveHiveToken(): Promise<string | null> {
     select: { secretRef: true, status: true },
   });
   if (backupCred?.status === "active" && backupCred.secretRef) {
-    try {
-      const { decryptSecret } = await import("@/lib/credential-crypto");
-      return decryptSecret(backupCred.secretRef);
-    } catch {
-      return backupCred.secretRef;
-    }
+    const stored = backupCred.secretRef;
+    const { decryptSecret } = await import("@/lib/govern/credential-crypto");
+    const decrypted = stored.startsWith("enc:") ? decryptSecret(stored) : stored;
+    if (decrypted === null) return null;
+    await maybeReencryptInPlace("git-backup", stored, decrypted);
+    return decrypted;
   }
 
   return null;

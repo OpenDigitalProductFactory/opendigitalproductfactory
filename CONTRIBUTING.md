@@ -10,7 +10,7 @@ Thanks for wanting to contribute. This project is built to grow through communit
 4. CI gates typecheck, unit tests, and a production build. Keep them green.
 5. A maintainer reviews and merges once the checks pass.
 
-External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). Branch protection on `main` is active and enforced at the GitHub platform level: the required status checks `Typecheck`, `Production Build`, and `DCO` must all pass before merge; PR required; linear history; no force-push. `Unit Tests` runs informationally while the broken-test surface is being cleaned up.
+External contributors always use fork → branch → PR. The maintainer uses the same workflow from topic branches named by intent (`clean/*`, `doc/*`, `feat/*`, `fix/*`, `chore/*`). The required CI checks (`Typecheck` and `Production Build`) must pass before merge; `Unit Tests` runs informationally while the broken-test surface is being cleaned up. GitHub branch protection activates automatically once the repo flips to public — until then, the workflow is maintained by discipline.
 
 ## Branch naming
 
@@ -27,36 +27,13 @@ One concern per branch, one concern per PR. If you find a refactor that's adjace
 
 ## Repo bootstrap (contributors)
 
-Running `pnpm install` in the repo root auto-configures the in-repo git hooks (Prisma migration guard + local typecheck gate) via a `postinstall` script. No manual setup is required for the typical `git clone && pnpm install` flow.
-
-If you cloned with `--no-scripts` or a tarball that doesn't run postinstall, set the hooks path manually:
+Once cloned, enable the in-repo git hooks so the Prisma migration guard runs locally:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-The installer scripts (`scripts/fresh-install.ps1`, `scripts/setup.ps1`, `scripts/setup.sh`) also configure this path when used.
-
-## Signing commits (DCO)
-
-Every commit in every PR must carry a `Signed-off-by:` trailer certifying the contribution under the [Developer Certificate of Origin](https://developercertificate.org/). This is a required status check on `main` — the `DCO` bot fails the PR until every commit has a matching trailer.
-
-The easiest way to add the trailer is the `-s` flag on `git commit`:
-
-```bash
-git commit -s -m "your message"
-```
-
-This appends `Signed-off-by: Your Name <your-email@example.com>` using your `user.name` and `user.email` git config. The email in the trailer must match the commit author's email.
-
-**If you forget and DCO fails your PR:**
-
-- Last commit only: `git commit --amend -s --no-edit && git push --force-with-lease`
-- Multiple commits: `git rebase --signoff main && git push --force-with-lease`
-
-Force-pushing to your own feature branch is fine — branch protection only blocks it on `main`.
-
-Dependabot PRs are auto-signed by a repo workflow; you don't need to do anything special for those.
+`scripts/fresh-install.ps1` and `scripts/setup.ps1` / `scripts/setup.sh` configure this automatically when you use them to set the repo up. Run the one-liner above manually if you cloned without those helpers.
 
 ## Before you start
 

@@ -26,5 +26,17 @@ export const infraPrune = inngest.createFunction(
 
       return result;
     });
+
+    // Defense-in-depth: pollDeviceFlow self-deletes its session on the
+    // expired/denied/poll-discovered-expiry paths, but a session whose owner
+    // never returns to poll would otherwise sit in the table indefinitely.
+    // Once a week is plenty for a 15-min-TTL transient.
+    await step.run("prune-device-code-sessions", async () => {
+      const { cleanupExpiredDeviceCodeSessions } = await import(
+        "@/lib/integrate/github-oauth"
+      );
+      const removed = await cleanupExpiredDeviceCodeSessions();
+      return { removedDeviceCodeSessions: removed };
+    });
   },
 );

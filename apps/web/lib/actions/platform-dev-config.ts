@@ -182,6 +182,12 @@ export async function hasContributionToken(): Promise<boolean> {
  * Retrieve the stored GitHub token (decrypted). Used by the contribution
  * pipeline when process.env.GITHUB_TOKEN is not set.
  * Returns null if no credential is stored or decryption fails.
+ *
+ * When the stored value is plaintext (no `enc:` prefix) AND
+ * `CREDENTIAL_ENCRYPTION_KEY` is set, the row is opportunistically
+ * re-encrypted in place. The `updateMany` guard clause makes the write
+ * concurrent-safe — a simultaneous second caller lands a count=0 no-op
+ * rather than double-encrypting.
  */
 export async function getStoredGitHubToken(): Promise<string | null> {
   const cred = await prisma.credentialEntry.findUnique({
@@ -190,110 +196,144 @@ export async function getStoredGitHubToken(): Promise<string | null> {
   });
   if (!cred || cred.status !== "active" || !cred.secretRef) return null;
 
+  const stored = cred.secretRef;
   try {
-    const { decryptSecret } = await import("@/lib/credential-crypto");
-    return decryptSecret(cred.secretRef);
+    const { decryptSecret, encryptSecret } = await import("@/lib/credential-crypto");
+    const decrypted = stored.startsWith("enc:") ? decryptSecret(stored) : stored;
+    if (decrypted === null) return null;
+
+    if (!stored.startsWith("enc:") && process.env.CREDENTIAL_ENCRYPTION_KEY) {
+      const encrypted = encryptSecret(decrypted);
+      if (encrypted.startsWith("enc:")) {
+        await prisma.credentialEntry.updateMany({
+          where: {
+            providerId: "git-backup",
+            NOT: { secretRef: { startsWith: "enc:" } },
+          },
+          data: { secretRef: encrypted },
+        });
+      }
+    }
+
+    return decrypted;
   } catch {
     return null;
   }
 }
 
-/**
- * Model-aware token validation for the contribution flow.
- *
- * maintainer-direct: checks that the token has push access to
- *   upstreamOwner/upstreamRepo via GET /repos/{owner}/{repo}'s
- *   permissions.push flag.
- *
- * fork-pr: checks the token's account (GET /user) matches expectedOwner
- *   unless machineUser=true, which opts out of the identity check (for
- *   installs using a dedicated machine-user GitHub account to host the fork).
- *
- * Both paths first run the plain /user check to verify the token is live.
- * Scope mismatches (wrong PAT scope) surface later at the actual fork/PR
- * operation with a GitHub 403 rather than being pre-checked here, since
- * fine-grained PATs do not expose scope info on /user.
- */
-export async function validateGitHubTokenForModel(input: {
+// ─── GitHub token validation ─────────────────────────────────────────────────
+//
+// Extended validator for the 2026-04-24 GitHub auth 2FA readiness spec. The
+// single-arg form `validateGitHubToken(token)` is preserved for back-compat;
+// the object form gains scope + expiry + prefix-based auth-method detection,
+// plus an optional per-repo probe for fine-grained PATs where scopes are
+// carried out-of-band (empty X-OAuth-Scopes header).
+//
+// `model` and `machineUser` are reserved for the 2026-04-23 public-contribution
+// -mode plan (Task 5.2), which can land before or after this change. They are
+// accepted here so callers that already pass them don't break the compile.
+
+export interface ValidateTokenInput {
   token: string;
-  model: "maintainer-direct" | "fork-pr";
-  /** maintainer-direct only — the repo the token must push to. */
-  upstreamOwner?: string;
-  upstreamRepo?: string;
-  /** fork-pr only — the fork owner the token's account must match, unless machineUser. */
+  requiredScope?: "public_repo" | "repo" | "contents:write";
   expectedOwner?: string;
-  /** fork-pr only — skip the identity check when true. */
+  requireNonExpired?: boolean;
+  authMethod?: "oauth-device" | "fine-grained-pat" | "classic-pat" | "auto";
+  model?: "maintainer-direct" | "fork-pr";
   machineUser?: boolean;
-}): Promise<{ valid: boolean; username?: string; error?: string }> {
-  const basic = await validateGitHubToken(input.token);
-  if (!basic.valid) return basic;
+}
 
-  if (input.model === "maintainer-direct") {
-    if (!input.upstreamOwner || !input.upstreamRepo) {
-      return { valid: false, error: "maintainer-direct validation requires upstreamOwner and upstreamRepo." };
-    }
-    try {
-      const repoRes = await fetch(
-        `https://api.github.com/repos/${input.upstreamOwner}/${input.upstreamRepo}`,
-        {
-          headers: {
-            Accept: "application/vnd.github+json",
-            Authorization: `Bearer ${input.token}`,
-            "X-GitHub-Api-Version": "2022-11-28",
-          },
-        },
-      );
-      if (!repoRes.ok) {
-        return {
-          valid: false,
-          error: `Token cannot read ${input.upstreamOwner}/${input.upstreamRepo} (${repoRes.status}). maintainer-direct requires contents:write on the upstream repo.`,
-        };
-      }
-      const repoData = (await repoRes.json()) as { permissions?: { push?: boolean } };
-      if (!repoData.permissions?.push) {
-        return {
-          valid: false,
-          error: `Token does not have push access to ${input.upstreamOwner}/${input.upstreamRepo}. maintainer-direct requires contents:write on the upstream repo.`,
-        };
-      }
-      return { valid: true, username: basic.username };
-    } catch {
-      return { valid: false, error: "Could not verify upstream access. Check your internet connection." };
-    }
-  }
+export interface ValidateTokenResult {
+  valid: boolean;
+  username?: string;
+  scope?: string;
+  expiresAt?: Date | null;
+  authMethod?: "oauth-device" | "fine-grained-pat" | "classic-pat";
+  error?: string;
+}
 
-  if (input.model === "fork-pr") {
-    if (input.machineUser === true) {
-      return { valid: true, username: basic.username };
-    }
-    if (!input.expectedOwner) {
-      return { valid: false, error: "fork-pr validation requires expectedOwner unless machineUser=true." };
-    }
-    const tokenOwner = basic.username?.toLowerCase();
-    const expected = input.expectedOwner.toLowerCase();
-    if (tokenOwner !== expected) {
-      return {
-        valid: false,
-        error: `Token owner (${basic.username}) does not match fork owner (${input.expectedOwner}). Use a PAT owned by the fork owner, or check the "machine-user account" opt-out if this is intentional.`,
-      };
-    }
-    return { valid: true, username: basic.username };
-  }
+/** Hard-coded fallback when PlatformDevConfig doesn't carry an upstream URL. */
+const UPSTREAM_OWNER_REPO_FALLBACK = "OpenDigitalProductFactory/opendigitalproductfactory";
 
-  return { valid: false, error: `Unsupported contribution model: ${String((input as { model: string }).model)}.` };
+function detectAuthMethod(
+  token: string,
+): "oauth-device" | "fine-grained-pat" | "classic-pat" | null {
+  if (token.startsWith("gho_")) return "oauth-device";
+  if (token.startsWith("github_pat_")) return "fine-grained-pat";
+  if (token.startsWith("ghp_")) return "classic-pat";
+  return null; // ghs_ (app install), ghr_ (refresh), or malformed
+}
+
+function parseScopesHeader(headerValue: string | null): Set<string> {
+  if (!headerValue) return new Set();
+  return new Set(
+    headerValue
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Does the token carry enough scope for the caller's requirement?
+ *
+ * GitHub's classic-PAT scopes form a small hierarchy: `repo` is a superset of
+ * `public_repo`, and (at the repo level) also grants write on file contents
+ * which is what `contents:write` represents for fine-grained PATs. We treat
+ * `repo` as satisfying any of our three required values.
+ */
+function scopeSatisfies(granted: Set<string>, required: ValidateTokenInput["requiredScope"]): boolean {
+  if (!required) return true;
+  if (granted.has("repo")) return true;
+  return granted.has(required);
+}
+
+function parseExpiryHeader(headerValue: string | null): Date | null {
+  if (!headerValue) return null;
+  const parsed = new Date(headerValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
 }
 
 /**
  * Validate a GitHub token by making a test API call.
- * Returns the authenticated username on success, or an error message.
+ *
+ * Single-arg form (back-compat): `validateGitHubToken(token)` — returns the
+ * minimal legacy shape `{ valid, username?, error? }`.
+ *
+ * Object form: accepts additional constraints (scope, owner, expiry, auth
+ * method) and returns the extended shape.
  */
-export async function validateGitHubToken(token: string): Promise<{
-  valid: boolean;
-  username?: string;
-  error?: string;
-}> {
+export async function validateGitHubToken(
+  token: string,
+): Promise<{ valid: boolean; username?: string; error?: string }>;
+export async function validateGitHubToken(
+  input: ValidateTokenInput,
+): Promise<ValidateTokenResult>;
+export async function validateGitHubToken(
+  arg: string | ValidateTokenInput,
+): Promise<ValidateTokenResult> {
+  const input: ValidateTokenInput = typeof arg === "string" ? { token: arg } : arg;
+  const { token } = input;
+
+  // Auth-method detection. "auto" (and "undefined" from the single-arg form)
+  // both dispatch to the prefix detector; explicit values bypass detection.
+  let resolvedAuthMethod: "oauth-device" | "fine-grained-pat" | "classic-pat" | undefined;
+  if (input.authMethod && input.authMethod !== "auto") {
+    resolvedAuthMethod = input.authMethod;
+  } else {
+    const detected = detectAuthMethod(token);
+    if (input.authMethod === "auto" && !detected) {
+      return {
+        valid: false,
+        error: "Token format not recognized. Expected gho_, github_pat_, or ghp_ prefix.",
+      };
+    }
+    resolvedAuthMethod = detected ?? undefined;
+  }
+
   try {
-    const response = await fetch("https://api.github.com/user", {
+    const userResponse = await fetch("https://api.github.com/user", {
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
@@ -301,14 +341,101 @@ export async function validateGitHubToken(token: string): Promise<{
       },
     });
 
-    if (!response.ok) {
-      if (response.status === 401) return { valid: false, error: "Token is invalid or expired." };
-      return { valid: false, error: `GitHub returned status ${response.status}.` };
+    if (!userResponse.ok) {
+      if (userResponse.status === 401) {
+        return { valid: false, error: "Token is invalid or expired." };
+      }
+      return { valid: false, error: `GitHub returned status ${userResponse.status}.` };
     }
 
-    const data = await response.json() as { login?: string };
-    return { valid: true, username: data.login ?? "unknown" };
-  } catch (err) {
+    const data = (await userResponse.json()) as { login?: string };
+    const username = data.login ?? "unknown";
+
+    const scopesHeader = userResponse.headers.get("X-OAuth-Scopes");
+    const grantedScopes = parseScopesHeader(scopesHeader);
+    const expiresAt = parseExpiryHeader(
+      userResponse.headers.get("github-authentication-token-expiration"),
+    );
+
+    // Owner check — unless machineUser opt-out explicitly allows mismatch.
+    if (input.expectedOwner && !input.machineUser && username !== input.expectedOwner) {
+      return {
+        valid: false,
+        username,
+        authMethod: resolvedAuthMethod,
+        error: `Token owner (${username}) does not match expected owner (${input.expectedOwner}). If this token belongs to a machine user, set machineUser: true.`,
+      };
+    }
+
+    // Scope check (classic PAT). For fine-grained PATs, GitHub does not return
+    // scopes via X-OAuth-Scopes; we verify access via a per-repo probe below.
+    if (resolvedAuthMethod === "classic-pat" && input.requiredScope) {
+      if (!scopeSatisfies(grantedScopes, input.requiredScope)) {
+        return {
+          valid: false,
+          username,
+          authMethod: resolvedAuthMethod,
+          scope: scopesHeader ?? undefined,
+          expiresAt,
+          error: `Token is missing required scope '${input.requiredScope}'. Granted: ${scopesHeader || "(none)"}.`,
+        };
+      }
+    }
+
+    // Expiry gate — only enforced if requireNonExpired was passed. A fine-
+    // grained PAT expiring in less than 30 days is rejected; we still surface
+    // expiresAt so callers can warn the user ahead of time.
+    if (input.requireNonExpired && expiresAt) {
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const daysLeft = Math.floor((expiresAt.getTime() - Date.now()) / msPerDay);
+      if (daysLeft < 30) {
+        return {
+          valid: false,
+          username,
+          authMethod: resolvedAuthMethod,
+          scope: scopesHeader ?? undefined,
+          expiresAt,
+          error: `Token expires in ${daysLeft} day(s). Rotate to a token with at least 30 days remaining.`,
+        };
+      }
+    }
+
+    // Per-repo probe (fine-grained PAT). Fine-grained tokens don't report
+    // their scopes via X-OAuth-Scopes — the only reliable signal is whether
+    // the token can actually reach the repo it's meant to act on.
+    if (resolvedAuthMethod === "fine-grained-pat") {
+      const probeOwner = input.expectedOwner ?? UPSTREAM_OWNER_REPO_FALLBACK.split("/")[0];
+      const probeRepo = UPSTREAM_OWNER_REPO_FALLBACK.split("/")[1];
+      const probeUrl = `https://api.github.com/repos/${probeOwner}/${probeRepo}`;
+
+      const repoResponse = await fetch(probeUrl, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      });
+
+      if (!repoResponse.ok) {
+        return {
+          valid: false,
+          username,
+          authMethod: resolvedAuthMethod,
+          scope: scopesHeader ?? undefined,
+          expiresAt,
+          error: `Token can't access the fork repo ${probeOwner}/${probeRepo} (status ${repoResponse.status}). Check that the fine-grained PAT grants Contents: read/write on that repository.`,
+        };
+      }
+    }
+
+    return {
+      valid: true,
+      username,
+      authMethod: resolvedAuthMethod,
+      scope: scopesHeader ?? undefined,
+      expiresAt,
+    };
+  } catch {
     return { valid: false, error: "Could not reach GitHub. Check your internet connection." };
   }
 }
@@ -383,8 +510,6 @@ export type ConfigureForkSetupResult =
 export async function configureForkSetup(input: {
   contributorForkOwner: string;
   token: string;
-  /** Phase 5: opt out of the "token owner must match fork owner" check for machine-user accounts. */
-  machineUserOptIn?: boolean;
 }): Promise<ConfigureForkSetupResult> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -394,16 +519,9 @@ export async function configureForkSetup(input: {
     return { success: false, error: "GitHub username is required." };
   }
 
-  // Validate token with the fork-pr model check (owner-match unless
-  // machineUser). validateGitHubTokenForModel short-circuits to the basic
-  // /user check first, so "token dead" errors still surface with the right
-  // message.
-  const validation = await validateGitHubTokenForModel({
-    token: input.token,
-    model: "fork-pr",
-    expectedOwner: input.contributorForkOwner.trim(),
-    machineUser: input.machineUserOptIn === true,
-  });
+  // Validate token (reuses the /user call — confirms the token is live and
+  // has API access; scope validation is layered in Phase 5).
+  const validation = await validateGitHubToken(input.token);
   if (!validation.valid) {
     return { success: false, error: validation.error ?? "Token validation failed." };
   }
@@ -486,14 +604,12 @@ export async function configureForkSetup(input: {
       contributorForkOwner: forkOwner,
       contributorForkRepo: forkRepo,
       forkVerifiedAt: status === "ready" ? new Date() : null,
-      machineUserOptIn: input.machineUserOptIn === true,
     },
     create: {
       id: "singleton",
       contributorForkOwner: forkOwner,
       contributorForkRepo: forkRepo,
       forkVerifiedAt: status === "ready" ? new Date() : null,
-      machineUserOptIn: input.machineUserOptIn === true,
     },
   });
 

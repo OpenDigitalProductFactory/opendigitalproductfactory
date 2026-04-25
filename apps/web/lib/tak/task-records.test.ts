@@ -23,7 +23,7 @@ describe("task-records", () => {
     mocks.taskArtifactCreate.mockReset();
     mocks.taskRunFindUnique.mockResolvedValue({ id: "task-row-1", contextId: "thread-1" });
     mocks.taskMessageCreate.mockResolvedValue({});
-    mocks.taskArtifactCreate.mockResolvedValue({});
+    mocks.taskArtifactCreate.mockResolvedValue({ id: "artifact-row-1", artifactId: "ta_123" });
   });
 
   it("persists task messages with normalized metadata", async () => {
@@ -60,7 +60,7 @@ describe("task-records", () => {
   });
 
   it("persists task artifacts with JSON payloads", async () => {
-    await createTaskArtifact({
+    await expect(createTaskArtifact({
       taskRunId: "run-1",
       artifactType: "design-system",
       name: "Extracted brand design system",
@@ -72,6 +72,9 @@ describe("task-records", () => {
       metadata: {
         sourceCount: 2,
       },
+    })).resolves.toEqual({
+      id: "artifact-row-1",
+      artifactId: "ta_123",
     });
 
     expect(mocks.taskArtifactCreate).toHaveBeenCalledWith({
@@ -91,7 +94,13 @@ describe("task-records", () => {
         metadata: expect.objectContaining({
           sourceCount: 2,
         }),
+        producerAgentId: null,
+        producerNodeId: null,
       }),
+      select: {
+        id: true,
+        artifactId: true,
+      },
     });
   });
 });

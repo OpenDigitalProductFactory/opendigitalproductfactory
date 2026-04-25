@@ -51,6 +51,15 @@ describe("FinanceTabNav", () => {
     expect(html).not.toContain('href="/finance/bills"');
   });
 
+  it("shows AI spend inside the spend family navigation", () => {
+    pathname = "/finance/spend/ai";
+    const html = renderToStaticMarkup(<FinanceTabNav />);
+
+    expect(html).toContain('href="/finance/spend"');
+    expect(html).toContain('href="/finance/spend/ai"');
+    expect(html).toContain('href="/finance/bills"');
+  });
+
   it("shows tax remittance in the configuration sub-navigation", () => {
     pathname = "/finance/settings/tax";
     const html = renderToStaticMarkup(<FinanceTabNav />);

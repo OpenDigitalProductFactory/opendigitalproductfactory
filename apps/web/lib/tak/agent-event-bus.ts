@@ -2,7 +2,11 @@
 // Lightweight typed event emitter for real-time agent progress.
 // Keyed by threadId. SSE endpoint subscribes, agentic loop emits.
 
+import type { TaskState } from "@/lib/tak/task-states";
+
 export type AgentEvent =
+  | { type: "task:status"; taskId: string; contextId: string | null; state: TaskState; sourceEvent?: string; message?: string; progress?: { stage?: string; percent?: number } }
+  | { type: "task:artifact"; taskId: string; contextId: string | null; artifactId: string; name: string; artifactType: string; sourceEvent?: string; message?: string }
   | { type: "tool:start"; tool: string; iteration: number }
   | { type: "tool:complete"; tool: string; success: boolean }
   | { type: "phase:change"; buildId: string; phase: string }
@@ -34,7 +38,6 @@ export type AgentEvent =
   | { type: "orchestrator:task_complete"; buildId: string; taskTitle: string; specialist: string; outcome: string; status?: string }
   | { type: "orchestrator:phase_summary"; buildId: string; completed: number; total: number; summary: string }
   | { type: "orchestrator:specialist_retry"; buildId: string; specialist: string; reason: string; attempt: number }
-  | { type: "orchestrator:task_gate_failed"; buildId: string; taskTitle: string; specialist: string; typecheckPassed: boolean; buildPassed: boolean }
   | { type: "orchestrator:warning"; buildId: string; message: string }
   // EP-CWQ-001: Collaborative work queue events
   | { type: "queue:item_created"; workItemId: string; sourceType: string; urgency: string }
