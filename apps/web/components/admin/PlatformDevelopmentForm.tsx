@@ -437,8 +437,14 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
       {/* Step / state: Connect GitHub (Device Flow primary, Advanced paste fallback) */}
       {isContributionMode && (wizardStep === "connect" || wizardStep === "done") && (
         <div className="space-y-4" data-testid="github-connect-block">
-          <ConnectGitHubCard initialConnected={props.initialConnected ?? null} />
-          <AdvancedTokenPaste mode={selected} />
+          {/* Anchor target for TokenExpiryBanner's "Reconnect GitHub" link. */}
+          <div id="connect-github">
+            <ConnectGitHubCard initialConnected={props.initialConnected ?? null} />
+          </div>
+          {/* Anchor target for TokenExpiryBanner's "Update token" link. */}
+          <div id="advanced-token">
+            <AdvancedTokenPaste mode={selected} />
+          </div>
         </div>
       )}
 
