@@ -296,4 +296,22 @@ describe("evaluateInventoryQuality", () => {
       ]),
     );
   });
+
+  it("accepts the canonical ai-proposed attribution method literal", () => {
+    const result = evaluateInventoryQuality([
+      {
+        entityKey: "service:auto-triaged",
+        entityType: "service",
+        attributionStatus: "attributed",
+        attributionMethod: "ai-proposed",
+        attributionConfidence: 0.91,
+        taxonomyNodeId: "products_and_services_sold/customer_relationship_management",
+        digitalProductId: null,
+        manufacturer: "OpenAI",
+        supportStatus: "supported",
+      },
+    ]);
+
+    expect(result.issues).toHaveLength(0);
+  });
 });
