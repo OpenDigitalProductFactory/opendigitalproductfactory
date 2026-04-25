@@ -1,9 +1,34 @@
 # Discovery Fingerprint Contribution Pipeline Design
 
 **Date:** 2026-04-25  
-**Status:** Proposed  
+**Status:** Partially implemented  
 **Author:** OpenAI Codex with Mark Bodman direction  
 **Epic:** Recommended new epic, separate from integration, site-location, and MSP archetype epics
+
+## Implemented Slice Status
+
+Implemented in the first slice:
+
+- fingerprint observation, review, rule, and catalog schema foundation
+- redaction and privacy scanning helpers
+- blast-radius-aware auto-accept policy gate
+- bounded deterministic rule evaluator
+- repo-owned catalog fixture validation
+- persistence helpers for future observation ingestion and approval review
+
+Deferred:
+
+- review queue UI
+- scheduled daily AI coworker triage
+- live discovery integration
+- contribution PR generation
+- automatic rule activation in runtime discovery
+
+Verification:
+
+- `pnpm --filter @dpf/db test -- discovery-fingerprint-model.test.ts discovery-fingerprint-redaction.test.ts discovery-fingerprint-policy.test.ts discovery-fingerprint-rules.test.ts discovery-fingerprint-catalog.test.ts discovery-fingerprint-store.test.ts` passed on 2026-04-25
+- `pnpm --filter @dpf/db typecheck` passed on 2026-04-25
+- production build was skipped because this slice is DB/package-only and does not touch `apps/web` or shipped UI/runtime discovery behavior
 
 ## 1. Problem Statement
 
