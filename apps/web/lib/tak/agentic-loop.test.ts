@@ -172,6 +172,15 @@ describe("detectFabrication", () => {
     )).toBe(true);
   });
 
+  it("detects plan-ready claims when only read tools were executed", () => {
+    expect(detectFabrication(
+      "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
+      2,
+      false,
+      ["list_project_directory", "search_project_files"],
+    )).toBe(true);
+  });
+
   it("does not flag narration when build tools were used", () => {
     expect(detectFabrication(
       "Here's what I added to the code.",
@@ -645,6 +654,33 @@ describe("runAgenticLoop", () => {
     const thirdCallMessages = mockRoute.mock.calls[2]?.[0] ?? [];
     const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
     expect(lastUserMessage?.content).toContain("Do not pause with status-only updates");
+  });
+
+  it("does not allow plan-ready claims after read-only tool use without build-plan persistence", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Checking the existing Build Studio workflow files.",
+        toolCalls: [{ id: "toolu_read_1", name: "search_project_files", arguments: { query: "BuildStudio workflow actions" } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "",
+      }));
+
+    mockExecuteTool.mockResolvedValueOnce({ success: true, message: "Found Build Studio workflow files." });
+
+    const result = await runAgenticLoop(baseParams);
+
+    expect(result.content).not.toContain("Plan ready");
+    expect(mockExecuteTool).toHaveBeenCalledTimes(1);
   });
 
   it("nudges build agent to use fallback steps after failed read stalls", async () => {

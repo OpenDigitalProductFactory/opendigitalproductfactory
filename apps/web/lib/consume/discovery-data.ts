@@ -66,6 +66,167 @@ export async function getNeedsReviewEntities() {
   }));
 }
 
+export type DiscoveryTriageDecisionSummary = {
+  id: string;
+  decisionId: string;
+  outcome: string;
+  actorType: string;
+  actorId: string | null;
+  identityConfidence: number | null;
+  taxonomyConfidence: number | null;
+  evidenceCompleteness: number | null;
+  reproducibilityScore: number | null;
+  requiresHumanReview: boolean;
+  createdAt: string;
+  evidencePacket: Record<string, unknown>;
+  proposedRule: Record<string, unknown> | null;
+};
+
+export type DiscoveryTriageQueueRow = Awaited<ReturnType<typeof getNeedsReviewEntities>>[number] & {
+  latestDecision: DiscoveryTriageDecisionSummary | null;
+};
+
+export type DiscoveryTriageQueues = {
+  autoAttributed: DiscoveryTriageQueueRow[];
+  humanReview: DiscoveryTriageQueueRow[];
+  needsMoreEvidence: DiscoveryTriageQueueRow[];
+  taxonomyGaps: DiscoveryTriageQueueRow[];
+  metrics: {
+    total: number;
+    withDecision: number;
+  };
+};
+
+function normalizeDecision(decision: {
+  id: string;
+  decisionId: string;
+  outcome: string;
+  actorType: string;
+  actorId: string | null;
+  identityConfidence: number | null;
+  taxonomyConfidence: number | null;
+  evidenceCompleteness: number | null;
+  reproducibilityScore: number | null;
+  requiresHumanReview: boolean;
+  createdAt: Date;
+  evidencePacket: unknown;
+  proposedRule: unknown;
+}): DiscoveryTriageDecisionSummary {
+  return {
+    ...decision,
+    createdAt: decision.createdAt.toISOString(),
+    evidencePacket: (decision.evidencePacket ?? {}) as Record<string, unknown>,
+    proposedRule: decision.proposedRule ? (decision.proposedRule as Record<string, unknown>) : null,
+  };
+}
+
+export async function getInventoryTriageQueues(): Promise<DiscoveryTriageQueues> {
+  const entities = await getNeedsReviewEntities();
+  const entityIds = entities.map((entity) => entity.id);
+
+  if (entityIds.length === 0) {
+    return {
+      autoAttributed: [],
+      humanReview: [],
+      needsMoreEvidence: [],
+      taxonomyGaps: [],
+      metrics: { total: 0, withDecision: 0 },
+    };
+  }
+
+  const decisions = await prisma.discoveryTriageDecision.findMany({
+    where: {
+      inventoryEntityId: { in: entityIds },
+    },
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      decisionId: true,
+      inventoryEntityId: true,
+      outcome: true,
+      actorType: true,
+      actorId: true,
+      identityConfidence: true,
+      taxonomyConfidence: true,
+      evidenceCompleteness: true,
+      reproducibilityScore: true,
+      requiresHumanReview: true,
+      createdAt: true,
+      evidencePacket: true,
+      proposedRule: true,
+    },
+  });
+
+  const latestDecisionByEntityId = new Map<string, DiscoveryTriageDecisionSummary>();
+  for (const decision of decisions) {
+    if (!decision.inventoryEntityId || latestDecisionByEntityId.has(decision.inventoryEntityId)) {
+      continue;
+    }
+    latestDecisionByEntityId.set(decision.inventoryEntityId, normalizeDecision(decision));
+  }
+
+  const queues: DiscoveryTriageQueues = {
+    autoAttributed: [],
+    humanReview: [],
+    needsMoreEvidence: [],
+    taxonomyGaps: [],
+    metrics: {
+      total: entities.length,
+      withDecision: latestDecisionByEntityId.size,
+    },
+  };
+
+  for (const entity of entities) {
+    const row: DiscoveryTriageQueueRow = {
+      ...entity,
+      latestDecision: latestDecisionByEntityId.get(entity.id) ?? null,
+    };
+
+    switch (row.latestDecision?.outcome) {
+      case "auto-attributed":
+        queues.autoAttributed.push(row);
+        break;
+      case "needs-more-evidence":
+        queues.needsMoreEvidence.push(row);
+        break;
+      case "taxonomy-gap":
+        queues.taxonomyGaps.push(row);
+        break;
+      default:
+        queues.humanReview.push(row);
+        break;
+    }
+  }
+
+  return queues;
+}
+
+export async function getDiscoveryTriageDecisionHistory(
+  inventoryEntityId: string,
+): Promise<DiscoveryTriageDecisionSummary[]> {
+  const decisions = await prisma.discoveryTriageDecision.findMany({
+    where: { inventoryEntityId },
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      decisionId: true,
+      outcome: true,
+      actorType: true,
+      actorId: true,
+      identityConfidence: true,
+      taxonomyConfidence: true,
+      evidenceCompleteness: true,
+      reproducibilityScore: true,
+      requiresHumanReview: true,
+      createdAt: true,
+      evidencePacket: true,
+      proposedRule: true,
+    },
+  });
+
+  return decisions.map(normalizeDecision);
+}
+
 // ─── Subnet-Grouped Inventory ────────────────────────────────────────────────
 
 export type SubnetGroupEntity = {

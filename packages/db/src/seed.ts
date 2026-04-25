@@ -17,6 +17,7 @@ import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
+import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -2002,6 +2003,7 @@ async function main(): Promise<void> {
   await seedEaViews();
   await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
+  await ensureDiscoveryTriageScheduledTask(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedAnthropicSubScope();

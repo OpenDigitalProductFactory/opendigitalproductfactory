@@ -844,6 +844,7 @@ model TaxonomyNode {
   fingerprintRules       DiscoveryFingerprintRule[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
+  triageSelectionDecisions DiscoveryTriageDecision[] @relation("DiscoveryTriageDecisionSelectedTaxonomy")
   parent                 TaxonomyNode?           @relation("TaxonomyTree", fields: [parentId], references: [id])
   children               TaxonomyNode[]          @relation("TaxonomyTree")
 }
@@ -2511,6 +2512,7 @@ model InventoryEntity {
   fromRelationships           InventoryRelationship[]      @relation("InventoryRelationshipFromEntity")
   toRelationships             InventoryRelationship[]      @relation("InventoryRelationshipToEntity")
   qualityIssues               PortfolioQualityIssue[]
+  triageDecisions             DiscoveryTriageDecision[]
   changeItems                 ChangeItem[]
   softwareEvidence            DiscoveredSoftwareEvidence[]
   fingerprintObservations     DiscoveryFingerprintObservation[]
@@ -2569,6 +2571,7 @@ model PortfolioQualityIssue {
   inventoryRelationship   InventoryRelationship? @relation(fields: [inventoryRelationshipId], references: [id])
   portfolio               Portfolio?             @relation(fields: [portfolioId], references: [id])
   taxonomyNode            TaxonomyNode?          @relation(fields: [taxonomyNodeId], references: [id])
+  triageDecisions         DiscoveryTriageDecision[]
 
   @@index([issueType])
   @@index([status])
@@ -2576,6 +2579,37 @@ model PortfolioQualityIssue {
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
+}
+
+model DiscoveryTriageDecision {
+  id                     String                 @id @default(cuid())
+  decisionId             String                 @unique
+  inventoryEntityId      String?
+  qualityIssueId         String?
+  actorType              String
+  actorId                String?
+  outcome                String
+  identityConfidence     Float?
+  taxonomyConfidence     Float?
+  evidenceCompleteness   Float?
+  reproducibilityScore   Float?
+  selectedTaxonomyNodeId String?
+  selectedIdentity       Json?
+  evidencePacket         Json
+  proposedRule           Json?
+  appliedRuleId          String?
+  requiresHumanReview    Boolean                @default(false)
+  humanReviewedAt        DateTime?
+  createdAt              DateTime               @default(now())
+  inventoryEntity        InventoryEntity?       @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  qualityIssue           PortfolioQualityIssue? @relation(fields: [qualityIssueId], references: [id], onDelete: SetNull)
+  selectedTaxonomyNode   TaxonomyNode?          @relation("DiscoveryTriageDecisionSelectedTaxonomy", fields: [selectedTaxonomyNodeId], references: [id], onDelete: SetNull)
+
+  @@index([outcome])
+  @@index([inventoryEntityId])
+  @@index([qualityIssueId])
+  @@index([selectedTaxonomyNodeId])
+  @@index([requiresHumanReview, createdAt])
 }
 
 model AgentThread {

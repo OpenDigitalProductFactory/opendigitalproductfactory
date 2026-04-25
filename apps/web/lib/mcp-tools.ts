@@ -1,6 +1,6 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
+import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
@@ -1925,6 +1925,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: [],
     },
     requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "run_discovery_triage",
+    description: "Run a single discovery triage pass over needs-review and weakly resolved inventory, applying safe high-confidence matches and returning a summary of the run.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        trigger: { type: "string", enum: ["cadence", "volume"], default: "cadence" },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
     sideEffect: true,
   },
   {
@@ -7210,6 +7224,23 @@ export async function executeTool(
         success: true,
         message: `Discovery sweep completed: ${result.summary.createdEntities + result.summary.updatedEntities} entities refreshed and ${result.summary.createdRelationships + result.summary.updatedRelationships} relationships refreshed.`,
         data: result.summary as Record<string, unknown>,
+      };
+    }
+
+    case "run_discovery_triage": {
+      const { runDiscoveryTriageDaily } = await import("@/lib/discovery-triage-runner");
+      const trigger = params["trigger"] === "volume" ? "volume" : "cadence";
+      const result = await runDiscoveryTriageDaily(undefined, {
+        trigger,
+        actorType: "agent",
+        actorId: context?.agentId ?? DISCOVERY_TRIAGE_AGENT_ID,
+      });
+      return {
+        success: true,
+        message: result.skipped
+          ? result.skipReason ?? "Discovery triage skipped."
+          : `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed.`,
+        data: result as unknown as Record<string, unknown>,
       };
     }
 

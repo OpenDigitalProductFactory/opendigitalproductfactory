@@ -77,6 +77,7 @@ COPY --from=build /app/apps/web/public ./apps/web/public
 COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json ./
+COPY --from=init /app/scripts ./scripts
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/prompts ./prompts
 COPY --from=init /app/skills ./skills
