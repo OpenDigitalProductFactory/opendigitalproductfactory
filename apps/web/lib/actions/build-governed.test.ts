@@ -1,19 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockAuth = vi.fn();
-const mockPrisma = {
-  featureBuild: {
-    findUnique: vi.fn(),
-    update: vi.fn(),
-    create: vi.fn(),
+const { mockAuth, mockPrisma } = vi.hoisted(() => ({
+  mockAuth: vi.fn(),
+  mockPrisma: {
+    featureBuild: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      create: vi.fn(),
+    },
+    platformDevConfig: {
+      findUnique: vi.fn(),
+    },
+    buildActivity: {
+      create: vi.fn(),
+    },
   },
-  platformDevConfig: {
-    findUnique: vi.fn(),
-  },
-  buildActivity: {
-    create: vi.fn(),
-  },
-};
+}));
 
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
@@ -22,6 +24,8 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
+
+import { approveBuildStart, advanceBuildPhase } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -50,7 +54,6 @@ describe("governed build start approvals", () => {
     });
     mockPrisma.featureBuild.update.mockResolvedValue({});
 
-    const { approveBuildStart } = await import("./build");
     const result = await approveBuildStart("FB-123");
 
     expect(result.approvedAt).toBeInstanceOf(Date);
@@ -86,8 +89,6 @@ describe("governed build start approvals", () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       governedBacklogEnabled: true,
     });
-
-    const { advanceBuildPhase } = await import("./build");
 
     await expect(advanceBuildPhase("FB-123", "plan")).rejects.toThrow(
       "Approve Start before moving this governed backlog draft into planning.",
