@@ -11,15 +11,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@stoplight/prism-cli": "5.12.0",
-    "@stoplight/prism-http": "5.12.0",
+    "@stoplight/prism-cli": "5.15.10",
+    "@stoplight/prism-http": "5.15.10",
     "pino": "^6.13.3"
   },
   "devDependencies": {
     "@types/pino": "^6.3.12",
     "@types/node": "^25.0.0",
     "tsx": "^4.20.6",
-    "typescript": "^6.0.3",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.5"
   }
 }
