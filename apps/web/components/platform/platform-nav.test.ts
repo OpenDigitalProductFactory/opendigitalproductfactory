@@ -65,6 +65,7 @@ describe("platform-nav", () => {
 
     expect(aiFamily.subItems.some((item) => item.label === "Operations")).toBe(false);
     expect(aiFamily.subItems.some((item) => item.label === "Authority")).toBe(false);
+    expect(aiFamily.subItems.some((item) => item.label === "Prompts")).toBe(true);
     expect(aiFamily.subItems.some((item) => item.label === "Providers & Routing")).toBe(true);
   });
 

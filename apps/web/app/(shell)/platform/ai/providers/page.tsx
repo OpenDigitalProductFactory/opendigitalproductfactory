@@ -2,7 +2,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getActivatedMcpServers, getProviderModelSummaries, getToolInventory } from "@/lib/ai-provider-data";
+import { getProviders, getTokenSpendByProvider, getTokenSpendByAgent, getScheduledJobs, groupByEndpointTypeAndCategory, getProviderModelSummaries } from "@/lib/ai-provider-data";
 import { syncProviderRegistry, detectMcpServers, runProviderCatalogReconciliationIfDue } from "@/lib/actions/ai-providers";
 import { DetectedServicesBanner } from "@/components/platform/DetectedServicesBanner";
 import { checkBundledProviders } from "@/lib/ollama";
@@ -11,8 +11,6 @@ import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
-import { McpServiceRow } from "@/components/platform/McpServiceRow";
-import { ToolInventoryPanel } from "@/components/platform/ToolInventoryPanel";
 import Link from "next/link";
 
 
@@ -45,15 +43,13 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, mcpServers, modelSummaries, toolInventory] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
     prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
     detectMcpServers(),
-    getActivatedMcpServers(),
     getProviderModelSummaries(),
-    getToolInventory(),
   ]);
 
   const lastSync = freshJobs.find((j) => j.jobId === "provider-registry-sync")?.lastRunAt;
@@ -61,14 +57,31 @@ export default async function ProvidersPage() {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Routing &amp; Calibration</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Providers &amp; Routing</h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          {providers.length} service{providers.length !== 1 ? "s" : ""} registered
+          {providers.length} provider{providers.length !== 1 ? "s" : ""} registered
           {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
         </p>
       </div>
 
       <DetectedServicesBanner detected={detected} />
+
+      <div
+        style={{
+          marginBottom: 24,
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 8,
+          padding: "12px 14px",
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 12, color: "var(--dpf-text)" }}>
+          MCP service operations and runtime tool inventory now live under{" "}
+          <Link href="/platform/tools/services" style={{ color: "var(--dpf-accent)" }}>
+            Tools &amp; Services
+          </Link>.
+        </p>
+      </div>
 
       {/* Section 1: External Services Registry */}
       <div style={{ marginBottom: 32 }}>
@@ -95,70 +108,6 @@ export default async function ProvidersPage() {
             </ServiceSection>
           ))
         )}
-      </div>
-
-      {/* TODO Phase 2: move MCP server cards to /platform/tools */}
-      {/* Section 1b: Activated MCP Services */}
-      {mcpServers.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Activated MCP Services
-              <span style={{ color: "var(--dpf-muted)", fontWeight: 400, marginLeft: 6 }}>
-                {mcpServers.length} service{mcpServers.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <Link
-              href="/platform/tools/catalog"
-              style={{ color: "var(--dpf-accent)", fontSize: 10 }}
-            >
-              Browse Catalog →
-            </Link>
-          </div>
-          <div
-            style={{
-              background: "var(--dpf-surface-1, #13131f)",
-              border: "1px solid var(--dpf-border, #2a2a40)",
-              borderRadius: 6,
-              overflow: "hidden",
-            }}
-          >
-            {mcpServers.map((s) => (
-              <McpServiceRow key={s.id} server={s} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {mcpServers.length === 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
-            MCP Services
-          </div>
-          <div style={{
-            background: "var(--dpf-surface-1)",
-            border: "1px solid var(--dpf-border)",
-            borderRadius: 6,
-            padding: "20px 16px",
-            textAlign: "center",
-          }}>
-            <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: 0 }}>
-              No MCP services activated.{" "}
-              <Link href="/platform/tools/catalog" style={{ color: "var(--dpf-accent)" }}>
-                Browse the integration catalog
-              </Link>{" "}
-              to activate services.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Agent Tool Inventory */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
-          Tool Inventory
-        </div>
-        <ToolInventoryPanel tools={toolInventory} />
       </div>
 
       {/* Section 2: Token Spend */}
