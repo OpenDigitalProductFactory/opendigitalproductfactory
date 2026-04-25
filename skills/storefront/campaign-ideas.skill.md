@@ -3,7 +3,7 @@ name: campaign-ideas
 description: "Suggest marketing campaigns tailored to the business type"
 category: storefront
 assignTo: ["marketing-specialist"]
-capability: "view_storefront"
+capability: "view_marketing"
 taskType: "conversation"
 triggerPattern: "campaign|marketing|promotion"
 userInvocable: true

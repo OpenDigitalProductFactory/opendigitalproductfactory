@@ -3,7 +3,7 @@ name: competitive-analysis
 description: "Guided conversation to understand competitive position and find differentiation opportunities"
 category: storefront
 assignTo: ["marketing-specialist"]
-capability: "view_storefront"
+capability: "view_marketing"
 taskType: "analysis"
 triggerPattern: "competitor|competition|differentiate|positioning|market position"
 userInvocable: true
