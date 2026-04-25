@@ -42,7 +42,7 @@ export default async function PlatformPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Platform</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Keep the AI workforce, external services, governance evidence, and controlled admin surfaces manageable for a small human team.
+          Keep AI operations, connection lifecycle management, governance evidence, and controlled admin surfaces understandable for a small human team.
         </p>
       </div>
 
@@ -51,7 +51,7 @@ export default async function PlatformPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PlatformSummaryCard
           title="AI Operations"
-          description="Supervise the AI workforce, routing, build studio, and escalation surfaces."
+          description="Supervise coworkers, assignments, skills, providers and routing, and the build runtime."
           href="/platform/ai"
           accent="var(--dpf-info)"
           metrics={[
@@ -61,7 +61,7 @@ export default async function PlatformPage() {
         />
         <PlatformSummaryCard
           title="Tools & Services"
-          description="Discover integrations, activate MCP services, and confirm available tools."
+          description="Research connections, operate MCP services, manage native integrations, and verify runtime capability availability."
           href="/platform/tools"
           accent="var(--dpf-success)"
           metrics={[

@@ -106,7 +106,7 @@ export async function DiscoveryOperationsPage({
         )}
 
         <div>
-          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Discovery Operations</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Estate Discovery</h1>
           <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
             Treat discovery as evidence. Use it to understand purpose, ownership, and dependencies across the product estate.
           </p>

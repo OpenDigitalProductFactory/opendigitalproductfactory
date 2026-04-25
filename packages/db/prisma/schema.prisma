@@ -1130,14 +1130,15 @@ model ModelProvider {
   supportedAuthMethods     Json           @default("[\"api_key\"]")
   consoleUrl               String?
   docsUrl                  String?
-  billingLabel             String?
-  authorizeUrl             String?
-  tokenUrl                 String?
-  oauthClientId            String?
-  oauthRedirectUri         String?
-  costPerformanceNotes     String?
-  endpointType             String         @default("llm")
-  sensitivityClearance     String[]       @default([])
+    billingLabel             String?
+    authorizeUrl             String?
+    tokenUrl                 String?
+    oauthClientId            String?
+    oauthRedirectUri         String?
+    costPerformanceNotes     String?
+    endpointType             String         @default("llm")
+    serviceKind              String?
+    sensitivityClearance     String[]       @default([])
   capabilityTier           String         @default("basic")
   costBand                 String         @default("free")
   taskTags                 String[]       @default([])
