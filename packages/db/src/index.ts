@@ -126,6 +126,25 @@ export {
   type TriageQualityIssueType,
 } from "./discovery-triage-enums";
 export {
+  buildDiscoveryEvidencePacket,
+  DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS,
+  recordDiscoveryTriageDecision,
+  resolveDiscoveryTriageOutcome,
+  scoreDiscoveryTriageCandidate,
+  shouldAutoApplyTriageDecision,
+  synthesizeDiscoveryFingerprintRule,
+  type DiscoveryEvidencePacket,
+  type DiscoveryEvidencePacketInput,
+  type DiscoveryProtocolEvidence,
+  type DiscoveryTriageClient,
+  type DiscoveryTriageDecisionInput,
+  type DiscoveryTriageIdentityCandidate,
+  type DiscoveryTriageProposedRule,
+  type DiscoveryTriageScore,
+  type DiscoveryTriageTaxonomyCandidate,
+  type DiscoveryTriageThresholds,
+} from "./discovery-triage";
+export {
   inferCrossCollectorRelationships,
   inferProductDependencies,
   type InferenceSummary,
