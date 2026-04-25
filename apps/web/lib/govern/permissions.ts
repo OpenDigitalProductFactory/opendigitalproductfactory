@@ -17,6 +17,7 @@ export type CapabilityKey =
   | "view_platform"
   | "view_admin"
   | "view_storefront"
+  | "view_marketing"
   | "manage_branding"
   | "manage_taxonomy"
   | "manage_agents"
@@ -30,6 +31,8 @@ export type CapabilityKey =
   | "manage_compliance"
   | "view_finance"
   | "manage_finance"
+  | "operate_marketing"
+  | "publish_marketing"
   | "manage_tool_evaluations"
   | "approve_tool_evaluations"
   | "manage_business_models"
@@ -49,6 +52,7 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   view_platform:               { roles: ["HR-000", "HR-200", "HR-300"] },
   view_admin:                  { roles: ["HR-000"] },
   view_storefront:             { roles: ["HR-000", "HR-200", "HR-300"] },
+  view_marketing:              { roles: ["HR-000", "HR-200", "HR-300"] },
   manage_branding:             { roles: ["HR-000"] },
   manage_taxonomy:             { roles: ["HR-000", "HR-300"] },
   manage_agents:               { roles: ["HR-000"] },
@@ -62,6 +66,8 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_compliance:           { roles: ["HR-000", "HR-200"] },
   view_finance:                { roles: ["HR-000", "HR-200"] },
   manage_finance:              { roles: ["HR-000", "HR-200"] },
+  operate_marketing:           { roles: ["HR-000", "HR-200", "HR-300"] },
+  publish_marketing:           { roles: ["HR-000", "HR-200"] },
   manage_tool_evaluations:     { roles: ["HR-000", "HR-300"] },
   approve_tool_evaluations:    { roles: ["HR-000", "HR-300"] },
   manage_business_models:      { roles: ["HR-000", "HR-200", "HR-300"] },

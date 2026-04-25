@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { parseRoleId, parseAgentTier, parseAgentType } from "./seed-helpers.js";
 
 describe("seed helpers", () => {
@@ -37,4 +38,24 @@ describe("seed helpers", () => {
     const mod = await import("./seed-ea-structure-rules.js");
     expect(typeof mod.seedEaStructureRules).toBe("function");
   }, 15_000);
+});
+
+describe("coworker seed invariants", () => {
+  const seedSource = readFileSync(new URL("./seed.ts", import.meta.url), "utf8");
+
+  it("includes marketing-specialist in the coworker seed roster", () => {
+    expect(seedSource).toContain('agentId: "marketing-specialist"');
+  });
+
+  it("includes storefront-advisor in the coworker seed roster", () => {
+    expect(seedSource).toContain('agentId: "storefront-advisor"');
+  });
+
+  it("grants marketing-specialist marketing_read and marketing_write", () => {
+    expect(seedSource).toContain('"marketing-specialist": ["marketing_read", "marketing_write"');
+  });
+
+  it("extends customer-advisor with marketing_read", () => {
+    expect(seedSource).toContain('"customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"]');
+  });
 });

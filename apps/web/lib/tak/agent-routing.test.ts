@@ -67,6 +67,26 @@ describe("resolveAgentForRoute", () => {
     expect(result.agentId).toBe("platform-engineer");
   });
 
+  it("routes /customer/marketing to the marketing specialist instead of the CRM advisor", () => {
+    const result = resolveAgentForRoute("/customer/marketing/strategy", superuser);
+    expect(result.agentId).toBe("marketing-specialist");
+    expect(result.agentName).toBe("Marketing Strategist");
+    expect(result.canAssist).toBe(true);
+  });
+
+  it("keeps marketing access gated separately from core customer routes", () => {
+    const result = resolveAgentForRoute("/customer/marketing", opsUser);
+    expect(result.agentId).toBe("marketing-specialist");
+    expect(result.canAssist).toBe(false);
+  });
+
+  it("routes /storefront to the storefront operations persona", () => {
+    const result = resolveAgentForRoute("/storefront", superuser);
+    expect(result.agentId).toBe("storefront-advisor");
+    expect(result.agentName).toBe("Storefront Operations Manager");
+    expect(result.canAssist).toBe(true);
+  });
+
   it("returns correct agent metadata", () => {
     const result = resolveAgentForRoute("/ops", superuser);
     expect(result.agentName).toBeTruthy();
@@ -91,7 +111,7 @@ describe("resolveAgentForRoute", () => {
   });
 
   it("every route agent has a non-empty systemPrompt", () => {
-    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/finance", "/platform", "/admin", "/workspace"];
+    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/customer/marketing", "/storefront", "/ops", "/finance", "/platform", "/admin", "/workspace"];
     for (const route of routes) {
       const result = resolveAgentForRoute(route, superuser);
       expect(result.systemPrompt.length).toBeGreaterThan(0);
@@ -99,7 +119,7 @@ describe("resolveAgentForRoute", () => {
   });
 
   it("returns skills array for each agent", () => {
-    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/ops", "/finance", "/platform", "/admin", "/workspace"];
+    const routes = ["/portfolio", "/inventory", "/platform/tools/discovery", "/ea", "/employee", "/customer", "/customer/marketing", "/storefront", "/ops", "/finance", "/platform", "/admin", "/workspace"];
     for (const route of routes) {
       const result = resolveAgentForRoute(route, superuser);
       expect(result.skills.length).toBeGreaterThan(0);

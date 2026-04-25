@@ -99,6 +99,30 @@ describe("mcp tools", () => {
     expect(sweep!.requiredCapability).toBe("manage_provider_connections");
     expect(sweep!.sideEffect).toBe(true);
   });
+
+  it("re-keys get_marketing_summary to view_marketing", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const tool = tools.find((t) => t.name === "get_marketing_summary");
+
+    expect(tool).toBeDefined();
+    expect(tool!.requiredCapability).toBe("view_marketing");
+  });
+
+  it("re-keys suggest_campaign_ideas to view_marketing", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const tool = tools.find((t) => t.name === "suggest_campaign_ideas");
+
+    expect(tool).toBeDefined();
+    expect(tool!.requiredCapability).toBe("view_marketing");
+  });
+
+  it("re-keys analyze_seo_opportunity to view_marketing", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const tool = tools.find((t) => t.name === "analyze_seo_opportunity");
+
+    expect(tool).toBeDefined();
+    expect(tool!.requiredCapability).toBe("view_marketing");
+  });
 });
 
 describe("sanitizeToolParams", () => {

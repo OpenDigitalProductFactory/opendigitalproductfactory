@@ -3,7 +3,7 @@ name: seo-content-optimizer
 description: "Help the business get found online with topic and content structure guidance"
 category: storefront
 assignTo: ["marketing-specialist"]
-capability: "view_storefront"
+capability: "view_marketing"
 taskType: "analysis"
 triggerPattern: "seo|search|found online|content topics|what to write"
 userInvocable: true
