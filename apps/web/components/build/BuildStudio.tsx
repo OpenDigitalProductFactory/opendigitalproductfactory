@@ -9,8 +9,10 @@ import { ReviewPanel } from "./ReviewPanel";
 import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
+import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
+import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
-import { approveBuildStart, createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
+import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import type { BuildFlowState } from "@/lib/build-flow-state";
@@ -51,7 +53,6 @@ export function BuildStudio({
   const [newTitle, setNewTitle] = useState("");
   const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [approvingStart, setApprovingStart] = useState(false);
   const isDevEnvironment = dpfEnvironment === "dev";
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
@@ -71,18 +72,12 @@ export function BuildStudio({
       governedBacklogEnabled,
     })
     : null;
-  const requiresStartApproval =
-    activeBuild != null
-    && governedBacklogEnabled
-    && activeBuild.originator != null
-    && activeBuild.phase === "ideate"
-    && activeBuild.draftApprovedAt == null;
-  const isApprovedDraft =
-    activeBuild != null
-    && governedBacklogEnabled
-    && activeBuild.originator != null
-    && activeBuild.phase === "ideate"
-    && activeBuild.draftApprovedAt != null;
+  const workflowAction = activeBuild
+    ? deriveBuildStudioWorkflowAction({
+      build: activeBuild,
+      governedBacklogEnabled,
+    })
+    : null;
 
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
@@ -294,19 +289,6 @@ export function BuildStudio({
     }
   }
 
-  async function handleApproveStart() {
-    if (!activeBuild || approvingStart) return;
-    setApprovingStart(true);
-    try {
-      await approveBuildStart(activeBuild.buildId);
-      const refreshed = await getFeatureBuild(activeBuild.buildId);
-      if (refreshed) setActiveBuild(refreshed);
-      router.refresh();
-    } finally {
-      setApprovingStart(false);
-    }
-  }
-
   return (
     <div className={getBuildStudioShellClassName()} data-testid={BUILD_STUDIO_TEST_IDS.shell}>
       <div className="relative flex flex-1 overflow-hidden">
@@ -390,8 +372,8 @@ export function BuildStudio({
                       : "transparent",
                   }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="text-sm font-semibold text-[var(--dpf-text)] mb-0.5">{build.title}</div>
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="mb-0.5 min-w-0 flex-1 break-words text-sm font-semibold text-[var(--dpf-text)]">{build.title}</div>
                     <button
                       type="button"
                       aria-label={`Delete ${build.title}`}
@@ -437,13 +419,13 @@ export function BuildStudio({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
           {activeBuild ? (
             <>
-              <div className="flex items-center justify-between border-b border-[var(--dpf-border)] px-4 py-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-[var(--dpf-text)] m-0">{activeBuild.title}</h2>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="m-0 min-w-0 break-words text-base font-bold text-[var(--dpf-text)]">{activeBuild.title}</h2>
                     <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
                     <span>{activeBuild.buildId}</span>
                     {activeBuild.originator && (
                       <>
@@ -464,9 +446,9 @@ export function BuildStudio({
                     {branchBadge && (
                       <>
                         <span>&middot;</span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] font-mono" title={branchBadge.title}>
-                          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
-                          {branchBadge.value}
+                        <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-1.5 py-0.5 font-mono" title={branchBadge.title}>
+                          <svg className="shrink-0" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
+                          <span className="truncate">{branchBadge.value}</span>
                         </span>
                       </>
                     )}
@@ -501,38 +483,20 @@ export function BuildStudio({
                         <span>Decision: {activeBuild.originator.resolution}</span>
                       )}
                     </div>
-                    {requiresStartApproval && (
-                      <div className="mt-3 flex flex-col gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-                        <div>
-                          <p className="text-sm font-semibold text-[var(--dpf-text)]">Prepared Draft</p>
-                          <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">
-                            This governed backlog effort has been prepared in Build Studio, but it will not move into planning until a human approves the start.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleApproveStart}
-                            disabled={approvingStart}
-                            className="inline-flex items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {approvingStart && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
-                            {approvingStart ? "Approving..." : "Approve Start"}
-                          </button>
-                          <span className="text-xs text-[var(--dpf-muted)]">
-                            Review the brief, assumptions, and workflow details before starting execution.
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    {isApprovedDraft && (
-                      <div className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-                        <p className="text-sm font-semibold text-[var(--dpf-text)]">Ready to Start</p>
-                        <p className="mt-1 text-xs leading-relaxed text-[var(--dpf-muted)]">
-                          Start approval has been recorded. Build Studio can now continue from ideate into planning when you are ready.
-                        </p>
-                      </div>
-                    )}
+                  </div>
+                )}
+                {activeBuild && workflowAction && (
+                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                    <BuildStudioWorkflowActionCard
+                      build={activeBuild}
+                      action={workflowAction}
+                      onCompleted={async () => {
+                        const refreshed = await getFeatureBuild(activeBuild.buildId);
+                        if (refreshed) {
+                          setActiveBuild(refreshed);
+                        }
+                      }}
+                    />
                   </div>
                 )}
                 {/* Tab selector */}
@@ -591,7 +555,11 @@ export function BuildStudio({
                     <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
                       Select any stage or task to inspect what happened, related artifacts, and the next approval gate.
                     </div>
-                    <ProcessGraph build={activeBuild} workflowLabel={activeLifecycleLabel} />
+                    <ProcessGraph
+                      build={activeBuild}
+                      workflowLabel={activeLifecycleLabel}
+                      governedBacklogEnabled={governedBacklogEnabled}
+                    />
                   </div>
                 )}
                 {buildView !== "graph" && (
