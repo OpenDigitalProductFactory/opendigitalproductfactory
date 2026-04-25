@@ -37,7 +37,27 @@ Out of scope:
 
 Open implementation blocker:
 
-- The spec marks daily-owner selection as approval-needed. Default to `agentId: "discovery-steward"` in code behind a single constant, but do not seed it into production data until Mark confirms the owner. If execution starts before confirmation, implement the code path and leave the seed guarded by a TODO/backlog note.
+- The spec marks daily-owner selection as approval-needed. Default to `agentId: "discovery-steward"` in code behind a single constant, but do not seed it into production data or mutate `agent_registry.json` for this feature until Mark confirms the owner. If execution starts before confirmation, implement the code path and leave the seed/registry changes explicitly blocked in the plan.
+
+Owner-gated seed/registry decision, captured for future revisions:
+
+- There are **two** owner questions:
+  - **coworker owner**: which `agentId` owns the daily triage task
+  - **install owner user**: which `ownerUserId` owns the seeded `ScheduledAgentTask` row
+- The coworker-owner decision is the true approval gate because it controls:
+  - whether we add a new coworker entry
+  - whether we only extend an existing coworker's grants
+  - which prompt identity/greeting is canonical
+  - which route-context ownership story future revisions inherit
+- The install-owner-user decision is an implementation detail. In the current schema it should resolve from `User.isSuperuser`, not a fictional `User.role = "superuser"` field.
+- Until approval lands:
+  - **allowed**: runner, MCP bridge, prompt file, metrics, UI, scheduler summary support
+  - **blocked**: seeded `ScheduledAgentTask`, final prompt identity text, registry grants/entry changes tied to the unresolved owner
+- Decision options to preserve in the record:
+  - new `discovery-steward` coworker
+  - existing `enterprise-architecture` coworker
+  - another explicitly named existing coworker
+- If none is approved yet, the branch should ship with the feature operationally complete except for bootstrap ownership wiring.
 
 Cross-package boundary rule:
 
@@ -715,17 +735,22 @@ git commit -s -m "feat(discovery): expose run_discovery_triage MCP tool"
 
 - [ ] **Step 1: Confirm owner decision**
 
-Ask Mark to resolve spec Q1 before seeding:
+Ask Mark to resolve spec Q1 before seeding or mutating the registry:
 
 - new `discovery-steward`
 - existing `enterprise-architecture`
 - another existing coworker
 
+Record the answer in both places before implementation proceeds:
+
+- spec open question / resolution note
+- plan execution notes / task checklist
+
 - [ ] **Step 2: Add prompt**
 
 Prompt requirements:
 
-- identity: "I'm Discovery Steward." or selected role
+- identity: use **provisional** role language until owner is approved; after approval, align exactly to the selected coworker identity
 - capabilities: triage discovery gaps, explain evidence, propose taxonomy/device recognition actions
 - skills hint: standard DPF greeting language
 - **must** invoke `run_discovery_triage` (Task 7b) on each fire and report its summary back to the user/log
@@ -733,7 +758,7 @@ Prompt requirements:
 
 - [ ] **Step 3: Seed scheduled task idempotently**
 
-Seed only after owner is resolved:
+Seed only after owner is resolved. This step includes the final registry wiring decision:
 
 - `taskId = discovery-taxonomy-gap-triage-daily`
 - `agentId = <resolved owner>` (default `discovery-steward`)
@@ -744,13 +769,16 @@ Seed only after owner is resolved:
 
   ```ts
   const owner = await prisma.user.findFirst({
-    where: { role: "superuser" },  // verify the actual role field/value before relying on this
+    where: { isSuperuser: true },
     orderBy: { createdAt: "asc" },
   });
   if (!owner) throw new Error("seed: no superuser found — cannot seed discovery triage scheduled task");
   ```
 
-  Verify the role field name and value against the `User` model before merging — it may be `role`, `isSuperuser`, or `Membership.role`.
+- Registry rule:
+  - if owner = new `discovery-steward`, add the coworker entry and grants in the same slice
+  - if owner = existing coworker, do **not** create a duplicate coworker; add only the needed grants
+  - do not commit speculative registry edits before the owner is approved
 
 - [ ] **Step 4: Run seed/migration verification**
 
@@ -1053,6 +1081,7 @@ Push the branch and open a PR against `main` after all gates pass. Per CLAUDE.md
 
 - Do not edit committed migration files after commit.
 - Do not use `seed.ts` to represent runtime changes. Only seed bootstrap defaults and the scheduled task definition if owner decision is resolved.
+- Treat the owner-gated seed/registry decision as a durable design checkpoint, not a casual TODO. Future revisions should be able to tell exactly what was blocked, why it was blocked, and what approval resolves it.
 - Keep the sibling fingerprint contribution pipeline out of this PR except for the `proposedRule` JSON placeholder and explicit blocked backlog dependency.
 - Preserve legacy `attributionStatus = "needs_review"` (with underscore) until a separate enum hygiene decision is made — see spec §16 Q7. New enum values added by this plan use hyphens.
 - Avoid hardcoded UI colors in the workbench. The current component already has some `yellow-500` and `green-600` classes; the implementation should clean those up while touching the file.

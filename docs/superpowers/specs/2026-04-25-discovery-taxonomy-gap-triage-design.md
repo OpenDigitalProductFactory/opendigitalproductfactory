@@ -167,6 +167,52 @@ A `ScheduledAgentTask` row drives the triage loop. The activity fires on a caden
 | `timezone` | Install timezone (defaults to `UTC`) | |
 | `ownerUserId` | First user with role `superuser` | Resolved at seed time, not hard-coded |
 
+### 7.1.1 Owner-gated seed and registry decision
+
+The remaining seed/registry blocker is not one question, but two tightly related ones:
+
+1. **Which coworker identity owns the task?**
+   - This determines `ScheduledAgentTask.agentId`.
+   - It also determines which prompt greeting/role language is correct.
+   - It also determines whether `packages/db/data/agent_registry.json` needs a **new coworker entry** or only **grant changes to an existing coworker**.
+
+2. **Which install user owns the scheduled row?**
+   - This determines `ScheduledAgentTask.ownerUserId`.
+   - This is an install-local runtime concern, not a product design concern.
+   - In the current schema the relevant durable field is `User.isSuperuser`, not a `role = "superuser"` string on `User`.
+
+The first question is the actual approval gate. The second is an implementation detail that must follow the approved owner pattern.
+
+**Decision options for `agentId`:**
+
+| Option | What changes | Benefits | Tradeoffs |
+| --- | --- | --- | --- |
+| New `discovery-steward` coworker | Add new registry entry, new grants, dedicated identity/prompt | Clean ownership boundary, durable specialist for future fingerprint work | More registry/governance surface now |
+| Existing `enterprise-architecture` coworker | Reuse existing coworker, add triage grants only if missing | Lowest operational churn, no new coworker to explain | Blends day-to-day discovery ops into a broader architecture role |
+| Another existing coworker | Reuse another current identity with added grants | Could align with a future discovery/platform-ops owner | Risks muddling responsibility unless explicitly named in backlog/spec |
+
+**What is allowed before this decision is approved:**
+
+- runner implementation
+- MCP tool bridge
+- prompt file creation
+- UI/workbench work
+- metrics and audit logging
+- scheduler execution support
+
+**What stays blocked until the decision is approved:**
+
+- seeding a `ScheduledAgentTask` bootstrap row
+- adding a new coworker entry to `agent_registry.json`
+- modifying an existing coworker's grants specifically for this task
+- baking a final owner identity into seed/runtime defaults
+
+**Implementation rule until approval lands:**
+
+- Code may keep a single default constant (`"discovery-steward"`) as an internal placeholder for testing and idempotency keys.
+- Seed/bootstrap artifacts must treat that placeholder as provisional and must not create production bootstrap rows from it.
+- The plan must preserve this as an explicit approval gate so later revisions do not mistake the placeholder for an approved product decision.
+
 The task should:
 
 1. Find unresolved and weakly resolved inventory:
@@ -524,7 +570,7 @@ CI merge-blocking gates per [`CLAUDE.md`](../../../CLAUDE.md) branch protection:
 
 ## 16. Open Questions
 
-1. **Approval needed (blocks seeding).** Which coworker should own daily triage? Proposed default: a new **Discovery Steward** coworker (`agentId: "discovery-steward"`), seeded with grants for discovery triage, backlog proposal, and inventory attribution. Fallback if a new coworker is rejected: assign to `enterprise-architecture`. The §7.1 `ScheduledAgentTask` row cannot be seeded until this is resolved.
+1. **Approval needed (blocks seeding and registry mutation).** Which coworker should own daily triage? Proposed default: a new **Discovery Steward** coworker (`agentId: "discovery-steward"`), seeded with grants for discovery triage, backlog proposal, and inventory attribution. Fallback if a new coworker is rejected: assign to `enterprise-architecture`. The §7.1 `ScheduledAgentTask` row cannot be seeded, and `agent_registry.json` should not be mutated for this feature, until this is resolved. See §7.1.1.
 2. Should high-confidence taxonomy-enrichment changes require human approval even when identity and placement are strong?
 3. What is the first approved privacy/redaction policy for fingerprints before hive-mind contribution? (Owned by sibling thread per §13.1.)
 4. Should customer-managed estate discoveries use the same triage queue as platform infrastructure, or a tenant-scoped queue?
