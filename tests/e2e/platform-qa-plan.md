@@ -117,11 +117,13 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | PORT-01 | Navigate to `/portfolio` | 4 portfolios visible with metrics |
 | PORT-02 | Expand a portfolio tree node | Child nodes shown |
 | PORT-03 | Click into Manufacturing and Delivery | Portfolio detail with products |
-| INV-01 | Navigate to `/platform/tools/discovery` | Discovery Operations loads with run summary, review queue, topology context, and attributed estate cards |
+| INV-01 | Navigate to `/platform/tools/discovery` | Estate Discovery loads with run summary, review queue, topology context, and attributed estate cards |
 | INV-02 | Navigate to `/inventory` | Legacy alias loads, banner points to `/platform/tools/discovery` and `/portfolio` |
-| INV-03 | Click a product card from discovery operations | Product Dependencies & Estate page loads |
+| INV-03 | Click a product card from estate discovery | Product Dependencies & Estate page loads |
 | INV-04 | Navigate directly to `/portfolio/product/<known-id>/inventory` | Estate cards show manufacturer, version, support posture, and upstream/downstream counts |
 | INV-05 | On `/portfolio/product/<known-id>/inventory`, inspect an estate card with discovery evidence only | Card shows identity label, identity confidence, support posture summary, advisory summary, and version source without inventing unsupported lifecycle certainty |
+| INV-06 | Navigate to `/platform/tools/catalog` | Connection Catalog loads with separate sections for MCP Catalog, Native Integrations, and Built-in Tools |
+| INV-07 | Navigate to `/platform/tools/built-ins` | Built-in Tools loads and Brave Search configuration appears only here, not under Admin settings |
 
 ## Phase 9: EA Modeler
 
@@ -221,6 +223,9 @@ When a test fails, create a backlog item under the active QA epic referencing th
 | ADMIN-05 | Navigate to `/admin/reference-data` | Reference data editor loads |
 | ADMIN-06 | Navigate to `/admin/business-context` | Redirected to `/storefront/settings/business` |
 | ADMIN-07 | Navigate to `/admin/operating-hours` | Redirected to `/storefront/settings/operations` |
+| ADMIN-08 | Navigate to `/admin/prompts` | Redirected to `/platform/ai/prompts` |
+| ADMIN-09 | Navigate to `/admin/skills` | Redirected to `/platform/ai/skills` |
+| ADMIN-10 | Navigate to `/platform/tools/catalog`, then `/platform/tools/services`, `/platform/tools/integrations`, and `/platform/tools/built-ins` | The Tools & Services family reads as Connection Catalog, MCP Services, Native Integrations, and Built-in Tools with no dead links or misleading labels |
 
 ## Phase 14: Documentation
 
