@@ -1429,6 +1429,7 @@ model Agent {
   valueStreamTeamRoles ValueStreamTeamRole[]
   workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
   workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
+  authorityBindings    AuthorityBinding[]
 }
 
 model AgentOwnership {
@@ -1560,6 +1561,58 @@ model AgentToolGrant {
   @@index([grantKey])
 }
 
+model AuthorityBinding {
+  id                 String                     @id @default(cuid())
+  bindingId          String                     @unique
+  name               String
+  scopeType          String
+  status             String                     @default("draft")
+  resourceType       String
+  resourceRef        String
+  appliedAgentId     String?
+  policyJson         Json?
+  authorityScope     Json?
+  approvalMode       String                     @default("none")
+  sensitivityCeiling String?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  appliedAgent       Agent?                     @relation(fields: [appliedAgentId], references: [id])
+  subjects           AuthorityBindingSubject[]
+  grants             AuthorityBindingGrant[]
+  decisionLogs       AuthorizationDecisionLog[]
+
+  @@index([scopeType, status])
+  @@index([resourceType, resourceRef])
+  @@index([appliedAgentId])
+}
+
+model AuthorityBindingSubject {
+  id                 String           @id @default(cuid())
+  authorityBindingId String
+  subjectType        String
+  subjectRef         String
+  relation           String
+  createdAt          DateTime         @default(now())
+  authorityBinding   AuthorityBinding @relation(fields: [authorityBindingId], references: [id], onDelete: Cascade)
+
+  @@unique([authorityBindingId, subjectType, subjectRef, relation])
+  @@index([subjectType, subjectRef])
+}
+
+model AuthorityBindingGrant {
+  id                 String           @id @default(cuid())
+  authorityBindingId String
+  grantKey           String
+  mode               String
+  rationale          String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  authorityBinding   AuthorityBinding @relation(fields: [authorityBindingId], references: [id], onDelete: Cascade)
+
+  @@unique([authorityBindingId, grantKey])
+  @@index([grantKey])
+}
+
 model AgentPerformance {
   id                   String    @id @default(cuid())
   agentId              String
@@ -1611,6 +1664,7 @@ model AuthorizationDecisionLog {
   humanContextRef     String?
   agentContextRef     String?
   delegationGrantId   String?
+  authorityBindingId  String?
   actionKey           String
   objectRef           String?
   decision            String
@@ -1621,11 +1675,13 @@ model AuthorizationDecisionLog {
   routeContext        String?
   sensitivityLevel    String?
   sensitivityOverride Boolean?
+  authorityBinding    AuthorityBinding? @relation(fields: [authorityBindingId], references: [id])
   delegationGrant     DelegationGrant? @relation(fields: [delegationGrantId], references: [id])
 
   @@index([decision])
   @@index([createdAt])
   @@index([actorRef])
+  @@index([authorityBindingId])
 }
 
 model CustomerAccount {

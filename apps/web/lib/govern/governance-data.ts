@@ -88,13 +88,23 @@ export async function createAuthorizationDecisionLog(input: {
   humanContextRef?: string | null;
   agentContextRef?: string | null;
   delegationGrantId?: string | null;
+  authorityBindingRef?: string | null;
   actionKey: string;
   objectRef?: string | null;
+  routeContext?: string | null;
   decision: "allow" | "deny" | "require_approval";
   rationale: Prisma.InputJsonValue;
 }): Promise<void> {
   const agentIdentityRef = input.agentContextRef
     ? (await getAgentGaidMap([input.agentContextRef])).get(input.agentContextRef) ?? input.agentContextRef
+    : null;
+  const authorityBindingId = input.authorityBindingRef
+    ? (
+        await prisma.authorityBinding.findUnique({
+          where: { bindingId: input.authorityBindingRef },
+          select: { id: true },
+        })
+      )?.id ?? null
     : null;
 
   await prisma.authorizationDecisionLog.create({
@@ -105,8 +115,10 @@ export async function createAuthorizationDecisionLog(input: {
       humanContextRef: input.humanContextRef ?? null,
       agentContextRef: agentIdentityRef,
       delegationGrantId: input.delegationGrantId ?? null,
+      authorityBindingId,
       actionKey: input.actionKey,
       objectRef: input.objectRef ?? null,
+      routeContext: input.routeContext ?? null,
       decision: input.decision,
       rationale: input.rationale,
     },

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+vi.mock("@/lib/authority/bindings", () => ({
+  listAuthorityBindings: vi.fn(),
+  getAuthorityBinding: vi.fn(),
+  getAuthorityBindingEvidence: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformRole: {
@@ -19,6 +25,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { getAuthorityBinding, getAuthorityBindingEvidence, listAuthorityBindings } from "@/lib/authority/bindings";
 
 describe("PlatformIdentityAuthorizationPage", () => {
   it("shows role bundles, assignments, teams, and coworker authority coverage", async () => {
@@ -122,11 +129,38 @@ describe("PlatformIdentityAuthorizationPage", () => {
         ],
       },
     ] as never);
+    vi.mocked(listAuthorityBindings).mockResolvedValue({
+      pivot: "subject",
+      rows: [
+        {
+          bindingId: "AB-000001",
+          name: "Finance workspace controller",
+          pivotKind: "subject",
+          pivotLabel: "HR-200",
+          status: "active",
+          scopeType: "route",
+          resourceType: "route",
+          resourceRef: "/finance",
+          approvalMode: "proposal-required",
+          sensitivityCeiling: "confidential",
+          appliedAgentId: "AGT-FIN-001",
+          appliedAgentName: "Finance Specialist",
+          subjectLabels: ["HR-200"],
+          subjectCount: 1,
+          grantModes: ["ledger_write:require-approval"],
+        },
+      ],
+    });
+    vi.mocked(getAuthorityBinding).mockResolvedValue(null);
+    vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
 
     const { default: PlatformIdentityAuthorizationPage } = await import("./page");
-    const html = renderToStaticMarkup(await PlatformIdentityAuthorizationPage());
+    const html = renderToStaticMarkup(
+      await PlatformIdentityAuthorizationPage({ searchParams: Promise.resolve({}) }),
+    );
 
     expect(html).toContain("Authorization");
+    expect(html).toContain("Authorization Bindings");
     expect(html).toContain("Role bundles");
     expect(html).toContain("Current human assignments");
     expect(html).toContain("Team memberships");
@@ -136,5 +170,37 @@ describe("PlatformIdentityAuthorizationPage", () => {
     expect(html).toContain("/finance");
     expect(html).toContain("Ava Green");
     expect(html).toContain("Finance Specialist");
+  });
+
+  it("opens the shared binding editor inline when a binding query param is present", async () => {
+    vi.mocked(prisma.platformRole.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userGroup.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.team.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindings).mockResolvedValue({ pivot: "subject", rows: [] });
+    vi.mocked(getAuthorityBinding).mockResolvedValue({
+      bindingId: "AB-000001",
+      name: "Finance workspace controller",
+      scopeType: "route",
+      status: "active",
+      resourceType: "route",
+      resourceRef: "/finance",
+      approvalMode: "proposal-required",
+      sensitivityCeiling: null,
+      appliedAgent: null,
+      subjects: [],
+      grants: [],
+    } as never);
+    vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+
+    const { default: PlatformIdentityAuthorizationPage } = await import("./page");
+    const html = renderToStaticMarkup(
+      await PlatformIdentityAuthorizationPage({
+        searchParams: Promise.resolve({ binding: "AB-000001" }),
+      }),
+    );
+
+    expect(html).toContain("Editing binding AB-000001");
+    expect(html).toContain("Save changes");
   });
 });
