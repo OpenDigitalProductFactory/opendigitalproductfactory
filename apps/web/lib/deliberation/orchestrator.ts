@@ -21,7 +21,6 @@
 // endpoint manifests or hitting the router's DB dependencies.
 
 import { prisma } from "@dpf/db";
-import { randomUUID } from "crypto";
 import type {
   DeliberationActivatedRiskLevel,
   DeliberationArtifactType,
@@ -316,13 +315,12 @@ export async function orchestrateDeliberation(
         taskRunId: `deliberation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         userId: input.userId,
         threadId: input.threadId ?? null,
-        contextId: input.threadId ?? randomUUID(),
         buildId: input.buildId ?? null,
         routeContext: input.routeContext ?? "deliberation",
         title: `Deliberation: ${input.patternSlug}`,
         objective: `Run ${pattern.name} over artifactType=${input.artifactType}`,
         source: "proactive",
-        status: "submitted",
+        status: "active",
         authorityScope: input.parentAuthorityScope ?? [],
       },
       select: { id: true, taskRunId: true },

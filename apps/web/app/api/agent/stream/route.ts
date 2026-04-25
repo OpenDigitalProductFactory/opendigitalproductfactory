@@ -7,7 +7,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { agentEventBus } from "@/lib/agent-event-bus";
-import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
+import { projectPersistedTaskProgressEvents } from "@/lib/tak/task-stream-projection";
 import { prisma } from "@dpf/db";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * Window during which terminal-status TaskRuns are still replayed.
  * Short-lived async jobs (e.g. brand extract completes in ~7s) finish
  * before the browser's EventSource connects. If we only replay
- * in-flight task states, the subscriber misses the terminal event entirely
+ * status="active", the subscriber misses the terminal event entirely
  * and the panel sits on "Working on it..." until the user refreshes
  * and the server-rendered state takes over.
  *
@@ -36,20 +36,54 @@ async function loadReplayEvents(
         threadId,
         progressPayload: { not: null as never },
         OR: [
-          { status: { in: [...TASK_IN_FLIGHT_STATES] } },
+          { status: "active" },
           {
             status: { in: ["completed", "failed"] },
             updatedAt: { gte: terminalFloor },
           },
         ],
       },
-      select: { progressPayload: true, updatedAt: true },
+      select: {
+        taskRunId: true,
+        contextId: true,
+        progressPayload: true,
+        updatedAt: true,
+        artifacts: {
+          select: {
+            artifactId: true,
+            name: true,
+            description: true,
+            parts: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+      },
       orderBy: { updatedAt: "desc" },
       take: 5,
     });
-    return runs
-      .map((r) => r.progressPayload as Record<string, unknown> | null)
-      .filter((p): p is Record<string, unknown> => p !== null);
+    return runs.flatMap((run) => {
+      const replayed: Array<Record<string, unknown>> = [];
+      replayed.push(
+        ...projectPersistedTaskProgressEvents(run.progressPayload, {
+          contextId: run.contextId ?? threadId,
+        }),
+      );
+      for (const artifact of run.artifacts) {
+        const parts = Array.isArray(artifact.parts) ? artifact.parts as Array<Record<string, unknown>> : [];
+        const firstPart = parts[0] ?? {};
+        replayed.push({
+          type: "task:artifact",
+          taskId: run.taskRunId,
+          contextId: run.contextId ?? threadId,
+          artifactId: artifact.artifactId,
+          name: artifact.name,
+          artifactType: typeof firstPart.type === "string" ? firstPart.type : "artifact",
+          message: artifact.description ?? undefined,
+        });
+      }
+      return replayed;
+    });
   } catch {
     return [];
   }

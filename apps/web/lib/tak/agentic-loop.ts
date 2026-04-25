@@ -322,7 +322,6 @@ export async function runAgenticLoop(params: {
   routeContext: string;
   agentId: string;
   threadId: string;
-  taskRunId?: string;
   taskType?: string;
   modelRequirements?: Record<string, unknown>;
   /** @deprecated V2 routing is handled internally by routeAndCall. Ignored. */
@@ -351,7 +350,6 @@ export async function runAgenticLoop(params: {
     routeContext,
     agentId,
     threadId,
-    taskRunId,
     taskType,
     modelRequirements,
     onProgress,
@@ -955,7 +953,6 @@ export async function runAgenticLoop(params: {
             threadId: threadId ?? "",
             agentId: agentId ?? "unknown",
             userId,
-            taskRunId: taskRunId ?? null,
             toolName: tc.name,
             parameters: isMetricsOnly ? {} : (tc.arguments as any),
             result: isMetricsOnly ? {} : (toolResult as any),

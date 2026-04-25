@@ -111,7 +111,7 @@ describe("runBrandExtraction (core handler)", () => {
     mocks.agentMessageCreate.mockResolvedValue({});
     mocks.agentAttachmentFindMany.mockResolvedValue([]);
     mocks.createTaskMessage.mockResolvedValue({});
-    mocks.createTaskArtifact.mockResolvedValue({});
+    mocks.createTaskArtifact.mockResolvedValue({ id: "artifact-row-1", artifactId: "ta_123" });
     mocks.designSystemToThemeTokens.mockReturnValue({ dark: {}, light: {} });
   });
 
@@ -192,6 +192,16 @@ describe("runBrandExtraction (core handler)", () => {
     expect(mocks.createTaskArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "run-1",
+        artifactType: "design-system",
+      }),
+    );
+    expect(mocks.pushThreadProgress).toHaveBeenCalledWith(
+      "thread-1",
+      "run-1",
+      expect.objectContaining({
+        type: "task:artifact",
+        taskId: "run-1",
+        artifactId: "ta_123",
         artifactType: "design-system",
       }),
     );
@@ -292,5 +302,33 @@ describe("runBrandExtraction (core handler)", () => {
         }),
       }),
     );
+  });
+
+  it("emits completion only after the canonical design-system artifact is recorded", async () => {
+    mocks.extractBrandDesignSystem.mockResolvedValue({
+      designSystem: minimalDesignSystem(),
+      sourcesUsed: [{ kind: "url", ref: "https://example.com", capturedAt: "t" }],
+      durationMs: 5000,
+    });
+
+    await runBrandExtraction({
+      organizationId: "org-1",
+      taskRunId: "run-1",
+      userId: "user-1",
+      threadId: "thread-1",
+      sources: { url: "https://example.com" },
+    });
+
+    const completionCall = mocks.pushThreadProgress.mock.calls.find(
+      ([, , payload]) => payload?.type === "brand:extract.complete",
+    );
+    const artifactCallOrder = mocks.createTaskArtifact.mock.invocationCallOrder[0];
+    const completionCallOrder = completionCall
+      ? mocks.pushThreadProgress.mock.invocationCallOrder[mocks.pushThreadProgress.mock.calls.indexOf(completionCall)]
+      : undefined;
+
+    expect(artifactCallOrder).toBeDefined();
+    expect(completionCallOrder).toBeDefined();
+    expect(artifactCallOrder!).toBeLessThan(completionCallOrder!);
   });
 });

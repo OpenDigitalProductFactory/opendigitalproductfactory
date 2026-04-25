@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockForkExistsAndIsFork, mockCreateForkAndWait } = vi.hoisted(() => ({
+  mockForkExistsAndIsFork: vi.fn(),
+  mockCreateForkAndWait: vi.fn(),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "test-user-1" } }),
 }));
@@ -15,6 +20,11 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+vi.mock("@/lib/integrate/github-fork", () => ({
+  forkExistsAndIsFork: mockForkExistsAndIsFork,
+  createForkAndWait: mockCreateForkAndWait,
+}));
+
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { configureForkSetup } from "./platform-dev-config";
@@ -27,6 +37,9 @@ function okJson<T>(body: T): Response {
   return {
     ok: true,
     status: 200,
+    headers: {
+      get: () => null,
+    },
     json: () => Promise.resolve(body),
     text: () => Promise.resolve(JSON.stringify(body)),
   } as unknown as Response;
@@ -36,6 +49,9 @@ function errResponse(status: number, text = ""): Response {
   return {
     ok: false,
     status,
+    headers: {
+      get: () => null,
+    },
     text: () => Promise.resolve(text),
     json: () => Promise.resolve({}),
   } as unknown as Response;
@@ -44,6 +60,12 @@ function errResponse(status: number, text = ""): Response {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("fetch", vi.fn());
+  mockForkExistsAndIsFork.mockResolvedValue({ exists: false, isFork: false });
+  mockCreateForkAndWait.mockResolvedValue({
+    status: "ready",
+    forkOwner: "jane-dev",
+    forkRepo: UPSTREAM_REPO,
+  });
   vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValue({
     upstreamRemoteUrl: UPSTREAM_URL,
   } as unknown as Awaited<ReturnType<typeof prisma.platformDevConfig.findUnique>>);
@@ -82,11 +104,8 @@ describe("configureForkSetup", () => {
   });
 
   it("returns {success: false} when the repo exists but is not a fork of the upstream", async () => {
-    const fetchMock = vi.mocked(globalThis.fetch);
-    // 1) /user — token validation
-    fetchMock.mockResolvedValueOnce(okJson({ login: "jane-dev" }));
-    // 2) GET /repos/jane-dev/opendigitalproductfactory — exists, not a fork
-    fetchMock.mockResolvedValueOnce(okJson({ fork: false }));
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(okJson({ login: "jane-dev" }));
+    mockForkExistsAndIsFork.mockResolvedValueOnce({ exists: true, isFork: false });
 
     const result = await configureForkSetup({ contributorForkOwner: "jane-dev", token: "ghp_x" });
 
@@ -96,11 +115,12 @@ describe("configureForkSetup", () => {
   });
 
   it("returns {success: true, status: 'ready'} when a fork already exists and writes fork metadata", async () => {
-    const fetchMock = vi.mocked(globalThis.fetch);
-    fetchMock.mockResolvedValueOnce(okJson({ login: "jane-dev" }));
-    fetchMock.mockResolvedValueOnce(
-      okJson({ fork: true, parent: { full_name: `${UPSTREAM_OWNER}/${UPSTREAM_REPO}` } }),
-    );
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(okJson({ login: "jane-dev" }));
+    mockForkExistsAndIsFork.mockResolvedValueOnce({
+      exists: true,
+      isFork: true,
+      parentFullName: `${UPSTREAM_OWNER}/${UPSTREAM_REPO}`,
+    });
 
     const result = await configureForkSetup({ contributorForkOwner: "jane-dev", token: "ghp_x" });
 
@@ -122,13 +142,13 @@ describe("configureForkSetup", () => {
   });
 
   it("returns {success: true, status: 'ready'} when the fork was freshly created and became ready", async () => {
-    const fetchMock = vi.mocked(globalThis.fetch);
-    fetchMock.mockResolvedValueOnce(okJson({ login: "jane-dev" })); // /user
-    fetchMock.mockResolvedValueOnce(errResponse(404)); // repo doesn't exist yet
-    fetchMock.mockResolvedValueOnce(okJson({ owner: { login: "jane-dev" }, name: UPSTREAM_REPO })); // POST /forks
-    fetchMock.mockResolvedValueOnce(
-      okJson({ fork: true, parent: { full_name: `${UPSTREAM_OWNER}/${UPSTREAM_REPO}` } }),
-    ); // first poll → ready
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(okJson({ login: "jane-dev" }));
+    mockForkExistsAndIsFork.mockResolvedValueOnce({ exists: false, isFork: false });
+    mockCreateForkAndWait.mockResolvedValueOnce({
+      status: "ready",
+      forkOwner: "jane-dev",
+      forkRepo: UPSTREAM_REPO,
+    });
 
     const result = await configureForkSetup({ contributorForkOwner: "jane-dev", token: "ghp_x" });
 

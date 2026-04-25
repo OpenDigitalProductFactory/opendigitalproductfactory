@@ -282,8 +282,8 @@ model EmployeeProfile {
   timesheets                TimesheetPeriod[]
   expenseClaims             ExpenseClaim[]          @relation("ExpenseClaims")
   serviceProviders          ServiceProvider[]
-  supplierContractsOwned    SupplierContract[]      @relation("SupplierContractBudgetOwner")
-  assignedFinanceWorkItems  FinanceWorkItem[]       @relation("FinanceWorkItemAssignee")
+  aiProviderContracts       SupplierContract[]      @relation("AiContractOwner")
+  aiFinanceWorkItems        FinanceWorkItem[]       @relation("AiFinanceWorkItemOwner")
   changeRequestsRequested   ChangeRequest[]         @relation("ChangeRequestedBy")
   changeRequestsAssessed    ChangeRequest[]         @relation("ChangeAssessedBy")
   changeRequestsApproved    ChangeRequest[]         @relation("ChangeApprovedBy")
@@ -861,6 +861,14 @@ model BacklogItem {
   taxonomyNodeId        String?
   epicId                String?
   source                String?
+  triageOutcome         String?
+  effortSize            String?
+  proposedOutcome       String?
+  activeBuildId         String?          @unique
+  duplicateOfId         String?
+  resolution            String?
+  abandonReason         String?
+  stalenessDetectedAt   DateTime?
   occurrenceCount       Int              @default(1)
   lastSeenAt            DateTime?
   submittedById         String?
@@ -875,8 +883,12 @@ model BacklogItem {
   upstreamIssueUrl      String?
   upstreamSyncedAt      DateTime?
   accountableEmployee   EmployeeProfile? @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  activeBuild           FeatureBuild?    @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
   digitalProduct        DigitalProduct?  @relation(fields: [digitalProductId], references: [id])
+  duplicateOf           BacklogItem?     @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates            BacklogItem[]    @relation("BacklogItemDuplicates")
   epic                  Epic?            @relation(fields: [epicId], references: [id])
+  featureBuilds         FeatureBuild[]   @relation("BacklogItemOriginator")
   submittedBy           User?            @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   taxonomyNode          TaxonomyNode?    @relation(fields: [taxonomyNodeId], references: [id])
 }
@@ -1079,6 +1091,23 @@ model OAuthPendingFlow {
   createdAt    DateTime @default(now())
 }
 
+// Transient store for OAuth Device Flow (RFC 8628) sessions in flight.
+// Holds the device_code server-side so the browser only ever handles the
+// short user_code; deletes itself after consumption or on expiry sweep.
+// 15-minute TTL maps to GitHub's documented expires_in for device codes.
+model DeviceCodeSession {
+  id         String   @id @default(cuid())
+  deviceCode String   @unique
+  userCode   String
+  interval   Int
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  createdBy  String
+  consumed   Boolean  @default(false)
+
+  @@index([expiresAt])
+}
+
 model ModelProvider {
   id                       String         @id @default(cuid())
   providerId               String         @unique
@@ -1145,7 +1174,7 @@ model ModelProvider {
   authMode                 String?
   credentialOwnerMode      String?
   modelProfiles            ModelProfile[]
-  financeProfiles          AiProviderFinanceProfile[]
+  financeProfile           AiProviderFinanceProfile?
 }
 
 model DiscoveredModel {
@@ -1401,6 +1430,7 @@ model Agent {
   valueStreamTeamRoles ValueStreamTeamRole[]
   workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
   workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
+  authorityBindings    AuthorityBinding[]
 }
 
 model AgentOwnership {
@@ -1532,6 +1562,58 @@ model AgentToolGrant {
   @@index([grantKey])
 }
 
+model AuthorityBinding {
+  id                 String                     @id @default(cuid())
+  bindingId          String                     @unique
+  name               String
+  scopeType          String
+  status             String                     @default("draft")
+  resourceType       String
+  resourceRef        String
+  appliedAgentId     String?
+  policyJson         Json?
+  authorityScope     Json?
+  approvalMode       String                     @default("none")
+  sensitivityCeiling String?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  appliedAgent       Agent?                     @relation(fields: [appliedAgentId], references: [id])
+  subjects           AuthorityBindingSubject[]
+  grants             AuthorityBindingGrant[]
+  decisionLogs       AuthorizationDecisionLog[]
+
+  @@index([scopeType, status])
+  @@index([resourceType, resourceRef])
+  @@index([appliedAgentId])
+}
+
+model AuthorityBindingSubject {
+  id                 String           @id @default(cuid())
+  authorityBindingId String
+  subjectType        String
+  subjectRef         String
+  relation           String
+  createdAt          DateTime         @default(now())
+  authorityBinding   AuthorityBinding @relation(fields: [authorityBindingId], references: [id], onDelete: Cascade)
+
+  @@unique([authorityBindingId, subjectType, subjectRef, relation])
+  @@index([subjectType, subjectRef])
+}
+
+model AuthorityBindingGrant {
+  id                 String           @id @default(cuid())
+  authorityBindingId String
+  grantKey           String
+  mode               String
+  rationale          String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  authorityBinding   AuthorityBinding @relation(fields: [authorityBindingId], references: [id], onDelete: Cascade)
+
+  @@unique([authorityBindingId, grantKey])
+  @@index([grantKey])
+}
+
 model AgentPerformance {
   id                   String    @id @default(cuid())
   agentId              String
@@ -1583,6 +1665,7 @@ model AuthorizationDecisionLog {
   humanContextRef     String?
   agentContextRef     String?
   delegationGrantId   String?
+  authorityBindingId  String?
   actionKey           String
   objectRef           String?
   decision            String
@@ -1593,11 +1676,13 @@ model AuthorizationDecisionLog {
   routeContext        String?
   sensitivityLevel    String?
   sensitivityOverride Boolean?
+  authorityBinding    AuthorityBinding? @relation(fields: [authorityBindingId], references: [id])
   delegationGrant     DelegationGrant? @relation(fields: [delegationGrantId], references: [id])
 
   @@index([decision])
   @@index([createdAt])
   @@index([actorRef])
+  @@index([authorityBindingId])
 }
 
 model CustomerAccount {
@@ -2522,7 +2607,6 @@ model ToolExecution {
   threadId      String
   agentId       String
   userId        String
-  taskRunId     String?
   toolName      String
   parameters    Json
   result        Json
@@ -2540,7 +2624,6 @@ model ToolExecution {
   @@index([userId, createdAt])
   @@index([toolName, createdAt])
   @@index([threadId])
-  @@index([taskRunId, createdAt(sort: Desc)])
   @@index([auditClass, createdAt(sort: Desc)])
   @@index([capabilityId, createdAt(sort: Desc)])
 }
@@ -2586,6 +2669,18 @@ model Notification {
 
   @@index([userId, read])
   @@index([createdAt])
+}
+
+model PlatformNotification {
+  id         String    @id @default(cuid())
+  severity   String    // "info" | "warning" | "critical" | "expired"
+  category   String    // e.g. "token-expiry"
+  subjectId  String?   // e.g. CredentialEntry.providerId
+  message    String    @db.Text
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([category, resolvedAt])
 }
 
 model PushDeviceRegistration {
@@ -2670,6 +2765,7 @@ model FeatureBuild {
   title                 String
   description           String?
   portfolioId           String?
+  originatingBacklogItemId String?
   brief                 Json?
   plan                  Json?
   phase                 String            @default("ideate")
@@ -2705,11 +2801,16 @@ model FeatureBuild {
   taxonomyAttribution   Json?
   releaseBundleId       String?
   calendarEventId       String?
+  abandonedAt           DateTime?
+  abandonReason         String?
+  draftApprovedAt       DateTime?
   activities            BuildActivity[]
   phaseHandoffs         PhaseHandoff[]
+  activeForBacklogItem  BacklogItem?      @relation("BacklogItemActiveBuild")
   accountableEmployee   EmployeeProfile?  @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy             User              @relation(fields: [createdById], references: [id])
   digitalProduct        DigitalProduct?   @relation(fields: [digitalProductId], references: [id])
+  originator            BacklogItem?      @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
   releaseBundle         ReleaseBundle?    @relation(fields: [releaseBundleId], references: [id])
   productVersions       ProductVersion[]
   promotionBackups      PromotionBackup[]
@@ -2717,6 +2818,7 @@ model FeatureBuild {
   @@index([phase])
   @@index([createdById])
   @@index([digitalProductId])
+  @@index([originatingBacklogItemId])
   @@index([releaseBundleId])
 }
 
@@ -3001,6 +3103,8 @@ model PlatformDevConfig {
   contributorForkOwner String?
   contributorForkRepo  String?
   forkVerifiedAt       DateTime?
+  backlogTeeUpDailyCap Int       @default(3)
+  governedBacklogEnabled Boolean @default(false)
 }
 
 model EaNotation {
@@ -4805,197 +4909,146 @@ model Supplier {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  bills              Bill[]
-  purchaseOrders     PurchaseOrder[]
+  bills          Bill[]
+  purchaseOrders PurchaseOrder[]
   aiProviderProfiles AiProviderFinanceProfile[]
-  supplierContracts  SupplierContract[]
+  supplierContracts SupplierContract[]
+  financeWorkItems  FinanceWorkItem[]
 
   @@index([status])
 }
 
-enum AiProviderFinanceStatus {
-  draft
-  active
-  needs_plan_details
-  archived
-}
-
-enum SupplierContractStatus {
-  draft
-  active
-  suspended
-  terminated
-}
-
-enum SupplierContractType {
-  subscription
-  metered
-  hybrid
-}
-
-enum SupplierContractBillingCadence {
-  monthly
-  quarterly
-  annual
-  custom
-}
-
-enum AiProviderReconciliationStrategy {
-  internal_only
-  provider_api
-  manual_review
-  hybrid
-}
-
-enum ContractAllowanceValuationMethod {
-  prorated_commitment
-  explicit_unit_value
-  none
-}
-
-enum FinanceWorkItemType {
-  plan_details_needed
-  billing_url_missing
-  usage_source_missing
-  reconciliation_review
-  underuse_attention
-  critical_low_remaining
-}
-
-enum FinanceWorkItemStatus {
-  open
-  in_progress
-  done
-  cancelled
-}
-
-enum UsageSnapshotDataSource {
-  provider_api
-  internal_usage
-  manual
-}
-
-enum UsageSnapshotDataConfidence {
-  high
-  medium
-  low
-}
-
 model AiProviderFinanceProfile {
-  id                     String                          @id @default(cuid())
-  providerId             String                          @unique
-  supplierId             String
-  status                 AiProviderFinanceStatus         @default(draft)
-  billingPortalUrl       String?
-  usageDashboardUrl      String?
-  invoiceHistoryUrl      String?
-  reconciliationStrategy AiProviderReconciliationStrategy @default(hybrid)
+  id                     String   @id @default(cuid())
+  providerId             String   @unique
+  supplierId             String?
+  status                 String   @default("seeded")
+  reconciliationStrategy String   @default("provider_portal")
+  valuationMethod        String   @default("commitment_first")
+  planCurrency           String   @default("USD")
+  monthlyBudget          Decimal?
+  billingUrl             String?
+  usageUrl               String?
   notes                  String?
-  createdAt              DateTime                        @default(now())
-  updatedAt              DateTime                        @updatedAt
+  lastEvaluatedAt        DateTime?
+  lastSnapshotAt         DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  provider          ModelProvider       @relation(fields: [providerId], references: [providerId])
-  supplier          Supplier            @relation(fields: [supplierId], references: [id])
+  provider          ModelProvider      @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
+  supplier          Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierContracts SupplierContract[]
-  workItems         FinanceWorkItem[]
+  financeWorkItems  FinanceWorkItem[]
 
   @@index([supplierId])
   @@index([status])
 }
 
 model SupplierContract {
-  id                     String                         @id @default(cuid())
-  contractId             String                         @unique
+  id                     String   @id @default(cuid())
+  contractId             String   @unique
+  profileId              String
   supplierId             String
-  providerFinanceProfileId String
-  status                 SupplierContractStatus         @default(draft)
-  contractType           SupplierContractType           @default(subscription)
-  billingCadence         SupplierContractBillingCadence @default(monthly)
-  currency               String                         @default("USD")
-  monthlyCommittedAmount Decimal?                       @db.Decimal(12, 2)
-  budgetOwnerEmployeeId  String?
+  accountableEmployeeId  String?
+  status                 String   @default("draft")
+  contractType           String   @default("subscription")
+  billingCadence         String   @default("monthly")
+  currency               String   @default("USD")
+  monthlyCommittedAmount Decimal?
+  budgetAmount           Decimal?
+  budgetWindow           String   @default("monthly")
+  allowsOverage          Boolean  @default(false)
+  usageUnit              String?
+  billingUrl             String?
+  usageUrl               String?
+  renewalDate            DateTime?
+  startDate              DateTime?
+  endDate                DateTime?
   notes                  String?
-  createdAt              DateTime                       @default(now())
-  updatedAt              DateTime                       @updatedAt
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  supplier             Supplier                 @relation(fields: [supplierId], references: [id])
-  providerFinanceProfile AiProviderFinanceProfile @relation(fields: [providerFinanceProfileId], references: [id])
-  budgetOwner          EmployeeProfile?         @relation("SupplierContractBudgetOwner", fields: [budgetOwnerEmployeeId], references: [id])
-  allowances           ContractAllowance[]
-  workItems            FinanceWorkItem[]
+  profile             AiProviderFinanceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  supplier            Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  accountableEmployee EmployeeProfile?         @relation("AiContractOwner", fields: [accountableEmployeeId], references: [id], onDelete: SetNull)
+  allowances          ContractAllowance[]
+  usageSnapshots      ContractUsageSnapshot[]
+  financeWorkItems    FinanceWorkItem[]
 
+  @@index([profileId])
   @@index([supplierId])
-  @@index([providerFinanceProfileId])
   @@index([status])
-  @@index([budgetOwnerEmployeeId])
+  @@index([accountableEmployeeId])
 }
 
 model ContractAllowance {
-  id                       String                           @id @default(cuid())
-  supplierContractId       String
-  metricKey                String
-  metricScope              String?
-  scopeRef                 String?
-  includedQuantity         Decimal                          @db.Decimal(18, 4)
-  softLowThresholdPct      Decimal?                         @db.Decimal(5, 2)
-  criticalLowThresholdPct  Decimal?                         @db.Decimal(5, 2)
-  underuseThresholdPct     Decimal?                         @db.Decimal(5, 2)
-  valuationMethod          ContractAllowanceValuationMethod @default(prorated_commitment)
-  explicitUnitValue        Decimal?                         @db.Decimal(12, 4)
-  createdAt                DateTime                         @default(now())
-  updatedAt                DateTime                         @updatedAt
+  id               String   @id @default(cuid())
+  contractId       String
+  allowanceName    String
+  usageUnit        String
+  includedQuantity Decimal
+  overageUnitCost  Decimal?
+  valuationMethod  String   @default("commitment_first")
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  supplierContract SupplierContract      @relation(fields: [supplierContractId], references: [id], onDelete: Cascade)
-  usageSnapshots   ContractUsageSnapshot[]
+  contract SupplierContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  @@index([supplierContractId])
-  @@index([metricKey])
+  @@index([contractId])
 }
 
 model ContractUsageSnapshot {
-  id                             String                     @id @default(cuid())
-  contractAllowanceId            String
-  snapshotDate                   DateTime
-  consumedQuantity               Decimal                    @db.Decimal(18, 4)
-  remainingQuantity              Decimal                    @db.Decimal(18, 4)
-  utilizationPct                 Decimal                    @db.Decimal(5, 2)
-  estimatedUnusedValue           Decimal                    @db.Decimal(12, 2)
-  projectedPeriodEndQuantity     Decimal                    @db.Decimal(18, 4)
-  projectedPeriodEndUtilizationPct Decimal                  @db.Decimal(5, 2)
-  projectedOverageQuantity       Decimal                    @db.Decimal(18, 4)
-  dataSource                     UsageSnapshotDataSource
-  dataConfidence                 UsageSnapshotDataConfidence
-  createdAt                      DateTime                   @default(now())
+  id                      String   @id @default(cuid())
+  contractId              String
+  snapshotDate            DateTime
+  sourceType              String   @default("internal_observed")
+  confidence              String   @default("medium")
+  consumedQuantity        Decimal  @default(0)
+  includedQuantity        Decimal?
+  remainingQuantity       Decimal?
+  utilizationPct          Float?
+  projectedMonthEndQuantity Decimal?
+  projectedUnusedValue    Decimal?
+  projectedOverageCost    Decimal?
+  metadata                Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  allowance ContractAllowance @relation(fields: [contractAllowanceId], references: [id], onDelete: Cascade)
+  contract SupplierContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  @@unique([contractAllowanceId, snapshotDate])
+  @@unique([contractId, snapshotDate])
   @@index([snapshotDate])
 }
 
 model FinanceWorkItem {
-  id                     String                @id @default(cuid())
-  workItemId             String                @unique
-  type                   FinanceWorkItemType
-  status                 FinanceWorkItemStatus @default(open)
-  providerFinanceProfileId String
-  supplierContractId     String?
-  assignedEmployeeId     String?
-  title                  String
-  body                   String
-  dueDate                DateTime?
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
+  id              String   @id @default(cuid())
+  workItemId      String   @unique
+  profileId       String?
+  contractId      String?
+  supplierId      String?
+  ownerEmployeeId String?
+  type            String
+  status          String   @default("open")
+  severity        String   @default("medium")
+  title           String
+  description     String?
+  dueAt           DateTime?
+  resolvedAt      DateTime?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  providerFinanceProfile AiProviderFinanceProfile @relation(fields: [providerFinanceProfileId], references: [id], onDelete: Cascade)
-  supplierContract       SupplierContract?        @relation(fields: [supplierContractId], references: [id])
-  assignedEmployee       EmployeeProfile?         @relation("FinanceWorkItemAssignee", fields: [assignedEmployeeId], references: [id])
+  profile       AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  contract      SupplierContract?         @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  supplier      Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  ownerEmployee EmployeeProfile?          @relation("AiFinanceWorkItemOwner", fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
 
-  @@index([providerFinanceProfileId])
-  @@index([supplierContractId])
-  @@index([assignedEmployeeId])
-  @@index([status])
-  @@index([type])
+  @@index([profileId])
+  @@index([contractId])
+  @@index([supplierId])
+  @@index([ownerEmployeeId])
+  @@index([status, severity])
 }
 
 model Bill {

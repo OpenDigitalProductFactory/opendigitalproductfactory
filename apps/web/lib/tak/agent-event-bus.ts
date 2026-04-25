@@ -2,7 +2,11 @@
 // Lightweight typed event emitter for real-time agent progress.
 // Keyed by threadId. SSE endpoint subscribes, agentic loop emits.
 
+import type { TaskState } from "@/lib/tak/task-states";
+
 export type AgentEvent =
+  | { type: "task:status"; taskId: string; contextId: string | null; state: TaskState; sourceEvent?: string; message?: string; progress?: { stage?: string; percent?: number } }
+  | { type: "task:artifact"; taskId: string; contextId: string | null; artifactId: string; name: string; artifactType: string; sourceEvent?: string; message?: string }
   | { type: "tool:start"; tool: string; iteration: number }
   | { type: "tool:complete"; tool: string; success: boolean }
   | { type: "phase:change"; buildId: string; phase: string }

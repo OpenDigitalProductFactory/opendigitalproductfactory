@@ -3,8 +3,22 @@
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
+import { BindingBootstrapPanel } from "@/components/platform/authority/BindingBootstrapPanel";
+import { BootstrapBindingsButton } from "@/components/platform/authority/BootstrapBindingsButton";
+import { BindingDetailDrawer } from "@/components/platform/authority/BindingDetailDrawer";
+import { BindingFilters } from "@/components/platform/authority/BindingFilters";
+import { BindingList } from "@/components/platform/authority/BindingList";
+import {
+  getAuthorityBinding,
+  getAuthorityBindingEvidence,
+  getAuthorityBindingFilterOptions,
+  listAuthorityBindingRecords,
+  parseAuthorityBindingFilters,
+} from "@/lib/authority/bindings";
+import { getAuthorityBindingBootstrapState } from "@/lib/authority/bootstrap-rollout";
 import { can } from "@/lib/permissions";
 import { AgentModelAssignmentTable } from "@/components/platform/AgentModelAssignmentTable";
+import { listAuthorityBindings } from "@/lib/authority/bindings";
 import { satisfiesMinimumCapabilities, DEFAULT_MINIMUM_CAPABILITIES } from "@/lib/routing/agent-capability-types";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import { EMPTY_CAPABILITIES } from "@/lib/routing/model-card-types";
@@ -48,16 +62,41 @@ const AGENT_NAMES: Record<string, string> = {
   "data-architect":       "Data Architect",
 };
 
-export default async function AssignmentsPage() {
+type Props = {
+  searchParams: Promise<{
+    binding?: string;
+    status?: string;
+    resource?: string;
+    coworker?: string;
+    subject?: string;
+  }>;
+};
+
+export default async function AssignmentsPage({ searchParams }: Props) {
+  const query = await searchParams;
+  const activeBindingId = typeof query.binding === "string" ? query.binding : null;
+  const currentFilters = {
+    status: typeof query.status === "string" ? query.status : undefined,
+    resource: typeof query.resource === "string" ? query.resource : undefined,
+    coworker: typeof query.coworker === "string" ? query.coworker : undefined,
+    subject: typeof query.subject === "string" ? query.subject : undefined,
+  };
+  const parsedFilters = parseAuthorityBindingFilters(currentFilters);
+  const hasActiveFilters = Object.keys(parsedFilters).length > 0;
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can(
     { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
     "manage_platform",
   );
+  const bootstrapState = await getAuthorityBindingBootstrapState({
+    canWrite,
+    hasActiveFilters,
+  });
+  const bootstrapAction = canWrite && !bootstrapState.report ? <BootstrapBindingsButton /> : null;
 
   // Fetch data in parallel
-  const [dbConfigs, providers, lastModels, toolGrantGroups] = await Promise.all([
+  const [dbConfigs, providers, lastModels, toolGrantGroups, bindingRecords, bindingList, activeBinding, activeBindingEvidence] = await Promise.all([
     prisma.agentModelConfig.findMany().catch(() => [] as any[]),
     prisma.modelProvider.findMany({
       where: { status: { in: ["active", "degraded"] } },
@@ -84,7 +123,12 @@ export default async function AssignmentsPage() {
       by: ["agentId"],
       _count: { grantKey: true },
     }).catch(() => [] as any[]),
+    listAuthorityBindingRecords(),
+    listAuthorityBindings({ pivot: "coworker", filters: parsedFilters }),
+    activeBindingId ? getAuthorityBinding(activeBindingId) : Promise.resolve(null),
+    activeBindingId ? getAuthorityBindingEvidence(activeBindingId) : Promise.resolve([]),
   ]);
+  const bindingFilterOptions = getAuthorityBindingFilterOptions(bindingRecords);
 
   // Build provider name lookup
   const providerNames: Record<string, string> = {};
@@ -159,7 +203,19 @@ export default async function AssignmentsPage() {
   }));
 
   return (
-    <div>
+    <div className="space-y-6">
+      {activeBinding ? (
+        <section className="space-y-3 rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Editing binding {activeBinding.bindingId}</h2>
+            <p className="text-xs text-[var(--dpf-muted)]">
+              Coworker-first edit surface for the shared authority binding record.
+            </p>
+          </div>
+          <BindingDetailDrawer binding={activeBinding} evidence={activeBindingEvidence} />
+        </section>
+      ) : null}
+
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
           AI Coworker Model Assignment
@@ -184,6 +240,35 @@ export default async function AssignmentsPage() {
           capabilityGapCount={capabilityGapAgents.length}
         />
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Resource Bindings</h2>
+          <p className="text-xs text-[var(--dpf-muted)]">
+            Coworker-first view of where each coworker is applied and which subjects can reach that governed context.
+          </p>
+        </div>
+        {bootstrapState.report ? (
+          <BindingBootstrapPanel
+            autoApplied={bootstrapState.autoApplied}
+            totalBindings={bootstrapState.totalBindings}
+            report={bootstrapState.report}
+          />
+        ) : null}
+        <BindingFilters
+          actionHref="/platform/ai/assignments"
+          currentFilters={currentFilters}
+          options={bindingFilterOptions}
+          resultCount={bindingList.rows.length}
+          actions={bootstrapAction}
+        />
+        <BindingList
+          pivot="coworker"
+          rows={bindingList.rows}
+          emptyMessage="No coworker authority bindings have been configured yet."
+          detailQueryBase="/platform/ai/assignments"
+        />
+      </section>
     </div>
   );
 }

@@ -16,6 +16,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       title: true,
       description: true,
       portfolioId: true,
+      originatingBacklogItemId: true,
       brief: true,
       plan: true,
       phase: true,
@@ -29,6 +30,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       createdById: true,
       createdAt: true,
       updatedAt: true,
+      draftApprovedAt: true,
       designDoc: true,
       designReview: true,
       buildPlan: true,
@@ -52,15 +54,30 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
           _count: { select: { backlogItems: true } },
         },
       },
+      originator: {
+        select: {
+          id: true,
+          itemId: true,
+          title: true,
+          status: true,
+          triageOutcome: true,
+          effortSize: true,
+          proposedOutcome: true,
+          activeBuildId: true,
+          resolution: true,
+          abandonReason: true,
+        },
+      },
     },
   });
 
   return rows.map((r) => ({
     ...r,
-    brief: r.brief as FeatureBrief | null,
-    plan: r.plan as Record<string, unknown> | null,
-    phase: r.phase as BuildPhase,
-    designDoc: r.designDoc as BuildDesignDoc | null,
+      brief: r.brief as FeatureBrief | null,
+      plan: r.plan as Record<string, unknown> | null,
+      phase: r.phase as BuildPhase,
+      draftApprovedAt: r.draftApprovedAt,
+      designDoc: r.designDoc as BuildDesignDoc | null,
     designReview: r.designReview as ReviewResult | null,
     buildPlan: r.buildPlan as BuildPlanDoc | null,
     planReview: r.planReview as ReviewResult | null,
@@ -76,6 +93,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
+    originator: r.originator,
     phaseHandoffs: null,
   }));
 });
@@ -89,6 +107,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       title: true,
       description: true,
       portfolioId: true,
+      originatingBacklogItemId: true,
       brief: true,
       plan: true,
       phase: true,
@@ -102,6 +121,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       createdById: true,
       createdAt: true,
       updatedAt: true,
+      draftApprovedAt: true,
       designDoc: true,
       designReview: true,
       buildPlan: true,
@@ -125,6 +145,20 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
           _count: { select: { backlogItems: true } },
         },
       },
+      originator: {
+        select: {
+          id: true,
+          itemId: true,
+          title: true,
+          status: true,
+          triageOutcome: true,
+          effortSize: true,
+          proposedOutcome: true,
+          activeBuildId: true,
+          resolution: true,
+          abandonReason: true,
+        },
+      },
     },
   });
 
@@ -135,6 +169,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     brief: r.brief as FeatureBrief | null,
     plan: r.plan as Record<string, unknown> | null,
     phase: r.phase as BuildPhase,
+    draftApprovedAt: r.draftApprovedAt,
     designDoc: r.designDoc as BuildDesignDoc | null,
     designReview: r.designReview as ReviewResult | null,
     buildPlan: r.buildPlan as BuildPlanDoc | null,
@@ -151,6 +186,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     product: r.digitalProduct
       ? { productId: r.digitalProduct.productId, version: r.digitalProduct.version, backlogCount: r.digitalProduct._count.backlogItems }
       : null,
+    originator: r.originator,
     phaseHandoffs: null,
   };
 });

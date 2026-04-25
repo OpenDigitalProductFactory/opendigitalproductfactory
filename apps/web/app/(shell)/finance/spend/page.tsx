@@ -3,9 +3,14 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { AiSpendSummaryCard } from "@/components/finance/AiSpendSummaryCard";
+import {
+  getAiSpendOverview,
+  maybeRunAiProviderFinanceDailyEvaluation,
+} from "@/lib/finance/ai-provider-finance";
 
 export default async function FinanceSpendPage() {
-  const [payables, submittedExpenseClaims, supplierCount, purchaseOrderCount, outboundPayments, orgSettings] =
+  const [payables, submittedExpenseClaims, supplierCount, purchaseOrderCount, outboundPayments, orgSettings, aiOverview] =
     await Promise.all([
       prisma.bill.aggregate({
         where: { status: { in: ["approved", "partially_paid"] } },
@@ -21,6 +26,7 @@ export default async function FinanceSpendPage() {
         where: { direction: "outbound" },
       }),
       getOrgSettings(),
+      maybeRunAiProviderFinanceDailyEvaluation().catch(() => undefined).then(() => getAiSpendOverview()),
     ]);
 
   const sym = getCurrencySymbol(orgSettings.baseCurrency);
@@ -78,6 +84,13 @@ export default async function FinanceSpendPage() {
             { label: "Outbound payments", value: `${outboundPayments}` },
             { label: "Base currency", value: orgSettings.baseCurrency },
           ]}
+        />
+        <AiSpendSummaryCard
+          supplierCount={aiOverview.supplierCount}
+          committedSpend={aiOverview.committedSpend}
+          contractsNeedingSetup={aiOverview.contractsNeedingSetup}
+          projectedUnusedCommitment={aiOverview.projectedUnusedCommitment}
+          currencySymbol={sym}
         />
       </div>
     </div>
