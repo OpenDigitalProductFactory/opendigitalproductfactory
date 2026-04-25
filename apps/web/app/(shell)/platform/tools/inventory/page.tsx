@@ -15,7 +15,7 @@ export default async function CapabilityInventoryPage() {
       <div>
         <h1 className="text-2xl font-bold">Capability Inventory</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {capabilities.length} capabilities registered · platform tools, MCP servers, and AI providers
+          {capabilities.length} capabilities registered · runtime view of platform tools, MCP servers, and AI providers already available to agents
         </p>
       </div>
 

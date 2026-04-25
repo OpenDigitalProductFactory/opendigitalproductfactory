@@ -48,6 +48,7 @@ async function seed() {
       where: { providerId: ep.providerId },
       update: {
         endpointType: ep.endpointType,
+        serviceKind: "built_in",
         sensitivityClearance: ep.sensitivityClearance,
         capabilityTier: ep.capabilityTier,
         costBand: ep.costBand,
@@ -57,6 +58,7 @@ async function seed() {
         providerId: ep.providerId,
         name: ep.name,
         endpointType: ep.endpointType,
+        serviceKind: "built_in",
         sensitivityClearance: ep.sensitivityClearance,
         capabilityTier: ep.capabilityTier,
         costBand: ep.costBand,

@@ -1137,6 +1137,7 @@ model ModelProvider {
   oauthRedirectUri         String?
   costPerformanceNotes     String?
   endpointType             String                     @default("llm")
+  serviceKind              String?
   sensitivityClearance     String[]                   @default([])
   capabilityTier           String                     @default("basic")
   costBand                 String                     @default("free")

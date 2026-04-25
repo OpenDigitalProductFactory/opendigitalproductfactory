@@ -813,31 +813,35 @@ This replaces the current muddy overlap between `Action History`, `Authority`, a
 
 ### 9.1 New top-level structure
 
-#### A. AI Workforce
+#### A. AI Operations
 
 Purpose: who does what, with which models/capabilities
 
 Subsections:
 
 - Overview
+- Workforce
 - Assignments
-- Routing & Calibration
-- Build Studio CLI
+- Prompts
 - Skills
+- Providers & Routing
+- Build Studio Runtime
 
-#### B. Tools & Integrations
+#### B. Tools & Services
 
 Purpose: what can be connected, activated, governed, and monitored
 
 Subsections:
 
-- Integration Catalog
-- Connected Integrations
+- Connection Catalog
+- MCP Services
+- Native Integrations
+- Built-in Tools
+- Estate Discovery
 - Capability Inventory
-- Service Health
 - Trust & Exposure Policy
 
-**Integration Catalog — sourcing:** The catalog is platform-curated, not dynamically discovered from an external registry. In Phase 1, the catalog is a static list of known integration types supported by the platform (e.g., GitHub, Jira, Anthropic, Codex, browser-use). Operators browse the catalog to activate an integration; activation moves the entry into Connected Integrations with a lifecycle state of `Registered`. Dynamic catalog discovery from external MCP registries or marketplaces is a Phase 4+ consideration and is not in scope here.
+**Connection Catalog — sourcing:** The catalog is a typed cross-source aggregation layer. It unions the current MCP registry-backed catalog with native integration descriptors and built-in tool descriptors, while keeping each source's setup and operations surface separate. Operators discover capabilities in `Connection Catalog`, then move into `MCP Services`, `Native Integrations`, or `Built-in Tools` to configure and operate them. The aggregation is a UI/service-layer union, not a forced schema merger.
 
 > **Why:** The gap analysis noted that the distinction between catalog (what could be connected) and connected integrations (what is connected) was undefined as to sourcing. A dynamically discovered catalog implies infrastructure (registry polling, trust vetting) that is out of scope for this epic. Clarifying it as platform-curated unblocks Phase 1 implementation without foreclosing future extensibility.
 
@@ -857,18 +861,19 @@ Subsections:
 
 | Current | Proposed home | Notes |
 | --- | --- | --- |
-| Workforce | AI Workforce > Overview | keep |
-| Model Assignment | AI Workforce > Assignments | make primary assignment surface |
-| Build Studio | AI Workforce > Build Studio CLI | explicitly label as CLI dispatch config |
+| Workforce | AI Operations > Overview / Workforce | keep AI runtime ownership together |
+| Model Assignment | AI Operations > Assignments | make primary assignment surface |
+| Build Studio | AI Operations > Build Studio Runtime | explicitly label as runtime/config surface; main working studio remains `/build` |
 | Route Log | Audit & Operations > Route Log | keep, fix score normalization |
 | Operations | Audit & Operations > Long-running Operations | rename for clarity |
 | Action History | Audit & Operations > Action Ledger | narrower and clearer |
 | Authority | Audit & Operations > Authority & Permissions | keep, tighten scope |
-| Skills | AI Workforce > Skills | not a top-level peer to routing/audit |
-| AI External Services — provider registry (Section 1) | AI Workforce > Routing & Calibration | provider cards, sync, model discovery — these are inference routing concerns |
-| AI External Services — activated MCP servers (Section 1b) | Tools & Integrations > Connected Integrations | MCP server activation, health, tool listing — these are integration concerns |
-| `/platform/services` | Tools & Integrations > Connected Integrations | primary home for external MCP services |
-| `/platform/integrations` | Tools & Integrations > Integration Catalog | primary home |
+| Prompts | AI Operations > Prompts | canonical AI prompt-management home |
+| Skills | AI Operations > Skills | canonical skill catalog + observability home |
+| AI External Services — provider registry (Section 1) | AI Operations > Providers & Routing | provider cards, sync, model discovery — these are inference routing concerns |
+| AI External Services — activated MCP servers (Section 1b) | Tools & Services > MCP Services | MCP server activation, health, tool listing — these are integration concerns |
+| `/platform/services` | Tools & Services > MCP Services | legacy route redirects to the MCP services home |
+| `/platform/integrations` | Tools & Services > Connection Catalog | legacy route redirects to the catalog home |
 
 ### 9.3 AI-specific surfaces that remain in AI
 
@@ -878,8 +883,10 @@ These stay in AI because they directly affect inference:
 - provider/model routing
 - model evals
 - endpoint behavioral tests
+- prompt management
+- skill management
 - agent assignment
-- Build Studio CLI dispatch
+- Build Studio runtime dispatch
 
 ### 9.4 MCP-specific surfaces that move out
 

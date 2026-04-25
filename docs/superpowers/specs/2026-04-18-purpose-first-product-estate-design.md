@@ -452,11 +452,11 @@ Remove `Inventory` from:
 
 `Portfolio` remains the primary home for product estate understanding.
 
-### 8.2 Discovery operations
+### 8.2 Estate discovery
 
 The current `/inventory` page should be demoted and reframed as:
 
-- label: `Discovery Operations`
+- label: `Estate Discovery`
 - area: `Platform > Tools & Services`
 - recommended canonical route: `/platform/tools/discovery`
 
@@ -465,7 +465,7 @@ During migration:
 - `/inventory` may remain as a redirect or legacy alias
 - but it should stop being presented as a top-level destination
 
-`Discovery Operations` becomes the home for:
+`Estate Discovery` becomes the home for:
 
 - discovery sweep execution
 - discovery connection setup
@@ -578,7 +578,7 @@ Each product should have a coherent estate view with four panels:
    - confidence
    - discovery source
 
-### 9.3 Discovery Operations page
+### 9.3 Estate Discovery page
 
 This is the specialist workspace.
 
