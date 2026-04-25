@@ -4,6 +4,15 @@ import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
 
 const PLATFORM_KEYS = ["upload_storage_path"];
+const ADMIN_PLATFORM_KEY_CONFIGS = [
+  {
+    key: "upload_storage_path",
+    label: "File Upload Storage Path",
+    description: "Directory for uploaded files. Use an absolute path in production (e.g., D:/dpf-uploads).",
+    placeholder: "./data/uploads",
+    isSecret: false,
+  },
+];
 const SOCIAL_AUTH_KEYS = [
   "google_client_id",
   "google_client_secret",
@@ -39,6 +48,7 @@ export default async function AdminSettingsPage() {
         keyData={await getKeyData(PLATFORM_KEYS)}
         title="Core Configuration"
         description="Install-wide settings that belong to the organization and platform rather than AI runtime tools."
+        configs={ADMIN_PLATFORM_KEY_CONFIGS}
       />
       <SocialAuthPanel keyData={await getKeyData(SOCIAL_AUTH_KEYS)} />
     </div>
