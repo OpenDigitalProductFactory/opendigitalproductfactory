@@ -3,7 +3,7 @@ name: content-brief
 description: "Draft a content brief for a marketing piece adapted to the business archetype"
 category: storefront
 assignTo: ["marketing-specialist"]
-capability: "view_storefront"
+capability: "view_marketing"
 taskType: "conversation"
 triggerPattern: "content|brief|blog|email|social"
 userInvocable: true

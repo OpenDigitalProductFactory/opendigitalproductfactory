@@ -3,7 +3,7 @@ name: marketing-health
 description: "Run a marketing health check for the business"
 category: storefront
 assignTo: ["marketing-specialist"]
-capability: "view_storefront"
+capability: "view_marketing"
 taskType: "analysis"
 triggerPattern: "health check|marketing assessment|metrics"
 userInvocable: true
