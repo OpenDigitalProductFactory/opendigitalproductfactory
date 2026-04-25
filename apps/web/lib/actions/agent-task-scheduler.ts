@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
+import { extractDiscoveryTriageSummary } from "./agent-task-scheduler-summary";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -248,6 +249,20 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
+    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
+    if (scheduledSummary) {
+      await prisma.agentMessage.create({
+        data: {
+          threadId: thread.id,
+          role: "assistant",
+          content: scheduledSummary.threadMessage,
+          agentId: task.agentId,
+          routeContext: task.routeContext,
+          taskType: "scheduled-task-summary",
+        },
+      });
+    }
+
     // Update task status and schedule next run
     const nextRunAt = computeNextCronRun(task.schedule, now);
     await prisma.scheduledAgentTask.update({
@@ -255,7 +270,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       data: {
         lastRunAt: now,
         lastStatus: "ok",
-        lastError: null,
+        lastError: scheduledSummary?.compactStatus ?? null,
         lastThreadId: thread.id,
         nextRunAt,
       },
@@ -263,7 +278,12 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
     await prisma.scheduledJob.update({
       where: { jobId: taskId },
-      data: { lastRunAt: now, lastStatus: "ok", lastError: null, nextRunAt },
+      data: {
+        lastRunAt: now,
+        lastStatus: "ok",
+        lastError: scheduledSummary?.compactStatus ?? null,
+        nextRunAt,
+      },
     }).catch(() => {});
 
   } catch (err) {
