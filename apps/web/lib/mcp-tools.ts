@@ -3487,8 +3487,7 @@ export async function executeTool(
             select: { governedBacklogEnabled: true },
           });
           const requiresStartApproval =
-            governedConfig?.governedBacklogEnabled === true
-            && updatedBuild.originatingBacklogItemId != null
+            updatedBuild.originatingBacklogItemId != null
             && updatedBuild.draftApprovedAt == null;
 
           if (requiresStartApproval) {

@@ -14,8 +14,10 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/actions/build", () => ({
   approveBuildStart: vi.fn(),
+  advanceBuildPhase: vi.fn(),
   createFeatureBuild: vi.fn(),
   deleteFeatureBuild: vi.fn(),
+  retryBuildExecution: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/build-read", () => ({
@@ -141,5 +143,49 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(html).toMatch(/class=\"inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-\[var\(--dpf-border\)\] bg-\[var\(--dpf-surface-2\)\] px-1\.5 py-0\.5 font-mono\"/);
     expect(html).toMatch(/class=\"truncate\">dpf\/fb8783b9\/fix-build-studio-header-content-overlap-in-workflo/);
+  });
+
+  it("renders a studio approval control for backlog-linked builds that are missing start approval", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild()]}
+        portfolios={[]}
+        governedBacklogEnabled={false}
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("Studio Control");
+    expect(html).toContain("Record Approve Start");
+    expect(html).toContain("Review with coworker");
+  });
+
+  it("renders an implementation control once the plan is approved and start approval is recorded", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({
+          phase: "plan",
+          draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+          buildPlan: {
+            fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Surface workflow actions." }],
+            tasks: [{ title: "Add workflow actions", testFirst: "Add failing tests.", implement: "Render the action card.", verify: "Run the verification gate." }],
+          },
+          planReview: {
+            decision: "pass",
+            summary: "Ready to implement.",
+            issues: [],
+          },
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("Ready for Implementation");
+    expect(html).toContain("Start Implementation");
+    expect(html).toContain("Refine the plan");
   });
 });
