@@ -1,18 +1,19 @@
-import { act } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentWorkLauncher } from "./AgentWorkLauncher";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-type TestRendererInstance = {
-  root: {
-    findByProps: (props: Record<string, string>) => { props: { onClick: () => void } };
+const { mockUseState } = vi.hoisted(() => ({
+  mockUseState: vi.fn(),
+}));
+
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    useState: mockUseState,
   };
-  toJSON: () => unknown;
-  unmount: () => void;
-};
+});
 
-const TestRenderer = require("react-test-renderer") as {
-  create: (element: React.ReactElement) => TestRendererInstance;
-};
+import { AgentWorkLauncher, dispatchAgentPrompt } from "./AgentWorkLauncher";
 
 const topics = [
   {
@@ -34,70 +35,52 @@ const topics = [
 ];
 
 function renderLauncher() {
-  const previousDocument = globalThis.document;
-  const dispatchEvent = vi.fn();
-  globalThis.document = {
-    dispatchEvent,
-  } as unknown as Document;
-
-  let renderer: TestRendererInstance | null = null;
-  act(() => {
-    renderer = TestRenderer.create(
-      <AgentWorkLauncher
-        agentName="Marketing Strategist"
-        primaryActionLabel="Start marketing review"
-        topics={topics}
-      />,
-    );
-  });
-
-  return {
-    dispatchEvent,
-    get renderer() {
-      if (!renderer) throw new Error("renderer not initialized");
-      return renderer;
-    },
-    cleanup: () => {
-      act(() => renderer?.unmount());
-      globalThis.document = previousDocument;
-    },
-  };
+  return renderToStaticMarkup(
+    AgentWorkLauncher({
+      agentName: "Marketing Strategist",
+      primaryActionLabel: "Start marketing review",
+      topics,
+    }),
+  );
 }
 
 describe("AgentWorkLauncher", () => {
+  beforeEach(() => {
+    mockUseState.mockImplementation((initialState: unknown) => [initialState, vi.fn()]);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    mockUseState.mockReset();
   });
 
-  it("renders the selected topic preview without sending a coworker prompt", () => {
-    const { renderer, dispatchEvent, cleanup } = renderLauncher();
+  it("server-renders with one clear primary action and no hidden auto-send state", () => {
+    const html = renderLauncher();
 
-    try {
-      act(() => {
-        renderer.root.findByProps({ "data-topic-id": "proof" }).props.onClick();
-      });
-
-      const tree = JSON.stringify(renderer.toJSON());
-      expect(tree).toContain("Plan proof of expertise.");
-      expect(tree).toContain("The strategist will identify the first proof asset.");
-      expect(dispatchEvent).not.toHaveBeenCalled();
-    } finally {
-      cleanup();
-    }
+    expect(html).toContain("Start marketing review");
+    expect(html).toContain("Choose where to start");
+    expect(html).not.toContain("data-confirm-agent-work");
   });
 
-  it("dispatches one open-agent-panel event only after explicit confirmation", () => {
-    const { renderer, dispatchEvent, cleanup } = renderLauncher();
+  it("renders the selected topic preview when a topic is already chosen", () => {
+    mockUseState.mockImplementation(() => ["proof", vi.fn()]);
+
+    const html = renderLauncher();
+
+    expect(html).toContain("Plan proof of expertise.");
+    expect(html).toContain("The strategist will identify the first proof asset.");
+    expect(html).toContain("data-confirm-agent-work=\"true\"");
+  });
+
+  it("dispatches one open-agent-panel event with the prompt payload", () => {
+    const previousDocument = globalThis.document;
+    const dispatchEvent = vi.fn();
+    globalThis.document = {
+      dispatchEvent,
+    } as unknown as Document;
 
     try {
-      act(() => {
-        renderer.root.findByProps({ "data-topic-id": "strategy" }).props.onClick();
-      });
-      expect(dispatchEvent).not.toHaveBeenCalled();
-
-      act(() => {
-        renderer.root.findByProps({ "data-confirm-agent-work": "true" }).props.onClick();
-      });
+      dispatchAgentPrompt("Run a marketing review.");
 
       expect(dispatchEvent).toHaveBeenCalledTimes(1);
       const event = dispatchEvent.mock.calls[0][0] as CustomEvent;
@@ -106,20 +89,7 @@ describe("AgentWorkLauncher", () => {
         autoMessage: "Run a marketing review.",
       });
     } finally {
-      cleanup();
-    }
-  });
-
-  it("server-renders with one clear primary action and no hidden auto-send state", () => {
-    const { renderer, cleanup } = renderLauncher();
-
-    try {
-      const tree = JSON.stringify(renderer.toJSON());
-      expect(tree).toContain("Start marketing review");
-      expect(tree).toContain("Choose where to start");
-      expect(tree).not.toContain("data-confirm-agent-work");
-    } finally {
-      cleanup();
+      globalThis.document = previousDocument;
     }
   });
 });

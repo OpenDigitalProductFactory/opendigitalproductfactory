@@ -17,7 +17,7 @@ type Props = {
   topics: AgentWorkLauncherTopic[];
 };
 
-function dispatchAgentPrompt(prompt: string) {
+export function dispatchAgentPrompt(prompt: string) {
   document.dispatchEvent(
     new CustomEvent("open-agent-panel", {
       detail: { autoMessage: prompt },
