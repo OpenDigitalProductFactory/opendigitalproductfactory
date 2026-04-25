@@ -83,9 +83,9 @@ Patterns to reject:
 
 Sources:
 
-- https://www.servicenow.com/docs/r/zurich/it-operations-management/discovery-and-service-mapping-patterns/c_MappingPatternsCustomization.html
-- https://www.servicenow.com/docs/r/store-release-notes/store-rn-itom-patterns.html
-- https://www.servicenow.com/docs/r/store-release-notes/store-rn-itom-pattern-designer-enhancements.html
+- [ServiceNow Discovery and Service Mapping Patterns - Customization](https://www.servicenow.com/docs/r/zurich/it-operations-management/discovery-and-service-mapping-patterns/c_MappingPatternsCustomization.html)
+- [ServiceNow Store release notes - ITOM patterns](https://www.servicenow.com/docs/r/store-release-notes/store-rn-itom-patterns.html)
+- [ServiceNow Store release notes - ITOM Pattern Designer enhancements](https://www.servicenow.com/docs/r/store-release-notes/store-rn-itom-pattern-designer-enhancements.html)
 
 ### 4.2 BMC Discovery TKU And TPL Patterns
 
@@ -106,8 +106,8 @@ Patterns to reject:
 
 Sources:
 
-- https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/Configipedia/Getting-started/
-- https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/Configipedia/Technology-Knowledge-Updates-TKU/Schedule-and-Roadmap/Technology-Knowledge-Update-TKU-2026-Jan-1/
+- [BMC Discovery Configipedia - Getting started](https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/Configipedia/Getting-started/)
+- [BMC TKU 2026-Jan-1 release notes](https://docs.bmc.com/xwiki/bin/view/IT-Operations-Management/Discovery/BMC-Discovery/Configipedia/Technology-Knowledge-Updates-TKU/Schedule-and-Roadmap/Technology-Knowledge-Update-TKU-2026-Jan-1/)
 
 ### 4.3 Lansweeper And Fing Device Recognition
 
@@ -127,8 +127,8 @@ Patterns to reject:
 
 Sources:
 
-- https://www.lansweeper.com/partners/technology-partners/embed/device-recognition/
-- https://www.lansweeper.com/product/features/it-network-discovery/credential-free-device-recognition/
+- [Lansweeper embedded device recognition](https://www.lansweeper.com/partners/technology-partners/embed/device-recognition/)
+- [Lansweeper credential-free device recognition](https://www.lansweeper.com/product/features/it-network-discovery/credential-free-device-recognition/)
 
 ### 4.4 Nmap Unknown Fingerprint Submission
 
@@ -149,10 +149,10 @@ Patterns to reject:
 
 Sources:
 
-- https://nmap.org/submit/
-- https://nmap.org/book/vscan-community.html
-- https://nmap.org/book/osdetect-fingerprint-format.html
-- https://nmap.org/nsedoc/scripts/fingerprint-strings.html
+- [Nmap submit unknown fingerprints](https://nmap.org/submit/)
+- [Nmap service-detection community submissions](https://nmap.org/book/vscan-community.html)
+- [Nmap OS-detection fingerprint format](https://nmap.org/book/osdetect-fingerprint-format.html)
+- [Nmap fingerprint-strings NSE script](https://nmap.org/nsedoc/scripts/fingerprint-strings.html)
 
 ## 5. Design Goals
 
@@ -285,25 +285,69 @@ This split prevents a common error: a device may be confidently identified but s
 
 ## 10. Threshold Policy
 
+### Blast radius classification
+
+Auto-accept thresholds must scale with the operational blast radius of acting on the observation. A high-confidence identity match for a foundational internal log shipper is not the same risk as the same match for a customer-facing payment gateway. A flat threshold misprices both directions: too lax for revenue-path entities, too strict for benign internal infrastructure.
+
+Blast radius is computed per observation from several inputs, none of which is sufficient alone. Initial triage walks these inputs in order and short-circuits as soon as a strong customer-impact signal is found.
+
+Inputs to blast radius scoring:
+
+- **Taxonomy placement** of the candidate entity. `products-sold/*` and other revenue-path subtrees score higher than `foundational/*` or internal observability. Mixed cases - a foundational service that a customer-facing product depends on - inherit the higher tier transitively.
+- **Network placement** from collector context. Edge, DMZ, and customer-facing ingress zones score higher than private-management or OOB-only zones. Unknown zone is treated conservatively as `medium`.
+- **Entity type and role** from identity scoring. Load balancers, primary databases, identity providers, payment gateways, and signed-traffic ingress score higher than ephemeral log shippers, dev jumpboxes, and internal exporters.
+- **Topology dependents**. Entities with many `runs-on`, `monitored-by`, or `depends-on` edges from customer-facing services score higher.
+- **SLA / customer linkage**. Entities tied to an active Service, Site, or Customer record with a defined SLA score higher than unlinked ones.
+- **Active-change context**. Entities currently under a change window or recently associated with an incident temporarily score one tier higher.
+
+Output a tier per observation:
+
+- `low` - internal foundational; no customer-facing dependents; no SLA linkage
+- `medium` - internal but has dependents reaching `products-sold`, or moderate SLA exposure, or unknown context
+- `high` - directly customer-facing or one hop from a `products-sold` revenue path
+- `customer-critical` - payment, identity, signed-traffic ingress, or named in an active customer SLA
+
+The tier is cached on the observation and recomputed when topology, taxonomy placement, or SLA linkage changes. Auto-accept must read the *current* tier, not the tier at original observation time.
+
+#### Open questions for the research slice
+
+These are not settled in this spec - they should be resolved through investigation against the live install before the auto-accept gate ships:
+
+- the canonical list of taxonomy paths that imply customer-facing impact, likely derivable from IT4IT value-stream alignment plus the `products-sold` subtree
+- the source for network-zone classification when topology metadata is sparse, and the conservative fallback when zone is unknown
+- whether SLA linkage is read from existing service-contract data or inferred from monitoring policy until contracts are modeled
+- the rollout strategy for `high` tier: dry-run only, sample-N-entities, or gradual percentage activation
+- whether `customer-critical` is ever eligible for auto-accept, even on a deterministic catalog match - the conservative default is no
+- how decay-of-context applies (an entity demoted from `high` to `medium` because dependents were retired should not retroactively reopen prior auto-accept decisions)
+
 ### Automatic acceptance
 
-Automatically apply identity and taxonomy placement only when all conditions are true:
+Automatically apply identity and taxonomy placement only when all conditions are true. Confidence thresholds scale with the blast radius tier:
 
-- identity confidence is `>= 0.97`, or a deterministic approved rule matched
-- taxonomy confidence is `>= 0.90`
-- top candidate margin is `>= 0.15`
+| Blast radius | Identity confidence | Taxonomy confidence | Margin | Rollout |
+| --- | --- | --- | --- | --- |
+| `low` | `>= 0.95` | `>= 0.85` | `>= 0.10` | direct |
+| `medium` | `>= 0.97` | `>= 0.90` | `>= 0.15` | direct |
+| `high` | `>= 0.99` | `>= 0.95` | `>= 0.20` | dry-run-first against a sample, then activate |
+| `customer-critical` | always route to human review | always route to human review | always route to human review | human approval required regardless of confidence |
+
+Independent of tier, all of these must also hold:
+
+- a deterministic approved rule matched, or identity confidence meets the tier threshold
 - at least two evidence families support the identity, unless the rule is deterministic and trusted
 - redaction status is not `blocked_sensitive`
 - no internal-vs-customer-estate ambiguity exists
 - no conflicting existing manual decision exists
 - no candidate maps to a deprecated taxonomy node
+- activation would not re-attribute more existing entities than the rollout cap for the tier
 
 Automatic acceptance should:
 
 - update `InventoryEntity` attribution fields
 - attach the evidence summary
-- write an audit event
+- write an audit event that records the blast radius tier used at decision time
 - create or update a deterministic rule only when the source rule lifecycle allows it
+- respect the rollout cap for the rule's tier before broad activation
 - avoid repo contribution until separate contribution review approves it
 
 ### Human review
@@ -318,7 +362,10 @@ Route to review when any condition is true:
 - the identity is proprietary or local-only
 - identity and taxonomy decisions disagree
 - the same observation generated different outcomes across runs
-- the rule would affect many existing entities
+- blast radius is `customer-critical` (always)
+- blast radius is `high` and the rule has not yet been dry-run-validated against a representative sample
+- activation would re-attribute more existing entities than the rollout cap for the tier
+- blast radius classification itself is unresolved (e.g., topology metadata missing for an entity that may be customer-facing)
 
 ### Unresolved / gather more evidence
 
@@ -639,5 +686,4 @@ The durable architecture is:
 local evidence -> reviewed observation -> deterministic local rule -> redacted repo catalog contribution
 ```
 
-High-confidence identity plus high-confidence taxonomy placement can be applied automatically with evidence and audit logging. Anything low-confidence, missing evidence, ambiguous, proprietary, customer-specific, or privacy-sensitive should route to daily AI coworker triage and human review. Approved reusable rules should become deterministic catalog entries with fixtures and redaction reports before they are contributed back to the repo.
-
+High-confidence identity plus high-confidence taxonomy placement can be applied automatically only when the operational blast radius supports it. Confidence thresholds and rollout strategy scale with the blast radius tier (`low`, `medium`, `high`, `customer-critical`), which is computed from taxonomy placement, network zone, entity role, dependents, and SLA linkage. Anything low-confidence, missing evidence, ambiguous, proprietary, customer-specific, privacy-sensitive, or `customer-critical` by blast radius should route to daily AI coworker triage and human review. Approved reusable rules should become deterministic catalog entries with fixtures and redaction reports before they are contributed back to the repo.
