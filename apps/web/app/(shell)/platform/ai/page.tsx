@@ -90,10 +90,10 @@ export default async function PlatformAiPage() {
     <div>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>
-          AI Workforce
+          AI Operations
         </h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          {agents.length} agent{agents.length !== 1 ? "s" : ""} registered
+          Workforce overview for assignments, skills, providers, routing, and build runtime.
         </p>
       </div>
 
@@ -226,7 +226,7 @@ export default async function PlatformAiPage() {
       })}
 
       {agents.length === 0 && (
-        <p className="text-sm text-[var(--dpf-muted)]">No agents registered yet.</p>
+        <p className="text-sm text-[var(--dpf-muted)]">No coworkers registered yet.</p>
       )}
     </div>
   );

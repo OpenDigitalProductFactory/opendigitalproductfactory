@@ -129,6 +129,7 @@ async function fetchInventoryUncached(): Promise<CapabilityInventoryRow[]> {
       status: true,
       category: true,
       endpointType: true,
+      serviceKind: true,
       capabilityTier: true,
     },
   });
@@ -141,7 +142,10 @@ async function fetchInventoryUncached(): Promise<CapabilityInventoryRow[]> {
       sourceType: "provider_native",
       integrationId: null,
       displayName: p.name,
-      description: `${p.endpointType ?? "llm"} · ${p.capabilityTier ?? "basic"} tier`,
+      description:
+        p.endpointType === "service"
+          ? `${p.serviceKind ?? "mcp"} service · ${p.capabilityTier ?? "basic"} tier`
+          : `${p.endpointType ?? "llm"} · ${p.capabilityTier ?? "basic"} tier`,
       enabled: p.status === "active",
       availabilityStatus: mapProviderStatus(p.status),
       riskClass: isExternal ? "elevated" : "standard",
@@ -154,6 +158,7 @@ async function fetchInventoryUncached(): Promise<CapabilityInventoryRow[]> {
         sourceType: "provider_native",
         category: p.category,
         endpointType: p.endpointType,
+        serviceKind: p.serviceKind,
         capabilityTier: p.capabilityTier,
       },
     });

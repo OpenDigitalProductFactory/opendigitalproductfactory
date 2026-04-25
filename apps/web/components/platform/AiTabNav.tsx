@@ -5,15 +5,12 @@ import { usePathname } from "next/navigation";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 const TABS = [
-  { label: "Workforce", href: "/platform/ai" },
-  { label: "External Services", href: "/platform/ai/providers" },
-  { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
-  { label: "Route Log", href: "/platform/ai/routing" },
-  { label: "Operations", href: "/platform/ai/operations" },
-  { label: "Action History", href: "/platform/ai/history" },
-  { label: "Model Assignment", href: "/platform/ai/model-assignment" },
-  { label: "Authority", href: "/platform/ai/authority" },
+  { label: "Overview", href: "/platform/ai" },
+  { label: "Assignments", href: "/platform/ai/assignments" },
+  { label: "Prompts", href: "/platform/ai/prompts" },
   { label: "Skills", href: "/platform/ai/skills" },
+  { label: "Providers & Routing", href: "/platform/ai/providers" },
+  { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
 ];
 
 export function AiTabNav() {

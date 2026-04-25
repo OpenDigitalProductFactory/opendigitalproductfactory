@@ -71,6 +71,7 @@ export type ProviderRow = {
   billingLabel: string | null;
   costPerformanceNotes: string | null;
   endpointType: string;
+  serviceKind?: string | null;
   sensitivityClearance: string[];
   capabilityTier: string;
   costBand: string;
@@ -204,6 +205,7 @@ export type RegistryProviderEntry = {
     pricingInfo?: string;
     enableUrl?: string;
   } | null;
+  serviceKind?: "mcp" | "built_in" | null;
   authorizeUrl?: string | null;
   tokenUrl?: string | null;
   oauthClientId?: string | null;
