@@ -187,3 +187,37 @@ export async function pollDeviceFlow(sessionId: string): Promise<PollActionResul
 
   return { status: "success", username: validation.username ?? "unknown" };
 }
+
+/**
+ * Disconnect the currently-stored GitHub credential.
+ *
+ * Clears `secretRef`, marks the row `unconfigured`, and zeroes auxiliary
+ * OAuth-shaped fields so the next connect starts from a clean slate. Used by
+ * the "Disconnect" action on the Connect GitHub card. Caller must hold
+ * `manage_platform`, same gate as the rest of this module.
+ */
+export async function disconnectGitHub(): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  const user = session?.user;
+  if (!user?.id) return { success: false, error: "Not authenticated" };
+
+  if (!can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_platform")) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  // Use updateMany so absence of the row is a no-op (zero-count update),
+  // not a thrown P2025 — disconnect from a never-connected install should
+  // succeed silently.
+  await prisma.credentialEntry.updateMany({
+    where: { providerId: "hive-contribution" },
+    data: {
+      secretRef: null,
+      status: "unconfigured",
+      scope: null,
+      tokenExpiresAt: null,
+      cachedToken: null,
+    },
+  });
+
+  return { success: true };
+}
