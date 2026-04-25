@@ -1,0 +1,11 @@
+{
+  "name": "private banner should not become contribution-ready",
+  "evidenceFamilies": [
+    "http_banner"
+  ],
+  "normalizedEvidence": {
+    "banner": "prod-acme-sql-01.internal.example.com 10.0.4.15 serial ABC123",
+    "process": "postgres"
+  },
+  "expectedRedactionStatus": "redacted"
+}

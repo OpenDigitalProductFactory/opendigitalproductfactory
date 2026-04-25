@@ -1,0 +1,40 @@
+{
+  "ruleKey": "observability:prometheus-node-exporter",
+  "status": "active",
+  "scope": "global",
+  "requiredEvidenceFamilies": [
+    "prometheus_target",
+    "process_name"
+  ],
+  "matchExpression": {
+    "all": [
+      {
+        "type": "contains",
+        "path": "job",
+        "value": "node-exporter"
+      },
+      {
+        "type": "contains",
+        "path": "process",
+        "value": "node_exporter"
+      }
+    ]
+  },
+  "resolvedIdentity": {
+    "kind": "software",
+    "name": "Prometheus Node Exporter",
+    "vendor": "Prometheus"
+  },
+  "taxonomy": {
+    "path": "platform.observability.metrics",
+    "deprecated": false
+  },
+  "identityConfidence": 0.98,
+  "taxonomyConfidence": 0.91,
+  "positiveFixtures": [
+    "fixtures/positive/prometheus-target.json"
+  ],
+  "negativeFixtures": [
+    "fixtures/negative/private-banner.json"
+  ]
+}
