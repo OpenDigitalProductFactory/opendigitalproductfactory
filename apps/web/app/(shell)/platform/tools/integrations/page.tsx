@@ -4,10 +4,16 @@ import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks"] }, status: "connected" },
+      where: {
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
+        status: "connected",
+      },
     }),
     prisma.integrationCredential.count({
-      where: { provider: { in: ["adp", "quickbooks"] }, status: "error" },
+      where: {
+        provider: { in: ["adp", "quickbooks", "stripe", "microsoft365", "hubspot", "google", "facebook"] },
+        status: "error",
+      },
     }),
   ]);
 
@@ -38,6 +44,66 @@ export default async function EnterpriseIntegrationsPage() {
           accent="var(--dpf-success)"
           metrics={[
             { label: "Category", value: "Finance" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Stripe Billing & Payments"
+          description="Payments anchor for balance, customer, invoice, and payment-intent context on the enterprise substrate."
+          href="/platform/tools/integrations/stripe"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Category", value: "Payments" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Microsoft 365 Communications"
+          description="Communications anchor for inbox, calendar, Teams, channels, and recent message context on the enterprise substrate."
+          href="/platform/tools/integrations/microsoft365-communications"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Category", value: "Communications" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="HubSpot CRM & Marketing"
+          description="Marketing and CRM anchor for account details, contacts, and lead-capture forms on the enterprise substrate."
+          href="/platform/tools/integrations/hubspot"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Category", value: "Marketing / CRM" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Google Marketing Intelligence"
+          description="Read-first GA4 and Search Console anchor for traffic, conversions, and search visibility on the enterprise substrate."
+          href="/platform/tools/integrations/google-marketing-intelligence"
+          accent="var(--dpf-accent)"
+          metrics={[
+            { label: "Category", value: "Marketing Intelligence" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Google Business Profile"
+          description="Localized presence anchor for business listings, location details, and recent review context on the enterprise substrate."
+          href="/platform/tools/integrations/google-business-profile"
+          accent="var(--dpf-success)"
+          metrics={[
+            { label: "Category", value: "Local Presence" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
+          title="Facebook Lead Ads"
+          description="Localized lead-capture anchor for page forms, recent submissions, and downstream CRM follow-up on the enterprise substrate."
+          href="/platform/tools/integrations/facebook-lead-ads"
+          accent="var(--dpf-warning)"
+          metrics={[
+            { label: "Category", value: "Localized Lead Capture" },
             { label: "Model", value: "Native" },
           ]}
         />

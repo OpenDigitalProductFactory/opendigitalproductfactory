@@ -17,7 +17,6 @@ const mockPrisma = {
 const mockInngest = {
   send: vi.fn(),
 };
-
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
@@ -25,7 +24,6 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: mockInngest,
 }));
-
 describe("backlog MCP tool execution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -170,7 +168,6 @@ describe("backlog MCP tool execution", () => {
       }),
     );
   });
-
   it("process_backlog_for_build_studio queues an on-demand tee-up sweep", async () => {
     const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(

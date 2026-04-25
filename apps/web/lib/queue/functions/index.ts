@@ -16,6 +16,7 @@ import {
   governedBacklogTeeUpRequested,
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
+import { tokenExpiryMonitor } from "./token-expiry-monitor";
 
 export const allFunctions = [
   prometheusPoll,
@@ -37,4 +38,5 @@ export const allFunctions = [
   deliberationRun,
   governedBacklogTeeUpScheduled,
   governedBacklogTeeUpRequested,
+  tokenExpiryMonitor,
 ];

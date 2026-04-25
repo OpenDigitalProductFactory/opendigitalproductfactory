@@ -2510,7 +2510,6 @@ export async function executeTool(
         },
       };
     }
-
     case "update_backlog_item": {
       const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
       if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
