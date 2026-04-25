@@ -19,6 +19,7 @@ export interface FacebookLeadAdsLead {
   createdTime: string | null;
   adId: string | null;
   formId: string | null;
+  fieldNames: string[];
 }
 
 export interface FacebookLeadAdsProbeResult {
@@ -123,7 +124,7 @@ async function listRecentLeads(
   params: FacebookLeadAdsRequestParams & { formId: string },
 ): Promise<FacebookLeadAdsLead[]> {
   const searchParams = new URLSearchParams({
-    fields: "id,created_time,ad_id,form_id",
+    fields: "id,created_time,ad_id,form_id,field_data{name}",
     access_token: params.accessToken,
     limit: "5",
   });
@@ -136,6 +137,9 @@ async function listRecentLeads(
       created_time?: string;
       ad_id?: string;
       form_id?: string;
+      field_data?: Array<{
+        name?: string;
+      }>;
     }>;
   };
 
@@ -147,6 +151,11 @@ async function listRecentLeads(
           createdTime: normalizeTimestamp(lead.created_time),
           adId: typeof lead.ad_id === "string" ? lead.ad_id : null,
           formId: typeof lead.form_id === "string" ? lead.form_id : null,
+          fieldNames: Array.isArray(lead.field_data)
+            ? lead.field_data
+                .map((field) => (typeof field?.name === "string" ? field.name : null))
+                .filter((value): value is string => Boolean(value))
+            : [],
         }))
     : [];
 }

@@ -75,7 +75,7 @@ describe("probeFacebookLeadAds", () => {
     mockAgent
       .get("https://graph.facebook.com")
       .intercept({
-        path: "/form-1/leads?fields=id%2Ccreated_time%2Cad_id%2Cform_id&access_token=meta-token&limit=5",
+        path: "/form-1/leads?fields=id%2Ccreated_time%2Cad_id%2Cform_id%2Cfield_data%7Bname%7D&access_token=meta-token&limit=5",
         method: "GET",
       })
       .reply(200, {
@@ -85,6 +85,10 @@ describe("probeFacebookLeadAds", () => {
             created_time: "2026-04-24T15:00:00+0000",
             ad_id: "ad-100",
             form_id: "form-1",
+            field_data: [
+              { name: "full_name" },
+              { name: "email" },
+            ],
           },
         ],
       });
@@ -99,6 +103,7 @@ describe("probeFacebookLeadAds", () => {
     expect(result.page.name).toBe("Acme Managed Services");
     expect(result.forms[0]?.id).toBe("form-1");
     expect(result.recentLeads[0]?.id).toBe("lead-1");
+    expect(result.recentLeads[0]?.fieldNames).toEqual(["full_name", "email"]);
   });
 
   it("returns empty leads when a page has no forms yet", async () => {

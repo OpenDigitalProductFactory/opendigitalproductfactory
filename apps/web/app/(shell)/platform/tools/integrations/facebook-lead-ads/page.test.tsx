@@ -99,6 +99,7 @@ describe("FacebookLeadAdsPage", () => {
             createdTime: "2026-04-24T15:00:00.000Z",
             adId: "ad-100",
             formId: "form-1",
+            fieldNames: ["full_name", "email"],
           },
         ],
         loadedAt: "2026-04-24T11:30:00.000Z",
@@ -114,5 +115,6 @@ describe("FacebookLeadAdsPage", () => {
     expect(html).toContain("Live lead preview");
     expect(html).toContain("Downtown Managed IT Consult");
     expect(html).toContain("lead-1");
+    expect(html).toContain("full_name, email");
   });
 });
