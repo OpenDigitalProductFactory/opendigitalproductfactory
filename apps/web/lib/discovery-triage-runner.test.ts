@@ -71,6 +71,8 @@ describe("runDiscoveryTriagePass", () => {
     });
     expect(result.metrics.autoAttributed).toBe(1);
     expect(result.metrics.autoApplyRate).toBe(1);
+    expect(result.metrics.decisionsCreated).toBe(1);
+    expect(result.metrics.escalationQueueDepth).toBe(0);
   });
 
   it("routes ambiguous candidates to human review without auto-applying", async () => {
@@ -124,6 +126,8 @@ describe("runDiscoveryTriagePass", () => {
       }),
     });
     expect(result.metrics.humanReview).toBe(1);
+    expect(result.metrics.escalationQueueDepth).toBe(1);
+    expect(result.metrics.repeatUnresolved).toBe(1);
   });
 
   it("routes clear identity without a taxonomy node to taxonomy-gap", async () => {
@@ -160,6 +164,7 @@ describe("runDiscoveryTriagePass", () => {
       }),
     });
     expect(result.metrics.taxonomyGap).toBe(1);
+    expect(result.metrics.escalationQueueDepth).toBe(1);
   });
 
   it("returns needs-more-evidence for sparse unresolved entities", async () => {
@@ -190,5 +195,6 @@ describe("runDiscoveryTriagePass", () => {
       }),
     });
     expect(result.metrics.needsMoreEvidence).toBe(1);
+    expect(result.metrics.decisionsCreated).toBe(1);
   });
 });

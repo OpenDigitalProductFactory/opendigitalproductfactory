@@ -58,11 +58,14 @@ export type DiscoveryTriageRunnerDb = {
 
 export type DiscoveryTriageRunMetrics = {
   processed: number;
+  decisionsCreated: number;
   autoAttributed: number;
   humanReview: number;
   taxonomyGap: number;
   needsMoreEvidence: number;
   dismissed: number;
+  escalationQueueDepth: number;
+  repeatUnresolved: number;
   autoApplyRate: number;
 };
 
@@ -109,11 +112,14 @@ function buildPacketInput(entity: DiscoveryTriageRunnerEntity): DiscoveryEvidenc
 function createEmptyMetrics(): DiscoveryTriageRunMetrics {
   return {
     processed: 0,
+    decisionsCreated: 0,
     autoAttributed: 0,
     humanReview: 0,
     taxonomyGap: 0,
     needsMoreEvidence: 0,
     dismissed: 0,
+    escalationQueueDepth: 0,
+    repeatUnresolved: 0,
     autoApplyRate: 0,
   };
 }
@@ -121,6 +127,7 @@ function createEmptyMetrics(): DiscoveryTriageRunMetrics {
 function finalizeMetrics(metrics: DiscoveryTriageRunMetrics): DiscoveryTriageRunMetrics {
   return {
     ...metrics,
+    escalationQueueDepth: metrics.humanReview + metrics.taxonomyGap,
     autoApplyRate: metrics.processed > 0
       ? Number((metrics.autoAttributed / metrics.processed).toFixed(3))
       : 0,
@@ -221,11 +228,15 @@ export async function runDiscoveryTriagePass(
     });
 
     metrics.processed += 1;
+    metrics.decisionsCreated += 1;
     if (outcome === "auto-attributed") metrics.autoAttributed += 1;
     if (outcome === "human-review") metrics.humanReview += 1;
     if (outcome === "taxonomy-gap") metrics.taxonomyGap += 1;
     if (outcome === "needs-more-evidence") metrics.needsMoreEvidence += 1;
     if (outcome === "dismissed") metrics.dismissed += 1;
+    if (issueByEntityId.has(entity.id) || entity.attributionStatus === "needs_review") {
+      metrics.repeatUnresolved += 1;
+    }
 
     decisions.push({
       inventoryEntityId: entity.id,
