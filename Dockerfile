@@ -25,7 +25,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 # Copy source EXCLUDING pnpm-lock.yaml (preserve the deps stage lockfile which has no expo entries)
 COPY pnpm-workspace.yaml tsconfig.base.json ./
-COPY scripts/ ./scripts/
+COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY docker-entrypoint.sh ./
@@ -36,7 +36,7 @@ RUN pnpm --filter web build
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json ./
-COPY scripts/ ./scripts/
+COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/

@@ -3,6 +3,7 @@ import {
   BACKLOG_TRIAGE_OUTCOMES,
   BACKLOG_SOURCE_VALUES,
   BACKLOG_EFFORT_SIZES,
+  BACKLOG_STATUS_VALUES,
 } from "@/lib/explore/backlog";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 
@@ -32,5 +33,13 @@ describe("backlog enum parity between backlog.ts and mcp-tools.ts", () => {
 
   it("proposedOutcome on create_backlog_item uses the triage outcome enum", () => {
     expect(toolInputEnum("create_backlog_item", "proposedOutcome")).toEqual([...BACKLOG_TRIAGE_OUTCOMES]);
+  });
+
+  it("update_backlog_item.status matches shared backlog statuses", () => {
+    expect(toolInputEnum("update_backlog_item", "status")).toEqual([...BACKLOG_STATUS_VALUES]);
+  });
+
+  it("query_backlog.status matches shared backlog statuses", () => {
+    expect(toolInputEnum("query_backlog", "status")).toEqual([...BACKLOG_STATUS_VALUES]);
   });
 });
