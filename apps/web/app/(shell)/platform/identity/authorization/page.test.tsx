@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue({
+    user: {
+      platformRole: "HR-000",
+      isSuperuser: true,
+    },
+  }),
+}));
+
 vi.mock("@/lib/authority/bindings", () => ({
   listAuthorityBindings: vi.fn(),
   listAuthorityBindingRecords: vi.fn(),
@@ -8,6 +17,14 @@ vi.mock("@/lib/authority/bindings", () => ({
   getAuthorityBindingEvidence: vi.fn(),
   getAuthorityBindingFilterOptions: vi.fn(),
   parseAuthorityBindingFilters: vi.fn(),
+}));
+
+vi.mock("@/lib/authority/bootstrap-rollout", () => ({
+  getAuthorityBindingBootstrapState: vi.fn(),
+}));
+
+vi.mock("@/lib/permissions", () => ({
+  can: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -36,6 +53,7 @@ import {
   listAuthorityBindings,
   parseAuthorityBindingFilters,
 } from "@/lib/authority/bindings";
+import { getAuthorityBindingBootstrapState } from "@/lib/authority/bootstrap-rollout";
 
 describe("PlatformIdentityAuthorizationPage", () => {
   it("shows role bundles, assignments, teams, and coworker authority coverage", async () => {
@@ -171,6 +189,11 @@ describe("PlatformIdentityAuthorizationPage", () => {
     });
     vi.mocked(getAuthorityBinding).mockResolvedValue(null);
     vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+    vi.mocked(getAuthorityBindingBootstrapState).mockResolvedValue({
+      autoApplied: false,
+      totalBindings: 1,
+      report: null,
+    });
 
     const { default: PlatformIdentityAuthorizationPage } = await import("./page");
     const html = renderToStaticMarkup(
@@ -220,6 +243,11 @@ describe("PlatformIdentityAuthorizationPage", () => {
       grants: [],
     } as never);
     vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+    vi.mocked(getAuthorityBindingBootstrapState).mockResolvedValue({
+      autoApplied: false,
+      totalBindings: 1,
+      report: null,
+    });
 
     const { default: PlatformIdentityAuthorizationPage } = await import("./page");
     const html = renderToStaticMarkup(
@@ -230,5 +258,43 @@ describe("PlatformIdentityAuthorizationPage", () => {
 
     expect(html).toContain("Editing binding AB-000001");
     expect(html).toContain("Save changes");
+  });
+
+  it("shows bootstrap coverage guidance when the first-run bootstrap had to infer or skip routes", async () => {
+    vi.mocked(prisma.platformRole.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userGroup.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.team.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindingRecords).mockResolvedValue([] as never);
+    vi.mocked(listAuthorityBindings).mockResolvedValue({ pivot: "subject", rows: [] });
+    vi.mocked(parseAuthorityBindingFilters).mockReturnValue({});
+    vi.mocked(getAuthorityBindingFilterOptions).mockReturnValue({
+      statuses: [],
+      resourceRefs: [],
+      appliedAgents: [],
+      subjectRefs: [],
+    });
+    vi.mocked(getAuthorityBinding).mockResolvedValue(null);
+    vi.mocked(getAuthorityBindingEvidence).mockResolvedValue([]);
+    vi.mocked(getAuthorityBindingBootstrapState).mockResolvedValue({
+      autoApplied: true,
+      totalBindings: 0,
+      report: {
+        created: 2,
+        skippedExisting: 0,
+        wouldCreate: 0,
+        candidates: [],
+        lowConfidence: [{ resourceRef: "/setup", agentId: "onboarding-coo", reason: "ungated-route" }],
+      },
+    });
+
+    const { default: PlatformIdentityAuthorizationPage } = await import("./page");
+    const html = renderToStaticMarkup(
+      await PlatformIdentityAuthorizationPage({ searchParams: Promise.resolve({}) }),
+    );
+
+    expect(html).toContain("Bootstrap coverage");
+    expect(html).toContain("Auto-applied initial authority binding bootstrap");
+    expect(html).toContain("/setup");
   });
 });
