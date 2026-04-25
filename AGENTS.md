@@ -65,6 +65,19 @@ Epics must be actively managed — not just created and forgotten.
 - Merge via squash-and-delete once CI passes: `gh pr merge <n> --squash --delete-branch`.
 - Always push after committing — local-only commits are invisible to CI.
 
+### DCO Rule (mandatory every commit)
+
+- Every commit that will be pushed must include a `Signed-off-by:` trailer.
+- Use `git commit -s`, not plain `git commit`.
+- If you amend or rebase commits, preserve the signoff on every rewritten commit.
+- Before pushing a branch, sanity-check with:
+
+```sh
+git log -n 5 --format="%h %s%n%b" | cat
+```
+
+- If a PR fails the `DCO` check, fix it immediately before doing more feature work.
+
 ### Why
 
 - The repo is public on GitHub. Branch protection on `main` enforces the PR flow at the platform level: required checks are `Typecheck`, `Production Build`, and `DCO`; linear history; no force-push; admins included.
