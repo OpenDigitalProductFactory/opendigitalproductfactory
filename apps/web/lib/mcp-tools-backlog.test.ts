@@ -14,10 +14,16 @@ const mockPrisma = {
   $transaction: vi.fn(),
 };
 
+const mockInngest = {
+  send: vi.fn(),
+};
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
 
+vi.mock("@/lib/queue/inngest-client", () => ({
+  inngest: mockInngest,
+}));
 describe("backlog MCP tool execution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -161,5 +167,27 @@ describe("backlog MCP tool execution", () => {
         }),
       }),
     );
+  });
+  it("process_backlog_for_build_studio queues an on-demand tee-up sweep", async () => {
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "process_backlog_for_build_studio",
+      { limit: 2 },
+      "user-1",
+      { routeContext: "/build", threadId: "thread-1", agentId: "AGT-1" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ status: "queued", limit: 2 });
+    expect(mockInngest.send).toHaveBeenCalledWith({
+      name: "build/backlog-tee-up.requested",
+      data: {
+        userId: "user-1",
+        limit: 2,
+        routeContext: "/build",
+        threadId: "thread-1",
+        requestedByAgentId: "AGT-1",
+      },
+    });
   });
 });

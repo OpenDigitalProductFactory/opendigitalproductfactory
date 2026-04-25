@@ -90,3 +90,14 @@ export interface BrandExtractRunEvent {
     };
   };
 }
+
+export interface BuildBacklogTeeUpRequestedEvent {
+  name: "build/backlog-tee-up.requested";
+  data: {
+    userId: string;
+    limit?: number | null;
+    routeContext?: string | null;
+    threadId?: string | null;
+    requestedByAgentId?: string | null;
+  };
+}
