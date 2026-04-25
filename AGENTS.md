@@ -132,23 +132,59 @@ Together these mean a Build-Studio-produced PR cannot fail CI typecheck — if i
 
 Until both are implemented, a Build Studio PR can still be typecheck-red or build-red when it leaves the sandbox. CI catches it on the PR (the merge gates on `main` hold), but the stated goal is to catch it at the sandbox boundary, not at merge time. Tracked in the repo's issue tracker.
 
-### Concurrent Sessions — Per-Thread Worktree (mandatory when >1 session)
+### Concurrent Sessions — Per-Thread Branch + Worktree (mandatory always)
 
-Two Claude Code sessions editing the same working tree at `d:\DPF` fight over `HEAD`, the index, and the working tree — even if they target different branches. Observed symptoms: commits land on `main` instead of the intended feature branch; `git reflog` shows unexpected `checkout: moving from <feature> to main` entries; one session's staged files sweep into another's commit.
+**Default rule: one user thread = one branch + one worktree.** This is not only a "when two sessions happen to overlap" safeguard; it is the standard operating model for all active work.
 
-**The fix is a git worktree per session, not just a branch per session.**
+Two Claude Code sessions editing the same working tree at `d:\DPF` fight over `HEAD`, the index, and the working tree — even if they target different branches. Observed symptoms: commits land on the wrong branch, `git reflog` shows unexpected checkout hops, one thread's staged files sweep into another thread's commit, and unrelated local changes linger in a worktree long after the original task is done.
+
+**The fix is a dedicated git worktree per thread, not just a branch per thread.**
+
+**Mandatory workflow for every new thread or materially new topic:**
+
+1. Start from `main`
+2. Create a fresh branch for that thread only
+3. Create or reuse a dedicated worktree bound to that branch
+4. Point the Claude session's primary working directory at that worktree
+5. Do not continue a new ask on an existing branch unless it is clearly the same delivery thread
 
 **Setup (per topic, run from `d:\DPF`):**
 
 ```sh
-git worktree add ../DPF-<topic> -b feat/<topic>-work
+git worktree add ../DPF-<topic> -b feat/<topic>
 ```
 
-Each worktree gets its own working directory, HEAD, branch, and index. The `.git` object database is shared — disk-efficient, concurrency-safe. Open each Claude Code session with its **Primary working directory** pointed at the matching worktree path. One worktree stays on `main` for merges/releases/global inspection; agents never work in that one.
+For docs or fixes, use the appropriate branch prefix instead of `feat/`, for example:
+
+```sh
+git worktree add ../DPF-<topic> -b doc/<topic>
+git worktree add ../DPF-<topic> -b fix/<topic>
+```
+
+Each worktree gets its own working directory, `HEAD`, branch, and index. The `.git` object database is shared — disk-efficient and concurrency-safe.
+
+**Reserved worktree rule:**
+
+- Keep one checkout on `main` for merge/release/global inspection only
+- Do not implement feature work in that root checkout
+- Treat the root `d:\DPF` checkout as read-only unless the thread is specifically about merge, release, or repo-wide inspection
+
+**When to split into a new thread branch immediately:**
+
+- The user changes domains or asks for a distinct deliverable
+- The current worktree already contains unrelated modified files
+- A second thread would need a different PR title or review scope
+- You catch yourself saying "while I'm here" about another concern
 
 **Cleanup after merge:** `git worktree remove ../DPF-<topic>` — prunes the checkout; the branch ref survives until explicitly deleted via `git branch -d`.
 
-**Signal that this rule is being violated:** a session notices its checkout flipped from a feature branch back to `main` between commands. That means another session is sharing the worktree. Stop, flag to Mark, move to a dedicated worktree before continuing.
+**Signal that this rule is being violated:**
+
+- A session notices its checkout flipped unexpectedly
+- `git status` shows files from more than one thread/domain
+- A branch name no longer matches the files being changed
+
+If any of those happen, stop, tell the user, and move the work to a dedicated worktree before continuing.
 
 **Belt-and-suspenders branch guard in every commit command:**
 
