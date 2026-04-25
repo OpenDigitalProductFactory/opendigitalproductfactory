@@ -35,9 +35,9 @@ Out of scope:
 - renaming legacy `InventoryEntity.attributionStatus = "needs_review"`
 - customer-managed estate tenant queue split
 
-Open implementation blocker:
+Resolved implementation blocker:
 
-- The spec marks daily-owner selection as approval-needed. Default to `agentId: "discovery-steward"` in code behind a single constant, but do not seed it into production data or mutate `agent_registry.json` for this feature until Mark confirms the owner. If execution starts before confirmation, implement the code path and leave the seed/registry changes explicitly blocked in the plan.
+- Daily-owner selection is now resolved to the existing `inventory-specialist` coworker. This branch should seed the scheduled task against the canonical discovery route and keep the prompt identity aligned to the Digital Product Estate Specialist. No new coworker entry is required.
 
 Owner-gated seed/registry decision, captured for future revisions:
 
@@ -50,14 +50,11 @@ Owner-gated seed/registry decision, captured for future revisions:
   - which prompt identity/greeting is canonical
   - which route-context ownership story future revisions inherit
 - The install-owner-user decision is an implementation detail. In the current schema it should resolve from `User.isSuperuser`, not a fictional `User.role = "superuser"` field.
-- Until approval lands:
-  - **allowed**: runner, MCP bridge, prompt file, metrics, UI, scheduler summary support
-  - **blocked**: seeded `ScheduledAgentTask`, final prompt identity text, registry grants/entry changes tied to the unresolved owner
-- Decision options to preserve in the record:
-  - new `discovery-steward` coworker
-  - existing `enterprise-architecture` coworker
-  - another explicitly named existing coworker
-- If none is approved yet, the branch should ship with the feature operationally complete except for bootstrap ownership wiring.
+- Resolution captured in this plan and the spec:
+  - **coworker owner**: `inventory-specialist`
+  - **install owner user**: first `User` with `isSuperuser = true`
+  - **registry impact**: none beyond existing coworker grants already present in hardcoded seed data
+  - **remaining work**: seed/bootstrap wiring and actor-id normalization
 
 Cross-package boundary rule:
 
@@ -733,24 +730,15 @@ git commit -s -m "feat(discovery): expose run_discovery_triage MCP tool"
 - Modify: `packages/db/src/seed.ts`
 - Modify: `packages/db/data/agent_registry.json` if new coworker is approved
 
-- [ ] **Step 1: Confirm owner decision**
+- [x] **Step 1: Confirm owner decision**
 
-Ask Mark to resolve spec Q1 before seeding or mutating the registry:
-
-- new `discovery-steward`
-- existing `enterprise-architecture`
-- another existing coworker
-
-Record the answer in both places before implementation proceeds:
-
-- spec open question / resolution note
-- plan execution notes / task checklist
+Resolved: use the existing `inventory-specialist` coworker. Record this in both the spec and the implementation plan so future revisions do not reopen the question accidentally.
 
 - [ ] **Step 2: Add prompt**
 
 Prompt requirements:
 
-- identity: use **provisional** role language until owner is approved; after approval, align exactly to the selected coworker identity
+- identity: align to the Digital Product Estate Specialist / `inventory-specialist`
 - capabilities: triage discovery gaps, explain evidence, propose taxonomy/device recognition actions
 - skills hint: standard DPF greeting language
 - **must** invoke `run_discovery_triage` (Task 7b) on each fire and report its summary back to the user/log
@@ -761,9 +749,9 @@ Prompt requirements:
 Seed only after owner is resolved. This step includes the final registry wiring decision:
 
 - `taskId = discovery-taxonomy-gap-triage-daily`
-- `agentId = <resolved owner>` (default `discovery-steward`)
+- `agentId = inventory-specialist`
 - `schedule = 0 8 * * *`
-- `routeContext = enterprise/discovery`
+- `routeContext = /platform/tools/discovery`
 - `timezone = process.env.INSTALL_TIMEZONE ?? "UTC"`
 - `ownerUserId` — resolved at seed time, not hard-coded. The "first superuser" pattern is not yet established in `seed.ts`; use:
 
@@ -776,9 +764,9 @@ Seed only after owner is resolved. This step includes the final registry wiring 
   ```
 
 - Registry rule:
-  - if owner = new `discovery-steward`, add the coworker entry and grants in the same slice
-  - if owner = existing coworker, do **not** create a duplicate coworker; add only the needed grants
-  - do not commit speculative registry edits before the owner is approved
+  - owner is an existing coworker, so do **not** create a duplicate coworker
+  - rely on existing hardcoded coworker grants plus the explicit `run_discovery_triage` grant mapping
+  - no speculative `agent_registry.json` mutation is needed for this slice
 
 - [ ] **Step 4: Run seed/migration verification**
 

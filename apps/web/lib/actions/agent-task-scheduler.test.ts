@@ -19,7 +19,7 @@ describe("extractDiscoveryTriageSummary", () => {
           data: {
             trigger: "cadence",
             processedAt: "2026-04-25T18:00:00.000Z",
-            runIdempotencyKey: "2026-04-25:discovery-steward:cadence",
+        runIdempotencyKey: "2026-04-25:inventory-specialist:cadence",
             metrics: {
               processed: 4,
               decisionsCreated: 4,
@@ -42,7 +42,7 @@ describe("extractDiscoveryTriageSummary", () => {
     expect(summary?.compactStatus).toContain("processed=4");
     expect(summary?.compactStatus).toContain("taxonomy-gaps=1");
     expect(summary?.threadMessage).toContain("[Scheduled summary: discovery taxonomy gap triage]");
-    expect(summary?.threadMessage).toContain("\"runIdempotencyKey\": \"2026-04-25:discovery-steward:cadence\"");
+    expect(summary?.threadMessage).toContain("\"runIdempotencyKey\": \"2026-04-25:inventory-specialist:cadence\"");
   });
 
   it("reports skipped triage runs with the idempotency key", () => {
@@ -56,7 +56,7 @@ describe("extractDiscoveryTriageSummary", () => {
           data: {
             trigger: "volume",
             processedAt: "2026-04-25T18:00:00.000Z",
-            runIdempotencyKey: "2026-04-25:discovery-steward:volume",
+        runIdempotencyKey: "2026-04-25:inventory-specialist:volume",
             skipped: true,
             skipReason: "Duplicate volume triage run already recorded today.",
             metrics: {
@@ -72,7 +72,7 @@ describe("extractDiscoveryTriageSummary", () => {
 
     expect(summary).not.toBeNull();
     expect(summary?.compactStatus).toContain("skipped");
-    expect(summary?.compactStatus).toContain("[2026-04-25:discovery-steward:volume]");
+    expect(summary?.compactStatus).toContain("[2026-04-25:inventory-specialist:volume]");
     expect(summary?.threadMessage).toContain("Duplicate volume triage run already recorded today.");
     expect(summary?.threadMessage).toContain("\"skipped\": true");
   });

@@ -1,6 +1,6 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
+import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
@@ -7233,7 +7233,7 @@ export async function executeTool(
       const result = await runDiscoveryTriageDaily(undefined, {
         trigger,
         actorType: "agent",
-        actorId: context?.agentId ?? "discovery-steward",
+        actorId: context?.agentId ?? DISCOVERY_TRIAGE_AGENT_ID,
       });
       return {
         success: true,

@@ -203,7 +203,7 @@ describe("recordDiscoveryTriageDecision", () => {
         inventoryEntityId: "entity-7",
         qualityIssueId: "issue-1",
         actorType: "agent",
-        actorId: "discovery-steward",
+      actorId: "inventory-specialist",
         outcome: "auto-attributed",
         score,
         evidencePacket: packet,

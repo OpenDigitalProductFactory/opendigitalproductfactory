@@ -55,7 +55,7 @@ describe("runDiscoveryTriagePass", () => {
 
     const result = await runDiscoveryTriagePass(db, {
       trigger: "cadence",
-      actorId: "discovery-steward",
+      actorId: "inventory-specialist",
     });
 
     expect(db.inventoryEntity.update).toHaveBeenCalledWith({
@@ -70,7 +70,7 @@ describe("runDiscoveryTriagePass", () => {
       data: expect.objectContaining({
         inventoryEntityId: "entity-1",
         actorType: "agent",
-        actorId: "discovery-steward",
+        actorId: "inventory-specialist",
         outcome: "auto-attributed",
         requiresHumanReview: false,
       }),
@@ -212,14 +212,14 @@ describe("runDiscoveryTriagePass", () => {
 
     const result = await runDiscoveryTriageDaily(db, {
       trigger: "cadence",
-      actorId: "discovery-steward",
+      actorId: "inventory-specialist",
       now: new Date("2026-04-25T13:00:00Z"),
     });
 
     expect(db.inventoryEntity.findMany).not.toHaveBeenCalled();
     expect(db.discoveryTriageDecision.create).not.toHaveBeenCalled();
     expect(result.skipped).toBe(true);
-    expect(result.runIdempotencyKey).toBe("2026-04-25:discovery-steward:cadence");
+    expect(result.runIdempotencyKey).toBe("2026-04-25:inventory-specialist:cadence");
     expect(result.metrics.processed).toBe(0);
   });
 
@@ -229,7 +229,7 @@ describe("runDiscoveryTriagePass", () => {
 
     const result = await maybeTriggerDiscoveryTriageForVolume(db, {
       threshold: 25,
-      actorId: "discovery-steward",
+      actorId: "inventory-specialist",
       now: new Date("2026-04-25T13:00:00Z"),
     });
 
@@ -271,7 +271,7 @@ describe("runDiscoveryTriagePass", () => {
 
     const result = await maybeTriggerDiscoveryTriageForVolume(db, {
       threshold: 25,
-      actorId: "discovery-steward",
+      actorId: "inventory-specialist",
       now: new Date("2026-04-25T13:00:00Z"),
     });
 
@@ -281,12 +281,12 @@ describe("runDiscoveryTriagePass", () => {
         inventoryEntityId: "entity-5",
         outcome: "auto-attributed",
         evidencePacket: expect.objectContaining({
-          runIdempotencyKey: "2026-04-25:discovery-steward:volume",
+          runIdempotencyKey: "2026-04-25:inventory-specialist:volume",
         }),
       }),
     });
     expect(result.triggered).toBe(true);
     expect(result.pendingCount).toBe(30);
-    expect(result.result?.runIdempotencyKey).toBe("2026-04-25:discovery-steward:volume");
+    expect(result.result?.runIdempotencyKey).toBe("2026-04-25:inventory-specialist:volume");
   });
 });

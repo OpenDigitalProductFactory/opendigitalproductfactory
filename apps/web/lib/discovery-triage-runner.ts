@@ -10,11 +10,11 @@ import {
   type DiscoveryEvidencePacketInput,
   type DiscoveryTriageThresholds,
 } from "@dpf/db/discovery-triage";
-import { prisma } from "@dpf/db";
+import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 
 export type DiscoveryTriageTrigger = "cadence" | "volume";
-export const DEFAULT_DISCOVERY_TRIAGE_ACTOR_ID = "discovery-steward";
+export const DEFAULT_DISCOVERY_TRIAGE_ACTOR_ID = DISCOVERY_TRIAGE_AGENT_ID;
 export const DEFAULT_DISCOVERY_TRIAGE_VOLUME_THRESHOLD = 25;
 
 export type DiscoveryTriageRunnerEntity = {

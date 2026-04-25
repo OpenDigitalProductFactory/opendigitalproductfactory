@@ -144,6 +144,8 @@ export {
   type DiscoveryTriageTaxonomyCandidate,
   type DiscoveryTriageThresholds,
 } from "./discovery-triage";
+export * from "./discovery-triage-config";
+export * from "./seed-discovery-triage";
 export {
   inferCrossCollectorRelationships,
   inferProductDependencies,

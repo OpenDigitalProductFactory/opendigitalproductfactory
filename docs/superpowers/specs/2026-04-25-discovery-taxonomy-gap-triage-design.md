@@ -159,13 +159,13 @@ A `ScheduledAgentTask` row drives the triage loop. The activity fires on a caden
 | Field | Initial value | Notes |
 | --- | --- | --- |
 | `taskId` | `discovery-taxonomy-gap-triage-daily` | Stable slug for idempotent seeding |
-| `agentId` | `discovery-steward` (proposed default — see §16 Q1) | New coworker; falls back to `enterprise-architecture` if Q1 resolves there |
+| `agentId` | `inventory-specialist` | Resolved owner: the existing Digital Product Estate Specialist already owns `/platform/tools/discovery` route context |
 | `title` | `Discovery taxonomy gap triage` | |
-| `prompt` | Loaded from `prompts/specialist/discovery-taxonomy-gap-triage.prompt.md` | Per the project rule that prompts live in DB seeded from `.prompt.md` files |
-| `routeContext` | `enterprise/discovery` | |
+| `prompt` | Seeded operational prompt that tells the estate specialist to invoke `run_discovery_triage` and summarize the result | The `.prompt.md` template remains in the prompt catalog for revision history, but `ScheduledAgentTask.prompt` stores the direct operational instruction string |
+| `routeContext` | `/platform/tools/discovery` | Canonical discovery operations route so scheduled execution resolves the same coworker and route context humans see |
 | `schedule` | `0 8 * * *` | Cron, not a "daily" flag |
 | `timezone` | Install timezone (defaults to `UTC`) | |
-| `ownerUserId` | First user with role `superuser` | Resolved at seed time, not hard-coded |
+| `ownerUserId` | First user with `isSuperuser = true` | Resolved at seed time, not hard-coded |
 
 ### 7.1.1 Owner-gated seed and registry decision
 
@@ -207,11 +207,12 @@ The first question is the actual approval gate. The second is an implementation 
 - modifying an existing coworker's grants specifically for this task
 - baking a final owner identity into seed/runtime defaults
 
-**Implementation rule until approval lands:**
+**Resolution recorded 2026-04-25:**
 
-- Code may keep a single default constant (`"discovery-steward"`) as an internal placeholder for testing and idempotency keys.
-- Seed/bootstrap artifacts must treat that placeholder as provisional and must not create production bootstrap rows from it.
-- The plan must preserve this as an explicit approval gate so later revisions do not mistake the placeholder for an approved product decision.
+- The approved owner is the existing `inventory-specialist` coworker.
+- No new coworker entry is needed for this slice.
+- The seed/bootstrap row may be created now because the owner decision is no longer provisional.
+- The prompt template remains discovery-specific, but its identity language should align to the Digital Product Estate Specialist.
 
 The task should:
 
@@ -570,7 +571,7 @@ CI merge-blocking gates per [`CLAUDE.md`](../../../CLAUDE.md) branch protection:
 
 ## 16. Open Questions
 
-1. **Approval needed (blocks seeding and registry mutation).** Which coworker should own daily triage? Proposed default: a new **Discovery Steward** coworker (`agentId: "discovery-steward"`), seeded with grants for discovery triage, backlog proposal, and inventory attribution. Fallback if a new coworker is rejected: assign to `enterprise-architecture`. The §7.1 `ScheduledAgentTask` row cannot be seeded, and `agent_registry.json` should not be mutated for this feature, until this is resolved. See §7.1.1.
+1. **Resolved 2026-04-25.** Daily triage is owned by the existing `inventory-specialist` coworker because discovery operations already route to the Digital Product Estate Specialist. This keeps the route context, coworker identity, and scheduled execution aligned without introducing a parallel coworker surface.
 2. Should high-confidence taxonomy-enrichment changes require human approval even when identity and placement are strong?
 3. What is the first approved privacy/redaction policy for fingerprints before hive-mind contribution? (Owned by sibling thread per §13.1.)
 4. Should customer-managed estate discoveries use the same triage queue as platform infrastructure, or a tenant-scoped queue?
