@@ -325,6 +325,152 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
     buildPhases: ["ideate"],
   },
+  // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────────
+  {
+    name: "list_epics",
+    description: "List epics with item-count rollups. Read-only. Filterable by status and whether the epic has open items. Returned epicId is the semantic id (EP-*), not the internal cuid.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["open", "in-progress", "done"], description: "Filter by epic status" },
+        hasOpenItems: { type: "boolean", description: "Only return epics that have at least one non-done item" },
+        limit: { type: "number", description: "Max results (default 25, max 100)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "list_backlog_items",
+    description: "List backlog items filtered by status, type, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"] },
+        type: { type: "string", enum: ["portfolio", "product"] },
+        epicId: { type: "string", description: "Semantic epic id (EP-*) to filter to" },
+        unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
+        hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
+        limit: { type: "number", description: "Max results (default 25, max 100)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "get_backlog_item",
+    description: "Fetch one backlog item by semantic id with linked epic, digital product, active build, and the most recent activity entries. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
+      },
+      required: ["itemId"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "update_backlog_item_status",
+    description: "Move a backlog item between lifecycle statuses (triaging|open|in-progress|done|deferred). Enforces legal-transition table; same-status calls are no-op successes. Sets completedAt and may auto-close the parent epic when the last item reaches done. Writes a status_change activity row.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Semantic backlog item id" },
+        status: { type: "string", enum: ["open", "in-progress", "done", "deferred"] },
+        reason: { type: "string", description: "Free-text rationale captured in the activity row" },
+        resolution: { type: "string", description: "Outcome summary, required when status=done" },
+      },
+      required: ["itemId", "status"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "link_backlog_item_to_epic",
+    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Semantic backlog item id" },
+        epicId: { type: "string", description: "Semantic epic id (EP-*), or empty string / 'null' to unlink" },
+      },
+      required: ["itemId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "search_specs_and_plans",
+    description: "Search design specs (docs/superpowers/specs) and implementation plans (docs/superpowers/plans) by title and body, with optional itemId/epicId narrowing. Returns paths, titles, dates, snippets, and the BI-/EP- references found in each match. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Free-text query (case-insensitive substring match on title and body)" },
+        kind: { type: "string", enum: ["spec", "plan"], description: "Restrict to one tree" },
+        matches: { type: "number", description: "Max results (default 10, max 25)" },
+        itemId: { type: "string", description: "Also include files that mention this BI- id" },
+        epicId: { type: "string", description: "Also include files that mention this EP- id" },
+      },
+      required: ["query"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "record_execution_evidence",
+    description: "Attach an evidence record to a backlog item (test pass/fail, build pass/fail, ux verification, spec review, manual check, external link). Writes an evidence activity row; the cross-cutting audit lives in ToolExecution. Side-effecting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Semantic backlog item id" },
+        kind: {
+          type: "string",
+          enum: [
+            "test_pass",
+            "test_fail",
+            "build_pass",
+            "build_fail",
+            "ux_verified",
+            "spec_review",
+            "manual_check",
+            "external_link",
+          ],
+          description: "Evidence kind",
+        },
+        summary: { type: "string", description: "Headline for the timeline (<= 240 chars)" },
+        url: { type: "string", description: "Link to PR / CI run / screenshot" },
+        body: { type: "string", description: "Longer notes (<= 8000 chars)" },
+        toolExecutionId: { type: "string", description: "Audit row id when this evidence was produced by a prior tool call" },
+      },
+      required: ["itemId", "kind", "summary"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "get_next_recommended_work",
+    description: "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        count: { type: "number", description: "How many recommendations to return (default 3, max 10)" },
+        epicId: { type: "string", description: "Restrict to one epic" },
+        forAgentId: { type: "string", description: "Only items grant-claimable by this agent" },
+        excludeItemIds: { type: "array", items: { type: "string" }, description: "Items to skip (already considered or rejected)" },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   {
     name: "report_quality_issue",
     description: "Report a bug, suggestion, or question about the platform. Available to ALL employees regardless of role — anyone can report a problem.",
@@ -2601,6 +2747,558 @@ export async function executeTool(
           epics: epics.map((e) => ({ epicId: e.epicId, title: e.title, status: e.status })),
           items: items.map((i) => ({ itemId: i.itemId, title: i.title, status: i.status, type: i.type, priority: i.priority, epicId: i.epicId })),
         },
+      };
+    }
+
+    // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────
+    case "list_epics": {
+      const where: Record<string, unknown> = {};
+      if (typeof params["status"] === "string") where["status"] = params["status"];
+      const limit = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+      const epics = await prisma.epic.findMany({
+        where,
+        take: limit,
+        orderBy: [{ updatedAt: "desc" }],
+        select: {
+          id: true,
+          epicId: true,
+          title: true,
+          status: true,
+          updatedAt: true,
+          items: { select: { status: true } },
+        },
+      });
+      const wantOpenItems = params["hasOpenItems"] === true;
+      const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+      const refIndex = await buildSpecPlanReferenceIndex();
+      const data = epics
+        .map((e) => {
+          const total = e.items.length;
+          const open = e.items.filter((it) => it.status === "open").length;
+          const inProgress = e.items.filter((it) => it.status === "in-progress").length;
+          const done = e.items.filter((it) => it.status === "done").length;
+          return {
+            epicId: e.epicId,
+            title: e.title,
+            status: e.status,
+            itemCount: { total, open, inProgress, done },
+            hasSpec: refIndex.specs.has(e.epicId) || refIndex.plans.has(e.epicId),
+            updatedAt: e.updatedAt.toISOString(),
+            _hasOpen: open + inProgress > 0,
+          };
+        })
+        .filter((row) => (wantOpenItems ? row._hasOpen : true))
+        .map((row) => {
+          const { _hasOpen, ...rest } = row;
+          void _hasOpen;
+          return rest;
+        });
+      return {
+        success: true,
+        message: `Listed ${data.length} epic(s).`,
+        data: { epics: data },
+      };
+    }
+
+    case "list_backlog_items": {
+      const where: Record<string, unknown> = {};
+      if (typeof params["status"] === "string") where["status"] = params["status"];
+      if (typeof params["type"] === "string") where["type"] = params["type"];
+      if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
+        const epicRow = await prisma.epic.findFirst({
+          where: { OR: [{ epicId: params["epicId"].trim() }, { id: params["epicId"].trim() }] },
+          select: { id: true },
+        });
+        if (epicRow) where["epicId"] = epicRow.id;
+        else
+          return {
+            success: false,
+            error: "epic_not_found",
+            message: `No epic matched ${params["epicId"]}`,
+          };
+      }
+      if (params["unclaimed"] === true) {
+        where["claimedById"] = null;
+        where["claimedByAgentId"] = null;
+      }
+      if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
+      else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
+
+      const limit = typeof params["limit"] === "number" ? Math.min(Math.max(1, params["limit"]), 100) : 25;
+      const items = await prisma.backlogItem.findMany({
+        where,
+        take: limit,
+        orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+        select: {
+          itemId: true,
+          title: true,
+          status: true,
+          type: true,
+          priority: true,
+          effortSize: true,
+          activeBuildId: true,
+          updatedAt: true,
+          triageOutcome: true,
+          epic: { select: { epicId: true } },
+          activeBuild: { select: { phase: true, draftApprovedAt: true } },
+        },
+      });
+      const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
+      const data = items.map((i) => ({
+        itemId: i.itemId,
+        title: i.title,
+        status: i.status,
+        type: i.type,
+        priority: i.priority,
+        effortSize: i.effortSize,
+        triageOutcome: i.triageOutcome,
+        epicId: i.epic?.epicId ?? null,
+        hasActiveBuild: i.activeBuildId != null,
+        lifecycleLabel: deriveLifecycleLabel({
+          backlogItem: { status: i.status, triageOutcome: i.triageOutcome, activeBuildId: i.activeBuildId },
+          featureBuild: i.activeBuild
+            ? { phase: i.activeBuild.phase, draftApprovedAt: i.activeBuild.draftApprovedAt }
+            : null,
+          governedBacklogEnabled: true,
+        }),
+        updatedAt: i.updatedAt.toISOString(),
+      }));
+      return {
+        success: true,
+        message: `Listed ${data.length} backlog item(s).`,
+        data: { items: data },
+      };
+    }
+
+    case "get_backlog_item": {
+      const itemIdRaw = String(params["itemId"] ?? "").trim();
+      if (!itemIdRaw)
+        return { success: false, error: "missing_itemId", message: "itemId is required" };
+      const item = await prisma.backlogItem.findUnique({
+        where: { itemId: itemIdRaw },
+        include: {
+          epic: { select: { epicId: true, title: true, status: true } },
+          digitalProduct: { select: { productId: true, name: true } },
+          activeBuild: {
+            select: {
+              buildId: true,
+              phase: true,
+              draftApprovedAt: true,
+              sandboxId: true,
+              createdAt: true,
+            },
+          },
+          activities: {
+            orderBy: { recordedAt: "desc" },
+            take: 10,
+          },
+        },
+      });
+      if (!item)
+        return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+      const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
+      const { searchSpecsAndPlans } = await import("@/lib/backlog/spec-plan-search");
+      const specPlanRefs = await searchSpecsAndPlans({
+        query: itemIdRaw,
+        itemId: itemIdRaw,
+        matches: 10,
+      });
+      return {
+        success: true,
+        message: `Loaded ${item.itemId}`,
+        data: {
+          itemId: item.itemId,
+          title: item.title,
+          status: item.status,
+          type: item.type,
+          priority: item.priority,
+          effortSize: item.effortSize,
+          triageOutcome: item.triageOutcome,
+          body: item.body ?? null,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+          completedAt: item.completedAt ? item.completedAt.toISOString() : null,
+          lifecycleLabel: deriveLifecycleLabel({
+            backlogItem: {
+              status: item.status,
+              triageOutcome: item.triageOutcome,
+              activeBuildId: item.activeBuildId,
+            },
+            featureBuild: item.activeBuild
+              ? { phase: item.activeBuild.phase, draftApprovedAt: item.activeBuild.draftApprovedAt }
+              : null,
+            governedBacklogEnabled: true,
+          }),
+          epic: item.epic
+            ? { epicId: item.epic.epicId, title: item.epic.title, status: item.epic.status }
+            : null,
+          digitalProduct: item.digitalProduct
+            ? { productId: item.digitalProduct.productId, name: item.digitalProduct.name }
+            : null,
+          activeBuild: item.activeBuild
+            ? {
+                buildId: item.activeBuild.buildId,
+                phase: item.activeBuild.phase,
+                draftApprovedAt: item.activeBuild.draftApprovedAt
+                  ? item.activeBuild.draftApprovedAt.toISOString()
+                  : null,
+                sandboxId: item.activeBuild.sandboxId,
+              }
+            : null,
+          specPlanFiles: specPlanRefs.map((r) => ({
+            path: r.path,
+            kind: r.kind,
+            title: r.title,
+            date: r.date,
+          })),
+          recentActivity: item.activities.map((a) => ({
+            id: a.id,
+            kind: a.kind,
+            summary: a.summary,
+            recordedAt: a.recordedAt.toISOString(),
+            payload: a.payload,
+          })),
+        },
+      };
+    }
+
+    case "update_backlog_item_status": {
+      const { isLegalTransition, isBacklogStatus } = await import("@/lib/backlog/transitions");
+      const itemIdRaw = String(params["itemId"] ?? "").trim();
+      const target = String(params["status"] ?? "");
+      if (!itemIdRaw)
+        return { success: false, error: "missing_itemId", message: "itemId is required" };
+      if (!isBacklogStatus(target))
+        return {
+          success: false,
+          error: "invalid_status",
+          message: `status must be one of triaging|open|in-progress|done|deferred, got ${target}`,
+        };
+      if (target === "triaging")
+        return {
+          success: false,
+          error: "invalid_status",
+          message: "use triage_backlog_item to move items through triage; this tool moves items already triaged",
+        };
+      const reason = typeof params["reason"] === "string" ? params["reason"] : null;
+      const resolution = typeof params["resolution"] === "string" ? params["resolution"] : null;
+      if (target === "done" && !resolution)
+        return {
+          success: false,
+          error: "missing_resolution",
+          message: "resolution is required when status=done",
+        };
+      const item = await prisma.backlogItem.findUnique({
+        where: { itemId: itemIdRaw },
+        select: { id: true, status: true, epicId: true },
+      });
+      if (!item)
+        return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+      if (!isBacklogStatus(item.status))
+        return {
+          success: false,
+          error: "corrupt_current_status",
+          message: `Item ${itemIdRaw} has non-canonical status ${item.status}`,
+        };
+      if (!isLegalTransition(item.status, target))
+        return {
+          success: false,
+          error: "illegal_transition",
+          message: `cannot move ${itemIdRaw} from ${item.status} to ${target}`,
+        };
+      if (item.status === target) {
+        return {
+          success: true,
+          entityId: itemIdRaw,
+          message: `${itemIdRaw} already at status=${target} (no-op)`,
+        };
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const next = await tx.backlogItem.update({
+          where: { id: item.id },
+          data: {
+            status: target,
+            ...(target === "done" ? { completedAt: new Date(), resolution } : {}),
+          },
+          select: { itemId: true, status: true, epicId: true, completedAt: true },
+        });
+        await tx.backlogItemActivity.create({
+          data: {
+            backlogItemId: item.id,
+            kind: "status_change",
+            summary: `${item.status} → ${target}` + (reason ? ` — ${reason.slice(0, 160)}` : ""),
+            payload: {
+              from: item.status,
+              to: target,
+              reason: reason ?? null,
+              resolution: resolution ?? null,
+            },
+            recordedById: userId,
+            recordedByAgentId: context?.agentId ?? null,
+          },
+        });
+        // Epic auto-close: when this item just reached done and every sibling is done/deferred,
+        // flip the epic to done. Mirrors AGENTS.md Epic Lifecycle Stewardship.
+        if (target === "done" && item.epicId) {
+          const remaining = await tx.backlogItem.count({
+            where: {
+              epicId: item.epicId,
+              id: { not: item.id },
+              status: { notIn: ["done", "deferred"] },
+            },
+          });
+          if (remaining === 0) {
+            await tx.epic.update({
+              where: { id: item.epicId },
+              data: { status: "done", completedAt: new Date() },
+            });
+          }
+        }
+        return next;
+      });
+      return {
+        success: true,
+        entityId: updated.itemId,
+        message: `${updated.itemId}: ${item.status} → ${updated.status}`,
+        data: { itemId: updated.itemId, status: updated.status, completedAt: updated.completedAt },
+      };
+    }
+
+    case "link_backlog_item_to_epic": {
+      const itemIdRaw = String(params["itemId"] ?? "").trim();
+      if (!itemIdRaw)
+        return { success: false, error: "missing_itemId", message: "itemId is required" };
+      const epicRaw = params["epicId"];
+      const wantUnlink =
+        epicRaw == null ||
+        (typeof epicRaw === "string" && (epicRaw.trim() === "" || epicRaw.trim().toLowerCase() === "null"));
+      let targetEpicCuid: string | null = null;
+      let targetEpicSemantic: string | null = null;
+      if (!wantUnlink) {
+        const epicRow = await prisma.epic.findFirst({
+          where: { OR: [{ epicId: String(epicRaw).trim() }, { id: String(epicRaw).trim() }] },
+          select: { id: true, epicId: true, status: true },
+        });
+        if (!epicRow)
+          return { success: false, error: "epic_not_found", message: `No epic matched ${epicRaw}` };
+        targetEpicCuid = epicRow.id;
+        targetEpicSemantic = epicRow.epicId;
+      }
+      const item = await prisma.backlogItem.findUnique({
+        where: { itemId: itemIdRaw },
+        select: { id: true, epicId: true, status: true, epic: { select: { epicId: true } } },
+      });
+      if (!item)
+        return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+      const priorEpicSemantic = item.epic?.epicId ?? null;
+      if (item.epicId === targetEpicCuid) {
+        return {
+          success: true,
+          entityId: itemIdRaw,
+          message: `${itemIdRaw} already linked to ${targetEpicSemantic ?? "no epic"} (no-op)`,
+        };
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.backlogItem.update({
+          where: { id: item.id },
+          data: { epicId: targetEpicCuid },
+        });
+        await tx.backlogItemActivity.create({
+          data: {
+            backlogItemId: item.id,
+            kind: "epic_link",
+            summary: `${priorEpicSemantic ?? "(no epic)"} → ${targetEpicSemantic ?? "(no epic)"}`,
+            payload: {
+              fromEpicId: priorEpicSemantic,
+              toEpicId: targetEpicSemantic,
+            },
+            recordedById: userId,
+            recordedByAgentId: context?.agentId ?? null,
+          },
+        });
+        // Reopen epic if we just attached an open/in-progress item to a done epic
+        if (targetEpicCuid && (item.status === "open" || item.status === "in-progress")) {
+          const target = await tx.epic.findUnique({
+            where: { id: targetEpicCuid },
+            select: { status: true },
+          });
+          if (target?.status === "done") {
+            await tx.epic.update({
+              where: { id: targetEpicCuid },
+              data: { status: "open", completedAt: null },
+            });
+          }
+        }
+      });
+      return {
+        success: true,
+        entityId: itemIdRaw,
+        message: `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}`,
+        data: { itemId: itemIdRaw, epicId: targetEpicSemantic },
+      };
+    }
+
+    case "search_specs_and_plans": {
+      const { searchSpecsAndPlans } = await import("@/lib/backlog/spec-plan-search");
+      const query = String(params["query"] ?? "").trim();
+      if (!query && !params["itemId"] && !params["epicId"])
+        return {
+          success: false,
+          error: "missing_query",
+          message: "query is required (or itemId/epicId)",
+        };
+      const kind = params["kind"] === "spec" || params["kind"] === "plan" ? params["kind"] : undefined;
+      const matches = typeof params["matches"] === "number" ? params["matches"] : undefined;
+      const itemId = typeof params["itemId"] === "string" ? params["itemId"] : undefined;
+      const epicId = typeof params["epicId"] === "string" ? params["epicId"] : undefined;
+      const results = await searchSpecsAndPlans({ query, kind, matches, itemId, epicId });
+      return {
+        success: true,
+        message: `Found ${results.length} match(es).`,
+        data: { results },
+      };
+    }
+
+    case "record_execution_evidence": {
+      const itemIdRaw = String(params["itemId"] ?? "").trim();
+      const kindRaw = String(params["kind"] ?? "");
+      const summaryRaw = String(params["summary"] ?? "").slice(0, 240);
+      const url = typeof params["url"] === "string" ? params["url"] : null;
+      const body = typeof params["body"] === "string" ? params["body"].slice(0, 8000) : null;
+      const toolExecutionId =
+        typeof params["toolExecutionId"] === "string" ? params["toolExecutionId"] : null;
+      const ALLOWED_KINDS = new Set([
+        "test_pass",
+        "test_fail",
+        "build_pass",
+        "build_fail",
+        "ux_verified",
+        "spec_review",
+        "manual_check",
+        "external_link",
+      ]);
+      if (!itemIdRaw || !kindRaw || !summaryRaw)
+        return {
+          success: false,
+          error: "missing_required",
+          message: "itemId, kind, summary are all required",
+        };
+      if (!ALLOWED_KINDS.has(kindRaw))
+        return { success: false, error: "invalid_kind", message: `kind=${kindRaw} not allowed` };
+      const item = await prisma.backlogItem.findUnique({
+        where: { itemId: itemIdRaw },
+        select: { id: true },
+      });
+      if (!item)
+        return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+      const activity = await prisma.backlogItemActivity.create({
+        data: {
+          backlogItemId: item.id,
+          kind: "evidence",
+          summary: summaryRaw,
+          payload: {
+            evidenceKind: kindRaw,
+            url,
+            body,
+            toolExecutionId,
+          },
+          recordedById: userId,
+          recordedByAgentId: context?.agentId ?? null,
+          toolExecutionId,
+        },
+      });
+      return {
+        success: true,
+        entityId: activity.id,
+        message: `Recorded ${kindRaw} evidence for ${itemIdRaw}`,
+        data: { activityId: activity.id, recordedAt: activity.recordedAt.toISOString() },
+      };
+    }
+
+    case "get_next_recommended_work": {
+      const { rankCandidates } = await import("@/lib/backlog/recommend");
+      const { buildSpecPlanReferenceIndex } = await import("@/lib/backlog/spec-plan-search");
+
+      const count = typeof params["count"] === "number" ? params["count"] : undefined;
+      const epicIdRaw = typeof params["epicId"] === "string" ? params["epicId"].trim() : "";
+      const forAgentId = typeof params["forAgentId"] === "string" ? params["forAgentId"] : null;
+      const excludeItemIds = Array.isArray(params["excludeItemIds"])
+        ? (params["excludeItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
+        : [];
+
+      const where: Record<string, unknown> = {
+        status: { in: ["open", "triaging"] },
+      };
+      if (epicIdRaw) {
+        const epicRow = await prisma.epic.findFirst({
+          where: { OR: [{ epicId: epicIdRaw }, { id: epicIdRaw }] },
+          select: { id: true },
+        });
+        if (epicRow) where["epicId"] = epicRow.id;
+        else
+          return {
+            success: false,
+            error: "epic_not_found",
+            message: `No epic matched ${epicIdRaw}`,
+          };
+      }
+
+      const items = await prisma.backlogItem.findMany({
+        where,
+        take: 200,
+        orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+        select: {
+          itemId: true,
+          title: true,
+          status: true,
+          priority: true,
+          effortSize: true,
+          triageOutcome: true,
+          activeBuildId: true,
+          claimedById: true,
+          claimedByAgentId: true,
+          updatedAt: true,
+          epic: { select: { epicId: true, status: true } },
+        },
+      });
+
+      const refIndex = await buildSpecPlanReferenceIndex();
+      const candidates = items.map((i) => {
+        const semanticEpic = i.epic?.epicId ?? null;
+        const hasSpec =
+          refIndex.specs.has(i.itemId) || (semanticEpic ? refIndex.specs.has(semanticEpic) : false);
+        const hasPlan =
+          refIndex.plans.has(i.itemId) || (semanticEpic ? refIndex.plans.has(semanticEpic) : false);
+        return {
+          itemId: i.itemId,
+          title: i.title,
+          status: i.status,
+          priority: i.priority,
+          effortSize: i.effortSize,
+          triageOutcome: i.triageOutcome,
+          hasActiveBuild: i.activeBuildId != null,
+          claimedById: i.claimedById,
+          claimedByAgentId: i.claimedByAgentId,
+          epicId: semanticEpic,
+          epicStatus: i.epic?.status ?? null,
+          hasSpec,
+          hasPlan,
+          updatedAt: i.updatedAt,
+        };
+      });
+
+      const ranked = rankCandidates(candidates, {
+        excludeItemIds,
+        forAgentId,
+        count,
+      });
+
+      return {
+        success: true,
+        message: `Recommending ${ranked.length} item(s).`,
+        data: { recommendations: ranked },
       };
     }
 

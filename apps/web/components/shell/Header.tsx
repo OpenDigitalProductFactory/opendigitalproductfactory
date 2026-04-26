@@ -2,6 +2,7 @@
 "use client";
 
 import { signOutAction } from "@/lib/actions";
+import { ContextualDocsButton } from "@/components/docs/ContextualDocsButton";
 import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
 import { PlatformHealthIndicator } from "@/components/monitoring/PlatformHealthIndicator";
 import { useEffect, useState } from "react";
@@ -95,6 +96,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
         </Link>
 
         <div className="flex items-center gap-3">
+          <ContextualDocsButton compact />
           <PlatformHealthIndicator />
           <HeaderFeedbackButton userId={userId ?? null} />
           {platformRole !== null && (
