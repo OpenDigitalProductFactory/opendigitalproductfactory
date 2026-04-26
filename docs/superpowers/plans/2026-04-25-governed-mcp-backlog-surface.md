@@ -252,20 +252,20 @@ Per AGENTS.md verification gate:
 
 This sub-plan delivers the Mode 1 external-client surface described in spec §11. It can ship in the same PR as the rest, or split into a follow-up PR if the diff is too large for one review — the core surface (§§1–12 above) is independently useful.
 
-### 13.1 Schema migration — `AgentApiToken` and `ToolExecution.apiTokenId`
+### 13.1 Schema migration — `McpApiToken` and `ToolExecution.apiTokenId`
 
-New migration `<timestamp>_agent_api_token`:
+Migration `20260425230000_mcp_api_token`:
 
-1. Add `AgentApiToken` model per spec §11.3 (User has-many).
-2. Add nullable `apiTokenId String?` column to `ToolExecution` plus index `@@index([apiTokenId])`.
+1. Add `McpApiToken` model per spec §11.3 (User has-many; cascade delete on user removal).
+2. Add nullable `apiTokenId String?` column to `ToolExecution` plus `@@index([apiTokenId, createdAt(sort: Desc)])`.
 3. No backfill — both are additive.
 
-### 13.2 New module: `apps/web/lib/auth/agent-api-token.ts`
+### 13.2 New module: `apps/web/lib/auth/mcp-api-token.ts`
 
 Surface:
 
 ```ts
-export async function issueAgentApiToken(input: {
+export async function issueMcpApiToken(input: {
   userId: string;
   name: string;
   capability: "read" | "write";
@@ -274,9 +274,9 @@ export async function issueAgentApiToken(input: {
   agentId?: string;
 }): Promise<{ tokenId: string; plaintext: string }>;
 
-export async function revokeAgentApiToken(tokenId: string, reason: string): Promise<void>;
+export async function revokeMcpApiToken(tokenId: string, reason: string): Promise<void>;
 
-export async function resolveAgentApiToken(plaintext: string): Promise<{
+export async function resolveMcpApiToken(plaintext: string): Promise<{
   tokenId: string;
   userId: string;
   agentId: string | null;
@@ -285,7 +285,7 @@ export async function resolveAgentApiToken(plaintext: string): Promise<{
 } | null>;
 ```
 
-`issueAgentApiToken`:
+`issueMcpApiToken`:
 
 - Generates 24 random bytes, encodes base32, prefixes `dpfmcp_`.
 - Hashes with sha256 (Node `crypto.createHash`).
@@ -293,13 +293,13 @@ export async function resolveAgentApiToken(plaintext: string): Promise<{
 - Inserts row with `tokenHash` only — plaintext returned to caller exactly once and never persisted.
 - If `capability === "write"`, reads `PlatformDevConfig` and throws if `contributionModel` is null.
 
-`resolveAgentApiToken`:
+`resolveMcpApiToken`:
 
 - Hashes input, single `findUnique({ tokenHash })` query.
 - Returns null if missing, revoked (`revokedAt != null`), or expired (`expiresAt < now()`).
 - Updates `lastUsedAt` (fire-and-forget).
 
-Tests in `agent-api-token.test.ts`:
+Tests in `mcp-api-token.test.ts`:
 
 - Issue read token without contribution-mode set → succeeds.
 - Issue write token without contribution-mode set → throws with the expected message.
@@ -308,12 +308,12 @@ Tests in `agent-api-token.test.ts`:
 - Expired token → returns null.
 - Tampered plaintext (one char off) → returns null without throwing.
 
-### 13.3 New endpoint: `apps/web/app/api/mcp/external/jsonrpc/route.ts`
+### 13.3 New endpoint: `apps/web/app/api/mcp/v1/route.ts`
 
 JSON-RPC 2.0 handler. POST only. Steps per spec §11.4:
 
 1. Read `Authorization: Bearer <token>` header. If absent → JSON-RPC error `{ code: -32001, message: "unauthorized" }`.
-2. `resolveAgentApiToken(plaintext)`. If null → same error.
+2. `resolveMcpApiToken(plaintext)`. If null → same error.
 3. Parse JSON-RPC envelope. Support methods: `initialize`, `notifications/initialized`, `tools/list`, `tools/call`. Mirrors the future internal JSON-RPC spec so external clients see one stable contract.
 4. For `tools/list`: load `User`, call `getAvailableTools(userContext, { agentId: token.agentId, unifiedMode: true })`, intersect with `token.scopes` (a tool is included only if `TOOL_TO_GRANTS[tool.name]` shares at least one entry with `token.scopes`).
 5. For `tools/call`: invoke `governedExecuteTool({ source: "external-jsonrpc", userContext, context: { agentId: token.agentId, apiTokenId: token.tokenId }, ... })`. Wrapper additionally rejects if the tool's required grants do not intersect `token.scopes`.
@@ -321,7 +321,7 @@ JSON-RPC 2.0 handler. POST only. Steps per spec §11.4:
 
 The wrapper signature gets a `context.apiTokenId?: string` field; the audit write includes `apiTokenId` and sets `executionMode: "external-jsonrpc"`.
 
-Tests in `apps/web/app/api/mcp/external/jsonrpc/route.test.ts`:
+Tests in `apps/web/app/api/mcp/v1/route.test.ts`:
 
 - Missing bearer → `-32001`.
 - Bad bearer → `-32001`.
@@ -332,7 +332,7 @@ Tests in `apps/web/app/api/mcp/external/jsonrpc/route.test.ts`:
 
 ### 13.4 Settings UI — `External Coding Agent Access` section
 
-File: extend `apps/web/app/(shell)/admin/platform-development/page.tsx` and add a new client component `apps/web/components/admin/AgentApiTokenManager.tsx`.
+File: extend `apps/web/app/(shell)/admin/platform-development/page.tsx` and add a new client component `apps/web/components/admin/McpTokenManager.tsx` plus session-scoped server actions in `apps/web/lib/actions/mcp-tokens.ts` (separate from the underlying `lib/auth/mcp-api-token.ts` primitives).
 
 UI:
 
@@ -370,8 +370,8 @@ In addition to the §11 verifications already listed:
 
 The PR now also notes:
 
-- New external MCP endpoint at `/api/mcp/external/jsonrpc` (bearer-token authenticated).
-- New `AgentApiToken` model with token issuance UI co-located with contribution mode.
+- New external MCP endpoint at `/api/mcp/v1` (bearer-token authenticated).
+- New `McpApiToken` model with token issuance UI co-located with contribution mode.
 - Write tokens gated on contribution mode being configured.
 - All external traffic audited with the new `apiTokenId` column on `ToolExecution`.
 

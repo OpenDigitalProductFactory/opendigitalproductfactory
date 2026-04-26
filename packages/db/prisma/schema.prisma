@@ -18,6 +18,7 @@ model User {
   approvedProposals            AgentActionProposal[]         @relation("ProposalDecisions")
   agentThreads                 AgentThread[]
   apiTokens                    ApiToken[]
+  mcpApiTokens                 McpApiToken[]
   backlogSubmissions           BacklogItem[]                 @relation("BacklogSubmissions")
   customEvalDimsApproved       CustomEvalDimension[]         @relation("CustomEvalDimensionApprover")
   customEvalDimsCreated        CustomEvalDimension[]         @relation("CustomEvalDimensionCreator")
@@ -2781,6 +2782,9 @@ model ToolExecution {
   auditClass    String?
   capabilityId  String?
   summary       String?
+  // External MCP transport (spec §13) — set when the tool call originated from
+  // a Bearer-token authenticated request through /api/mcp/v1.
+  apiTokenId    String?
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -2788,6 +2792,31 @@ model ToolExecution {
   @@index([threadId])
   @@index([auditClass, createdAt(sort: Desc)])
   @@index([capabilityId, createdAt(sort: Desc)])
+  @@index([apiTokenId, createdAt(sort: Desc)])
+}
+
+// Personal access token for the external MCP transport at /api/mcp/v1.
+// User-owned (the human issues it from /admin/platform-development), hashed
+// at rest, scoped to a subset of the user's grants, optionally bound to a
+// specific Agent identity for grant-narrowing.
+model McpApiToken {
+  id              String    @id @default(cuid())
+  userId          String
+  agentId         String?
+  name            String
+  tokenHash       String    @unique
+  prefix          String
+  scopes          String[]  @default([])
+  capability      String    @default("read")
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  revokedReason   String?
+  createdAt       DateTime  @default(now())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([tokenHash])
 }
 
 model AgentAttachment {
