@@ -893,6 +893,25 @@ model BacklogItem {
   featureBuilds         FeatureBuild[]   @relation("BacklogItemOriginator")
   submittedBy           User?            @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   taxonomyNode          TaxonomyNode?    @relation(fields: [taxonomyNodeId], references: [id])
+  activities            BacklogItemActivity[]
+}
+
+// Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
+// the entity-scoped view used by get_backlog_item and the UI.
+model BacklogItemActivity {
+  id                String      @id @default(cuid())
+  backlogItemId     String
+  kind              String
+  summary           String
+  payload           Json        @default("{}")
+  recordedAt        DateTime    @default(now())
+  recordedById      String?
+  recordedByAgentId String?
+  toolExecutionId   String?
+  backlogItem       BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@index([backlogItemId, recordedAt(sort: Desc)])
+  @@index([kind, recordedAt(sort: Desc)])
 }
 
 model Epic {

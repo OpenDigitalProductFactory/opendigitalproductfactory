@@ -47,7 +47,8 @@
           "role_registry_read",
           "policy_read",
           "strategy_read",
-          "budget_read"
+          "budget_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -101,7 +102,8 @@
           "agent_control_read",
           "role_registry_read",
           "investment_proposal_create",
-          "gap_analysis_read"
+          "gap_analysis_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -154,7 +156,8 @@
           "role_registry_read",
           "backlog_write",
           "roadmap_create",
-          "architecture_read"
+          "architecture_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -215,7 +218,8 @@
           "sbom_read",
           "release_gate_create",
           "build_plan_write",
-          "backlog_write"
+          "backlog_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -271,7 +275,8 @@
           "role_registry_read",
           "iac_execute",
           "deployment_plan_create",
-          "resource_reservation_read"
+          "resource_reservation_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -326,7 +331,8 @@
           "role_registry_read",
           "service_offer_read",
           "catalog_publish",
-          "subscription_read"
+          "subscription_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -380,7 +386,8 @@
           "role_registry_read",
           "consumer_onboard",
           "order_create",
-          "incident_read"
+          "incident_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -433,7 +440,8 @@
           "role_registry_read",
           "telemetry_read",
           "incident_create",
-          "change_event_emit"
+          "change_event_emit",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -486,7 +494,8 @@
           "role_registry_read",
           "constraint_validate",
           "architecture_guardrail_read",
-          "evidence_chain_read"
+          "evidence_chain_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -533,7 +542,8 @@
           "backlog_read",
           "policy_read",
           "policy_write",
-          "violation_report_create"
+          "violation_report_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -581,7 +591,8 @@
           "backlog_read",
           "strategy_read",
           "strategy_write",
-          "decision_record_create"
+          "decision_record_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -627,7 +638,8 @@
           "registry_read",
           "backlog_read",
           "backlog_write",
-          "portfolio_backlog_read"
+          "portfolio_backlog_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -672,7 +684,8 @@
           "backlog_read",
           "portfolio_read",
           "rationalization_report_create",
-          "decision_record_create"
+          "decision_record_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -721,7 +734,8 @@
           "financial_read",
           "tool_evaluation_read",
           "tool_verdict_create",
-          "risk_score_create"
+          "risk_score_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -768,7 +782,8 @@
           "criteria_read",
           "gap_analysis_create",
           "external_registry_search",
-          "tool_evaluation_create"
+          "tool_evaluation_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -812,7 +827,8 @@
           "registry_read",
           "backlog_read",
           "scope_agreement_create",
-          "decision_record_create"
+          "decision_record_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -862,7 +878,8 @@
           "credential_scan",
           "dependency_audit",
           "supply_chain_verify",
-          "finding_create"
+          "finding_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "persistent",
@@ -907,7 +924,8 @@
           "registry_read",
           "backlog_read",
           "backlog_write",
-          "scoring_model_read"
+          "scoring_model_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -955,7 +973,8 @@
           "architecture_write",
           "decision_record_create",
           "ea_graph_write",
-          "ea_graph_read"
+          "ea_graph_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1001,7 +1020,8 @@
           "backlog_read",
           "roadmap_create",
           "release_plan_read",
-          "decision_record_create"
+          "decision_record_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1046,7 +1066,8 @@
           "registry_read",
           "backlog_read",
           "release_plan_create",
-          "schedule_write"
+          "schedule_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1096,7 +1117,8 @@
           "dependency_graph_read",
           "sandbox_execute",
           "tool_evaluation_read",
-          "integration_test_create"
+          "integration_test_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1143,7 +1165,8 @@
           "backlog_read",
           "release_gate_create",
           "acceptance_package_write",
-          "decision_record_create"
+          "decision_record_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1190,7 +1213,8 @@
           "backlog_read",
           "deployment_plan_create",
           "rollback_plan_create",
-          "decision_record_create"
+          "decision_record_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1236,7 +1260,8 @@
           "registry_read",
           "backlog_read",
           "resource_reservation_write",
-          "order_create"
+          "order_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1281,7 +1306,8 @@
           "backlog_read",
           "iac_execute",
           "change_event_emit",
-          "product_instance_write"
+          "product_instance_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1327,7 +1353,8 @@
           "registry_read",
           "backlog_read",
           "service_offer_write",
-          "contract_read"
+          "contract_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1373,7 +1400,8 @@
           "registry_read",
           "backlog_read",
           "catalog_publish",
-          "service_offer_read"
+          "service_offer_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1419,7 +1447,8 @@
           "backlog_read",
           "subscription_write",
           "contract_write",
-          "chargeback_write"
+          "chargeback_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1463,7 +1492,8 @@
           "registry_read",
           "backlog_read",
           "consumer_write",
-          "entitlement_provision"
+          "entitlement_provision",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1507,7 +1537,8 @@
           "registry_read",
           "backlog_read",
           "product_instance_write",
-          "order_write"
+          "order_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1553,7 +1584,8 @@
           "backlog_read",
           "incident_create",
           "sla_compliance_write",
-          "clip_route"
+          "clip_route",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1597,7 +1629,8 @@
           "registry_read",
           "backlog_read",
           "telemetry_read",
-          "change_event_emit"
+          "change_event_emit",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1642,7 +1675,8 @@
           "backlog_read",
           "incident_create",
           "telemetry_read",
-          "escalation_trigger"
+          "escalation_trigger",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1688,7 +1722,8 @@
           "backlog_read",
           "runbook_execute",
           "incident_write",
-          "evidence_artifact_create"
+          "evidence_artifact_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1732,7 +1767,8 @@
           "registry_read",
           "backlog_read",
           "constraint_validate",
-          "violation_report_create"
+          "violation_report_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1781,7 +1817,8 @@
           "guardrail_validate",
           "decision_record_create",
           "tool_evaluation_read",
-          "trust_boundary_map"
+          "trust_boundary_map",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1825,7 +1862,8 @@
           "registry_read",
           "backlog_read",
           "evidence_chain_validate",
-          "audit_report_create"
+          "audit_report_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1869,7 +1907,8 @@
           "registry_read",
           "backlog_read",
           "policy_read",
-          "policy_write"
+          "policy_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -1915,7 +1954,8 @@
           "backlog_read",
           "budget_read",
           "chargeback_write",
-          "financial_report_create"
+          "financial_report_create",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "none",
@@ -1962,7 +2002,8 @@
           "architecture_read",
           "adr_create",
           "conway_validate",
-          "ea_graph_read"
+          "ea_graph_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "none",
@@ -2010,7 +2051,8 @@
           "sbom_read",
           "license_check",
           "regulatory_compliance_check",
-          "tool_evaluation_read"
+          "tool_evaluation_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "none",
@@ -2099,7 +2141,8 @@
           "registry_read",
           "backlog_read",
           "portfolio_backlog_write",
-          "pbi_status_write"
+          "pbi_status_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -2144,7 +2187,8 @@
           "registry_read",
           "backlog_read",
           "backlog_write",
-          "prod_status_write"
+          "prod_status_write",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
@@ -2188,7 +2232,8 @@
           "backlog_read",
           "backlog_write",
           "decision_record_create",
-          "architecture_read"
+          "architecture_read",
+          "spec_plan_read"
         ],
         "memory": {
           "type": "session",
