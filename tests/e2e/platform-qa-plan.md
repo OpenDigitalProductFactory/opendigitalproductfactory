@@ -258,6 +258,8 @@ Valid `outcome` values per `TRIAGE_OUTCOMES` in [packages/db/src/discovery-triag
 | ADMIN-08 | Navigate to `/admin/prompts` | Redirected to `/platform/ai/prompts` |
 | ADMIN-09 | Navigate to `/admin/skills` | Redirected to `/platform/ai/skills` |
 | ADMIN-10 | Navigate to `/platform/tools/catalog`, then `/platform/tools/services`, `/platform/tools/integrations`, and `/platform/tools/built-ins` | The Tools & Services family reads as Connection Catalog, MCP Services, Native Integrations, and Built-in Tools with no dead links or misleading labels |
+| REF-LOCALITY-01 | On `/admin/reference-data`, expand Work Locations → Headquarters → Link address; pick Country=US, Region=Texas; in Locality search for `Thorndale`; choose `+ Add new locality: "Thorndale"`; complete address fields and save | Locality is created through the cascade picker (no direct DB insert / seed edit); the HQ address links to it; on refresh the address is still linked |
+| REF-LOCALITY-02 | On the same Headquarters Link-address form, leave Region blank and try to save | Form blocks save and asks for the missing locality (cascade picker keeps Locality disabled until Region is selected); no address is created |
 
 ## Phase 14: Documentation
 

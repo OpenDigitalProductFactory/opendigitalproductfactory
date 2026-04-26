@@ -171,6 +171,7 @@ describe("createRegion", () => {
       select: { id: true, name: true, code: true },
     });
     expect(revalidatePath).toHaveBeenCalledWith("/employee");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/reference-data");
   });
 
   it("rejects empty/whitespace name", async () => {
@@ -185,11 +186,13 @@ describe("createRegion", () => {
 // createCity
 // ---------------------------------------------------------------------------
 describe("createCity", () => {
-  it("returns suggestions when near-match exists", async () => {
+  it("returns suggestions when an exact normalized match exists", async () => {
+    // Resolver service uses exact-normalized matching (case + diacritics + whitespace),
+    // not prefix matching, so the test input must normalize-equal an existing row.
     const existing = [{ id: "ci1", name: "Melbourne" }];
     vi.mocked(prisma.city.findMany).mockResolvedValue(existing as never);
 
-    const result = await createCity("region-1", "Melb");
+    const result = await createCity("region-1", "melbourne");
 
     expect(result.ok).toBe(false);
     expect(result.suggestions).toEqual(existing);
@@ -216,6 +219,7 @@ describe("createCity", () => {
       select: { id: true, name: true },
     });
     expect(revalidatePath).toHaveBeenCalledWith("/employee");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/reference-data");
   });
 
   it("rejects empty/whitespace name", async () => {
@@ -243,6 +247,7 @@ describe("forceCreateRegion", () => {
     expect(prisma.region.findMany).not.toHaveBeenCalled();
     expect(prisma.region.create).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/employee");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/reference-data");
   });
 });
 
@@ -263,5 +268,6 @@ describe("forceCreateCity", () => {
     expect(prisma.city.findMany).not.toHaveBeenCalled();
     expect(prisma.city.create).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/employee");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/reference-data");
   });
 });

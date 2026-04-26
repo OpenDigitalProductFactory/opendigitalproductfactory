@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
 import {
+  LocationCascadePicker,
+  type LocationSelection,
+} from "@/components/location/LocationCascadePicker";
+import {
+  createCity,
+  createRegion,
+  searchCities,
   searchCountries,
   searchRegions,
-  searchCities,
 } from "@/lib/actions/reference-data";
 import {
   linkWorkLocationAddress,
@@ -42,8 +47,6 @@ type Props = {
   workLocations: WorkLocation[];
 };
 
-type RefItem = { id: string; label: string };
-
 const LABEL_OPTIONS = [
   "home",
   "work",
@@ -64,6 +67,12 @@ const inputCls =
   "w-full rounded border px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]";
 
 const labelCls = "block text-xs font-medium text-[var(--dpf-muted)] mb-1";
+
+const EMPTY_LOCATION: LocationSelection = {
+  country: null,
+  region: null,
+  locality: null,
+};
 
 function formatAddress(a: Address): string {
   const parts = [a.addressLine1];
@@ -88,75 +97,41 @@ export function WorkLocationPanel({ workLocations }: Props) {
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
 
-  // Address form state -- keyed by location ID
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [label, setLabel] = useState<string>("work");
-  const [country, setCountry] = useState<RefItem | null>(null);
-  const [region, setRegion] = useState<RefItem | null>(null);
-  const [city, setCity] = useState<RefItem | null>(null);
+  const [locationSelection, setLocationSelection] =
+    useState<LocationSelection>(EMPTY_LOCATION);
+  const city = locationSelection.locality;
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Search adapters
-  const searchCountryAdapter = useCallback(
-    async (q: string): Promise<RefItem[]> => {
-      const results = await searchCountries(q);
-      return results.map((c) => ({
-        id: c.id,
-        label: `${c.name} (${c.iso2})`,
-      }));
-    },
+  const cascadeAdapters = useMemo(
+    () => ({
+      searchCountries: async (q: string) => {
+        const results = await searchCountries(q);
+        return results.map((c) => ({ id: c.id, label: `${c.name} (${c.iso2})` }));
+      },
+      searchRegions: async (countryId: string, q: string) => {
+        const results = await searchRegions(countryId, q);
+        return results.map((r) => ({
+          id: r.id,
+          label: r.code ? `${r.name} (${r.code})` : r.name,
+        }));
+      },
+      searchLocalities: async (regionId: string, q: string) => {
+        const results = await searchCities(regionId, q);
+        return results.map((c) => ({ id: c.id, label: c.name }));
+      },
+    }),
     [],
   );
-
-  const searchRegionAdapter = useCallback(
-    async (q: string): Promise<RefItem[]> => {
-      if (!country) return [];
-      const results = await searchRegions(country.id, q);
-      return results.map((r) => ({
-        id: r.id,
-        label: r.code ? `${r.name} (${r.code})` : r.name,
-      }));
-    },
-    [country],
-  );
-
-  const searchCityAdapter = useCallback(
-    async (q: string): Promise<RefItem[]> => {
-      if (!region) return [];
-      const results = await searchCities(region.id, q);
-      return results.map((c) => ({
-        id: c.id,
-        label: c.name,
-      }));
-    },
-    [region],
-  );
-
-  // Cascade handlers
-  const handleCountrySelect = useCallback((item: RefItem) => {
-    setCountry(item);
-    setRegion(null);
-    setCity(null);
-  }, []);
-
-  const handleRegionSelect = useCallback((item: RefItem) => {
-    setRegion(item);
-    setCity(null);
-  }, []);
-
-  const handleCitySelect = useCallback((item: RefItem) => {
-    setCity(item);
-  }, []);
 
   function resetForm() {
     setLinkingId(null);
     setLabel("work");
-    setCountry(null);
-    setRegion(null);
-    setCity(null);
+    setLocationSelection(EMPTY_LOCATION);
     setAddressLine1("");
     setAddressLine2("");
     setPostalCode("");
@@ -165,7 +140,7 @@ export function WorkLocationPanel({ workLocations }: Props) {
 
   function handleLink(locationId: string) {
     if (!city) {
-      setError("Please select a city.");
+      setError("Please select a locality.");
       return;
     }
     if (!addressLine1.trim()) {
@@ -215,7 +190,7 @@ export function WorkLocationPanel({ workLocations }: Props) {
           Work Locations ({workLocations.length})
         </h3>
         <span className="text-[var(--dpf-muted)] text-sm">
-          {open ? "\u25BE" : "\u25B8"}
+          {open ? "▾" : "▸"}
         </span>
       </button>
 
@@ -226,7 +201,6 @@ export function WorkLocationPanel({ workLocations }: Props) {
               key={loc.id}
               className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 space-y-2"
             >
-              {/* Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-[var(--dpf-foreground)]">
@@ -248,7 +222,6 @@ export function WorkLocationPanel({ workLocations }: Props) {
                 )}
               </div>
 
-              {/* Address display or link form */}
               {loc.address ? (
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-xs text-[var(--dpf-muted)] break-words">
@@ -286,37 +259,15 @@ export function WorkLocationPanel({ workLocations }: Props) {
                     </select>
                   </div>
 
-                  <div>
-                    <label className={labelCls}>Country</label>
-                    <ReferenceTypeahead
-                      placeholder="Search countries..."
-                      onSearch={searchCountryAdapter}
-                      onSelect={handleCountrySelect}
-                      value={country}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelCls}>Region</label>
-                    <ReferenceTypeahead
-                      placeholder="Search regions..."
-                      onSearch={searchRegionAdapter}
-                      onSelect={handleRegionSelect}
-                      value={region}
-                      disabled={!country}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelCls}>City</label>
-                    <ReferenceTypeahead
-                      placeholder="Search cities..."
-                      onSearch={searchCityAdapter}
-                      onSelect={handleCitySelect}
-                      value={city}
-                      disabled={!region}
-                    />
-                  </div>
+                  <LocationCascadePicker
+                    value={locationSelection}
+                    onChange={setLocationSelection}
+                    searchCountries={cascadeAdapters.searchCountries}
+                    searchRegions={cascadeAdapters.searchRegions}
+                    searchLocalities={cascadeAdapters.searchLocalities}
+                    onCreateRegion={(name, countryId) => createRegion(countryId, name, undefined)}
+                    onCreateLocality={(name, regionId) => createCity(regionId, name)}
+                  />
 
                   <div>
                     <label className={labelCls}>Address Line 1</label>
