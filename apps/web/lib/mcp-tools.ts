@@ -27,6 +27,7 @@ import {
   type IntegrationProfileTag,
   type IntegrationTreatment,
 } from "@/lib/integrate/integration-benchmarking";
+import { normalizeBuildPlanPaths } from "@/lib/integrate/build-plan-paths";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -3931,6 +3932,10 @@ export async function executeTool(
           );
           if (gate.allowed) {
             await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
+            if (toPhase === "review") {
+              const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
+              await queueBuildReviewVerification(latestBuild.buildId);
+            }
             const { agentEventBus } = await import("@/lib/agent-event-bus");
             if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
             logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
@@ -4030,6 +4035,16 @@ export async function executeTool(
             message: `REJECTED: Each task needs at minimum a "title" field. Got: ${JSON.stringify(Object.keys(firstTask ?? {}))}.`,
           };
         }
+
+        const normalizedPlan = normalizeBuildPlanPaths(plan as Parameters<typeof normalizeBuildPlanPaths>[0]);
+        if (normalizedPlan.unresolvedModifyPaths.length > 0) {
+          return {
+            success: false,
+            error: "buildPlan modify targets must exist in the current repo.",
+            message: `REJECTED: The build plan tries to modify file paths that do not exist in this repo: ${normalizedPlan.unresolvedModifyPaths.join(", ")}. Re-read the current codebase and save the buildPlan again using real monorepo-relative paths.`,
+          };
+        }
+        normalizedValue = normalizedPlan.plan;
 
         console.log(`[saveBuildEvidence] buildPlan validated: ${fileStructure.length} files, ${tasks.length} tasks`);
       }
@@ -4305,8 +4320,38 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
+      const normalizedPlan = normalizeBuildPlanPaths(build.buildPlan as Parameters<typeof normalizeBuildPlanPaths>[0]);
+      if (normalizedPlan.rewrites.length > 0 || normalizedPlan.unresolvedModifyPaths.length > 0) {
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: {
+            buildPlan: normalizedPlan.plan as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        });
+      }
+      if (normalizedPlan.unresolvedModifyPaths.length > 0) {
+        const review = {
+          decision: "fail" as const,
+          issues: normalizedPlan.unresolvedModifyPaths.map((path) => ({
+            severity: "critical" as const,
+            description: `Plan refers to missing modify target: ${path}`,
+          })),
+          summary: "Build plan points at files that do not exist in the current repo.",
+        };
+        await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+        if (context?.threadId) {
+          const { agentEventBus } = await import("@/lib/agent-event-bus");
+          agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
+        }
+        logBuildActivity(buildId, "reviewBuildPlan", `Plan review: fail. ${review.summary}`);
+        return {
+          success: true,
+          message: `Plan review FAILED. Blocking issues: ${normalizedPlan.unresolvedModifyPaths.join(", ")} no longer exist in the repo. Revise the implementation plan to target the current files, then re-run reviewBuildPlan.`,
+          data: { review, blocked: true, action: "revise_and_resubmit" },
+        };
+      }
       const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
-      const prompt = buildPlanReviewPrompt(build.buildPlan as Parameters<typeof buildPlanReviewPrompt>[0]);
+      const prompt = buildPlanReviewPrompt(normalizedPlan.plan);
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run two independent reviewers in parallel — conservative merge flags issues either catches.
@@ -4768,9 +4813,9 @@ export async function executeTool(
       });
       const { agentEventBus: eventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) eventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
-      const statusMsg = results.passed && results.typeCheckPassed
-        ? `All tests pass, typecheck clean.${fixAttempts > 0 ? ` Fixed after ${fixAttempts} attempt(s).` : ""}`
-        : `Tests: ${results.passed ? "PASS" : "FAIL"}. Typecheck: ${results.typeCheckPassed ? "PASS" : "FAIL"}.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
+      const statusMsg = results.typeCheckPassed
+        ? `Verification recorded: typecheck clean, unit test output captured for review.${fixAttempts > 0 ? ` Fixed after ${fixAttempts} attempt(s).` : ""}`
+        : `Verification recorded: typecheck failed, unit test output captured for review.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
       logBuildActivity(buildId, "run_sandbox_tests", statusMsg);
 
       return { success: true, message: statusMsg, data: verificationData };
@@ -5134,9 +5179,18 @@ export async function executeTool(
     }
 
     case "deploy_feature": {
-      const buildId = await resolveActiveBuildId(userId);
+      const explicitBuildId = typeof params.buildId === "string" && params.buildId.startsWith("FB-")
+        ? params.buildId
+        : null;
+      const buildId = explicitBuildId ?? await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, buildBranch: true, phase: true } });
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { sandboxId: true, buildBranch: true, phase: true, createdById: true },
+      });
+      if (!build || build.createdById !== userId) {
+        return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
+      }
       if (!build?.sandboxId) return { success: false, error: "Sandbox not running.", message: "No sandbox." };
       // Invariant: buildBranch must be set once we're in build phase or later.
       // Its absence means startBuildBranch never ran — so the sandbox tree
@@ -5169,6 +5223,24 @@ export async function executeTool(
       // Extract diff from sandbox
       const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/integrate/sandbox/sandbox-promotion");
       const extracted = await extractAndCategorizeDiff(build.sandboxId);
+      if (!extracted.fullDiff.trim()) {
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: { diffPatch: "", diffSummary: "" },
+        });
+        const noDiffMessage = "No releasable source changes were found in the sandbox. This build currently has only generated/cache churn or no real code changes, so release preparation cannot continue until implementation produces a real source diff.";
+        logBuildActivity(buildId, "deploy_feature", noDiffMessage);
+        return {
+          success: false,
+          error: "No releasable source changes found.",
+          message: noDiffMessage,
+          data: {
+            diffLength: 0,
+            codeFiles: 0,
+            migrationFiles: 0,
+          },
+        };
+      }
       await prisma.featureBuild.update({
         where: { buildId },
         data: { diffPatch: extracted.fullDiff, diffSummary: extracted.fullDiff.slice(0, 500) },
@@ -6194,7 +6266,10 @@ export async function executeTool(
     }
 
     case "contribute_to_hive": {
-      const buildId = await resolveActiveBuildId(userId);
+      const explicitBuildId = typeof params.buildId === "string" && params.buildId.startsWith("FB-")
+        ? params.buildId
+        : null;
+      const buildId = explicitBuildId ?? await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const devConfig = await prisma.platformDevConfig.findUnique({
@@ -6249,11 +6324,13 @@ export async function executeTool(
         where: { buildId },
         select: {
           id: true, title: true, brief: true, diffPatch: true, diffSummary: true,
-          sandboxId: true, portfolioId: true,
+          sandboxId: true, portfolioId: true, createdById: true,
           createdBy: { select: { email: true } },
         },
       });
-      if (!build) return { success: false, error: "Build not found.", message: "Build not found." };
+      if (!build || build.createdById !== userId) {
+        return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
+      }
 
       const diff = (build.diffPatch ?? "") as string;
       if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };

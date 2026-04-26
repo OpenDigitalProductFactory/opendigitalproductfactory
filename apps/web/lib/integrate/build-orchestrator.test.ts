@@ -130,9 +130,9 @@ describe("classifyOutcome — ClaudeResult (CLI dispatch)", () => {
     expect(classifyOutcome(result, "frontend-engineer")).toBe("BLOCKED");
   });
 
-  it("returns DONE_WITH_CONCERNS when Claude CLI fails but output has error details", () => {
+  it("returns BLOCKED when Claude CLI fails even if output includes error details", () => {
     const result = mockClaudeResult({ content: "Typecheck failed with 3 errors.", success: false });
-    expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
+    expect(classifyOutcome(result, "qa-engineer")).toBe("BLOCKED");
   });
 
   it("returns BLOCKED when Claude CLI fails with no useful content", () => {

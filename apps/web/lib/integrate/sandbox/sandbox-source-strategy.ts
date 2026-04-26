@@ -2,7 +2,10 @@
 // Pluggable strategy for copying project source into a sandbox container.
 
 import { lazyExec, lazyFs } from "@/lib/shared/lazy-node";
-import { execInSandbox } from "@/lib/sandbox";
+import {
+  buildSandboxWorkspaceCleanupCommand,
+  execInSandbox,
+} from "@/lib/sandbox";
 
 const exec = lazyExec();
 
@@ -56,6 +59,37 @@ export function buildWorkspaceRootProbeCommand(portalContainer: string): string 
   return `docker exec ${portalContainer} sh -lc "if [ -n \\"${projectRootVar}\\" ] && [ -f \\"${projectRootVar}/package.json\\" ]; then printf %s \\"${projectRootVar}\\"; elif [ -f /workspace/package.json ]; then printf %s /workspace; fi"`;
 }
 
+export function buildWorkspacePackagesCopyCommand(
+  portalContainer: string,
+  containerId: string,
+  packagesDir: string,
+): string {
+  return `docker exec ${portalContainer} tar -cf - -C ${packagesDir} . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`;
+}
+
+export function buildWorkspaceAppsWebCopyCommand(
+  portalContainer: string,
+  containerId: string,
+  webAppDir: string,
+): string {
+  return [
+    `docker exec ${portalContainer} tar`,
+    "--exclude='node_modules'",
+    "--exclude='.next'",
+    "--exclude='tsconfig.tsbuildinfo'",
+    `-cf - -C ${webAppDir} .`,
+    `| docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
+  ].join(" ");
+}
+
+export function buildWorkspaceScriptsCopyCommand(
+  portalContainer: string,
+  containerId: string,
+  rootConfigDir: string,
+): string {
+  return `docker exec ${portalContainer} tar -cf - -C ${rootConfigDir} scripts | docker exec -i ${containerId} tar -xf - -C /workspace`;
+}
+
 // ─── LocalSourceStrategy ──────────────────────────────────────────────────────
 
 export class LocalSourceStrategy implements SandboxSourceStrategy {
@@ -94,18 +128,25 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
     // 2. Copy full source from the active shared workspace when present.
     //    If the portal is running from an image-only bootstrap, fall back to -src paths.
     await exec(
-      `docker exec ${portalContainer} tar -cf - -C ${sourcePaths.packagesDir} . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/packages && tar -xf - -C /workspace/packages'`,
+      buildWorkspacePackagesCopyCommand(portalContainer, containerId, sourcePaths.packagesDir),
       { timeout: 60_000 },
     );
     await exec(
-      `docker exec ${portalContainer} tar -cf - -C ${sourcePaths.webAppDir} . | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps/web && tar -xf - -C /workspace/apps/web'`,
+      buildWorkspaceAppsWebCopyCommand(portalContainer, containerId, sourcePaths.webAppDir),
       { timeout: 60_000 },
     );
+    await exec(
+      buildWorkspaceScriptsCopyCommand(portalContainer, containerId, sourcePaths.rootConfigDir),
+      { timeout: 20_000 },
+    ).catch(() => console.log("[source-strategy] scripts/ not found, skipping"));
 
-    // 3. Git baseline so coding agent can produce a clean diff
+    // 3. Remove app-local generated artifacts before later pipeline steps
+    //    install dependencies or launch the preview server. The branch
+    //    management step owns git state; source copy should not re-init
+    //    or re-baseline the sandbox repository.
     await execInSandbox(
       containerId,
-      "cd /workspace && git config user.email sandbox@dpf.local && git config user.name 'DPF Sandbox' && git init && git add -A && git commit -m 'sandbox baseline'",
+      buildSandboxWorkspaceCleanupCommand(),
     );
   }
 }

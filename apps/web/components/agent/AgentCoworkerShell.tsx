@@ -8,6 +8,10 @@ import { getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import {
+  shouldDispatchAutoMessageImmediately,
+  shouldSuppressAutoMessage,
+} from "./agent-auto-message";
+import {
   clampPanelPosition,
   clampPanelSize,
   getDockedPanelFrame,
@@ -52,7 +56,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
   const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
-  const lastAutoMessageRef = useRef<string | null>(null);
+  const lastAutoMessageRef = useRef<{ signature: string; at: number } | null>(null);
   // Queue auto-messages whose target thread hasn't loaded yet. The panel
   // can't submit to a thread until threadId is set; if the open-agent-panel
   // event arrives while the thread is mid-switch, we hold the message
@@ -178,14 +182,29 @@ export function AgentCoworkerShell({ userContext }: Props) {
       setIsOpen(true);
       savePanelOpen(userKey, true);
       const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string; targetBuildId?: string } | undefined>).detail;
-      if (detail?.autoMessage && detail.autoMessage !== lastAutoMessageRef.current) {
-        lastAutoMessageRef.current = detail.autoMessage;
+      if (detail?.autoMessage) {
+        const signature = `${detail.autoMessage}::${detail.targetBuildId ?? ""}`;
+        const now = Date.now();
+        if (shouldSuppressAutoMessage({
+          last: lastAutoMessageRef.current,
+          nextSignature: signature,
+          now,
+        })) {
+          return;
+        }
+        lastAutoMessageRef.current = { signature, at: now };
         // If the event targets a specific build, queue the message until the
         // Shell's threadContext advances to that build. Otherwise submit
         // immediately (legacy behaviour — route-level auto-messages, e.g.
         // the onboarding COO introducing each setup step, don't have a
         // targetBuildId and must fire right away).
-        if (detail.targetBuildId) {
+        if (shouldDispatchAutoMessageImmediately({
+          targetBuildId: detail.targetBuildId ?? null,
+          activeBuildId,
+          threadId,
+        })) {
+          setPendingAutoMessage(detail.autoMessage);
+        } else if (detail.targetBuildId) {
           setQueuedAutoMessage({ message: detail.autoMessage, targetBuildId: detail.targetBuildId });
         } else {
           setPendingAutoMessage(detail.autoMessage);
@@ -217,7 +236,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
       document.removeEventListener("open-agent-feedback", handleOpenPanel);
       document.removeEventListener("open-agent-panel", handleOpenPanel);
     };
-  }, [userKey]);
+  }, [activeBuildId, threadId, userKey]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     if (dockedFrame) return;

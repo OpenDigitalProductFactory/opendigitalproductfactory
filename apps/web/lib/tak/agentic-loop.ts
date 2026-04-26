@@ -138,6 +138,44 @@ export function detectFabrication(
   return false;
 }
 
+function buildFabricationRecoveryNudge(params: {
+  response: string;
+  tools: ToolDefinition[];
+  executedTools: Array<{ name: string }>;
+}): string {
+  const availableToolNames = new Set(params.tools.map((tool) => tool.name));
+  const looksLikePlanReady =
+    /plan(?:ning)?\s+(?:is\s+done|ready)|start\s+implementation|building\s+now/i.test(params.response);
+
+  if (
+    looksLikePlanReady
+    && availableToolNames.has("saveBuildEvidence")
+    && availableToolNames.has("reviewBuildPlan")
+  ) {
+    return 'STOP. Do not say the plan is ready yet. First call saveBuildEvidence with field "buildPlan" and a valid value containing top-level "fileStructure" and "tasks" arrays. Then call reviewBuildPlan. Only after those tool calls succeed may you say Start Implementation is the next approval.';
+  }
+
+  return `STOP. You described code or claimed actions without using tools. Do NOT show code to the user. ${getPhaseSpecificNudge(params.executedTools)} Call a tool NOW.`;
+}
+
+function buildFabricationFailureMessage(params: {
+  response: string;
+  tools: ToolDefinition[];
+  executedTools: Array<{ name: string }>;
+}): string {
+  const availableToolNames = new Set(params.tools.map((tool) => tool.name));
+
+  if (
+    /plan(?:ning)?\s+(?:is\s+done|ready)|start\s+implementation|building\s+now/i.test(params.response)
+    && availableToolNames.has("saveBuildEvidence")
+    && availableToolNames.has("reviewBuildPlan")
+  ) {
+    return "I still have not persisted the implementation plan evidence. Start Implementation cannot unlock until I save buildPlan and complete reviewBuildPlan, so I am stopping instead of claiming the plan is ready.";
+  }
+
+  return "I stopped because I was still describing work without using the required tools. The authoritative state was not updated yet, so the claimed progress would have been misleading.";
+}
+
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
 // Nudging these responses toward tools breaks legitimate HR / data-entry flows
@@ -643,20 +681,12 @@ export async function runAgenticLoop(params: {
         };
       }
 
-      // Safety net: nudge the model to use tools if it responded with text-only.
-      // Catches both mid-workflow stalls AND first-iteration zero-tool responses.
-      // Skip nudging entirely when tools were stripped by routing degradation —
-      // the model gave a correct conversational response, nudging would push it
-      // to hallucinate tool calls it can't make.
-      const shouldNudgeNow = result.toolsStripped ? false : shouldNudge({
-        continuationNudges,
-        iteration,
-        maxIterations: MAX_ITERATIONS,
-        hasTools: !!(toolsForProvider && toolsForProvider.length > 0),
-        executedToolCount: executedTools.length,
-        responseLength: trimmed.length,
-        responseText: trimmed,
-      });
+      const looksFabricated = detectFabrication(
+        trimmed,
+        executedTools.length,
+        false,
+        executedTools.map((t) => t.name),
+      );
 
       const isBuildRoute = BUILD_ROUTE_PATTERN.test(routeContext);
       const hasConcreteBuildProgress = executedTools.some((t) => t.result.success && BUILD_PROGRESS_TOOL_NAMES.has(t.name));
@@ -722,19 +752,66 @@ export async function runAgenticLoop(params: {
         }
       }
 
+      if (looksFabricated) {
+        if (!fabricationRetried) {
+          fabricationRetried = true;
+          console.warn(
+            "[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying.",
+          );
+          messages = [
+            ...messages,
+            { role: "assistant" as const, content: result.content },
+            {
+              role: "user" as const,
+              content: buildFabricationRecoveryNudge({
+                response: trimmed,
+                tools,
+                executedTools,
+              }),
+            },
+          ];
+          continue;
+        }
+
+        return {
+          content: buildFabricationFailureMessage({
+            response: trimmed,
+            tools,
+            executedTools,
+          }),
+          providerId: result.providerId,
+          modelId: result.modelId,
+          downgraded: result.downgraded,
+          downgradeMessage: result.downgradeMessage,
+          totalInputTokens,
+          totalOutputTokens,
+          executedTools,
+          proposal: null,
+        };
+      }
+
+      // Safety net: nudge the model to use tools if it responded with text-only.
+      // Catches both mid-workflow stalls AND first-iteration zero-tool responses.
+      // Skip nudging entirely when tools were stripped by routing degradation —
+      // the model gave a correct conversational response, nudging would push it
+      // to hallucinate tool calls it can't make.
+      const shouldNudgeNow = result.toolsStripped ? false : shouldNudge({
+        continuationNudges,
+        iteration,
+        maxIterations: MAX_ITERATIONS,
+        hasTools: !!(toolsForProvider && toolsForProvider.length > 0),
+        executedToolCount: executedTools.length,
+        responseLength: trimmed.length,
+        responseText: trimmed,
+      });
+
         if (shouldNudgeNow) {
           // Preserve the best text-only response before nudging, in case the
           // nudge produces an empty response (common with ChatGPT/gpt-5.4).
           // Never preserve content that already looks fabricated — otherwise a
           // later empty retry can resurrect an ungrounded "plan ready" / "built"
           // claim as the fallback response.
-          const looksFabricated = detectFabrication(
-            trimmed,
-            executedTools.length,
-            false,
-            executedTools.map((t) => t.name),
-          );
-          if (!looksFabricated && trimmed.length > bestPreNudgeContent.length) {
+          if (trimmed.length > bestPreNudgeContent.length) {
             bestPreNudgeContent = trimmed;
           }
           continuationNudges++;
@@ -775,23 +852,6 @@ export async function runAgenticLoop(params: {
           {
             role: "user" as const,
             content: nudgeContent,
-          },
-        ];
-        continue;
-      }
-
-      // Fabrication guardrail: if agent claims completion without calling tools, retry once
-      if (!fabricationRetried && detectFabrication(trimmed, executedTools.length, false, executedTools.map((t) => t.name))) {
-        fabricationRetried = true;
-        console.warn(
-          `[agentic-loop] fabrication detected: claimed completion with 0 tools. Retrying.`,
-        );
-        messages = [
-          ...messages,
-          { role: "assistant" as const, content: result.content },
-          {
-            role: "user" as const,
-            content: `STOP. You described code or claimed actions without using tools. Do NOT show code to the user. ${getPhaseSpecificNudge(executedTools)} Call a tool NOW.`,
           },
         ];
         continue;
@@ -1020,8 +1080,21 @@ export async function runAgenticLoop(params: {
     `[agentic-loop] hit MAX_ITERATIONS (${MAX_ITERATIONS}). executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
+  const fallbackContent = lastResult?.content?.trim() ?? "";
+  const fallbackIsFabricated = detectFabrication(
+    fallbackContent,
+    executedTools.length,
+    false,
+    executedTools.map((tool) => tool.name),
+  );
   return {
-    content: lastResult?.content || "I ran into a limit while working on this. Try breaking your request into smaller steps.",
+    content: fallbackIsFabricated
+      ? buildFabricationFailureMessage({
+          response: fallbackContent,
+          tools,
+          executedTools,
+        })
+      : lastResult?.content || "I ran into a limit while working on this. Try breaking your request into smaller steps.",
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
     downgraded: lastResult?.downgraded ?? false,

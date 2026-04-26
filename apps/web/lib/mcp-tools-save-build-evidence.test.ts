@@ -88,4 +88,55 @@ describe("saveBuildEvidence", () => {
       }),
     );
   });
+
+  it("canonicalizes legacy Build Studio file paths before persisting buildPlan", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "buildPlan",
+        value: {
+          fileStructure: [
+            {
+              path: "apps/web/components/build-studio/WorkflowGraphPanel.tsx",
+              action: "modify",
+              purpose: "Constrain graph canvas",
+            },
+          ],
+          tasks: [
+            {
+              title: "Constrain graph canvas",
+              testFirst: "Inspect apps/web/components/build-studio/WorkflowGraphPanel.tsx",
+              implement: "Update apps/web/components/build-studio/WorkflowGraphPanel.tsx",
+              verify: "Graph stays in bounds",
+            },
+          ],
+        },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-12345678" },
+        data: expect.objectContaining({
+          buildPlan: expect.objectContaining({
+            fileStructure: [
+              expect.objectContaining({
+                path: "apps/web/components/build/ProcessGraph.tsx",
+              }),
+            ],
+            tasks: [
+              expect.objectContaining({
+                implement: "Update apps/web/components/build/ProcessGraph.tsx",
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+  });
 });

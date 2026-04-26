@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  buildDockerHealthInspectCommand,
   buildDbContainerName,
   buildNeo4jContainerName,
   buildQdrantContainerName,
@@ -73,6 +74,17 @@ describe("buildQdrantContainerName", () => {
 
   it("includes the full buildId", () => {
     expect(buildQdrantContainerName("build-xyz-99")).toBe("dpf-sandbox-qdrant-build-xyz-99");
+  });
+});
+
+describe("buildDockerHealthInspectCommand", () => {
+  it("checks container health through docker inspect instead of in-container wget", () => {
+    const command = buildDockerHealthInspectCommand("dpf-qdrant-1");
+
+    expect(command).toContain("docker inspect -f");
+    expect(command).toContain("dpf-qdrant-1");
+    expect(command).toContain("healthy");
+    expect(command).not.toContain("wget");
   });
 });
 
