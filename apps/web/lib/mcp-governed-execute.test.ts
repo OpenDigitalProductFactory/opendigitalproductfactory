@@ -100,6 +100,29 @@ describe("governedExecuteTool — happy path", () => {
       expect(auditRows[0]?.executionMode).toBe(source);
     }
   });
+
+  it("writes apiTokenId from context when set (external-jsonrpc transport)", async () => {
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "u",
+      userContext: NORMAL_USER,
+      context: { apiTokenId: "tok_abc" },
+      source: "external-jsonrpc",
+    });
+    expect(auditRows[0]?.apiTokenId).toBe("tok_abc");
+  });
+
+  it("writes apiTokenId=null when context has no token (in-portal transports)", async () => {
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "u",
+      userContext: NORMAL_USER,
+      source: "agentic-loop",
+    });
+    expect(auditRows[0]?.apiTokenId).toBeNull();
+  });
 });
 
 describe("governedExecuteTool — rejection paths", () => {
