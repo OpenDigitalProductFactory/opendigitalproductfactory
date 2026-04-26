@@ -3,3 +3,8 @@
 *.docx filter=lfs diff=lfs merge=lfs -text
 docker-entrypoint.sh text eol=lf
 *.sh text eol=lf
+
+# Upstream Model Context Protocol spec — preserve LF line endings so the local
+# copy stays byte-identical to upstream and refresh diffs are clean.
+docs/Reference/mcp/spec/** text eol=lf
+docs/Reference/mcp/schema/** text eol=lf
