@@ -4,8 +4,13 @@ import { prisma } from "@dpf/db";
 import { getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { BuildStudio } from "@/components/build/BuildStudio";
+import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
 import Link from "next/link";
 import { execSync } from "child_process";
+
+interface PageProps {
+  searchParams: Promise<{ v?: string }>;
+}
 
 function getProjectBranch(): string | null {
   try {
@@ -21,7 +26,12 @@ function getProjectBranch(): string | null {
   }
 }
 
-export default async function BuildPage() {
+export default async function BuildPage({ searchParams }: PageProps) {
+  const { v } = await searchParams;
+  if (v === "2") {
+    return <BuildStudioV2 />;
+  }
+
   const session = await auth();
   if (!session?.user?.id) return null;
 

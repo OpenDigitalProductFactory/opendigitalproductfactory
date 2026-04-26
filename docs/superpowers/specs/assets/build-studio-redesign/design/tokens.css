@@ -1,0 +1,138 @@
+/* DPF Build Studio v2 — outcome-driven, package-delivery metaphor */
+:root {
+  /* Light (matches DPF globals.css :root) */
+  --bg:        #fafafa;
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f6;
+  --surface-3: #eeeef2;
+  --text:      #14142b;
+  --text-2:    #4a4a5e;
+  --muted:     #6b7280;
+  --accent:    #2563eb;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
+  --border:    #e2e2e8;
+  --border-strong: #c8c8d4;
+  --success:   #16a34a;
+  --warning:   #d97706;
+  --error:     #dc2626;
+  --info:      #0284c7;
+
+  --shadow-card: 0 1px 2px rgba(15,15,30,0.04), 0 4px 14px rgba(15,15,30,0.05);
+  --shadow-pop:  0 6px 24px rgba(15,15,30,0.10);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+
+  --radius:    10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+}
+
+[data-theme="dark"] {
+  --bg:        #0f0f1a;
+  --surface-1: #1a1a2e;
+  --surface-2: #161625;
+  --surface-3: #121220;
+  --text:      #e2e2f0;
+  --text-2:    #b8b8cc;
+  --muted:     #8888a0;
+  --accent:    #7c8cf8;
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--surface-1));
+  --border:    #2a2a40;
+  --border-strong: #3a3a55;
+  --success:   #4ade80;
+  --warning:   #fbbf24;
+  --error:     #f87171;
+  --info:      #38bdf8;
+
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.30), 0 4px 14px rgba(0,0,0,0.30);
+  --shadow-pop:  0 6px 24px rgba(0,0,0,0.40);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+button { font-family: inherit; cursor: pointer; }
+textarea, input { font-family: inherit; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; border: 2px solid var(--bg); }
+
+.mono { font-family: var(--font-mono); }
+.serif { font-family: var(--font-serif); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  font-size: 13px; font-weight: 500;
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 140ms ease;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.btn-primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  font-weight: 600;
+}
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn-accent {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.btn-accent:hover { filter: brightness(1.06); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--muted)); flex-shrink: 0; }
+.chip-dot.pulse {
+  box-shadow: 0 0 0 0 var(--c);
+  animation: pulse 1.6s infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0    color-mix(in srgb, var(--c) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 6px  transparent; }
+  100% { box-shadow: 0 0 0 0    transparent; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slide-up 320ms ease-out; }
+
+@keyframes shimmer {
+  0%   { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 400px 100%;
+  animation: shimmer 1.6s infinite linear;
+}

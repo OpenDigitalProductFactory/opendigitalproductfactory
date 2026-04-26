@@ -9,7 +9,9 @@
   --dpf-text: #1a1a2e;
   --dpf-text-secondary: #4a4a5e;
   --dpf-accent: #2563eb;
+  --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 12%, var(--dpf-surface-1));
   --dpf-border: #d4d4dc;
+  --dpf-border-strong: #c8c8d4;
   --dpf-muted: #6b7280;
   --dpf-success: #16a34a;
   --dpf-warning: #d97706;
@@ -29,7 +31,9 @@
     --dpf-text: #e2e2f0;
     --dpf-text-secondary: #b8b8cc;
     --dpf-accent: #7c8cf8;
+    --dpf-accent-soft: color-mix(in srgb, var(--dpf-accent) 18%, var(--dpf-surface-1));
     --dpf-border: #2a2a40;
+    --dpf-border-strong: #3a3a55;
     --dpf-muted: #8888a0;
     --dpf-success: #4ade80;
     --dpf-warning: #fbbf24;
@@ -93,3 +97,10 @@ body {
     background: color-mix(in srgb, var(--dpf-accent) 15%, var(--dpf-surface-1));
   }
 }
+
+/* Build Studio v2 — bubble entrance animation */
+@keyframes dpf-slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dpf-slide-up { animation: dpf-slide-up 320ms ease-out; }
