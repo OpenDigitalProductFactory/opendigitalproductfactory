@@ -102,8 +102,8 @@ function Register-DPFStartupTask {
     }
 }
 
-$GHCR_PORTAL = "ghcr.io/markdbodman/dpf-portal"
-$GHCR_SANDBOX = "ghcr.io/markdbodman/dpf-sandbox"
+$GHCR_PORTAL = "ghcr.io/opendigitalproductfactory/dpf-portal"
+$GHCR_SANDBOX = "ghcr.io/opendigitalproductfactory/dpf-sandbox"
 
 $InstallMode = $null  # Set in Step 4: "consumer", "contributor", or "private"
 
@@ -435,7 +435,7 @@ if (-not (Test-StepDone "download")) {
             # Authenticate with GitHub Container Registry (images are private during early access)
             $oldEAP = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
-            docker pull ghcr.io/markdbodman/dpf-portal:latest 2>&1 | Out-Null
+            docker pull ghcr.io/opendigitalproductfactory/dpf-portal:latest 2>&1 | Out-Null
             $needsAuth = ($LASTEXITCODE -ne 0)
             $ErrorActionPreference = $oldEAP
 
