@@ -167,7 +167,7 @@ In `Dockerfile`, after line 30 (`FROM base AS runner`), add:
 ```dockerfile
 LABEL org.opencontainers.image.title="Open Digital Product Factory"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
+LABEL org.opencontainers.image.source="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
 ```
 
 - [ ] **Step 2: Update README license section**

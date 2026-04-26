@@ -382,7 +382,7 @@ In `apps/web/lib/mcp-tools.ts`, find the `contribute_to_hive` handler. After the
       let prUrl: string | null = null;
       try {
         const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
-        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/markdbodman/opendigitalproductfactory.git";
+        const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
         const hasDco = !!devConfig?.dcoAcceptedAt;
 
         if (hasDco && (process.env.GITHUB_TOKEN || devConfig?.gitRemoteUrl)) {
@@ -491,7 +491,7 @@ Create `apps/web/lib/git-backup.ts`:
 
 import { prisma } from "@dpf/db";
 
-const DEFAULT_UPSTREAM = "https://github.com/markdbodman/opendigitalproductfactory.git";
+const DEFAULT_UPSTREAM = "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
 
 /**
  * Commit a promotion diff to the configured backup repository.

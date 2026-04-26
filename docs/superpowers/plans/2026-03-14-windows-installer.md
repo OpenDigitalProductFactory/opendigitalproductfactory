@@ -744,7 +744,7 @@ if (-not (Is-StepDone "docker")) {
 Write-Step 4 8 "Downloading Digital Product Factory..."
 if (-not (Is-StepDone "download")) {
     Write-Action "Downloading latest release..."
-    $repoUrl = "https://github.com/markdbodman/opendigitalproductfactory/archive/refs/heads/main.zip"
+    $repoUrl = "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/archive/refs/heads/main.zip"
     $zipPath = "$env:TEMP\dpf-latest.zip"
     Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
 
@@ -1047,7 +1047,7 @@ An AI-powered digital product management platform with enterprise architecture m
 
 ## Quick Install (Windows)
 
-1. Download `install-dpf.ps1` from the [latest release](https://github.com/markdbodman/opendigitalproductfactory/releases)
+1. Download `install-dpf.ps1` from the [latest release](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases)
 2. Right-click the file → **Run with PowerShell**
 3. Follow the guided steps (5-10 minutes)
 
@@ -1057,7 +1057,7 @@ The installer will set up everything automatically: Docker, databases, AI engine
 
 ```bash
 # Clone and install
-git clone https://github.com/markdbodman/opendigitalproductfactory.git
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
 cd opendigitalproductfactory
 pnpm install
 

@@ -1,5 +1,7 @@
 # Documentation
 
+> Looking for a pre-install tour you can share with people who don't have the platform yet? See [index.html](index.html) — a single-page overview that links into the rest of this directory.
+
 This directory holds the long-form documentation that accompanies the Open Digital Product Factory source tree. It's split into two audiences:
 
 - **User-facing** docs live under [user-guide/](user-guide/) and are also bundled into the portal's in-app help pages at runtime.

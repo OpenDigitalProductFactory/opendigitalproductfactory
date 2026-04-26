@@ -40,7 +40,7 @@ Status: Implemented (code) + Decided (architecture)
 
 **Context:** Three options for how hive mind contributions reach the upstream repo:
 - Option A: Shared community fork (`dpf-hive/opendigitalproductfactory`)
-- Option B: Direct branch push to upstream (`markdbodman/opendigitalproductfactory`)
+- Option B: Direct branch push to upstream (`OpenDigitalProductFactory/opendigitalproductfactory`)
 - Option C: Cross-fork from customer's own fork (current)
 
 **Decision:** Option B as the primary path. Option A as a future evolution.
@@ -66,7 +66,7 @@ Status: Implemented (code) + Decided (architecture)
 
 **How it works:**
 
-1. Mark creates a fine-grained PAT on `markdbodman` scoped to `opendigitalproductfactory` with `Contents: Read and write` + `Pull requests: Read and write`
+1. Maintainer creates a fine-grained PAT on their account scoped to `OpenDigitalProductFactory/opendigitalproductfactory` with `Contents: Read and write` + `Pull requests: Read and write`
 2. This token is set as `HIVE_CONTRIBUTION_TOKEN` in the environment (docker-compose.yml or a registration endpoint)
 3. The seed stores it in `CredentialEntry` with `providerId: "hive-contribution"`
 4. When a customer selects `selective` or `contribute_all` and accepts the DCO, the platform uses this pre-provisioned token
@@ -176,7 +176,7 @@ fork_only (private mode)
   └── Customer identity: visible in their own repo (fine — it's theirs)
 
 selective / contribute_all (hive mode)
-  ├── Upstream repo (upstreamRemoteUrl = markdbodman/opendigitalproductfactory)
+  ├── Upstream repo (upstreamRemoteUrl = OpenDigitalProductFactory/opendigitalproductfactory)
   ├── Hive token (hive-contribution credential, provisioned by platform owner)
   ├── Branch: dpf/<clientId-hash>/<feature-slug>
   ├── PR: same-repo branch → main

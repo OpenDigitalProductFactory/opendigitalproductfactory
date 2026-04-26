@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Open Digital Product Factory — Documentation Overview</title>
+<meta name="description" content="A pre-install tour of the Open Digital Product Factory: what it does, how it is governed, and where to read the user guide, architecture, and specifications." />
+<style>
+  :root {
+    --bg: #0b0d10;
+    --surface: #14181d;
+    --surface-2: #1b2027;
+    --border: #262d36;
+    --fg: #e6e8eb;
+    --fg-muted: #a4adb8;
+    --accent: #6aa9ff;
+    --accent-2: #8be0c7;
+    --warn: #ffcf66;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface-2: #f0f3f7;
+      --border: #d9dde3;
+      --fg: #1a1f25;
+      --fg-muted: #515b66;
+      --accent: #1f5fbf;
+      --accent-2: #1f7a5a;
+      --warn: #8a5a00;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header.hero {
+    padding: 56px 24px 40px;
+    border-bottom: 1px solid var(--border);
+    background:
+      radial-gradient(1200px 400px at 20% -10%, rgba(106,169,255,0.10), transparent 60%),
+      radial-gradient(900px 300px at 90% 0%, rgba(139,224,199,0.08), transparent 60%),
+      var(--surface);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .eyebrow {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    font-size: clamp(16px, 1.6vw, 19px);
+    color: var(--fg-muted);
+    max-width: 820px;
+    margin: 0 0 24px;
+  }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .btn {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0b0d10;
+  }
+  .btn:hover { text-decoration: none; filter: brightness(1.05); }
+
+  main { padding: 48px 24px 80px; }
+  section { margin-bottom: 56px; }
+  section h2 {
+    font-size: 22px;
+    margin: 0 0 8px;
+    letter-spacing: -0.005em;
+  }
+  section .sub {
+    color: var(--fg-muted);
+    margin: 0 0 20px;
+    max-width: 820px;
+  }
+
+  .grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .card {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h3 {
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--fg);
+  }
+  .card p { margin: 0; color: var(--fg-muted); font-size: 14px; }
+
+  table.guide {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 14px;
+  }
+  table.guide th, table.guide td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.guide th {
+    background: var(--surface-2);
+    font-weight: 600;
+    color: var(--fg);
+  }
+  table.guide tr:last-child td { border-bottom: none; }
+
+  .pillars {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+  .pillar {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .pillar .tag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin-bottom: 6px;
+  }
+
+  .install {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .install h3 { margin: 0 0 10px; font-size: 16px; }
+  pre {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 0;
+    overflow-x: auto;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--fg);
+  }
+  .note {
+    border-left: 3px solid var(--warn);
+    padding: 8px 12px;
+    background: var(--surface-2);
+    color: var(--fg-muted);
+    border-radius: 4px;
+    font-size: 14px;
+    margin-top: 12px;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px;
+    color: var(--fg-muted);
+    font-size: 13px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Open Digital Product Factory</div>
+    <h1>An open, AI-native platform that helps your organization build and run itself.</h1>
+    <p class="lede">
+      A pre-install tour for people who want to understand the platform before they download it. The Open Digital Product Factory (ODPF) gives small teams and regulated enterprises the same digital-product, architecture, compliance, and AI-workforce capabilities that have historically been locked behind expensive enterprise suites &mdash; on your own hardware, governed end-to-end, and extensible by AI coworkers under human approval.
+    </p>
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">View on GitHub</a>
+      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md">Project README</a>
+      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Contributing</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <h2>What this page is</h2>
+    <p class="sub">
+      You can explore the platform's documentation here without installing anything. The full user guide, architecture references, and standards documents are kept inside the repository so they stay in lock-step with the running code; this page is a curated entry point that links into them.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>User Guide</h3>
+        <p>Day-to-day operating guidance for everyone who uses the platform &mdash; getting started, AI coworkers, build studio, compliance, finance, HR, customers, and more.</p>
+      </div>
+      <div class="card">
+        <h3>Architecture &amp; Standards</h3>
+        <p>The Trusted AI Kernel (TAK), Global AI Agent Identification and Governance (GAID), the white paper, and the platform's own conformance assessment.</p>
+      </div>
+      <div class="card">
+        <h3>Specifications &amp; Plans</h3>
+        <p>Long-form design specs that record how each capability was built. Useful as historical context, not as onboarding material.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why the platform exists</h2>
+    <p class="sub">
+      Enterprise software for portfolio management, enterprise architecture, backlog tracking, and lifecycle governance has traditionally been locked behind expensive platforms that require dedicated teams to operate. Capable AI agents change that economics: the know-how of those professionals can be commoditized into a limitless workforce, as long as governance keeps humans in the loop.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Premise</div>
+        <strong>AI agents are first-class participants.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Every screen has a context-aware AI coworker. Every action they propose flows through human-in-the-loop governance. Every decision is audit-logged.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Sovereignty</div>
+        <strong>Runs on your hardware.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A built-in local AI engine ships with the platform, so no data leaves your environment unless you opt into an external provider.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Direction</div>
+        <strong>A platform that grows from within.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Build Studio drafts new features in a sandbox; humans review the design and UX; approved changes deploy automatically. No developer is required on the hot path.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Hive Mind</div>
+        <strong>Opt-in community sharing.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Each install is a node. You can share what you build with the community and pull in what others have built. Sharing is always opt-in.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What you can do with it</h2>
+    <p class="sub">A condensed view of the capability surface. Each capability has its own section in the user guide.</p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:32%;">Capability</th><th>What it is for</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Portfolio Management</td><td>Organize digital products into portfolios with health metrics, investment tracking, and lifecycle management.</td></tr>
+        <tr><td>HR &amp; Workforce</td><td>Manage employees, roles, reviews, timesheets, and organizational structure.</td></tr>
+        <tr><td>Customer Relationships</td><td>Track customer accounts, sales pipeline from lead to order, and engagement history.</td></tr>
+        <tr><td>Compliance &amp; Regulatory</td><td>Onboard regulations and standards, map controls to obligations, collect evidence, and track posture.</td></tr>
+        <tr><td>Financial Management</td><td>Invoices, suppliers and bills, purchase orders, banking and reconciliation, AI-spend visibility.</td></tr>
+        <tr><td>Enterprise Architecture</td><td>Model the application, technology, and business layers with ArchiMate notation.</td></tr>
+        <tr><td>Storefront</td><td>Public-facing storefront for products and services with booking, donations, and checkout.</td></tr>
+        <tr><td>Build Studio</td><td>A guided five-phase pipeline (intake, design, build, review, ship) with AI coworkers and a sandbox.</td></tr>
+        <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking.</td></tr>
+        <tr><td>AI Workforce</td><td>Provider configuration, model routing, agent management, and per-agent grants.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>User guide &mdash; in-product help, also browsable on GitHub</h2>
+    <p class="sub">These pages are bundled into the platform's in-app help and also live in the source tree. Start at the index and follow the section that matches your role.</p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:30%;">Section</th><th>Read on GitHub</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Documentation index</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/README.md">docs/README.md</a></td></tr>
+        <tr><td>Getting started</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/getting-started">user-guide/getting-started</a></td></tr>
+        <tr><td>AI coworker</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/getting-started/ai-coworker.md">getting-started/ai-coworker.md</a></td></tr>
+        <tr><td>Roles &amp; access</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/getting-started/roles-and-access.md">getting-started/roles-and-access.md</a></td></tr>
+        <tr><td>Development workspace</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/user-guide/development-workspace.md">user-guide/development-workspace.md</a></td></tr>
+        <tr><td>AI workforce &amp; providers</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/ai-workforce">user-guide/ai-workforce</a></td></tr>
+        <tr><td>Build Studio</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/build-studio">user-guide/build-studio</a></td></tr>
+        <tr><td>Compliance</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/compliance">user-guide/compliance</a></td></tr>
+        <tr><td>Customers</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/customers">user-guide/customers</a></td></tr>
+        <tr><td>Finance</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/finance">user-guide/finance</a></td></tr>
+        <tr><td>HR</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/hr">user-guide/hr</a></td></tr>
+        <tr><td>Operations</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/operations">user-guide/operations</a></td></tr>
+        <tr><td>Platform &amp; AI ops</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/platform">user-guide/platform</a></td></tr>
+        <tr><td>Portfolios</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/portfolios">user-guide/portfolios</a></td></tr>
+        <tr><td>Products</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/products">user-guide/products</a></td></tr>
+        <tr><td>Storefront</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/storefront">user-guide/storefront</a></td></tr>
+        <tr><td>Workspace</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/workspace">user-guide/workspace</a></td></tr>
+        <tr><td>Admin</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide/admin">user-guide/admin</a></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Architecture &amp; standards</h2>
+    <p class="sub">
+      The repository carries a draft standards family for trustworthy AI-agent operation and identity. The platform itself is the first implementation and conformance case. These documents are intended to be read together: TAK defines the runtime kernel and control model, GAID defines identity and governance claims, the white paper explains the policy context, and the conformance assessment shows how the platform maps to the proposed standards today.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:42%;">Document</th><th>Read on GitHub</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Platform overview</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/platform-overview.md">architecture/platform-overview.md</a></td></tr>
+        <tr><td>Trusted AI Kernel (TAK)</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/trusted-ai-kernel.md">architecture/trusted-ai-kernel.md</a></td></tr>
+        <tr><td>Global AI Agent Identification &amp; Governance (GAID)</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/GAID.md">architecture/GAID.md</a></td></tr>
+        <tr><td>Trusted AI Agent Governance white paper</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md">white paper (markdown)</a></td></tr>
+        <tr><td>Standards conformance assessment</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/agent-standards-dpf-conformance.md">agent-standards-dpf-conformance.md</a></td></tr>
+        <tr><td>AI coworker development principles</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/ai-coworker-development-principles.md">ai-coworker-development-principles.md</a></td></tr>
+        <tr><td>Platform usability standards</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/platform-usability-standards.md">platform-usability-standards.md</a></td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      Reference material that influenced the platform's modelling &mdash; including IT4IT mapping and the broader product-management taxonomy &mdash; lives under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/Reference">docs/Reference</a>.
+    </p>
+  </section>
+
+  <section>
+    <h2>Specifications &amp; plans</h2>
+    <p class="sub">
+      Long-form design specs that document how each capability was built. They are historical records rather than onboarding material, but they are useful if you want to understand the design rationale behind a particular feature, or if you are evaluating the platform's engineering discipline.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>Specs index</h3>
+        <p><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers/specs">docs/superpowers/specs</a> &mdash; one design document per dated initiative.</p>
+      </div>
+      <div class="card">
+        <h3>Trusted AI Kernel context</h3>
+        <p>For runtime governance and control flow, start with the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/architecture/trusted-ai-kernel.md">TAK markdown</a> alongside the specs.</p>
+      </div>
+      <div class="card">
+        <h3>Build Studio specs</h3>
+        <p>Search the specs directory for "build-studio" to follow the evolution of the guided build pipeline.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Installation, when you are ready</h2>
+    <div class="install">
+      <h3>One installer, one question</h3>
+      <p style="margin:0 0 12px; color:var(--fg-muted); font-size:14px;">
+        The installer asks whether you want a <strong>Ready to go</strong> install (pre-built images, Build Studio is the development surface) or a <strong>Customizable</strong> install (full source clone, Build Studio and a local IDE share the same workspace). Both modes include the full platform.
+      </p>
+      <pre><code>gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 \
+  -H "Accept: application/vnd.github.raw" &gt; install-dpf.ps1
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
+      <div class="note">
+        Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Hardware detection, credential generation, Docker Desktop setup, and auto-start are handled for you.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Governance posture (at a glance)</h2>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Human-in-the-loop</div>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">Agents propose; humans approve. Every meaningful action carries an explicit approval surface.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Audit by default</div>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">Decisions, tool calls, and approvals are recorded so the runtime is reviewable end-to-end.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Identity for agents</div>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">GAID provides badging, issuer, and traceability so contributions from agents are distinguishable, not anonymous.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">PR-based change flow</div>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">All code changes flow through pull requests with required CI checks and DCO sign-off before they reach the main branch.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Who this is for</h2>
+    <div class="grid">
+      <div class="card"><h3>Small business owners</h3><p>Enterprise-grade product, finance, and compliance capabilities without enterprise-grade budgets or teams.</p></div>
+      <div class="card"><h3>Regulated industries</h3><p>Healthcare, finance, insurance, and similar settings that need audit trails, approval chains, and compliance evidence built in &mdash; not bolted on.</p></div>
+      <div class="card"><h3>IT leaders</h3><p>One governed platform to model architecture, manage portfolios, and track delivery in lock-step.</p></div>
+      <div class="card"><h3>Developers and architects</h3><p>An open platform that treats AI as a core capability rather than a chatbot sidebar &mdash; extensible, contributable, and audit-friendly.</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Open Digital Product Factory &middot; Documentation overview page &middot;
+    <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub repository</a>
+  </div>
+</footer>
+
+</body>
+</html>
