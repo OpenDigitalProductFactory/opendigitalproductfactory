@@ -97,3 +97,10 @@ body {
     background: color-mix(in srgb, var(--dpf-accent) 15%, var(--dpf-surface-1));
   }
 }
+
+/* Build Studio v2 — bubble entrance animation */
+@keyframes dpf-slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dpf-slide-up { animation: dpf-slide-up 320ms ease-out; }
