@@ -253,7 +253,7 @@ ALTER TABLE "PlatformDevConfig"
 
 - `dcoAcceptedAt` -- when the DCO was accepted (null = not accepted)
 - `dcoAcceptedById` -- who accepted the DCO
-- `upstreamRemoteUrl` -- the target for contribution PRs. Application-level default: `https://github.com/markdbodman/opendigitalproductfactory.git` (not hardcoded in schema to allow updates via code deployments)
+- `upstreamRemoteUrl` -- the target for contribution PRs. Application-level default: `https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git` (not hardcoded in schema to allow updates via code deployments)
 
 The existing `gitRemoteUrl` field is used for the user's own backup/tracking repo. `upstreamRemoteUrl` is the canonical DPF project for contributions.
 

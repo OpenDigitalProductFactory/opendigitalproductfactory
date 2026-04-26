@@ -266,8 +266,8 @@ param(
 After the helpers section (around line 102), add:
 
 ```powershell
-$GHCR_PORTAL = "ghcr.io/markdbodman/dpf-portal"
-$GHCR_SANDBOX = "ghcr.io/markdbodman/dpf-sandbox"
+$GHCR_PORTAL = "ghcr.io/OpenDigitalProductFactory/dpf-portal"
+$GHCR_SANDBOX = "ghcr.io/OpenDigitalProductFactory/dpf-sandbox"
 $InstallMode = $null  # Set in Step 4: "consumer", "contributor", or "private"
 ```
 
@@ -360,7 +360,7 @@ if (-not (Is-StepDone "download")) {
 
                 if (-not $forkCheck -or $forkCheck.StatusCode -ne 200) {
                     Write-Action "No fork found. Opening GitHub to create one..."
-                    Start-Process "https://github.com/markdbodman/opendigitalproductfactory/fork"
+                    Start-Process "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/fork"
                     Write-Host "  Press Enter after you've created the fork..." -ForegroundColor Yellow
                     Read-Host | Out-Null
                 }
@@ -387,7 +387,7 @@ if (-not (Is-StepDone "download")) {
                     Write-Warn "Clone failed. Check your username and try again."
                     exit 1
                 }
-                git -C "$DPF_DIR" remote add upstream "https://github.com/markdbodman/opendigitalproductfactory.git" 2>$null
+                git -C "$DPF_DIR" remote add upstream "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git" 2>$null
 
                 foreach ($f in $stash.Keys) { $stash[$f] | Set-Content "$DPF_DIR\$f" }
                 Write-OK "Cloned fork with upstream remote configured"
@@ -409,7 +409,7 @@ if (-not (Is-StepDone "download")) {
 
                 $oldEAP = $ErrorActionPreference
                 $ErrorActionPreference = "Continue"
-                git clone "https://github.com/markdbodman/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
+                git clone "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git" "$DPF_DIR" 2>&1
                 $ErrorActionPreference = $oldEAP
                 if ($LASTEXITCODE -ne 0) {
                     Write-Warn "Clone failed. Check your internet connection."
@@ -689,8 +689,8 @@ The pre-flight git check (around lines 117-122) should only run for customizer m
 This requires the images to be published to GHCR first (Task 2). For local testing before publishing, temporarily tag the local build:
 
 ```powershell
-docker tag opendigitalproductfactory-portal:latest ghcr.io/markdbodman/dpf-portal:latest
-docker tag dpf-sandbox:latest ghcr.io/markdbodman/dpf-sandbox:latest
+docker tag opendigitalproductfactory-portal:latest ghcr.io/OpenDigitalProductFactory/dpf-portal:latest
+docker tag dpf-sandbox:latest ghcr.io/OpenDigitalProductFactory/dpf-sandbox:latest
 ```
 
 Then run the installer in a clean temp directory:

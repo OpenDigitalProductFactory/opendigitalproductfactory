@@ -109,7 +109,7 @@ License information must appear in six locations:
 ```dockerfile
 LABEL org.opencontainers.image.title="Open Digital Product Factory"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.source="https://github.com/markdbodman/opendigitalproductfactory"
+LABEL org.opencontainers.image.source="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
 ```
 
 **Data files** — Ensure `packages/db/data/` is available in the init stage. The `COPY . .` in the init stage already includes it, but verify the runner stage receives it via `COPY --from=init /app/packages/db ./packages/db`.

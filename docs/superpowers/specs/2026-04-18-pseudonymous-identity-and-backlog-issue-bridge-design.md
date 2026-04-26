@@ -205,7 +205,7 @@ User agent: {userAgent}
 
 ## Rollout
 
-1. Part A identity change ships independently — it is a pure derivation change with no schema impact and no user-visible wizard change beyond a copy update. Smoke test: run `contribute_to_hive` on a dev install, confirm the PR author on `markdbodman/opendigitalproductfactory` shows `dpf-agent-<shortId>` not `dpf-agent`.
+1. Part A identity change ships independently — it is a pure derivation change with no schema impact and no user-visible wizard change beyond a copy update. Smoke test: run `contribute_to_hive` on a dev install, confirm the PR author on `OpenDigitalProductFactory/opendigitalproductfactory` shows `dpf-agent-<shortId>` not `dpf-agent`.
 2. Part B ships after: migration, `issue-bridge.ts`, UI buttons. Can be feature-flagged via a `enableUpstreamIssueBridge` column on `PlatformDevConfig` if a cautious rollout is preferred.
 3. Documentation: update [docs/user-guide/development-workspace.md](docs/user-guide/development-workspace.md) and the contribution-mode spec from 2026-04-01 to reflect the pseudonymous default. Update the `contribute_to_hive` tool description in [mcp-tools.ts](apps/web/lib/mcp-tools.ts) to mention the pseudonym appears in PR metadata.
 

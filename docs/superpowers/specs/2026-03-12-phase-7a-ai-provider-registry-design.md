@@ -153,7 +153,7 @@ export type SpendByAgent = {
 ## Provider Registry JSON
 
 Hosted at:
-`https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/packages/db/data/providers-registry.json`
+`https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/packages/db/data/providers-registry.json`
 
 Schema per entry:
 
