@@ -1,6 +1,9 @@
+import { headers } from "next/headers";
+
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
+import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
@@ -29,6 +32,14 @@ export default async function AdminPlatformDevelopmentPage() {
   // paste-mode PATs are surfaced via the Advanced disclosure but not as
   // "Connected as @user" since we don't proactively verify their owner.
   const initialConnected = await getGitHubConnectedState().catch(() => null);
+
+  // Best-effort base URL for token setup snippets shown in the UI. Prefer the
+  // forwarded Host header (which respects any reverse proxy); fall back to
+  // localhost:3000 for the dev case.
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") ?? "http";
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
+  const baseUrl = `${proto}://${host}`;
 
   return (
     <div>
@@ -59,6 +70,10 @@ export default async function AdminPlatformDevelopmentPage() {
         hasContributionToken={hasContribToken}
         pseudonym={pseudonym}
         initialConnected={initialConnected}
+      />
+      <McpTokenManager
+        contributionModelConfigured={config?.contributionModel != null}
+        baseUrl={baseUrl}
       />
     </div>
   );

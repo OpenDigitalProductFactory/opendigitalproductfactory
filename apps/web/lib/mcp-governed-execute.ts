@@ -152,8 +152,7 @@ async function writeAudit(data: {
       ? `${data.toolName}: ${data.result.success ? "ok" : "failed"}` +
         (data.durationMs ? ` (${data.durationMs}ms)` : "")
       : null,
-    // apiTokenId is plumbed through GovernedExecuteContext but not yet written
-    // — the column lands in spec §13 (external-client transport).
+    apiTokenId: data.context?.apiTokenId ?? null,
   };
   try {
     if (_toolExecutionCreateOverride) {

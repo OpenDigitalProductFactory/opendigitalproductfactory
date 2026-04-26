@@ -4,6 +4,7 @@
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { hashPassword } from "@/lib/password";
+import { syncCustomerPrincipal } from "@/lib/identity/principal-linking";
 
 export async function customerSignup(input: {
   email: string;
@@ -21,7 +22,7 @@ export async function customerSignup(input: {
   const passwordHash = await hashPassword(input.password);
   const accountId = `CUST-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
-  await prisma.customerAccount.create({
+  const account = await prisma.customerAccount.create({
     data: {
       accountId,
       name: input.companyName.trim(),
@@ -33,7 +34,20 @@ export async function customerSignup(input: {
         },
       },
     },
+    include: { contacts: true },
   });
+
+  // Project the new contact into the canonical Principal substrate so
+  // downstream identity resolution and audit trails carry a stable
+  // principalId. Best-effort — a failure here must not block signup.
+  const newContact = account.contacts[0];
+  if (newContact) {
+    try {
+      await syncCustomerPrincipal(newContact.id);
+    } catch (error) {
+      console.error("[customer-auth] syncCustomerPrincipal failed for", newContact.id, error);
+    }
+  }
 
   return { success: true };
 }

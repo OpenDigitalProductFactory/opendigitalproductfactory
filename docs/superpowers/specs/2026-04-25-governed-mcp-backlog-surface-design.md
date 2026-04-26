@@ -442,13 +442,16 @@ The same nine-tool surface is exposed to **external** MCP clients (Claude Code, 
 
 ### 11.1 Why a separate transport from the in-portal one
 
-The [Platform MCP Tool Server spec](./2026-04-11-platform-mcp-tool-server-design.md) defines an internal JSON-RPC endpoint with short-lived (5-minute) session tokens, intentionally bound to `localhost` inside the Docker network. That endpoint is for the platform calling its own CLI processes (e.g. `claude -p` inside the sandbox). It is the wrong shape for an external coding agent on the user's laptop, which needs:
+The existing endpoints at `/api/mcp/tools` (POST list) and `/api/mcp/call` (POST execute) are the in-portal coworker chat's bespoke REST contract — despite the URL, they are not actual MCP-protocol endpoints. The chat UI calls them, no need to churn that surface. The [Platform MCP Tool Server spec](./2026-04-11-platform-mcp-tool-server-design.md) had additionally proposed an internal JSON-RPC endpoint scoped to `localhost` inside the Docker network for the platform's own CLI processes (e.g. `claude -p` inside the sandbox).
 
-- A long-lived bearer credential (paste once into Claude Code's MCP config).
-- A reachable URL the desktop client can hit (`http://localhost:3000/api/mcp/external/jsonrpc` for Mode 1; TLS-fronted for deployed installs).
+For an external coding agent on the user's laptop, neither fits. We need:
+
+- A real **MCP JSON-RPC 2.0** endpoint (`initialize`, `notifications/initialized`, `tools/list`, `tools/call`) that any MCP-capable client (Claude Code, Codex CLI, VS Code MCP) can talk to without translation.
+- A reachable URL the desktop client can hit (`http://localhost:3000/api/mcp/v1` for Mode 1; TLS-fronted for deployed installs).
+- A long-lived bearer credential (paste once into the client's `mcp.json`).
 - An identity that resolves to a real `User` row, not an in-portal session cookie.
 
-We add a sibling endpoint at `/api/mcp/external/jsonrpc` that mirrors the protocol of the internal endpoint but authenticates by `Authorization: Bearer <token>` and resolves the token to the issuing user. Both endpoints call the same `governedExecuteTool` so tools, grants, and audit are one pipeline.
+We add a new endpoint at `/api/mcp/v1` that speaks the canonical protocol (per the in-tree spec snapshot at [docs/Reference/mcp/](../../docs/Reference/mcp/), version `2025-11-25`), authenticates by `Authorization: Bearer <token>`, and routes through the same `governedExecuteTool` as the in-portal paths so tools, grants, and audit are one pipeline.
 
 ### 11.2 Credentials and identity — relationship to contribution mode
 
@@ -462,18 +465,18 @@ These cannot be the same literal token (different audiences, different validator
 2. **One settings surface.** `/admin/platform-development` already hosts contribution-mode config. We co-locate MCP token issuance there as a sibling section ("External Coding Agent Access"). Same admin view, same revoke flow, same audit.
 3. **One write-attribution gate.** Read-only MCP tokens issue freely. **Write-capable** MCP tokens require `PlatformDevConfig.contributionModel` to be set (i.e., the contribution path is wired). This guarantees that any external-MCP write that ever turns into code can be attributed end-to-end. If contribution mode is not configured, write-capable tokens are blocked at issuance with a pointer to set it up first.
 
-### 11.3 Token model — `AgentApiToken`
+### 11.3 Token model — `McpApiToken`
 
-A new Prisma model:
+A new Prisma model. The name is intentionally MCP-transport-specific (not `AgentApiToken` — the token is owned by a User, not an Agent — and not just `ApiToken` because that name is already taken by the V1 customer-portal JWT-refresh model).
 
 ```prisma
-model AgentApiToken {
+model McpApiToken {
   id              String    @id @default(cuid())
   userId          String                 // issuing user
   agentId         String?                // optional: bind to a specific agent identity
   name            String                 // human label, e.g. "Mark's Claude Code (laptop)"
   tokenHash       String    @unique      // sha256 of the secret; secret never stored
-  prefix          String                 // first 8 chars, for display (like dpfmcp_aB12...)
+  prefix          String                 // first 12 chars, for display (e.g. dpfmcp_AB12)
   scopes          String[]  @default([]) // grant keys the token may exercise (subset of user's grants)
   capability      String    @default("read") // "read" | "write" — write requires contribution-mode
   lastUsedAt      DateTime?
@@ -488,16 +491,21 @@ model AgentApiToken {
 }
 ```
 
-Token format: `dpfmcp_<24 random bytes base32>`. Stored as `sha256(secret)`; the plaintext is shown to the user **once** at issuance and never recoverable — same pattern as GitHub PATs.
+Token format: `dpfmcp_<24 random bytes base32>`. Base32 alphabet is Crockford-ish (no I/L/O/U) so tokens are easier for humans to verify visually. Stored as `sha256(secret)`; the plaintext is shown to the user **once** at issuance and never recoverable — same pattern as GitHub PATs.
 
 `scopes` is a subset of the user's effective grants, chosen at issuance. A user with `backlog_read`, `backlog_write`, `spec_plan_read` can mint a token with only `backlog_read` for a low-trust laptop. The MCP request's effective grants are `tokenScopes ∩ userGrants ∩ (agentGrants if agentId set)`.
 
 ### 11.4 External JSON-RPC endpoint
 
-`apps/web/app/api/mcp/external/jsonrpc/route.ts`:
+`apps/web/app/api/mcp/v1/route.ts` implements MCP JSON-RPC 2.0 per the in-tree spec snapshot at [docs/Reference/mcp/](../../docs/Reference/mcp/) (version `2025-11-25`). Specifically:
+
+- [docs/Reference/mcp/spec/basic/lifecycle.mdx](../../docs/Reference/mcp/spec/basic/lifecycle.mdx) — `initialize` handshake, `notifications/initialized`
+- [docs/Reference/mcp/spec/basic/transports.mdx](../../docs/Reference/mcp/spec/basic/transports.mdx) — Streamable HTTP (we use the single-POST flow, not SSE)
+- [docs/Reference/mcp/spec/server/tools.mdx](../../docs/Reference/mcp/spec/server/tools.mdx) — `tools/list`, `tools/call`, annotations
+- [docs/Reference/mcp/schema/schema.ts](../../docs/Reference/mcp/schema/schema.ts) — canonical types
 
 ```http
-POST /api/mcp/external/jsonrpc
+POST /api/mcp/v1
 Authorization: Bearer dpfmcp_...
 Content-Type: application/json
 
@@ -506,15 +514,30 @@ Content-Type: application/json
 
 Handler steps:
 
-1. Parse `Authorization: Bearer` header. If absent or malformed → JSON-RPC error `-32001 unauthorized`.
-2. `sha256(secret)` and `prisma.agentApiToken.findUnique({ tokenHash })`. Reject if not found, revoked, or expired.
-3. Update `lastUsedAt` (fire-and-forget).
-4. Resolve `userId` → load `User` (platformRole, isSuperuser).
-5. For `tools/list`: call `getAvailableTools(userContext, { agentId: token.agentId, unifiedMode: true })` and additionally filter by `token.scopes` (intersect with each tool's required grants). Return only tools the token can actually invoke — mirrors the in-portal MCP scoping.
-6. For `tools/call`: invoke `governedExecuteTool({ source: "external-jsonrpc", userContext, context: { agentId: token.agentId }, ... })`. Pass the token's scope set as an additional grant filter so a token-scope mismatch fails fast with `forbidden_grant`.
-7. The audit row in `ToolExecution` records `executionMode: "external-jsonrpc"` and a new field `apiTokenId` (added in the same migration as `AgentApiToken`) so each external write is traceable to a specific token.
+1. **Transport guards** (per spec MUST):
+   - Validate `Origin` header when present (DNS rebinding protection); CLI clients with no Origin are allowed.
+   - Refuse non-TLS requests except when the host is `localhost`/`127.0.0.1` (Mode 1).
+2. Parse `Authorization: Bearer` header. If absent → 401 with `WWW-Authenticate: Bearer realm="DPF MCP"`.
+3. `resolveMcpApiToken(plaintext)` (sha256 + lookup). Reject revoked or expired with 401 + `WWW-Authenticate`. Lazy `lastUsedAt` update on success.
+4. Parse JSON-RPC envelope. Standard JSON-RPC error codes: `-32700` (parse), `-32600` (invalid request), `-32601` (method not found), `-32602` (invalid params), `-32603` (internal). Notifications (no `id`) → 202 Accepted with no body.
+5. **`initialize`** → `{ protocolVersion: "2025-11-25", serverInfo, capabilities: { tools: { listChanged: false } }, instructions }`.
+6. **`tools/list`** → load `User` (platformRole, isSuperuser); return tools where the user has the required capability **and** the token's scopes intersect the tool's required grants. Each tool carries `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) per the MCP spec.
+7. **`tools/call`** → token-scope pre-check (clear `isError:true` message on mismatch, no wrapper roundtrip); side-effecting tools rejected with `isError:true` for read-only tokens; otherwise `governedExecuteTool({ source: "external-jsonrpc", context: { agentId: token.agentId, apiTokenId: token.tokenId }, ... })`. Response shape: `{ content: [{ type: "text", text: <JSON-serialized ToolResult> }], isError: !success, structuredContent: result.data }` — text block carries the full structured result for clients without structured-content support; structured field mirrors `ToolResult.data` for clients that read it directly (per the 2025-11-25 spec).
+8. **`ping`** → empty result.
+9. The audit row in `ToolExecution` records `executionMode: "external-jsonrpc"` and the `apiTokenId` so each external call is traceable to a specific token.
 
-The contract surface (the JSON-RPC method names, the tool schemas) is identical to the internal MCP endpoint. An external client doesn't need to know it's a different transport.
+`GET /api/mcp/v1` returns 405 with `Allow: POST` — we don't implement SSE since stateless single-POST is sufficient for synchronous tool calls and matches the spec's "stateless server" pattern.
+
+### 11.4a Authorization model — GitHub PAT, not OAuth 2.1
+
+The MCP spec requires OAuth 2.0 resource-server discovery via Protected Resource Metadata for fully compliant authorization. We **intentionally** use the GitHub-PAT pattern instead — tokens are issued by an admin from inside the portal, not via OAuth flow. The trade-off:
+
+- Real-world MCP clients (Claude Code, Codex CLI, VS Code MCP) accept arbitrary `Authorization: Bearer X` in their `mcp.json`, so the user experience works.
+- We return `WWW-Authenticate: Bearer realm="DPF MCP"` on 401 so clients that perform OAuth discovery don't fail with an opaque error — they just won't find the discovery document and fall back to the prompt-the-user path.
+- We do not implement `/.well-known/oauth-protected-resource`, do not advertise an authorization server, and do not validate token audience via RFC 8707.
+- A future PR can add an OAuth flow alongside if any client requires it. The token model already separates issuance (`issueMcpApiToken`) from resolution (`resolveMcpApiToken`), so an OAuth issuer would just add a new issuance entry point.
+
+This is documented as the install's authorization model so reviewers and downstream maintainers know it is a deliberate design decision, not a missing feature.
 
 ### 11.5 Issuance flow
 
@@ -527,27 +550,32 @@ Settings page at `/admin/platform-development` gains a new section:
     - Modal: `name`, `capability` (radio: read / write — write disabled with explainer if contribution-mode unset), `scopes` (multi-select, defaulted from user's grants), `expiresIn` (dropdown: 30/60/90/180 days/never, default 90), optional `agentId` (dropdown of agents the user can act as)
     - Submit → server action mints secret, hashes, persists, returns plaintext **once** to the modal with copy button and a setup snippet for Claude Code / Codex / VS Code (see §11.6)
 
-The server action lives at `apps/web/lib/actions/agent-api-tokens.ts`:
+The token primitives live at [apps/web/lib/auth/mcp-api-token.ts](../../apps/web/lib/auth/mcp-api-token.ts):
 
 ```ts
-export async function issueAgentApiToken(input: {
+export async function issueMcpApiToken(input: {
+  userId: string;
   name: string;
   capability: "read" | "write";
   scopes: string[];
   expiresInDays: number | null;
-  agentId?: string;
-}): Promise<{ tokenId: string; plaintext: string }>;
+  agentId?: string | null;
+}): Promise<IssueMcpTokenResult>;     // ok|error union including contribution_mode_required
 
-export async function revokeAgentApiToken(tokenId: string, reason: string): Promise<void>;
+export async function revokeMcpApiToken(tokenId: string, reason: string): Promise<{ ok: boolean }>;
+
+export async function resolveMcpApiToken(plaintext: string): Promise<ResolvedMcpToken | null>;
 ```
 
-`issueAgentApiToken` enforces the contribution-mode gate when `capability=write`:
+The session-scoped server actions wrap these with NextAuth identity in [apps/web/lib/actions/mcp-tokens.ts](../../apps/web/lib/actions/mcp-tokens.ts) — they are what the settings UI calls.
+
+`issueMcpApiToken` enforces the contribution-mode gate when `capability=write`:
 
 ```ts
 if (input.capability === "write") {
   const cfg = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
   if (!cfg?.contributionModel) {
-    throw new Error("Configure contribution mode before issuing write-capable tokens");
+    return { ok: false, error: "contribution_mode_required", message: "..." };
   }
 }
 ```
@@ -560,7 +588,7 @@ For Claude Code (`~/.claude/mcp.json`):
 {
   "mcpServers": {
     "dpf": {
-      "url": "http://localhost:3000/api/mcp/external/jsonrpc",
+      "url": "http://localhost:3000/api/mcp/v1",
       "headers": { "Authorization": "Bearer dpfmcp_<your-token>" }
     }
   }
@@ -573,7 +601,7 @@ For Codex CLI / VS Code MCP: equivalent `.mcp.json` with the same URL and bearer
 
 | Concern | Mode 1 (single install on user's box) | Deployed (multi-user, hosted) |
 | ------- | ------------------------------------- | ----------------------------- |
-| Endpoint URL | `http://localhost:3000/api/mcp/external/jsonrpc` | `https://<host>/api/mcp/external/jsonrpc` (TLS required) |
+| Endpoint URL | `http://localhost:3000/api/mcp/v1` | `https://<host>/api/mcp/v1` (TLS required) |
 | Token transport | HTTP (local-only) | HTTPS — endpoint refuses non-TLS via `request.url.startsWith("http://")` check (allowed for `localhost` only) |
 | Token expiry | Default 90 days, "never" allowed | Default 90 days, "never" disabled in UI for non-superusers |
 | Rate limiting | Lax (single user) | Per-token rate limit (out of scope here, tracked as follow-up) |
@@ -593,6 +621,8 @@ After this lands, on a fresh install:
 6. If they then ask Claude Code to make a code change that lands as a contribution PR, the chain `MCP token → user → install GitHub bind → PR` is intact.
 
 This is the Mode 1 backlog interface the spec set out to deliver.
+
+> **Implementation note (2026-04-26):** §11 shipped in the PR that introduced this section's edits. Token model, JSON-RPC route, settings UI, and contribution-mode gate are all live. The `AgentApiToken` name in the original draft was renamed to `McpApiToken` (the token is User-owned, not Agent-owned, and the name is now MCP-transport-specific). The endpoint settled on `/api/mcp/v1` rather than the verbose `/api/mcp/external/jsonrpc` because the URL is the canonical MCP endpoint going forward — the `external/jsonrpc` qualifier was misleading since the same endpoint can also accept session-cookie auth in a future iteration if we want to migrate the in-portal chat UI off its bespoke REST.
 
 ### 11.9 Risks and mitigations specific to §11
 
