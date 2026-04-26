@@ -201,6 +201,33 @@ export async function searchSpecsAndPlans(
   return results.slice(0, matchesCap);
 }
 
+// Reverse index: which IDs (BI-* and EP-*) are referenced anywhere under
+// docs/superpowers/{specs,plans}? Used by get_next_recommended_work to flag
+// items that already have a design or plan attached.
+export async function buildSpecPlanReferenceIndex(): Promise<{
+  specs: Set<string>;
+  plans: Set<string>;
+}> {
+  const root = repoRoot();
+  const specs = new Set<string>();
+  const plans = new Set<string>();
+  const specFiles = await listMarkdown(path.join(root, SPEC_DIR));
+  for (const file of specFiles) {
+    const entry = await loadFile(file);
+    if (!entry) continue;
+    for (const id of entry.refs.items) specs.add(id);
+    for (const id of entry.refs.epics) specs.add(id);
+  }
+  const planFiles = await listMarkdown(path.join(root, PLAN_DIR));
+  for (const file of planFiles) {
+    const entry = await loadFile(file);
+    if (!entry) continue;
+    for (const id of entry.refs.items) plans.add(id);
+    for (const id of entry.refs.epics) plans.add(id);
+  }
+  return { specs, plans };
+}
+
 // Test seam — clears in-memory caches between scenarios.
 export function _resetSpecPlanCachesForTests(): void {
   cache.clear();
