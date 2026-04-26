@@ -18,8 +18,10 @@ import {
   type ReviewResult,
 } from "@/lib/feature-build-types";
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
+import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
+import { listReleasableSandboxFiles } from "@/lib/integrate/sandbox/sandbox";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -164,6 +166,7 @@ export async function advanceBuildPhase(
       acceptanceMet: true,
       uxTestResults: true,
       uxVerificationStatus: true,
+      sandboxId: true,
     },
   });
   if (!build) throw new Error("Build not found");
@@ -226,6 +229,18 @@ export async function advanceBuildPhase(
       }).catch(() => {});
     } else {
       throw new Error(gate.reason ?? "Phase gate check failed");
+    }
+  }
+
+  if (currentPhase === "review" && targetPhase === "ship") {
+    if (!build.sandboxId) {
+      throw new Error("Build Studio cannot continue to release because the sandbox is no longer available.");
+    }
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId);
+    if (releasableFiles.length === 0) {
+      throw new Error(
+        "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.",
+      );
     }
   }
 
@@ -368,12 +383,7 @@ export async function advanceBuildPhase(
   // FeatureBuild.uxVerificationStatus + uxTestResults. The existing
   // checkPhaseGate then blocks review -> ship on any failures.
   if (targetPhase === "review") {
-    try {
-      const { inngest } = await import("@/lib/queue/inngest-client");
-      await inngest.send({ name: "build/review.verify", data: { buildId } });
-    } catch (err) {
-      console.error(`[build] build/review.verify enqueue failed for ${buildId}:`, err);
-    }
+    await queueBuildReviewVerification(buildId);
   }
 }
 
@@ -447,6 +457,241 @@ export async function retryBuildExecution(buildId: string): Promise<void> {
   // Fire-and-forget retry — picks up from failed step
   autoExecuteBuild(buildId).catch((err) =>
     console.error(`[build] retryBuildExecution failed for ${buildId}:`, err),
+  );
+}
+
+export async function runBuildReviewVerification(buildId: string): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { createdById: true, phase: true },
+  });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (build.phase !== "review") {
+    throw new Error("Review verification can only run for builds in review");
+  }
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      uxVerificationStatus: null,
+      uxTestResults: null as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await queueBuildReviewVerification(buildId);
+}
+
+export async function recordBuildAcceptance(
+  buildId: string,
+  note?: string,
+): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: {
+      createdById: true,
+      phase: true,
+      brief: true,
+      designDoc: true,
+      verificationOut: true,
+      uxVerificationStatus: true,
+      uxTestResults: true,
+    },
+  });
+
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+  if (build.phase !== "review") {
+    throw new Error("Acceptance can only be recorded during review");
+  }
+
+  const verification = build.verificationOut as
+    | { typecheckPassed?: boolean }
+    | null;
+  if (!verification?.typecheckPassed) {
+    throw new Error("Typecheck must be clean before acceptance can be recorded");
+  }
+
+  const uxStatus = build.uxVerificationStatus;
+  if (uxStatus !== "complete" && uxStatus !== "skipped") {
+    throw new Error("UX verification must be complete before acceptance can be recorded");
+  }
+
+  const uxTestResults = Array.isArray(build.uxTestResults)
+    ? build.uxTestResults as Array<{ passed?: boolean }>
+    : [];
+  const failedUxSteps = uxTestResults.length > 0
+    ? uxTestResults.filter((step) => !step.passed)
+    : [];
+  if (failedUxSteps.length > 0) {
+    throw new Error("Fix the failed UX verification steps before recording acceptance");
+  }
+
+  const brief = build.brief as { acceptanceCriteria?: string[] } | null;
+  const designDoc = build.designDoc as { acceptanceCriteria?: string[] } | null;
+  const acceptanceCriteria = Array.isArray(brief?.acceptanceCriteria) && brief.acceptanceCriteria.length > 0
+    ? brief.acceptanceCriteria
+    : Array.isArray(designDoc?.acceptanceCriteria)
+      ? designDoc.acceptanceCriteria
+      : [];
+
+  if (acceptanceCriteria.length === 0) {
+    throw new Error("No acceptance criteria are available to record");
+  }
+
+  const evidenceSuffix = note?.trim()
+    ? ` ${note.trim()}`
+    : "";
+  const acceptanceMet = acceptanceCriteria.map((criterion) => ({
+    criterion,
+    met: true,
+    evidence: `Reviewed in Build Studio after clean typecheck and completed UX verification.${evidenceSuffix}`,
+  }));
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      acceptanceMet: acceptanceMet as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "record_acceptance",
+      summary: `Acceptance recorded for ${acceptanceCriteria.length} criteria after review evidence completed.`,
+    },
+  }).catch(() => {});
+}
+
+export async function resumeBuildImplementation(buildId: string): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: {
+      createdById: true,
+      phase: true,
+      sandboxId: true,
+      diffPatch: true,
+      diffSummary: true,
+      taskResults: true,
+      verificationOut: true,
+      threadId: true,
+      taskResultsVersion: true,
+    },
+  });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+
+  let recoverFromMissingReleaseDiff = false;
+  if (build.phase === "ship") {
+    if (!build.sandboxId) {
+      throw new Error("This release-phase build has no sandbox attached, so implementation cannot be resumed safely.");
+    }
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId);
+    if (releasableFiles.length > 0) {
+      throw new Error("This build already has releasable source changes. Continue from the release decisions instead of reopening implementation.");
+    }
+    recoverFromMissingReleaseDiff = true;
+  } else if (build.phase !== "build" && build.phase !== "review") {
+    throw new Error("Only builds in implementation, review, or ship-without-diff recovery can be resumed");
+  }
+
+  const storedResults = build.taskResults as
+    | {
+      completedTasks?: number;
+      totalTasks?: number;
+      timedOut?: boolean;
+      tasks?: Array<{
+        title: string;
+        specialist: string;
+        outcome: string;
+        durationMs?: number;
+      }>;
+      timestamp?: string;
+    }
+    | null;
+
+  const hasRecoverableTask =
+    recoverFromMissingReleaseDiff
+      || (storedResults?.tasks?.some((task) => task.outcome !== "DONE") ?? false);
+  const verificationFailed = (() => {
+    const verification = build.verificationOut as
+      | {
+        typecheckPassed?: boolean;
+        testsFailed?: number;
+      }
+      | null;
+    if (!verification) return false;
+    return verification.typecheckPassed === false || (verification.testsFailed ?? 0) > 0;
+  })();
+
+  if (!recoverFromMissingReleaseDiff && !hasRecoverableTask && !verificationFailed) {
+    throw new Error("This build does not currently need implementation recovery");
+  }
+
+  try {
+    const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+    if (await isSandboxAvailable()) {
+      await startBuildBranch(buildId);
+    }
+  } catch (err) {
+    throw new Error(`Could not prepare a clean sandbox workspace for recovery: ${(err as Error).message}`);
+  }
+
+  const normalizedTasks = storedResults?.tasks?.map((task) => (
+    recoverFromMissingReleaseDiff || task.outcome !== "DONE"
+      ? { ...task, outcome: "BLOCKED" }
+      : task
+  )) ?? [];
+  const completedTasks = normalizedTasks.filter((task) => task.outcome === "DONE").length;
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      phase: "build",
+      diffPatch: recoverFromMissingReleaseDiff ? null : build.diffPatch,
+      diffSummary: recoverFromMissingReleaseDiff ? null : build.diffSummary,
+      verificationOut: null as unknown as Prisma.InputJsonValue,
+      taskResults: {
+        ...(storedResults ?? {}),
+        completedTasks,
+        tasks: normalizedTasks,
+        timestamp: new Date().toISOString(),
+      } as Prisma.InputJsonValue,
+      taskResultsVersion: {
+        increment: 1,
+      },
+    },
+  });
+
+  try {
+    if (build.threadId) {
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      agentEventBus.emit(build.threadId, { type: "phase:change", buildId, phase: "build" });
+      agentEventBus.emit(build.threadId, { type: "evidence:update", buildId, field: "taskResults" });
+    }
+  } catch {
+    // Best effort only — UI also refetches after the action resolves.
+  }
+
+  prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "resume_implementation",
+      summary: recoverFromMissingReleaseDiff
+        ? "Implementation resumed from ship because release preparation found no releasable source diff; implementation tasks were reset for a real rerun."
+        : `Implementation resumed from ${build.phase}; non-clean task results were reset for rerun.`,
+    },
+  }).catch(() => {});
+
+  autoExecuteBuild(buildId).catch((err) =>
+    console.error(`[build] resumeBuildImplementation failed for ${buildId}:`, err),
   );
 }
 

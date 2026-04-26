@@ -683,6 +683,86 @@ describe("runAgenticLoop", () => {
     expect(mockExecuteTool).toHaveBeenCalledTimes(1);
   });
 
+  it("uses a plan-specific recovery nudge when the model claims Start Implementation is next without saving build evidence", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    const buildPlan = {
+      fileStructure: [
+        { path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix header overlap" },
+      ],
+      tasks: [
+        { title: "Stabilize build studio header layout", testFirst: "render workflow at constrained height", implement: "adjust layout containers", verify: "pnpm --filter web typecheck" },
+      ],
+    };
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Plan ready — 5 tasks across 4 files. Building now.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Saving the implementation plan now.",
+        toolCalls: [{ id: "toolu_plan_1", name: "saveBuildEvidence", arguments: { field: "buildPlan", value: buildPlan } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Reviewing the implementation plan now.",
+        toolCalls: [{ id: "toolu_plan_2", name: "reviewBuildPlan", arguments: {} }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Plan ready — 1 task across 1 file, and Start Implementation is the correct next approval in the product UI. I saved the implementation plan, completed the review, and confirmed the scoped header-overlap fix is ready for sandbox execution.",
+      }));
+
+    mockExecuteTool
+      .mockResolvedValueOnce({ success: true, message: 'Evidence "buildPlan" saved.' })
+      .mockResolvedValueOnce({ success: true, message: "Plan review: pass.", data: { review: { decision: "pass" } } });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        { name: "saveBuildEvidence", description: "Save evidence", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+        { name: "reviewBuildPlan", description: "Review build plan", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "saveBuildEvidence", description: "Save evidence", parameters: {} } },
+        { type: "function", function: { name: "reviewBuildPlan", description: "Review build plan", parameters: {} } },
+      ],
+    });
+
+    expect(result.content).toContain("Start Implementation is the correct next approval");
+    expect(mockExecuteTool).toHaveBeenCalledTimes(2);
+    const secondCallMessages = mockRoute.mock.calls[1]?.[0] ?? [];
+    const lastUserMessage = [...secondCallMessages].reverse().find((m: any) => m.role === "user");
+    expect(lastUserMessage?.content).toContain('saveBuildEvidence with field "buildPlan"');
+    expect(lastUserMessage?.content).toContain("reviewBuildPlan");
+  });
+
+  it("blocks a repeated fabricated plan-ready reply instead of surfacing it to the user", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Plan ready — 5 tasks across 4 files. Building now.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Plan ready — 5 tasks across 4 files. Building now.",
+      }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        { name: "saveBuildEvidence", description: "Save evidence", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+        { name: "reviewBuildPlan", description: "Review build plan", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
+      ],
+      toolsForProvider: [
+        { type: "function", function: { name: "saveBuildEvidence", description: "Save evidence", parameters: {} } },
+        { type: "function", function: { name: "reviewBuildPlan", description: "Review build plan", parameters: {} } },
+      ],
+    });
+
+    expect(result.content).not.toContain("Plan ready");
+    expect(result.content).toContain("Start Implementation cannot unlock until I save buildPlan");
+  });
+
   it("nudges build agent to use fallback steps after failed read stalls", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);

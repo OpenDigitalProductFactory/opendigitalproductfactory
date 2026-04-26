@@ -20,6 +20,105 @@ import { prisma } from "@dpf/db";
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 const WORKSPACE = "/workspace";
+const GIT_INDEX_LOCK = `${WORKSPACE}/.git/index.lock`;
+const SANDBOX_GIT_STAGE_EXCLUDES = [
+  ":!node_modules",
+  ":!**/node_modules/**",
+  ":!.next",
+  ":!**/.next/**",
+  ":!.pnpm-store",
+  ":!**/.pnpm-store/**",
+  ":!*.tsbuildinfo",
+  ":!**/*.tsbuildinfo",
+  ":!pnpm-lock*",
+] as const;
+const SANDBOX_GIT_CLEAN_EXCLUDES = [
+  ":!node_modules",
+  ":!**/node_modules/**",
+  ":!.pnpm-store",
+  ":!**/.pnpm-store/**",
+  ":!pnpm-lock*",
+] as const;
+const SANDBOX_TRACKED_CACHE_FIND_PATHS = [
+  "./.pnpm-store",
+  "*/.pnpm-store",
+  "./node_modules",
+  "*/node_modules",
+  "*/.next",
+] as const;
+
+function quoteGitPathspec(pathspec: string): string {
+  return `'${pathspec}'`;
+}
+
+export function buildSandboxGitAddCommand(): string {
+  return [
+    "git add -A --",
+    ...SANDBOX_GIT_STAGE_EXCLUDES.map(quoteGitPathspec),
+  ].join(" ");
+}
+
+export function buildSandboxBranchSwitchPrepCommand(workspace: string = WORKSPACE): string {
+  return [
+    `for _dpf_pid in $(ss -tlnp 2>/dev/null | awk '/:3000 / { if (match($NF, /pid=([0-9]+)/, m)) print m[1]; }' | sort -u); do kill "$_dpf_pid" >/dev/null 2>&1 || true; done`,
+    `for _dpf_pid in $(ss -tlnp 2>/dev/null | awk '/:3000 / { if (match($NF, /pid=([0-9]+)/, m)) print m[1]; }' | sort -u); do kill -9 "$_dpf_pid" >/dev/null 2>&1 || true; done`,
+    `rm -rf ${workspace}/apps/web/.next`,
+    `rm -f ${workspace}/apps/web/tsconfig.tsbuildinfo /tmp/next-dev.log /tmp/dev-server.log /tmp/dev.log`,
+  ].join(" && ");
+}
+
+export function buildSandboxGitCleanCommand(workspace: string = WORKSPACE): string {
+  return `cd ${workspace} && git reset --hard HEAD && git clean -fd -- ${SANDBOX_GIT_CLEAN_EXCLUDES.map(quoteGitPathspec).join(" ")}`;
+}
+
+export function buildSandboxGitPruneTrackedArtifactsCommand(): string {
+  const cacheFindExpr = SANDBOX_TRACKED_CACHE_FIND_PATHS
+    .map((pattern) => `-path '${pattern}'`)
+    .join(" -o ");
+  return [
+    `find . \\( ${cacheFindExpr} \\) -prune -print | while IFS= read -r path; do git rm -r --cached --ignore-unmatch -- "$path" >/dev/null 2>&1 || true; done`,
+    `find . -name '*.tsbuildinfo' -print | while IFS= read -r path; do git rm --cached --ignore-unmatch -- "$path" >/dev/null 2>&1 || true; done`,
+  ].join(" && ");
+}
+
+export function buildSandboxGitCommitPrunedArtifactsCommand(
+  message: string,
+  workspace: string = WORKSPACE,
+): string {
+  return [
+    `cd ${workspace}`,
+    buildSandboxGitPruneTrackedArtifactsCommand(),
+    `if ! git diff --cached --quiet --exit-code; then git commit -m ${quoteGitPathspec(message)}; fi`,
+  ].join(" && ");
+}
+
+function sandboxGitPrelude(): string {
+  return [
+    `if [ -f "${GIT_INDEX_LOCK}" ]; then for _dpf_git_wait in 1 2 3 4 5; do if ! pgrep -x git >/dev/null 2>&1; then break; fi; sleep 1; done; if [ -f "${GIT_INDEX_LOCK}" ] && ! pgrep -x git >/dev/null 2>&1; then rm -f "${GIT_INDEX_LOCK}"; fi; fi`,
+    `git config --global --add safe.directory "${WORKSPACE}" >/dev/null 2>&1 || true`,
+  ].join(" && ");
+}
+
+export function wrapSandboxGitCommand(command: string): string {
+  return [
+    sandboxGitPrelude(),
+    command,
+  ].join(" && ");
+}
+
+async function execSandboxGit(command: string): Promise<string> {
+  return execInSandbox(SANDBOX_CONTAINER, wrapSandboxGitCommand(command));
+}
+
+async function normalizeSandboxBranchArtifacts(branchName: string): Promise<void> {
+  await execSandboxGit(
+    buildSandboxGitCommitPrunedArtifactsCommand(
+      `chore: untrack sandbox generated artifacts on ${branchName}`,
+    ),
+  ).catch((err) => {
+    console.warn(`[build-branch] artifact prune commit skipped on ${branchName}: ${(err as Error).message?.slice(0, 200)}`);
+  });
+}
 
 // ─── Client Identity ─────────────────────────────────────────────────────────
 
@@ -84,28 +183,26 @@ export async function isSandboxAvailable(): Promise<boolean> {
  */
 async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   // Configure identity first (idempotent)
-  await execInSandbox(
-    SANDBOX_CONTAINER,
+  await execSandboxGit(
     [
       `git -C ${WORKSPACE} config user.name "${identity.gitAuthorName}"`,
       `git -C ${WORKSPACE} config user.email "${identity.gitAgentEmail}"`,
     ].join(" && "),
   ).catch(() => {});
 
-  const isRepo = await execInSandbox(
-    SANDBOX_CONTAINER,
+  const isRepo = await execSandboxGit(
     `git -C ${WORKSPACE} rev-parse --is-inside-work-tree 2>/dev/null && echo yes || echo no`,
   ).catch(() => "no");
 
   if (isRepo.trim() !== "yes") {
-    await execInSandbox(
-      SANDBOX_CONTAINER,
+    await execSandboxGit(
       [
         `cd ${WORKSPACE}`,
         `git init`,
         `git config user.name "${identity.gitAuthorName}"`,
         `git config user.email "${identity.gitAgentEmail}"`,
-        `git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'`,
+        buildSandboxGitPruneTrackedArtifactsCommand(),
+        buildSandboxGitAddCommand(),
         `git commit -m 'sandbox baseline' --allow-empty`,
       ].join(" && "),
     );
@@ -113,19 +210,18 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   }
 
   // Ensure at least one commit exists
-  const commitCount = await execInSandbox(
-    SANDBOX_CONTAINER,
+  const commitCount = await execSandboxGit(
     `git -C ${WORKSPACE} rev-list --count HEAD 2>/dev/null || echo 0`,
   ).catch(() => "0");
 
   if (commitCount.trim() === "0") {
-    await execInSandbox(
-      SANDBOX_CONTAINER,
+    await execSandboxGit(
       [
         `cd ${WORKSPACE}`,
         `git config user.name "${identity.gitAuthorName}"`,
         `git config user.email "${identity.gitAgentEmail}"`,
-        `git add -A -- ':!node_modules' ':!.next' ':!*.tsbuildinfo' ':!pnpm-lock*'`,
+        buildSandboxGitPruneTrackedArtifactsCommand(),
+        buildSandboxGitAddCommand(),
         `git commit -m 'sandbox baseline' --allow-empty`,
       ].join(" && "),
     );
@@ -137,14 +233,12 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
  * Creates it from HEAD if missing.
  */
 async function ensureClientBranch(identity: ClientIdentity): Promise<void> {
-  const exists = await execInSandbox(
-    SANDBOX_CONTAINER,
+  const exists = await execSandboxGit(
     `git -C ${WORKSPACE} branch --list "${identity.clientBranch}" | grep -q . && echo yes || echo no`,
   ).catch(() => "no");
 
   if (exists.trim() !== "yes") {
-    await execInSandbox(
-      SANDBOX_CONTAINER,
+    await execSandboxGit(
       `git -C ${WORKSPACE} checkout -b "${identity.clientBranch}"`,
     );
     console.log(`[build-branch] Created persistent client branch: ${identity.clientBranch}`);
@@ -175,37 +269,47 @@ export async function startBuildBranch(buildId: string): Promise<void> {
   // Preserve the large generated/cached directories so pnpm install stays hot.
   // `git reset --hard HEAD` wipes tracked modifications; `git clean -fd` with
   // exclusions deletes untracked source files without touching node_modules etc.
-  await execInSandbox(
-    SANDBOX_CONTAINER,
-    `cd ${WORKSPACE} && git reset --hard HEAD && git clean -fd -- ':!node_modules' ':!**/node_modules/**' ':!.next' ':!**/.next/**' ':!.pnpm-store' ':!**/*.tsbuildinfo'`,
+  await execSandboxGit(
+    buildSandboxBranchSwitchPrepCommand(),
+  ).catch((err) => {
+    console.warn(`[build-branch] preview cleanup failed (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
+  });
+
+  await execSandboxGit(
+    buildSandboxGitCleanCommand(),
   ).catch((err) => {
     console.warn(`[build-branch] pre-checkout scrub failed (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
   });
 
+  await execSandboxGit(
+    `cd ${WORKSPACE} && ${buildSandboxGitPruneTrackedArtifactsCommand()}`,
+  ).catch((err) => {
+    console.warn(`[build-branch] cache prune failed (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
+  });
+
   // Switch to client branch before forking the build branch
-  await execInSandbox(
-    SANDBOX_CONTAINER,
+  await execSandboxGit(
     `git -C ${WORKSPACE} checkout "${identity.clientBranch}"`,
   );
+  await normalizeSandboxBranchArtifacts(identity.clientBranch);
 
   const branchName = `build/${buildId}`;
 
-  const branchExists = await execInSandbox(
-    SANDBOX_CONTAINER,
+  const branchExists = await execSandboxGit(
     `git -C ${WORKSPACE} branch --list "${branchName}" | grep -q . && echo yes || echo no`,
   ).catch(() => "no");
 
   if (branchExists.trim() === "yes") {
-    await execInSandbox(
-      SANDBOX_CONTAINER,
+    await execSandboxGit(
       `git -C ${WORKSPACE} checkout "${branchName}"`,
     );
+    await normalizeSandboxBranchArtifacts(branchName);
     console.log(`[build-branch] Resumed build branch: ${branchName}`);
   } else {
-    await execInSandbox(
-      SANDBOX_CONTAINER,
+    await execSandboxGit(
       `git -C ${WORKSPACE} checkout -b "${branchName}"`,
     );
+    await normalizeSandboxBranchArtifacts(branchName);
     console.log(`[build-branch] Created build branch: ${branchName} from ${identity.clientBranch}`);
   }
 
@@ -224,8 +328,7 @@ export async function startBuildBranch(buildId: string): Promise<void> {
  */
 export async function currentSandboxBranch(): Promise<string | null> {
   try {
-    const out = await execInSandbox(
-      SANDBOX_CONTAINER,
+    const out = await execSandboxGit(
       `git -C ${WORKSPACE} rev-parse --abbrev-ref HEAD`,
     );
     return out.trim() || null;
@@ -243,8 +346,7 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
   const identity = await getClientIdentity();
   const branchName = `build/${buildId}`;
 
-  await execInSandbox(
-    SANDBOX_CONTAINER,
+  await execSandboxGit(
     [
       `cd ${WORKSPACE}`,
       `git checkout "${identity.clientBranch}"`,
@@ -262,8 +364,7 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
 export async function abandonBuildBranch(buildId: string): Promise<void> {
   const identity = await getClientIdentity();
   try {
-    await execInSandbox(
-      SANDBOX_CONTAINER,
+    await execSandboxGit(
       `cd ${WORKSPACE} && git checkout "${identity.clientBranch}"`,
     );
     console.log(`[build-branch] Abandoned build/${buildId} — back on ${identity.clientBranch}`);

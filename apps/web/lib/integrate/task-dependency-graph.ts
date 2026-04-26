@@ -57,19 +57,40 @@ function assignSpecialist(task: PlanTask, taskIndex: number, files: PlanFileEntr
   });
 
   // Classify by the matched files, or fall back to title keywords
+  const heuristicSpecialist = classifyFromTask(task);
   const specialist = taskFiles.length > 0
-    ? classifyFile(taskFiles[0]!.path)
-    : classifyFromTitle(task.title);
+    ? heuristicSpecialist === "qa-engineer"
+      ? "qa-engineer"
+      : classifyFile(taskFiles[0]!.path)
+    : heuristicSpecialist;
 
   return { taskIndex, title: task.title, specialist, files: taskFiles, task };
 }
 
-function classifyFromTitle(title: string): SpecialistRole {
-  const lower = title.toLowerCase();
+function classifyFromTask(task: PlanTask): SpecialistRole {
+  const lower = [
+    task.title,
+    task.testFirst,
+    task.implement,
+    task.verify,
+  ].join(" ").toLowerCase();
+
   if (lower.includes("schema") || lower.includes("model") || lower.includes("migration") || lower.includes("database")) return "data-architect";
   if (lower.includes("api") || lower.includes("route") || lower.includes("action") || lower.includes("endpoint")) return "software-engineer";
   if (lower.includes("ui") || lower.includes("page") || lower.includes("component") || lower.includes("frontend") || lower.includes("layout")) return "frontend-engineer";
-  if (lower.includes("test") || lower.includes("verify") || lower.includes("typecheck")) return "qa-engineer";
+  if (
+    lower.includes("test")
+    || lower.includes("verify")
+    || lower.includes("typecheck")
+    || lower.includes("regression")
+    || lower.includes("acceptance criteria")
+    || lower.includes("manual desktop checks")
+    || lower.includes("200% zoom")
+    || lower.includes("reflow")
+    || lower.includes("accessibility")
+  ) {
+    return "qa-engineer";
+  }
   return "software-engineer";
 }
 

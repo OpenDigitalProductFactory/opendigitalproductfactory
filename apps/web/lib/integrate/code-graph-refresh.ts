@@ -77,6 +77,14 @@ const CODE_GRAPH_FILE_EXTENSIONS = new Set([
   ".yaml",
   ".yml",
 ]);
+const CODE_GRAPH_TRACKED_FILE_EXCLUDES = [
+  ".pnpm-store",
+  "**/.pnpm-store/**",
+  ".next",
+  "**/.next/**",
+  "node_modules",
+  "**/node_modules/**",
+];
 const exec = lazyExec();
 
 function getGitRoot(): string {
@@ -116,8 +124,22 @@ async function isWorkspaceDirty(gitRoot: string): Promise<boolean> {
   return stdout.trim().length > 0;
 }
 
+export function buildListTrackedFilesCommand(): string {
+  const includeSpecs = Array.from(CODE_GRAPH_FILE_EXTENSIONS)
+    .sort()
+    .map((extension) => `"**/*${extension}"`);
+  const excludeSpecs = CODE_GRAPH_TRACKED_FILE_EXCLUDES
+    .map((pathspec) => `":(exclude)${pathspec}"`);
+
+  return `git ls-files -- ${[...includeSpecs, ...excludeSpecs].join(" ")}`;
+}
+
 async function listTrackedFiles(gitRoot: string): Promise<string[]> {
-  const { stdout } = await exec("git ls-files", { cwd: gitRoot, timeout: 30_000, maxBuffer: 1024 * 1024 * 4 });
+  const { stdout } = await exec(buildListTrackedFilesCommand(), {
+    cwd: gitRoot,
+    timeout: 30_000,
+    maxBuffer: 1024 * 1024 * 4,
+  });
   return normalizeGitOutput(stdout).filter(shouldIndexCodeGraphPath);
 }
 

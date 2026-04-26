@@ -17,6 +17,25 @@ export const SANDBOX_RESOURCE_LIMITS = {
 } as const;
 
 export const SANDBOX_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const SANDBOX_WORKSPACE = "/workspace";
+const SANDBOX_STAGE_EXCLUDES = [
+  ":!**/node_modules/**",
+  ":!node_modules/**",
+  ":!**/.next/**",
+  ":!.next/**",
+  ":!.pnpm-store/**",
+  ":!**/*.tsbuildinfo",
+  ":!pnpm-lock*",
+] as const;
+const SANDBOX_DIFF_EXCLUDES = [
+  ":(exclude)**/node_modules/**",
+  ":(exclude)node_modules/**",
+  ":(exclude)**/.next/**",
+  ":(exclude).next/**",
+  ":(exclude).pnpm-store/**",
+  ":(exclude)**/*.tsbuildinfo",
+  ":(exclude)pnpm-lock*",
+] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -64,6 +83,111 @@ export function parseSandboxPort(output: string): number | null {
   if (!match?.[1]) return null;
   const port = parseInt(match[1], 10);
   return Number.isFinite(port) ? port : null;
+}
+
+export function prefixSafeWorkspaceCommand(command: string): string {
+  return [
+    `git config --global --add safe.directory "${SANDBOX_WORKSPACE}" >/dev/null 2>&1 || true`,
+    command,
+  ].join(" && ");
+}
+
+function quotePosixArg(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function joinQuotedArgs(args: readonly string[]): string {
+  return args.map((arg) => quotePosixArg(arg)).join(" ");
+}
+
+export function buildSandboxStageCommand(workspace: string = SANDBOX_WORKSPACE): string {
+  return `cd ${workspace} && git add -A -- ${joinQuotedArgs(SANDBOX_STAGE_EXCLUDES)}`;
+}
+
+export function buildSandboxListReleasableFilesCommand(workspace: string = SANDBOX_WORKSPACE): string {
+  return `cd ${workspace} && git diff --cached --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
+}
+
+export function buildSandboxDiffForFilesCommand(
+  files: readonly string[],
+  workspace: string = SANDBOX_WORKSPACE,
+): string {
+  return `cd ${workspace} && git diff --cached -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
+}
+
+export function buildSandboxNextDevReadinessCommand(workspace: string = SANDBOX_WORKSPACE): string {
+  return [
+    `test -d ${workspace}/node_modules`,
+    `test -f ${workspace}/apps/web/package.json`,
+    "echo yes || echo no",
+  ].join(" && ");
+}
+
+export function buildSandboxAppsWebCopyCommand(
+  portalContainer: string,
+  containerId: string,
+): string {
+  return [
+    `docker exec ${portalContainer} tar`,
+    "--exclude='apps/web/node_modules'",
+    "--exclude='apps/web/.next'",
+    "--exclude='apps/web/tsconfig.tsbuildinfo'",
+    "-cf - -C /app apps/web",
+    `| docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
+  ].join(" ");
+}
+
+export function buildSandboxRootScriptsCopyCommand(
+  portalContainer: string,
+  containerId: string,
+): string {
+  return `docker exec ${portalContainer} tar -cf - -C /app scripts | docker exec -i ${containerId} tar -xf - -C /workspace`;
+}
+
+export function buildSandboxWorkspaceCleanupCommand(workspace: string = SANDBOX_WORKSPACE): string {
+  return [
+    `rm -rf ${workspace}/apps/web/node_modules`,
+    `${workspace}/apps/web/.next`,
+    `${workspace}/apps/web/tsconfig.tsbuildinfo`,
+  ].join(" ");
+}
+
+export function buildSandboxNextDevLaunchCommand(
+  containerId: string,
+  workspace: string = SANDBOX_WORKSPACE,
+): string {
+  return [
+    `docker exec -d ${containerId} sh -c`,
+    JSON.stringify(
+      `cd ${workspace} && PORT=3000 pnpm --filter web dev --hostname 0.0.0.0 --port 3000 > /tmp/next-dev.log 2>&1`,
+    ),
+  ].join(" ");
+}
+
+export function parseSandboxChangedFiles(output: string): string[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+async function resetSandboxGitIndex(containerId: string): Promise<void> {
+  await execInSandbox(containerId, `cd ${SANDBOX_WORKSPACE} && git reset >/dev/null 2>&1 || true`);
+}
+
+async function stageSandboxWorkspaceChanges(containerId: string): Promise<void> {
+  await resetSandboxGitIndex(containerId);
+  await execInSandbox(containerId, buildSandboxStageCommand());
+}
+
+export async function listReleasableSandboxFiles(containerId: string): Promise<string[]> {
+  await stageSandboxWorkspaceChanges(containerId);
+  try {
+    const output = await execInSandbox(containerId, buildSandboxListReleasableFilesCommand());
+    return parseSandboxChangedFiles(output);
+  } finally {
+    await resetSandboxGitIndex(containerId);
+  }
 }
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -125,10 +249,22 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
   console.log("[sandbox-init] packages/ copied");
 
   await exec(
-    `docker exec ${portalContainer} tar -cf - -C /app apps/web | docker exec -i ${containerId} sh -c 'mkdir -p /workspace/apps && tar -xf - -C /workspace'`,
+    buildSandboxRootScriptsCopyCommand(portalContainer, containerId),
+    { timeout: 20_000 },
+  ).catch(() => console.log("[sandbox-init] scripts/ not found, skipping"));
+  console.log("[sandbox-init] scripts/ copied");
+
+  await exec(
+    buildSandboxAppsWebCopyCommand(portalContainer, containerId),
     { timeout: 60_000 },
   );
   console.log("[sandbox-init] apps/web/ copied");
+
+  await exec(
+    `docker exec ${containerId} sh -c ${JSON.stringify(buildSandboxWorkspaceCleanupCommand())}`,
+    { timeout: 15_000 },
+  );
+  console.log("[sandbox-init] stale app-local artifacts cleared");
 
   // Install dependencies (sandbox has pnpm via corepack)
   // This can take 3-5 minutes on a cold cache. Use generous timeout.
@@ -156,7 +292,8 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
 }
 
 export async function execInSandbox(containerId: string, command: string): Promise<string> {
-  const { stdout } = await exec(`docker exec ${containerId} sh -c ${JSON.stringify(command)}`, {
+  const safeCommand = prefixSafeWorkspaceCommand(command);
+  const { stdout } = await exec(`docker exec ${containerId} sh -c ${JSON.stringify(safeCommand)}`, {
     maxBuffer: 10 * 1024 * 1024, // 10MB — git diffs can be large
   });
   return stdout;
@@ -187,16 +324,14 @@ export async function startSandboxDevServer(containerId: string): Promise<void> 
   let useNextDev = false;
   try {
     const { stdout } = await exec(
-      `docker exec ${containerId} sh -c "test -d /workspace/apps/web/node_modules && test -f /workspace/apps/web/package.json && echo yes || echo no"`,
+      `docker exec ${containerId} sh -c ${JSON.stringify(buildSandboxNextDevReadinessCommand())}`,
     );
     useNextDev = stdout.trim() === "yes";
   } catch { /* fall back to static preview */ }
 
   if (useNextDev) {
     console.log("[sandbox] starting next dev server...");
-    await exec(
-      `docker exec -d ${containerId} sh -c "cd /workspace/apps/web && PORT=3000 npx next dev --port 3000 > /tmp/next-dev.log 2>&1"`,
-    );
+    await exec(buildSandboxNextDevLaunchCommand(containerId));
     // Wait for it to be ready (Turbopack is fast, ~2-5s)
     await new Promise(resolve => setTimeout(resolve, 5000));
     console.log("[sandbox] next dev server started on port 3000");
@@ -252,43 +387,15 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
 }
 
 export async function extractDiff(containerId: string): Promise<string> {
-  // Unstage first so a prior extractDiff call's index doesn't leak into this one.
-  // Without this, files an earlier (possibly buggy) `git add -A` staged stay in the
-  // index forever — the current diff ends up carrying ghosts from past runs.
-  await execInSandbox(containerId, "cd /workspace && git reset");
-
-  // Stage ALL changes (including new untracked files) so git diff --cached sees them.
-  // Without this, new files created by write_sandbox_file are untracked and invisible.
-  //
-  // Filter out build artifacts and caches — they produce a 200MB+ diff AND trigger
-  // false positives in assess_contribution (e.g. minified bundles in .next/ contain
-  // the word "token" thousands of times, which looks like an API-key leak).
-  //
-  // Pathspec gotcha: `:!node_modules` matches only a top-level `node_modules/`
-  // directory, NOT `apps/web/node_modules/`. Same for `:!.next`. Use `:!**/X/**`
-  // to match at any depth. pnpm v10 added `.pnpm-store/` at repo root — exclude
-  // that too.
-  await execInSandbox(containerId,
-    "cd /workspace && git add -A -- " +
-    "':!**/node_modules/**' ':!node_modules/**' " +
-    "':!**/.next/**' ':!.next/**' " +
-    "':!.pnpm-store/**' " +
-    "':!**/*.tsbuildinfo' " +
-    "':!pnpm-lock*'",
-  );
-
-  // Get the list of staged source files (defense in depth — the pathspec above
-  // should have excluded these, but `grep -v` catches any that slipped through).
-  const changedFiles = await execInSandbox(containerId,
-    "cd /workspace && git diff --cached --name-only | " +
-    "grep -v node_modules | grep -v '.next/' | grep -v '.pnpm-store/' | " +
-    "grep -v '.tsbuildinfo' | grep -v 'pnpm-lock'",
-  );
-  const files = changedFiles.trim().split("\n").filter(Boolean);
-  if (files.length === 0) return "";
-  // Quote each file path to handle shell metacharacters like (parentheses)
-  const quotedFiles = files.map((f) => `'${f}'`).join(" ");
-  return execInSandbox(containerId, `cd /workspace && git diff --cached -- ${quotedFiles}`);
+  await stageSandboxWorkspaceChanges(containerId);
+  try {
+    const changedFiles = await execInSandbox(containerId, buildSandboxListReleasableFilesCommand());
+    const files = parseSandboxChangedFiles(changedFiles);
+    if (files.length === 0) return "";
+    return execInSandbox(containerId, buildSandboxDiffForFilesCommand(files));
+  } finally {
+    await resetSandboxGitIndex(containerId);
+  }
 }
 
 export async function destroySandbox(containerId: string): Promise<void> {

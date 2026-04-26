@@ -188,4 +188,31 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain("Start Implementation");
     expect(html).toContain("Refine the plan");
   });
+
+  it("renders the dedicated release decision surface when a build reaches ship", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({
+          phase: "ship",
+          draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+          buildPlan: {
+            fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix layout overlap." }],
+            tasks: [{ title: "Fix layout overlap", testFirst: "Reproduce overlap", implement: "Refactor layout", verify: "Run checks" }],
+          },
+          planReview: {
+            decision: "pass",
+            summary: "Ready to implement.",
+            issues: [],
+          },
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("release-decision-panel");
+    expect(html).toContain(">Release<");
+  });
 });

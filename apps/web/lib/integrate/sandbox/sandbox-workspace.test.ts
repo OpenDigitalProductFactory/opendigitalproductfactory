@@ -1,47 +1,46 @@
-// apps/web/lib/sandbox-workspace.test.ts
-// Pure-function tests only — do NOT test Docker commands (those are integration tests)
+// apps/web/lib/integrate/sandbox/sandbox-workspace.test.ts
 
-import { describe, it, expect } from "vitest";
-import { buildInstallCommands } from "./sandbox-workspace";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockExecInSandbox, mockStartSandboxDevServer } = vi.hoisted(() => ({
+  mockExecInSandbox: vi.fn(),
+  mockStartSandboxDevServer: vi.fn(),
+}));
+
+vi.mock("@/lib/sandbox", () => ({
+  execInSandbox: mockExecInSandbox,
+  startSandboxDevServer: mockStartSandboxDevServer,
+}));
+
+import { buildInstallCommands, installDepsAndStart } from "./sandbox-workspace";
 
 describe("buildInstallCommands", () => {
-  it("returns an array", () => {
-    expect(Array.isArray(buildInstallCommands())).toBe(true);
+  it("returns the verified workspace install commands in order", () => {
+    expect(buildInstallCommands()).toEqual([
+      "cd /workspace && pnpm install",
+      "cd /workspace && pnpm --filter @dpf/db exec prisma generate",
+    ]);
   });
 
-  it("returns exactly 3 commands", () => {
-    expect(buildInstallCommands()).toHaveLength(3);
-  });
-
-  it("includes pnpm install", () => {
-    expect(buildInstallCommands()).toContain("pnpm install");
-  });
-
-  it("includes pnpm prisma generate", () => {
-    expect(buildInstallCommands()).toContain("pnpm prisma generate");
-  });
-
-  it("includes nohup pnpm dev command for background start", () => {
-    expect(buildInstallCommands()).toContain(
-      "nohup pnpm dev > /tmp/dev.log 2>&1 &",
-    );
-  });
-
-  it("pnpm install is first", () => {
-    expect(buildInstallCommands()[0]).toBe("pnpm install");
-  });
-
-  it("pnpm prisma generate is second", () => {
-    expect(buildInstallCommands()[1]).toBe("pnpm prisma generate");
-  });
-
-  it("nohup pnpm dev is third", () => {
-    expect(buildInstallCommands()[2]).toBe("nohup pnpm dev > /tmp/dev.log 2>&1 &");
-  });
-
-  it("returns a fresh copy each call (not the same array reference)", () => {
+  it("returns a fresh copy each call", () => {
     const a = buildInstallCommands();
     const b = buildInstallCommands();
     expect(a).not.toBe(b);
+  });
+});
+
+describe("installDepsAndStart", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockExecInSandbox.mockResolvedValue("");
+    mockStartSandboxDevServer.mockResolvedValue(undefined);
+  });
+
+  it("runs workspace install and prisma generation before starting the preview server", async () => {
+    await installDepsAndStart("dpf-sandbox-1");
+
+    expect(mockExecInSandbox).toHaveBeenNthCalledWith(1, "dpf-sandbox-1", "cd /workspace && pnpm install");
+    expect(mockExecInSandbox).toHaveBeenNthCalledWith(2, "dpf-sandbox-1", "cd /workspace && pnpm --filter @dpf/db exec prisma generate");
+    expect(mockStartSandboxDevServer).toHaveBeenCalledWith("dpf-sandbox-1");
   });
 });

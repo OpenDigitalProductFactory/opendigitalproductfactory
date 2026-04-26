@@ -140,6 +140,8 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.primaryLabel).toBe("Start Implementation");
     expect(action.targetPhase).toBe("build");
     expect(action.disabledReason).toBeNull();
+    expect(action.coworkerPrompt).toContain('saveBuildEvidence field buildPlan');
+    expect(action.coworkerPrompt).toContain("reviewBuildPlan");
   });
 
   it("surfaces verification once implementation evidence is ready", () => {
@@ -171,6 +173,179 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.primaryLabel).toBe("Run Verification Review");
     expect(action.targetPhase).toBe("review");
   });
+
+  it("surfaces implementation recovery during build when task results are flagged", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix layout overlap." }],
+          tasks: [{ title: "Fix layout overlap", testFirst: "Reproduce overlap", implement: "Refactor layout", verify: "Run checks" }],
+        },
+        planReview: {
+          decision: "pass",
+          summary: "Ready to implement.",
+          issues: [],
+        },
+        taskResults: {
+          completedTasks: 0,
+          totalTasks: 1,
+          tasks: [{ title: "Fix layout overlap", specialist: "frontend-engineer", outcome: "DONE_WITH_CONCERNS" }],
+        } as unknown as FeatureBuildRow["taskResults"],
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 0,
+          typecheckPassed: false,
+          fullOutput: "container not running",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("resume-implementation");
+    expect(action.primaryLabel).toBe("Resume Implementation");
+    expect(action.message).toContain("healthy sandbox");
+  });
+
+  it("surfaces implementation recovery in review when review only contains failed execution evidence", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: {
+          completedTasks: 0,
+          totalTasks: 2,
+          tasks: [
+            { title: "Fix layout overlap", specialist: "frontend-engineer", outcome: "DONE_WITH_CONCERNS" },
+            { title: "Run verification", specialist: "qa-engineer", outcome: "DONE_WITH_CONCERNS" },
+          ],
+        } as unknown as FeatureBuildRow["taskResults"],
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 1,
+          typecheckPassed: false,
+          fullOutput: "typecheck failed",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("resume-implementation");
+    expect(action.primaryLabel).toBe("Resume Implementation");
+    expect(action.coworkerLabel).toBe("Recover with coworker");
+  });
+
+  it("surfaces a manual UX verification action when review never received UX evidence", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "typecheck clean",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("run-review-verification");
+    expect(action.primaryLabel).toBe("Run UX Verification");
+    expect(action.disabledReason).toBeNull();
+    expect(action.coworkerLabel).toBe("Finish acceptance review");
+  });
+
+  it("surfaces the ship transition when review evidence is complete", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix layout overlap." }],
+          tasks: [{ title: "Fix layout overlap", testFirst: "Reproduce overlap", implement: "Refactor layout", verify: "Run checks" }],
+        },
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "typecheck clean",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+        acceptanceMet: [
+          { criterion: "The workflow header no longer overlaps content.", met: true, evidence: "Header wraps cleanly." },
+          { criterion: "The operator can approve, implement, and verify from the Build Studio UI.", met: true, evidence: "Studio controls present." },
+        ],
+        uxVerificationStatus: "complete",
+        uxTestResults: [
+          { step: "Header does not overlap content", passed: true, screenshotUrl: "/evidence/header.png", error: null },
+        ],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("advance-phase");
+    expect(action.primaryLabel).toBe("Continue to Release");
+    expect(action.targetPhase).toBe("ship");
+    expect(action.disabledReason).toBeNull();
+  });
+
+  it("surfaces a direct acceptance action when UX evidence is complete and only acceptance is missing", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix layout overlap." }],
+          tasks: [{ title: "Fix layout overlap", testFirst: "Reproduce overlap", implement: "Refactor layout", verify: "Run checks" }],
+        },
+        verificationOut: {
+          testsPassed: 1,
+          testsFailed: 7,
+          typecheckPassed: true,
+          fullOutput: "legacy suite drift",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+        acceptanceMet: null,
+        uxVerificationStatus: "complete",
+        uxTestResults: [
+          { step: "Header does not overlap content", passed: true, screenshotUrl: "/evidence/header.png", error: null },
+        ],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("record-acceptance");
+    expect(action.primaryLabel).toBe("Record Acceptance");
+    expect(action.disabledReason).toBeNull();
+    expect(action.coworkerLabel).toBe("Summarize review with coworker");
+  });
+
+  it("keeps the review transition visible when evidence is still missing", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "typecheck clean",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("run-review-verification");
+    expect(action.primaryLabel).toBe("Run UX Verification");
+    expect(action.disabledReason).toBeNull();
+    expect(action.coworkerLabel).toBe("Finish acceptance review");
+  });
 });
 
 describe("deriveWorkflowStageGuidance", () => {
@@ -184,5 +359,84 @@ describe("deriveWorkflowStageGuidance", () => {
 
     expect(guidance.nextApproval).toContain("Approve Start");
     expect(guidance.title).toContain("Approval");
+  });
+
+  it("shows recovery guidance when review needs implementation recovery", () => {
+    const guidance = deriveWorkflowStageGuidance({
+      build: makeBuild({
+        phase: "review",
+        taskResults: {
+          completedTasks: 0,
+          totalTasks: 1,
+          tasks: [{ title: "Fix layout overlap", specialist: "frontend-engineer", outcome: "DONE_WITH_CONCERNS" }],
+        } as unknown as FeatureBuildRow["taskResults"],
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 1,
+          typecheckPassed: false,
+          fullOutput: "container not running",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+      }),
+      phase: "review",
+      workflowLabel: "Review",
+      governedBacklogEnabled: true,
+    });
+
+    expect(guidance.title).toBe("Implementation Needs Recovery");
+    expect(guidance.nextApproval).toContain("Resume implementation");
+  });
+
+  it("shows release guidance on the review node when review evidence is complete", () => {
+    const guidance = deriveWorkflowStageGuidance({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        buildPlan: {
+          fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix layout overlap." }],
+          tasks: [{ title: "Fix layout overlap", testFirst: "Reproduce overlap", implement: "Refactor layout", verify: "Run checks" }],
+        },
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "typecheck clean",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+        acceptanceMet: [
+          { criterion: "The workflow header no longer overlaps content.", met: true, evidence: "Header wraps cleanly." },
+        ],
+        uxVerificationStatus: "complete",
+        uxTestResults: [{ step: "Header does not overlap", passed: true, screenshotUrl: null, error: null }],
+      }),
+      phase: "review",
+      workflowLabel: "Ready to Release",
+      governedBacklogEnabled: true,
+    });
+
+    expect(guidance.title).toBe("Ready for Release Decisions");
+    expect(guidance.nextApproval).toContain("Continue to release decisions");
+  });
+
+  it("keeps the review node actionable when UX verification still needs to run", () => {
+    const guidance = deriveWorkflowStageGuidance({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        verificationOut: {
+          testsPassed: 0,
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "typecheck clean",
+          timestamp: "2026-04-25T13:20:00Z",
+        },
+      }),
+      phase: "review",
+      workflowLabel: "Review",
+      governedBacklogEnabled: true,
+    });
+
+    expect(guidance.workflowAction.kind).toBe("run-review-verification");
+    expect(guidance.nextApproval).toContain("sandbox evidence");
   });
 });

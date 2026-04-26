@@ -43,6 +43,10 @@ export function buildSandboxDbEnvVars(buildId: string): Record<string, string> {
 const POLL_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
 
+export function buildDockerHealthInspectCommand(containerId: string): string {
+  return `docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" ${containerId} | grep -q '^healthy$'`;
+}
+
 async function pollUntilReady(
   containerId: string,
   checkCommand: string,
@@ -55,6 +59,21 @@ async function pollUntilReady(
       return; // success
     } catch {
       // not ready yet — wait and retry
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  throw new Error(`${label} did not become ready within ${POLL_TIMEOUT_MS / 1000}s`);
+}
+
+async function pollUntilHealthy(containerId: string, label: string): Promise<void> {
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  const command = buildDockerHealthInspectCommand(containerId);
+  while (Date.now() < deadline) {
+    try {
+      await exec(command);
+      return;
+    } catch {
+      // not healthy yet
     }
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
@@ -143,11 +162,7 @@ export async function waitForSandboxNeo4j(neo4jContainerId: string): Promise<voi
 }
 
 export async function waitForSandboxQdrant(qdrantContainerId: string): Promise<void> {
-  await pollUntilReady(
-    qdrantContainerId,
-    "wget -qO /dev/null http://localhost:6333/readyz",
-    "Qdrant",
-  );
+  await pollUntilHealthy(qdrantContainerId, "Qdrant");
 }
 
 // ─── Lifecycle — Seed ─────────────────────────────────────────────────────────
