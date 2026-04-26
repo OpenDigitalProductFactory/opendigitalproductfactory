@@ -88,7 +88,7 @@ services:
       start_period: 10s
 
   portal-init:
-    image: ghcr.io/markdbodman/dpf-portal:${DPF_VERSION:-latest}
+    image: ghcr.io/OpenDigitalProductFactory/dpf-portal:${DPF_VERSION:-latest}
     command: ["/docker-entrypoint.sh"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD}@postgres:5432/dpf
@@ -99,7 +99,7 @@ services:
         condition: service_healthy
 
   portal:
-    image: ghcr.io/markdbodman/dpf-portal:${DPF_VERSION:-latest}
+    image: ghcr.io/OpenDigitalProductFactory/dpf-portal:${DPF_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -134,7 +134,7 @@ volumes:
 
 ```yaml
   sandbox-image:
-    image: ghcr.io/markdbodman/dpf-sandbox:${DPF_VERSION:-latest}
+    image: ghcr.io/OpenDigitalProductFactory/dpf-sandbox:${DPF_VERSION:-latest}
     container_name: dpf-sandbox-dev
     profiles: ["build-images"]
     command: ["echo", "Image ready"]
@@ -184,9 +184,9 @@ For users who want to modify the platform and contribute changes upstream.
 
 1. Prompt for GitHub username
 2. Check if fork exists at `github.com/<user>/opendigitalproductfactory` (via `gh` CLI or HTTPS probe)
-3. If no fork, open browser to `https://github.com/markdbodman/opendigitalproductfactory/fork` and wait for confirmation
+3. If no fork, open browser to `https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/fork` and wait for confirmation
 4. `git clone https://github.com/<user>/opendigitalproductfactory.git $DPF_DIR`
-5. `git remote add upstream https://github.com/markdbodman/opendigitalproductfactory.git`
+5. `git remote add upstream https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git`
 6. `docker compose build` (builds from source)
 7. `docker compose up -d`
 8. Pull Docker Model Runner model
@@ -197,7 +197,7 @@ For users who want to modify the platform but keep changes private.
 
 **Install flow:**
 
-1. `git clone https://github.com/markdbodman/opendigitalproductfactory.git $DPF_DIR`
+1. `git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git $DPF_DIR`
 2. `git remote remove origin` (or rename to `upstream` as read-only reference)
 3. `docker compose build` (builds from source)
 4. `docker compose up -d`
@@ -205,7 +205,7 @@ For users who want to modify the platform but keep changes private.
 
 ### Unified Docker image
 
-A single image (`ghcr.io/markdbodman/dpf-portal`) contains both the migration/seed entrypoint and the Next.js standalone output. Compose runs it as two services with different commands:
+A single image (`ghcr.io/OpenDigitalProductFactory/dpf-portal`) contains both the migration/seed entrypoint and the Next.js standalone output. Compose runs it as two services with different commands:
 
 - `portal-init`: `command: ["/docker-entrypoint.sh"]` — runs migrations, seed, exits
 - `portal`: default CMD `node apps/web/server.js` — serves the application
@@ -217,13 +217,13 @@ This requires a Dockerfile change: the `runner` stage must also include the entr
 GitHub Actions workflow (`.github/workflows/publish-image.yml`) triggered on git tags matching `v*`:
 
 1. Typecheck gate (`pnpm typecheck`) runs before build to catch errors early
-2. Build the unified portal image from `Dockerfile` → `ghcr.io/markdbodman/dpf-portal:<tag>` and `:latest`
-3. Build the sandbox image from `Dockerfile.sandbox` → `ghcr.io/markdbodman/dpf-sandbox:<tag>` and `:latest`
+2. Build the unified portal image from `Dockerfile` → `ghcr.io/OpenDigitalProductFactory/dpf-portal:<tag>` and `:latest`
+3. Build the sandbox image from `Dockerfile.sandbox` → `ghcr.io/OpenDigitalProductFactory/dpf-sandbox:<tag>` and `:latest`
 4. Push both to GHCR
 
 Two images published per release:
-- `ghcr.io/markdbodman/dpf-portal` — portal init + app
-- `ghcr.io/markdbodman/dpf-sandbox` — Build Studio sandbox base
+- `ghcr.io/OpenDigitalProductFactory/dpf-portal` — portal init + app
+- `ghcr.io/OpenDigitalProductFactory/dpf-sandbox` — Build Studio sandbox base
 
 The install script defaults to `latest` but accepts an optional `--Version` parameter for pinning.
 
@@ -297,7 +297,7 @@ GET https://api.github.com/repos/<user>/opendigitalproductfactory
 If 200 → fork exists, proceed with clone. If 404 → open browser to fork page:
 
 ```
-Start-Process "https://github.com/markdbodman/opendigitalproductfactory/fork"
+Start-Process "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/fork"
 ```
 
 Then poll the same endpoint (5s interval, 2min timeout) until the fork appears. Unauthenticated GitHub API allows 60 requests/hour — sufficient for this single check + poll.

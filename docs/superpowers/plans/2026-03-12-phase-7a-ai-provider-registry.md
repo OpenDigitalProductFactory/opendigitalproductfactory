@@ -661,7 +661,7 @@ async function requireSession(): Promise<void> {
 // ─── Registry sync ────────────────────────────────────────────────────────────
 
 const REGISTRY_URL =
-  "https://raw.githubusercontent.com/markdbodman/opendigitalproductfactory/main/packages/db/data/providers-registry.json";
+  "https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/packages/db/data/providers-registry.json";
 
 /**
  * Sync provider registry from GitHub. No auth guard — called from server component
