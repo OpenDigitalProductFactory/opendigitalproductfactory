@@ -3,7 +3,12 @@ import { prisma } from "@dpf/db";
 
 type PrincipalDb = Pick<
   typeof prisma,
-  "user" | "employeeProfile" | "agent" | "principal" | "principalAlias"
+  | "user"
+  | "employeeProfile"
+  | "agent"
+  | "customerContact"
+  | "principal"
+  | "principalAlias"
 >;
 
 type PrincipalAliasDb = Pick<typeof prisma, "principalAlias">;
@@ -274,6 +279,44 @@ export async function syncAgentPrincipal(
       {
         aliasType: "gaid",
         aliasValue: buildPrivateAgentGaid(agent.agentId),
+        issuer: INTERNAL_ISSUER,
+      },
+    ],
+  });
+}
+
+export async function syncCustomerPrincipal(
+  customerContactId: string,
+  db: PrincipalDb = prisma,
+): Promise<SyncedPrincipal> {
+  const contact = await db.customerContact.findUnique({
+    where: { id: customerContactId },
+    select: {
+      id: true,
+      email: true,
+      isActive: true,
+    },
+  });
+
+  if (!contact) {
+    throw new Error(`CustomerContact ${customerContactId} not found.`);
+  }
+
+  const lowercaseEmail = contact.email.toLowerCase();
+
+  return upsertPrincipalForAliases(db, {
+    kind: "customer",
+    status: contact.isActive ? "active" : "inactive",
+    displayName: contact.email,
+    aliases: [
+      {
+        aliasType: "customer_contact",
+        aliasValue: contact.id,
+        issuer: INTERNAL_ISSUER,
+      },
+      {
+        aliasType: "email",
+        aliasValue: lowercaseEmail,
         issuer: INTERNAL_ISSUER,
       },
     ],
