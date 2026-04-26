@@ -1,0 +1,63 @@
+title: Open Digital Product Factory
+description: An open-source, AI-native digital product management platform.
+url: https://opendigitalproductfactory.com
+repository: OpenDigitalProductFactory/opendigitalproductfactory
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  hard_wrap: false
+
+permalink: pretty
+
+# Don't run Jekyll over content that contains Liquid template markers
+# (the prompt loader uses {{include:...}} that Liquid would try to parse)
+# or content we don't want as part of the public site.
+exclude:
+  - superpowers
+  - Reference
+  - "*.docx"
+  - "Trusted-AI-Kernel-Architecture.docx"
+  - "GAID.docx"
+  - "Trusted-AI-Agent-Governance-White-Paper.docx"
+  - dark-theme-development-guidelines.md
+  - architecture/ea-diagrams
+  - architecture/gaid-diagrams
+  - architecture/tak-diagrams
+  - architecture/monitoring-diagrams
+  - architecture/generate-tak-docx.mjs
+  - architecture/generate-gaid-docx.mjs
+  - architecture/generate-docx-from-markdown.mjs
+  - architecture/generate-agent-standards-white-paper-docx.mjs
+  - architecture/agent-standards-style-notes.md
+
+# Apply the default layout to Markdown pages but explicitly opt index.html
+# OUT of the layout — it is a bespoke landing page with its own embedded
+# styles and should not be wrapped in the doc-site chrome.
+defaults:
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: default
+  - scope:
+      path: "index.html"
+      type: pages
+    values:
+      layout: null
+
+# Jekyll plugins available on GitHub Pages by default
+plugins:
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+
+# Make [foo](bar.md) links resolve to the rendered .html
+relative_links:
+  enabled: true
+  collections: false
+
+# Apply the layout to .md files that don't have YAML frontmatter
+# (e.g. architecture/platform-overview.md, README.md)
+optional_front_matter:
+  remove_originals: false

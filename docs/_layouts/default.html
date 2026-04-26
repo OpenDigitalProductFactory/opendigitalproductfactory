@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{% if page.title %}{{ page.title }} &middot; {% endif %}{{ site.title }}</title>
+{% if page.description or site.description %}<meta name="description" content="{{ page.description | default: site.description }}" />{% endif %}
+<link rel="stylesheet" href="{{ '/assets/css/site.css' | relative_url }}" />
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap site-header-inner">
+    <a class="site-brand" href="{{ '/' | relative_url }}">
+      <span class="site-brand-mark" aria-hidden="true">ODPF</span>
+      <span class="site-brand-name">Open Digital Product Factory</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="{{ '/user-guide/getting-started/' | relative_url }}">Getting started</a>
+      <a href="{{ '/user-guide/' | relative_url }}">User guide</a>
+      <a href="{{ '/architecture/platform-overview' | relative_url }}">Architecture</a>
+      <a href="https://github.com/{{ site.repository }}" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap doc-main">
+  {% if page.title %}
+    <header class="doc-page-header">
+      <h1>{{ page.title }}</h1>
+      {% if page.lastUpdated %}<p class="doc-meta">Last updated {{ page.lastUpdated }}{% if page.updatedBy %} &middot; {{ page.updatedBy }}{% endif %}</p>{% endif %}
+    </header>
+  {% endif %}
+
+  <article class="doc-content">
+    {{ content }}
+  </article>
+
+  <p class="doc-edit-link"><a href="https://github.com/{{ site.repository }}/edit/main/docs/{{ page.path }}" rel="noopener">Edit this page on GitHub</a></p>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>
+      <a href="{{ '/' | relative_url }}">{{ site.title }}</a> &middot;
+      <a href="https://github.com/{{ site.repository }}" rel="noopener">GitHub repository</a>
+    </p>
+  </div>
+</footer>
+</body>
+</html>
