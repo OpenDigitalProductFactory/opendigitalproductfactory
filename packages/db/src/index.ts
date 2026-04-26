@@ -118,6 +118,35 @@ export {
   type PromotionSummary,
 } from "./discovery-promotion";
 export {
+  TRIAGE_ACTOR_TYPES,
+  TRIAGE_OUTCOMES,
+  TRIAGE_QUALITY_ISSUE_TYPES,
+  type TriageActorType,
+  type TriageOutcome,
+  type TriageQualityIssueType,
+} from "./discovery-triage-enums";
+export {
+  buildDiscoveryEvidencePacket,
+  DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS,
+  recordDiscoveryTriageDecision,
+  resolveDiscoveryTriageOutcome,
+  scoreDiscoveryTriageCandidate,
+  shouldAutoApplyTriageDecision,
+  synthesizeDiscoveryFingerprintRule,
+  type DiscoveryEvidencePacket,
+  type DiscoveryEvidencePacketInput,
+  type DiscoveryProtocolEvidence,
+  type DiscoveryTriageClient,
+  type DiscoveryTriageDecisionInput,
+  type DiscoveryTriageIdentityCandidate,
+  type DiscoveryTriageProposedRule,
+  type DiscoveryTriageScore,
+  type DiscoveryTriageTaxonomyCandidate,
+  type DiscoveryTriageThresholds,
+} from "./discovery-triage";
+export * from "./discovery-triage-config";
+export * from "./seed-discovery-triage";
+export {
   inferCrossCollectorRelationships,
   inferProductDependencies,
   type InferenceSummary,

@@ -54,7 +54,7 @@ export type InventoryQualityEntityInput = {
   entityKey: string;
   entityType: string;
   attributionStatus: "attributed" | "needs_review" | "unmapped" | "stale" | "dismissed";
-  attributionMethod?: "rule" | "heuristic" | "manual" | "ai_proposed" | null;
+  attributionMethod?: "rule" | "heuristic" | "manual" | "ai-proposed" | null;
   attributionConfidence?: number | null;
   candidateTaxonomy?: Array<{ nodeId: string; score: number }> | null;
   taxonomyNodeId?: string | null;
