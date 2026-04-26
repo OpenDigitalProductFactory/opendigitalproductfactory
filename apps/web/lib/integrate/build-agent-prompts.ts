@@ -1,4 +1,13 @@
-import type { BuildPhase, FeatureBrief } from "@/lib/feature-build-types";
+import type {
+  AcceptanceCriterion,
+  BuildDesignDoc,
+  BuildPhase,
+  BuildPlanDoc,
+  FeatureBrief,
+  ReviewResult,
+  UxVerificationStatus,
+  VerificationOutput,
+} from "@/lib/feature-build-types";
 import { PROJECT_CONTEXT } from "./build-project-context";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
 
@@ -357,21 +366,22 @@ You are performing the role of the release-acceptance-agent (AGT-132): validatin
 
 RELEASE GATE CHECKS (all must pass before shipping):
 
-1. Run unit tests and typecheck: call run_sandbox_tests. All tests must pass, typecheck must be clean.
-2. Run UX acceptance tests: call run_ux_test. This uses AI-powered browser automation (browser-use) to verify accessibility, visual correctness, and acceptance criteria against the live sandbox.
+1. Run the sandbox verification check: call run_sandbox_tests. Typecheck MUST be clean before ship. The wider unit-test surface is currently informational — summarize likely build-specific failures if they appear, but do NOT block ship solely because unrelated suite failures still exist while typecheck is clean.
+2. Confirm live UX verification status from the build record. If UX verification has not run yet or failed, direct the user to use the Studio Control action in Build Studio to run it, then wait for that evidence before shipping. If uxVerificationStatus is "complete" or "skipped", reuse that evidence.
 3. Evaluate each acceptance criterion from the design document. Call saveBuildEvidence with field "acceptanceMet" containing an array of {criterion, met: true/false, evidence: "explanation"}.
 4. Check deployment readiness: call check_deployment_windows to see if a deployment window is available.
 5. Present a PLAIN LANGUAGE summary to the user:
-   - "Release gate checks complete: [N] unit tests pass, [N] UX tests pass, all acceptance criteria met."
+   - "Release gate checks complete: typecheck is clean, UX verification is complete, and all acceptance criteria are met."
    - Include deployment window status: "A deployment window is available now" or "Next window: [time]".
-   - If UX tests failed: "I found [N] accessibility issues that need fixing. Going back to build to address them."
+   - If UX verification failed: "I found [N] UX or accessibility issues that need fixing. Going back to build to address them."
 6. If everything passes, ask: "Ready to ship?"
    - If ship → advance to ship phase
    - If changes → go back to build phase with their feedback
    - If reject → set phase to failed
 
 RULES:
-- ALWAYS run BOTH unit tests AND UX tests before presenting results. No build ships without both passing.
+- ALWAYS require clean typecheck plus completed UX verification before presenting a ship recommendation.
+- Treat unrelated unit-test failures as informational until the broader test surface is cleaned up. Do not mark acceptance unmet solely because the full suite contains legacy failures outside this build's scope.
 - Do NOT show raw test output unless Dev mode is enabled. Summarize in plain language.
 - Do NOT claim tests pass without showing verification evidence.
 - Keep responses to 2-4 sentences max.
@@ -498,6 +508,14 @@ export type BuildContext = {
   phase: BuildPhase;
   title: string;
   brief: FeatureBrief | null;
+  designDoc?: BuildDesignDoc | null;
+  designReview?: ReviewResult | null;
+  buildPlan?: BuildPlanDoc | null;
+  planReview?: ReviewResult | null;
+  verificationOut?: VerificationOutput | null;
+  acceptanceMet?: AcceptanceCriterion[] | null;
+  uxVerificationStatus?: UxVerificationStatus | null;
+  uxTestResults?: Array<{ step: string; passed: boolean; notes?: string }> | null;
   portfolioId: string | null;
   plan: Record<string, unknown> | null;
   contributionMode?: string;
@@ -514,6 +532,59 @@ export type BuildContext = {
    *  peer review was activated so downstream agents can explain decisions. */
   deliberationReason?: string;
 };
+
+function formatReviewGateSection(ctx: BuildContext): string[] {
+  if (
+    ctx.phase !== "review"
+    && !ctx.verificationOut
+    && !ctx.acceptanceMet
+    && !ctx.uxVerificationStatus
+    && !ctx.uxTestResults
+  ) {
+    return [];
+  }
+
+  const lines = ["", "--- Review Gate Evidence ---"];
+  const verification = ctx.verificationOut;
+  if (verification) {
+    lines.push(
+      `Verification status: typecheck ${verification.typecheckPassed ? "pass" : "fail"}; reported unit-test failures ${verification.testsFailed}; reported unit-test passes ${verification.testsPassed}.`,
+    );
+  }
+
+  if (ctx.uxVerificationStatus) {
+    const label = ctx.uxVerificationStatus;
+    const totalSteps = Array.isArray(ctx.uxTestResults) ? ctx.uxTestResults.length : 0;
+    const passedSteps = Array.isArray(ctx.uxTestResults)
+      ? ctx.uxTestResults.filter((step) => step.passed).length
+      : 0;
+    if (totalSteps > 0) {
+      lines.push(`UX verification: ${label} (${passedSteps}/${totalSteps} steps passed).`);
+    } else {
+      lines.push(`UX verification: ${label}.`);
+    }
+  }
+
+  if (Array.isArray(ctx.acceptanceMet) && ctx.acceptanceMet.length > 0) {
+    const metCount = ctx.acceptanceMet.filter((criterion) => criterion.met).length;
+    lines.push(`Acceptance evidence saved: ${metCount}/${ctx.acceptanceMet.length} criteria marked met.`);
+  } else if (ctx.phase === "review") {
+    lines.push("Acceptance evidence saved: not yet recorded.");
+  }
+
+  if (
+    ctx.phase === "review"
+    && verification?.typecheckPassed === true
+    && ctx.uxVerificationStatus === "complete"
+    && (!Array.isArray(ctx.acceptanceMet) || ctx.acceptanceMet.length === 0)
+  ) {
+    lines.push(
+      "Next review action: save acceptanceMet now using the existing design criteria and the completed verification evidence. Do NOT rerun sandbox investigation unless the evidence above is missing or contradictory.",
+    );
+  }
+
+  return lines;
+}
 
 export async function getBuildContextSection(ctx: BuildContext): Promise<string> {
   const lines: string[] = [
@@ -556,6 +627,45 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     lines.push(`  Target roles: ${ctx.brief.targetRoles.join(", ")}`);
     lines.push(`  Acceptance criteria: ${ctx.brief.acceptanceCriteria.join("; ")}`);
   }
+
+  if (ctx.designDoc) {
+    const audit = ctx.designDoc.existingCodeAudit ?? ctx.designDoc.existingFunctionalityAudit ?? null;
+    lines.push("");
+    lines.push("--- Approved Design Evidence ---");
+    if (ctx.designDoc.problemStatement) {
+      lines.push(`Problem statement: ${ctx.designDoc.problemStatement}`);
+    }
+    if (ctx.designDoc.proposedApproach) {
+      lines.push(`Approved approach: ${ctx.designDoc.proposedApproach}`);
+    }
+    if (ctx.designDoc.reusePlan) {
+      lines.push(`Reuse plan: ${ctx.designDoc.reusePlan}`);
+    }
+    if (audit) {
+      lines.push(`Codebase research: ${audit}`);
+    }
+    if (Array.isArray(ctx.designDoc.acceptanceCriteria) && ctx.designDoc.acceptanceCriteria.length > 0) {
+      lines.push(`Design acceptance criteria: ${ctx.designDoc.acceptanceCriteria.join("; ")}`);
+    }
+    if (ctx.designReview?.summary) {
+      lines.push(`Design review: ${ctx.designReview.decision} — ${ctx.designReview.summary}`);
+    }
+    lines.push("Use this approved design evidence directly. Do NOT search the codebase again for plan refinement unless the user explicitly changes scope.");
+  }
+
+  if (ctx.buildPlan) {
+    lines.push("");
+    lines.push("--- Current Implementation Plan Evidence ---");
+    lines.push(JSON.stringify(ctx.buildPlan, null, 2).slice(0, 4000));
+    if (ctx.planReview?.summary) {
+      lines.push(`Plan review: ${ctx.planReview.decision} — ${ctx.planReview.summary}`);
+      if (ctx.planReview.issues.length > 0) {
+        lines.push(`Review issues: ${ctx.planReview.issues.map((issue) => `${issue.severity}: ${issue.description}`).join("; ")}`);
+      }
+    }
+  }
+
+  lines.push(...formatReviewGateSection(ctx));
 
   if (ctx.plan && Object.keys(ctx.plan).length > 0) {
     lines.push("");

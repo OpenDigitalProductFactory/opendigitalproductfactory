@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   advanceBuildPhase,
   approveBuildStart,
+  recordBuildAcceptance,
+  runBuildReviewVerification,
+  resumeBuildImplementation,
   retryBuildExecution,
 } from "@/lib/actions/build";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
@@ -38,10 +41,22 @@ export function BuildStudioWorkflowActionCard({
     switch (action.kind) {
       case "approve-start":
         return "Recording approval...";
+      case "run-review-verification":
+        return "Running UX verification...";
+      case "record-acceptance":
+        return "Recording acceptance...";
       case "advance-phase":
-        return action.targetPhase === "build" ? "Starting implementation..." : "Starting verification...";
+        if (action.targetPhase === "build") {
+          return "Starting implementation...";
+        }
+        if (action.targetPhase === "review") {
+          return "Starting verification...";
+        }
+        return "Opening release decisions...";
       case "retry-build":
         return "Retrying build...";
+      case "resume-implementation":
+        return "Reopening implementation...";
       default:
         return action.primaryLabel;
     }
@@ -56,10 +71,16 @@ export function BuildStudioWorkflowActionCard({
     try {
       if (action.kind === "approve-start") {
         await approveBuildStart(build.buildId);
+      } else if (action.kind === "record-acceptance") {
+        await recordBuildAcceptance(build.buildId);
+      } else if (action.kind === "run-review-verification") {
+        await runBuildReviewVerification(build.buildId);
       } else if (action.kind === "advance-phase" && action.targetPhase) {
         await advanceBuildPhase(build.buildId, action.targetPhase);
       } else if (action.kind === "retry-build") {
         await retryBuildExecution(build.buildId);
+      } else if (action.kind === "resume-implementation") {
+        await resumeBuildImplementation(build.buildId);
       }
 
       window.dispatchEvent(

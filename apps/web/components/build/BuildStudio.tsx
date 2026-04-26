@@ -9,6 +9,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
+import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
@@ -83,6 +84,14 @@ export function BuildStudio({
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
+  const refreshActiveBuildState = useCallback(async (buildId: string) => {
+    const [fresh, nextFlow] = await Promise.all([
+      getFeatureBuild(buildId),
+      getBuildFlowStateAction(buildId),
+    ]);
+    if (fresh) setActiveBuild(fresh);
+    setFlowState(nextFlow);
+  }, []);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
     const now = Date.now();
@@ -91,19 +100,11 @@ export function BuildStudio({
     lastFetchRef.current = now;
     fetchInFlightRef.current = true;
     try {
-      // Fetch build row + flow state in parallel. Flow state is derived
-      // from existing columns (see lib/build-flow-state.ts) so the cost
-      // is one extra Prisma round-trip, not a new source of truth.
-      const [fresh, nextFlow] = await Promise.all([
-        getFeatureBuild(activeBuild.buildId),
-        getBuildFlowStateAction(activeBuild.buildId),
-      ]);
-      if (fresh) setActiveBuild(fresh);
-      setFlowState(nextFlow);
+      await refreshActiveBuildState(activeBuild.buildId);
     } finally {
       fetchInFlightRef.current = false;
     }
-  }, [activeBuild?.buildId]);
+  }, [activeBuild?.buildId, refreshActiveBuildState]);
 
   // Fetch initial flow state when the active build changes so the first
   // paint shows substep counts and fork nodes without waiting for an SSE
@@ -485,17 +486,22 @@ export function BuildStudio({
                     </div>
                   </div>
                 )}
-                {activeBuild && workflowAction && (
+                {activeBuild && activeBuild.phase === "ship" && (
+                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                    <ReleaseDecisionPanel
+                      build={activeBuild}
+                      flowState={flowState}
+                      portfolios={portfolios}
+                      onCompleted={() => refreshActiveBuildState(activeBuild.buildId)}
+                    />
+                  </div>
+                )}
+                {activeBuild && workflowAction && activeBuild.phase !== "ship" && (
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <BuildStudioWorkflowActionCard
                       build={activeBuild}
                       action={workflowAction}
-                      onCompleted={async () => {
-                        const refreshed = await getFeatureBuild(activeBuild.buildId);
-                        if (refreshed) {
-                          setActiveBuild(refreshed);
-                        }
-                      }}
+                      onCompleted={() => refreshActiveBuildState(activeBuild.buildId)}
                     />
                   </div>
                 )}
@@ -528,7 +534,11 @@ export function BuildStudio({
                       borderBottom: buildView === "docs" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
                     }}
                   >
-                    {(activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete") ? "Review" : "Details"}
+                    {activeBuild.phase === "ship"
+                      ? "Release"
+                      : (activeBuild.phase === "review" || activeBuild.phase === "complete")
+                        ? "Review"
+                        : "Details"}
                   </button>
                   {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
                     <button

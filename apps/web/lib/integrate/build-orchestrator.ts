@@ -12,6 +12,7 @@ import {
   buildDependencyGraph,
   type AssignedTask,
 } from "./task-dependency-graph";
+import { normalizeBuildPlanPaths } from "./build-plan-paths";
 import {
   buildSpecialistPrompt,
   SPECIALIST_AGENT_IDS,
@@ -30,6 +31,7 @@ import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
 import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
 import { getBuildStudioConfig } from "./build-studio-config";
 import type { ReviewResult } from "@/lib/feature-build-types";
+import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import {
   buildReviewBranchArtifacts,
   mapCompactSummaryToBuildEntry,
@@ -380,7 +382,6 @@ export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResu
   if ("durationMs" in result && !("providerId" in result)) {
     if (!result.success) {
       if (content.includes("timed out")) return "BLOCKED";
-      if (content.includes("error") || content.includes("failed")) return "DONE_WITH_CONCERNS";
       return "BLOCKED";
     }
     // CLI succeeded — check content for concern indicators using contextual patterns.
@@ -698,6 +699,38 @@ export async function runBuildOrchestrator(params: {
 }): Promise<OrchestratorResult> {
   const { buildId, plan, userId, platformRole, isSuperuser, parentThreadId, buildContext } = params;
   const startTime = Date.now();
+  const normalizedPlan = normalizeBuildPlanPaths(plan);
+
+  if (normalizedPlan.rewrites.length > 0) {
+    try {
+      await prisma.featureBuild.update({
+        where: { buildId },
+        data: {
+          buildPlan: normalizedPlan.plan as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      console.warn("[orchestrator] Could not persist normalized build plan:", (err as Error).message);
+    }
+  }
+
+  if (normalizedPlan.unresolvedModifyPaths.length > 0) {
+    const missingTargets = normalizedPlan.unresolvedModifyPaths.join(", ");
+    agentEventBus.emit(parentThreadId, {
+      type: "orchestrator:warning",
+      buildId,
+      message: `Build plan refers to files that no longer exist: ${missingTargets}`,
+    });
+    return {
+      content: `Build cannot start because the implementation plan targets files that no longer exist in the current repo: ${missingTargets}. Refresh the plan against the current Build Studio file layout, then retry implementation.`,
+      totalTasks: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+      specialistResults: [],
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+    };
+  }
 
   // ─── Ensure sandbox metadata is on the build record ─────────────────────
   // The preview iframe needs sandboxPort to render. Set it if missing.
@@ -845,8 +878,8 @@ export async function runBuildOrchestrator(params: {
 
   // Build dependency graph from plan
   const phases = buildDependencyGraph(
-    plan.fileStructure ?? [],
-    plan.tasks ?? [],
+    normalizedPlan.plan.fileStructure ?? [],
+    normalizedPlan.plan.tasks ?? [],
   );
 
   const totalTasks = phases.reduce((sum, p) => sum + p.tasks.length, 0);
@@ -1061,12 +1094,14 @@ export async function runBuildOrchestrator(params: {
   try {
     const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
-    if (updatedBuild && updatedBuild.phase === "build" && canTransitionPhase("build", "review")) {
+    const hasBlockingTasks = allResults.some((r) => r.outcome === "BLOCKED" || r.outcome === "NEEDS_CONTEXT");
+    if (!hasBlockingTasks && updatedBuild && updatedBuild.phase === "build" && canTransitionPhase("build", "review")) {
       const gate = checkPhaseGate("build", "review", {
         verificationOut: updatedBuild.verificationOut,
       });
       if (gate.allowed) {
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
+        await queueBuildReviewVerification(buildId);
         agentEventBus.emit(parentThreadId, { type: "phase:change", buildId, phase: "review" });
         prisma.buildActivity.create({ data: { buildId, tool: "phase:advance", summary: "Phase advanced: build → review" } }).catch((err: unknown) => console.warn("[orchestrator] buildActivity create failed:", (err as Error)?.message));
       }

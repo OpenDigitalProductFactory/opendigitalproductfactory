@@ -15,6 +15,16 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
 
+  // Governed MCP backlog surface (spec 2026-04-25)
+  list_epics: ["backlog_read"],
+  list_backlog_items: ["backlog_read"],
+  get_backlog_item: ["backlog_read"],
+  update_backlog_item_status: ["backlog_write"],
+  link_backlog_item_to_epic: ["backlog_write"],
+  search_specs_and_plans: ["spec_plan_read", "backlog_read"],
+  record_execution_evidence: ["backlog_write"],
+  get_next_recommended_work: ["backlog_read"],
+
   // Registry / Products
   create_digital_product: ["registry_read", "backlog_write"],
   update_lifecycle: ["backlog_write"],
@@ -71,6 +81,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   validate_version_confidence: ["registry_read"],
   explain_blast_radius: ["registry_read"],
   discovery_sweep: ["telemetry_read"],
+  run_discovery_triage: ["registry_write"],
   attribute_entity_to_product: ["registry_write"],
   dismiss_entity: ["registry_write"],
   resolve_portfolio_quality_issue: ["registry_write"],

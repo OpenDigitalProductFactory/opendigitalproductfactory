@@ -1,15 +1,14 @@
 // apps/web/lib/sandbox-workspace.ts
 // Granular workspace initialisation functions called by the build pipeline.
 
-import { execInSandbox } from "@/lib/sandbox";
+import { execInSandbox, startSandboxDevServer } from "@/lib/sandbox";
 import { getSourceStrategy } from "@/lib/sandbox-source-strategy";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const INSTALL_COMMANDS = [
-  "pnpm install",
-  "pnpm prisma generate",
-  "nohup pnpm dev > /tmp/dev.log 2>&1 &",
+  "cd /workspace && pnpm install",
+  "cd /workspace && pnpm --filter @dpf/db exec prisma generate",
 ];
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -30,9 +29,10 @@ export async function copySourceAndBaseline(
 }
 
 export async function installDepsAndStart(containerId: string): Promise<void> {
-  await execInSandbox(containerId, "cd /workspace && pnpm install");
-  await execInSandbox(containerId, "cd /workspace && pnpm prisma generate");
-  await execInSandbox(containerId, "cd /workspace && nohup pnpm dev > /tmp/dev.log 2>&1 &");
+  for (const command of buildInstallCommands()) {
+    await execInSandbox(containerId, command);
+  }
+  await startSandboxDevServer(containerId);
 }
 
 // ─── Full orchestration (convenience — not used by pipeline directly) ─────────

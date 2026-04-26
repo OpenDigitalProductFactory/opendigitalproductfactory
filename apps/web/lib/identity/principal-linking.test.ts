@@ -11,6 +11,9 @@ vi.mock("@dpf/db", () => ({
     agent: {
       findUnique: vi.fn(),
     },
+    customerContact: {
+      findUnique: vi.fn(),
+    },
     principal: {
       create: vi.fn(),
       update: vi.fn(),
@@ -24,7 +27,11 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { syncAgentPrincipal, syncEmployeePrincipal } from "./principal-linking";
+import {
+  syncAgentPrincipal,
+  syncCustomerPrincipal,
+  syncEmployeePrincipal,
+} from "./principal-linking";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -131,6 +138,93 @@ describe("syncAgentPrincipal", () => {
           aliasValue: "gaid:priv:dpf.internal:agt-100",
         }),
       ]),
+    );
+  });
+});
+
+describe("syncCustomerPrincipal", () => {
+  it("creates a customer principal anchored by customer_contact and lowercase email aliases", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-db-1",
+      email: "Buyer@Example.com",
+      isActive: true,
+    } as never);
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.principal.create).mockResolvedValue({
+      id: "principal-db-3",
+      principalId: "PRN-000003",
+      kind: "customer",
+      status: "active",
+      displayName: "Buyer@Example.com",
+      createdAt: new Date("2026-04-26T00:00:00Z"),
+      updatedAt: new Date("2026-04-26T00:00:00Z"),
+    });
+    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 2 });
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
+      {
+        id: "alias-customer-contact",
+        principalId: "principal-db-3",
+        aliasType: "customer_contact",
+        aliasValue: "contact-db-1",
+        issuer: "",
+        createdAt: new Date("2026-04-26T00:00:00Z"),
+      },
+      {
+        id: "alias-email",
+        principalId: "principal-db-3",
+        aliasType: "email",
+        aliasValue: "buyer@example.com",
+        issuer: "",
+        createdAt: new Date("2026-04-26T00:00:00Z"),
+      },
+    ]);
+
+    const result = await syncCustomerPrincipal("contact-db-1");
+
+    expect(result.kind).toBe("customer");
+    expect(result.principalId).toBe("PRN-000003");
+    expect(result.aliases).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          aliasType: "customer_contact",
+          aliasValue: "contact-db-1",
+        }),
+        expect.objectContaining({
+          aliasType: "email",
+          aliasValue: "buyer@example.com",
+        }),
+      ]),
+    );
+  });
+
+  it("marks the principal inactive when the contact is inactive", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-db-2",
+      email: "former@example.com",
+      isActive: false,
+    } as never);
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.principal.create).mockResolvedValue({
+      id: "principal-db-4",
+      principalId: "PRN-000004",
+      kind: "customer",
+      status: "inactive",
+      displayName: "former@example.com",
+      createdAt: new Date("2026-04-26T00:00:00Z"),
+      updatedAt: new Date("2026-04-26T00:00:00Z"),
+    });
+    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 2 });
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([]);
+
+    const result = await syncCustomerPrincipal("contact-db-2");
+
+    expect(result.status).toBe("inactive");
+  });
+
+  it("throws when the customer contact does not exist", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue(null);
+    await expect(syncCustomerPrincipal("missing-contact")).rejects.toThrow(
+      /CustomerContact missing-contact not found/,
     );
   });
 });

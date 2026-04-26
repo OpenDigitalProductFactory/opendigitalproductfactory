@@ -12,6 +12,7 @@
  * Run via: pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts
  */
 import { createHash } from "crypto";
+import { pathToFileURL } from "url";
 import { prisma } from "../src/client";
 import { KNOWN_PROVIDER_MODELS } from "../../../apps/web/lib/routing/known-provider-models";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
@@ -269,9 +270,14 @@ async function reconcile(): Promise<void> {
   console.log(`\nCatalog reconciliation: ${created} created, ${updated} updated, ${skipped} skipped (discovery/admin-owned), ${noChange} unchanged.`);
 }
 
-reconcile()
-  .catch((err) => {
-    console.error("Reconciliation failed:", err);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Only run reconcile() when invoked directly (e.g. `tsx scripts/reconcile-catalog-capabilities.ts`).
+// Without this guard, importing the module from a test file kicks off DB I/O that races vitest's
+// shutdown — when the rejection lands during the run, process.exit(1) flips the suite red.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  reconcile()
+    .catch((err) => {
+      console.error("Reconciliation failed:", err);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}

@@ -58,7 +58,11 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { CODE_GRAPH_GRAPH_KEY, reconcileCodeGraph } from "./code-graph-refresh";
+import {
+  buildListTrackedFilesCommand,
+  CODE_GRAPH_GRAPH_KEY,
+  reconcileCodeGraph,
+} from "./code-graph-refresh";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -73,6 +77,14 @@ beforeEach(() => {
 });
 
 describe("reconcileCodeGraph", () => {
+  it("excludes tracked cache directories when listing code files", () => {
+    const command = buildListTrackedFilesCommand();
+    expect(command).toContain(".pnpm-store");
+    expect(command).toContain(".next");
+    expect(command).toContain("node_modules");
+    expect(command).toContain("*.ts");
+  });
+
   it("performs a full rebuild when no prior index exists", async () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
 
@@ -80,7 +92,7 @@ describe("reconcileCodeGraph", () => {
       if (command === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
       if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
       if (command === "git status --porcelain") return { stdout: "", stderr: "" };
-      if (command === "git ls-files") {
+      if (command.startsWith("git ls-files -- ")) {
         return {
           stdout: "apps/web/lib/integrate/change-impact.ts\npackages/db/prisma/schema.prisma\n",
           stderr: "",

@@ -73,6 +73,33 @@ describe("buildDependencyGraph", () => {
     expect(lastPhase.tasks[0]!.specialist).toBe("qa-engineer");
   });
 
+  it("keeps visual regression tasks after implementation work", () => {
+    const files: PlanFileEntry[] = [
+      { path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Build Studio layout" },
+      { path: "apps/web/components/build/ProcessGraph.tsx", action: "modify", purpose: "Workflow graph layout" },
+    ];
+    const tasks: PlanTask[] = [
+      {
+        title: "Stabilize workflow view shell layout",
+        testFirst: "Open /build and confirm the overlap",
+        implement: "Update the BuildStudio layout containers",
+        verify: "Header and tabs remain visible",
+      },
+      {
+        title: "Run targeted regression checks for constrained height and zoom safety",
+        testFirst: "Define checks mapped to each acceptance criterion before final verification",
+        implement: "Execute manual desktop checks at heights just above 600px and browser 200% zoom for Graph, Details, and Preview with active build selected",
+        verify: "All acceptance criteria pass, including legibility of title/branch badge and no sidebar/right-header visual bleed",
+      },
+    ];
+
+    const phases = buildDependencyGraph(files, tasks);
+    const nonQaPhases = phases.filter((phase) => phase.tasks[0]?.specialist !== "qa-engineer");
+
+    expect(nonQaPhases[0]?.tasks[0]?.title).toBe("Stabilize workflow view shell layout");
+    expect(phases[phases.length - 1]?.tasks[0]?.specialist).toBe("qa-engineer");
+  });
+
   it("handles empty plan gracefully", () => {
     const phases = buildDependencyGraph([], []);
     expect(phases).toHaveLength(1); // QA only

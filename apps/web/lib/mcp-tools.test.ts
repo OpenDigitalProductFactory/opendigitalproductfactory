@@ -123,6 +123,16 @@ describe("mcp tools", () => {
     expect(tool).toBeDefined();
     expect(tool!.requiredCapability).toBe("view_marketing");
   });
+
+  it("exposes discovery triage as an immediate provider-management tool", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const triage = tools.find((tool) => tool.name === "run_discovery_triage");
+
+    expect(triage).toBeDefined();
+    expect(triage!.requiredCapability).toBe("manage_provider_connections");
+    expect(triage!.executionMode).toBe("immediate");
+    expect(triage!.sideEffect).toBe(true);
+  });
 });
 
 describe("sanitizeToolParams", () => {

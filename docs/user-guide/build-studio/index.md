@@ -59,3 +59,11 @@ The AI Coworker registers the feature as a digital product, creates a promotion 
 
 - [Feature Deployment](deployment) — How the deployment pipeline works, safety guarantees, and rollback
 - [Development Workspace](../development-workspace) — How Build Studio, VS Code, policy states, and validation environments fit together
+
+## Documentation Deliverables
+
+When a feature adds a new route or materially changes how an existing route works, the Build Studio deliverable is not complete until the matching `docs/user-guide` page exists or is updated.
+
+- Route-level docs should explain the actual workflow of that page, not just the parent area.
+- Internal shell routes should ship with a contextual docs target so the page-level Docs link lands on the right guide.
+- Public, portal, auth, token-action, and customer-auth routes still need an explicit documentation policy decision even when they intentionally do not expose internal docs links.

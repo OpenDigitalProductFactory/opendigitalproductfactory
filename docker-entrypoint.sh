@@ -71,9 +71,10 @@ elif [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   echo "  Bootstrapping source volume from image version $IMAGE_VERSION..."
 
   # Copy source from image to volume
-  mkdir -p "$WORKSPACE/apps/web" "$WORKSPACE/packages"
+  mkdir -p "$WORKSPACE/apps/web" "$WORKSPACE/packages" "$WORKSPACE/scripts"
   cp -r /app/apps/web-src/. "$WORKSPACE/apps/web/"
   cp -r /app/packages-src/. "$WORKSPACE/packages/"
+  cp -r /app/scripts/. "$WORKSPACE/scripts/"
   cp /app/pnpm-workspace.yaml "$WORKSPACE/" 2>/dev/null || true
   cp /app/pnpm-lock.yaml "$WORKSPACE/" 2>/dev/null || true
   cp /app/package.json "$WORKSPACE/" 2>/dev/null || true

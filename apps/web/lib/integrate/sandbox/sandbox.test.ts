@@ -1,8 +1,18 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildSandboxAppsWebCopyCommand,
+  buildSandboxDiffForFilesCommand,
   buildSandboxCreateArgs,
+  buildSandboxListReleasableFilesCommand,
   buildSandboxNetworkName,
+  buildSandboxNextDevLaunchCommand,
+  buildSandboxNextDevReadinessCommand,
+  buildSandboxRootScriptsCopyCommand,
+  buildSandboxStageCommand,
+  buildSandboxWorkspaceCleanupCommand,
   parseSandboxPort,
+  parseSandboxChangedFiles,
+  prefixSafeWorkspaceCommand,
   SANDBOX_IMAGE,
   SANDBOX_RESOURCE_LIMITS,
   SANDBOX_TIMEOUT_MS,
@@ -88,5 +98,111 @@ describe("parseSandboxPort", () => {
 
   it("returns null for malformed output", () => {
     expect(parseSandboxPort("no-port-here")).toBeNull();
+  });
+});
+
+describe("prefixSafeWorkspaceCommand", () => {
+  it("prepends a safe.directory allowance for the sandbox workspace", () => {
+    const command = prefixSafeWorkspaceCommand("cd /workspace && git status -sb");
+
+    expect(command).toContain('git config --global --add safe.directory "/workspace"');
+    expect(command).toContain("cd /workspace && git status -sb");
+  });
+});
+
+describe("buildSandboxStageCommand", () => {
+  it("stages releasable sandbox changes while excluding caches and generated artifacts", () => {
+    const command = buildSandboxStageCommand();
+
+    expect(command).toContain("cd /workspace && git add -A --");
+    expect(command).toContain(":!**/node_modules/**");
+    expect(command).toContain(":!**/.next/**");
+    expect(command).toContain(":!**/*.tsbuildinfo");
+    expect(command).toContain(":!pnpm-lock*");
+  });
+});
+
+describe("buildSandboxListReleasableFilesCommand", () => {
+  it("lists staged releasable files without using grep pipelines", () => {
+    const command = buildSandboxListReleasableFilesCommand();
+
+    expect(command).toContain("git diff --cached --name-only -- .");
+    expect(command).toContain(":(exclude)**/.next/**");
+    expect(command).toContain(":(exclude)**/node_modules/**");
+    expect(command).not.toContain("grep -v");
+  });
+});
+
+describe("buildSandboxDiffForFilesCommand", () => {
+  it("quotes file paths so shell metacharacters stay safe", () => {
+    const command = buildSandboxDiffForFilesCommand([
+      "apps/web/components/build/BuildStudio.tsx",
+      "apps/web/components/build/O'Malley Panel.tsx",
+    ]);
+
+    expect(command).toContain("git diff --cached --");
+    expect(command).toContain("'apps/web/components/build/BuildStudio.tsx'");
+    expect(command).toContain("'apps/web/components/build/O'\"'\"'Malley Panel.tsx'");
+  });
+});
+
+describe("sandbox next dev helpers", () => {
+  it("checks workspace readiness from the monorepo root instead of apps/web/node_modules", () => {
+    const command = buildSandboxNextDevReadinessCommand();
+
+    expect(command).toContain("test -d /workspace/node_modules");
+    expect(command).toContain("test -f /workspace/apps/web/package.json");
+    expect(command).not.toContain("/workspace/apps/web/node_modules");
+  });
+
+  it("launches the sandbox preview server from the workspace root with pnpm filter web", () => {
+    const command = buildSandboxNextDevLaunchCommand("dpf-sandbox-1");
+
+    expect(command).toContain("docker exec -d dpf-sandbox-1 sh -c");
+    expect(command).toContain("cd /workspace && PORT=3000 pnpm --filter web dev --hostname 0.0.0.0 --port 3000");
+    expect(command).not.toContain("cd /workspace/apps/web && PORT=3000 npx next dev");
+    expect(command).not.toContain("dev -- --hostname");
+  });
+});
+
+describe("sandbox workspace initialization helpers", () => {
+  it("copies apps/web source without stale node_modules or build output", () => {
+    const command = buildSandboxAppsWebCopyCommand("portal-1", "sandbox-1");
+
+    expect(command).toContain("tar --exclude='apps/web/node_modules'");
+    expect(command).toContain("--exclude='apps/web/.next'");
+    expect(command).toContain("--exclude='apps/web/tsconfig.tsbuildinfo'");
+    expect(command).toContain("docker exec portal-1");
+    expect(command).toContain("docker exec -i sandbox-1");
+  });
+
+  it("cleans any stale app-local dependencies and build artifacts before install", () => {
+    const command = buildSandboxWorkspaceCleanupCommand();
+
+    expect(command).toContain("rm -rf /workspace/apps/web/node_modules");
+    expect(command).toContain("/workspace/apps/web/.next");
+    expect(command).toContain("/workspace/apps/web/tsconfig.tsbuildinfo");
+  });
+
+  it("copies root scripts so workspace postinstall hooks can run in the sandbox", () => {
+    const command = buildSandboxRootScriptsCopyCommand("portal-1", "sandbox-1");
+
+    expect(command).toContain("tar -cf - -C /app scripts");
+    expect(command).toContain("docker exec portal-1");
+    expect(command).toContain("docker exec -i sandbox-1");
+  });
+});
+
+describe("parseSandboxChangedFiles", () => {
+  it("returns an empty list when no releasable files are present", () => {
+    expect(parseSandboxChangedFiles("")).toEqual([]);
+    expect(parseSandboxChangedFiles("\n\n")).toEqual([]);
+  });
+
+  it("trims and splits file output into a clean list", () => {
+    expect(parseSandboxChangedFiles("apps/web/lib/a.ts\n apps/web/lib/b.ts \r\n")).toEqual([
+      "apps/web/lib/a.ts",
+      "apps/web/lib/b.ts",
+    ]);
   });
 });

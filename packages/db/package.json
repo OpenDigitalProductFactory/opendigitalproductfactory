@@ -10,6 +10,8 @@
     "./neo4j-sync": "./src/neo4j-sync.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",
     "./discovery-attribution": "./src/discovery-attribution.ts",
+    "./discovery-triage": "./src/discovery-triage.ts",
+    "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts"
   },
