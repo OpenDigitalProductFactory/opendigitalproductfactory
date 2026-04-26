@@ -1,8 +1,15 @@
 "use server";
 
-import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { prisma } from "@dpf/db";
+import {
+  createLocality,
+  forceCreateLocality,
+  searchCountriesForLocation,
+  searchLocalities,
+  searchRegionsForLocation,
+} from "@/lib/location-resolution/service";
 
 async function requireAuth(): Promise<void> {
   const session = await auth();
@@ -17,68 +24,26 @@ export type CreateRefResult = {
 };
 
 // ---------------------------------------------------------------------------
-// Search actions
+// Search actions — delegate to location-resolution service
 // ---------------------------------------------------------------------------
 
 export async function searchCountries(query: string) {
   await requireAuth();
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-
-  return prisma.country.findMany({
-    where: {
-      status: "active",
-      OR: [
-        { name: { contains: trimmed, mode: "insensitive" } },
-        { iso2: { contains: trimmed, mode: "insensitive" } },
-        { iso3: { contains: trimmed, mode: "insensitive" } },
-      ],
-    },
-    select: { id: true, name: true, iso2: true, iso3: true, phoneCode: true },
-    orderBy: { name: "asc" },
-    take: 20,
-  });
+  return searchCountriesForLocation(query);
 }
 
 export async function searchRegions(countryId: string, query: string) {
   await requireAuth();
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-
-  return prisma.region.findMany({
-    where: {
-      countryId,
-      status: "active",
-      OR: [
-        { name: { contains: trimmed, mode: "insensitive" } },
-        { code: { contains: trimmed, mode: "insensitive" } },
-      ],
-    },
-    select: { id: true, name: true, code: true },
-    orderBy: { name: "asc" },
-    take: 20,
-  });
+  return searchRegionsForLocation(countryId, query);
 }
 
 export async function searchCities(regionId: string, query: string) {
   await requireAuth();
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-
-  return prisma.city.findMany({
-    where: {
-      regionId,
-      status: "active",
-      name: { contains: trimmed, mode: "insensitive" },
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-    take: 20,
-  });
+  return searchLocalities(regionId, query);
 }
 
 // ---------------------------------------------------------------------------
-// Create actions (with near-match duplicate prevention)
+// Create actions
 // ---------------------------------------------------------------------------
 
 export async function createRegion(
@@ -124,6 +89,7 @@ export async function createRegion(
   });
 
   revalidatePath("/employee");
+  revalidatePath("/admin/reference-data");
   return { ok: true, message: `Region "${created.name}" created.`, created };
 }
 
@@ -132,41 +98,10 @@ export async function createCity(
   name: string,
 ): Promise<CreateRefResult> {
   await requireAuth();
-  const trimmedName = name.trim();
-  if (!trimmedName) {
-    return { ok: false, message: "City name is required." };
-  }
-
-  // Near-match check: case-insensitive prefix match
-  const matches = await prisma.city.findMany({
-    where: {
-      regionId,
-      status: "active",
-      name: { startsWith: trimmedName, mode: "insensitive" },
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
-
-  if (matches.length > 0) {
-    return {
-      ok: false,
-      message: `Similar cities already exist. Did you mean one of these?`,
-      suggestions: matches,
-    };
-  }
-
-  const created = await prisma.city.create({
-    data: {
-      name: trimmedName,
-      regionId,
-      status: "active",
-    },
-    select: { id: true, name: true },
-  });
-
+  const result = await createLocality({ regionId, name });
   revalidatePath("/employee");
-  return { ok: true, message: `City "${created.name}" created.`, created };
+  revalidatePath("/admin/reference-data");
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +132,7 @@ export async function forceCreateRegion(
   });
 
   revalidatePath("/employee");
+  revalidatePath("/admin/reference-data");
   return { ok: true, message: `Region "${created.name}" created.`, created };
 }
 
@@ -205,20 +141,8 @@ export async function forceCreateCity(
   name: string,
 ): Promise<CreateRefResult> {
   await requireAuth();
-  const trimmedName = name.trim();
-  if (!trimmedName) {
-    return { ok: false, message: "City name is required." };
-  }
-
-  const created = await prisma.city.create({
-    data: {
-      name: trimmedName,
-      regionId,
-      status: "active",
-    },
-    select: { id: true, name: true },
-  });
-
+  const result = await forceCreateLocality({ regionId, name });
   revalidatePath("/employee");
-  return { ok: true, message: `City "${created.name}" created.`, created };
+  revalidatePath("/admin/reference-data");
+  return result;
 }
