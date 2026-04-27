@@ -204,7 +204,8 @@
       A pre-install tour for people who want to understand the platform before they download it. The Open Digital Product Factory (ODPF) gives small teams and regulated enterprises the same digital-product, architecture, compliance, and AI-workforce capabilities that have historically been locked behind expensive enterprise suites &mdash; on your own hardware, governed end-to-end, and extensible by AI coworkers under human approval.
     </p>
     <div class="cta-row">
-      <a class="btn primary" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">View on GitHub</a>
+      <a class="btn primary" href="#install-on-windows">Install on Windows</a>
+      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">View on GitHub</a>
       <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md">Project README</a>
       <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Contributing</a>
     </div>
@@ -212,6 +213,65 @@
 </header>
 
 <main class="wrap">
+
+  <section id="install-on-windows">
+    <h2>Install on Windows</h2>
+    <p class="sub">
+      Open PowerShell and paste one of the snippets below. The installer asks a single question &mdash; <strong>Ready to go</strong> (pre-built images, Build Studio is the development surface) or <strong>Customizable</strong> (full source clone, Build Studio and a local IDE share the same workspace) &mdash; and handles everything else: Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start.
+    </p>
+    <div class="install">
+      <h3>Recommended: with the GitHub CLI</h3>
+      <pre><code>gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 -H "Accept: application/vnd.github.raw" &gt; install-dpf.ps1
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
+      <h3 style="margin-top:18px;">Without the GitHub CLI</h3>
+      <pre><code>iwr https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
+      <div class="note">
+        Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Login credentials are shown at the end of installation and saved to <code>.admin-credentials</code> in your install directory. After installation: <code>dpf-start</code> to start, <code>dpf-stop</code> to stop.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recommended hardware</h2>
+    <p class="sub">
+      The platform supports a broad range of hardware, but the experience changes depending on whether you want simple evaluation, day-to-day local AI, or sandbox-heavy self-building. The installer detects your CPU, RAM, and GPU and picks an appropriate local model automatically &mdash; you do not need to size anything by hand.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:26%;">Tier</th><th>CPU</th><th>RAM</th><th>Storage</th><th>GPU</th><th>Best for</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Minimum viable</strong></td>
+          <td>Modern 4 cores</td>
+          <td>16 GB</td>
+          <td>50&ndash;100 GB SSD</td>
+          <td>None required</td>
+          <td>Evaluation, administration, and external-provider-first usage</td>
+        </tr>
+        <tr>
+          <td><strong>Recommended</strong></td>
+          <td>8+ cores</td>
+          <td>32 GB</td>
+          <td>100&ndash;200 GB NVMe SSD</td>
+          <td>Optional, 8&ndash;12 GB VRAM</td>
+          <td>Small-team use, local-first AI, moderate sandbox iteration</td>
+        </tr>
+        <tr>
+          <td><strong>Self-building</strong></td>
+          <td>12+ cores</td>
+          <td>64 GB+</td>
+          <td>200+ GB NVMe SSD</td>
+          <td>16 GB+ VRAM</td>
+          <td>Frequent sandbox launches, heavier local models, tighter iteration</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      For the full deployment picture &mdash; container topology, the local-AI model selection table, and the monitoring stack &mdash; see <a href="/architecture/platform-overview">architecture/platform-overview</a>.
+    </p>
+  </section>
 
   <section>
     <h2>What this page is</h2>
@@ -356,22 +416,6 @@
       <div class="card">
         <h3>Build Studio specs</h3>
         <p>Search the specs directory for "build-studio" to follow the evolution of the guided build pipeline.</p>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Installation, when you are ready</h2>
-    <div class="install">
-      <h3>One installer, one question</h3>
-      <p style="margin:0 0 12px; color:var(--fg-muted); font-size:14px;">
-        The installer asks whether you want a <strong>Ready to go</strong> install (pre-built images, Build Studio is the development surface) or a <strong>Customizable</strong> install (full source clone, Build Studio and a local IDE share the same workspace). Both modes include the full platform.
-      </p>
-      <pre><code>gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/install-dpf.ps1 \
-  -H "Accept: application/vnd.github.raw" &gt; install-dpf.ps1
-powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
-      <div class="note">
-        Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Hardware detection, credential generation, Docker Desktop setup, and auto-start are handled for you.
       </div>
     </div>
   </section>
