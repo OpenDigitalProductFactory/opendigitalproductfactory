@@ -116,6 +116,12 @@ vi.mock("@dpf/db", () => ({
     modelProvider: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    taskRun: {
+      findFirst: vi.fn(),
+    },
+    agentActionProposal: {
+      create: vi.fn(),
+    },
     agentModelConfig: {
       findUnique: vi.fn(),
     },
@@ -164,6 +170,15 @@ describe("agent coworker external access", () => {
     mockPrisma.agentMessage.findMany.mockResolvedValue([]);
     mockPrisma.agentAttachment.findMany.mockResolvedValue([]);
     mockPrisma.agent.findUnique.mockResolvedValue(null);
+    mockPrisma.taskRun.findFirst.mockResolvedValue(null);
+    mockPrisma.agentActionProposal.create.mockResolvedValue({
+      proposalId: "AP-TRACE",
+      actionType: "create_backlog_item",
+      parameters: {},
+      status: "proposed",
+      resultEntityId: null,
+      resultError: null,
+    });
     mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
     mockPrisma.toolExecution.create.mockResolvedValue({});
     mockPrisma.agentMessage.create
@@ -310,5 +325,52 @@ describe("agent coworker external access", () => {
         paletteAccent: "#4f46e5",
       });
     }
+  });
+
+  it("stamps the current task run on proposals", async () => {
+    mockPrisma.taskRun.findFirst.mockResolvedValue({ taskRunId: "run-123" });
+    mockGetAvailableTools.mockReturnValue([
+      {
+        name: "create_backlog_item",
+        description: "Create backlog item",
+        inputSchema: {},
+        requiredCapability: "manage_backlog",
+        executionMode: "proposal",
+        sideEffect: true,
+      },
+    ]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "I'd like to create a backlog item for this.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+      toolCalls: [
+        {
+          id: "proposal_tool",
+          name: "create_backlog_item",
+          arguments: {
+            title: "Follow up on provider setup",
+          },
+        },
+      ],
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "Create a follow-up backlog item",
+      routeContext: "/admin",
+    });
+
+    expect(mockPrisma.agentActionProposal.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskRunId: "run-123",
+        }),
+      }),
+    );
   });
 });

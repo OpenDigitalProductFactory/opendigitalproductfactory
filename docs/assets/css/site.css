@@ -60,17 +60,16 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
 }
 .site-brand:hover { text-decoration: none; }
-.site-brand-mark {
-  display: inline-block;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #0b0d10;
-  font-weight: 700;
+.site-brand-logo {
+  display: block;
+  height: 40px;
+  width: auto;
 }
-.site-brand-name { font-size: 15px; }
+/* The logo's wordmark is dark navy — reads fine on white, disappears on
+   the dark theme. Invert it so the gear and wordmark stay visible. */
+@media (prefers-color-scheme: dark) {
+  .site-brand-logo { filter: invert(1) hue-rotate(180deg); }
+}
 .site-nav { display: flex; gap: 18px; flex-wrap: wrap; }
 .site-nav a {
   color: var(--fg-muted);
