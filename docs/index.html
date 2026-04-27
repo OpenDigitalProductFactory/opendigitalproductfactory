@@ -49,13 +49,14 @@
       var(--surface);
   }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-  .eyebrow {
-    display: inline-block;
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--fg-muted);
-    margin-bottom: 12px;
+  .hero-logo {
+    display: block;
+    height: 64px;
+    width: auto;
+    margin-bottom: 18px;
+  }
+  @media (prefers-color-scheme: light) {
+    .hero-logo { filter: brightness(0.55) saturate(1.4); }
   }
   h1 {
     font-size: clamp(28px, 4vw, 44px);
@@ -198,7 +199,7 @@
 <body>
 <header class="hero">
   <div class="wrap">
-    <div class="eyebrow">Open Digital Product Factory</div>
+    <img class="hero-logo" src="assets/logos/open-digital-product-factory-logo.svg" alt="Open Digital Product Factory" width="240" height="80" />
     <h1>An open, AI-native platform that helps your organization build and run itself.</h1>
     <p class="lede">
       A pre-install tour for people who want to understand the platform before they download it. The Open Digital Product Factory (ODPF) gives small teams and regulated enterprises the same digital-product, architecture, compliance, and AI-workforce capabilities that have historically been locked behind expensive enterprise suites &mdash; on your own hardware, governed end-to-end, and extensible by AI coworkers under human approval.
