@@ -62,13 +62,13 @@ a:hover { text-decoration: underline; }
 .site-brand:hover { text-decoration: none; }
 .site-brand-logo {
   display: block;
-  height: 32px;
+  height: 40px;
   width: auto;
 }
-/* On the light theme the wordmark colour inside the SVG sits low-contrast
-   on a white background; tint the whole logo for legibility. */
-@media (prefers-color-scheme: light) {
-  .site-brand-logo { filter: brightness(0.55) saturate(1.4); }
+/* The logo's wordmark is dark navy — reads fine on white, disappears on
+   the dark theme. Invert it so the gear and wordmark stay visible. */
+@media (prefers-color-scheme: dark) {
+  .site-brand-logo { filter: invert(1) hue-rotate(180deg); }
 }
 .site-nav { display: flex; gap: 18px; flex-wrap: wrap; }
 .site-nav a {
