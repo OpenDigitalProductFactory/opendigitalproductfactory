@@ -14,6 +14,7 @@ export type ArchetypeCategory =
   | "beauty-personal-care"
   | "trades-maintenance"
   | "professional-services"
+  | "software-platform"
   | "education-training"
   | "pet-services"
   | "food-hospitality"

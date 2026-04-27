@@ -11,6 +11,7 @@ type Entry = {
   createdAt: string;
   providerName: string | null;
   status: string;
+  backlogItemId?: string | null;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -40,12 +41,16 @@ function StatusBadge({ status }: { status: string }) {
 export function StorefrontInbox({
   entries,
   providers = [],
+  defaultDigitalProduct,
 }: {
   entries: Entry[];
   providers?: { id: string; name: string }[];
+  defaultDigitalProduct?: { id: string; name: string } | null;
 }) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [productBacklogState, setProductBacklogState] = useState<Record<string, string>>({});
+  const [pendingInquiryId, setPendingInquiryId] = useState<string | null>(null);
 
   const filtered = entries.filter((e) => {
     if (typeFilter !== "all" && e.type !== typeFilter) return false;
@@ -71,8 +76,69 @@ export function StorefrontInbox({
     window.location.reload();
   }
 
+  async function sendInquiryToProductBacklog(id: string) {
+    if (!defaultDigitalProduct) return;
+    setPendingInquiryId(id);
+    try {
+      const res = await fetch(`/api/storefront/admin/inquiries/${id}/product-backlog`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ digitalProductId: defaultDigitalProduct.id }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error ?? "Failed to create backlog item");
+      }
+      setProductBacklogState((current) => ({
+        ...current,
+        [id]: body.backlogItem?.itemId ?? "Created",
+      }));
+    } catch (error) {
+      setProductBacklogState((current) => ({
+        ...current,
+        [id]: error instanceof Error ? error.message : "Failed to create backlog item",
+      }));
+    } finally {
+      setPendingInquiryId(null);
+    }
+  }
+
   return (
     <div>
+      {defaultDigitalProduct ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--dpf-text)" }}>
+            Customer-zero inquiry intake is wired to product backlog triage
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, color: "var(--dpf-muted)" }}>
+            Use <strong>Send to product backlog</strong> to capture DPF sales or product signals as triaging work for{" "}
+            {defaultDigitalProduct.name}.
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+            color: "var(--dpf-muted)",
+            fontSize: 12,
+          }}
+        >
+          No digital product is configured yet, so storefront inquiries cannot be routed into the product backlog.
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         {["all", "inquiry", "booking", "order", "donation"].map((t) => (
           <button
@@ -121,6 +187,19 @@ export function StorefrontInbox({
               <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "var(--dpf-surface-2)" }}>
                 {TYPE_LABELS[e.type] ?? e.type}
               </span>
+              {e.type === "inquiry" && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "1px 7px",
+                    borderRadius: 10,
+                    background: "color-mix(in srgb, var(--dpf-accent) 14%, transparent)",
+                    color: "var(--dpf-accent)",
+                  }}
+                >
+                  Customer-zero signal
+                </span>
+              )}
               <span style={{ fontSize: 12, fontFamily: "monospace" }}>{e.ref}</span>
               {e.type === "booking" && e.status && <StatusBadge status={e.status} />}
               {e.type === "booking" && e.providerName && (
@@ -134,6 +213,45 @@ export function StorefrontInbox({
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
             {e.detail && <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>{e.detail}</div>}
+            {e.type === "inquiry" && (
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  onClick={() => sendInquiryToProductBacklog(e.id)}
+                  disabled={!defaultDigitalProduct || pendingInquiryId === e.id}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    border: "1px solid var(--dpf-accent)",
+                    background: "none",
+                    color: "var(--dpf-accent)",
+                    cursor: !defaultDigitalProduct || pendingInquiryId === e.id ? "not-allowed" : "pointer",
+                    fontSize: 12,
+                    opacity: !defaultDigitalProduct || pendingInquiryId === e.id ? 0.6 : 1,
+                  }}
+                >
+                  {pendingInquiryId === e.id ? "Sending..." : "Send to product backlog"}
+                </button>
+                {e.backlogItemId && (
+                  <span style={{ fontSize: 12, color: "var(--dpf-success, #22c55e)" }}>
+                    Backlog item {e.backlogItemId}
+                  </span>
+                )}
+                {!e.backlogItemId && productBacklogState[e.id] && (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: productBacklogState[e.id].startsWith("BI-")
+                        ? "var(--dpf-success, #22c55e)"
+                        : "var(--dpf-error, #ef4444)",
+                    }}
+                  >
+                    {productBacklogState[e.id].startsWith("BI-")
+                      ? `Backlog item ${productBacklogState[e.id]}`
+                      : productBacklogState[e.id]}
+                  </span>
+                )}
+              </div>
+            )}
             {e.type === "booking" && (
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 {e.status === "pending" && (

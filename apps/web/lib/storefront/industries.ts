@@ -3,6 +3,7 @@ export const INDUSTRY_OPTIONS = [
   { value: "beauty-personal-care", label: "Beauty & Personal Care" },
   { value: "trades-maintenance", label: "Trades & Maintenance" },
   { value: "professional-services", label: "Professional Services" },
+  { value: "software-platform", label: "Software Platform" },
   { value: "education-training", label: "Education & Training" },
   { value: "pet-services", label: "Pet Services" },
   { value: "food-hospitality", label: "Food & Hospitality" },

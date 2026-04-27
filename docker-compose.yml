@@ -67,6 +67,8 @@ services:
       postgres:
         condition: service_healthy
 
+  # Production-served runtime for the real install. Keep localhost:3000 reserved
+  # for this surface so customer-zero verification always targets the live path.
   portal:
     build:
       context: .
@@ -170,6 +172,7 @@ services:
   # Pool of N sandbox containers, each with its own workspace volume.
   # Pool size configurable via DPF_SANDBOX_POOL_SIZE env (default: 3).
   # Legacy dpf-sandbox-1 on port 3035 remains as fallback.
+  # This is the isolated build/runtime surface, not the production-served app.
   sandbox:
     build:
       context: .
@@ -373,6 +376,8 @@ services:
       postgres:
         condition: service_healthy
 
+  # Developer runtime surface. Use localhost:3001 for local non-production app
+  # work so localhost:3000 remains the production-served portal.
   dev-portal:
     build:
       context: .

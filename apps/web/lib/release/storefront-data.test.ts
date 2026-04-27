@@ -83,4 +83,34 @@ describe("getPublicStorefront", () => {
     expect(result?.items).toHaveLength(1);
     expect(result?.items[0]?.name).toBe("Active");
   });
+
+  it("returns published software-platform storefront data without special-case breakage", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockStorefront,
+      tagline: "Run your digital product operation on the platform that runs itself.",
+      archetype: { archetypeId: "software-platform" },
+      items: [
+        {
+          id: "1",
+          itemId: "itm-1",
+          name: "Open Digital Product Factory",
+          ctaType: "inquiry",
+          sortOrder: 0,
+          description: "AI-native platform for governed delivery",
+          category: "Platform",
+          priceAmount: null,
+          priceCurrency: "GBP",
+          priceType: "quote",
+          imageUrl: null,
+          ctaLabel: "Start a conversation",
+          bookingConfig: null,
+        },
+      ],
+    } as never);
+
+    const result = await getPublicStorefront("acme-vet");
+    expect(result?.archetypeId).toBe("software-platform");
+    expect(result?.items[0]?.ctaType).toBe("inquiry");
+    expect(result?.items[0]?.name).toBe("Open Digital Product Factory");
+  });
 });

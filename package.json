@@ -5,6 +5,10 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:portal": "docker compose up -d dev-portal",
+    "dev:prod-runtime": "docker compose up -d portal",
+    "dev:sandbox": "docker compose up -d sandbox",
     "build": "pnpm --filter web build",
     "test": "pnpm --filter web test && pnpm --filter @dpf/db test && pnpm --filter mobile test",
     "test:e2e": "playwright test",

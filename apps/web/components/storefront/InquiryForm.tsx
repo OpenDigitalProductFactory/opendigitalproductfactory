@@ -89,7 +89,7 @@ export function InquiryForm({
       ))}
       <button type="submit" disabled={loading}
         style={{
-          padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "var(--dpf-text)",
+          padding: "10px 20px", background: "var(--dpf-accent, #4f46e5)", color: "#fff",
           border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600,
           cursor: loading ? "not-allowed" : "pointer",
         }}>

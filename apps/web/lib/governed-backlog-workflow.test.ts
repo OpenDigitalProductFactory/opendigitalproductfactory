@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deriveLifecycleLabel } from "@/lib/governed-backlog-workflow";
+import {
+  createStorefrontInquiryBacklogDraft,
+  deriveLifecycleLabel,
+} from "@/lib/governed-backlog-workflow";
 
 describe("deriveLifecycleLabel", () => {
   it("returns Captured for triaging items without an outcome", () => {
@@ -80,5 +83,27 @@ describe("deriveLifecycleLabel", () => {
         governedBacklogEnabled: false,
       }),
     ).toBe("In Progress");
+  });
+
+  it("maps a storefront inquiry into customer-zero governed backlog intake metadata", () => {
+    expect(
+      createStorefrontInquiryBacklogDraft({
+        inquiryId: "inquiry_1",
+        inquiryRef: "INQ-1001",
+        customerName: "Jane Prospect",
+        customerEmail: "jane@example.com",
+        message: "We want to run our own digital product operation on DPF.",
+        storefrontLabel: "Open Digital Product Factory",
+        itemLabel: "Open Digital Product Factory",
+      }),
+    ).toMatchObject({
+      itemId: "BI-SFI-INQ1001",
+      title: "Customer-zero product inquiry INQ-1001",
+      type: "product",
+      status: "triaging",
+      source: "user-request",
+      signalLabel: "customer-zero",
+      recommendedTriageOutcome: "build",
+    });
   });
 });

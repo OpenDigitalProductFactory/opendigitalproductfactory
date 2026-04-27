@@ -48,4 +48,12 @@ describe("archetype catalog", () => {
     expect(msp?.activationProfile?.seededConfigurationItemTypes?.some((item) => item.key === "endpoint-security-license")).toBe(true);
     expect(msp?.activationProfile?.seededChargeModels?.some((model) => model.key === "pass_through")).toBe(true);
   });
+
+  it("includes a software-platform archetype for DPF-style product sellers", () => {
+    const softwarePlatform = ALL_ARCHETYPES.find((a) => a.archetypeId === "software-platform");
+    expect(softwarePlatform).toBeDefined();
+    expect(softwarePlatform?.category).toBe("software-platform");
+    expect(softwarePlatform?.ctaType).toBe("inquiry");
+    expect(softwarePlatform?.itemTemplates.some((item) => item.name === "Open Digital Product Factory")).toBe(true);
+  });
 });

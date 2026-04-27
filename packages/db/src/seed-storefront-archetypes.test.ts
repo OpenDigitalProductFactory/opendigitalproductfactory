@@ -27,4 +27,28 @@ describe("seedStorefrontArchetypes", () => {
       profileType: "managed-service-provider",
     });
   });
+
+  it("upserts the software-platform archetype for DPF product installs", async () => {
+    const upsert = vi.fn().mockResolvedValue(undefined);
+    const prisma = {
+      storefrontArchetype: {
+        upsert,
+      },
+    } as never;
+
+    await seedStorefrontArchetypes(prisma);
+
+    const softwarePlatformCall = upsert.mock.calls.find(
+      ([args]) => args.where.archetypeId === "software-platform",
+    );
+
+    expect(softwarePlatformCall).toBeDefined();
+    expect(softwarePlatformCall?.[0].create.category).toBe("software-platform");
+    expect(softwarePlatformCall?.[0].create.ctaType).toBe("inquiry");
+    expect(softwarePlatformCall?.[0].create.itemTemplates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Open Digital Product Factory" }),
+      ]),
+    );
+  });
 });
