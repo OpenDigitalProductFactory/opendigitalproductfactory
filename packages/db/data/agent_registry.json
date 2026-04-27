@@ -42,6 +42,9 @@
         "tool_grants": [
           "registry_read",
           "backlog_read",
+          "backlog_write",
+          "backlog_triage",
+          "build_promote",
           "decision_record_create",
           "agent_control_read",
           "role_registry_read",
@@ -155,6 +158,7 @@
           "agent_control_read",
           "role_registry_read",
           "backlog_write",
+          "backlog_triage",
           "roadmap_create",
           "architecture_read",
           "spec_plan_read"
@@ -218,7 +222,9 @@
           "sbom_read",
           "release_gate_create",
           "build_plan_write",
+          "build_promote",
           "backlog_write",
+          "backlog_triage",
           "spec_plan_read"
         ],
         "memory": {

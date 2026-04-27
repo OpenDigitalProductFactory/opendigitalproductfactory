@@ -25,6 +25,20 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_execution_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],
 
+  // Backlog triage and Build Studio promotion (spec 2026-04-21)
+  // These were defined in PLATFORM_TOOLS but missing here, so every call was
+  // denied by the default-deny rule below. That broke the entire backlog →
+  // Build Studio handoff path through any coworker chat.
+  triage_backlog_item:              ["backlog_triage"],
+  size_backlog_item:                ["backlog_triage"],
+  promote_to_build_studio:          ["build_promote"],
+  process_backlog_for_build_studio: ["build_promote"],
+
+  // Deliberation (multi-branch peer review / debate)
+  start_deliberation:        ["deliberation_create"],
+  get_deliberation_status:   ["deliberation_read"],
+  get_deliberation_outcome:  ["deliberation_read"],
+
   // Registry / Products
   create_digital_product: ["registry_read", "backlog_write"],
   update_lifecycle: ["backlog_write"],

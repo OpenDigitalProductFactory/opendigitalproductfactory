@@ -673,9 +673,15 @@ export async function sendMessage(input: {
     ? toolsToOpenAIFormat(availableTools)
     : undefined;
 
-  // Log tools available for this build phase (helps diagnose missing tool issues)
+  // Log tools available so we can diagnose why a model claims it can't see a
+  // tool that should be in scope. Logged for every coworker call, not just
+  // build-phase ones — chat coworkers on /workspace etc. were silent before.
+  console.log(
+    `[tools] route=${input.routeContext} agent=${agent.agentId} ` +
+    `${activeBuildPhase ? `buildPhase=${activeBuildPhase} ` : ""}` +
+    `count=${availableTools.length} tools=[${availableTools.map(t => t.name).join(", ")}]`,
+  );
   if (activeBuildPhase) {
-    console.log(`[tools] Phase: ${activeBuildPhase} | ${availableTools.length} tools: ${availableTools.map(t => t.name).join(", ")}`);
 
     // Inject PhaseHandoff context — structured summary from the previous phase
     // replaces raw chat history for focused, token-efficient context
