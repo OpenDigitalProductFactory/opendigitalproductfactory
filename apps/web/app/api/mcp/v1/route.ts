@@ -128,10 +128,23 @@ function isOriginAllowed(origin: string | null): boolean {
 }
 
 // Spec safety: refuse non-TLS requests except for localhost (Mode 1 / dev).
+//
+// When the portal runs behind a proxy or inside a container, `request.url`
+// reflects the *internal* bind address (e.g. 0.0.0.0) and protocol, not what
+// the client actually connected to. We must consult X-Forwarded-Proto and
+// X-Forwarded-Host (or the Host header) to know the client's view.
 function isTransportAllowed(request: Request): boolean {
+  const xfProto = request.headers.get("x-forwarded-proto");
   const url = new URL(request.url);
-  if (url.protocol === "https:") return true;
-  return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+  const proto = (xfProto?.split(",")[0]?.trim() || url.protocol.replace(/:$/, "")).toLowerCase();
+  if (proto === "https") return true;
+
+  const xfHost = request.headers.get("x-forwarded-host");
+  const hostHeader = request.headers.get("host");
+  const rawHost = (xfHost?.split(",")[0]?.trim() || hostHeader || url.host).toLowerCase();
+  // Strip port; bracketed IPv6 retains brackets after URL.host parsing.
+  const hostname = rawHost.replace(/^\[(.+)\]:?\d*$/, "$1").replace(/:\d+$/, "");
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 async function loadUserContext(userId: string): Promise<UserContext> {
