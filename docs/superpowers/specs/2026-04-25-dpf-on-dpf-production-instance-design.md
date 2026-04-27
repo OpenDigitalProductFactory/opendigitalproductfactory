@@ -328,6 +328,8 @@ Define three explicit runtime roles:
 
 The user's concern about port `3000` is correct and should become policy.
 
+This formalizes guidance that already exists in `AGENTS.md` § "Portal Runtime & Navigation", which states that production-path verification must use the Docker-served app at `http://localhost:3000` and not stale ad hoc `next dev` / `next start` sessions. This spec extends that rule from a verification convention into an operating boundary for the install.
+
 Target rule:
 
 1. `localhost:3000` is reserved for the production-served runtime of this install
@@ -415,7 +417,21 @@ The sold-product representation should be treated as product/storefront/catalog 
 
 Current evidence suggests the live install still relies heavily on `StorefrontItem`-style catalog records rather than a broader first-class product packaging model. That is acceptable for the first slice if the content becomes truthful, but a later refactor may be needed so DPF product/package semantics are more explicit and reusable.
 
-### 10.4 Publication Boundary
+Planning prerequisite: open question 15.2 (whether the first sold-product representation can ride on `StorefrontItem` or needs a more explicit product/package model immediately) must be resolved before the first-slice replacement work in section 11.1 item 3 can be tasked. It is not a deferrable open question — the planner cannot write the catalog-replacement task without picking a model.
+
+### 10.4 Archetype Constraint and DPF Identity
+
+`StorefrontConfig.archetypeId` is the single source of truth for portal industry category and is treated as effectively write-once per the project rule in `CLAUDE.md` § "Portal Archetype". The live install's archetype is `Corporate Training` in category `education-training`, and none of the 11 canonical industries in `apps/web/lib/storefront/industries.ts` cleanly represents "software platform" or "digital product factory".
+
+This means converting business and sold-product identity from `Managing Digital`/training to Open Digital Product Factory cannot be done by editing copy alone — it collides with the archetype rule. The implementation plan must pick one of:
+
+1. add a new canonical industry slug (e.g. `software-platform` or `digital-products`) to `industries.ts` and seed a matching built-in archetype for DPF
+2. classify DPF under `professional-services` as the closest existing fit and accept the imprecision in vocabulary/finance defaults
+3. build the admin/support archetype-reset operation that `CLAUDE.md` describes but does not yet exist as a user-facing flow
+
+This is captured as a new open question in section 15.
+
+### 10.5 Publication Boundary
 
 Because `MarketingPublishedSnapshot` is not live in the current database, this design treats publication-boundary work as a dependency or follow-on slice, not as already available infrastructure.
 
@@ -426,9 +442,9 @@ The first slice should be a `customer-zero production spine`, not a full redesig
 ### 11.1 Scope
 
 1. establish runtime separation rules and local production/dev posture
-2. convert canonical business identity from generic/example state to Open Digital Product Factory
-3. convert sold-product storefront/catalog truth from training-example content to DPF product truth
-4. identify and route the initial real marketing/customer/sales loop through DPF-native surfaces
+2. convert canonical business identity from generic/example state to Open Digital Product Factory (gated on resolving the archetype-rule collision in section 10.4 and open question 15.5)
+3. convert sold-product storefront/catalog truth from training-example content to DPF product truth (gated on resolving the catalog-model decision in open question 15.2)
+4. identify and route the initial real marketing/customer/sales loop through DPF-native surfaces (see section 12 starter set)
 5. document how Build Studio and isolated development fit this install's production posture
 
 ### 11.2 Why this slice
@@ -444,6 +460,8 @@ This is the smallest slice that makes the install real:
 
 This work should be tracked under a new epic rather than folded into unrelated open epics.
 
+Overlap check: open and recently merged epic-adjacent work was reviewed against this scope, including the 2026-04-18 purpose-first product estate design, the customer marketing workspace phase 1 plan (2026-04-24), the external customer AI coworker design (2026-04-24), the build-studio governed backlog delivery design (2026-04-23), and the backlog → triage → Build Studio integration spec. Each of those is upstream infrastructure that this customer-zero work will exercise; none of them owns the operator/sold-product identity conversion or the production-vs-dev runtime boundary. A new epic is therefore appropriate.
+
 Recommended epic theme:
 
 - `DPF on DPF: Production Instance and Customer-Zero Operationalization`
@@ -456,6 +474,14 @@ Recommended first backlog items:
 4. define the minimum DPF-native marketing/customer/sales operating loop for this instance
 5. align Build Studio/local workflow guidance so production changes follow the same governed pattern sold to customers
 6. audit current setup UX for generic/example copy that conflicts with DPF-on-DPF operation
+
+Starter set for item 4 ("DPF-native surfaces"): the first prospect-to-customer loop should land on surfaces that already exist in the current branch/runtime truth, not on net-new concepts invented by the plan. Baseline candidates to evaluate during planning are:
+
+1. the public storefront/catalog as the prospect entry point
+2. the existing storefront inquiry/order flows and internal storefront inbox surfaces for conversion handling
+3. the governed backlog workflow (`apps/web/lib/governed-backlog-workflow.ts`) for converting customer signal into product work
+
+Adjacent in-progress work such as customer-assistant or customer-marketing modules may become follow-on candidates after they land, but they are not assumed as present in this plan's baseline. Open question 15.1 picks the concrete starter set.
 
 ## 13. Risks and Constraints
 
@@ -487,9 +513,10 @@ This first design is successful when:
 
 ## 15. Open Questions for Planning
 
-These are implementation-plan questions, not blockers for this design:
+These are implementation-plan questions. Items marked `(planning prerequisite)` must be answered before the corresponding first-slice work in section 11.1 can be tasked; the rest may be deferred into the plan itself.
 
-1. which exact DPF-native surfaces should own the first real prospect-to-customer loop
-2. whether the first sold-product representation can ride on `StorefrontItem` or needs a more explicit product/package model immediately
+1. which exact DPF-native surfaces should own the first real prospect-to-customer loop — pick from or extend the starter set in section 12 `(planning prerequisite for 11.1 item 4)`
+2. whether the first sold-product representation can ride on `StorefrontItem` or needs a more explicit product/package model immediately `(planning prerequisite for 11.1 item 3)`
 3. what the default local/external developer runtime matrix should be for this install
 4. how strongly the public-facing UX should narrate `DPF on DPF` in phase 1 versus letting it appear more subtly as proof
+5. how to satisfy the archetype-rule collision in section 10.4: add a new canonical industry slug for software/platform offerings, classify DPF under `professional-services`, or build the admin/support archetype-reset operation `(planning prerequisite for 11.1 item 2)`

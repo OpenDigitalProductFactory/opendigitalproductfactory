@@ -222,6 +222,10 @@ Valid `outcome` values per `TRIAGE_OUTCOMES` in [packages/db/src/discovery-triag
 | STORE-13 | Open the coworker panel on `/storefront` | Marketing Specialist agent loads for the portal workspace and shows portal-specific skills |
 | STORE-14 | Navigate to `/storefront/settings/business` | Settings sub-nav shows Portal, Your Business, and Operating Hours; Your Business is active and the business context form loads |
 | STORE-15 | Navigate to `/storefront/settings/operations` | Settings sub-nav shows Portal, Your Business, and Operating Hours; Operating Hours is active and the schedule editor loads |
+| STORE-16 | With the Docker-served portal running, open `http://localhost:3000` and `http://localhost:3001` | `3000` remains the production-served runtime and `3001` remains the isolated developer runtime; they do not collide |
+| STORE-17 | On `/s/<slug>/inquire`, submit a DPF product inquiry with name, email, and a message about using DPF internally | Inquiry is captured successfully and returns a reference number without exposing internal-only workflow controls |
+| STORE-18 | Navigate to `/storefront/inbox`, find the new inquiry, and click `Send to product backlog` | The inbox shows the inquiry as a customer-zero signal and creates or reuses a triaging backlog item tied to the configured digital product |
+| STORE-19 | Navigate to `/ops` after sending the inquiry to backlog | A triaging backlog item exists with the inquiry reference in the title/body and notes that it came from the storefront customer-zero intake flow |
 
 ## Phase 12: AI Coworker Cross-Cutting
 

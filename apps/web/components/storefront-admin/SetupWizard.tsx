@@ -312,7 +312,7 @@ export function SetupWizard({
           >
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Can't find your business?</div>
             <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
-              Define a custom business model. Your template can also be contributed back to help others.
+              Define a custom operating model. Your template can also be contributed back to help others, including software-platform and customer-zero installs.
             </div>
           </button>
         </div>
@@ -325,9 +325,9 @@ export function SetupWizard({
   if (step === "custom") {
     return (
       <div style={{ maxWidth: 520, color: "var(--dpf-text)" }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Define your business model</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Define your operating model</h2>
         <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 16 }}>
-          Tell us about your business and we'll create a custom template.
+          Tell us about your business or platform and we'll create a template that matches how you operate and what you sell.
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

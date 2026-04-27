@@ -2,6 +2,7 @@ import { healthcareWellnessArchetypes } from "./healthcare-wellness";
 import { beautyPersonalCareArchetypes } from "./beauty-personal-care";
 import { tradesMaintenanceArchetypes } from "./trades-maintenance";
 import { professionalServicesArchetypes } from "./professional-services";
+import { softwarePlatformArchetypes } from "./software-platform";
 import { educationTrainingArchetypes } from "./education-training";
 import { petServicesArchetypes } from "./pet-services";
 import { foodHospitalityArchetypes } from "./food-hospitality";
@@ -15,6 +16,7 @@ export const ALL_ARCHETYPES = [
   ...beautyPersonalCareArchetypes,
   ...tradesMaintenanceArchetypes,
   ...professionalServicesArchetypes,
+  ...softwarePlatformArchetypes,
   ...educationTrainingArchetypes,
   ...petServicesArchetypes,
   ...foodHospitalityArchetypes,

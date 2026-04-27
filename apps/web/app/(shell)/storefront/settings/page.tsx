@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
+import { applyDpfProductionInstancePreset } from "@/lib/actions/dpf-production-instance";
 
 export default async function StorefrontSettingsPage() {
   const config = await prisma.storefrontConfig.findFirst({
@@ -16,6 +17,12 @@ export default async function StorefrontSettingsPage() {
     },
   });
   if (!config) redirect("/storefront/setup");
+
+  async function applyDpfPreset() {
+    "use server";
+    await applyDpfProductionInstancePreset();
+    redirect("/storefront/settings");
+  }
 
   async function updateSettings(formData: FormData) {
     "use server";
@@ -125,6 +132,40 @@ export default async function StorefrontSettingsPage() {
       >
         Save Changes
       </button>
+
+      <div
+        style={{
+          marginTop: 16,
+          padding: "16px",
+          borderRadius: 8,
+          border: "1px solid var(--dpf-border)",
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: "var(--dpf-text)" }}>
+          DPF production-instance preset
+        </div>
+        <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginBottom: 12 }}>
+          Internal support action for converting this install toward Open Digital Product Factory customer-zero truth. This does not change archetype; use the admin archetype reset first when needed.
+        </p>
+        <form action={applyDpfPreset}>
+          <button
+            type="submit"
+            style={{
+              padding: "8px 20px",
+              borderRadius: 6,
+              border: "1px solid var(--dpf-border)",
+              background: "var(--dpf-surface-2)",
+              color: "var(--dpf-text)",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Apply DPF preset
+          </button>
+        </form>
+      </div>
 
       <div
         style={{

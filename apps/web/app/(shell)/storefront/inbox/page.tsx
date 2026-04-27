@@ -6,7 +6,7 @@ export default async function InboxPage() {
   const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
   if (!config) redirect("/storefront/setup");
 
-  const [inquiries, bookings, orders, donations, providerList] = await Promise.all([
+  const [inquiries, bookings, orders, donations, providerList, digitalProducts] = await Promise.all([
     prisma.storefrontInquiry.findMany({
       where: { storefrontId: config.id },
       orderBy: { createdAt: "desc" },
@@ -65,6 +65,15 @@ export default async function InboxPage() {
       select: { id: true, name: true },
       orderBy: { sortOrder: "asc" },
     }),
+    prisma.digitalProduct.findMany({
+      select: {
+        id: true,
+        name: true,
+        lifecycleStage: true,
+      },
+      orderBy: [{ name: "asc" }],
+      take: 20,
+    }),
   ]);
 
   type InboxEntry = {
@@ -77,7 +86,23 @@ export default async function InboxPage() {
     createdAt: string;
     providerName: string | null;
     status: string;
+    backlogItemId?: string | null;
   };
+
+  const inquiryBacklogItemIds = new Map(
+    (
+      await prisma.backlogItem.findMany({
+        where: {
+          itemId: {
+            in: inquiries.map((inquiry) => `BI-SFI-${inquiry.inquiryRef.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`),
+          },
+        },
+        select: {
+          itemId: true,
+        },
+      })
+    ).map((item) => [item.itemId, item.itemId]),
+  );
 
   const entries: InboxEntry[] = [
     ...inquiries.map((inquiry) => ({
@@ -90,6 +115,10 @@ export default async function InboxPage() {
       createdAt: inquiry.createdAt.toISOString(),
       providerName: null,
       status: "",
+      backlogItemId:
+        inquiryBacklogItemIds.get(
+          `BI-SFI-${inquiry.inquiryRef.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}`,
+        ) ?? null,
     })),
     ...bookings.map((booking) => ({
       id: booking.id,
@@ -126,5 +155,20 @@ export default async function InboxPage() {
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  return <StorefrontInbox entries={entries} providers={providerList} />;
+  const defaultDigitalProduct =
+    digitalProducts.find((product) => product.name === "Open Digital Product Factory") ??
+    digitalProducts[0] ??
+    null;
+
+  return (
+    <StorefrontInbox
+      entries={entries}
+      providers={providerList}
+      defaultDigitalProduct={
+        defaultDigitalProduct
+          ? { id: defaultDigitalProduct.id, name: defaultDigitalProduct.name }
+          : null
+      }
+    />
+  );
 }
