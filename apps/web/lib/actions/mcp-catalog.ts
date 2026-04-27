@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { inngest } from "@/lib/queue/inngest-client";
 import { computeNextRunAt, type ScheduleValue } from "@/lib/ai-provider-types";
+import { getIntegrationConnectorProfile } from "@/lib/integrate/connector-factory";
+import { getNativeIntegrationDescriptor } from "@/lib/integrate/native-integrations";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -61,7 +63,7 @@ export async function queryMcpIntegrations(params: {
 }) {
   const { query, category, archetypeId, pricingModel, limit = 20 } = params;
 
-  return prisma.mcpIntegration.findMany({
+  const integrations = await prisma.mcpIntegration.findMany({
     where: {
       status: "active",
       ...(category ? { category } : {}),
@@ -80,10 +82,29 @@ export async function queryMcpIntegrations(params: {
       shortDescription: true, category: true, pricingModel: true,
       rating: true, ratingCount: true, installCount: true, isVerified: true,
       documentationUrl: true, logoUrl: true, archetypeIds: true,
+      tags: true, rawMetadata: true,
     },
     orderBy: [{ isVerified: "desc" }, { installCount: "desc" }],
     take: limit,
   });
+
+  return integrations.map((integration) => ({
+    ...integration,
+    connectorProfile: getIntegrationConnectorProfile({
+      name: integration.name,
+      slug: integration.slug,
+      category: integration.category,
+      tags: integration.tags,
+      rawMetadata: integration.rawMetadata,
+    }),
+    nativeIntegration: getNativeIntegrationDescriptor({
+      name: integration.name,
+      slug: integration.slug,
+      category: integration.category,
+      tags: integration.tags,
+      rawMetadata: integration.rawMetadata,
+    }),
+  }));
 }
 
 // ─── Schedule management ───────────────────────────────────────────────────────

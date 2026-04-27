@@ -83,11 +83,21 @@ describe("triggerMcpCatalogSync", () => {
 describe("queryMcpIntegrations", () => {
   it("returns integrations matching query", async () => {
     vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
-      { id: "1", name: "Stripe", category: "finance", status: "active" } as never,
+      {
+        id: "1",
+        name: "Stripe",
+        slug: "stripe",
+        category: "finance",
+        status: "active",
+        tags: ["payments"],
+        rawMetadata: {},
+      } as never,
     ]);
     const result = await queryMcpIntegrations({ query: "stripe" });
     expect(result.length).toBe(1);
     expect(result[0].name).toBe("Stripe");
+    expect(result[0].connectorProfile.authModes).toContain("api_key_header");
+    expect(result[0].connectorProfile.capabilities).toContain("universal_api_call");
   });
 
   it("filters by category", async () => {
@@ -115,6 +125,49 @@ describe("queryMcpIntegrations", () => {
         where: expect.objectContaining({ status: "active" }),
       })
     );
+  });
+
+  it("uses explicit connector metadata from rawMetadata when present", async () => {
+    vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
+      {
+        id: "2",
+        name: "Microsoft Teams",
+        slug: "microsoft-teams",
+        category: "communication",
+        status: "active",
+        tags: ["teams", "chat"],
+        rawMetadata: {
+          dpfConnectorProfile: {
+            authModes: ["oauth_client_credentials"],
+            transportModes: ["rest_json"],
+            capabilities: ["list", "get", "polling_trigger", "webhook_trigger", "universal_api_call"],
+            supportsGenericConnector: true,
+          },
+        },
+      } as never,
+    ]);
+
+    const result = await queryMcpIntegrations({ query: "teams" });
+    expect(result[0].connectorProfile.metadataSource).toBe("explicit");
+    expect(result[0].connectorProfile.capabilities).toContain("webhook_trigger");
+  });
+
+  it("attaches native integration routing for ADP", async () => {
+    vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
+      {
+        id: "3",
+        name: "ADP Workforce Now",
+        slug: "adp-workforce-now",
+        category: "hr",
+        status: "active",
+        tags: ["adp", "payroll"],
+        rawMetadata: {},
+      } as never,
+    ]);
+
+    const result = await queryMcpIntegrations({ query: "adp" });
+    expect(result[0].nativeIntegration?.route).toBe("/platform/tools/integrations/adp");
+    expect(result[0].nativeIntegration?.activationKind).toBe("native_setup");
   });
 });
 

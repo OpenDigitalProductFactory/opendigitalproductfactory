@@ -36,7 +36,9 @@ export default async function AdpIntegrationPage() {
             Tools
           </a>
           <span>/</span>
-          <span>Enterprise Integrations</span>
+          <a href="/platform/tools/integrations" className="hover:underline">
+            Enterprise Integrations
+          </a>
           <span>/</span>
           <span>ADP</span>
         </div>

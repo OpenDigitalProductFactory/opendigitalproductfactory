@@ -9,6 +9,7 @@ export default async function ToolsHubPage() {
     enabledTools,
     activeDiscoveryConnections,
     needsReviewCount,
+    enterpriseConnections,
   ] =
     await Promise.all([
       prisma.mcpIntegration.count({ where: { status: "active" } }),
@@ -17,14 +18,15 @@ export default async function ToolsHubPage() {
       prisma.mcpServerTool.count({ where: { isEnabled: true } }),
       prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
       prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+      prisma.integrationCredential.count({ where: { provider: { in: ["adp"] }, status: { in: ["connected", "error"] } } }),
     ]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Tools &amp; Services</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Tools &amp; Connections</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Discover integrations, run discovery operations, activate MCP services, and confirm what tools are really available to agents.
+          Discover integrations, manage native enterprise anchors, run discovery operations, activate MCP services, and confirm what tools are really available to agents.
         </p>
       </div>
 
@@ -60,6 +62,16 @@ export default async function ToolsHubPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Enterprise Integrations"
+          description="Open native customer-configured anchors like ADP that use dedicated setup and governance flows."
+          href="/platform/tools/integrations"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Connected", value: enterpriseConnections },
+            { label: "First anchor", value: "ADP" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Capability Inventory"
           description="See the merged inventory of built-in tools, MCP tools, and provider-facing capabilities."
           href="/platform/tools/inventory"
@@ -76,8 +88,8 @@ export default async function ToolsHubPage() {
           Recommended Flow
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          Start in the catalog when you are researching options, move to discovery operations when you need to understand what was found and why it matters,
-          then use services and capability inventory to manage the platform tooling the AI workforce relies on.
+          Start in the catalog when you are researching options, move into enterprise integrations for native anchors like ADP, then use discovery operations,
+          services, and capability inventory to manage the platform tooling the AI workforce relies on.
         </p>
       </div>
     </div>

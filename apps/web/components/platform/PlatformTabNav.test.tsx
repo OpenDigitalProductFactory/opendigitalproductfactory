@@ -32,7 +32,7 @@ describe("PlatformTabNav", () => {
 
     expect(html).toContain(">Overview<");
     expect(html).toContain(">AI Operations<");
-    expect(html).toContain(">Tools &amp; Services<");
+    expect(html).toContain(">Tools &amp; Connections<");
     expect(html).toContain(">Governance &amp; Audit<");
     expect(html).toContain(">Core Admin<");
     expect(html).not.toContain(">Catalog<");

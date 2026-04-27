@@ -13,6 +13,15 @@ type Integration = {
   documentationUrl: string | null;
   logoUrl: string | null;
   activeServerId?: string | null;
+  connectorProfile?: {
+    authModes: string[];
+    capabilities: string[];
+  };
+  nativeIntegration?: {
+    route: string;
+    activationKind: "native_setup";
+    label: string;
+  } | null;
 };
 
 const PRICING_BADGES: Record<string, string> = {
@@ -31,6 +40,14 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
       ? raw
       : null;
 
+  const actionHref =
+    integration.nativeIntegration?.route ??
+    (integration.activeServerId
+      ? `/platform/tools/services/${integration.activeServerId}`
+      : `/platform/tools/services/activate?integrationId=${integration.id}`);
+
+  const actionLabel = integration.nativeIntegration ? "Open Setup →" : integration.activeServerId ? "Open Service →" : "Activate →";
+
   return (
     <div className="border rounded-lg p-4 flex flex-col gap-2 hover:shadow-md transition-shadow bg-card">
       <div className="flex items-start gap-3">
@@ -48,12 +65,12 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
               <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">✓ Verified</span>
             )}
             {integration.activeServerId && (
-              <a
-                href={`/platform/tools/services/${integration.activeServerId}`}
-                className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded hover:underline"
-              >
-                Active
-              </a>
+            <a
+              href={actionHref}
+              className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded hover:underline"
+            >
+              Active
+            </a>
             )}
             {integration.pricingModel && (
               <span className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
@@ -69,6 +86,24 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
 
       {integration.shortDescription && (
         <p className="text-sm text-muted-foreground line-clamp-2">{integration.shortDescription}</p>
+      )}
+
+      {integration.connectorProfile && (
+        <div className="flex flex-wrap gap-2">
+          <span className="text-[11px] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] px-2 py-0.5 rounded border border-[var(--dpf-border)]">
+            {integration.connectorProfile.authModes[0] === "oauth_client_credentials" ? "OAuth" : "API key"}
+          </span>
+          {integration.connectorProfile.capabilities.includes("universal_api_call") && (
+            <span className="text-[11px] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] px-2 py-0.5 rounded border border-[var(--dpf-border)]">
+              Universal API
+            </span>
+          )}
+          {integration.connectorProfile.capabilities.includes("webhook_trigger") && (
+            <span className="text-[11px] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] px-2 py-0.5 rounded border border-[var(--dpf-border)]">
+              Webhooks
+            </span>
+          )}
+        </div>
       )}
 
       <div className="flex items-center justify-between mt-auto pt-1">
@@ -93,10 +128,10 @@ export function IntegrationCard({ integration }: { integration: Integration }) {
           )}
           {!integration.activeServerId && (
             <a
-              href={`/platform/tools/services/activate?integrationId=${integration.id}`}
+              href={actionHref}
               className="text-xs text-primary hover:underline"
             >
-              Activate &rarr;
+              {actionLabel}
             </a>
           )}
         </div>

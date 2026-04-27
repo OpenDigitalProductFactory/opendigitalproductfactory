@@ -2,6 +2,8 @@
 import { prisma } from "@dpf/db";
 import { ServiceActivationForm } from "@/components/platform/ServiceActivationForm";
 import Link from "next/link";
+import { getNativeIntegrationDescriptor } from "@/lib/integrate/native-integrations";
+import { redirect } from "next/navigation";
 
 type SearchParams = Promise<{ integrationId?: string; serverId?: string }>;
 
@@ -19,9 +21,19 @@ export default async function ToolsActivateServicePage({
   if (integrationId) {
     const integration = await prisma.mcpIntegration.findUnique({
       where: { id: integrationId },
-      select: { name: true, slug: true, category: true },
+      select: { name: true, slug: true, category: true, tags: true, rawMetadata: true },
     });
     if (integration) {
+      const nativeIntegration = getNativeIntegrationDescriptor({
+        name: integration.name,
+        slug: integration.slug,
+        category: integration.category,
+        tags: integration.tags,
+        rawMetadata: integration.rawMetadata,
+      });
+      if (nativeIntegration) {
+        redirect(nativeIntegration.route);
+      }
       prefillName = integration.name;
       prefillCategory = integration.category;
       prefillServerId = integration.slug;

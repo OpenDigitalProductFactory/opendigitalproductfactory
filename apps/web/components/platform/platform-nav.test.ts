@@ -9,7 +9,7 @@ describe("platform-nav", () => {
     expect(PLATFORM_FAMILIES.map((family) => family.label)).toEqual([
       "Overview",
       "AI Operations",
-      "Tools & Services",
+      "Tools & Connections",
       "Governance & Audit",
       "Core Admin",
     ]);
@@ -44,11 +44,14 @@ describe("platform-nav", () => {
   });
 
   it("includes Enterprise Integrations in the tools family", () => {
-    const toolsFamily = getPlatformFamily("/platform/tools/integrations/adp");
+    const toolsFamily = getPlatformFamily("/platform/tools/integrations");
 
     expect(toolsFamily.key).toBe("tools");
     expect(
       toolsFamily.subItems.some((item) => item.label === "Enterprise Integrations"),
+    ).toBe(true);
+    expect(
+      toolsFamily.subItems.some((item) => item.href === "/platform/tools/integrations"),
     ).toBe(true);
   });
 

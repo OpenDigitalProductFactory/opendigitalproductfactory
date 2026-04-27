@@ -24,6 +24,8 @@ import {
   type IntegrationProfileTag,
   type IntegrationTreatment,
 } from "@/lib/integrate/integration-benchmarking";
+import { getIntegrationConnectorProfile } from "@/lib/integrate/connector-factory";
+import { getNativeIntegrationDescriptor } from "@/lib/integrate/native-integrations";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -6771,6 +6773,20 @@ export async function executeTool(
               category: row.category,
               tags: row.tags,
               vendor: row.vendor,
+              rawMetadata: row.rawMetadata,
+            }),
+            connectorProfile: getIntegrationConnectorProfile({
+              name: row.name,
+              slug: row.slug,
+              category: row.category,
+              tags: row.tags,
+              rawMetadata: row.rawMetadata,
+            }),
+            nativeIntegration: getNativeIntegrationDescriptor({
+              name: row.name,
+              slug: row.slug,
+              category: row.category,
+              tags: row.tags,
               rawMetadata: row.rawMetadata,
             }),
           }))

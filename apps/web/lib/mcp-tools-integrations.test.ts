@@ -33,12 +33,17 @@ describe("executeTool — search_integrations", () => {
       | {
           results: Array<{
             benchmark: { recommendedTreatment: string };
+            connectorProfile: { authModes: string[]; capabilities: string[] };
+            nativeIntegration?: { route: string } | null;
           }>;
         }
       | undefined;
     expect(result.success).toBe(true);
     expect(data?.results).toHaveLength(1);
     expect(data?.results[0].benchmark.recommendedTreatment).toBe("native_first_class");
+    expect(data?.results[0].connectorProfile.authModes).toContain("api_key_header");
+    expect(data?.results[0].connectorProfile.capabilities).toContain("universal_api_call");
+    expect(data?.results[0].nativeIntegration ?? null).toBeNull();
   });
 
   it("passes category filter to prisma query", async () => {
@@ -90,5 +95,39 @@ describe("executeTool — search_integrations", () => {
     expect(result.success).toBe(true);
     expect(data?.results).toHaveLength(1);
     expect(data?.results[0].name).toBe("NinjaOne");
+  });
+
+  it("returns native integration routing for ADP search results", async () => {
+    vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
+      {
+        id: "1",
+        name: "ADP Workforce Now",
+        vendor: "ADP",
+        slug: "adp-workforce-now",
+        shortDescription: "Payroll and workers",
+        category: "hr",
+        pricingModel: "paid",
+        rating: 4.1,
+        ratingCount: 12,
+        isVerified: true,
+        documentationUrl: "https://example.com",
+        logoUrl: null,
+        archetypeIds: ["professional-services"],
+        tags: ["adp", "payroll"],
+        rawMetadata: {},
+      } as never,
+    ]);
+
+    const result = await executeTool("search_integrations", { query: "adp" }, "user-1");
+    const data = result.data as
+      | {
+          results: Array<{
+            nativeIntegration?: { route: string } | null;
+          }>;
+        }
+      | undefined;
+
+    expect(result.success).toBe(true);
+    expect(data?.results[0].nativeIntegration?.route).toBe("/platform/tools/integrations/adp");
   });
 });

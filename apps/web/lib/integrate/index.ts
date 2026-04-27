@@ -14,3 +14,5 @@ export * from "./codebase-tools";
 export * from "./git-utils";
 export * from "./coding-agent";
 export * from "./sandbox";
+export * from "./connector-factory";
+export * from "./native-integrations";
