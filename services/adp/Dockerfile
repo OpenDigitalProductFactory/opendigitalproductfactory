@@ -1,8 +1,12 @@
-# ADP MCP server — standalone Node 20 service.
+# ADP MCP server — standalone Node 24 service.
 # The runtime ships as its own container, but it consumes
 # packages/integration-shared as a local file dependency during the image build.
+#
+# Node 24 is required: undici@8.x calls webidl.util.markAsUncloneable, which
+# was added in Node 22. Keep this aligned with the portal/promoter/sandbox
+# images so a single Node major governs the whole stack.
 
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY tsconfig.base.json ./tsconfig.base.json
 COPY services/adp ./services/adp
@@ -18,7 +22,7 @@ RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSy
   && pnpm install --no-frozen-lockfile \
   && pnpm build
 
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/services/adp/dist ./dist
