@@ -1244,6 +1244,9 @@ model ModelProfile {
   profileConfidence         String        @default("low")
   profileSource             String        @default("seed")
   reasoning                 Int           @default(50)
+  // Phase 1: stability — proportion of identical outputs across 3x temp=0 runs (0-100)
+  stabilityScore            Int?
+  lastStabilityCheckAt      DateTime?
   retiredAt                 DateTime?
   retiredReason             String?
   structuredOutputScore     Int           @default(50)
@@ -1322,6 +1325,10 @@ model EndpointTaskPerformance {
   blocked                 Boolean   @default(false)
   avgLatencyMs            Float     @default(0)
   avgTokensUsed           Float     @default(0)
+  // Phase 1: operational metrics from eval calls
+  tokensPerSecondAvg      Float?
+  ttftMsAvg               Float?
+  peakVramMbAvg           Float?
   lastEvaluatedAt         DateTime?
   lastInstructionUpdateAt DateTime?
   dimensionScores         Json      @default("{}")
