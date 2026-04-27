@@ -87,6 +87,8 @@ export type VerificationOutput = {
   testsPassed: number;
   testsFailed: number;
   typecheckPassed: boolean;
+  documentationUpdated?: boolean;
+  documentationEvidence?: string;
   fullOutput: string;
   timestamp: string;
 };
@@ -531,6 +533,16 @@ export function checkPhaseGate(
     if (!evidence.designDoc) return { allowed: false, reason: "Design document is missing." };
     if (!evidence.buildPlan) return { allowed: false, reason: "Implementation plan is missing." };
     if (!evidence.verificationOut) return { allowed: false, reason: "Verification output is missing." };
+    const verification = evidence.verificationOut as {
+      documentationUpdated?: boolean;
+      documentationEvidence?: string;
+    };
+    if (verification.documentationUpdated !== true) {
+      return {
+        allowed: false,
+        reason: "Documentation updates must be verified before shipping. Update affected docs or record why no docs changed.",
+      };
+    }
     if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
     // The AI may save acceptanceMet as a string description or an array of {criterion, met, evidence}.
     // Both indicate the AI evaluated criteria. Only block if it's a proper array with unmet items.

@@ -178,6 +178,20 @@ Your final message MUST include:
 - Tests: N passed, N failed
 - If failures: the test name and a one-line description of each failure`;
 
+const DOCUMENTATION_SPECIALIST_PROMPT = `${SHARED_IDENTITY}
+
+You are the Documentation Specialist. Your domain: user guide pages, route-aware help coverage, change notes, and documentation quality.
+
+WORKFLOW:
+1. list_sandbox_files for docs/user-guide/**/*.md and the feature files in the task.
+2. read_sandbox_file on the closest existing guide page before editing or creating docs.
+3. Update the specific local documentation page for the changed route or feature. If none exists, create the missing docs/user-guide/<area>/index.md page.
+4. If a new route family was added, update the route-to-doc mapping so the header Docs button opens the specific page.
+5. run_sandbox_command with "pnpm exec tsc --noEmit" when TypeScript mapping files changed.
+6. Report the docs paths changed and whether route-aware help coverage was added or confirmed.
+
+Documentation is a release deliverable. Never mark a feature ready if the affected user-facing route has no local documentation target.`;
+
 // UX_ACCESSIBILITY_PROMPT removed 2026-04-20. AGT-903 / autoA11yAudit
 // was superseded by the Inngest-driven build/review.verify handler
 // which runs browser-use against the live sandbox rather than inspecting
@@ -189,6 +203,7 @@ const SPECIALIST_PROMPTS: Record<SpecialistRole, string> = {
   "data-architect": DATA_ARCHITECT_PROMPT,
   "software-engineer": SOFTWARE_ENGINEER_PROMPT,
   "frontend-engineer": FRONTEND_ENGINEER_PROMPT,
+  "documentation-specialist": DOCUMENTATION_SPECIALIST_PROMPT,
   "qa-engineer": QA_ENGINEER_PROMPT,
 };
 
@@ -197,6 +212,7 @@ export const SPECIALIST_AGENT_IDS: Record<SpecialistRole, string> = {
   "data-architect": "AGT-BUILD-DA",
   "software-engineer": "AGT-BUILD-SE",
   "frontend-engineer": "AGT-BUILD-FE",
+  "documentation-specialist": "AGT-904",
   "qa-engineer": "AGT-BUILD-QA",
 };
 
@@ -205,6 +221,7 @@ export const SPECIALIST_MODEL_REQS: Record<SpecialistRole, { defaultMinimumTier:
   "data-architect": { defaultMinimumTier: "frontier", defaultBudgetClass: "quality_first" },
   "software-engineer": { defaultMinimumTier: "frontier", defaultBudgetClass: "quality_first" },
   "frontend-engineer": { defaultMinimumTier: "frontier", defaultBudgetClass: "quality_first" },
+  "documentation-specialist": { defaultMinimumTier: "strong", defaultBudgetClass: "balanced" },
   "qa-engineer": { defaultMinimumTier: "strong", defaultBudgetClass: "balanced" },
 };
 
@@ -227,6 +244,10 @@ export const SPECIALIST_TOOLS: Record<SpecialistRole, string[]> = {
     "search_sandbox", "list_sandbox_files", "run_sandbox_command",
     "generate_code",
     "search_design_intelligence", "generate_design_system",
+  ],
+  "documentation-specialist": [
+    "read_sandbox_file", "edit_sandbox_file", "write_sandbox_file",
+    "search_sandbox", "list_sandbox_files", "run_sandbox_command",
   ],
   "qa-engineer": [
     "read_sandbox_file", "search_sandbox", "list_sandbox_files",

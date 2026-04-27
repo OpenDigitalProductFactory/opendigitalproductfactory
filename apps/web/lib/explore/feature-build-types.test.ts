@@ -286,6 +286,37 @@ describe("checkPhaseGate", () => {
     expect(result.allowed).toBe(false);
   });
 
+  it("blocks review to ship until documentation updates are verified", () => {
+    const result = checkPhaseGate("review", "ship", {
+      designDoc: { problemStatement: "test" },
+      buildPlan: { fileStructure: [], tasks: [] },
+      verificationOut: { testsPassed: 5, testsFailed: 0, typecheckPassed: true, fullOutput: "", timestamp: "" },
+      acceptanceMet: [{ criterion: "Works", met: true, evidence: "Verified" }],
+      uxVerificationStatus: "skipped",
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Documentation");
+  });
+
+  it("allows review to ship when documentation is verified", () => {
+    const result = checkPhaseGate("review", "ship", {
+      designDoc: { problemStatement: "test" },
+      buildPlan: { fileStructure: [], tasks: [] },
+      verificationOut: {
+        testsPassed: 5,
+        testsFailed: 0,
+        typecheckPassed: true,
+        documentationUpdated: true,
+        documentationEvidence: "Updated docs/user-guide/build-studio/index.md and route mapping.",
+        fullOutput: "",
+        timestamp: "",
+      },
+      acceptanceMet: [{ criterion: "Works", met: true, evidence: "Verified" }],
+      uxVerificationStatus: "skipped",
+    });
+    expect(result.allowed).toBe(true);
+  });
+
   it("allows any phase to failed (no gate)", () => {
     const result = checkPhaseGate("build", "failed", {});
     expect(result.allowed).toBe(true);

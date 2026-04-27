@@ -1,14 +1,19 @@
 import { notFound } from "next/navigation";
 import { loadDocPage, loadAllDocs, buildDocsIndex, extractHeadings, AREA_META, AREA_ORDER, type DocsIndex } from "@/lib/docs";
+import { resolveDocsTarget } from "@/lib/docs-route-map";
 import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DocRenderer } from "@/components/docs/DocRenderer";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
+  searchParams?: Promise<{ from?: string }>;
 };
 
-export default async function DocsPage({ params }: Props) {
+export default async function DocsPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { from } = searchParams ? await searchParams : {};
+  const sourcePath = typeof from === "string" ? from : null;
+  const sourceTarget = sourcePath ? resolveDocsTarget(sourcePath) : null;
   const allDocs = loadAllDocs();
   const index = buildDocsIndex(allDocs);
 
@@ -30,6 +35,7 @@ export default async function DocsPage({ params }: Props) {
   if (!slug || slug.length === 0) {
     return (
       <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems}>
+        <DocsContextNotice sourcePath={sourcePath} sourceLabel={sourceTarget?.label ?? null} />
         <DocsHome index={index} />
       </DocsLayout>
     );
@@ -44,8 +50,34 @@ export default async function DocsPage({ params }: Props) {
 
   return (
     <DocsLayout index={sidebarIndex} currentSlug={docSlug} searchItems={searchItems} headings={tocHeadings}>
+      <DocsContextNotice sourcePath={sourcePath} sourceLabel={sourceTarget?.label ?? doc.title} />
       <DocContent doc={doc} />
     </DocsLayout>
+  );
+}
+
+function DocsContextNotice({ sourcePath, sourceLabel }: { sourcePath: string | null; sourceLabel: string | null }) {
+  if (!sourcePath) return null;
+
+  return (
+    <div className="mb-4 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-[var(--dpf-text)]">
+            {sourceLabel ? `Documentation for ${sourceLabel}` : "Contextual documentation"}
+          </p>
+          <p className="mt-0.5 text-[11px] text-[var(--dpf-muted)]">
+            Opened from <span className="font-mono text-[var(--dpf-text)]">{sourcePath}</span>
+          </p>
+        </div>
+        <a
+          href="/docs"
+          className="text-xs font-medium text-[var(--dpf-accent)] hover:underline"
+        >
+          All Docs
+        </a>
+      </div>
+    </div>
   );
 }
 

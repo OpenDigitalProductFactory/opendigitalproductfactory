@@ -134,7 +134,15 @@ describe("Build Disciplines — Full Flow Integration", () => {
     const fullEvidence = {
       designDoc: { problemStatement: "test" },
       buildPlan: { fileStructure: [], tasks: [] },
-      verificationOut: { testsPassed: 10, testsFailed: 0, typecheckPassed: true, fullOutput: "", timestamp: "" },
+      verificationOut: {
+        testsPassed: 10,
+        testsFailed: 0,
+        typecheckPassed: true,
+        documentationUpdated: true,
+        documentationEvidence: "Updated affected user guide page.",
+        fullOutput: "",
+        timestamp: "",
+      },
       acceptanceMet: [
         { criterion: "Filter works", met: true, evidence: "Test passes" },
         { criterion: "Debounced", met: true, evidence: "300ms delay verified" },

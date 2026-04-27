@@ -15,7 +15,12 @@ export type PlanTask = {
   verify: string;
 };
 
-export type SpecialistRole = "data-architect" | "software-engineer" | "frontend-engineer" | "qa-engineer";
+export type SpecialistRole =
+  | "data-architect"
+  | "software-engineer"
+  | "frontend-engineer"
+  | "documentation-specialist"
+  | "qa-engineer";
 
 export type AssignedTask = {
   taskIndex: number;
@@ -36,8 +41,10 @@ export type ExecutionPhase = {
 const SCHEMA_PATTERNS = [/packages\/db\/prisma\//i, /\.prisma$/i, /migration/i];
 const API_PATTERNS = [/app\/api\//i, /actions\//i, /server-action/i, /lib\/.*(?:action|service)/i];
 const FRONTEND_PATTERNS = [/components?\//i, /app\/\(shell\)\//i, /\.tsx$/i, /\.css$/i];
+const DOCUMENTATION_PATTERNS = [/^docs\//i, /\/docs\//i, /\.md$/i, /user-guide/i];
 
 function classifyFile(path: string): SpecialistRole {
+  if (DOCUMENTATION_PATTERNS.some(p => p.test(path))) return "documentation-specialist";
   if (SCHEMA_PATTERNS.some(p => p.test(path))) return "data-architect";
   if (API_PATTERNS.some(p => p.test(path))) return "software-engineer";
   if (FRONTEND_PATTERNS.some(p => p.test(path))) return "frontend-engineer";
@@ -69,6 +76,7 @@ function classifyFromTitle(title: string): SpecialistRole {
   if (lower.includes("schema") || lower.includes("model") || lower.includes("migration") || lower.includes("database")) return "data-architect";
   if (lower.includes("api") || lower.includes("route") || lower.includes("action") || lower.includes("endpoint")) return "software-engineer";
   if (lower.includes("ui") || lower.includes("page") || lower.includes("component") || lower.includes("frontend") || lower.includes("layout")) return "frontend-engineer";
+  if (lower.includes("doc") || lower.includes("guide") || lower.includes("readme")) return "documentation-specialist";
   if (lower.includes("test") || lower.includes("verify") || lower.includes("typecheck")) return "qa-engineer";
   return "software-engineer";
 }
@@ -79,7 +87,8 @@ const ROLE_PRIORITY: Record<SpecialistRole, number> = {
   "data-architect": 0,    // Schema first -- everything depends on models
   "software-engineer": 1, // API routes depend on schema
   "frontend-engineer": 2, // Frontend depends on API types
-  "qa-engineer": 3,       // Tests run after all code generation
+  "documentation-specialist": 3,
+  "qa-engineer": 4,       // Tests run after all code generation
 };
 
 /**

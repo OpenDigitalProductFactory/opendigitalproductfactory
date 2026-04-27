@@ -4,6 +4,7 @@
 import { signOutAction } from "@/lib/actions";
 import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
 import { PlatformHealthIndicator } from "@/components/monitoring/PlatformHealthIndicator";
+import { ContextualDocsLink } from "@/components/docs/ContextualDocsLink";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -96,6 +97,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
 
         <div className="flex items-center gap-3">
           <PlatformHealthIndicator />
+          <ContextualDocsLink />
           <HeaderFeedbackButton userId={userId ?? null} />
           {platformRole !== null && (
             <span className="hidden text-xs text-[var(--dpf-muted)] sm:inline">

@@ -713,7 +713,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
     name: "saveBuildEvidence",
-    description: "Save evidence to a FeatureBuild record. Fields: designDoc, buildPlan, taskResults, verificationOut, acceptanceMet.",
+    description: "Save evidence to a FeatureBuild record. Fields: designDoc, buildPlan, taskResults, verificationOut, acceptanceMet. verificationOut must include documentationUpdated and documentationEvidence before ship.",
     inputSchema: {
       type: "object",
       properties: {

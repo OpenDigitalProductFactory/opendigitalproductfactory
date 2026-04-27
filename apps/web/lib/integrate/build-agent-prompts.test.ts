@@ -37,6 +37,8 @@ describe("getBuildPhasePrompt", () => {
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("testFirst");
     expect(prompt).toContain("reviewBuildPlan");
+    expect(prompt).toContain("documentation-specialist");
+    expect(prompt).toContain("documentation update task");
     expect(prompt).toContain("The plan is approved when it passes review");
   });
   it("returns build prompt for build phase", async () => {
@@ -54,6 +56,7 @@ describe("getBuildPhasePrompt", () => {
   it("returns review prompt for review phase", async () => {
     const prompt = await getBuildPhasePrompt("review");
     expect(prompt).toContain("acceptanceMet");
+    expect(prompt).toContain("documentationUpdated");
     expect(prompt).toContain("Ready to ship");
   });
   it("returns ship prompt for ship phase", async () => {

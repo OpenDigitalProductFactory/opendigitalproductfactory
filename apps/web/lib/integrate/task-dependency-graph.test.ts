@@ -73,6 +73,19 @@ describe("buildDependencyGraph", () => {
     expect(lastPhase.tasks[0]!.specialist).toBe("qa-engineer");
   });
 
+  it("assigns documentation changes to the documentation specialist before QA", () => {
+    const files: PlanFileEntry[] = [
+      { path: "docs/user-guide/complaints/index.md", action: "create", purpose: "User guide page" },
+    ];
+    const tasks: PlanTask[] = [
+      { title: "Write documentation update", testFirst: "", implement: "", verify: "" },
+    ];
+
+    const phases = buildDependencyGraph(files, tasks);
+    expect(phases[0]!.tasks[0]!.specialist).toBe("documentation-specialist");
+    expect(phases[phases.length - 1]!.tasks[0]!.specialist).toBe("qa-engineer");
+  });
+
   it("handles empty plan gracefully", () => {
     const phases = buildDependencyGraph([], []);
     expect(phases).toHaveLength(1); // QA only

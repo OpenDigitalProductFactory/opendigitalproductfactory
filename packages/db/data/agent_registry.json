@@ -178,6 +178,7 @@
         "AGT-BUILD-DA",
         "AGT-BUILD-SE",
         "AGT-BUILD-FE",
+        "AGT-904",
         "AGT-BUILD-QA"
       ],
       "escalates_to": "HR-200",

@@ -122,6 +122,14 @@ Key patterns:
 - Read an existing page first to understand the layout structure.
 - Typecheck with: pnpm exec tsc --noEmit`,
 
+    "documentation-specialist": `You are a documentation specialist keeping the user guide aligned with product changes.
+Key patterns:
+- User guide pages: docs/user-guide/<area>/index.md
+- Route mapping: apps/web/lib/shared/docs-route-map.ts
+- Read the changed route/page and closest existing guide before editing.
+- Update or create the affected documentation page, then ensure the route opens that page-specific doc.
+- If route mapping TypeScript changed, typecheck with: pnpm exec tsc --noEmit`,
+
     "qa-engineer": `You are a QA engineer verifying the build.
 - Run tests: pnpm exec vitest run --reporter=verbose
 - Run typecheck: pnpm exec tsc --noEmit

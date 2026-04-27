@@ -29,7 +29,11 @@ function evidence(overrides: Partial<Record<string, unknown>> = {}): Record<stri
     // path rather than missing upstream evidence.
     designDoc: { summary: "ok" },
     buildPlan: { tasks: [] },
-    verificationOut: { passed: true },
+    verificationOut: {
+      passed: true,
+      documentationUpdated: true,
+      documentationEvidence: "Verified affected docs coverage.",
+    },
     acceptanceMet: [{ criterion: "ac-1", met: true, evidence: "ok" }],
     acceptanceCriteria: ["User can click the button", "Form submits without error"],
     ...overrides,

@@ -43,6 +43,7 @@ export const BUILD_PHASE_IT4IT: Record<string, {
     stage: "§5.3.5 Accept & Publish Release",
     agents: [
       { id: "AGT-132", name: "release-acceptance-agent", role: "Release Gate Package, Tier 0 gate checks (MUST-0033/0034)" },
+      { id: "AGT-904", name: "documentation-specialist", role: "Documentation coverage and route-aware help verification" },
     ],
     requirements: ["MUST-0033", "MUST-0034"],
   },
@@ -205,6 +206,8 @@ STEP 1 — SAVE THE PLAN:
   - If the format is wrong, saveBuildEvidence will REJECT it and tell you to fix the format.
   - Each task's "implement" field MUST use full monorepo-relative paths (e.g. "apps/web/lib/..." not "lib/...", "packages/db/prisma/..." not "prisma/..."). The working directory is the monorepo root — shortened paths will create files in the wrong location.
   - Each task's "implement" field should reference specific patterns from your research (e.g. "use auth() like invoices route").
+  - Include at least one documentation update task assigned by path: update the affected docs/user-guide page, or create the missing local guide page if the route has no documentation yet. This task is owned by the documentation-specialist (AGT-904).
+  - If the feature creates or changes an authenticated route, include the route-to-doc mapping update or explicit verification that the existing mapping already opens the correct page.
 
 STEP 2: Call reviewBuildPlan to review it.
   - If the review PASSES: proceed to step 3.
@@ -314,8 +317,9 @@ CONTEXT GATHERING (before writing any code):
 After ALL tasks complete:
 1. Run full verification (run_sandbox_tests + typecheck).
 2. Run run_sandbox_command with "git diff" to see all changes.
-3. Save verification output via saveBuildEvidence field "verificationOut".
-4. If verification passes, tell the user the build is complete and ready for review.
+3. Verify documentation: every changed user-facing route must have a local docs/user-guide page and route-aware Docs button mapping. If docs changed, include the paths; if no docs changed, include the specific reason.
+4. Save verification output via saveBuildEvidence field "verificationOut" with documentationUpdated: true and documentationEvidence explaining the docs paths changed or the verified no-change reason.
+5. If verification passes, tell the user the build is complete and ready for review.
 
 FALLBACK: ONLY use propose_file_change if launch_sandbox explicitly returns "Docker unavailable" or "sandbox failed to start". Command errors inside the sandbox (failed migrations, compilation errors, test failures) are NORMAL build problems — fix them in the sandbox using sandbox_exec and run_sandbox_command. A command returning an error does NOT mean the sandbox is unavailable.
 
@@ -360,12 +364,13 @@ RELEASE GATE CHECKS (all must pass before shipping):
 1. Run unit tests and typecheck: call run_sandbox_tests. All tests must pass, typecheck must be clean.
 2. Run UX acceptance tests: call run_ux_test. This uses AI-powered browser automation (browser-use) to verify accessibility, visual correctness, and acceptance criteria against the live sandbox.
 3. Evaluate each acceptance criterion from the design document. Call saveBuildEvidence with field "acceptanceMet" containing an array of {criterion, met: true/false, evidence: "explanation"}.
-4. Check deployment readiness: call check_deployment_windows to see if a deployment window is available.
-5. Present a PLAIN LANGUAGE summary to the user:
-   - "Release gate checks complete: [N] unit tests pass, [N] UX tests pass, all acceptance criteria met."
+4. Verify documentation coverage. The documentation-specialist (AGT-904) must confirm that the affected local docs page was updated or that no docs change was required, and that route-aware help opens the correct page. Then call saveBuildEvidence with field "verificationOut" including documentationUpdated: true and documentationEvidence: "[docs paths or no-change reason]".
+5. Check deployment readiness: call check_deployment_windows to see if a deployment window is available.
+6. Present a PLAIN LANGUAGE summary to the user:
+   - "Release gate checks complete: [N] unit tests pass, [N] UX tests pass, documentation verified, all acceptance criteria met."
    - Include deployment window status: "A deployment window is available now" or "Next window: [time]".
    - If UX tests failed: "I found [N] accessibility issues that need fixing. Going back to build to address them."
-6. If everything passes, ask: "Ready to ship?"
+7. If everything passes, ask: "Ready to ship?"
    - If ship → advance to ship phase
    - If changes → go back to build phase with their feedback
    - If reject → set phase to failed
