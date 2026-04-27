@@ -881,6 +881,15 @@ export async function sendMessage(input: {
   let responseModelId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
+  const currentTaskRun = await prisma.taskRun.findFirst({
+    where: {
+      userId: user.id!,
+      threadId: input.threadId,
+      archivedAt: null,
+    },
+    orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+    select: { taskRunId: true },
+  }).catch(() => null);
 
   // EP-AI-WORKFORCE-001: Provider pinning is now via AgentModelConfig.pinnedProviderId
   // (resolved in agentic-loop.ts via agentModelConfig lookup). No need to merge here.
@@ -1024,6 +1033,7 @@ export async function sendMessage(input: {
       const agentMsg = await prisma.agentMessage.create({
         data: {
           threadId: input.threadId, role: "assistant",
+          taskRunId: currentTaskRun?.taskRunId ?? null,
           content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
           agentId: agent.agentId, routeContext: input.routeContext,
           providerId: agenticResult.providerId,
@@ -1035,6 +1045,7 @@ export async function sendMessage(input: {
       const proposal = await prisma.agentActionProposal.create({
         data: {
           proposalId, threadId: input.threadId, messageId: agentMsg.id,
+          taskRunId: currentTaskRun?.taskRunId ?? null,
           agentId: agent.agentId, actionType: tc.name,
           parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue, status: "proposed",
         },
@@ -1397,6 +1408,7 @@ export async function sendMessage(input: {
     data: {
       threadId: input.threadId,
       role: "assistant",
+      taskRunId: currentTaskRun?.taskRunId ?? null,
       content: responseContent,
       agentId: agent.agentId,
       routeContext: input.routeContext,
