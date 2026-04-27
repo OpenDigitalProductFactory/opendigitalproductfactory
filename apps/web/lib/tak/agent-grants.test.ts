@@ -286,4 +286,10 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["contribute_to_hive"]).toEqual(["backlog_write"]);
     expect(mapping["apply_platform_update"]).toEqual(["admin_write"]);
   });
+
+  it("includes code graph tools", () => {
+    const mapping = getToolGrantMapping();
+    expect(mapping["get_code_graph_freshness"]).toEqual(["code_graph_read"]);
+    expect(mapping["inspect_build_code_impact"]).toEqual(["code_graph_read"]);
+  });
 });
