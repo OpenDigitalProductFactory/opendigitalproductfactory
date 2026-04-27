@@ -114,3 +114,35 @@ jobs:
 
       - name: Build web (Next.js production)
         run: pnpm --filter web build
+
+  dockerfile-node-version:
+    name: Dockerfile Node Version
+    runs-on: ubuntu-latest
+    # Guards against the failure mode that landed in PR for ADP: a service
+    # Dockerfile pinned to an older Node major than the rest of the stack,
+    # paired with a dependency (undici@8) that needs a newer one. The
+    # container crash-looped on `webidl.util.markAsUncloneable is not a
+    # function` and broke `docker compose up` for fresh installs. CI now
+    # asserts every Dockerfile uses node:24-alpine (or newer) so this drift
+    # cannot reach main again. Bump the floor here when the platform moves.
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Assert all Dockerfiles target node:24-alpine or newer
+        run: |
+          set -euo pipefail
+          floor=24
+          fail=0
+          while IFS= read -r -d '' file; do
+            while IFS= read -r line; do
+              # Match "FROM node:<major>[-...]" — capture the major version.
+              if [[ "$line" =~ ^[[:space:]]*FROM[[:space:]]+node:([0-9]+) ]]; then
+                major="${BASH_REMATCH[1]}"
+                if (( major < floor )); then
+                  echo "::error file=$file::$file uses node:$major (line: $line). Floor is node:$floor-alpine."
+                  fail=1
+                fi
+              fi
+            done < "$file"
+          done < <(find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) -not -path './node_modules/*' -not -path './.git/*' -print0)
+          exit $fail
