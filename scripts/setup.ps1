@@ -111,7 +111,7 @@ docker compose up -d
 Write-Host "  Waiting for PostgreSQL to be ready..."
 $retries = 30
 do {
-    $ready = docker compose exec -T postgres pg_isready -U dpf -q 2>$null
+    $null = docker compose exec -T postgres pg_isready -U dpf -q 2>$null
     if ($LASTEXITCODE -eq 0) { break }
     $retries--
     if ($retries -eq 0) { Write-Fail "PostgreSQL did not start. Check: docker compose logs postgres" }
@@ -142,6 +142,38 @@ Write-Ok "Migrations complete"
 Write-Step "Seeding database"
 pnpm db:seed
 Write-Ok "Database seeded with roles, agents, and default admin user"
+
+# -- Agent rulebook conformance --------------------------------------------------
+# Every install must ship the canonical AGENTS.md plus pointer files for each
+# supported AI tool. If any are missing or have lost their pointer to AGENTS.md,
+# fail the install loudly so the issue is fixed at the seed, not discovered at
+# runtime when an agent operates without rules.
+
+Write-Step "Verifying agent rulebook"
+
+$agentRulebook = "AGENTS.md"
+if (-not (Test-Path $agentRulebook)) {
+    Write-Fail "Canonical agent rulebook missing: $agentRulebook. This install is broken; do not proceed."
+}
+Write-Ok "Canonical rulebook: $agentRulebook"
+
+$pointers = @(
+    "CLAUDE.md",
+    ".cursor/rules/000-load-agents.mdc",
+    ".clinerules/000-load-agents.md",
+    ".github/copilot-instructions.md",
+    "CONVENTIONS.md",
+    ".continue/rules/000-load-agents.md"
+)
+foreach ($p in $pointers) {
+    if (-not (Test-Path $p)) {
+        Write-Fail "Pointer file missing: $p. Re-clone or restore from main."
+    }
+    if (-not (Select-String -Path $p -Pattern "AGENTS.md" -Quiet)) {
+        Write-Fail "Pointer file does not reference AGENTS.md: $p. Drift detected."
+    }
+}
+Write-Ok "Pointer files intact: $($pointers.Count) tools wired to AGENTS.md"
 
 # -- Done ------------------------------------------------------------------------
 

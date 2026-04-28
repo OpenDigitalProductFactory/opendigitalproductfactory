@@ -1,522 +1,146 @@
-# Agent Guardrails
+# DPF — Agent Rulebook
 
-## Live State vs Seed Data
+This is the canonical operating contract for AI agents working in the Digital Product Factory. Read in full before any action. Subdirectory `AGENTS.md` files extend this with area-specific detail (`apps/web/AGENTS.md`, `packages/db/AGENTS.md`).
 
-- For any request about current epics, backlog, users, roles, capabilities, or status, query the live database first.
-- Treat `packages/db/src/seed.ts` as bootstrap defaults only, not runtime truth.
-- Only use seed content when the user explicitly asks about bootstrap data, migrations, or initial setup behavior.
-- If live DB access fails, state that clearly and label any fallback output as a seed/default snapshot, not live state.
-
-## Never Fabricate
-
-- Do not make things up. If you don't know, say so or ask for pointers.
-- Always research existing code, specs, patterns, and conventions before creating something new.
-- Do not fabricate test cases, configurations, architecture patterns, or data without grounding them in what actually exists.
-- If no clear precedent exists, ask the user for direction rather than inventing.
-- This applies to both code generation AND conversational responses — never claim a capability, status, or result that isn't verified.
-
-## Mutation Safety
-
-- Do not edit `seed.ts` to represent day-to-day runtime changes.
-- Runtime workflow changes should be made through app actions, migrations, or direct DB operations as appropriate.
-
-## Local Login Memory
-
-- For local browser QA against this install, do not assume the seed fallback password `changeme123`.
-- The workforce login email is `admin@dpf.local` unless the user says otherwise.
-- Read the current install-specific admin password from the repo-root `.env` file via `ADMIN_PASSWORD`.
-- Do not look for this in `apps/web/.env.local` first; that file may omit the login password even when the root `.env` has it.
-- If `/build` or another shell route redirects to `/welcome`, authenticate first at `/login` using the root `.env` password.
-
-## Backlog & Planning
-
-- The backlog lives in the PostgreSQL database (`Epic`, `BacklogItem` tables). Always query the live DB for current state.
-- Before starting new work, review open epics and their backlog items to understand priorities and dependencies.
-- Design specs and implementation plans live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. Check for existing designs before starting work on an epic — some have specs ready to implement.
-- When completing backlog items, update their status in the DB to keep the backlog trustworthy.
-- When suggesting what to work on next, consider: items with existing designs first, then dependencies between items, then impact.
-
-### Epic Lifecycle Stewardship
-
-Epics must be actively managed — not just created and forgotten.
-
-**Before creating a new epic:**
-1. Query existing epics: `SELECT "epicId", title, status FROM "Epic" ORDER BY "createdAt" DESC;`
-2. Look for epics with overlapping scope — same domain, similar goals, or superseding intent.
-3. If a related epic exists, prefer adding items to it or updating its scope over creating a new one.
-4. If the new epic genuinely supersedes an older one, mark the old one as done or delete it (if empty) in the same operation.
-
-**When completing backlog items:**
-- The system auto-closes epics when all items reach done/deferred status. However, if you complete the last item in an epic via a direct DB operation (SQL seed script, not the server action), you must manually flip the epic to done.
-- After finishing work on a backlog item, always update its status immediately — stale open items cause the epic to appear incomplete.
-
-**Periodic hygiene (apply when reviewing the backlog):**
-- Epics with 0 items and status "open" are noise — either add items or delete them.
-- Epics where all items are done but status is still "open" must be flipped to done.
-- Epics that have been superseded by newer, more specific epics should be closed or deleted.
-
-## Branching & Workflow
-
-### Core Rule
-
-- **All changes land via a pull request against `main` — including the maintainer's.** No direct pushes to `main`.
-- Branch from `main` with a short-lived topic branch named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. One concern per branch, one concern per PR.
-- Open the PR with `gh pr create --base main`. Keep `Typecheck` and `Production Build` green before requesting merge. `Unit Tests` runs informationally while the broken-test surface is being cleaned up.
-- A PR is the delivery vehicle for a completed change slice, not a status label for the entire body of work. If the slice in the branch is ready for review and CI, open a normal PR even if adjacent follow-up work will happen in later PRs.
-- Do not open a draft PR merely to signal that broader work remains. If the branch's slice is not ready for review yet, keep working privately until it is; if it is ready, open or convert it to a normal ready-for-review PR and note any separate follow-up slices in the PR body.
-- Merge via squash-and-delete once CI passes: `gh pr merge <n> --squash --delete-branch`.
-- Always push after committing — local-only commits are invisible to CI.
-
-### DCO Rule (mandatory every commit)
-
-- Every commit that will be pushed must include a `Signed-off-by:` trailer.
-- Use `git commit -s`, not plain `git commit`.
-- If you amend or rebase commits, preserve the signoff on every rewritten commit.
-- Before pushing a branch, sanity-check with:
-
-```sh
-git log -n 5 --format="%h %s%n%b" | cat
-```
-
-- If a PR fails the `DCO` check, fix it immediately before doing more feature work.
-
-### Why
-
-- The repo is public on GitHub. Branch protection on `main` enforces the PR flow at the platform level: required checks are `Typecheck`, `Production Build`, and `DCO`; linear history; no force-push; admins included.
-- CI has to run on every change before it lands — direct pushes bypass the gate.
-- Every commit in every PR must carry a `Signed-off-by:` trailer — use `git commit -s`. The DCO bot is a required check and blocks merge until every commit has it.
-- External contributors already use fork → branch → PR (see [CONTRIBUTING.md](CONTRIBUTING.md)). The maintainer using the same flow means one workflow, not two.
-- A PR diff is reviewable even for single-maintainer work; `git revert` is still straightforward but the review pass catches issues earlier.
-
-### Commits
-
-- Small, focused commits within a branch. Each commit should leave the tree in a working state.
-- Commit messages explain *why*, not just *what*. Conventional-commit prefixes (`feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`) match the existing history.
-- Do not batch unrelated changes into a single PR.
-
-### Concurrent sessions
-
-- Multiple Claude sessions work in parallel on separate branches — no working-tree collisions by default.
-- If two sessions ever share a working tree on the same branch, use `git commit --only <paths>` to scope commits to the files you touched.
-
-### History
-
-- Pre-2026-04-23 rule was "commit directly on `main`," driven by (a) worktree accidents causing lost work and (b) branch protection being unavailable on the Free tier while the repo was private. Both no longer apply: worktrees are not part of the flow, and the repo is public.
-
-### Typecheck Gate — local, before commit (mandatory)
-
-TypeScript errors must be caught at code time, not as an afterthought. Relying on CI alone has repeatedly broken `main` for all concurrent agents because one session's committed code referenced files another hadn't committed yet. The local pre-commit hook at [.githooks/pre-commit](.githooks/pre-commit) runs `pnpm --filter <affected workspace> typecheck` before every commit that touches `.ts` / `.tsx` / `.mts` / `.cts` files and rejects the commit if typecheck fails.
-
-**Required setup (once per clone):**
-
-```sh
-git config core.hooksPath .githooks
-```
-
-New clones inherit this automatically via the repo's `postinstall` script. Verify with `git config core.hooksPath` — must return `.githooks`. If it doesn't, re-set it.
-
-**How it scopes work:**
-
-- Only TS-affecting commits pay the typecheck cost. Doc-only / migration-only / config-only commits skip the hook.
-- Only affected workspaces are checked (scoped via `pnpm --filter`). A change in `packages/db` also re-checks `apps/web` because web consumes db types. A change in `services/adp` only checks that service.
-- Typical overhead on a focused commit: 15–60 seconds. On a multi-workspace commit: 1–3 minutes.
-
-**Emergency escape:** `DPF_SKIP_TYPECHECK=1 git commit ...` bypasses the gate. Use only when you must commit a known-broken intermediate state (e.g., rebasing in halves). CI will still catch it.
-
-**Authoring discipline — all agents:**
-
-- Before proposing a commit, mentally gate on "will typecheck pass?" — do not commit code that imports symbols you haven't also committed, doesn't populate required properties, or references modules that don't exist yet.
-- If you refactor a shared type in `feature-build-types.ts`, update every consumer in the same commit. Don't leave drift between the type and the data layer.
-- If you create a new file that another committed file imports, `git add` both in the same commit. Untracked-import drift is the single most common cause of "main is red" incidents.
-
-**Subagent dispatchers:** include "run `pnpm --filter web typecheck` before committing and fix any errors" in every task prompt that modifies TypeScript. Subagents do not read AGENTS.md.
-
-### Typecheck Gate — Build Studio (mandatory)
-
-The platform's own Build Studio feature-building lifecycle must apply the same gate to the sandbox it builds in. Two additions:
-
-1. **Per-task verification step** — after every Build Studio task execution in the sandbox, run `pnpm --filter web typecheck` and `pnpm --filter web build` inside the sandbox container. If either fails, the task status is `failed` and the coworker must fix the error before the phase advances. Mirrors the local pre-commit gate.
-2. **Pre-ship verification** — the review-phase verification pass (currently UX-only via browser-use) must include typecheck + production build as mandatory passes. The build never leaves the sandbox without passing what CI would run. Implementation landing spot: [apps/web/lib/queue/functions/build-review-verification.ts](apps/web/lib/queue/functions/build-review-verification.ts).
-
-Together these mean a Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox.
-
-**Implementation status — NOT YET LANDED (audited 2026-04-24):**
-
-- Per-task verification does **not** run typecheck or build. Instead, [apps/web/lib/integrate/build-orchestrator.ts:375-401](apps/web/lib/integrate/build-orchestrator.ts#L375-L401) classifies outcome by string-matching the CLI's stdout for keywords like `"error"` / `"typecheck.*fail"`. A task whose CLI summary omits those words can silently pass even if typecheck is red. The landing spot for the real gate is after [`classifyOutcome()` returns at build-orchestrator.ts:583](apps/web/lib/integrate/build-orchestrator.ts#L583): before writing status `"DONE"`, exec the two `pnpm --filter web …` commands inside the sandbox container and override to `"BLOCKED"` on non-zero exit.
-- Pre-ship verification in [apps/web/lib/queue/functions/build-review-verification.ts](apps/web/lib/queue/functions/build-review-verification.ts) runs browser-use UX tests only. Typecheck + production build must be added as sibling `step.run(...)` blocks, with failures persisted alongside `uxTestResults` and `checkPhaseGate` extended to block ship until both are green.
-
-Until both are implemented, a Build Studio PR can still be typecheck-red or build-red when it leaves the sandbox. CI catches it on the PR (the merge gates on `main` hold), but the stated goal is to catch it at the sandbox boundary, not at merge time. Tracked in the repo's issue tracker.
-
-### Concurrent Sessions — Per-Thread Branch + Worktree (mandatory always)
-
-**Default rule: one user thread = one branch + one worktree.** This is not only a "when two sessions happen to overlap" safeguard; it is the standard operating model for all active work.
-
-Two Claude Code sessions editing the same working tree at `d:\DPF` fight over `HEAD`, the index, and the working tree — even if they target different branches. Observed symptoms: commits land on the wrong branch, `git reflog` shows unexpected checkout hops, one thread's staged files sweep into another thread's commit, and unrelated local changes linger in a worktree long after the original task is done.
-
-**The fix is a dedicated git worktree per thread, not just a branch per thread.**
-
-**Mandatory workflow for every new thread or materially new topic:**
-
-1. Start from `main`
-2. Create a fresh branch for that thread only
-3. Create or reuse a dedicated worktree bound to that branch
-4. Point the Claude session's primary working directory at that worktree
-5. Do not continue a new ask on an existing branch unless it is clearly the same delivery thread
-
-**Setup (per topic, run from `d:\DPF`):**
-
-```sh
-git worktree add ../DPF-<topic> -b feat/<topic>
-```
-
-For docs or fixes, use the appropriate branch prefix instead of `feat/`, for example:
-
-```sh
-git worktree add ../DPF-<topic> -b doc/<topic>
-git worktree add ../DPF-<topic> -b fix/<topic>
-```
-
-Each worktree gets its own working directory, `HEAD`, branch, and index. The `.git` object database is shared — disk-efficient and concurrency-safe.
-
-**Reserved worktree rule:**
-
-- Keep one checkout on `main` for merge/release/global inspection only
-- Do not implement feature work in that root checkout
-- Treat the root `d:\DPF` checkout as read-only unless the thread is specifically about merge, release, or repo-wide inspection
-
-**When to split into a new thread branch immediately:**
-
-- The user changes domains or asks for a distinct deliverable
-- The current worktree already contains unrelated modified files
-- A second thread would need a different PR title or review scope
-- You catch yourself saying "while I'm here" about another concern
-
-**Cleanup after merge:** `git worktree remove ../DPF-<topic>` — prunes the checkout; the branch ref survives until explicitly deleted via `git branch -d`.
-
-**Signal that this rule is being violated:**
-
-- A session notices its checkout flipped unexpectedly
-- `git status` shows files from more than one thread/domain
-- A branch name no longer matches the files being changed
-
-If any of those happen, stop, tell the user, and move the work to a dedicated worktree before continuing.
-
-**Belt-and-suspenders branch guard in every commit command:**
-
-```sh
-BRANCH=$(git branch --show-current)
-if [ "$BRANCH" = "main" ]; then echo "ERROR: on main — abort"; exit 1; fi
-git commit --only <paths> -m "..."
-```
-
-### Verification — Build Gate (mandatory)
-
-Work is NOT complete until the production build passes and UX-level testing has been run for the affected surfaces. This is non-negotiable.
-
-**Required checks before claiming any task, epic, or session is done:**
-
-1. **Unit tests pass** — `npx vitest run` for affected test files (at minimum)
-2. **Production build succeeds** — `cd apps/web && npx next build` must complete with zero errors
-3. **UX-level verification passes** — for any UI, agent, coworker, workflow, or end-user-facing change, run the affected browser/Playwright/manual QA flow against the real running app and confirm the user-visible behavior
-4. **Migration applies cleanly** — if a migration was added, verify it applies without drift
-
-**When to run the build:**
-- After completing each epic or logical chunk of work (not after every single commit)
-- Before claiming a feature is "done" or "shipped"
-- Before any session wrap-up summary that lists completed work
-
-**When UX verification is required:**
-- Any change to Build Studio, coworker behavior, prompts, routing, forms, page layout, visual rendering, or user workflow
-- Any fix where the bug was visible in the browser or chat UX
-- Any change where unit tests prove logic but do not prove the shipped user experience
-
-**Definition of done for user-facing work:**
-- Automated checks passing is necessary but not sufficient
-- The affected UX path must be exercised on the running app
-- If there is a relevant case in `tests/e2e/platform-qa-plan.md`, run it or the affected phase subset before calling the work done
-- If UX verification was not run, explicitly state that the work is not done yet
-
-**Why this matters:** TypeScript errors, missing imports, and type mismatches only surface during `next build` — not during `vitest run` or IDE checks. The project has experienced 300+ build errors discovered only at the end of a development cycle because builds were not run incrementally. Catching these early (per-epic, not per-release) is dramatically cheaper.
-
-**If the build fails:**
-- Fix the errors before moving to the next task
-- Do not defer build fixes to a later session
-- If the failure is pre-existing (not caused by your changes), note it explicitly but still fix if feasible
-
-**Subagent dispatchers:** When dispatching implementation subagents for the final task in an epic, include "run `cd apps/web && npx next build` and fix any errors" as part of the task.
-Also include the required UX/browser verification path for any user-facing change.
-
-### Communication
-
-- If uncommitted changes exist, mention them before starting new work.
-- When committing, list what's included so the user can verify.
-
-## Portal Runtime & Navigation
-
-- Internal portal management uses `/storefront` as the canonical route. Treat `/admin/storefront` and its sub-routes as legacy compatibility redirects only.
-- Keep `/portal` reserved for the external/customer-facing portal experience. Do not collapse internal management and external portal routes into the same namespace.
-- Portal management belongs in the Business shell. Do not render the Admin tab strip above portal-management pages or move the primary portal workspace back under Admin.
-- Business-operational portal setup now lives under the Business-side settings family:
-  - `/storefront/settings` for portal presentation and live URL settings
-  - `/storefront/settings/business` for business context
-  - `/storefront/settings/operations` for operating hours
-- Treat `/admin/business-context` and `/admin/operating-hours` as legacy redirects only. Do not reintroduce them as primary Admin destinations.
-- When a UI change needs verification in the shipped runtime, prefer the VS Code task `DPF: Rebuild Production Runtime` or the equivalent command:
-  `docker compose build --no-cache portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal`
-- After rebuilding, verify against the Docker-served app at `http://localhost:3000`. Do not rely on stale ad hoc `next dev` / `next start` sessions for final confirmation of production-path behavior.
-- Portal QA should explicitly cover both `/storefront` and the legacy `/admin/storefront` redirect so regressions in canonical routing are caught early.
-- Business setup QA should explicitly cover `/storefront/settings/business`, `/storefront/settings/operations`, and the legacy Admin redirects.
-- The coworker for `/storefront` should resolve to the Marketing Specialist route context unless a deliberate design change replaces it.
-
-## Release Testing — Platform QA
-
-Every release must pass the platform QA test plan before deployment. The test plan lives at `tests/e2e/platform-qa-plan.md` and covers 15 phases across all functional areas.
-
-For user-facing feature work, this is also part of the definition of done at the feature level, not just at release time. Unit tests and `next build` do not replace exercising the affected UX path.
-
-### When to Run
-
-- **Full suite:** Before any production release or after a fresh install from source
-- **Affected phases:** After completing a feature or fix, run the phases that touch the changed areas
-- **Coworker tests:** Always run Phase 12 (AI Coworker Cross-Cutting) after changes to prompts, tools, or provider configuration
-- **Build Studio / workflow UX:** After Build Studio, coworker, or workflow changes, run the relevant Build Studio and/or coworker QA cases before claiming done
-
-### How to Run
-
-Tests are executed via Playwright against the running platform (Docker or local dev). Use `browser_navigate`, `browser_snapshot`, `browser_click`, and `browser_fill_form` to interact with the UI. For coworker tests, type messages in the chat panel and verify responses.
-
-### Adding Test Cases
-
-When implementing a new feature or fixing a bug:
-1. Add test cases to the relevant phase in `tests/e2e/platform-qa-plan.md`
-2. Use the next available ID in the sequence (e.g., `EMP-08`, `FIN-09`)
-3. Include both **UI path** (button clicks, form fills) and **coworker path** (chat prompts, approve/reject) where applicable
-4. Include an **incomplete information test** — verify the coworker asks for missing required fields instead of guessing
-5. Run the affected phases to verify before marking the backlog item as done
-
-If the change is user-facing and there is no suitable QA case yet, add one before claiming the work is complete.
-
-### Failure Handling
-
-When a test fails:
-1. Create a backlog item under the active QA epic, referencing the test ID (e.g., "FAIL: EMP-04 — coworker guesses last name")
-2. Include repro steps, expected vs actual behavior, and fix suggestions in the item body
-3. Prioritize: Blocker > High > Medium > Low based on user impact
-4. Fix the issue, re-run the test, then mark the backlog item as done
-
-### Test Results as Release Evidence
-
-Each test run produces a results summary (pass/fail counts per phase). This is compliance evidence — store it as a backlog epic for traceability. The pattern established in epic "Platform QA: Fresh Install Test Failures (2026-03-24)" should be followed for all future runs.
-
-## Design Research — Best-of-Breed Benchmarking
-
-Every new feature design MUST include a research phase benchmarking against open source and commercial best-of-breed solutions before finalizing the spec. This is not optional — it prevents reinventing solved problems and ensures the platform adopts proven patterns.
-
-### When to Research
-
-- Before writing or updating any design spec (`docs/superpowers/specs/`)
-- When adding a new domain capability (booking, CRM, invoicing, etc.)
-- When the design involves scheduling, workflow, or data model decisions with well-known industry patterns
-
-### What to Research
-
-1. **Open source leaders** — Find 2-3 actively maintained open source projects in the same domain. Read their data models (Prisma schemas, DB migrations), not just their feature lists.
-2. **Commercial best-of-breed** — Identify 2-3 commercial products that dominate the vertical. Study their API docs, data models, and architectural patterns.
-3. **Anti-patterns** — Search for known pitfalls (race conditions, timezone bugs, stale data) specific to the domain.
-
-### What to Document
-
-The spec must include a "Research & Benchmarking" section with:
-- Systems compared and what was learned from each
-- Patterns adopted (with attribution) and why
-- Patterns rejected and why
-- Gaps our design fills that existing solutions don't (our differentiators)
-- Anti-patterns identified and how the design avoids them
-
-### Integration with Build Process
-
-Platform AI coworkers involved in feature design (Build Studio, architecture agents) must:
-- Search for open source implementations before proposing data models
-- Reference specific projects and schemas, not abstract "best practices"
-- Flag when a proposed design diverges from established industry patterns and justify the divergence
-
-This research step is part of the brainstorming/design phase, not a separate task. It feeds directly into the spec.
+Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/copilot-instructions.md`, `CONVENTIONS.md`, `.continue/rules/`) are pointers to this file. Do not duplicate rules into them.
 
 ---
 
-## Data Model Stewardship
+## 1. First Principles
 
-When adding any large feature, audit the existing schema for refactoring opportunities before finalising the new data model. Do not proceed with a spec until this audit is complete.
+- **Never fabricate.** If you don't know, say so. Ground claims in code, specs, or DB state — not in patterns from training data.
+- **Research and use standards.** Before designing file layouts, conventions, or integrations, find the existing standard. Cite sources. Recommend the standard unless you have a project-specific reason to deviate.
+- **Fix the seed, not the runtime.** Recurring config or data regressions mean the seed/template/setup script wasn't patched. Patch the source, then add an invariant guard.
+- **Live state over seed data.** For current epics, backlog, users, capabilities, or status, query the database. Treat `packages/db/src/seed.ts` as bootstrap defaults only; never edit it to represent runtime change.
+- **Single source of truth.** Each rule, fact, or decision lives in exactly one place. Pointers, not copies.
+- **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save.
+- **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates.
 
-### Indicators that refactoring is needed
+## 2. Project Architecture (current as of 2026-04-27)
 
-- A domain-specific model is being re-used as a shared concept (e.g. reading org name from `BrandingConfig`)
-- The same logical data (name, slug, address, contact info) appears independently in two or more existing models
-- A new feature needs "meta" data (identity, location, ownership) that has no canonical home in the schema
+- **Stack.** Next.js 16 monorepo (pnpm workspaces): `apps/web`, `packages/db` (Prisma 7.x). Docker Compose: postgres:16-alpine, neo4j:5-community, qdrant, portal, portal-init. Local AI via Docker Model Runner (Docker Desktop 4.40+). All inference uses OpenAI-compatible `/v1/chat/completions` (`apps/web/lib/ai-inference.ts`).
+- **Shell scripts** run in Linux containers — LF endings only, enforced by `.gitattributes`. Use `pnpm --filter <pkg> exec <tool>`, never `npx <tool>` (npx ignores pinned versions).
+- **PowerShell scripts** target Windows 10/11 + PS 5.1+. Plain ASCII only — no Unicode, BOM, smart quotes, em-dashes, emoji.
+- **Migrations** live in `packages/db/prisma/migrations/`. Create with `pnpm --filter @dpf/db exec prisma migrate dev --name <name>`. Never `npx prisma`. Migration files are immutable after commit — Prisma stores checksums; modifying a committed migration causes drift.
+- **Backfill SQL** for any data-moving migration goes inline in the same migration file, not a separate script.
+- **Prompts** live in `prompts/<category>/<slug>.prompt.md` with YAML frontmatter, seeded to `PromptTemplate` on deploy, editable via Admin > Prompts. Hardcoded TS constants are fallback only.
+- **Skills** live in `skills/<category>/<name>.skill.md`, seeded to `SkillDefinition` + `SkillAssignment`. Belong to coworkers, not routes.
+- **Portal archetype.** `StorefrontConfig.archetypeId` is the single source of truth for portal industry. `Organization.industry` and `BusinessContext.industry` are derived. Vocabulary resolution: `resolveVocabularyKey({ archetypeCategory, industry })` — archetype wins.
+- **Portal routes.** Internal management lives at `/storefront`. `/portal` is reserved for external/customer experience. `/admin/storefront`, `/admin/business-context`, `/admin/operating-hours` are legacy redirects.
 
-### What to do
+## 3. Strongly-Typed String Enums (mandatory)
 
-1. Identify the shared concept and propose a canonical model for it
-2. Update consuming models to reference the canonical model (FK or nullable override)
-3. Note any other refactoring opportunities discovered but deferred — add them to the spec's "future refactoring" section so they are not lost
-4. Document the decision in the spec; do not silently absorb the refactor into implementation
+DB string columns with fixed valid values are canonical enums. Source of truth: `apps/web/lib/backlog.ts` (`EPIC_STATUSES`, union types) and `apps/web/lib/mcp-tools.ts` (`enum:` arrays). Match exactly.
 
-### Standing example
+| Model         | Field    | Valid values                                |
+| ------------- | -------- | ------------------------------------------- |
+| `Epic`        | `status` | `open`, `in-progress`, `done`               |
+| `BacklogItem` | `status` | `open`, `in-progress`, `done`, `deferred`   |
+| `BacklogItem` | `type`   | `portfolio`, `product`                      |
 
-`Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, not from environment variables, not from a bespoke field on another model.
+Hyphens, not underscores. Adding a new value requires updating both `backlog.ts` and the MCP tool definition in the same commit, before any data uses it.
 
-## Schema Migration Conventions
+## 4. Branching, Commits & PRs
 
-Prisma migration files are the ETL layer for schema-level data transformations. Every migration that moves, renames, or restructures existing data must include the data transformation SQL inline — not as a separate script, not as a one-off manual step.
+- **All changes land via PR against `main`** — including the maintainer's. No direct pushes; branch protection enforces it.
+- **One concern per branch, one concern per PR.** Topic branches named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. Branch from `main`.
+- **DCO sign-off required on every commit.** Use `git commit -s`. The DCO bot blocks merge until every commit has a `Signed-off-by:` trailer.
+- **Always push** after committing. Local-only commits are invisible to CI.
+- **Squash-and-delete on merge:** `gh pr merge <n> --squash --delete-branch`.
+- **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps.
+- **Keep `d:\DPF` (root) as the merge/release worktree** — read-only for active feature work.
+- **Branch guard before commit:** if `git branch --show-current` returns `main`, abort.
 
-### The rule
+## 5. Verification — Build Gate (mandatory)
 
-When a migration does any of the following, it must include backfill SQL in the same migration file:
-- Moves a column's data to a new model (e.g. `BrandingConfig.companyName` → `Organization.name`)
-- Adds a non-nullable column to an existing table with rows
-- Renames a column (expand: add new, backfill, contract: drop old — across separate migrations)
-- Sets a FK that must be populated from existing data
+Work is not complete until all four pass:
 
-### Pattern
+1. **Unit tests** — `npx vitest run` for affected files.
+2. **Production build** — `cd apps/web && npx next build` with zero errors.
+3. **UX verification** — for any UI/agent/coworker/workflow/forms change, exercise the affected path against the running app.
+4. **Migration applies cleanly** — if a migration was added.
 
-```sql
--- 1. DDL generated by prisma migrate dev (do not hand-edit the table definitions)
-CREATE TABLE "Organization" (...);
-ALTER TABLE "BrandingConfig" ADD COLUMN "organizationId" TEXT;
+TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. Run the build per epic, not per release. Pre-existing failures: note them and fix if feasible. Do not defer.
 
--- 2. Backfill: copy existing data into the new structure
-INSERT INTO "Organization" ("id", "orgId", "name", "slug", "createdAt", "updatedAt")
-SELECT gen_random_uuid(), 'ORG-000001', "companyName",
-       lower(regexp_replace("companyName", '[^a-z0-9]+', '-', 'g')),
-       now(), now()
-FROM "BrandingConfig" WHERE scope = 'organization' LIMIT 1;
+**Local typecheck gate.** Pre-commit hook at `.githooks/pre-commit` runs `pnpm --filter <affected> typecheck` on `.ts`/`.tsx`/`.mts`/`.cts` commits and rejects on failure. Set once: `git config core.hooksPath .githooks` (auto for new clones via `postinstall`). Emergency bypass: `DPF_SKIP_TYPECHECK=1`.
 
--- 3. Link FK to backfilled rows
-UPDATE "BrandingConfig" bc
-SET "organizationId" = o.id
-FROM "Organization" o
-WHERE bc.scope = 'organization';
-```
+**Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox must run typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: not yet landed (audited 2026-04-24); see `apps/web/lib/integrate/build-orchestrator.ts` and `apps/web/lib/queue/functions/build-review-verification.ts`.
 
-### Workflow
+## 6. Backlog & Planning
 
-1. Run `pnpm migrate` — Prisma generates the DDL skeleton
-2. Open the generated `.sql` file and add backfill SQL after the DDL
-3. Run `pnpm migrate` again (or `pnpm db:push` in sandbox) to verify it applies cleanly
-4. Commit the migration file alongside the schema change
+- **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live DB for current state.
+- **Specs and plans** live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. Check for an existing design before starting work — some are ready to implement.
+- **Before creating a new epic:** query existing epics for overlap. Prefer extending an existing epic over creating a new one. If superseding an old epic, mark it done in the same operation.
+- **On completing items:** update status in the DB immediately. The system auto-closes epics when all items are done/deferred. Direct DB ops require manually flipping the parent epic.
+- **Periodic hygiene:** epics with 0 items + status `open` are noise — add items or delete. Epics where all items are done but status is still `open` must be flipped.
 
-### Migration files are immutable after commit
+## 7. Subagent Dispatch Discipline
 
-**Never modify a migration file after it has been committed.** Prisma stores checksums of applied migrations and will detect any change, causing drift that blocks `migrate dev` on every other environment.
+**Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching:
 
-- To correct a past migration: create a **new** migration that applies the fix
-- To add missing backfill SQL: create a new data-only migration
-- If drift has already occurred: run `npx prisma migrate resolve --applied <migration-name>` for each drifted file to re-sync checksums without data loss
+- **For TypeScript work:** include "run `pnpm --filter web typecheck` before committing and fix any errors."
+- **For final-task-in-epic work:** include "run `cd apps/web && npx next build` and fix any errors" plus the required UX verification path.
+- **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 
-A pre-commit hook (`.githooks/pre-commit`) blocks commits that modify existing migration `.sql` files. This hook is active when `git config core.hooksPath .githooks` has been set (done automatically at repo setup). If you clone this repo fresh, run:
-```bash
-git config core.hooksPath .githooks
-```
+## 8. Tool Authorization
 
-### Local dev drift
+Agent `tool_grants` in `agent_registry.json` are enforced at runtime. `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
 
-If the local dev DB has drifted despite the hook (e.g. SQL was applied directly without `migrate dev`), use `prisma migrate resolve --applied <name>` to re-sync each affected migration's checksum. This preserves all data. Only use `prisma migrate reset --force` on a truly empty dev DB — never on an environment with backlog, seed, or user data.
+1. User role capabilities (`PERMISSIONS[capability].roles` for the user's `platformRole`)
+2. Agent grants (`config_profile.tool_grants`)
 
-### When NOT to use this pattern
+Both must permit the tool. The `TOOL_TO_GRANTS` record maps platform tool names to grant categories. Tools not in the mapping are allowed by default.
 
-- Pure additive changes (new nullable columns, new tables with no existing data to migrate): no backfill needed
-- Sandbox-only iteration: use `prisma db push` — no migration files needed in the sandbox
-- Large datasets (millions of rows): use a separate background job with batching; do not block the migration transaction
+Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `parameters`, `result`, `success`, `executionMode`, `routeContext`, `durationMs`, `createdAt`). Visible at `/platform/ai/authority`.
 
-## Agent Tool Grants & Authorization
+## 9. External Tools
 
-Agent `tool_grants` in `agent_registry.json` are enforced at runtime. When the AI coworker resolves an agent for a page, `getAvailableTools()` filters by the intersection of:
-
-1. **User role capabilities** — what `PERMISSIONS[capability].roles` allows for the user's `platformRole`
-2. **Agent tool grants** — what the agent's `config_profile.tool_grants` array permits
-
-An agent can only invoke a tool if BOTH the user AND the agent are authorized. This is computed by `agent-grants.ts`, which maps platform tool names to grant categories (e.g., `create_backlog_item` requires grant `backlog_write`).
-
-- The grant mapping lives in `apps/web/lib/agent-grants.ts` (`TOOL_TO_GRANTS` record)
-- Tools not in the mapping are allowed by default (backward-compatible)
-- Agent identity is passed via `agentId` parameter in `getAvailableTools()`
-
-## Action Audit Trail
-
-Every tool call is recorded in the `ToolExecution` table — not just proposals. The insert happens fire-and-forget in `agentic-loop.ts` immediately after `executeTool()` returns.
-
-Each record captures: `agentId`, `userId`, `toolName`, `parameters`, `result`, `success`, `executionMode`, `routeContext`, `durationMs`, `createdAt`.
-
-This enables queries like:
-- "What did AGT-190 do last week?" — filter `ToolExecution` by `agentId`
-- "Who created backlog items via agents?" — filter by `toolName = create_backlog_item`
-- "What actions were approved by HR-300?" — join `AgentActionProposal` with `decidedById`
-
-The audit log is visible at `/platform/ai/authority` (Tool Execution Log section).
-
-## Tool Evaluation Pipeline
-
-External tools (MCP servers, npm packages, APIs) must pass the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption. The pipeline runs 6 agents (1 new Security Auditor + 5 extended existing agents) through security, architecture, compliance, and integration checks. Approved tools are version-pinned with conditions and scheduled for re-evaluation.
+External MCP servers, npm packages, and APIs must pass the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption: 6 agents covering security, architecture, compliance, integration. Approved tools are version-pinned in `packages/db/data/approved_tools_registry.json` with re-evaluation scheduled.
 
 - Spec: `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md`
-- Skill: `/project:tool-evaluation` initiates an evaluation
-- Approved tools tracked in `packages/db/data/approved_tools_registry.json`
+- Run: `/project:tool-evaluation`
 
-## Design Principles
+## 10. Design Research
 
-> **FOR SUBAGENT DISPATCHERS:** When dispatching any subagent that creates or modifies UI components, you MUST include the Theme-Aware Styling rules below in the subagent prompt. Subagents do not read AGENTS.md — they only know what you tell them. Failure to include theming context results in components that ignore the platform's branding system.
+Every new feature spec must include a "Research & Benchmarking" section before finalization. Compare 2–3 open-source leaders (read their data models, not just feature lists) and 2–3 commercial products. Document patterns adopted, patterns rejected, anti-patterns identified, and gaps the design fills. Reference specific projects, not abstract "best practices."
 
-These principles apply to all new UI development on the platform.
+## 11. Data Model Stewardship
 
-### Section Organization
-- Use tab-nav with sub-routes for section organization (e.g., `/admin`, `/admin/branding`, `/admin/settings`)
-- Follow the pattern established by EA Modeler, AI Workforce, and Ops — each TabNav component lives in `components/{area}/` and is rendered by each sub-route page
-- When a section grows beyond one concern, split into tabs rather than cramming onto one page
+Before adding any large feature, audit the existing schema for refactoring opportunities. Indicators that refactoring is needed: a domain model being reused as a shared concept; the same logical data appearing in two+ existing models; a new feature needing meta-data with no canonical home.
 
-### Progressive Disclosure
-- Simple defaults for most users; AI coworker for advanced control
-- Expose only essential fields (3-5) in manual forms
-- Advanced configuration happens through the AI coworker conversation, not through raw field editors
+`Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, env vars, or bespoke fields elsewhere.
 
-### Setup Flows
-- Wizard-first for initial configuration (when no data exists)
-- Quick-edit form for returning users (when data already exists)
-- "Re-run wizard" link available from quick-edit for starting over
+## 12. UI — Theme-Aware Styling (mandatory)
 
-### Welcome Messages
-- All AI coworker agents use a consistent greeting format:
-  1. Identity: "I'm [role name]."
-  2. Capabilities: "I can help you [2-3 things]."
-  3. Skills hint: "You can also explore more actions in the skills menu above."
-- Single canonical greeting per agent (no random rotation)
-- Restricted variant remains for permission-limited users
+**No hardcoded colors.** All UI uses CSS custom properties so light mode, dark mode, and branding all work automatically.
 
-### Theme-Aware Styling (mandatory)
+| Role              | Use                                                       | Never                                              |
+| ----------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| Body/heading text | `text-[var(--dpf-text)]`                                  | `text-white`, `text-black`, `text-gray-*`, `#xxx`  |
+| Muted text        | `text-[var(--dpf-muted)]`                                 | `text-gray-400`                                    |
+| Surfaces          | `bg-[var(--dpf-surface-1)]`, `bg-[var(--dpf-surface-2)]`  | `bg-white`, `bg-[#xxx]`                            |
+| Borders           | `border-[var(--dpf-border)]`                              | `border-gray-*`                                    |
+| Accent            | `text-[var(--dpf-accent)]`, `bg-[var(--dpf-accent)]`      | Hardcoded hex                                      |
+| Page background   | `bg-[var(--dpf-bg)]`                                      | `bg-[#xxx]`                                        |
 
-**Never use hardcoded colors for text, backgrounds, or borders.** All UI must use the platform's CSS custom properties so that light mode, dark mode, and user-configured branding all work automatically.
+Sole exception: `text-white` on `bg-[var(--dpf-accent)]` buttons. Inline `style={{ color: "#xxx" }}` is equally prohibited — use `var(--dpf-text)`. `<option>` elements need explicit `bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]`. Variables defined in `globals.css`, overridden at runtime by branding tokens.
 
-| Role | Use | Never use |
-|------|-----|-----------|
-| Body/heading text | `text-[var(--dpf-text)]` | `text-white`, `text-black`, `text-gray-*`, `#xxx` |
-| Secondary/muted text | `text-[var(--dpf-muted)]` | `text-gray-400`, `#8888a0`, etc. |
-| Backgrounds | `bg-[var(--dpf-surface-1)]`, `bg-[var(--dpf-surface-2)]` | `bg-white`, `bg-[#1a1a2e]`, etc. |
-| Borders | `border-[var(--dpf-border)]` | `border-gray-*`, `#2a2a40`, etc. |
-| Accent/interactive | `text-[var(--dpf-accent)]`, `bg-[var(--dpf-accent)]` | Hardcoded hex accent values |
-| Page background | `bg-[var(--dpf-bg)]` | `bg-[#0d0d18]`, `bg-white` |
+Full standard: `docs/platform-usability-standards.md`. Other UI conventions: tab-nav with sub-routes for sections, progressive disclosure (3–5 essential fields, advanced via coworker), wizard-first setup with quick-edit on return, consistent welcome messages (identity → 2-3 capabilities → skills hint).
 
-**The only exception** is `text-white` on `bg-[var(--dpf-accent)]` buttons, where white text on a colored background is intentional and always readable.
+## 13. Login & Local QA
 
-Inline `style={{ color: "#xxx" }}` objects are equally prohibited — use CSS variable references: `style={{ color: "var(--dpf-text)" }}`.
+- Login email: `admin@dpf.local` unless told otherwise.
+- Read the install's admin password from `ADMIN_PASSWORD` in repo-root `.env` — not from `apps/web/.env.local` (which may omit it).
+- If `/build` or another shell route redirects to `/welcome`, authenticate at `/login` first.
+- Verify production-path UI changes against the Docker-served app at the install's configured URL (`AUTH_URL`/`APP_URL` in `.env`), not stale `next dev` sessions. Rebuild with: `docker compose build --no-cache portal portal-init sandbox && docker compose up -d`.
 
-`<option>` elements in `<select>` dropdowns must have explicit `className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"` for cross-browser consistency.
+## 14. Release Testing
 
-These variables are defined in `globals.css` (base theme) and overridden at runtime by branding configuration tokens. Using them ensures every surface respects the user's chosen brand.
+Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence.
 
-### Consistency
-- Before creating new patterns, check existing components: TabNav variants, page layouts, route structure
-- Follow established naming conventions: `{Area}TabNav`, `{Area}PageClient` for client wrapper components
-- Server components fetch data and pass to client components for interactivity
+## 15. Communication
 
-## Usability Standards
-
-All UI development must follow `docs/platform-usability-standards.md`. This document defines the CSS variable system, contrast requirements, form element standards, and prohibited color patterns. AI agents generating or reviewing UI code MUST consult this document.
+- If uncommitted changes exist, mention them before starting new work.
+- When committing, list what's included.
+- State results and decisions directly. No running commentary on internal deliberation.
+- End-of-turn summary: one or two sentences — what changed, what's next.

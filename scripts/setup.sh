@@ -128,6 +128,35 @@ step "Seeding database"
 pnpm db:seed
 ok "Database seeded with roles, agents, and default admin user"
 
+# ── Agent rulebook conformance ───────────────────────────────────────────────
+# Every install must ship the canonical AGENTS.md plus pointer files for each
+# supported AI tool. Fail the install if any are missing or have drifted.
+
+step "Verifying agent rulebook"
+
+if [ ! -f AGENTS.md ]; then
+  fail "Canonical agent rulebook missing: AGENTS.md. This install is broken; do not proceed."
+fi
+ok "Canonical rulebook: AGENTS.md"
+
+POINTERS=(
+  "CLAUDE.md"
+  ".cursor/rules/000-load-agents.mdc"
+  ".clinerules/000-load-agents.md"
+  ".github/copilot-instructions.md"
+  "CONVENTIONS.md"
+  ".continue/rules/000-load-agents.md"
+)
+for p in "${POINTERS[@]}"; do
+  if [ ! -f "$p" ]; then
+    fail "Pointer file missing: $p. Re-clone or restore from main."
+  fi
+  if ! grep -q "AGENTS.md" "$p"; then
+    fail "Pointer file does not reference AGENTS.md: $p. Drift detected."
+  fi
+done
+ok "Pointer files intact: ${#POINTERS[@]} tools wired to AGENTS.md"
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
