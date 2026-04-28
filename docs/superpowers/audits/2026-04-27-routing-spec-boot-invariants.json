@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-04-28T03:47:22.086Z",
+  "spec": "docs/superpowers/specs/2026-04-27-routing-control-data-plane-design.md",
+  "invariantsChecked": 10,
+  "violationCount": 3,
+  "findings": [
+    {
+      "invariantId": "INV-6",
+      "summary": "ModelProfile.capabilityTier still carries legacy LLM-grading vocabulary (15 rows)",
+      "detail": "Distinct values seen:\n  'advanced' (4 rows)\n  'deep-thinker' (8 rows)\n  'moderate' (3 rows)\n\nFix: Phase B of the routing migration retires this column. Rename to capabilityCategory (its actual purpose) and stop reading it as a routing tier."
+    },
+    {
+      "invariantId": "INV-6b",
+      "summary": "2 routing source file(s) still reference capabilityTier",
+      "detail": "  apps/web/lib/routing/known-provider-models.ts\n  apps/web/lib/routing/recipe-types.ts\n\nThese should be audited: any read of capabilityTier as a routing input is the bug INV-6 names. Reads as admin-UI categorization are fine but should be tagged for the rename."
+    },
+    {
+      "invariantId": "INV-9",
+      "summary": "1 subscription-style provider(s) report costModel='token' with $0 pricing — should be costModel='subscription'",
+      "detail": "  anthropic-sub: costModel=token input=0 output=0\n\nFix: spec §12.2 introduces costModel='subscription' with subscriptionWindowKind. Until that lands, the $0 token pricing means real spend (subscription quota) goes uncaptured in the cost ledger."
+    }
+  ]
+}
