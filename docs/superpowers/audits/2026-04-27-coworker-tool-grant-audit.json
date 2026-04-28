@@ -1,0 +1,1089 @@
+{
+  "generatedAt": "2026-04-28T05:36:04.954Z",
+  "spec": "docs/superpowers/specs/2026-04-27-coworker-tool-grant-spec-design.md",
+  "invariantsChecked": 6,
+  "errorCount": 103,
+  "warnCount": 32,
+  "findings": [
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'acceptance_package_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'adr_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'architecture_guardrail_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'architecture_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'audit_report_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'budget_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'catalog_publish' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'change_event_emit' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'chargeback_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'clip_route' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'constraint_validate' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'consumer_onboard' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'contract_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'contract_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'conway_validate' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'credential_scan' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'criteria_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'dependency_audit' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'dependency_graph_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'entitlement_provision' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'escalation_trigger' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'evidence_artifact_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'evidence_chain_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'evidence_chain_validate' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'financial_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'financial_report_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'finding_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'gap_analysis_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'gap_analysis_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'guardrail_validate' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'incident_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'incident_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'incident_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'integration_test_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'investment_proposal_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'license_check' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'order_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'order_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'pbi_status_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'policy_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'portfolio_backlog_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'portfolio_backlog_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'prod_status_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'product_instance_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'rationalization_report_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'regulatory_compliance_check' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'resource_reservation_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'resource_reservation_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'retention_record_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'risk_score_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'roadmap_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'role_registry_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'rollback_plan_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'runbook_execute' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'sbom_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'sbom_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'schedule_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'scope_agreement_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'scoring_model_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'service_offer_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'service_offer_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'sla_compliance_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'strategy_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'strategy_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'subscription_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'subscription_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'supply_chain_verify' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'tool_evaluation_read' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'tool_evaluation_write' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'tool_verdict_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'trust_boundary_map' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'violation_report_create' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'vulnerability_scan' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_query_db' checks grant 'admin_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_read_file' checks grant 'admin_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_restart_service' checks grant 'admin_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_run_command' checks grant 'admin_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_run_migration' checks grant 'admin_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_run_seed' checks grant 'admin_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'admin_view_logs' checks grant 'admin_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'analyze_public_website_branding' checks grant 'web_search' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'analyze_seo_opportunity' checks grant 'marketing_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'apply_platform_update' checks grant 'admin_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'assess_archetype_refinement' checks grant 'marketing_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'attribute_entity_to_product' checks grant 'registry_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'create_knowledge_article' checks grant 'registry_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'dismiss_entity' checks grant 'registry_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'extract_brand_design_system' checks grant 'admin_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'extract_brand_design_system' checks grant 'web_search' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'fetch_public_website' checks grant 'web_search' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'generate_custom_archetype' checks grant 'marketing_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'get_code_graph_freshness' checks grant 'code_graph_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'get_deliberation_outcome' checks grant 'deliberation_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'get_deliberation_status' checks grant 'deliberation_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'get_marketing_summary' checks grant 'marketing_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'inspect_build_code_impact' checks grant 'code_graph_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'query_employees' checks grant 'consumer_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'resolve_portfolio_quality_issue' checks grant 'registry_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'run_discovery_triage' checks grant 'registry_write' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'search_public_web' checks grant 'web_search' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'start_deliberation' checks grant 'deliberation_create' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'start_scout_research' checks grant 'web_search' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-003",
+      "severity": "error",
+      "agentId": null,
+      "file": "apps/web/lib/tak/agent-grants.ts",
+      "summary": "Tool 'suggest_campaign_ideas' checks grant 'marketing_read' which is not in the catalog",
+      "detail": "Every grant key referenced by TOOL_TO_GRANTS must have a catalog entry. Either add the catalog entry (and a registry agent that holds the grant) or change the tool's required grants."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/admin/setup-branding.skill.md",
+      "summary": "Skill 'setup-branding' assignTo references unknown agent(s): admin-assistant",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/build/build-page.skill.md",
+      "summary": "Skill 'build-page' assignTo references unknown agent(s): build-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/build/design-component.skill.md",
+      "summary": "Skill 'design-component' assignTo references unknown agent(s): build-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/build/manage-sandbox.skill.md",
+      "summary": "Skill 'manage-sandbox' assignTo references unknown agent(s): build-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/build/ship-feature.skill.md",
+      "summary": "Skill 'ship-feature' assignTo references unknown agent(s): build-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/build/start-feature.skill.md",
+      "summary": "Skill 'start-feature' assignTo references unknown agent(s): build-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/compliance/add-regulation.skill.md",
+      "summary": "Skill 'add-regulation' assignTo references unknown agent(s): compliance-officer",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/compliance/onboard-regulation.skill.md",
+      "summary": "Skill 'onboard-regulation' assignTo references unknown agent(s): compliance-officer",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/customer/add-customer.skill.md",
+      "summary": "Skill 'add-customer' assignTo references unknown agent(s): customer-advisor",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/design/ui-ux-design-intelligence.skill.md",
+      "summary": "Skill 'ui-ux-design-intelligence' assignTo references unknown agent(s): build-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/docs/review-structure.skill.md",
+      "summary": "Skill 'review-structure' assignTo references unknown agent(s): docs-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/employee/assign-role.skill.md",
+      "summary": "Skill 'assign-role' assignTo references unknown agent(s): hr-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/employee/team-structure.skill.md",
+      "summary": "Skill 'team-structure' assignTo references unknown agent(s): hr-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/inventory/advance-product.skill.md",
+      "summary": "Skill 'advance-product' assignTo references unknown agent(s): inventory-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/inventory/inventory-gap-audit.skill.md",
+      "summary": "Skill 'inventory-gap-audit' assignTo references unknown agent(s): inventory-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/inventory/version-discovery.skill.md",
+      "summary": "Skill 'version-discovery' assignTo references unknown agent(s): inventory-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/ops/create-item.skill.md",
+      "summary": "Skill 'create-item' assignTo references unknown agent(s): ops-coordinator",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/ops/epic-progress.skill.md",
+      "summary": "Skill 'epic-progress' assignTo references unknown agent(s): ops-coordinator",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/platform/add-provider.skill.md",
+      "summary": "Skill 'add-provider' assignTo references unknown agent(s): platform-engineer",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/portfolio/find-knowledge.skill.md",
+      "summary": "Skill 'find-knowledge' assignTo references unknown agent(s): portfolio-advisor",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/portfolio/find-product.skill.md",
+      "summary": "Skill 'find-product' assignTo references unknown agent(s): portfolio-advisor",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/portfolio/health-summary.skill.md",
+      "summary": "Skill 'health-summary' assignTo references unknown agent(s): portfolio-advisor",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/portfolio/register-product.skill.md",
+      "summary": "Skill 'register-product' assignTo references unknown agent(s): portfolio-advisor",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/campaign-ideas.skill.md",
+      "summary": "Skill 'campaign-ideas' assignTo references unknown agent(s): marketing-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/competitive-analysis.skill.md",
+      "summary": "Skill 'competitive-analysis' assignTo references unknown agent(s): marketing-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/email-campaign-builder.skill.md",
+      "summary": "Skill 'email-campaign-builder' assignTo references unknown agent(s): marketing-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/extract-brand-design-system.skill.md",
+      "summary": "Skill 'extract-brand-design-system' assignTo references unknown agent(s): onboarding-coo, admin-assistant",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/marketing-health.skill.md",
+      "summary": "Skill 'marketing-health' assignTo references unknown agent(s): marketing-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/review-inbox.skill.md",
+      "summary": "Skill 'review-inbox' assignTo references unknown agent(s): marketing-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/storefront/seo-content-optimizer.skill.md",
+      "summary": "Skill 'seo-content-optimizer' assignTo references unknown agent(s): marketing-specialist",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/workspace/backlog-status.skill.md",
+      "summary": "Skill 'backlog-status' assignTo references unknown agent(s): coo",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "warn",
+      "agentId": null,
+      "file": "skills/workspace/create-task.skill.md",
+      "summary": "Skill 'create-task' assignTo references unknown agent(s): coo",
+      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
+    }
+  ]
+}

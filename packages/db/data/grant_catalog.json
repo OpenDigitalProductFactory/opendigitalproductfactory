@@ -1,0 +1,940 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-04-28",
+  "notes": "Catalog of grant keys referenced by packages/db/data/agent_registry.json. honored_by_tools is empty when no tool in apps/web/lib/mcp-tools.ts (via apps/web/lib/tak/agent-grants.ts TOOL_TO_GRANTS) checks the grant — those are aspirational grants that do not yet authorize any platform action. The tool-grant audit's GRANT-002 surfaces them as findings; backfill PRs either implement the tool or remove the grant from the registry. Descriptions are heuristic placeholders generated from the grant key — refine by hand during reconciliation.",
+  "grants": [
+    {
+      "key": "acceptance_package_write",
+      "description": "Create or update acceptance package.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "adr_create",
+      "description": "Create adr.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "agent_control_read",
+      "description": "Read agent control.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "add_provider",
+        "configure_gateway_scan",
+        "run_endpoint_tests",
+        "update_provider_category"
+      ],
+      "implies": []
+    },
+    {
+      "key": "architecture_guardrail_read",
+      "description": "Read architecture guardrail.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "architecture_read",
+      "description": "Read architecture.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "reviewDesignDoc"
+      ],
+      "implies": []
+    },
+    {
+      "key": "architecture_write",
+      "description": "Create or update architecture.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "audit_report_create",
+      "description": "Create audit report.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "backlog_read",
+      "description": "Read backlog.",
+      "category": "backlog",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "analyze_reusability",
+        "assess_complexity",
+        "assess_contribution",
+        "get_backlog_item",
+        "get_next_recommended_work",
+        "list_backlog_items",
+        "list_epics",
+        "query_backlog",
+        "search_specs_and_plans"
+      ],
+      "implies": []
+    },
+    {
+      "key": "backlog_triage",
+      "description": "Triage backlog.",
+      "category": "backlog",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "size_backlog_item",
+        "triage_backlog_item"
+      ],
+      "implies": []
+    },
+    {
+      "key": "backlog_write",
+      "description": "Create or update backlog.",
+      "category": "backlog",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "confirm_taxonomy_placement",
+        "contribute_to_hive",
+        "create_backlog_item",
+        "create_build_epic",
+        "create_digital_product",
+        "link_backlog_item_to_epic",
+        "propose_decomposition",
+        "record_execution_evidence",
+        "register_digital_product_from_build",
+        "register_tech_debt",
+        "report_quality_issue",
+        "saveBuildEvidence",
+        "save_build_notes",
+        "save_phase_handoff",
+        "submit_feedback",
+        "update_backlog_item",
+        "update_backlog_item_status",
+        "update_feature_brief",
+        "update_lifecycle"
+      ],
+      "implies": []
+    },
+    {
+      "key": "budget_read",
+      "description": "Read budget.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "build_plan_write",
+      "description": "Create or update build plan.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "reviewBuildPlan"
+      ],
+      "implies": []
+    },
+    {
+      "key": "build_promote",
+      "description": "Promote build.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "process_backlog_for_build_studio",
+        "promote_to_build_studio"
+      ],
+      "implies": []
+    },
+    {
+      "key": "catalog_publish",
+      "description": "Publish catalog.",
+      "category": "release",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "change_event_emit",
+      "description": "Emit change event.",
+      "category": "release",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "chargeback_write",
+      "description": "Create or update chargeback.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "clip_route",
+      "description": "clip route.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "constraint_validate",
+      "description": "Validate constraint.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "consumer_onboard",
+      "description": "Onboard consumer.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "consumer_write",
+      "description": "Create or update consumer.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "create_employee",
+        "transition_employee_status"
+      ],
+      "implies": []
+    },
+    {
+      "key": "contract_read",
+      "description": "Read contract.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "contract_write",
+      "description": "Create or update contract.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "conway_validate",
+      "description": "Validate conway.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "credential_scan",
+      "description": "Scan credential.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "criteria_read",
+      "description": "Read criteria.",
+      "category": "evaluate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "data_governance_validate",
+      "description": "Validate data governance.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "prefill_onboarding_wizard"
+      ],
+      "implies": []
+    },
+    {
+      "key": "decision_record_create",
+      "description": "Create decision record.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "propose_improvement"
+      ],
+      "implies": []
+    },
+    {
+      "key": "dependency_audit",
+      "description": "dependency audit.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "dependency_graph_read",
+      "description": "Read dependency graph.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "deployment_plan_create",
+      "description": "Create deployment plan.",
+      "category": "deploy",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "check_deployment_windows",
+        "schedule_promotion"
+      ],
+      "implies": []
+    },
+    {
+      "key": "ea_graph_read",
+      "description": "Read ea graph.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "export_archimate",
+        "query_ontology_graph",
+        "run_traversal_pattern"
+      ],
+      "implies": []
+    },
+    {
+      "key": "ea_graph_write",
+      "description": "Create or update ea graph.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "classify_ea_element",
+        "create_ea_element",
+        "create_ea_relationship",
+        "import_archimate"
+      ],
+      "implies": []
+    },
+    {
+      "key": "entitlement_provision",
+      "description": "Provision entitlement.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "escalation_trigger",
+      "description": "Trigger escalation.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "evidence_artifact_create",
+      "description": "Create evidence artifact.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "evidence_chain_read",
+      "description": "Read evidence chain.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "evidence_chain_validate",
+      "description": "Validate evidence chain.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "external_registry_search",
+      "description": "Search external registry.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "search_integrations"
+      ],
+      "implies": []
+    },
+    {
+      "key": "file_read",
+      "description": "Read file.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "analyze_brand_document",
+        "compare_versions",
+        "evaluate_page",
+        "extract_brand_design_system",
+        "generate_codebase_manifest",
+        "generate_design_system",
+        "list_project_directory",
+        "list_source_directory",
+        "propose_file_change",
+        "query_version_history",
+        "read_codebase_manifest",
+        "read_project_file",
+        "read_source_at_version",
+        "run_ux_test",
+        "search_design_intelligence",
+        "search_project_files",
+        "search_source_at_version",
+        "start_ideate_research",
+        "start_scout_research"
+      ],
+      "implies": []
+    },
+    {
+      "key": "financial_read",
+      "description": "Read financial.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "financial_report_create",
+      "description": "Create financial report.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "finding_create",
+      "description": "Create finding.",
+      "category": "detect",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "gap_analysis_create",
+      "description": "Create gap analysis.",
+      "category": "evaluate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "gap_analysis_read",
+      "description": "Read gap analysis.",
+      "category": "evaluate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "guardrail_validate",
+      "description": "Validate guardrail.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "iac_execute",
+      "description": "Execute iac.",
+      "category": "deploy",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "deploy_feature",
+        "execute_promotion"
+      ],
+      "implies": []
+    },
+    {
+      "key": "incident_create",
+      "description": "Create incident.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "incident_read",
+      "description": "Read incident.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "incident_write",
+      "description": "Create or update incident.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "integration_test_create",
+      "description": "Create integration test.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "investment_proposal_create",
+      "description": "Create investment proposal.",
+      "category": "evaluate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "license_check",
+      "description": "Check license.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "order_create",
+      "description": "Create order.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "order_write",
+      "description": "Create or update order.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "pbi_status_write",
+      "description": "Create or update pbi status.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "policy_read",
+      "description": "Read policy.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "policy_write",
+      "description": "Create or update policy.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "propose_leave_policy"
+      ],
+      "implies": []
+    },
+    {
+      "key": "portfolio_backlog_read",
+      "description": "Read portfolio backlog.",
+      "category": "portfolio",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "portfolio_backlog_write",
+      "description": "Create or update portfolio backlog.",
+      "category": "portfolio",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "portfolio_read",
+      "description": "Read portfolio.",
+      "category": "portfolio",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "search_portfolio_context"
+      ],
+      "implies": []
+    },
+    {
+      "key": "prod_status_write",
+      "description": "Create or update prod status.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "product_instance_write",
+      "description": "Create or update product instance.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "rationalization_report_create",
+      "description": "Create rationalization report.",
+      "category": "evaluate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "registry_read",
+      "description": "Read registry.",
+      "category": "registry",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "create_digital_product",
+        "explain_blast_radius",
+        "flag_stale_knowledge",
+        "list_departments",
+        "list_positions",
+        "query_employees",
+        "register_digital_product_from_build",
+        "review_estate_identity",
+        "search_integrations",
+        "search_knowledge",
+        "search_knowledge_base",
+        "search_portfolio_context",
+        "suggest_taxonomy_placement",
+        "summarize_estate_posture",
+        "validate_version_confidence"
+      ],
+      "implies": []
+    },
+    {
+      "key": "regulatory_compliance_check",
+      "description": "Check regulatory compliance.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "release_gate_create",
+      "description": "Create release gate.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "create_release_bundle",
+        "run_release_gate"
+      ],
+      "implies": []
+    },
+    {
+      "key": "release_plan_create",
+      "description": "Create release plan.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "schedule_release_bundle"
+      ],
+      "implies": []
+    },
+    {
+      "key": "release_plan_read",
+      "description": "Read release plan.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_release_status"
+      ],
+      "implies": []
+    },
+    {
+      "key": "resource_reservation_read",
+      "description": "Read resource reservation.",
+      "category": "deploy",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "resource_reservation_write",
+      "description": "Create or update resource reservation.",
+      "category": "deploy",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "retention_record_write",
+      "description": "Create or update retention record.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "risk_score_create",
+      "description": "Create risk score.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "roadmap_create",
+      "description": "Create roadmap.",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "role_registry_read",
+      "description": "Read role registry.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "rollback_plan_create",
+      "description": "Create rollback plan.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "runbook_execute",
+      "description": "Execute runbook.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "sandbox_execute",
+      "description": "Execute code in the build sandbox: read, write, edit, run tests and commands.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "check_sandbox",
+        "create_portal_pr",
+        "describe_model",
+        "edit_sandbox_file",
+        "generate_code",
+        "iterate_sandbox",
+        "launch_sandbox",
+        "list_sandbox_files",
+        "read_sandbox_file",
+        "run_sandbox_command",
+        "run_sandbox_tests",
+        "search_sandbox",
+        "start_build",
+        "start_ideate_research",
+        "start_sandbox",
+        "start_scout_research",
+        "validate_schema",
+        "write_sandbox_file"
+      ],
+      "implies": []
+    },
+    {
+      "key": "sbom_read",
+      "description": "Read sbom.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "sbom_write",
+      "description": "Create or update sbom.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "schedule_write",
+      "description": "Create or update schedule.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "scope_agreement_create",
+      "description": "Create scope agreement.",
+      "category": "evaluate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "scoring_model_read",
+      "description": "Read scoring model.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "service_offer_read",
+      "description": "Read service offer.",
+      "category": "release",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "service_offer_write",
+      "description": "Create or update service offer.",
+      "category": "release",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "sla_compliance_write",
+      "description": "Create or update sla compliance.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "spec_plan_read",
+      "description": "Read spec plan.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "search_specs_and_plans"
+      ],
+      "implies": []
+    },
+    {
+      "key": "strategy_read",
+      "description": "Read strategy.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "strategy_write",
+      "description": "Create or update strategy.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "subscription_read",
+      "description": "Read subscription.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "subscription_write",
+      "description": "Create or update subscription.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "supply_chain_verify",
+      "description": "Verify supply chain.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "telemetry_read",
+      "description": "Read telemetry.",
+      "category": "operate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "discovery_sweep"
+      ],
+      "implies": []
+    },
+    {
+      "key": "tool_evaluation_create",
+      "description": "Create tool evaluation.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "evaluate_tool"
+      ],
+      "implies": []
+    },
+    {
+      "key": "tool_evaluation_read",
+      "description": "Read tool evaluation.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "tool_evaluation_write",
+      "description": "Create or update tool evaluation.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "tool_verdict_create",
+      "description": "Create tool verdict.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "trust_boundary_map",
+      "description": "Map trust boundary.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "violation_report_create",
+      "description": "Create violation report.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "vulnerability_scan",
+      "description": "Scan vulnerability.",
+      "category": "governance",
+      "sensitivity": "internal",
+      "honored_by_tools": [],
+      "implies": []
+    }
+  ]
+}

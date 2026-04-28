@@ -1,0 +1,70 @@
+name: Coworker Tool-Grant Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/db/data/agent_registry.json"
+      - "packages/db/data/grant_catalog.json"
+      - "skills/**"
+      - "apps/web/lib/tak/agent-grants.ts"
+      - "apps/web/lib/mcp-tools.ts"
+      - "prompts/route-persona/**"
+      - "prompts/specialist/**"
+      - "apps/web/scripts/audit-coworker-tool-grants.ts"
+      - "docs/superpowers/audits/2026-04-27-coworker-tool-grant-audit.json"
+      - ".github/workflows/audit-coworker-tool-grants.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-coworker-tool-grants-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Runs apps/web/scripts/audit-coworker-tool-grants.ts (static — no DB) over
+# the registry, the grant catalog, the TOOL_TO_GRANTS map, and the skills
+# directory. Compares against the baseline at
+# docs/superpowers/audits/2026-04-27-coworker-tool-grant-audit.json and
+# fails ONLY when NEW error-level violations appear.
+#
+# The day-one baseline records every existing aspirational grant (registry
+# scope without an honoring tool), every tool checking an undeclared grant,
+# and every skill whose allowedTools exceed its assigned agents' grants.
+# Reconciliation PRs shrink the baseline; the gate prevents regressions.
+
+jobs:
+  audit:
+    name: Coworker Tool-Grant Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run coworker tool-grant audit (with baseline)
+        run: |
+          pnpm --filter web exec tsx \
+            scripts/audit-coworker-tool-grants.ts \
+            --baseline docs/superpowers/audits/2026-04-27-coworker-tool-grant-audit.json \
+            > audit-current.json
+        continue-on-error: false
+
+      - name: Upload audit report (always, for inspection)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coworker-tool-grant-audit
+          path: audit-current.json
+          retention-days: 14
