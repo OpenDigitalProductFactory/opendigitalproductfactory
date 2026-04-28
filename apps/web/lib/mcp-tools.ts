@@ -183,7 +183,7 @@ export type ToolResult = {
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "create_backlog_item",
-    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake).",
+    description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
     inputSchema: {
       type: "object",
       properties: {
@@ -193,6 +193,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         triageOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Required when status is not triaging" },
         source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "What kind of gap or signal produced this item" },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory suggestion for Scrum Master triage (non-binding)" },
+        priority: { type: "integer", description: "Optional ranked priority within the open pool (lower = higher priority)." },
+        effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when triageOutcome=build (skipping triage). Otherwise applied if provided." },
         body: { type: "string", description: "Detailed description" },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
@@ -262,15 +264,17 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item",
-    description: "Update an existing backlog item",
+    description: "Update an existing backlog item's editable fields. Use update_backlog_item_status for triaged status transitions, triage_backlog_item to triage, size_backlog_item for effortSize, and link_backlog_item_to_epic for epic linkage — those have their own audit and validation.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "The item ID (e.g., BI-PORT-001)" },
         title: { type: "string", description: "New title" },
-        status: { type: "string", enum: [...BACKLOG_STATUS_VALUES] },
-        priority: { type: "number", description: "Priority number" },
+        status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Update status. For triaged items only; use triage_backlog_item to leave triaging." },
+        priority: { type: "number", description: "Priority number (lower = higher priority)" },
         body: { type: "string", description: "Updated description" },
+        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "Reclassify the source signal" },
+        proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
       },
       required: ["itemId"],
     },
@@ -377,13 +381,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses (triaging|open|in-progress|done|deferred). Enforces legal-transition table; same-status calls are no-op successes. Sets completedAt and may auto-close the parent epic when the last item reaches done. Writes a status_change activity row.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id" },
-        status: { type: "string", enum: ["open", "in-progress", "done", "deferred"] },
-        reason: { type: "string", description: "Free-text rationale captured in the activity row" },
+        status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"], description: "Target status. 'triaging' from a triaged status is allowed and clears the prior triage decision." },
+        reason: { type: "string", description: "Free-text rationale captured in the activity row. Required when status=triaging from a triaged status." },
         resolution: { type: "string", description: "Outcome summary, required when status=done" },
       },
       required: ["itemId", "status"],
@@ -2482,7 +2486,39 @@ export async function executeTool(
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
         ? params["itemId"].trim()
         : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const status = String(params["status"] ?? "open");
+      const status = typeof params["status"] === "string" ? params["status"] : "triaging";
+      const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
+      const source = typeof params["source"] === "string" ? params["source"] : null;
+      const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
+      const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
+      const priority = typeof params["priority"] === "number" ? params["priority"] : null;
+
+      // Validate the status / triageOutcome pairing rule from the tool description:
+      // "supply status+triageOutcome together only when explicitly skipping triage"
+      // Concretely: status=triaging requires no triageOutcome; any other status requires one.
+      if (status !== "triaging" && !triageOutcome) {
+        return {
+          success: false,
+          error: "triageOutcome is required when status is not 'triaging'",
+          message: "When skipping triage (status='open' or 'in-progress'), pass triageOutcome to record the decision. Otherwise omit status to default to 'triaging'.",
+        };
+      }
+      if (status === "triaging" && triageOutcome) {
+        return {
+          success: false,
+          error: "triageOutcome must not be set when status='triaging'",
+          message: "Items in triaging status have not been triaged yet. Use triage_backlog_item to set triageOutcome.",
+        };
+      }
+      // When triageOutcome=build, effortSize is required (matches triage_backlog_item rules
+      // so the ready-for-build pool is consistently sized).
+      if (triageOutcome === "build" && !effortSize) {
+        return {
+          success: false,
+          error: "effortSize is required when triageOutcome='build'",
+          message: "Build-bound items must declare effortSize ('small'|'medium'|'large'|'xlarge').",
+        };
+      }
 
       // BacklogItem.epicId is a FK to Epic.id (cuid). Agents typically pass
       // the semantic epicId ("EP-..."), so resolve to cuid before inserting.
@@ -2507,6 +2543,11 @@ export async function executeTool(
           ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
           ...(epicCuid ? { epicId: epicCuid } : {}),
+          ...(source ? { source } : {}),
+          ...(triageOutcome ? { triageOutcome } : {}),
+          ...(proposedOutcome ? { proposedOutcome } : {}),
+          ...(effortSize ? { effortSize } : {}),
+          ...(priority !== null ? { priority } : {}),
         },
       });
       // Index in platform knowledge for semantic search
@@ -2677,6 +2718,23 @@ export async function executeTool(
       const data: Record<string, unknown> = {};
       if (typeof params["title"] === "string") data["title"] = params["title"];
       if (typeof params["status"] === "string") {
+        // Block direct status mutations that should go through dedicated tools.
+        // - Setting status='triaging' on an already-triaged item: use the retriage flow (BI-7D4AF644 follow-up).
+        // - Leaving triaging without going through triage_backlog_item: would skip the rationale + audit.
+        if (params["status"] === "triaging" && existing.status !== "triaging") {
+          return {
+            success: false,
+            error: "use_update_backlog_item_status_for_retriage",
+            message: "To move a triaged item back to triaging, use update_backlog_item_status (it requires a reason and audits the retriage). update_backlog_item is for editing fields, not for status transitions.",
+          };
+        }
+        if (existing.status === "triaging" && params["status"] !== "triaging") {
+          return {
+            success: false,
+            error: "Use triage_backlog_item to leave triaging status",
+            message: "Items in triaging must be moved out via triage_backlog_item so the decision is recorded with rationale.",
+          };
+        }
         data["status"] = params["status"];
         // Track completion date
         const isTerminal = params["status"] === "done" || params["status"] === "deferred";
@@ -2689,6 +2747,8 @@ export async function executeTool(
       }
       if (typeof params["priority"] === "number") data["priority"] = params["priority"];
       if (typeof params["body"] === "string") data["body"] = params["body"];
+      if (typeof params["source"] === "string") data["source"] = params["source"];
+      if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
       await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
       return { success: true, entityId: String(params["itemId"]), message: `Updated ${String(params["itemId"])}` };
     }
@@ -2974,12 +3034,6 @@ export async function executeTool(
           error: "invalid_status",
           message: `status must be one of triaging|open|in-progress|done|deferred, got ${target}`,
         };
-      if (target === "triaging")
-        return {
-          success: false,
-          error: "invalid_status",
-          message: "use triage_backlog_item to move items through triage; this tool moves items already triaged",
-        };
       const reason = typeof params["reason"] === "string" ? params["reason"] : null;
       const resolution = typeof params["resolution"] === "string" ? params["resolution"] : null;
       if (target === "done" && !resolution)
@@ -2988,9 +3042,11 @@ export async function executeTool(
           error: "missing_resolution",
           message: "resolution is required when status=done",
         };
+      // Retriage requires a reason so the audit trail explains why a triaged decision was reopened.
+      // (Reason is checked against the *current* status below, after the item is loaded.)
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, status: true, epicId: true },
+        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -3013,6 +3069,16 @@ export async function executeTool(
           message: `${itemIdRaw} already at status=${target} (no-op)`,
         };
       }
+      // Retriage path (BI-7D4AF644): require a reason and clear the prior triage
+      // decision so triage_backlog_item starts clean on the next pass.
+      const isRetriage = target === "triaging" && item.status !== "triaging";
+      if (isRetriage && !reason) {
+        return {
+          success: false,
+          error: "missing_reason",
+          message: "reason is required when moving an item back to triaging — explain why the prior triage needs to be revisited",
+        };
+      }
 
       const updated = await prisma.$transaction(async (tx) => {
         const next = await tx.backlogItem.update({
@@ -3020,6 +3086,7 @@ export async function executeTool(
           data: {
             status: target,
             ...(target === "done" ? { completedAt: new Date(), resolution } : {}),
+            ...(isRetriage ? { triageOutcome: null, effortSize: null, completedAt: null } : {}),
           },
           select: { itemId: true, status: true, epicId: true, completedAt: true },
         });
@@ -3033,6 +3100,13 @@ export async function executeTool(
               to: target,
               reason: reason ?? null,
               resolution: resolution ?? null,
+              ...(isRetriage
+                ? {
+                    retriage: true,
+                    clearedTriageOutcome: item.triageOutcome ?? null,
+                    clearedEffortSize: item.effortSize ?? null,
+                  }
+                : {}),
             },
             recordedById: userId,
             recordedByAgentId: context?.agentId ?? null,

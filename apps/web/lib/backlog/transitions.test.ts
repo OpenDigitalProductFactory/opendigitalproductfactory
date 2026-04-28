@@ -44,7 +44,6 @@ describe("isLegalTransition", () => {
   it("permits deferred reactivation", () => {
     expect(isLegalTransition("deferred", "open")).toBe(true);
     expect(isLegalTransition("deferred", "in-progress")).toBe(true);
-    expect(isLegalTransition("deferred", "triaging")).toBe(false);
     expect(isLegalTransition("deferred", "done")).toBe(false);
   });
 
@@ -52,6 +51,14 @@ describe("isLegalTransition", () => {
     expect(isLegalTransition("done", "done")).toBe(true);
     expect(isLegalTransition("done", "open")).toBe(false);
     expect(isLegalTransition("done", "in-progress")).toBe(false);
+  });
+
+  it("permits retriage from open / in-progress / deferred (BI-7D4AF644)", () => {
+    expect(isLegalTransition("open", "triaging")).toBe(true);
+    expect(isLegalTransition("in-progress", "triaging")).toBe(true);
+    expect(isLegalTransition("deferred", "triaging")).toBe(true);
+    // Retriage from done is still blocked (done is terminal except admin reopen).
+    expect(isLegalTransition("done", "triaging")).toBe(false);
   });
 });
 
