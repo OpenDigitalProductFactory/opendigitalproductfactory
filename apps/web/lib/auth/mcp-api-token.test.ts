@@ -28,8 +28,26 @@ const tokenFindMany = prisma.mcpApiToken.findMany as unknown as ReturnType<typeo
 const tokenUpdate = prisma.mcpApiToken.update as unknown as ReturnType<typeof vi.fn>;
 const cfgFindUnique = prisma.platformDevConfig.findUnique as unknown as ReturnType<typeof vi.fn>;
 
+async function withFlag<T>(
+  value: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const orig = process.env.CONTRIBUTION_MODEL_ENABLED;
+  if (value === undefined) delete process.env.CONTRIBUTION_MODEL_ENABLED;
+  else process.env.CONTRIBUTION_MODEL_ENABLED = value;
+  try {
+    // Must await inside the try so the env var is still set when the
+    // contributionMode gate runs in async code.
+    return await fn();
+  } finally {
+    if (orig === undefined) delete process.env.CONTRIBUTION_MODEL_ENABLED;
+    else process.env.CONTRIBUTION_MODEL_ENABLED = orig;
+  }
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
+  delete process.env.CONTRIBUTION_MODEL_ENABLED;
   tokenCreate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
     id: "tok_123",
     createdAt: new Date(),
@@ -43,6 +61,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.resetAllMocks();
+  delete process.env.CONTRIBUTION_MODEL_ENABLED;
 });
 
 describe("issueMcpApiToken — happy path", () => {
@@ -92,8 +111,45 @@ describe("issueMcpApiToken — happy path", () => {
     expect(result.expiresAt).toBeNull();
   });
 
-  it("issues a write token when contribution-mode is configured", async () => {
-    cfgFindUnique.mockResolvedValue({ contributionModel: "fork-pr" });
+  it("flag-on: issues a write token when contributionModel is set", async () => {
+    cfgFindUnique.mockResolvedValue({
+      contributionMode: "selective",
+      contributionModel: "fork-pr",
+    });
+    const result = await withFlag("true", () =>
+      issueMcpApiToken({
+        userId: "u1",
+        name: "Mark write",
+        capability: "write",
+        scopes: ["backlog_write"],
+        expiresInDays: 30,
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("flag-off: issues a write token when contributionMode is selective", async () => {
+    // With the flag off, contributionModel is never written by any UI
+    // surface, so the gate falls back to the user's coarse choice.
+    cfgFindUnique.mockResolvedValue({
+      contributionMode: "selective",
+      contributionModel: null,
+    });
+    const result = await issueMcpApiToken({
+      userId: "u1",
+      name: "Mark write",
+      capability: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 30,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("flag-off: issues a write token when contributionMode is contribute_all", async () => {
+    cfgFindUnique.mockResolvedValue({
+      contributionMode: "contribute_all",
+      contributionModel: null,
+    });
     const result = await issueMcpApiToken({
       userId: "u1",
       name: "Mark write",
@@ -167,7 +223,7 @@ describe("issueMcpApiToken — rejections", () => {
     expect(result.error).toBe("invalid_capability");
   });
 
-  it("rejects write-capable token when contribution-mode is unset", async () => {
+  it("rejects write-capable token when PlatformDevConfig row is missing", async () => {
     cfgFindUnique.mockResolvedValue(null);
     const result = await issueMcpApiToken({
       userId: "u1",
@@ -182,8 +238,31 @@ describe("issueMcpApiToken — rejections", () => {
     expect(tokenCreate).not.toHaveBeenCalled();
   });
 
-  it("rejects write-capable token when PlatformDevConfig has no contributionModel set", async () => {
-    cfgFindUnique.mockResolvedValue({ contributionModel: null });
+  it("flag-on: rejects write-capable token when contributionModel is null", async () => {
+    cfgFindUnique.mockResolvedValue({
+      contributionMode: "selective",
+      contributionModel: null,
+    });
+    const result = await withFlag("true", () =>
+      issueMcpApiToken({
+        userId: "u1",
+        name: "x",
+        capability: "write",
+        scopes: ["backlog_write"],
+        expiresInDays: 30,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("contribution_mode_required");
+  });
+
+  it("flag-off: rejects write-capable token when contributionMode is fork_only", async () => {
+    // fork_only means "stay private" — writes have nowhere to go.
+    cfgFindUnique.mockResolvedValue({
+      contributionMode: "fork_only",
+      contributionModel: null,
+    });
     const result = await issueMcpApiToken({
       userId: "u1",
       name: "x",
@@ -194,6 +273,40 @@ describe("issueMcpApiToken — rejections", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.error).toBe("contribution_mode_required");
+  });
+});
+
+describe("encodeBase32 invariant — token characters", () => {
+  it("never contains the literal substring 'undefined' (regression — alphabet must be 32 chars)", async () => {
+    cfgFindUnique.mockResolvedValue(null);
+    // Mint many tokens; with the previous 30-char alphabet ~6% of characters
+    // would render as "undefined", so 200 tokens would virtually guarantee a
+    // hit. With a 32-char alphabet this must never happen.
+    for (let i = 0; i < 200; i++) {
+      const r = await issueMcpApiToken({
+        userId: "u1",
+        name: `t${i}`,
+        capability: "read",
+        scopes: ["backlog_read"],
+        expiresInDays: null,
+      });
+      if (!r.ok) throw new Error(`mint #${i} failed: ${r.error}`);
+      expect(r.plaintext).not.toContain("undefined");
+    }
+  });
+
+  it("uses only Crockford base32 characters (0-9, A-Z minus I/L/O/U)", async () => {
+    cfgFindUnique.mockResolvedValue(null);
+    const r = await issueMcpApiToken({
+      userId: "u1",
+      name: "x",
+      capability: "read",
+      scopes: ["backlog_read"],
+      expiresInDays: null,
+    });
+    if (!r.ok) throw new Error("expected ok");
+    const secret = r.plaintext.replace(/^dpfmcp_/, "");
+    expect(secret).toMatch(/^[0-9A-HJKMNP-TV-Z]+$/);
   });
 });
 

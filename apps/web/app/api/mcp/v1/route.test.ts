@@ -29,6 +29,9 @@ function makeRequest(opts: {
   bearer?: string | null;
   origin?: string | null;
   body?: unknown;
+  forwardedProto?: string;
+  forwardedHost?: string;
+  hostHeader?: string;
 }): Request {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (opts.bearer !== null && opts.bearer !== undefined) {
@@ -37,6 +40,9 @@ function makeRequest(opts: {
   if (opts.origin !== null && opts.origin !== undefined) {
     headers["Origin"] = opts.origin;
   }
+  if (opts.forwardedProto) headers["X-Forwarded-Proto"] = opts.forwardedProto;
+  if (opts.forwardedHost) headers["X-Forwarded-Host"] = opts.forwardedHost;
+  if (opts.hostHeader) headers["Host"] = opts.hostHeader;
   return new Request(opts.url ?? "http://localhost:3000/api/mcp/v1", {
     method: opts.method ?? "POST",
     headers,
@@ -88,6 +94,62 @@ describe("POST — transport guards", () => {
       }),
     );
     expect(res.status).toBe(401); // got past TLS guard, failed at auth
+  });
+
+  // Regression: when Next.js runs inside a container or behind a proxy,
+  // request.url reflects the *internal* bind address (e.g. 0.0.0.0). The
+  // transport guard must consult the forwarded host/proto headers — what
+  // the client actually connected to — not the URL Next reconstructed.
+  it("allows containerized request when X-Forwarded-Host points to localhost", async () => {
+    resolveMock.mockResolvedValue(null);
+    const res = await POST(
+      makeRequest({
+        url: "http://0.0.0.0:3000/api/mcp/v1",
+        bearer: "dpfmcp_X",
+        forwardedHost: "localhost:3000",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+      }),
+    );
+    expect(res.status).toBe(401); // past transport guard, fails at auth
+  });
+
+  it("allows containerized request when X-Forwarded-Proto is https", async () => {
+    resolveMock.mockResolvedValue(null);
+    const res = await POST(
+      makeRequest({
+        url: "http://0.0.0.0:3000/api/mcp/v1",
+        bearer: "dpfmcp_X",
+        forwardedProto: "https",
+        forwardedHost: "portal.example.com",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("falls back to Host header when no X-Forwarded-Host present", async () => {
+    resolveMock.mockResolvedValue(null);
+    const res = await POST(
+      makeRequest({
+        url: "http://0.0.0.0:3000/api/mcp/v1",
+        bearer: "dpfmcp_X",
+        hostHeader: "127.0.0.1:3000",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("still rejects http requests on non-localhost hosts (no proxy headers)", async () => {
+    const res = await POST(
+      makeRequest({
+        url: "http://evil.example.com/api/mcp/v1",
+        bearer: "dpfmcp_X",
+        forwardedHost: "evil.example.com",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+      }),
+    );
+    expect(res.status).toBe(403);
   });
 
   it("rejects requests with disallowed Origin", async () => {
