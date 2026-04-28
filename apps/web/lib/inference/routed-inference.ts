@@ -21,6 +21,7 @@ import {
 } from "@/lib/routing/loader";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
+import { logTokenUsage } from "@/lib/ai-inference";
 
 // ─── Result type ────────────────────────────────────────────────────────────
 
@@ -446,7 +447,18 @@ export async function routeAndCall(
       };
     }
 
-    // Adapter didn't return operation ID — treat as sync result
+    // Adapter didn't return operation ID — treat as sync result.
+    // Phase J (BI-28858D2F follow-up / cost-ledger): every dispatch persists
+    // a TokenUsage row regardless of which adapter served it. The CLI
+    // subprocess paths (claude-cli, codex-cli) previously bypassed this.
+    void persistRoutedTokenUsage({
+      agentId: options?.agentId ?? "unknown",
+      providerId: result.providerId,
+      contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+      inputTokens: result.tokenUsage?.inputTokens ?? 0,
+      outputTokens: result.tokenUsage?.outputTokens ?? 0,
+    });
+
     return {
       providerId: result.providerId,
       modelId: result.modelId,
@@ -495,7 +507,19 @@ export async function routeAndCall(
     ? `This turn ran on the bundled local model because configured paid providers were unavailable. Tool calls and complex reasoning may be unreliable on local — retry in a moment, or check provider status in Admin > AI.`
     : null;
 
-  // 6. Normalize result to RoutedInferenceResult
+  // 6. Persist TokenUsage row for the cost ledger (Phase J).
+  // Fire-and-forget because metering must not block the response. A loud log
+  // on failure is the floor; the bus-check enforcement detector (separate
+  // follow-up) is the durable guarantee that drift surfaces.
+  void persistRoutedTokenUsage({
+    agentId: options?.agentId ?? "unknown",
+    providerId: result.providerId,
+    contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+    inputTokens: result.tokenUsage?.inputTokens ?? 0,
+    outputTokens: result.tokenUsage?.outputTokens ?? 0,
+  });
+
+  // 7. Normalize result to RoutedInferenceResult
   return {
     providerId: result.providerId,
     modelId: result.modelId,
@@ -509,4 +533,43 @@ export async function routeAndCall(
     routeDecision: decision,
     responseId: result.responseId,
   };
+}
+
+// ─── Phase J: routed-call token usage persistence ──────────────────────────
+//
+// Every routed inference call must produce a `TokenUsage` row regardless of
+// which adapter served it. Before this fix, only the direct HTTP path
+// (`callProvider` in `ai-inference.ts`) wrote metering — the CLI subprocess
+// adapters (claude-cli, codex-cli) silently bypassed it. The result was a
+// $0 cost tally for ~100% of subscription-served traffic on a typical install.
+//
+// This wrapper is the *convenience* enforcement; the durable enforcement is
+// the OutcomeEvent-bus detector "outcome event without metering row" listed
+// in the routing-architecture spec §10.2. That bus check makes new dispatch
+// paths (future adapters) loud about forgetting to meter; this wrapper makes
+// it easy to satisfy by default.
+//
+// Errors are logged but never thrown — metering must never block the response.
+async function persistRoutedTokenUsage(input: {
+  agentId: string;
+  providerId: string;
+  contextKey: string;
+  inputTokens: number;
+  outputTokens: number;
+}): Promise<void> {
+  // Skip rows with zero tokens both ways. A successful call always reports at
+  // least the input prompt tokens; zero/zero usually means the adapter
+  // returned an error or stub. The audit row would be misleading.
+  if (input.inputTokens === 0 && input.outputTokens === 0) {
+    return;
+  }
+  try {
+    await logTokenUsage(input);
+  } catch (err) {
+    console.error(
+      `[routed-inference] token usage persistence failed: provider=${input.providerId} ` +
+      `agent=${input.agentId} in=${input.inputTokens} out=${input.outputTokens}`,
+      err,
+    );
+  }
 }
