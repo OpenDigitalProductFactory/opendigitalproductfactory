@@ -39,7 +39,31 @@ if [ -n "$MODIFIED_MIGRATIONS" ]; then
   exit 1
 fi
 
-# ─── Guard 2: typecheck gate ────────────────────────────────────────────────
+# ─── Guard 2: stale Prisma client refresh ───────────────────────────────────
+# When `git pull` brings in a newer schema.prisma, the generated Prisma client
+# in packages/db/generated/client stays at the old shape until someone runs
+# `pnpm install` (which fires the postinstall: prisma generate). The
+# typecheck below will then fail with "Property X does not exist" errors that
+# look like main is broken — they're actually just local staleness.
+#
+# Detect the drift and regenerate transparently. Fast (~1s) and idempotent.
+
+SCHEMA="packages/db/prisma/schema.prisma"
+CLIENT="packages/db/generated/client/client.ts"
+
+if [ -f "$SCHEMA" ] && [ -f "$CLIENT" ] && [ "$SCHEMA" -nt "$CLIENT" ]; then
+  echo "[pre-commit] schema.prisma is newer than generated client — regenerating..."
+  if ! pnpm --filter @dpf/db exec prisma generate >/tmp/pre-commit-prisma.log 2>&1; then
+    echo ""
+    echo "ERROR: prisma generate failed. Check /tmp/pre-commit-prisma.log."
+    cat /tmp/pre-commit-prisma.log | tail -20
+    echo ""
+    exit 1
+  fi
+  echo "[pre-commit] Prisma client refreshed."
+fi
+
+# ─── Guard 3: typecheck gate ────────────────────────────────────────────────
 
 if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then
   echo "[pre-commit] DPF_SKIP_TYPECHECK=1 — skipping typecheck gate."
