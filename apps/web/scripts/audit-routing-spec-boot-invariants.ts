@@ -276,21 +276,35 @@ const LEGACY_CAPABILITY_TIER_VALUES = new Set([
 ]);
 
 async function checkInv6(): Promise<void> {
-  const tiers = await prisma.$queryRaw<Array<{ capabilityTier: string; count: bigint }>>`
-    SELECT "capabilityTier", COUNT(*)::bigint AS count
-    FROM "ModelProfile"
-    GROUP BY "capabilityTier"
-    ORDER BY "capabilityTier"
+  // Phase B of the routing migration renamed ModelProfile.capabilityTier to
+  // capabilityCategory (per spec §7.2). After that rename the column itself
+  // is fine — the invariant is now about the *values* still carrying the
+  // legacy LLM-grading vocabulary. Read whichever column name exists so the
+  // audit works against pre- and post-migration installs.
+  const columns = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'ModelProfile'
+      AND column_name IN ('capabilityTier', 'capabilityCategory')
   `;
+  const columnName = columns.find((c) => c.column_name === "capabilityCategory")
+    ? "capabilityCategory"
+    : "capabilityTier";
+
+  const tiers = await prisma.$queryRawUnsafe<Array<{ value: string; count: bigint }>>(
+    `SELECT "${columnName}" AS value, COUNT(*)::bigint AS count
+     FROM "ModelProfile"
+     GROUP BY "${columnName}"
+     ORDER BY "${columnName}"`,
+  );
   const legacyRows = tiers
-    .filter((r) => LEGACY_CAPABILITY_TIER_VALUES.has(r.capabilityTier))
+    .filter((r) => LEGACY_CAPABILITY_TIER_VALUES.has(r.value))
     .reduce((s, r) => s + Number(r.count), 0);
 
   if (legacyRows > 0) {
     violation(
       "INV-6",
-      `ModelProfile.capabilityTier still carries legacy LLM-grading vocabulary (${legacyRows} rows)`,
-      `Distinct values seen:\n${tiers.map((r) => `  '${r.capabilityTier}' (${r.count} rows)`).join("\n")}\n\nFix: Phase B of the routing migration retires this column. Rename to capabilityCategory and stop reading it as a routing tier.`,
+      `ModelProfile.${columnName} still carries legacy LLM-grading vocabulary (${legacyRows} rows)`,
+      `Distinct values seen:\n${tiers.map((r) => `  '${r.value}' (${r.count} rows)`).join("\n")}\n\nFix: stop seeding the legacy vocabulary and migrate live rows to the post-rename admin-UI categorization. The routing layer reads only qualityTier; this column is admin-display only.`,
     );
   }
 }
@@ -300,6 +314,14 @@ async function checkInv6(): Promise<void> {
 function checkInv6b(): void {
   // Walk apps/web/lib/routing/ and look for `capabilityTier` references.
   // Static check, no DB.
+  //
+  // Post-rename (Phase B), the catalog field is `capabilityCategory`.
+  // Any remaining `capabilityTier` reference in routing source is either:
+  //   - the legacy non-canonical low|medium|high vocabulary on
+  //     RoleRoutingRecipe.capabilityTier (recipe-types.ts) — a routing
+  //     input that should be switched to qualityTier (canonical), or
+  //   - a stale reference left behind by an incomplete rename.
+  // Either case is a violation worth surfacing.
   const routingDir = join(ROOT, "apps/web/lib/routing");
   if (!existsSync(routingDir)) return;
 
@@ -319,7 +341,7 @@ function checkInv6b(): void {
       "INV-6b",
       `${matches.length} routing source file(s) still reference capabilityTier`,
       matches.map((f) => `  ${f}`).join("\n") +
-        "\n\nThese should be audited: any read of capabilityTier as a routing input is the bug INV-6 names. Reads as admin-UI categorization are fine but should be tagged for the rename.",
+        "\n\nThe canonical routing-input vocabulary is `qualityTier` (see quality-tiers.ts). Any `capabilityTier` reference in routing source is suspect: either a routing input using a non-canonical vocabulary (the bug), or a stale reference left after the Phase B rename.",
     );
   }
 }

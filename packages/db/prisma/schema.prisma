@@ -1217,7 +1217,7 @@ model ModelProfile {
   modelId                   String
   friendlyName              String
   summary                   String
-  capabilityTier            String
+  capabilityCategory        String
   costTier                  String
   bestFor                   Json
   avoidFor                  Json

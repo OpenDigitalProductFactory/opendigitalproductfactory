@@ -26,7 +26,7 @@ export interface KnownModel {
   outputModalities: string[];
   modelClass: string;
   modelFamily: string | null;
-  capabilityTier: string;
+  capabilityCategory: string;
   costTier: string;
   bestFor: string[];
   avoidFor: string[];
@@ -69,7 +69,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "chat",
       modelFamily: "claude-4",
-      capabilityTier: "advanced",
+      capabilityCategory: "advanced",
       costTier: "$$",
       bestFor: ["code generation", "tool use", "complex reasoning", "analysis"],
       avoidFor: [],
@@ -108,7 +108,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "chat",
       modelFamily: "claude-4",
-      capabilityTier: "advanced",
+      capabilityCategory: "advanced",
       costTier: "$$$",
       bestFor: ["deep reasoning", "complex code", "architecture", "long context"],
       avoidFor: [],
@@ -147,7 +147,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "chat",
       modelFamily: "claude-haiku-4",
-      capabilityTier: "moderate",
+      capabilityCategory: "moderate",
       costTier: "$",
       bestFor: ["general purpose tasks", "fast responses", "simple tool use"],
       avoidFor: ["complex code generation", "deep reasoning"],
@@ -181,7 +181,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "chat",
       modelFamily: "claude-3",
-      capabilityTier: "moderate",
+      capabilityCategory: "moderate",
       costTier: "$",
       bestFor: ["general purpose tasks"],
       avoidFor: ["complex tasks", "tool use via subscription"],
@@ -219,7 +219,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "code",
       modelFamily: "codex",
-      capabilityTier: "advanced",
+      capabilityCategory: "advanced",
       costTier: "$$$",
       bestFor: ["coding", "reasoning", "tool-use"],
       avoidFor: ["conversation"],
@@ -252,7 +252,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "code",
       modelFamily: "codex",
-      capabilityTier: "advanced",
+      capabilityCategory: "advanced",
       costTier: "$$",
       bestFor: ["coding"],
       avoidFor: ["conversation", "custom-tool-use"],
@@ -287,7 +287,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "code",
       modelFamily: "gpt-5",
-      capabilityTier: "advanced",
+      capabilityCategory: "advanced",
       costTier: "$$$$",
       bestFor: ["coding", "reasoning", "tool-use"],
       avoidFor: [],
@@ -327,7 +327,7 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
       outputModalities: ["text"],
       modelClass: "chat",
       modelFamily: "gpt-5",
-      capabilityTier: "advanced",
+      capabilityCategory: "advanced",
       costTier: "subscription",
       bestFor: ["conversation", "coding", "reasoning"],
       avoidFor: ["custom-tool-use"],
