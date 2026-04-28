@@ -88,9 +88,15 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
+      # AUTH_TRUST_HOST tells Auth.js to trust the request's Host /
+      # X-Forwarded-Host header so callbacks resolve to whatever URL the
+      # browser used (localhost, LAN IP, dpf.local, public domain). No
+      # hardcoded URL — the portal works in all three modes (localhost,
+      # LAN with mDNS, public with reverse proxy) without env edits.
+      # Optional override: PUBLIC_URL — required only for outbound async
+      # flows (emails, webhooks) where there's no in-flight request.
       AUTH_TRUST_HOST: "true"
-      AUTH_URL: http://localhost:3000
-      APP_URL: http://localhost:3000
+      PUBLIC_URL: ${PUBLIC_URL:-}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
       NEO4J_USER: neo4j

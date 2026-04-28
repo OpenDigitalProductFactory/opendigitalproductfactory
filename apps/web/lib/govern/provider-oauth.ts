@@ -31,9 +31,10 @@ const FLOW_TTL_MS = 10 * 60 * 1000; // 10 minutes
  *  3. Default → our full API callback route */
 const LOCALHOST_RESTRICTED_HOSTS = ["claude.ai"];
 
-function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; authorizeUrl?: string | null }): string {
+async function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; authorizeUrl?: string | null }): Promise<string> {
   if (provider.oauthRedirectUri) return provider.oauthRedirectUri;
-  const appUrl = process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "http://localhost:3000";
+  const { getPortalUrl } = await import("@/lib/portal-url");
+  const appUrl = await getPortalUrl();
   // Providers whose OAuth clients restrict redirect URIs to short localhost/callback paths
   if (provider.authorizeUrl && LOCALHOST_RESTRICTED_HOSTS.some(h => provider.authorizeUrl!.includes(h))) {
     return `${appUrl}/callback`;
@@ -60,7 +61,7 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     data: { state, codeVerifier, providerId },
   });
 
-  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
+  const redirectUri = await getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -120,7 +121,7 @@ export async function exchangeOAuthCode(
     return { error: "provider_misconfigured" };
   }
 
-  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
+  const redirectUri = await getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   // Anthropic requires JSON + state; OpenAI requires form-encoded without state
   const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
