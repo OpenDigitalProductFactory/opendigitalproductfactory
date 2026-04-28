@@ -1,0 +1,80 @@
+name: Coworker Personas Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/db/data/agent_registry.json"
+      - "prompts/route-persona/**"
+      - "prompts/specialist/**"
+      - "apps/web/scripts/audit-coworker-personas.ts"
+      - "docs/superpowers/audits/2026-04-27-coworker-persona-audit.json"
+      - ".github/workflows/audit-coworker-personas.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-coworker-personas-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Runs apps/web/scripts/audit-coworker-personas.ts against the canonical
+# coworker registry and persona files (static — no DB). Compares against a
+# tracked baseline at docs/superpowers/audits/2026-04-27-coworker-persona-audit.json
+# and fails ONLY when NEW error-level violations appear — pre-existing
+# violations in the baseline are tracked as backfill items and do not block
+# merges.
+#
+# This is the staged-rollout gate from the spec at
+# docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §5:
+#   PR 1 (this one): script + workflow + baseline. Gate is live; existing
+#                    violations are grandfathered.
+#   PR 2..N: backfill personas one tier or value stream at a time. Each PR
+#            shrinks the baseline by passing --json-out and committing the
+#            updated baseline alongside the persona changes.
+#   PR final: when baseline reaches zero, no special action is needed — the
+#             gate already blocks every new error.
+#
+# When fixing a baseline violation, regenerate the baseline:
+#   pnpm --filter web exec tsx scripts/audit-coworker-personas.ts \
+#     --json-out docs/superpowers/audits/2026-04-27-coworker-persona-audit.json
+# and commit the updated baseline alongside the fix.
+
+jobs:
+  audit:
+    name: Coworker Personas Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run coworker-persona audit (with baseline)
+        # Exits 0 if findings match the baseline (or are a subset).
+        # Exits 1 if NEW error-level violations appear vs. the baseline — fails the PR.
+        # Stdout is the structured JSON report; stderr is the diff summary.
+        run: |
+          pnpm --filter web exec tsx \
+            scripts/audit-coworker-personas.ts \
+            --baseline docs/superpowers/audits/2026-04-27-coworker-persona-audit.json \
+            > audit-current.json
+        continue-on-error: false
+
+      - name: Upload audit report (always, for inspection)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coworker-personas-audit
+          path: audit-current.json
+          retention-days: 14
