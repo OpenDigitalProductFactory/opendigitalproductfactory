@@ -7,6 +7,7 @@ import { prisma } from "@dpf/db";
 import { encryptSecret, decryptSecret } from "@/lib/credential-crypto";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import { activateProvider } from "@/lib/govern/activate-provider";
+import { getStablePortalUrl } from "@/lib/portal-url";
 
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
@@ -31,10 +32,12 @@ const FLOW_TTL_MS = 10 * 60 * 1000; // 10 minutes
  *  3. Default → our full API callback route */
 const LOCALHOST_RESTRICTED_HOSTS = ["claude.ai"];
 
-async function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; authorizeUrl?: string | null }): Promise<string> {
+function getOAuthRedirectUri(provider: { oauthRedirectUri?: string | null; authorizeUrl?: string | null }): string {
   if (provider.oauthRedirectUri) return provider.oauthRedirectUri;
-  const { getPortalUrl } = await import("@/lib/portal-url");
-  const appUrl = await getPortalUrl();
+  // OAuth callback URIs must be STABLE — the provider only accepts the exact
+  // pre-registered URL. Use the env-driven helper, not the request-scoped one.
+  // (A LAN client and a localhost client must both send the same redirect_uri.)
+  const appUrl = getStablePortalUrl();
   // Providers whose OAuth clients restrict redirect URIs to short localhost/callback paths
   if (provider.authorizeUrl && LOCALHOST_RESTRICTED_HOSTS.some(h => provider.authorizeUrl!.includes(h))) {
     return `${appUrl}/callback`;
@@ -61,7 +64,7 @@ export async function createOAuthFlow(providerId: string): Promise<{ authorizeUr
     data: { state, codeVerifier, providerId },
   });
 
-  const redirectUri = await getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
+  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -121,7 +124,7 @@ export async function exchangeOAuthCode(
     return { error: "provider_misconfigured" };
   }
 
-  const redirectUri = await getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
+  const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   // Anthropic requires JSON + state; OpenAI requires form-encoded without state
   const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
