@@ -93,11 +93,15 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
   if (!build.originatingBacklogItemId) {
     throw new Error("Only backlog-linked drafts require start approval");
   }
-  if (devConfig?.governedBacklogEnabled !== true && build.phase === "ideate") {
-    // Allow already-linked drafts to record approval even if the flag later
-    // drifts off, but keep plain ideate builds out of the approval path.
-    throw new Error("This build is not using the governed backlog workflow");
-  }
+  // Backlog-linked drafts always have an approval gate, regardless of the
+  // governedBacklogEnabled platform flag. The flag controls whether NEW drafts
+  // are auto-promoted under governance; it does not control whether existing
+  // backlog-linked builds can record approval. The previous gate threw
+  // "This build is not using the governed backlog workflow" on every fresh
+  // install (where the flag defaults to false), making the UI's own
+  // "Record Approve Start" button error out — even though the workflow-action
+  // resolver renders it solely on the backlog-link condition. Aligning here.
+  void devConfig;
 
   const approvedAt = build.draftApprovedAt ?? new Date();
   await prisma.featureBuild.update({

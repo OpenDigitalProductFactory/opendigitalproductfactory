@@ -4106,6 +4106,7 @@ export async function executeTool(
     case "reviewDesignDoc": {
       const buildId = await resolveActiveBuildId(userId);
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+      let phaseGateBlocker: string | null = null;
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
@@ -4306,13 +4307,26 @@ export async function executeTool(
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
+            // Surface the blocker to the agent so it can self-correct on the next
+            // turn. Without this, the agent sees "review passed" and assumes
+            // ideate is done — but the phase silently stays in ideate forever
+            // because intake anchors (taxonomy, constrainedGoal) weren't set.
+            // The agent has the tools (confirm_taxonomy_placement,
+            // update_feature_brief) — it just didn't know they were required.
+            phaseGateBlocker = gate.reason ?? null;
           }
         }
       } catch (err) {
         console.error("[reviewDesignDoc] auto-advance failed:", err);
       }
 
-      return { success: true, message: `Design review: ${review.decision}. ${review.summary}`, data: { review } };
+      const reviewMessage = phaseGateBlocker
+        ? `Design review: ${review.decision}. ${review.summary}\n\n` +
+          `IMPORTANT: Phase did NOT advance to plan. Reason: ${phaseGateBlocker} ` +
+          `Call confirm_taxonomy_placement (with the right taxonomyNodeId from suggest_taxonomy_placement) ` +
+          `and update_feature_brief (with a concrete constrainedGoal) before re-running reviewDesignDoc.`
+        : `Design review: ${review.decision}. ${review.summary}`;
+      return { success: true, message: reviewMessage, data: { review, phaseGateBlocker } };
     }
 
     case "reviewBuildPlan": {
