@@ -4,7 +4,7 @@
 |-------|-------|
 | **Spec** | [docs/superpowers/specs/2026-04-27-coworker-tool-grant-spec-design.md](../specs/2026-04-27-coworker-tool-grant-spec-design.md) |
 | **Generated** | 2026-04-28 |
-| **Errors** | 103 |
+| **Errors** | 73 (was 103; GRANT-003 resolved 2026-04-28 by PR for C2) |
 | **Warnings** | 32 |
 | **Baseline** | [2026-04-27-coworker-tool-grant-audit.json](./2026-04-27-coworker-tool-grant-audit.json) |
 | **Sibling audit** | [Persona audit](./2026-04-27-coworker-persona-audit.md) — must land first; this audit's GRANT-006 promotes the persona audit's PERSONA-007 from warn to error |
@@ -50,21 +50,19 @@ By category:
 - **deploy (2):** resource_reservation_read, resource_reservation_write
 - **detect (1):** finding_create
 
-### GRANT-003 — Tool checks grant absent from catalog (30 errors)
+### GRANT-003 — Tool checks grant absent from catalog (RESOLVED — 0 errors)
 
-[agent-grants.ts](../../../apps/web/lib/tak/agent-grants.ts) defines 134 platform tools mapped to grants. Ten of those grants are not in the catalog — meaning no registry agent declares the grant either. **Any agent invoking a tool requiring one of these grants is denied.** This is the most operationally severe class of finding because it represents tools that no one can call.
+**Resolved 2026-04-28** by C2 of the [2026-04-28 sequencing plan](../plans/2026-04-28-coworker-and-routing-sequencing-plan.md): all 10 previously-undeclared grants now have catalog entries with `honored_by_tools` populated:
 
-Distinct undeclared grants used by tools:
+- `admin_read`, `admin_write` — governance, confidential sensitivity
+- `code_graph_read` — explore
+- `consumer_read` — consume
+- `deliberation_create`, `deliberation_read` — platform
+- `marketing_read`, `marketing_write` — new `marketing` category
+- `registry_write` — registry (implies `registry_read`)
+- `web_search` — platform
 
-- `admin_read`, `admin_write`
-- `code_graph_read`
-- `consumer_read`
-- `deliberation_create`, `deliberation_read`
-- `marketing_read`, `marketing_write`
-- `registry_write`
-- `web_search`
-
-Reconciliation: for each, decide whether the grant should be added to the catalog and assigned to specific agents in the registry, or whether the tool's required grant should change to one already in the catalog (e.g., `web_search` → `external_registry_search`).
+GRANT-004 (skill `allowedTools` not authorized) was unchanged by this PR because C2 only added catalog entries — agent-registry assignments are a separate sub-batch. Some marketing-related and admin skill mismatches will remain GRANT-004 findings until the corresponding registry assignments land.
 
 ### GRANT-004 — Skill allowedTools not authorized by assigned agent's grants (32 errors)
 
@@ -98,9 +96,9 @@ Reconciliation per skill: either grant the assigned agent the missing authority,
 
 The spec's §7 staged rollout schedules reconciliation across categories. Suggested PR sequence, each shrinking the baseline by one category:
 
-1. **Fix GRANT-003 first.** Adding catalog entries for the 10 undeclared grants (and assigning them to the right registry agents) will resolve a meaningful slice of GRANT-004 in passing. Two PRs: (a) trivially undeclared grants like `web_search` and `admin_*` get catalog entries and agent assignments, (b) `deliberation_*` and `consumer_read` may need design discussion.
+1. ✅ **Fix GRANT-003 first.** Done — C2 of the [2026-04-28 sequencing plan](../plans/2026-04-28-coworker-and-routing-sequencing-plan.md) added catalog entries for the 10 undeclared grants. Registry assignments deferred to value-stream-specific batches under the plan's Track D (D1 governance reads, D5 release/subscription, D6 consume, etc.).
 
-2. **Fix GRANT-002 by category.** One PR per value stream — governance is the largest at 24 grants and might split into two. For each grant: implement the tool, or remove the grant.
+2. **Fix GRANT-002 by category.** One PR per value stream — governance is the largest at 24 grants and might split into two. For each grant: implement the tool, or remove the grant. Per the plan, this is sequenced under Track D after Track B (routing substrate) lands.
 
 3. **Re-run GRANT-004 after each PR.** Skills will start passing as their dependencies resolve. Direct skill fixes only for the residue.
 
