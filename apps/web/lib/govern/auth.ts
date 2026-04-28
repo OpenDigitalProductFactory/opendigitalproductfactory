@@ -84,11 +84,27 @@ export type DpfSession = {
 //
 // Fix: give the sandbox a distinct cookie name. Portal keeps the default
 // so existing sessions survive, sandbox gets its own cookie that never
-// collides. `secure: false` because both run over plain http in dev.
+// collides.
 const isSandboxEnv = process.env.DPF_ENVIRONMENT === "sandbox";
 const sessionCookieName = isSandboxEnv
   ? "authjs.session-token.sandbox"
   : "authjs.session-token";
+
+// `secure: true` on a cookie tells the browser to drop it over plain HTTP.
+// In a self-hosted deploy, the portal can be reached three ways:
+//   - http://localhost:3000           (single-machine dev)
+//   - http://<lan-ip>:3000            (LAN / mDNS, plain HTTP)
+//   - https://dpf.example.com         (public domain behind reverse proxy)
+//
+// Gating on NODE_ENV breaks the LAN case: the production build sets
+// NODE_ENV=production, secure=true, the cookie is dropped over HTTP, every
+// click after login sees no session and bounces back to /login.
+//
+// Gate on the *protocol* instead: secure only when the operator has
+// explicitly declared an HTTPS public URL. This is the same convention
+// used by Gitea, Outline, and other self-hosted Next.js / Auth.js apps.
+const publicUrl = process.env.PUBLIC_URL ?? "";
+const isHttps = publicUrl.startsWith("https://");
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -101,7 +117,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: isHttps,
       },
     },
   },
