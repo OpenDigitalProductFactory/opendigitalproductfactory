@@ -11,6 +11,7 @@
 
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@dpf/db";
+import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 
 export type McpTokenCapability = "read" | "write";
 
@@ -53,9 +54,17 @@ const TOKEN_PREFIX = "dpfmcp_";
 const SECRET_BYTES = 24;
 const PREFIX_DISPLAY_LENGTH = 12;
 
-// Base32 alphabet (Crockford-ish, no I/L/O/U). Avoids characters that look
-// like each other so tokens are easier for humans to verify visually.
-const BASE32_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
+// Crockford base32 (RFC-style 32 symbols, excluding I/L/O/U for visual
+// disambiguation). MUST be exactly 32 characters — `& 31` indexes 0..31, so
+// a shorter alphabet produces `undefined` lookups that template-literal
+// into the literal text "undefined" inside generated tokens.
+const BASE32_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+if (BASE32_ALPHABET.length !== 32) {
+  throw new Error(
+    `BASE32_ALPHABET must be exactly 32 characters; got ${BASE32_ALPHABET.length}`,
+  );
+}
 
 function encodeBase32(buf: Buffer): string {
   let bits = 0;
@@ -87,13 +96,27 @@ function hashSecret(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
+// A write-capable token requires a configured contribution path. What
+// "configured" means depends on the feature flag:
+//   - Flag ON  (CONTRIBUTION_MODEL_ENABLED=true): the fork-PR rollout is in
+//     effect, so PlatformDevConfig.contributionModel must be set explicitly
+//     via the ForkSetupPanel (values: "maintainer-direct" | "fork-pr").
+//   - Flag OFF (default): the legacy direct-push flow is in use; the
+//     ForkSetupPanel is hidden and contributionModel is never written.
+//     The only meaningful prerequisite is that the user opted into sharing
+//     at all — i.e. contributionMode is "selective" or "contribute_all".
+//     "fork_only" means "stay private", so writes have nowhere to go.
 async function contributionModeConfigured(): Promise<boolean> {
   try {
     const cfg = await prisma.platformDevConfig.findUnique({
       where: { id: "singleton" },
-      select: { contributionModel: true },
+      select: { contributionMode: true, contributionModel: true },
     });
-    return cfg?.contributionModel != null;
+    if (!cfg) return false;
+    if (isContributionModelEnabled()) {
+      return cfg.contributionModel != null;
+    }
+    return cfg.contributionMode === "selective" || cfg.contributionMode === "contribute_all";
   } catch {
     return false;
   }

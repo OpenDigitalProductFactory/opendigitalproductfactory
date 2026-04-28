@@ -26,10 +26,20 @@ backups/
 # Test artifacts
 e2e-report/
 e2e-results/
+e2e/debug/
+e2e/.auth/
 test-results/
 
 # Local agent / codex caches
 .codex/
+
+# MCP client configs contain live bearer tokens — must never be committed.
+# .mcp.json (Claude Code CLI) and .vscode/mcp.json (Claude Code VS Code
+# extension via VS Code's native MCP store) both carry an Authorization
+# header in plaintext. Use the "Connect Claude Code" flow from
+# Admin > Platform Development to (re)generate these locally.
+.mcp.json
+.vscode/mcp.json
 
 # Python bytecode caches
 __pycache__/
