@@ -46,7 +46,7 @@ export async function getEndpointPerformance(endpointId: string) {
       where: { providerId: endpointId },
       select: {
         friendlyName: true,
-        capabilityTier: true,
+        capabilityCategory: true,
         codingCapability: true,
         instructionFollowing: true,
         bestFor: true,

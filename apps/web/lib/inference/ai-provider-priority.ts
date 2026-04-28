@@ -70,18 +70,18 @@ async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
   for (let i = 0; i < providers.length; i++) {
     const p = providers[i]!;
 
-    // Try ModelProfile first (has capabilityTier)
+    // Try ModelProfile first (has capabilityCategory)
     // Fetch all profiles and sort in JS using TIER_RANK — Prisma's alphabetical
     // sort on the string field gets the order wrong (e.g., "specialist" > "deep-thinker").
     const profiles = await prisma.modelProfile.findMany({
       where: { providerId: p.providerId },
-      select: { modelId: true, capabilityTier: true, costTier: true },
+      select: { modelId: true, capabilityCategory: true, costTier: true },
     });
 
     // Sort: highest tier first, then cheapest cost tier, then prefer non-dated model aliases
     const chatProfiles = profiles.filter((pr) => !NON_CHAT_PATTERN.test(pr.modelId));
     chatProfiles.sort((a, b) => {
-      const tierDiff = (TIER_RANK[b.capabilityTier] ?? 0) - (TIER_RANK[a.capabilityTier] ?? 0);
+      const tierDiff = (TIER_RANK[b.capabilityCategory] ?? 0) - (TIER_RANK[a.capabilityCategory] ?? 0);
       if (tierDiff !== 0) return tierDiff;
       // Prefer non-dated model aliases (e.g., "claude-sonnet-4-6" over "claude-sonnet-4-6-20250514")
       const aIsDated = /\d{8}$/.test(a.modelId) ? 1 : 0;
@@ -96,7 +96,7 @@ async function buildBootstrapPriority(): Promise<ProviderPriorityEntry[]> {
         providerId: p.providerId,
         modelId: profile.modelId,
         rank: i + 1,
-        capabilityTier: profile.capabilityTier ?? "unknown",
+        capabilityTier: profile.capabilityCategory ?? "unknown",
       });
       continue;
     }
@@ -247,7 +247,7 @@ async function filterByModelRequirements(
     select: {
       providerId: true,
       modelId: true,
-      capabilityTier: true,
+      capabilityCategory: true,
       instructionFollowing: true,
       codingCapability: true,
     },
@@ -261,7 +261,7 @@ async function filterByModelRequirements(
 
     if (req.minCapabilityTier) {
       const required = TIER_RANK[req.minCapabilityTier] ?? 0;
-      const actual = TIER_RANK[profile.capabilityTier] ?? 0;
+      const actual = TIER_RANK[profile.capabilityCategory] ?? 0;
       if (actual < required) return false;
     }
 
@@ -480,11 +480,11 @@ export async function optimizeProviderPriority(): Promise<{ ranked: number }> {
     // Sort in JS using TIER_RANK — Prisma alphabetical sort gets order wrong.
     const allProfiles = await prisma.modelProfile.findMany({
       where: { providerId: p.providerId },
-      select: { modelId: true, capabilityTier: true, costTier: true },
+      select: { modelId: true, capabilityCategory: true, costTier: true },
     });
     const chatProfiles = allProfiles.filter((pr) => !NON_CHAT_PATTERN.test(pr.modelId));
     chatProfiles.sort((a, b) => {
-      const tierDiff = (TIER_ORDER[b.capabilityTier] ?? 0) - (TIER_ORDER[a.capabilityTier] ?? 0);
+      const tierDiff = (TIER_ORDER[b.capabilityCategory] ?? 0) - (TIER_ORDER[a.capabilityCategory] ?? 0);
       if (tierDiff !== 0) return tierDiff;
       const aIsDated = /\d{8}$/.test(a.modelId) ? 1 : 0;
       const bIsDated = /\d{8}$/.test(b.modelId) ? 1 : 0;
@@ -498,7 +498,7 @@ export async function optimizeProviderPriority(): Promise<{ ranked: number }> {
         providerId: p.providerId,
         modelId: profile.modelId,
         rank: 0, // will be set after sorting
-        capabilityTier: profile.capabilityTier ?? "unknown",
+        capabilityTier: profile.capabilityCategory ?? "unknown",
       });
       continue;
     }

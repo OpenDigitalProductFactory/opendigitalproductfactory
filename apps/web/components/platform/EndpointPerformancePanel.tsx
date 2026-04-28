@@ -49,7 +49,7 @@ type TestRun = {
 
 type Profile = {
   friendlyName: string;
-  capabilityTier: string;
+  capabilityCategory: string;
   codingCapability: string | null;
   instructionFollowing: string | null;
   bestFor: unknown;
@@ -121,7 +121,7 @@ export default function EndpointPerformancePanel({
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Endpoint Performance</h2>
           {profile && (
             <div className="flex items-center gap-3 mt-1 text-xs text-[var(--dpf-muted)]">
-              <span>Tier: {profile.capabilityTier}</span>
+              <span>Tier: {profile.capabilityCategory}</span>
               {profile.instructionFollowing && (
                 <span>Instructions: <span className={CAPABILITY_COLORS[profile.instructionFollowing] ?? ""}>{profile.instructionFollowing}</span></span>
               )}
