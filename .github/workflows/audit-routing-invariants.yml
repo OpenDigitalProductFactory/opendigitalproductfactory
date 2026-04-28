@@ -1,0 +1,102 @@
+name: Routing Invariants Audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-routing-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Runs apps/web/scripts/audit-routing-spec-boot-invariants.ts against a
+# fresh CI database. The audit checks the routing architectural spec's
+# §8.1 and §12.7 invariants (10 checks total). Compares against a tracked
+# baseline at docs/superpowers/audits/2026-04-27-routing-spec-boot-invariants.json
+# and fails ONLY when NEW violations appear — pre-existing violations in
+# the baseline are tracked as backlog items and don't block merges.
+#
+# Per the routing-substrate constraint document (attempt-history.md), this
+# is the structural difference between attempt #11 and attempts 1-10:
+# CI now refuses to ship new instances of the four recurring failure
+# classes (vocabulary mismatch, three-place hand-aligned data, trusted
+# seed vs reality, unobserved silent failure).
+#
+# When fixing a baseline violation, regenerate the baseline:
+#   DATABASE_URL=... pnpm --filter web exec tsx \
+#     scripts/audit-routing-spec-boot-invariants.ts \
+#     --json-out docs/superpowers/audits/2026-04-27-routing-spec-boot-invariants.json
+# and commit the updated baseline alongside the fix.
+
+jobs:
+  audit:
+    name: Routing Invariants Audit
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dpf
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: dpf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dpf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
+      ADMIN_PASSWORD: ci_admin_changeme
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm --filter @dpf/db exec prisma migrate deploy
+
+      - name: Run seed
+        # The seed is the primary source of the violations the audit is
+        # designed to detect. Running it before the audit is intentional —
+        # we want to see the install state a real user would see on day
+        # zero, including any seed-induced drift.
+        run: pnpm --filter @dpf/db run seed
+
+      - name: Run routing-invariants audit (with baseline)
+        # Exits 0 if findings match the baseline (or are a subset).
+        # Exits 1 if NEW violations appear vs. the baseline — fails the PR.
+        # Stdout is the structured JSON report; stderr is the diff summary.
+        run: |
+          pnpm --filter web exec tsx \
+            scripts/audit-routing-spec-boot-invariants.ts \
+            --baseline docs/superpowers/audits/2026-04-27-routing-spec-boot-invariants.json \
+            > audit-current.json
+        continue-on-error: false
+
+      - name: Upload audit report (always, for inspection)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: routing-invariants-audit
+          path: audit-current.json
+          retention-days: 14
