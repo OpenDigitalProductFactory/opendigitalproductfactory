@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-04-28T03:47:22.086Z",
+  "generatedAt": "2026-04-28T05:15:13.639Z",
   "spec": "docs/superpowers/specs/2026-04-27-routing-control-data-plane-design.md",
   "invariantsChecked": 10,
   "violationCount": 3,
   "findings": [
     {
-      "invariantId": "INV-6",
-      "summary": "ModelProfile.capabilityTier still carries legacy LLM-grading vocabulary (15 rows)",
-      "detail": "Distinct values seen:\n  'advanced' (4 rows)\n  'deep-thinker' (8 rows)\n  'moderate' (3 rows)\n\nFix: Phase B of the routing migration retires this column. Rename to capabilityCategory (its actual purpose) and stop reading it as a routing tier."
+      "invariantId": "INV-6b",
+      "summary": "1 routing source file(s) still reference capabilityTier",
+      "detail": "  apps/web/lib/routing/recipe-types.ts\n\nThe canonical routing-input vocabulary is `qualityTier` (see quality-tiers.ts). Any `capabilityTier` reference in routing source is suspect: either a routing input using a non-canonical vocabulary (the bug), or a stale reference left after the Phase B rename."
     },
     {
-      "invariantId": "INV-6b",
-      "summary": "2 routing source file(s) still reference capabilityTier",
-      "detail": "  apps/web/lib/routing/known-provider-models.ts\n  apps/web/lib/routing/recipe-types.ts\n\nThese should be audited: any read of capabilityTier as a routing input is the bug INV-6 names. Reads as admin-UI categorization are fine but should be tagged for the rename."
+      "invariantId": "INV-6",
+      "summary": "ModelProfile.capabilityCategory still carries legacy LLM-grading vocabulary (15 rows)",
+      "detail": "Distinct values seen:\n  'advanced' (4 rows)\n  'deep-thinker' (8 rows)\n  'moderate' (3 rows)\n\nFix: stop seeding the legacy vocabulary and migrate live rows to the post-rename admin-UI categorization. The routing layer reads only qualityTier; this column is admin-display only."
     },
     {
       "invariantId": "INV-9",

@@ -495,7 +495,7 @@ export async function profileModelsInternal(
           modelId: m.modelId,
           friendlyName: m.modelId,
           summary: "Not accessible with current provider credentials",
-          capabilityTier: "restricted",
+          capabilityCategory: "restricted",
           costTier: "$",
           bestFor: [],
           avoidFor: [],
@@ -527,7 +527,7 @@ export async function profileModelsInternal(
           providerId, modelId: m.modelId,
           friendlyName: card.displayName || m.modelId,
           summary: "Deprecated by provider",
-          capabilityTier: "deprecated", costTier: "$",
+          capabilityCategory: "deprecated", costTier: "$",
           bestFor: [], avoidFor: [],
           modelStatus: "retired",
           retiredAt: new Date(),
@@ -556,7 +556,7 @@ export async function profileModelsInternal(
           providerId, modelId: m.modelId,
           friendlyName: card.displayName || m.modelId,
           summary: "Past deprecation date",
-          capabilityTier: "deprecated", costTier: "$",
+          capabilityCategory: "deprecated", costTier: "$",
           bestFor: [], avoidFor: [],
           modelStatus: "retired",
           retiredAt: new Date(),
@@ -584,7 +584,7 @@ export async function profileModelsInternal(
           .replace(/[-_:]/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase());
     const reasoning = card.dimensionScores.reasoning;
-    const capabilityTier = reasoning >= 85 ? "deep-thinker"
+    const capabilityCategory = reasoning >= 85 ? "deep-thinker"
       : reasoning >= 70 ? "strong"
       : reasoning >= 50 ? "moderate"
       : "fast-cheap";
@@ -730,7 +730,7 @@ export async function profileModelsInternal(
         modelId:       m.modelId,
         friendlyName,
         summary:       `${provider.name} model. Routing profile sourced from adapter registry.`,
-        capabilityTier,
+        capabilityCategory,
         costTier,
         bestFor:       ["general purpose tasks"],
         avoidFor:      [],
@@ -756,7 +756,7 @@ export async function profileModelsInternal(
         ...metadataFields,
         ...scoreFields,
         ...tierFields,
-        capabilityTier,
+        capabilityCategory,
         costTier,
         generatedBy:          "system:metadata-sync",
         generatedAt:          new Date(),
@@ -1033,7 +1033,7 @@ async function seedKnownModels(
         modelId: m.modelId,
         friendlyName: m.friendlyName,
         summary: m.summary,
-        capabilityTier: m.capabilityTier,
+        capabilityCategory: m.capabilityCategory,
         costTier: m.costTier,
         bestFor: m.bestFor,
         avoidFor: m.avoidFor,

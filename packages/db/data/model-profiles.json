@@ -5,7 +5,7 @@
     "friendlyName": "Claude Haiku 3",
     "modelStatus": "retired",
     "retiredReason": "Claude 3 Haiku returns empty responses via subscription OAuth — use Haiku 4.5 instead",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -87,7 +87,7 @@
     "modelId": "claude-sonnet-4-6",
     "friendlyName": "Claude Sonnet 4.6",
     "modelStatus": "active",
-    "capabilityTier": "frontier",
+    "capabilityCategory": "frontier",
     "costTier": "$$",
     "bestFor": ["code generation", "tool use", "complex reasoning", "analysis"],
     "avoidFor": [],
@@ -114,7 +114,7 @@
     "modelId": "claude-opus-4-6",
     "friendlyName": "Claude Opus 4.6",
     "modelStatus": "active",
-    "capabilityTier": "frontier",
+    "capabilityCategory": "frontier",
     "costTier": "$$$",
     "bestFor": ["deep reasoning", "complex code", "architecture", "long context"],
     "avoidFor": [],
@@ -141,7 +141,7 @@
     "modelId": "claude-haiku-4-5-20251001",
     "friendlyName": "Claude Haiku 4.5",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks", "fast responses", "simple tool use"
@@ -223,7 +223,7 @@
     "modelId": "gpt-5.4",
     "friendlyName": "GPT-5.4 (ChatGPT Subscription)",
     "modelStatus": "active",
-    "capabilityTier": "advanced",
+    "capabilityCategory": "advanced",
     "costTier": "subscription",
     "bestFor": [
       "conversation",
@@ -286,7 +286,7 @@
       "modelId": "gpt-5.3-codex",
       "friendlyName": "GPT-5 Codex",
       "modelStatus": "active",
-      "capabilityTier": "advanced",
+      "capabilityCategory": "advanced",
       "costTier": "$$$",
       "bestFor": [
         "coding",
@@ -346,7 +346,7 @@
     "modelId": "codex-mini-latest",
     "friendlyName": "Codex Mini",
     "modelStatus": "disabled",
-      "capabilityTier": "advanced",
+      "capabilityCategory": "advanced",
       "costTier": "$$",
     "bestFor": [
       "coding",
@@ -405,7 +405,7 @@
     "modelId": "deep-research-pro-preview-12-2025",
     "friendlyName": "Deep Research Pro Preview (Dec-12-2025)",
     "modelStatus": "retired",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -485,7 +485,7 @@
     "modelId": "gemini-2.0-flash",
     "friendlyName": "Gemini 2.0 Flash",
     "modelStatus": "retired",
-    "capabilityTier": "strong",
+    "capabilityCategory": "strong",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -565,7 +565,7 @@
     "modelId": "gemini-2.0-flash-001",
     "friendlyName": "Gemini 2.0 Flash 001",
     "modelStatus": "active",
-    "capabilityTier": "strong",
+    "capabilityCategory": "strong",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -645,7 +645,7 @@
     "modelId": "gemini-2.0-flash-lite",
     "friendlyName": "Gemini 2.0 Flash-Lite",
     "modelStatus": "retired",
-    "capabilityTier": "strong",
+    "capabilityCategory": "strong",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -725,7 +725,7 @@
     "modelId": "gemini-2.0-flash-lite-001",
     "friendlyName": "Gemini 2.0 Flash-Lite 001",
     "modelStatus": "retired",
-    "capabilityTier": "strong",
+    "capabilityCategory": "strong",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -805,7 +805,7 @@
     "modelId": "gemini-2.5-computer-use-preview-10-2025",
     "friendlyName": "Gemini 2.5 Computer Use Preview 10-2025",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -885,7 +885,7 @@
     "modelId": "gemini-2.5-flash",
     "friendlyName": "Gemini 2.5 Flash",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -965,7 +965,7 @@
     "modelId": "gemini-2.5-flash-image",
     "friendlyName": "Nano Banana",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1045,7 +1045,7 @@
     "modelId": "gemini-2.5-flash-lite",
     "friendlyName": "Gemini 2.5 Flash-Lite",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1125,7 +1125,7 @@
     "modelId": "gemini-2.5-flash-lite-preview-09-2025",
     "friendlyName": "Gemini 2.5 Flash-Lite Preview Sep 2025",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1205,7 +1205,7 @@
     "modelId": "gemini-2.5-flash-preview-tts",
     "friendlyName": "Gemini 2.5 Flash Preview TTS",
     "modelStatus": "retired",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1285,7 +1285,7 @@
     "modelId": "gemini-2.5-pro",
     "friendlyName": "Gemini 2.5 Pro",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1365,7 +1365,7 @@
     "modelId": "gemini-2.5-pro-preview-tts",
     "friendlyName": "Gemini 2.5 Pro Preview TTS",
     "modelStatus": "retired",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1445,7 +1445,7 @@
     "modelId": "gemini-3-flash-preview",
     "friendlyName": "Gemini 3 Flash Preview",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1525,7 +1525,7 @@
     "modelId": "gemini-3-pro-image-preview",
     "friendlyName": "Nano Banana Pro",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1605,7 +1605,7 @@
     "modelId": "gemini-3-pro-preview",
     "friendlyName": "Gemini 3 Pro Preview",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1685,7 +1685,7 @@
     "modelId": "gemini-3.1-flash-image-preview",
     "friendlyName": "Nano Banana 2",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1765,7 +1765,7 @@
     "modelId": "gemini-3.1-flash-lite-preview",
     "friendlyName": "Gemini 3.1 Flash Lite Preview",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1845,7 +1845,7 @@
     "modelId": "gemini-3.1-pro-preview",
     "friendlyName": "Gemini 3.1 Pro Preview",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -1925,7 +1925,7 @@
     "modelId": "gemini-3.1-pro-preview-customtools",
     "friendlyName": "Gemini 3.1 Pro Preview Custom Tools",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2005,7 +2005,7 @@
     "modelId": "gemini-flash-latest",
     "friendlyName": "Gemini Flash Latest",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2085,7 +2085,7 @@
     "modelId": "gemini-flash-lite-latest",
     "friendlyName": "Gemini Flash-Lite Latest",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2165,7 +2165,7 @@
     "modelId": "gemini-pro-latest",
     "friendlyName": "Gemini Pro Latest",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2245,7 +2245,7 @@
     "modelId": "gemini-robotics-er-1.5-preview",
     "friendlyName": "Gemini Robotics-ER 1.5 Preview",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2325,7 +2325,7 @@
     "modelId": "gemma-3-12b-it",
     "friendlyName": "Gemma 3 12B",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2405,7 +2405,7 @@
     "modelId": "gemma-3-1b-it",
     "friendlyName": "Gemma 3 1B",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2485,7 +2485,7 @@
     "modelId": "gemma-3-27b-it",
     "friendlyName": "Gemma 3 27B",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2565,7 +2565,7 @@
     "modelId": "gemma-3-4b-it",
     "friendlyName": "Gemma 3 4B",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2645,7 +2645,7 @@
     "modelId": "gemma-3n-e2b-it",
     "friendlyName": "Gemma 3n E2B",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2725,7 +2725,7 @@
     "modelId": "gemma-3n-e4b-it",
     "friendlyName": "Gemma 3n E4B",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"
@@ -2805,7 +2805,7 @@
     "modelId": "nano-banana-pro-preview",
     "friendlyName": "Nano Banana Pro",
     "modelStatus": "active",
-    "capabilityTier": "moderate",
+    "capabilityCategory": "moderate",
     "costTier": "$",
     "bestFor": [
       "general purpose tasks"

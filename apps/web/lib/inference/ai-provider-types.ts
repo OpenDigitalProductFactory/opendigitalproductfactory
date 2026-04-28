@@ -151,7 +151,7 @@ export type ModelProfileRow = {
   modelId: string;
   friendlyName: string;
   summary: string;
-  capabilityTier: string;
+  capabilityCategory: string;
   costTier: string;
   bestFor: string[];
   avoidFor: string[];
