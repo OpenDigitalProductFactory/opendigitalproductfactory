@@ -1,0 +1,559 @@
+{
+  "unhonored_demand": {
+    "budget_read": [
+      {
+        "agent": "AGT-ORCH-000",
+        "reason": "Cannot delegate budget authority without seeing the envelope."
+      },
+      {
+        "agent": "AGT-900",
+        "reason": "Budget cap enforcement requires reads."
+      }
+    ],
+    "policy_read": [
+      {
+        "agent": "AGT-ORCH-000",
+        "reason": "Constitutional governance is a stated duty."
+      },
+      {
+        "agent": "AGT-100",
+        "reason": "Reading policies IS the job."
+      },
+      {
+        "agent": "AGT-S2P-POL",
+        "reason": "Reading policy IS the job."
+      }
+    ],
+    "role_registry_read": [
+      {
+        "agent": "AGT-ORCH-000",
+        "reason": "Cross-orchestrator coordination needs the human supervisor role map."
+      },
+      {
+        "agent": "AGT-ORCH-100",
+        "reason": "Knowing which specialists I delegate to."
+      },
+      {
+        "agent": "AGT-ORCH-200",
+        "reason": "Standard for all orchestrators."
+      }
+    ],
+    "strategy_read": [
+      {
+        "agent": "AGT-ORCH-000",
+        "reason": "Strategic alignment is the first phrase in capability_domain."
+      },
+      {
+        "agent": "AGT-101",
+        "reason": "Required for alignment validation."
+      }
+    ],
+    "gap_analysis_read": [
+      {
+        "agent": "AGT-ORCH-100",
+        "reason": "Reading gap analyses is core Evaluate work."
+      }
+    ],
+    "investment_proposal_create": [
+      {
+        "agent": "AGT-ORCH-100",
+        "reason": "Need at least the read side honored to verify what I write."
+      },
+      {
+        "agent": "AGT-111",
+        "reason": "Primary output."
+      }
+    ],
+    "sbom_read": [
+      {
+        "agent": "AGT-ORCH-300",
+        "reason": "Cannot publish a release gate without reading the SBOM."
+      },
+      {
+        "agent": "AGT-131",
+        "reason": "Core input/output."
+      },
+      {
+        "agent": "AGT-902",
+        "reason": "Data lineage."
+      }
+    ],
+    "release_gate_create": [
+      {
+        "agent": "AGT-ORCH-300",
+        "reason": "Core artifact of the role."
+      }
+    ],
+    "resource_reservation_read": [
+      {
+        "agent": "AGT-ORCH-400",
+        "reason": "Pre-deploy check."
+      }
+    ],
+    "service_offer_read": [
+      {
+        "agent": "AGT-ORCH-500",
+        "reason": "Cannot orchestrate Release without seeing offers."
+      },
+      {
+        "agent": "AGT-151",
+        "reason": "Pre-publish validation."
+      }
+    ],
+    "subscription_read": [
+      {
+        "agent": "AGT-ORCH-500",
+        "reason": "Coordinating retirement requires subscription visibility."
+      }
+    ],
+    "consumer_onboard": [
+      {
+        "agent": "AGT-ORCH-600",
+        "reason": "First step in §5.6."
+      }
+    ],
+    "incident_read": [
+      {
+        "agent": "AGT-ORCH-600",
+        "reason": "Acting on escalations."
+      },
+      {
+        "agent": "AGT-ORCH-700",
+        "reason": "Operate VS without incident read is non-functional."
+      }
+    ],
+    "order_create": [
+      {
+        "agent": "AGT-ORCH-600",
+        "reason": "Order is the trigger event for provisioning."
+      },
+      {
+        "agent": "AGT-141",
+        "reason": "MUST-0038 dependency triggers."
+      }
+    ],
+    "telemetry_read": [
+      {
+        "agent": "AGT-ORCH-700",
+        "reason": "Telemetry is the operate VS's input."
+      }
+    ],
+    "constraint_validate": [
+      {
+        "agent": "AGT-ORCH-800",
+        "reason": "Constraint validation IS the role."
+      },
+      {
+        "agent": "AGT-180",
+        "reason": "The role's primary verb."
+      }
+    ],
+    "architecture_guardrail_read": [
+      {
+        "agent": "AGT-ORCH-800",
+        "reason": "Inputs to validation."
+      }
+    ],
+    "evidence_chain_read": [
+      {
+        "agent": "AGT-ORCH-800",
+        "reason": "Audit detection."
+      }
+    ],
+    "violation_report_create": [
+      {
+        "agent": "AGT-100",
+        "reason": "Producing violations IS the output."
+      }
+    ],
+    "strategy_write": [
+      {
+        "agent": "AGT-101",
+        "reason": "Required for theme management."
+      }
+    ],
+    "portfolio_backlog_read": [
+      {
+        "agent": "AGT-102",
+        "reason": "Manages PBI lifecycle per MUST-0054-0057."
+      }
+    ],
+    "rationalization_report_create": [
+      {
+        "agent": "AGT-110",
+        "reason": "Primary output of the role."
+      }
+    ],
+    "financial_read": [
+      {
+        "agent": "AGT-111",
+        "reason": "Cost dimension input."
+      }
+    ],
+    "tool_evaluation_read": [
+      {
+        "agent": "AGT-111",
+        "reason": "Inputs for scoring."
+      }
+    ],
+    "tool_verdict_create": [
+      {
+        "agent": "AGT-111",
+        "reason": "EP-GOVERN-002 output."
+      }
+    ],
+    "criteria_read": [
+      {
+        "agent": "AGT-112",
+        "reason": "Inputs to gap heat maps."
+      }
+    ],
+    "gap_analysis_create": [
+      {
+        "agent": "AGT-112",
+        "reason": "Primary output."
+      }
+    ],
+    "scope_agreement_create": [
+      {
+        "agent": "AGT-113",
+        "reason": "The role's name and primary artifact."
+      }
+    ],
+    "vulnerability_scan": [
+      {
+        "agent": "AGT-190",
+        "reason": "Security auditing."
+      }
+    ],
+    "credential_scan": [
+      {
+        "agent": "AGT-190",
+        "reason": "CoSAI threat coverage."
+      }
+    ],
+    "dependency_audit": [
+      {
+        "agent": "AGT-190",
+        "reason": "Supply chain."
+      }
+    ],
+    "finding_create": [
+      {
+        "agent": "AGT-190",
+        "reason": "Producing findings IS the role."
+      }
+    ],
+    "scoring_model_read": [
+      {
+        "agent": "AGT-120",
+        "reason": "Required for SHOULD-0023 scoring criteria."
+      }
+    ],
+    "architecture_write": [
+      {
+        "agent": "AGT-121",
+        "reason": "Architecture-definition-agent should write architecture."
+      }
+    ],
+    "roadmap_create": [
+      {
+        "agent": "AGT-122",
+        "reason": "Roadmap-assembly-agent should create roadmaps."
+      }
+    ],
+    "schedule_write": [
+      {
+        "agent": "AGT-130",
+        "reason": "Multi-team scheduling per MUST-0031."
+      }
+    ],
+    "sbom_write": [
+      {
+        "agent": "AGT-131",
+        "reason": "Core input/output."
+      }
+    ],
+    "dependency_graph_read": [
+      {
+        "agent": "AGT-131",
+        "reason": "Dependency tracking."
+      }
+    ],
+    "acceptance_package_write": [
+      {
+        "agent": "AGT-132",
+        "reason": "§5.3.5 output artifact."
+      }
+    ],
+    "rollback_plan_create": [
+      {
+        "agent": "AGT-140",
+        "reason": "SHOULD-0028 rollback pairing."
+      }
+    ],
+    "resource_reservation_write": [
+      {
+        "agent": "AGT-141",
+        "reason": "Primary output of MUST-0037."
+      }
+    ],
+    "change_event_emit": [
+      {
+        "agent": "AGT-142",
+        "reason": "Required by §5.4.3."
+      },
+      {
+        "agent": "AGT-170",
+        "reason": "Stated in §5.7.1."
+      }
+    ],
+    "product_instance_write": [
+      {
+        "agent": "AGT-142",
+        "reason": "Status updates required."
+      },
+      {
+        "agent": "AGT-161",
+        "reason": "Product instantiation."
+      }
+    ],
+    "contract_read": [
+      {
+        "agent": "AGT-150",
+        "reason": "Validation input."
+      }
+    ],
+    "service_offer_write": [
+      {
+        "agent": "AGT-150",
+        "reason": "The role's primary verb."
+      }
+    ],
+    "catalog_publish": [
+      {
+        "agent": "AGT-151",
+        "reason": "The role's primary verb."
+      }
+    ],
+    "subscription_write": [
+      {
+        "agent": "AGT-152",
+        "reason": "Lifecycle management."
+      }
+    ],
+    "contract_write": [
+      {
+        "agent": "AGT-152",
+        "reason": "Contract updates."
+      }
+    ],
+    "chargeback_write": [
+      {
+        "agent": "AGT-152",
+        "reason": "Billing records."
+      }
+    ],
+    "entitlement_provision": [
+      {
+        "agent": "AGT-160",
+        "reason": "Stated in capability_domain."
+      }
+    ],
+    "order_write": [
+      {
+        "agent": "AGT-161",
+        "reason": "Order fulfillment."
+      }
+    ],
+    "incident_create": [
+      {
+        "agent": "AGT-162",
+        "reason": "Incident intake is the role."
+      },
+      {
+        "agent": "AGT-171",
+        "reason": "Incident creation IS the role."
+      }
+    ],
+    "sla_compliance_write": [
+      {
+        "agent": "AGT-162",
+        "reason": "MUST-0040 evidence."
+      }
+    ],
+    "escalation_trigger": [
+      {
+        "agent": "AGT-171",
+        "reason": "P1 escalation flow."
+      }
+    ],
+    "runbook_execute": [
+      {
+        "agent": "AGT-172",
+        "reason": "SHOULD-0034 execution."
+      }
+    ],
+    "incident_write": [
+      {
+        "agent": "AGT-172",
+        "reason": "Resolution updates."
+      }
+    ],
+    "guardrail_validate": [
+      {
+        "agent": "AGT-181",
+        "reason": "MUST-0047-0053 enforcement."
+      }
+    ],
+    "evidence_chain_validate": [
+      {
+        "agent": "AGT-182",
+        "reason": "Validation IS the role."
+      }
+    ],
+    "audit_report_create": [
+      {
+        "agent": "AGT-182",
+        "reason": "Audit reports IS the output."
+      }
+    ],
+    "adr_create": [
+      {
+        "agent": "AGT-901",
+        "reason": "ADR drafts are stated output."
+      }
+    ],
+    "license_check": [
+      {
+        "agent": "AGT-902",
+        "reason": "SPDX license compatibility."
+      }
+    ],
+    "regulatory_compliance_check": [
+      {
+        "agent": "AGT-902",
+        "reason": "EU AI Act, ISO 42001 enforcement."
+      }
+    ],
+    "portfolio_backlog_write": [
+      {
+        "agent": "AGT-S2P-PFB",
+        "reason": "PBI management IS the role."
+      }
+    ],
+    "pbi_status_write": [
+      {
+        "agent": "AGT-S2P-PFB",
+        "reason": "Status workflow."
+      }
+    ],
+    "prod_status_write": [
+      {
+        "agent": "AGT-R2D-PB",
+        "reason": "Status workflow per BACKLOGS/README.md."
+      }
+    ]
+  },
+  "ambiguous_boundaries": [
+    {
+      "from": "AGT-ORCH-000",
+      "with_agent_id": "AGT-ORCH-800",
+      "tool_or_capability": "decision_record_create + constraint_validate",
+      "your_view": "AGT-ORCH-800 should own constraint validation; I should own strategic decision records only. Today both can create decision records."
+    },
+    {
+      "from": "AGT-ORCH-100",
+      "with_agent_id": "AGT-100",
+      "tool_or_capability": "investment_proposal_create",
+      "your_view": "Specialist (AGT-100) should propose; I should approve. Today both have create."
+    },
+    {
+      "from": "AGT-ORCH-200",
+      "with_agent_id": "AGT-110",
+      "tool_or_capability": "roadmap_create",
+      "your_view": "Roadmap creation is specialist work (AGT-110); I orchestrate. My grant should be roadmap_read + roadmap_approve."
+    },
+    {
+      "from": "AGT-ORCH-300",
+      "with_agent_id": "AGT-BUILD-QA",
+      "tool_or_capability": "release_gate_create",
+      "your_view": "QA tests; I gate. release_gate_create should be mine; QA results should be a required input I read."
+    },
+    {
+      "from": "AGT-102",
+      "with_agent_id": "AGT-S2P-PFB",
+      "tool_or_capability": "Portfolio Backlog Item lifecycle",
+      "your_view": "Both AGT-102 and AGT-S2P-PFB claim portfolio backlog ownership. Pick one."
+    },
+    {
+      "from": "AGT-180",
+      "with_agent_id": "AGT-100",
+      "tool_or_capability": "violation_report_create",
+      "your_view": "Both AGT-100 (policy-enforcement) and AGT-180 (constraint-validation) have violation_report_create. AGT-100 should produce policy violations; AGT-180 should produce constraint violations. Distinct subtypes."
+    },
+    {
+      "from": "AGT-S2P-POL",
+      "with_agent_id": "AGT-100",
+      "tool_or_capability": "policy_read + policy_write",
+      "your_view": "Both AGT-100 (policy-enforcement) and AGT-S2P-POL (policy-specialist) have policy grants. policy-specialist owns the lifecycle; policy-enforcement validates. Disambiguate."
+    },
+    {
+      "from": "AGT-900",
+      "with_agent_id": "AGT-152",
+      "tool_or_capability": "chargeback_write",
+      "your_view": "Both AGT-900 (finance) and AGT-152 (subscription-management) have chargeback_write. Finance should own the ledger; subscription-management should emit events. Disambiguate."
+    },
+    {
+      "from": "AGT-S2P-PFB",
+      "with_agent_id": "AGT-102",
+      "tool_or_capability": "Portfolio Backlog Item lifecycle",
+      "your_view": "AGT-102 and AGT-S2P-PFB both claim portfolio backlog management. Pick one canonical owner."
+    },
+    {
+      "from": "AGT-BUILD-DA",
+      "with_agent_id": "AGT-BUILD-SE",
+      "tool_or_capability": "Schema design vs. application code",
+      "your_view": "Schema/migrations are DA's; routes/handlers are SE's. The registry currently does not encode this division."
+    },
+    {
+      "from": "AGT-BUILD-SE",
+      "with_agent_id": "AGT-BUILD-DA",
+      "tool_or_capability": "Schema vs. application code",
+      "your_view": "Same point as DA's view — capability_domain duplication."
+    }
+  ],
+  "over_allocated": [
+    {
+      "agent": "AGT-ORCH-500",
+      "grant_key": "catalog_publish",
+      "reason": "Publish without write/read makes catalog_publish a one-way door."
+    }
+  ],
+  "blocker_count_total": 75,
+  "important_count_total": 26,
+  "by_vs_blocker": {
+    "cross-cutting": 15,
+    "evaluate": 13,
+    "integrate": 4,
+    "deploy": 7,
+    "release": 8,
+    "consume": 8,
+    "operate": 8,
+    "governance": 8,
+    "explore": 1,
+    "Strategy to Portfolio": 3
+  },
+  "by_vs_important": {
+    "cross-cutting": 4,
+    "evaluate": 1,
+    "explore": 4,
+    "integrate": 9,
+    "release": 1,
+    "operate": 1,
+    "governance": 3,
+    "deploy": 1,
+    "consume": 1,
+    "Request to Deploy": 1
+  }
+}

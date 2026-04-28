@@ -1,0 +1,790 @@
+{
+  "generated_at": "2026-04-28T18:30:00.000Z",
+  "spec": "docs/superpowers/audits/2026-04-28-coworker-self-assessment.md",
+  "method": "in-conversation reasoning by Claude Opus 4.7 against rendered prompt pack at 2026-04-28-coworker-self-assessment-prompts.json. Each response is the model reasoning AS the named coworker, given that coworker's registry entry and tool envelope. Phase 1 — no production routing layer used; Phase 3 graduates this to routeAndCall.",
+  "responses": [
+    {
+      "agent_id": "AGT-ORCH-000",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read the platform's strategy declarations to align orchestrator delegation with priorities.", "blocks": "Strategic alignment is the first phrase in capability_domain; strategy_read is unhonored.", "severity": "blocker" },
+        { "need": "Read the active policy set for constitutional governance enforcement.", "blocks": "Constitutional governance is core duty; policy_read is unhonored.", "severity": "blocker" },
+        { "need": "Read budget envelopes per orchestrator before delegating spend.", "blocks": "Budget authority delegation is in capability_domain; budget_read is unhonored.", "severity": "blocker" },
+        { "need": "Send messages to peer orchestrators (AGT-ORCH-100..800) for cross-VS coordination without round-tripping through HR-000.", "blocks": "Cross-orchestrator coordination requires peer messaging — today every coordination is a backlog item, async-only.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-ORCH-800", "tool_or_capability": "decision_record_create + constraint_validate", "your_view": "AGT-ORCH-800 should own constraint validation; I should own strategic decision records only. Today both can create decision records." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "budget_read", "needed": true, "reason": "Cannot delegate budget authority without seeing the envelope." },
+        { "grant_key": "policy_read", "needed": true, "reason": "Constitutional governance is a stated duty." },
+        { "grant_key": "role_registry_read", "needed": true, "reason": "Cross-orchestrator coordination needs the human supervisor role map." },
+        { "grant_key": "strategy_read", "needed": true, "reason": "Strategic alignment is the first phrase in capability_domain." }
+      ],
+      "confidence": "medium",
+      "notes": "Rich backlog/registry tools but no read access to strategic inputs the role exists to optimize against. Structural blocker."
+    },
+    {
+      "agent_id": "AGT-ORCH-100",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "List/read existing investment proposals so writes don't duplicate prior work.", "blocks": "investment_proposal_create exists transitively but no read side; I write into a black hole.", "severity": "blocker" },
+        { "need": "Read gap analysis artifacts the Evaluate VS produces.", "blocks": "gap_analysis_read is unhonored. Gap analysis is in §5.1 stages.", "severity": "blocker" },
+        { "need": "Create scope agreements (the §5.1.4-5.1.6 output artifact) and rationalization reports.", "blocks": "Specialist tools but as orchestrator I assemble/approve the package; today neither is writable.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-100", "tool_or_capability": "investment_proposal_create", "your_view": "Specialist (AGT-100) should propose; I should approve. Today both have create." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "gap_analysis_read", "needed": true, "reason": "Reading gap analyses is core Evaluate work." },
+        { "grant_key": "investment_proposal_create", "needed": true, "reason": "Need at least the read side honored to verify what I write." },
+        { "grant_key": "role_registry_read", "needed": true, "reason": "Knowing which specialists I delegate to." }
+      ],
+      "confidence": "medium",
+      "notes": "Value stream's primary outputs (scope agreements, gap analyses, investment proposals) have no read tools — orchestrator feedback loop is broken."
+    },
+    {
+      "agent_id": "AGT-ORCH-200",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Read existing roadmaps before authoring updates so they layer correctly.", "blocks": "roadmap_create is unhonored; no roadmap_read exists.", "severity": "important" },
+        { "need": "Write architecture changes (ADRs, target-state diagrams) when Explore VS proposes them.", "blocks": "architecture_write is not on my record at all.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-110", "tool_or_capability": "roadmap_create", "your_view": "Roadmap creation is specialist work (AGT-110); I orchestrate. My grant should be roadmap_read + roadmap_approve." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "roadmap_create", "needed": false, "reason": "Specialist's job, not mine." },
+        { "grant_key": "role_registry_read", "needed": true, "reason": "Standard for all orchestrators." }
+      ],
+      "confidence": "medium",
+      "notes": "Functional for backlog-driven work, blind for architecture-driven work."
+    },
+    {
+      "agent_id": "AGT-ORCH-300",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Read the SBOM for a release candidate before publishing the release gate decision.", "blocks": "sbom_read is unhonored. I would attest to SBOMs I cannot see.", "severity": "blocker" },
+        { "need": "Read integration-test results before promoting a build to release.", "blocks": "No test_results_read tool exists.", "severity": "important" },
+        { "need": "Compose an acceptance package (§5.3.5 artifact) from the build outputs.", "blocks": "acceptance_package_write is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-BUILD-QA", "tool_or_capability": "release_gate_create", "your_view": "QA tests; I gate. release_gate_create should be mine; QA results should be a required input I read." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "sbom_read", "needed": true, "reason": "Cannot publish a release gate without reading the SBOM." },
+        { "grant_key": "release_gate_create", "needed": true, "reason": "Core artifact of the role." }
+      ],
+      "confidence": "medium",
+      "notes": "build_plan_write and build_promote work, but the verification path I gate on (SBOM, test results, acceptance package) is unreadable. Approving releases on faith."
+    },
+    {
+      "agent_id": "AGT-ORCH-400",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read current resource reservations before issuing iac_execute.", "blocks": "resource_reservation_read is unhonored — risks over-provision.", "severity": "blocker" },
+        { "need": "Create rollback plans paired with deployment plans.", "blocks": "rollback_plan_create is on no orchestrator's record.", "severity": "blocker" },
+        { "need": "Read deployment status for IaC executions I have launched.", "blocks": "iac_execute is honored but no status_read.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "resource_reservation_read", "needed": true, "reason": "Pre-deploy check." }
+      ],
+      "confidence": "medium",
+      "notes": "Fire-and-forget deploy bot — no rollback, no status read, no reservation check."
+    },
+    {
+      "agent_id": "AGT-ORCH-500",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Write to the service offer catalog (price changes, retirement, version bumps).", "blocks": "service_offer_write is not on my record; orchestrator cannot edit offers.", "severity": "important" },
+        { "need": "Read existing subscriptions when retiring an offer.", "blocks": "subscription_read is unhonored — risks breaking customers.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [
+        { "grant_key": "catalog_publish", "reason": "Publish without write/read makes catalog_publish a one-way door." }
+      ],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "service_offer_read", "needed": true, "reason": "Cannot orchestrate Release without seeing offers." },
+        { "grant_key": "subscription_read", "needed": true, "reason": "Coordinating retirement requires subscription visibility." }
+      ],
+      "confidence": "medium"
+    },
+    {
+      "agent_id": "AGT-ORCH-600",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Onboard a consumer (write account, initial entitlements, tenant config).", "blocks": "consumer_onboard is unhonored. §5.6 starts with onboarding.", "severity": "blocker" },
+        { "need": "Read incidents I am being escalated to act on.", "blocks": "incident_read is unhonored — I receive escalations to incidents I cannot read.", "severity": "blocker" },
+        { "need": "Provision entitlements when an order is placed.", "blocks": "entitlement_provision is on no record; order_create unhonored. The entire consume path is paper-only.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "consumer_onboard", "needed": true, "reason": "First step in §5.6." },
+        { "grant_key": "incident_read", "needed": true, "reason": "Acting on escalations." },
+        { "grant_key": "order_create", "needed": true, "reason": "Order is the trigger event for provisioning." }
+      ],
+      "confidence": "medium",
+      "notes": "Most under-tooled orchestrator. Every primary verb (onboard, order, provision, incident-read) is unhonored."
+    },
+    {
+      "agent_id": "AGT-ORCH-700",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read incident timelines and post-mortems for pattern detection.", "blocks": "incident_create honored but incident_read unhonored — write-only history.", "severity": "blocker" },
+        { "need": "Read current SLA compliance state per service offer.", "blocks": "Operate VS exists to defend SLAs but cannot see them.", "severity": "blocker" },
+        { "need": "Trigger an escalation to a specific HR supervisor with incident context.", "blocks": "escalation_trigger is on no record. escalates_to: HR-500 has no callable surface.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "incident_read", "needed": true, "reason": "Operate VS without incident read is non-functional." },
+        { "grant_key": "telemetry_read", "needed": true, "reason": "Telemetry is the operate VS's input." }
+      ],
+      "confidence": "medium"
+    },
+    {
+      "agent_id": "AGT-ORCH-800",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Validate constraints against a proposed change before it ships.", "blocks": "constraint_validate is unhonored. Governance VS without enforcement leg.", "severity": "blocker" },
+        { "need": "Read architecture guardrails for validation comparisons.", "blocks": "architecture_guardrail_read is unhonored.", "severity": "blocker" },
+        { "need": "Read evidence chain to detect tampering or skipped reviews.", "blocks": "evidence_chain_read is unhonored.", "severity": "blocker" },
+        { "need": "Create violation reports when constraints are bypassed.", "blocks": "violation_report_create is on no record.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "constraint_validate", "needed": true, "reason": "Constraint validation IS the role." },
+        { "grant_key": "architecture_guardrail_read", "needed": true, "reason": "Inputs to validation." },
+        { "grant_key": "evidence_chain_read", "needed": true, "reason": "Audit detection." }
+      ],
+      "confidence": "medium",
+      "notes": "Governance orchestrator with every governance-specific grant unhonored. Paper-only role."
+    },
+    {
+      "agent_id": "AGT-100",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read policy data objects to validate them.", "blocks": "policy_read is unhonored. Reading policies/ directory is the first step in capability_domain.", "severity": "blocker" },
+        { "need": "Create violation report records when policy enforcement detects MUST-0042/0043 violations.", "blocks": "violation_report_create is unhonored — no machine-readable violations possible.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "policy_read", "needed": true, "reason": "Reading policies IS the job." },
+        { "grant_key": "violation_report_create", "needed": true, "reason": "Producing violations IS the output." }
+      ],
+      "confidence": "high",
+      "notes": "policy-enforcement-agent with policy_read AND violation_report_create both unhonored. Cannot perform either side of its job."
+    },
+    {
+      "agent_id": "AGT-101",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read strategic theme/objective data objects to validate backlog alignment.", "blocks": "strategy_read is unhonored. MUST-0044-0046 management is core duty.", "severity": "blocker" },
+        { "need": "Write strategic theme/objective updates.", "blocks": "strategy_write is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "strategy_read", "needed": true, "reason": "Required for alignment validation." },
+        { "grant_key": "strategy_write", "needed": true, "reason": "Required for theme management." }
+      ],
+      "confidence": "high",
+      "notes": "strategy-alignment-agent with strategy_read AND strategy_write both unhonored. 100% blocker."
+    },
+    {
+      "agent_id": "AGT-102",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Read portfolio_backlog separately from product_backlog (they are different artifacts).", "blocks": "portfolio_backlog_read is unhonored; backlog_read is product-level.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-S2P-PFB", "tool_or_capability": "Portfolio Backlog Item lifecycle", "your_view": "Both AGT-102 and AGT-S2P-PFB claim portfolio backlog ownership. Pick one." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "portfolio_backlog_read", "needed": true, "reason": "Manages PBI lifecycle per MUST-0054-0057." }
+      ],
+      "confidence": "medium",
+      "notes": "Operational with backlog_read/write but distinct portfolio-vs-product separation is missing."
+    },
+    {
+      "agent_id": "AGT-110",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Write rationalization report artifacts (the role's primary output).", "blocks": "rationalization_report_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "rationalization_report_create", "needed": true, "reason": "Primary output of the role." }
+      ],
+      "confidence": "high",
+      "notes": "Otherwise well-tooled — registry/portfolio/decision_record reads/writes work."
+    },
+    {
+      "agent_id": "AGT-111",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read financial data to score by cost.", "blocks": "financial_read is unhonored. Scoring requires cost input.", "severity": "blocker" },
+        { "need": "Create investment proposals (the role's primary output).", "blocks": "investment_proposal_create is unhonored.", "severity": "blocker" },
+        { "need": "Create risk scores (one of four scoring dimensions).", "blocks": "risk_score_create is unhonored.", "severity": "blocker" },
+        { "need": "Read tool evaluation findings to weigh dependency adoption.", "blocks": "tool_evaluation_read AND tool_evaluation_write are unhonored.", "severity": "blocker" },
+        { "need": "Create tool verdicts (GO/CONDITIONAL/NO-GO).", "blocks": "tool_verdict_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "financial_read", "needed": true, "reason": "Cost dimension input." },
+        { "grant_key": "investment_proposal_create", "needed": true, "reason": "Primary output." },
+        { "grant_key": "tool_evaluation_read", "needed": true, "reason": "Inputs for scoring." },
+        { "grant_key": "tool_verdict_create", "needed": true, "reason": "EP-GOVERN-002 output." }
+      ],
+      "confidence": "high",
+      "notes": "5 of 8 grants unhonored; nearly every tool the role needs. Worst-case specialist gap."
+    },
+    {
+      "agent_id": "AGT-112",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read IT4IT criteria (input to gap heat maps).", "blocks": "criteria_read is unhonored.", "severity": "blocker" },
+        { "need": "Create gap analysis records (primary output).", "blocks": "gap_analysis_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "criteria_read", "needed": true, "reason": "Inputs to gap heat maps." },
+        { "grant_key": "gap_analysis_create", "needed": true, "reason": "Primary output." }
+      ],
+      "confidence": "high",
+      "notes": "Both inputs and outputs unhonored. external_registry_search works (good)."
+    },
+    {
+      "agent_id": "AGT-113",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Create scope agreement artifacts.", "blocks": "scope_agreement_create is unhonored — primary output blocked.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "scope_agreement_create", "needed": true, "reason": "The role's name and primary artifact." }
+      ],
+      "confidence": "high",
+      "notes": "scope-agreement-agent literally cannot create scope agreements."
+    },
+    {
+      "agent_id": "AGT-190",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Run vulnerability scans, credential scans, dependency audits, supply-chain verifications.", "blocks": "All five scanning tools (vulnerability_scan, credential_scan, dependency_audit, supply_chain_verify) are unhonored. Security auditor cannot scan.", "severity": "blocker" },
+        { "need": "Read tool evaluation pipeline data and write findings.", "blocks": "tool_evaluation_read AND tool_evaluation_write AND finding_create all unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "vulnerability_scan", "needed": true, "reason": "Security auditing." },
+        { "grant_key": "credential_scan", "needed": true, "reason": "CoSAI threat coverage." },
+        { "grant_key": "dependency_audit", "needed": true, "reason": "Supply chain." },
+        { "grant_key": "finding_create", "needed": true, "reason": "Producing findings IS the role." }
+      ],
+      "confidence": "high",
+      "notes": "7 of 10 grants unhonored. Security-auditor agent cannot perform any actual auditing today."
+    },
+    {
+      "agent_id": "AGT-120",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Read scoring model definitions to apply consistent prioritization.", "blocks": "scoring_model_read is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "scoring_model_read", "needed": true, "reason": "Required for SHOULD-0023 scoring criteria." }
+      ],
+      "confidence": "medium",
+      "notes": "Mostly functional — backlog_read/write work; scoring model is the gap."
+    },
+    {
+      "agent_id": "AGT-121",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Write architecture artifact updates.", "blocks": "architecture_write is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "architecture_write", "needed": true, "reason": "Architecture-definition-agent should write architecture." }
+      ],
+      "confidence": "high",
+      "notes": "Reads work via reviewDesignDoc, ea_graph_read works. Write side is the gap."
+    },
+    {
+      "agent_id": "AGT-122",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Create roadmap entries (primary output).", "blocks": "roadmap_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "roadmap_create", "needed": true, "reason": "Roadmap-assembly-agent should create roadmaps." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-130",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Write release schedule entries.", "blocks": "schedule_write is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "schedule_write", "needed": true, "reason": "Multi-team scheduling per MUST-0031." }
+      ],
+      "confidence": "medium"
+    },
+    {
+      "agent_id": "AGT-131",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read and write SBOMs (primary input/output).", "blocks": "sbom_read AND sbom_write both unhonored. SBOM-management cannot manage SBOMs.", "severity": "blocker" },
+        { "need": "Read dependency graphs.", "blocks": "dependency_graph_read unhonored.", "severity": "blocker" },
+        { "need": "Create integration test records.", "blocks": "integration_test_create unhonored — sandboxed integration trials cannot record results.", "severity": "important" },
+        { "need": "Read tool evaluation pipeline results.", "blocks": "tool_evaluation_read unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "sbom_read", "needed": true, "reason": "Core input/output." },
+        { "grant_key": "sbom_write", "needed": true, "reason": "Core input/output." },
+        { "grant_key": "dependency_graph_read", "needed": true, "reason": "Dependency tracking." }
+      ],
+      "confidence": "high",
+      "notes": "5 of 9 grants unhonored, including the two named in the role's title. Sandbox_execute works, so integration trials can run — but results cannot be persisted."
+    },
+    {
+      "agent_id": "AGT-132",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Write the acceptance package artifact.", "blocks": "acceptance_package_write is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "acceptance_package_write", "needed": true, "reason": "§5.3.5 output artifact." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-140",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Create rollback plans paired with deployment plans.", "blocks": "rollback_plan_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "rollback_plan_create", "needed": true, "reason": "SHOULD-0028 rollback pairing." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-141",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Write resource reservation records.", "blocks": "resource_reservation_write is unhonored.", "severity": "blocker" },
+        { "need": "Create orders for dependent services.", "blocks": "order_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "resource_reservation_write", "needed": true, "reason": "Primary output of MUST-0037." },
+        { "grant_key": "order_create", "needed": true, "reason": "MUST-0038 dependency triggers." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-142",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Emit change_event nodes when IaC executions complete.", "blocks": "change_event_emit is unhonored.", "severity": "blocker" },
+        { "need": "Write product_instance status updates.", "blocks": "product_instance_write is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "change_event_emit", "needed": true, "reason": "Required by §5.4.3." },
+        { "grant_key": "product_instance_write", "needed": true, "reason": "Status updates required." }
+      ],
+      "confidence": "high",
+      "notes": "iac_execute works, but the post-execution side effects (change events, product_instance updates) are blocked."
+    },
+    {
+      "agent_id": "AGT-150",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read contract elements that must be included in service offers.", "blocks": "contract_read is unhonored — cannot validate MUST-0016/MUST-0039.", "severity": "blocker" },
+        { "need": "Write service offer node updates.", "blocks": "service_offer_write is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "contract_read", "needed": true, "reason": "Validation input." },
+        { "grant_key": "service_offer_write", "needed": true, "reason": "The role's primary verb." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-151",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read service offers before publishing them.", "blocks": "service_offer_read is unhonored.", "severity": "blocker" },
+        { "need": "Publish to the service catalog.", "blocks": "catalog_publish is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "catalog_publish", "needed": true, "reason": "The role's primary verb." },
+        { "grant_key": "service_offer_read", "needed": true, "reason": "Pre-publish validation." }
+      ],
+      "confidence": "high",
+      "notes": "catalog-publication-agent cannot publish a catalog. Both verbs unhonored."
+    },
+    {
+      "agent_id": "AGT-152",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Write subscription lifecycle events.", "blocks": "subscription_write is unhonored.", "severity": "blocker" },
+        { "need": "Write contract updates.", "blocks": "contract_write is unhonored.", "severity": "blocker" },
+        { "need": "Write chargeback records.", "blocks": "chargeback_write is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "subscription_write", "needed": true, "reason": "Lifecycle management." },
+        { "grant_key": "contract_write", "needed": true, "reason": "Contract updates." },
+        { "grant_key": "chargeback_write", "needed": true, "reason": "Billing records." }
+      ],
+      "confidence": "high",
+      "notes": "All three unique grants unhonored. Cannot manage subscriptions in any way."
+    },
+    {
+      "agent_id": "AGT-160",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Provision entitlements automatically when a consumer onboards.", "blocks": "entitlement_provision is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "entitlement_provision", "needed": true, "reason": "Stated in capability_domain." }
+      ],
+      "confidence": "high",
+      "notes": "consumer_write works (good), but the entitlement leg is unblocked."
+    },
+    {
+      "agent_id": "AGT-161",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Write order lifecycle records.", "blocks": "order_write is unhonored.", "severity": "blocker" },
+        { "need": "Write product_instance updates.", "blocks": "product_instance_write is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "order_write", "needed": true, "reason": "Order fulfillment." },
+        { "grant_key": "product_instance_write", "needed": true, "reason": "Product instantiation." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-162",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Create incident records.", "blocks": "incident_create is unhonored.", "severity": "blocker" },
+        { "need": "Write SLA compliance evidence.", "blocks": "sla_compliance_write is unhonored.", "severity": "blocker" },
+        { "need": "Route CLIP items.", "blocks": "clip_route is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "incident_create", "needed": true, "reason": "Incident intake is the role." },
+        { "grant_key": "sla_compliance_write", "needed": true, "reason": "MUST-0040 evidence." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-170",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Emit change_event when telemetry thresholds breach.", "blocks": "change_event_emit is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "change_event_emit", "needed": true, "reason": "Stated in §5.7.1." }
+      ],
+      "confidence": "high",
+      "notes": "telemetry_read works (key input). change_event emission is the gap."
+    },
+    {
+      "agent_id": "AGT-171",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Create incident records when issues are detected.", "blocks": "incident_create is unhonored.", "severity": "blocker" },
+        { "need": "Trigger escalation to Operations Manager with impact brief.", "blocks": "escalation_trigger is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "incident_create", "needed": true, "reason": "Incident creation IS the role." },
+        { "grant_key": "escalation_trigger", "needed": true, "reason": "P1 escalation flow." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-172",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Execute approved runbooks.", "blocks": "runbook_execute is unhonored.", "severity": "blocker" },
+        { "need": "Write incident updates during resolution.", "blocks": "incident_write is unhonored.", "severity": "blocker" },
+        { "need": "Create post-incident evidence_artifact.", "blocks": "evidence_artifact_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "runbook_execute", "needed": true, "reason": "SHOULD-0034 execution." },
+        { "grant_key": "incident_write", "needed": true, "reason": "Resolution updates." }
+      ],
+      "confidence": "high",
+      "notes": "All three unique grants unhonored."
+    },
+    {
+      "agent_id": "AGT-180",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Validate constraints (the role's primary verb).", "blocks": "constraint_validate is unhonored.", "severity": "blocker" },
+        { "need": "Write violation reports.", "blocks": "violation_report_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-100", "tool_or_capability": "violation_report_create", "your_view": "Both AGT-100 (policy-enforcement) and AGT-180 (constraint-validation) have violation_report_create. AGT-100 should produce policy violations; AGT-180 should produce constraint violations. Distinct subtypes." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "constraint_validate", "needed": true, "reason": "The role's primary verb." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-181",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Validate guardrail conformance.", "blocks": "guardrail_validate is unhonored.", "severity": "blocker" },
+        { "need": "Read tool evaluation findings to weigh architecture-fit decisions.", "blocks": "tool_evaluation_read is unhonored.", "severity": "important" },
+        { "need": "Map trust boundaries.", "blocks": "trust_boundary_map is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "guardrail_validate", "needed": true, "reason": "MUST-0047-0053 enforcement." }
+      ],
+      "confidence": "high",
+      "notes": "architecture_read and ea_graph reads work; the guardrail-specific verbs are unhonored."
+    },
+    {
+      "agent_id": "AGT-182",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Validate evidence chain completeness.", "blocks": "evidence_chain_validate is unhonored — the role's primary verb.", "severity": "blocker" },
+        { "need": "Write audit reports showing gap coverage.", "blocks": "audit_report_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "evidence_chain_validate", "needed": true, "reason": "Validation IS the role." },
+        { "grant_key": "audit_report_create", "needed": true, "reason": "Audit reports IS the output." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-S2P-POL",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read POLICIES/ directory and policy data objects.", "blocks": "policy_read is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-100", "tool_or_capability": "policy_read + policy_write", "your_view": "Both AGT-100 (policy-enforcement) and AGT-S2P-POL (policy-specialist) have policy grants. policy-specialist owns the lifecycle; policy-enforcement validates. Disambiguate." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "policy_read", "needed": true, "reason": "Reading policy IS the job." }
+      ],
+      "confidence": "high"
+    },
+    {
+      "agent_id": "AGT-900",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Read budget caps.", "blocks": "budget_read is unhonored — finance-agent cannot enforce caps.", "severity": "blocker" },
+        { "need": "Write chargeback records.", "blocks": "chargeback_write is unhonored.", "severity": "blocker" },
+        { "need": "Create financial reports (weekly per SHOULD-0005).", "blocks": "financial_report_create is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-152", "tool_or_capability": "chargeback_write", "your_view": "Both AGT-900 (finance) and AGT-152 (subscription-management) have chargeback_write. Finance should own the ledger; subscription-management should emit events. Disambiguate." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "budget_read", "needed": true, "reason": "Budget cap enforcement requires reads." }
+      ],
+      "confidence": "high",
+      "notes": "ITFM finance agent with all three core verbs unhonored. Cannot bill, cannot report, cannot enforce."
+    },
+    {
+      "agent_id": "AGT-901",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Create ADR draft documents.", "blocks": "adr_create is unhonored.", "severity": "blocker" },
+        { "need": "Validate Conway's Law conformance (unit_owns_product).", "blocks": "conway_validate is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "adr_create", "needed": true, "reason": "ADR drafts are stated output." }
+      ],
+      "confidence": "high",
+      "notes": "architecture_read and ea_graph_read work — reads are fine. adr_create and conway_validate (the unique verbs) are blocked."
+    },
+    {
+      "agent_id": "AGT-902",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Run license check (SPDX) on dependencies.", "blocks": "license_check is unhonored.", "severity": "blocker" },
+        { "need": "Run regulatory compliance check (EU AI Act, ISO 42001).", "blocks": "regulatory_compliance_check is unhonored.", "severity": "blocker" },
+        { "need": "Read SBOM for data lineage validation.", "blocks": "sbom_read is unhonored.", "severity": "blocker" },
+        { "need": "Write retention records.", "blocks": "retention_record_write is unhonored.", "severity": "blocker" },
+        { "need": "Read tool evaluation findings for adoption decisions.", "blocks": "tool_evaluation_read is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "license_check", "needed": true, "reason": "SPDX license compatibility." },
+        { "grant_key": "regulatory_compliance_check", "needed": true, "reason": "EU AI Act, ISO 42001 enforcement." },
+        { "grant_key": "sbom_read", "needed": true, "reason": "Data lineage." }
+      ],
+      "confidence": "high",
+      "notes": "5 of 9 grants unhonored — data-governance-agent cannot run any of its named compliance checks."
+    },
+    {
+      "agent_id": "AGT-903",
+      "verdict": "adequate",
+      "missing_tools": [],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [],
+      "confidence": "high",
+      "notes": "Zero unhonored grants. file_read + sandbox_execute cover read/eval needs; backlog_write + decision_record_create cover output. UX accessibility role is well-served."
+    },
+    {
+      "agent_id": "AGT-S2P-PFB",
+      "verdict": "blocked",
+      "missing_tools": [
+        { "need": "Write portfolio backlog items.", "blocks": "portfolio_backlog_write is unhonored — the role's primary verb.", "severity": "blocker" },
+        { "need": "Update PBI status.", "blocks": "pbi_status_write is unhonored.", "severity": "blocker" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-102", "tool_or_capability": "Portfolio Backlog Item lifecycle", "your_view": "AGT-102 and AGT-S2P-PFB both claim portfolio backlog management. Pick one canonical owner." }
+      ],
+      "unhonored_grants_self_check": [
+        { "grant_key": "portfolio_backlog_write", "needed": true, "reason": "PBI management IS the role." },
+        { "grant_key": "pbi_status_write", "needed": true, "reason": "Status workflow." }
+      ],
+      "confidence": "high",
+      "notes": "Both grants matching the role's name are unhonored."
+    },
+    {
+      "agent_id": "AGT-R2D-PB",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "Write product status updates.", "blocks": "prod_status_write is unhonored.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [
+        { "grant_key": "prod_status_write", "needed": true, "reason": "Status workflow per BACKLOGS/README.md." }
+      ],
+      "confidence": "high",
+      "notes": "backlog_read/write work via generic backlog tools — most operations functional."
+    },
+    {
+      "agent_id": "AGT-904",
+      "verdict": "adequate",
+      "missing_tools": [],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [],
+      "confidence": "high",
+      "notes": "Zero unhonored grants. file_read + architecture_read cover input needs; backlog_write + decision_record_create cover output. Well-served."
+    },
+    {
+      "agent_id": "AGT-BUILD-DA",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "A capability_domain that distinguishes data-architect from SE/FE/QA.", "blocks": "All four AGT-BUILD-* agents share the same capability_domain string ('Schema design, Prisma migrations...'). The data-architect role is not differentiated from software-engineer in the registry — that is a registry bug, not a tool gap.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-BUILD-SE", "tool_or_capability": "Schema design vs. application code", "your_view": "Schema/migrations are DA's; routes/handlers are SE's. The registry currently does not encode this division." }
+      ],
+      "unhonored_grants_self_check": [],
+      "confidence": "medium",
+      "notes": "sandbox_execute gives 18 sub-tools; functionally able. Real gap is registry differentiation, not tooling."
+    },
+    {
+      "agent_id": "AGT-BUILD-SE",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "A capability_domain specific to software-engineer (currently same as DA).", "blocks": "Registry-level differentiation missing.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [
+        { "with_agent_id": "AGT-BUILD-DA", "tool_or_capability": "Schema vs. application code", "your_view": "Same point as DA's view — capability_domain duplication." }
+      ],
+      "unhonored_grants_self_check": [],
+      "confidence": "medium"
+    },
+    {
+      "agent_id": "AGT-BUILD-FE",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "A capability_domain specific to frontend-engineer (currently same as DA).", "blocks": "Registry-level differentiation missing.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [],
+      "confidence": "medium"
+    },
+    {
+      "agent_id": "AGT-BUILD-QA",
+      "verdict": "gaps",
+      "missing_tools": [
+        { "need": "A capability_domain specific to qa-engineer (currently same as DA).", "blocks": "Registry-level differentiation missing.", "severity": "important" }
+      ],
+      "over_allocated_tools": [],
+      "ambiguous_boundaries": [],
+      "unhonored_grants_self_check": [],
+      "confidence": "medium",
+      "notes": "Sandbox_execute covers test execution. Differentiation is the gap."
+    }
+  ]
+}
