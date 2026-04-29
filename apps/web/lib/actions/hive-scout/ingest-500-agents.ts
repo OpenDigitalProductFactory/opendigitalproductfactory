@@ -23,7 +23,9 @@ const CATALOG_README_URL =
   "https://raw.githubusercontent.com/ashishpatel26/500-AI-Agents-Projects/main/README.md";
 const BACKLOG_SOURCE = "hive-scout";
 const ITEM_ID_PREFIX = "HS";
-const PROMPT_CATEGORY = "specialist";
+// Backlog-item body template (not a coworker persona). Lives under
+// prompts/templates/ to keep prompts/specialist/ scoped to actual specialists.
+const PROMPT_CATEGORY = "templates";
 const PROMPT_SLUG = "hive-scout-archetype-gap";
 const DEEP_LINK = "/portfolio/backlog?source=hive-scout";
 

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-29T00:31:08.411Z",
+  "generatedAt": "2026-04-29T01:34:35.375Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 89,
+  "errorCount": 94,
   "warnCount": 0,
   "findings": [
     {
@@ -398,6 +398,78 @@
       "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-S2P-POL.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
     },
     {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-ADMIN",
+      "file": null,
+      "summary": "Registry agent AGT-WS-ADMIN (admin-assistant) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-ADMIN.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-BUILD",
+      "file": null,
+      "summary": "Registry agent AGT-WS-BUILD (build-specialist) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-BUILD.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-CUSTOMER",
+      "file": null,
+      "summary": "Registry agent AGT-WS-CUSTOMER (customer-advisor) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-CUSTOMER.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-EA",
+      "file": null,
+      "summary": "Registry agent AGT-WS-EA (ea-architect) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-EA.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-HR",
+      "file": null,
+      "summary": "Registry agent AGT-WS-HR (hr-specialist) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-HR.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-ONBOARD",
+      "file": null,
+      "summary": "Registry agent AGT-WS-ONBOARD (onboarding-coo) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-ONBOARD.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-OPS",
+      "file": null,
+      "summary": "Registry agent AGT-WS-OPS (ops-coordinator) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-OPS.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-PLATFORM",
+      "file": null,
+      "summary": "Registry agent AGT-WS-PLATFORM (platform-engineer) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-PLATFORM.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
+      "invariantId": "PERSONA-001",
+      "severity": "error",
+      "agentId": "AGT-WS-PORTFOLIO",
+      "file": null,
+      "summary": "Registry agent AGT-WS-PORTFOLIO (portfolio-advisor) has no persona file",
+      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-WS-PORTFOLIO.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
+    },
+    {
       "invariantId": "PERSONA-003",
       "severity": "error",
       "agentId": null,
@@ -521,24 +593,8 @@
       "invariantId": "PERSONA-003",
       "severity": "error",
       "agentId": null,
-      "file": "prompts/specialist/hive-scout-archetype-gap.prompt.md",
-      "summary": "Persona prompts/specialist/hive-scout-archetype-gap.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
       "file": "prompts/specialist/qa-engineer.prompt.md",
       "summary": "Persona prompts/specialist/qa-engineer.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/shared-identity.prompt.md",
-      "summary": "Persona prompts/specialist/shared-identity.prompt.md missing required frontmatter fields",
       "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
     },
     {
@@ -681,24 +737,8 @@
       "invariantId": "PERSONA-005",
       "severity": "error",
       "agentId": null,
-      "file": "prompts/specialist/hive-scout-archetype-gap.prompt.md",
-      "summary": "Persona prompts/specialist/hive-scout-archetype-gap.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
       "file": "prompts/specialist/qa-engineer.prompt.md",
       "summary": "Persona prompts/specialist/qa-engineer.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/shared-identity.prompt.md",
-      "summary": "Persona prompts/specialist/shared-identity.prompt.md missing or misordered required body sections",
       "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
     },
     {
