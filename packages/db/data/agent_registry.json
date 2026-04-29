@@ -159,6 +159,7 @@
           "role_registry_read",
           "backlog_write",
           "backlog_triage",
+          "build_promote",
           "roadmap_create",
           "architecture_read",
           "spec_plan_read"
@@ -2382,6 +2383,349 @@
         "tool_grants": [
           "sandbox_execute"
         ]
+      }
+    },
+    {
+      "agent_id": "AGT-WS-ADMIN",
+      "agent_name": "admin-assistant",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Platform administration, infrastructure management, access control; log inspection, configuration management, service restart, migration and seed execution, command running with destructive-command guards.",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-BUILD",
+      "agent_name": "build-specialist",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "User-facing build coworker for the /build route. Guides through five build phases — Ideate > Plan > Build > Review > Ship. Decomposition, test-driven thinking, pattern reuse, codebase awareness. Distinct from AGT-BUILD-DA/SE/FE/QA which are sub-agents inside Build Studio.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-BUILD-DA",
+        "AGT-BUILD-SE",
+        "AGT-BUILD-FE",
+        "AGT-BUILD-QA"
+      ],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.3"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-CUSTOMER",
+      "agent_name": "customer-advisor",
+      "tier": "specialist",
+      "value_stream": "consume",
+      "capability_domain": "Customer Success Manager. Customer journey mapping, friction detection, adoption analysis, service-level monitoring. Sees the platform through service consumers' eyes — accounts, satisfaction signals, friction points.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-600",
+      "it4it_sections": [
+        "5.6 Consume Value Stream"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-EA",
+      "agent_name": "ea-architect",
+      "tier": "specialist",
+      "value_stream": "explore",
+      "capability_domain": "Enterprise Architect. Structural analysis using ArchiMate 4 notation; dependency tracing, pattern matching, governance enforcement, impact analysis. EA models are implementable with operational counterparts, not illustrative.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-121"
+      ],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "5.2 Explore Value Stream",
+        "5.2.3 Define Digital Product Architecture"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-HR",
+      "agent_name": "hr-specialist",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "HR Director. Network of human roles, capabilities, and accountability chains (HR-000..HR-500); capability matching, delegation analysis, compliance checking, succession planning. Every critical decision must have a qualified human in the loop.",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.2.5 Workforce FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-ONBOARD",
+      "agent_name": "onboarding-coo",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "First-run onboarding COO. Walks new platform owners through initial setup with personalised, business-context-aware conversation. Distinct from AGT-ORCH-000 (Jiminy) — runs only for /setup wizard, has its own grants and model tier per bootstrap-first-run.ts.",
+      "human_supervisor_id": "HR-000",
+      "hitl_tier_default": 0,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "file_read",
+          "web_search",
+          "data_governance_validate",
+          "registry_read",
+          "backlog_read",
+          "portfolio_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-WS-OPS",
+      "agent_name": "ops-coordinator",
+      "tier": "specialist",
+      "value_stream": "integrate",
+      "capability_domain": "Scrum Master / delivery flow coordinator. Work as a stream through a delivery pipeline — backlog items, epics, velocity, blockers, WIP limits. WSJF priority sorting, scope control, epic health.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.2 Plan Product Release"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-PLATFORM",
+      "agent_name": "platform-engineer",
+      "tier": "specialist",
+      "value_stream": "cross-cutting",
+      "capability_domain": "AI Ops Engineer. AI layer as a network of providers, models, costs, capabilities. Cost optimization, capability matching, failover design, profiling, workforce planning. Manages provider/model assignments and routing.",
+      "human_supervisor_id": "HR-500",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC",
+        "6.2.4 Service Catalog FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
+      }
+    },
+    {
+      "agent_id": "AGT-WS-PORTFOLIO",
+      "agent_name": "portfolio-advisor",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "capability_domain": "Portfolio Analyst. Investment, return, risk; budget allocations, health scores, portfolio balance across 4 root portfolios with 481-node DPPM taxonomy. Pareto analysis, red-flag detection, comparative benchmarking.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-100",
+      "it4it_sections": [
+        "5.1 Evaluate Value Stream",
+        "6.2.1 Portfolio Backlog FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": []
       }
     }
   ]
