@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-29T02:16:43.113Z",
+  "generatedAt": "2026-04-29T02:35:30.486Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 67,
+  "errorCount": 49,
   "warnCount": 0,
   "findings": [
     {
@@ -240,14 +240,6 @@
     {
       "invariantId": "PERSONA-001",
       "severity": "error",
-      "agentId": "AGT-900",
-      "file": null,
-      "summary": "Registry agent AGT-900 (finance-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-900.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
       "agentId": "AGT-901",
       "file": null,
       "summary": "Registry agent AGT-901 (architecture-agent) has no persona file",
@@ -264,50 +256,10 @@
     {
       "invariantId": "PERSONA-001",
       "severity": "error",
-      "agentId": "AGT-903",
-      "file": null,
-      "summary": "Registry agent AGT-903 (ux-accessibility-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-903.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
       "agentId": "AGT-904",
       "file": null,
       "summary": "Registry agent AGT-904 (documentation-specialist) has no persona file",
       "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-904.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-BUILD-DA",
-      "file": null,
-      "summary": "Registry agent AGT-BUILD-DA (build-data-architect) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-BUILD-DA.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-BUILD-FE",
-      "file": null,
-      "summary": "Registry agent AGT-BUILD-FE (build-frontend-engineer) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-BUILD-FE.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-BUILD-QA",
-      "file": null,
-      "summary": "Registry agent AGT-BUILD-QA (build-qa-engineer) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-BUILD-QA.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-BUILD-SE",
-      "file": null,
-      "summary": "Registry agent AGT-BUILD-SE (build-software-engineer) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-BUILD-SE.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
     },
     {
       "invariantId": "PERSONA-001",
@@ -401,14 +353,6 @@
       "invariantId": "PERSONA-003",
       "severity": "error",
       "agentId": null,
-      "file": "prompts/route-persona/finance-agent.prompt.md",
-      "summary": "Persona prompts/route-persona/finance-agent.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
       "file": "prompts/route-persona/inventory-specialist.prompt.md",
       "summary": "Persona prompts/route-persona/inventory-specialist.prompt.md missing required frontmatter fields",
       "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
@@ -425,57 +369,9 @@
       "invariantId": "PERSONA-003",
       "severity": "error",
       "agentId": null,
-      "file": "prompts/specialist/data-architect.prompt.md",
-      "summary": "Persona prompts/specialist/data-architect.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
       "file": "prompts/specialist/discovery-taxonomy-gap-triage.prompt.md",
       "summary": "Persona prompts/specialist/discovery-taxonomy-gap-triage.prompt.md missing required frontmatter fields",
       "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/frontend-engineer.prompt.md",
-      "summary": "Persona prompts/specialist/frontend-engineer.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/qa-engineer.prompt.md",
-      "summary": "Persona prompts/specialist/qa-engineer.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/software-engineer.prompt.md",
-      "summary": "Persona prompts/specialist/software-engineer.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/ux-accessibility.prompt.md",
-      "summary": "Persona prompts/specialist/ux-accessibility.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/finance-agent.prompt.md",
-      "summary": "Persona prompts/route-persona/finance-agent.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
     },
     {
       "invariantId": "PERSONA-005",
@@ -497,48 +393,8 @@
       "invariantId": "PERSONA-005",
       "severity": "error",
       "agentId": null,
-      "file": "prompts/specialist/data-architect.prompt.md",
-      "summary": "Persona prompts/specialist/data-architect.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
       "file": "prompts/specialist/discovery-taxonomy-gap-triage.prompt.md",
       "summary": "Persona prompts/specialist/discovery-taxonomy-gap-triage.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/frontend-engineer.prompt.md",
-      "summary": "Persona prompts/specialist/frontend-engineer.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/qa-engineer.prompt.md",
-      "summary": "Persona prompts/specialist/qa-engineer.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/software-engineer.prompt.md",
-      "summary": "Persona prompts/specialist/software-engineer.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/ux-accessibility.prompt.md",
-      "summary": "Persona prompts/specialist/ux-accessibility.prompt.md missing or misordered required body sections",
       "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
     }
   ]
