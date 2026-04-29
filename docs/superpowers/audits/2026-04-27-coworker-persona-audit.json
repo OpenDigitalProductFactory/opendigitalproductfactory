@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-29T04:50:48.704Z",
+  "generatedAt": "2026-04-29T05:12:59.530Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 15,
+  "errorCount": 12,
   "warnCount": 0,
   "findings": [
     {
@@ -28,30 +28,6 @@
       "file": null,
       "summary": "Registry agent AGT-162 (service-support-agent) has no persona file",
       "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-162.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-170",
-      "file": null,
-      "summary": "Registry agent AGT-170 (monitoring-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-170.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-171",
-      "file": null,
-      "summary": "Registry agent AGT-171 (incident-detection-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-171.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-172",
-      "file": null,
-      "summary": "Registry agent AGT-172 (incident-resolution-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-172.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
     },
     {
       "invariantId": "PERSONA-001",
