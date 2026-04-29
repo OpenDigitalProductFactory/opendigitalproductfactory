@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-29T03:22:25.538Z",
+  "generatedAt": "2026-04-29T03:37:49.699Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 43,
+  "errorCount": 35,
   "warnCount": 0,
   "findings": [
     {
@@ -260,70 +260,6 @@
       "file": null,
       "summary": "Registry agent AGT-904 (documentation-specialist) has no persona file",
       "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-904.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-100",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-100 (evaluate-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-100.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-200",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-200 (explore-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-200.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-300",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-300 (integrate-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-300.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-400",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-400 (deploy-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-400.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-500",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-500 (release-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-500.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-600",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-600 (consume-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-600.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-700",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-700 (operate-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-700.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-ORCH-800",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-800 (governance-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-800.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
     },
     {
       "invariantId": "PERSONA-001",
