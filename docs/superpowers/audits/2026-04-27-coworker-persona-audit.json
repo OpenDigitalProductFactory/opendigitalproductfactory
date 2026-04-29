@@ -1,34 +1,10 @@
 {
-  "generatedAt": "2026-04-29T03:47:18.841Z",
+  "generatedAt": "2026-04-29T04:01:56.496Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 30,
+  "errorCount": 27,
   "warnCount": 0,
   "findings": [
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-100",
-      "file": null,
-      "summary": "Registry agent AGT-100 (policy-enforcement-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-100.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-101",
-      "file": null,
-      "summary": "Registry agent AGT-101 (strategy-alignment-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-101.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
-      "agentId": "AGT-102",
-      "file": null,
-      "summary": "Registry agent AGT-102 (portfolio-backlog-agent) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-102.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
     {
       "invariantId": "PERSONA-001",
       "severity": "error",
