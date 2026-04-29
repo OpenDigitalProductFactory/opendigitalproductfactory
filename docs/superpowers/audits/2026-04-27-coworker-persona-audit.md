@@ -4,7 +4,7 @@
 |-------|-------|
 | **Spec** | [docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md](../specs/2026-04-27-coworker-persona-audit-design.md) |
 | **Generated** | 2026-04-28 |
-| **Errors** | 92 |
+| **Errors** | 89 (was 92; first persona migrated 2026-04-28 — Jiminy / AGT-ORCH-000) |
 | **Warnings** | 0 |
 | **Baseline** | [2026-04-27-coworker-persona-audit.json](./2026-04-27-coworker-persona-audit.json) |
 
@@ -23,9 +23,9 @@ Then update this markdown report's counts and lists by hand, or rerun the report
 
 ## Findings by invariant
 
-### PERSONA-001 — Registry agent has no persona file (50 errors)
+### PERSONA-001 — Registry agent has no persona file (49 errors)
 
-50 of the 50 agents in [agent_registry.json](../../../packages/db/data/agent_registry.json) have no matching persona file. The 21 existing files in `prompts/route-persona/` and `prompts/specialist/` do not yet declare an `agent_id` frontmatter field, so the audit cannot link them to registry entries. All registry agents are reported as missing until the new frontmatter is added (see PERSONA-003) and a persona file is created for each (see backfill plan below).
+49 of the 50 agents in [agent_registry.json](../../../packages/db/data/agent_registry.json) have no matching persona file. The 20 remaining un-migrated existing files in `prompts/route-persona/` and `prompts/specialist/` do not yet declare an `agent_id` frontmatter field, so the audit cannot link them to registry entries. **AGT-ORCH-000 (Jiminy / coo-orchestrator) was migrated 2026-04-28** as the first C1 batch — see [2026-04-28-coworker-context-topology.md](./2026-04-28-coworker-context-topology.md) for the topology decision that informed the persona content. All other registry agents remain reported as missing until the new frontmatter is added (see PERSONA-003) and a persona file is created for each (see backfill plan below).
 
 **Orchestrators (9):** AGT-ORCH-000, AGT-ORCH-100, AGT-ORCH-200, AGT-ORCH-300, AGT-ORCH-400, AGT-ORCH-500, AGT-ORCH-600, AGT-ORCH-700, AGT-ORCH-800.
 
@@ -53,9 +53,9 @@ Then update this markdown report's counts and lists by hand, or rerun the report
 
 **Recipient-pattern specialists (3):** AGT-S2P-POL, AGT-S2P-PFB, AGT-R2D-PB.
 
-### PERSONA-003 — Persona missing required frontmatter fields (21 errors)
+### PERSONA-003 — Persona missing required frontmatter fields (20 errors)
 
-All 21 persona files predate the schema and lack the new required fields (`agent_id`, `reports_to`, `delegates_to`, `value_stream`, `hitl_tier`, `status`). Listed for reference; one fix per file in the backfill PRs.
+20 persona files predate the schema and lack the new required fields (`agent_id`, `reports_to`, `delegates_to`, `value_stream`, `hitl_tier`, `status`). The 21st (`coo.prompt.md`, now Jiminy) was migrated 2026-04-28. Listed for reference; one fix per file in the backfill PRs.
 
 - prompts/route-persona/admin-assistant.prompt.md
 - prompts/route-persona/build-specialist.prompt.md
@@ -81,9 +81,9 @@ All 21 persona files predate the schema and lack the new required fields (`agent
 
 Note: `shared-identity.prompt.md` is a composition fragment, not a coworker persona. The schema may need a special-case `kind: fragment` exemption — flagged as a refinement under spec §6 Open Questions.
 
-### PERSONA-005 — Persona missing required body sections (21 errors)
+### PERSONA-005 — Persona missing required body sections (20 errors)
 
-Same 21 files as above. None currently have the `# Role / # Accountable For / # Interfaces With / # Out Of Scope / # Tools Available / # Operating Rules` structure. Existing prose maps reasonably well into `# Operating Rules`; the other five sections are the backfill work.
+20 of the original 21 persona files lack the `# Role / # Accountable For / # Interfaces With / # Out Of Scope / # Tools Available / # Operating Rules` structure. `coo.prompt.md` (Jiminy) now has all six sections; the other 20 are the backfill work. Existing prose in those files maps reasonably well into `# Operating Rules`; the other five sections are the authoring work.
 
 ---
 

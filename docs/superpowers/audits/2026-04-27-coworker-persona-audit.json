@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-28T05:31:03.528Z",
+  "generatedAt": "2026-04-29T00:31:08.411Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 92,
+  "errorCount": 89,
   "warnCount": 0,
   "findings": [
     {
@@ -312,14 +312,6 @@
     {
       "invariantId": "PERSONA-001",
       "severity": "error",
-      "agentId": "AGT-ORCH-000",
-      "file": null,
-      "summary": "Registry agent AGT-ORCH-000 (coo-orchestrator) has no persona file",
-      "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-ORCH-000.\n\nFix: create prompts/route-persona/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-001",
-      "severity": "error",
       "agentId": "AGT-ORCH-100",
       "file": null,
       "summary": "Registry agent AGT-ORCH-100 (evaluate-orchestrator) has no persona file",
@@ -419,14 +411,6 @@
       "agentId": null,
       "file": "prompts/route-persona/build-specialist.prompt.md",
       "summary": "Persona prompts/route-persona/build-specialist.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/coo.prompt.md",
-      "summary": "Persona prompts/route-persona/coo.prompt.md missing required frontmatter fields",
       "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
     },
     {
@@ -587,14 +571,6 @@
       "agentId": null,
       "file": "prompts/route-persona/build-specialist.prompt.md",
       "summary": "Persona prompts/route-persona/build-specialist.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/coo.prompt.md",
-      "summary": "Persona prompts/route-persona/coo.prompt.md missing or misordered required body sections",
       "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
     },
     {
