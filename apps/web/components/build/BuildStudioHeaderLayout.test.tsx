@@ -115,6 +115,21 @@ function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
 }
 
 describe("BuildStudio active-build header layout", () => {
+  it("renders the empty state instead of crashing when server data arrays are missing", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={undefined as unknown as FeatureBuildRow[]}
+        portfolios={undefined as unknown as []}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("Product Development Studio");
+    expect(html).toContain("No builds yet");
+  });
+
   it("keeps the active-build title and metadata lane shrinkable for long submission branches", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
