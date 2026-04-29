@@ -10,6 +10,7 @@ packages/db/generated/
 .worktrees/
 .playwright-mcp/
 .pnpm-store/
+.claude/settings.local.json
 docker-compose.override.yml
 backups/
 .host-profile.json
