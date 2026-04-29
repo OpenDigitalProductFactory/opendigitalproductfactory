@@ -2,7 +2,7 @@
 name: gap-assessment
 description: "Identify compliance gaps — obligations with no controls"
 category: compliance
-assignTo: ["compliance-officer"]
+assignTo: ["policy-specialist"]
 capability: "view_compliance"
 taskType: "analysis"
 triggerPattern: "gap|coverage|unmapped|missing control"

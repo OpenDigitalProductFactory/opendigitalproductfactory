@@ -2,7 +2,7 @@
 name: posture-report
 description: "Report on current compliance posture score and key detractors"
 category: compliance
-assignTo: ["compliance-officer"]
+assignTo: ["policy-specialist"]
 capability: "view_compliance"
 taskType: "analysis"
 triggerPattern: "posture|score|compliance health"
