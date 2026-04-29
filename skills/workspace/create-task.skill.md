@@ -2,7 +2,7 @@
 name: create-task
 description: "Create a new backlog task"
 category: workspace
-assignTo: ["coo"]
+assignTo: ["coo-orchestrator"]
 capability: "manage_backlog"
 taskType: "conversation"
 triggerPattern: "create|new task|add item"

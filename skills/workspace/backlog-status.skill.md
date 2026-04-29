@@ -2,7 +2,7 @@
 name: backlog-status
 description: "Current backlog status — open epics, completed work, and priorities"
 category: workspace
-assignTo: ["coo"]
+assignTo: ["coo-orchestrator"]
 capability: "view_platform"
 taskType: "analysis"
 triggerPattern: "backlog|status|epic|priority"
