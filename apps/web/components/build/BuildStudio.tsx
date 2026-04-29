@@ -47,8 +47,10 @@ export function BuildStudio({
   submissionBranchShortId,
 }: Props) {
   const router = useRouter();
+  const buildRows = Array.isArray(builds) ? builds : [];
+  const portfolioRows = Array.isArray(portfolios) ? portfolios : [];
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
-    builds.find((b) => b.phase !== "complete" && b.phase !== "failed") ?? null,
+    buildRows.find((b) => b.phase !== "complete" && b.phase !== "failed") ?? null,
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -335,7 +337,7 @@ export function BuildStudio({
           )}
 
           <div className="flex-1 overflow-auto p-2">
-            {builds.length === 0 ? (
+            {buildRows.length === 0 ? (
               <div className="p-6 text-center">
                 <div className="text-3xl mb-3 opacity-20">&#128161;</div>
                 <p className="text-sm text-[var(--dpf-muted)] mb-2">No builds yet</p>
@@ -344,7 +346,7 @@ export function BuildStudio({
                 </p>
               </div>
             ) : (
-              builds.map((build, idx) => {
+              buildRows.map((build, idx) => {
                 const lifecycleLabel = deriveLifecycleLabel({
                   backlogItem: build.originator
                     ? {
@@ -491,7 +493,7 @@ export function BuildStudio({
                     <ReleaseDecisionPanel
                       build={activeBuild}
                       flowState={flowState}
-                      portfolios={portfolios}
+                      portfolios={portfolioRows}
                       onCompleted={() => refreshActiveBuildState(activeBuild.buildId)}
                     />
                   </div>
