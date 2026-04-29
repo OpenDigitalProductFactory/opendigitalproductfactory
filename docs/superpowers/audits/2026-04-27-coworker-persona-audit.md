@@ -4,7 +4,7 @@
 |-------|-------|
 | **Spec** | [docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md](../specs/2026-04-27-coworker-persona-audit-design.md) |
 | **Generated** | 2026-04-28 |
-| **Errors** | 89 (was 92; first persona migrated 2026-04-28 — Jiminy / AGT-ORCH-000) |
+| **Errors** | 67 (was 89; +5 from registering 9 AGT-WS-* agents in #332, then −27 by migrating those 9 personas in this batch) |
 | **Warnings** | 0 |
 | **Baseline** | [2026-04-27-coworker-persona-audit.json](./2026-04-27-coworker-persona-audit.json) |
 
@@ -25,7 +25,7 @@ Then update this markdown report's counts and lists by hand, or rerun the report
 
 ### PERSONA-001 — Registry agent has no persona file (49 errors)
 
-49 of the 50 agents in [agent_registry.json](../../../packages/db/data/agent_registry.json) have no matching persona file. The 20 remaining un-migrated existing files in `prompts/route-persona/` and `prompts/specialist/` do not yet declare an `agent_id` frontmatter field, so the audit cannot link them to registry entries. **AGT-ORCH-000 (Jiminy / coo-orchestrator) was migrated 2026-04-28** as the first C1 batch — see [2026-04-28-coworker-context-topology.md](./2026-04-28-coworker-context-topology.md) for the topology decision that informed the persona content. All other registry agents remain reported as missing until the new frontmatter is added (see PERSONA-003) and a persona file is created for each (see backfill plan below).
+49 of the 59 registry agents have no matching persona file. **10 personas have been migrated to the new schema**: Jiminy / AGT-ORCH-000 in #330, then the 9 AGT-WS-* coworkers in this PR (admin-assistant, build-specialist, customer-advisor, ea-architect, hr-specialist, onboarding-coo, ops-coordinator, platform-engineer, portfolio-advisor). The 49 remaining are agents whose persona files still need to be authored or whose existing files still need schema migration (see PERSONA-003).
 
 **Orchestrators (9):** AGT-ORCH-000, AGT-ORCH-100, AGT-ORCH-200, AGT-ORCH-300, AGT-ORCH-400, AGT-ORCH-500, AGT-ORCH-600, AGT-ORCH-700, AGT-ORCH-800.
 
@@ -53,37 +53,31 @@ Then update this markdown report's counts and lists by hand, or rerun the report
 
 **Recipient-pattern specialists (3):** AGT-S2P-POL, AGT-S2P-PFB, AGT-R2D-PB.
 
-### PERSONA-003 — Persona missing required frontmatter fields (20 errors)
+### PERSONA-003 — Persona missing required frontmatter fields (9 errors)
 
-20 persona files predate the schema and lack the new required fields (`agent_id`, `reports_to`, `delegates_to`, `value_stream`, `hitl_tier`, `status`). The 21st (`coo.prompt.md`, now Jiminy) was migrated 2026-04-28. Listed for reference; one fix per file in the backfill PRs.
+9 persona files still predate the new schema. 12 of the original 21 have been migrated or addressed:
+- `coo.prompt.md` migrated as Jiminy in #330
+- 9 route-personas migrated as AGT-WS-* in this PR (admin-assistant, build-specialist, customer-advisor, ea-architect, hr-specialist, onboarding-coo, ops-coordinator, platform-engineer, portfolio-advisor)
+- `hive-scout-archetype-gap.prompt.md` relocated to `prompts/templates/` in #332 (out of audit scope)
+- `shared-identity.prompt.md` exempted with `kind: fragment` in #332
 
-- prompts/route-persona/admin-assistant.prompt.md
-- prompts/route-persona/build-specialist.prompt.md
-- prompts/route-persona/coo.prompt.md
-- prompts/route-persona/customer-advisor.prompt.md
-- prompts/route-persona/ea-architect.prompt.md
-- prompts/route-persona/finance-agent.prompt.md
-- prompts/route-persona/hr-specialist.prompt.md
-- prompts/route-persona/inventory-specialist.prompt.md
-- prompts/route-persona/marketing-specialist.prompt.md
-- prompts/route-persona/onboarding-coo.prompt.md
-- prompts/route-persona/ops-coordinator.prompt.md
-- prompts/route-persona/platform-engineer.prompt.md
-- prompts/route-persona/portfolio-advisor.prompt.md
-- prompts/specialist/data-architect.prompt.md
-- prompts/specialist/discovery-taxonomy-gap-triage.prompt.md
-- prompts/specialist/frontend-engineer.prompt.md
-- prompts/specialist/hive-scout-archetype-gap.prompt.md
-- prompts/specialist/qa-engineer.prompt.md
-- prompts/specialist/shared-identity.prompt.md
-- prompts/specialist/software-engineer.prompt.md
-- prompts/specialist/ux-accessibility.prompt.md
+The 9 remaining files needing migration:
 
-Note: `shared-identity.prompt.md` is a composition fragment, not a coworker persona. The schema may need a special-case `kind: fragment` exemption — flagged as a refinement under spec §6 Open Questions.
+- prompts/route-persona/finance-agent.prompt.md *(maps to AGT-900)*
+- prompts/route-persona/inventory-specialist.prompt.md *(no registry counterpart — orphan, no UI nav surface)*
+- prompts/route-persona/marketing-specialist.prompt.md *(no registry counterpart — orphan, no UI nav surface)*
+- prompts/specialist/data-architect.prompt.md *(maps to AGT-BUILD-DA)*
+- prompts/specialist/discovery-taxonomy-gap-triage.prompt.md *(no registry counterpart)*
+- prompts/specialist/frontend-engineer.prompt.md *(maps to AGT-BUILD-FE)*
+- prompts/specialist/qa-engineer.prompt.md *(maps to AGT-BUILD-QA)*
+- prompts/specialist/software-engineer.prompt.md *(maps to AGT-BUILD-SE)*
+- prompts/specialist/ux-accessibility.prompt.md *(maps to AGT-903)*
 
-### PERSONA-005 — Persona missing required body sections (20 errors)
+Six of these (finance-agent + the 5 specialists with registry counterparts) are next-batch C1 work. Three (inventory-specialist, marketing-specialist, discovery-taxonomy-gap-triage) are still orphaned — no UI nav surface per the #332 directive — and remain on the audit until they're either registered or retired.
 
-20 of the original 21 persona files lack the `# Role / # Accountable For / # Interfaces With / # Out Of Scope / # Tools Available / # Operating Rules` structure. `coo.prompt.md` (Jiminy) now has all six sections; the other 20 are the backfill work. Existing prose in those files maps reasonably well into `# Operating Rules`; the other five sections are the authoring work.
+### PERSONA-005 — Persona missing required body sections (9 errors)
+
+Same 9 files as PERSONA-003 lack the `# Role / # Accountable For / # Interfaces With / # Out Of Scope / # Tools Available / # Operating Rules` structure. 10 personas now have the structure (Jiminy + 9 AGT-WS-*). Existing prose in the 9 unmigrated files maps reasonably well into `# Operating Rules`; the other five sections are the authoring work.
 
 ---
 
