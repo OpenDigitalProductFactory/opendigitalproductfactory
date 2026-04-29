@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-04-29T01:35:28.753Z",
+  "generatedAt": "2026-04-29T03:22:26.983Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-tool-grant-spec-design.md",
   "invariantsChecked": 6,
-  "errorCount": 91,
-  "warnCount": 23,
+  "errorCount": 94,
+  "warnCount": 14,
   "findings": [
     {
       "invariantId": "GRANT-002",
@@ -617,78 +617,6 @@
       "invariantId": "GRANT-004",
       "severity": "warn",
       "agentId": null,
-      "file": "skills/inventory/advance-product.skill.md",
-      "summary": "Skill 'advance-product' assignTo references unknown agent(s): inventory-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/inventory/inventory-gap-audit.skill.md",
-      "summary": "Skill 'inventory-gap-audit' assignTo references unknown agent(s): inventory-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/inventory/version-discovery.skill.md",
-      "summary": "Skill 'version-discovery' assignTo references unknown agent(s): inventory-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/storefront/campaign-ideas.skill.md",
-      "summary": "Skill 'campaign-ideas' assignTo references unknown agent(s): marketing-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/storefront/competitive-analysis.skill.md",
-      "summary": "Skill 'competitive-analysis' assignTo references unknown agent(s): marketing-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/storefront/email-campaign-builder.skill.md",
-      "summary": "Skill 'email-campaign-builder' assignTo references unknown agent(s): marketing-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/storefront/marketing-health.skill.md",
-      "summary": "Skill 'marketing-health' assignTo references unknown agent(s): marketing-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/storefront/review-inbox.skill.md",
-      "summary": "Skill 'review-inbox' assignTo references unknown agent(s): marketing-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
-      "file": "skills/storefront/seo-content-optimizer.skill.md",
-      "summary": "Skill 'seo-content-optimizer' assignTo references unknown agent(s): marketing-specialist",
-      "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
-    },
-    {
-      "invariantId": "GRANT-004",
-      "severity": "warn",
-      "agentId": null,
       "file": "skills/workspace/backlog-status.skill.md",
       "summary": "Skill 'backlog-status' assignTo references unknown agent(s): coo",
       "detail": "assignTo entries must be agent_id, agent_name, or \"*\". Unknown values are ignored at runtime — likely a typo."
@@ -788,6 +716,30 @@
       "file": "skills/employee/team-structure.skill.md",
       "summary": "Skill 'team-structure' allowedTools not authorized by AGT-WS-HR's grants",
       "detail": "Missing authorization for: query_employees.\n\nFix: either grant AGT-WS-HR a key that authorizes these tools, or remove the tools from the skill's allowedTools."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "error",
+      "agentId": "AGT-WS-INVENTORY",
+      "file": "skills/inventory/inventory-gap-audit.skill.md",
+      "summary": "Skill 'inventory-gap-audit' allowedTools not authorized by AGT-WS-INVENTORY's grants",
+      "detail": "Missing authorization for: query_version_history.\n\nFix: either grant AGT-WS-INVENTORY a key that authorizes these tools, or remove the tools from the skill's allowedTools."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "error",
+      "agentId": "AGT-WS-INVENTORY",
+      "file": "skills/inventory/version-discovery.skill.md",
+      "summary": "Skill 'version-discovery' allowedTools not authorized by AGT-WS-INVENTORY's grants",
+      "detail": "Missing authorization for: query_version_history.\n\nFix: either grant AGT-WS-INVENTORY a key that authorizes these tools, or remove the tools from the skill's allowedTools."
+    },
+    {
+      "invariantId": "GRANT-004",
+      "severity": "error",
+      "agentId": "AGT-WS-MARKETING",
+      "file": "skills/storefront/marketing-health.skill.md",
+      "summary": "Skill 'marketing-health' allowedTools not authorized by AGT-WS-MARKETING's grants",
+      "detail": "Missing authorization for: create_backlog_item.\n\nFix: either grant AGT-WS-MARKETING a key that authorizes these tools, or remove the tools from the skill's allowedTools."
     },
     {
       "invariantId": "GRANT-004",

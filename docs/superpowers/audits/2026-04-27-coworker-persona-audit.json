@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-29T02:35:30.486Z",
+  "generatedAt": "2026-04-29T03:22:25.538Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md",
   "invariantsChecked": 9,
-  "errorCount": 49,
+  "errorCount": 43,
   "warnCount": 0,
   "findings": [
     {
@@ -348,54 +348,6 @@
       "file": null,
       "summary": "Registry agent AGT-S2P-POL (policy-specialist) has no persona file",
       "detail": "No persona file under prompts/route-persona/ or prompts/specialist/ declares agent_id: AGT-S2P-POL.\n\nFix: create prompts/specialist/<slug>.prompt.md following the schema in the persona-audit spec §3."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/inventory-specialist.prompt.md",
-      "summary": "Persona prompts/route-persona/inventory-specialist.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/marketing-specialist.prompt.md",
-      "summary": "Persona prompts/route-persona/marketing-specialist.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-003",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/discovery-taxonomy-gap-triage.prompt.md",
-      "summary": "Persona prompts/specialist/discovery-taxonomy-gap-triage.prompt.md missing required frontmatter fields",
-      "detail": "Missing or invalid: agent_id (absent), reports_to (absent), delegates_to (absent), value_stream (absent), hitl_tier (absent), status (absent).\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.1."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/inventory-specialist.prompt.md",
-      "summary": "Persona prompts/route-persona/inventory-specialist.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/route-persona/marketing-specialist.prompt.md",
-      "summary": "Persona prompts/route-persona/marketing-specialist.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
-    },
-    {
-      "invariantId": "PERSONA-005",
-      "severity": "error",
-      "agentId": null,
-      "file": "prompts/specialist/discovery-taxonomy-gap-triage.prompt.md",
-      "summary": "Persona prompts/specialist/discovery-taxonomy-gap-triage.prompt.md missing or misordered required body sections",
-      "detail": "Missing: # Role, # Accountable For, # Interfaces With, # Out Of Scope, # Tools Available, # Operating Rules\n\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2."
     }
   ]
 }

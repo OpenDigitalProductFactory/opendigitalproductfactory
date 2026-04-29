@@ -2727,6 +2727,91 @@
         "concurrency_limit": 2,
         "tool_grants": []
       }
+    },
+    {
+      "agent_id": "AGT-WS-INVENTORY",
+      "agent_name": "inventory-specialist",
+      "tier": "specialist",
+      "value_stream": "explore",
+      "capability_domain": "Product Manager. Product lifecycle, maturity, and market fit analysis. Owns the daily Discovery Taxonomy Gap Triage scheduled task that runs run_discovery_triage at 08:00 UTC.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "5.2 Explore Value Stream",
+        "5.2.1 Manage Product Backlog"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "portfolio_read",
+          "registry_read",
+          "registry_write",
+          "backlog_read",
+          "backlog_write",
+          "agent_control_read"
+        ]
+      }
+    },
+    {
+      "agent_id": "AGT-WS-MARKETING",
+      "agent_name": "marketing-specialist",
+      "tier": "specialist",
+      "value_stream": "consume",
+      "capability_domain": "Marketing Strategist. Acquisition strategy, campaign planning, funnel analysis, and marketing automation readiness. Adapts role label per business archetype (HOA community manager, healthcare patient recall, retail marketing, etc.).",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-600",
+      "it4it_sections": [
+        "5.6 Consume Value Stream"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "marketing_read",
+          "marketing_write",
+          "consumer_read",
+          "registry_read"
+        ]
+      }
     }
   ]
 }
