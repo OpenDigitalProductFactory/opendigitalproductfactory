@@ -4,7 +4,7 @@
 |-------|-------|
 | **Spec** | [docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md](../specs/2026-04-27-coworker-persona-audit-design.md) |
 | **Generated** | 2026-04-28 |
-| **Errors** | 43 (down from 92 day-one. Trajectory: #330 Jiminy → 89, #332 register 9 + #333 migrate 9 → 67, #334 migrate 6 → 49, this PR register 2 + migrate 2 + relocate 1 template → 43) |
+| **Errors** | 35 (down from 92 day-one — 62% drop. Trajectory: #330 Jiminy → 89, #332 register 9 + drift fixes → 94, #333 migrate 9 → 67, #334 migrate 6 → 49, #335 register+migrate 2+relocate 1 → 43, this PR author 8 orchestrators → 35) |
 | **Warnings** | 0 |
 | **Baseline** | [2026-04-27-coworker-persona-audit.json](./2026-04-27-coworker-persona-audit.json) |
 
@@ -23,9 +23,17 @@ Then update this markdown report's counts and lists by hand, or rerun the report
 
 ## Findings by invariant
 
-### PERSONA-001 — Registry agent has no persona file (43 errors)
+### PERSONA-001 — Registry agent has no persona file (35 errors)
 
-43 of the 61 registry agents have no matching persona file. **18 personas have been migrated to the new schema**: Jiminy / AGT-ORCH-000 (#330), the 9 AGT-WS-* coworkers from #333 (admin-assistant, build-specialist, customer-advisor, ea-architect, hr-specialist, onboarding-coo, ops-coordinator, platform-engineer, portfolio-advisor), the 6 from #334 (AGT-BUILD-DA/SE/FE/QA, AGT-903 ux-accessibility, AGT-900 finance-agent), and 2 from this PR (AGT-WS-INVENTORY inventory-specialist, AGT-WS-MARKETING marketing-specialist). The 43 remaining are agents whose persona files still need to be authored — primarily the 8 value-stream orchestrators (AGT-ORCH-100..800), 28 value-stream specialists, and 4 infrastructure/recipient-pattern agents.
+35 of the 61 registry agents have no matching persona file. **26 personas now have schema-compliant files**:
+
+- AGT-ORCH-000 (Jiminy) in #330
+- 9 AGT-WS-* in #333 (admin-assistant, build-specialist, customer-advisor, ea-architect, hr-specialist, onboarding-coo, ops-coordinator, platform-engineer, portfolio-advisor)
+- 6 in #334 (AGT-BUILD-DA/SE/FE/QA, AGT-903 ux-accessibility, AGT-900 finance-agent)
+- 2 in #335 (AGT-WS-INVENTORY inventory-specialist, AGT-WS-MARKETING marketing-specialist)
+- **8 value-stream orchestrators authored in this PR** (AGT-ORCH-100 Evaluate, AGT-ORCH-200 Explore, AGT-ORCH-300 Integrate, AGT-ORCH-400 Deploy, AGT-ORCH-500 Release, AGT-ORCH-600 Consume, AGT-ORCH-700 Operate, AGT-ORCH-800 Governance)
+
+The 35 remaining are entirely value-stream specialists and infrastructure/recipient-pattern agents — author-from-scratch work for subsequent batches.
 
 **Orchestrators (9):** AGT-ORCH-000, AGT-ORCH-100, AGT-ORCH-200, AGT-ORCH-300, AGT-ORCH-400, AGT-ORCH-500, AGT-ORCH-600, AGT-ORCH-700, AGT-ORCH-800.
 
