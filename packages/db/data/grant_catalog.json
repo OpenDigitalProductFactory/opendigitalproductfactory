@@ -12,6 +12,35 @@
       "implies": []
     },
     {
+      "key": "admin_read",
+      "description": "Read administrative state (DB inspections, log retrieval, file reads from the running install).",
+      "category": "governance",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "admin_query_db",
+        "admin_read_file",
+        "admin_view_logs"
+      ],
+      "implies": []
+    },
+    {
+      "key": "admin_write",
+      "description": "Execute administrative actions (commands, migrations, seeds, service restarts, brand-design extraction, platform updates).",
+      "category": "governance",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "admin_restart_service",
+        "admin_run_command",
+        "admin_run_migration",
+        "admin_run_seed",
+        "apply_platform_update",
+        "extract_brand_design_system"
+      ],
+      "implies": [
+        "admin_read"
+      ]
+    },
+    {
       "key": "adr_create",
       "description": "Create adr.",
       "category": "governance",
@@ -185,6 +214,17 @@
       "implies": []
     },
     {
+      "key": "code_graph_read",
+      "description": "Read the code-graph (build/dependency impact analysis, freshness checks).",
+      "category": "explore",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_code_graph_freshness",
+        "inspect_build_code_impact"
+      ],
+      "implies": []
+    },
+    {
       "key": "constraint_validate",
       "description": "Validate constraint.",
       "category": "governance",
@@ -198,6 +238,16 @@
       "category": "consume",
       "sensitivity": "internal",
       "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "consumer_read",
+      "description": "Read consumer (customer/employee) records and roster data.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "query_employees"
+      ],
       "implies": []
     },
     {
@@ -268,6 +318,27 @@
       "sensitivity": "internal",
       "honored_by_tools": [
         "propose_improvement"
+      ],
+      "implies": []
+    },
+    {
+      "key": "deliberation_create",
+      "description": "Start a multi-branch peer-review deliberation (consult 2-3 specialists for a decision).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "start_deliberation"
+      ],
+      "implies": []
+    },
+    {
+      "key": "deliberation_read",
+      "description": "Read deliberation status and outcomes (in-progress and completed peer reviews).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_deliberation_outcome",
+        "get_deliberation_status"
       ],
       "implies": []
     },
@@ -509,6 +580,31 @@
       "implies": []
     },
     {
+      "key": "marketing_read",
+      "description": "Read marketing context (SEO opportunities, archetype refinement, campaign-summary intelligence).",
+      "category": "marketing",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "analyze_seo_opportunity",
+        "assess_archetype_refinement",
+        "get_marketing_summary",
+        "suggest_campaign_ideas"
+      ],
+      "implies": []
+    },
+    {
+      "key": "marketing_write",
+      "description": "Author marketing artifacts (custom archetypes, campaign content).",
+      "category": "marketing",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "generate_custom_archetype"
+      ],
+      "implies": [
+        "marketing_read"
+      ]
+    },
+    {
       "key": "order_create",
       "description": "Create order.",
       "category": "consume",
@@ -623,6 +719,22 @@
         "validate_version_confidence"
       ],
       "implies": []
+    },
+    {
+      "key": "registry_write",
+      "description": "Create or update registry artifacts (knowledge articles, entity attributions, portfolio-quality resolutions, discovery triage).",
+      "category": "registry",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "attribute_entity_to_product",
+        "create_knowledge_article",
+        "dismiss_entity",
+        "resolve_portfolio_quality_issue",
+        "run_discovery_triage"
+      ],
+      "implies": [
+        "registry_read"
+      ]
     },
     {
       "key": "regulatory_compliance_check",
@@ -934,6 +1046,20 @@
       "category": "governance",
       "sensitivity": "internal",
       "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "web_search",
+      "description": "Search and fetch from the public web (search engine, page fetch, branding analysis, scout research).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "analyze_public_website_branding",
+        "extract_brand_design_system",
+        "fetch_public_website",
+        "search_public_web",
+        "start_scout_research"
+      ],
       "implies": []
     }
   ]

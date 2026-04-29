@@ -99,7 +99,7 @@ Only 1 finding — over-allocation is structurally rare in this roster.
 
 ### Class 5 — Registry-level role bugs (surfaced by the assessment)
 
-- **AGT-BUILD-DA / SE / FE / QA share an identical `capability_domain` string** ("Schema design, Prisma migrations, model validation, index optimization; DAMA-DMBOK aligned"). The four roles need distinct capability_domains. This is a registry bug, not a tool gap, but it surfaces as four `gaps` verdicts.
+- ~~**AGT-BUILD-DA / SE / FE / QA share an identical `capability_domain` string**~~ **RESOLVED 2026-04-28** by C3 of the [2026-04-28 sequencing plan](../plans/2026-04-28-coworker-and-routing-sequencing-plan.md). Each AGT-BUILD-* now has a distinct capability_domain matching its specialist persona's `description`: AGT-BUILD-DA does Prisma schema/migrations, AGT-BUILD-SE does API/server-actions/business-logic, AGT-BUILD-FE does pages/components/CSS/accessibility, AGT-BUILD-QA does test execution/typecheck/output interpretation.
 - **Several specialists lack `delegates_to`** — every specialist row shows `delegates_to: ["(none)"]` because the registry's `delegates_to` arrays are empty. This is correct for terminal specialists but means orchestrators name `delegates_to` while the specialists they name don't reciprocate via `escalates_to`. Cross-check is loose.
 
 ---
@@ -121,7 +121,7 @@ Suggested batch order, optimizing for unblock-impact-per-PR:
 | **7** | `investment_proposal_create`, `gap_analysis_create/read`, `scope_agreement_create`, `rationalization_report_create`, `criteria_read`, `tool_evaluation_*`, `tool_verdict_create`, `risk_score_create`, `financial_read` | Evaluate VS (AGT-ORCH-100, AGT-110, AGT-111, AGT-112, AGT-113, AGT-190). |
 | **8** | `iac` status-read, `rollback_plan_create`, `resource_reservation_*`, `change_event_emit`, `deployment_plan_create` follow-ups | Deploy VS rounds out. |
 | **9** | Boundary-disambiguation PR — apply the 11 boundary findings as registry-side grant moves (mostly removing duplicates and creating `*_approve` paired grants). | Resolves Class 3 entirely. |
-| **10** | AGT-BUILD-* differentiation — give each of DA / SE / FE / QA a distinct `capability_domain` and assign-to map. | Resolves Class 5. |
+| **10** | ~~AGT-BUILD-* differentiation — give each of DA / SE / FE / QA a distinct `capability_domain` and assign-to map.~~ **DONE** by C3 (2026-04-28). | ✅ Class 5 resolved. |
 
 Each batch completes when (a) the tool implementations land in `apps/web/lib/mcp-tools.ts` and `apps/web/lib/tak/agent-grants.ts`, (b) the grant catalog's `honored_by_tools` is updated, (c) the tool-grant audit baseline (#317) is regenerated and shows the relevant GRANT-002 findings dropping, (d) the persona audit (#316) `# Tools Available` section regeneration script runs against the affected coworkers.
 
