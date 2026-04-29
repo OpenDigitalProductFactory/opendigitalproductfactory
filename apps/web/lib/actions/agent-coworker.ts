@@ -385,6 +385,14 @@ export async function sendMessage(input: {
     }
   }
 
+  // Cross-cutting overlay agents (today: Jiminy / AGT-ORCH-000 only) read
+  // memory globally rather than scoped to a single route. See the topology
+  // decision DR-2026-04-28-02. Specialists keep route-scoped recall (Pass 1
+  // first, global fallback if <3 results). Jiminy skips Pass 1 entirely so
+  // cross-route follow-ups surface reliably regardless of how many memories
+  // happen to be tagged with the current route.
+  const isCrossCuttingOverlay = agent.agentId === "AGT-ORCH-000";
+
   let populatedPrompt: string;
 
   if (useUnified) {
@@ -417,18 +425,23 @@ export async function sendMessage(input: {
 
     // User facts: structured memory from prior conversations
     const { loadUserFacts, formatFactsAsContext, formatFactsCompressed } = await import("@/lib/tak/user-facts");
-    const routeDomain = input.routeContext.replace(/^\//, "").split("/")[0] || undefined;
+    const routeDomain = isCrossCuttingOverlay
+      ? undefined
+      : input.routeContext.replace(/^\//, "").split("/")[0] || undefined;
     const userFacts = await loadUserFacts(user.id!, routeDomain).catch(() => []);
     const factsContext = formatFactsAsContext(userFacts);
     const factsCompressed = formatFactsCompressed(userFacts);
 
-    // Semantic memory: recall relevant context from past conversations, scoped to current route.
+    // Semantic memory: recall relevant context from past conversations.
+    // Specialists scope to current route (with global fallback inside the
+    // recall function); cross-cutting overlay agents pass undefined so the
+    // recall function skips its route-scoped first pass.
     // Pass excludeMessageIds to avoid duplicating content already in the chat window.
     const { recallRelevantContext } = await import("@/lib/semantic-memory");
     const recalledContext = await recallRelevantContext({
       query: input.content,
       userId: user.id!,
-      routeContext: input.routeContext,
+      routeContext: isCrossCuttingOverlay ? undefined : input.routeContext,
       limit: 8,
       excludeMessageIds: windowMessageIds,
     }).catch(() => null);
@@ -595,11 +608,12 @@ export async function sendMessage(input: {
     // Semantic memory: recall relevant context from ALL conversations.
     // With a short recent window (8 messages), semantic recall is the primary
     // mechanism for remembering older context — both cross-thread and same-thread.
+    // Jiminy / cross-cutting overlay passes undefined to skip route-scoped Pass 1.
     const { recallRelevantContext } = await import("@/lib/semantic-memory");
     const recalledContext = await recallRelevantContext({
       query: input.content,
       userId: user.id!,
-      routeContext: input.routeContext,
+      routeContext: isCrossCuttingOverlay ? undefined : input.routeContext,
       // Don't exclude current thread — we need older same-thread context too
       limit: 8,
     }).catch(() => null);
