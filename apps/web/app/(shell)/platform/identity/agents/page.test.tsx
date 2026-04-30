@@ -9,6 +9,12 @@ vi.mock("@dpf/db", () => ({
     principalAlias: {
       findMany: vi.fn(),
     },
+    agentModelConfig: {
+      findMany: vi.fn(),
+    },
+    userFact: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -24,6 +30,12 @@ describe("PlatformIdentityAgentsPage", () => {
         status: "active",
         lifecycleStage: "production",
         humanSupervisorId: "HR-100",
+        sensitivity: "internal",
+        hitlTierDefault: 2,
+        executionConfig: null,
+        governanceProfile: null,
+        skills: [],
+        toolGrants: [],
       },
       {
         id: "agent-db-2",
@@ -32,6 +44,12 @@ describe("PlatformIdentityAgentsPage", () => {
         status: "active",
         lifecycleStage: "production",
         humanSupervisorId: "HR-300",
+        sensitivity: "internal",
+        hitlTierDefault: 2,
+        executionConfig: null,
+        governanceProfile: null,
+        skills: [],
+        toolGrants: [],
       },
     ] as never);
     vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
@@ -52,6 +70,8 @@ describe("PlatformIdentityAgentsPage", () => {
         createdAt: new Date("2026-04-23T00:00:00Z"),
       },
     ] as never);
+    vi.mocked(prisma.agentModelConfig.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userFact.findMany).mockResolvedValue([] as never);
 
     const { default: PlatformIdentityAgentsPage } = await import("./page");
     const html = renderToStaticMarkup(await PlatformIdentityAgentsPage());
