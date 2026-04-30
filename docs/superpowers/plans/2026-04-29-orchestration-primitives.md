@@ -1,16 +1,22 @@
-# Orchestration Primitives Implementation Plan
+# Orchestration Primitives Implementation Plan — Coworker Execution Substrate
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task.
 
 **Goal:** Land four orchestration primitives (`Sequential` / `Parallel` / `Loop` / `Branch`) plus a unified event envelope; migrate ~13 in-process retry/iteration surfaces; retire all legacy retry constants and the legacy positional bus API.
 
-**Architecture:** New `apps/web/lib/orchestration/` module owns deterministic primitives, typed `Outcome<T>` (succeeded/failed/exhausted/cancelled), governance-derived budgets, runId-scoped heartbeats. The existing `agentEventBus` evolves to carry a shared envelope (`runId`, `userId`, `threadId?`, `taskRunId?`, `agentId?`, `governanceProfile`, `cost`) on every event variant; subscribers filter by `{ threadId }` or `{ userId }`.
+**Architecture:** New `apps/web/lib/orchestration/` module — the **coworker execution substrate** — owns deterministic primitives, typed `Outcome<T>` (succeeded/failed/exhausted/cancelled), governance-derived budgets, runId-scoped heartbeats. The existing `agentEventBus` evolves to carry a shared envelope (`runId`, `userId`, `threadId?`, `taskRunId?`, `agentId?`, `governanceProfile`, `cost`) on every event variant; subscribers filter by `{ threadId }` or `{ userId }`.
+
+**Naming guardrail:** This substrate is **distinct from the routing execution-adapter framework** (`apps/web/lib/routing/`, see [2026-03-20-execution-adapter-framework-design.md](../specs/2026-03-20-execution-adapter-framework-design.md)). In code, doc prose, PR descriptions, and commit messages, refer to this layer as the "orchestration substrate" or "coworker execution substrate" — never as an "execution adapter," which is reserved for provider-dispatch plumbing.
+
+**Refactor budget:** **20% of every migration PR's effort** is reserved for refactoring and deletion (per spec §Mandatory Refactor Budget). Each migration phase has named refactor-budget targets — at least one constant, helper, or ambiguous status behavior must retire in the merging PR. Reviewers reject wrapper-only migrations.
 
 **Tech Stack:** TypeScript strict, Vitest, Next.js 14 App Router, Prisma 5, Inngest (durable shell preserved). No new runtime dependencies.
 
 **Spec:** [docs/superpowers/specs/2026-04-29-orchestration-primitives-design.md](../specs/2026-04-29-orchestration-primitives-design.md)
 
-**Branch:** `spec/orchestration-primitives` is the spec branch. Implementation work uses topic branches `feat/orch-phase-N-<slice>` per the AGENTS.md PR-based workflow. All commits signed off (`git commit -s`) per memory.
+**Supersession context:** This plan was merged with the Codex substrate review (PR #350) on 2026-04-30 per [audits/2026-04-29-orchestration-supersession-decision.md](../audits/2026-04-29-orchestration-supersession-decision.md). The principal restructure: Phase 1B was originally a 16-file/40-emit-site bus refactor as a foundation step. The Codex audit flagged that as the highest-risk slice in the lane. This revised plan splits Phase 1B into a small types-only PR; emit-site migrations move into their consumer phases (Phase 2 migrates sandbox-db + github-fork emit sites, Phase 3 migrates build-* emit sites, etc.); Phase 7 tightens the envelope to mandatory.
+
+**Branch:** Implementation work uses topic branches `feat/orch-phase-N-<slice>` per the AGENTS.md PR-based workflow. All commits signed off (`git commit -s`) per the project DCO requirement.
 
 ---
 
@@ -19,26 +25,37 @@
 Every migration PR (Phases 2–6) must satisfy ALL of these before merge:
 
 - [ ] **Behavior parity test** — exercises the migrated call site; passes against new primitive (Phase 6 explicitly breaks parity for silent-exhaustion paths and asserts the new fail-loud behavior)
-- [ ] **Terminal-outcome test** — every code path returns a typed `Outcome` (no `null`, no free-text best-effort)
+- [ ] **Terminal-outcome test** — every code path returns a typed `Outcome` (no `null`, no free-text best-effort, no `"deferred"`)
 - [ ] **Event emission test** — at least one terminal event (`*:succeeded` / `*:failed` / `*:exhausted` / `*:cancelled`) per primitive run
-- [ ] **Heartbeat test** — Loops with possibly-slow steps emit `loop:still_working` within `1.5 × heartbeatMs` (skip if surface always completes < heartbeatMs)
-- [ ] **Cost monotonicity test** — cumulative `cost.tokens` and `cost.ms` non-decreasing across events for the same `runId`
+- [ ] **Heartbeat test** — Loops with possibly-slow steps emit `loop:still_working` within `1.5 × heartbeatMs`; consumer-emitted events inside the step do **not** reset the heartbeat (per spec §Heartbeat Contract edge-case clarification). Skip if surface always completes < heartbeatMs
+- [ ] **Cost monotonicity test** — cumulative `cost.tokens`, `cost.ms`, and `cost.attempts` non-decreasing across events for the same `runId` (per spec §Cost Monotonicity Invariant)
+- [ ] **Refactor-budget evidence** — at least one named constant, helper, or ambiguous status behavior retired in this PR (per spec §Mandatory Refactor Budget). The PR description must list what was deleted under a "Refactor budget delivered" heading
 - [ ] `pnpm --filter web typecheck` clean
 - [ ] `pnpm --filter web exec vitest run <affected>` green
 - [ ] `cd apps/web && npx next build` clean
-- [ ] DCO sign-off on every commit (memory: 2026-04-24 DCO app)
+- [ ] DCO sign-off on every commit
 
 ---
 
 ## Phase 1 — Foundation (sub-phased into three PRs)
 
-The bus refactor touches 16 files and 44 emit/subscribe sites. Splitting Phase 1 keeps diffs reviewable and lets later phases land on a stable foundation.
+Per the Codex substrate audit, the original "Phase 1B = 16-file/40-emit-site bus refactor" was the highest-risk slice in the lane. This revised plan splits Phase 1 across three small PRs, then distributes emit-site migration into the consumer phases that need it. The foundation never blocks consumers behind a 16-file refactor.
 
-### Phase 1A — Orchestration Module Skeleton (PR 1)
+### Phase 1.0 — Naming guardrails (folded into 1A; informational)
 
-**Branch:** `feat/orch-phase-1a-skeleton`
+These guardrails are not a separate PR — they are checklist items reviewers verify in Phase 1A and every later phase:
 
-**Goal:** Land the new module with primitives, types, and the governance registry. **No bus changes yet, no call-site migrations yet.** The module is wired up but unused.
+- [ ] **Module README/header.** The first PR landing files in `apps/web/lib/orchestration/` includes a top-of-file comment in `index.ts` (or a `README.md` in the directory) stating: this module is the **coworker execution substrate** (in-process control flow), distinct from the routing execution-adapter framework in `apps/web/lib/routing/`.
+- [ ] **Terminology in PR descriptions.** Every PR in this lane uses "orchestration substrate" or "coworker execution substrate" — never bare "execution adapter."
+- [ ] **Migration order recorded in epic/backlog.** The active epic for this work names the seven-phase order so later contributors do not jump straight to Phase 6 (agentic loop).
+
+### Phase 1A — Orchestration Module Skeleton (PR 1) — ✅ SHIPPED 2026-04-29
+
+**Status:** Shipped via [PR #353](https://github.com/markdbodman/opendigitalproductfactory/pull/353), commit `d2852ac4` ("feat(orchestration): module skeleton — primitives, profiles, heartbeat (Phase 1A)"). All Phase 1A tasks below are historical record.
+
+**Branch:** `feat/orch-phase-1a-skeleton` (merged)
+
+**Goal:** Land the new module with primitives, types, and the governance registry. **No bus changes, no call-site migrations.** The module is wired up but unused.
 
 #### Task 1A.1 — Module bootstrap
 
@@ -159,7 +176,7 @@ The bus refactor touches 16 files and 44 emit/subscribe sites. Splitting Phase 1
 
 - [ ] **Step 1:** Write a test that wraps each primitive's invocation, runs scenarios that hit every code path (succeed, fail, exhaust, cancel where applicable), and asserts exactly one terminal event was captured per `runId`. The wrapper observes emit calls — this is **runtime-instrumented**, not a static lint, per spec §Verification Plan
 - [ ] **Step 2:** Run; expect failures because the primitives don't emit yet (events come in Phase 1B)
-- [ ] **Step 3:** Mark these tests `it.todo` for now with a comment pointing to Phase 1B Task 1B.5; they activate once the bus envelope is in place
+- [ ] **Step 3:** Mark these tests `it.todo` for now with a comment pointing to Phase 1C Task 1C.3; they activate once the bus envelope is in place
 - [ ] **Step 4:** Commit: `test(orchestration): structural terminal-event scaffolding (it.todo until 1B)`
 
 #### Task 1A.9 — Open Phase 1A PR
@@ -171,24 +188,24 @@ The bus refactor touches 16 files and 44 emit/subscribe sites. Splitting Phase 1
 
 ---
 
-### Phase 1B — Bus Envelope Refactor (PR 2)
+### Phase 1B — Bus Envelope Foundation (PR 2)
 
-**Branch:** `feat/orch-phase-1b-bus-envelope`
+**Branch:** `feat/orch-phase-1b-envelope-types`
 
-**Goal:** Refactor `agent-event-bus.ts` so every emitted event carries the `OrchestrationEnvelope` (`runId?`, `userId`, `threadId?`, `taskRunId?`, `agentId?`, `governanceProfile?`, `emittedAt`, `cost?`). Add `subscribe({ threadId })` and `subscribe({ userId })` overloads. Existing positional `subscribe(threadId, handler)` and `emit(threadId, event)` remain as compatibility shims (retired in Phase 7). Migrate **all 40 emit sites** to populate `userId` from their call context.
+**Goal:** Add `OrchestrationEnvelope` type, `subscribe({ threadId })` / `subscribe({ userId })` overloads, and tests. **All envelope fields optional. No emit-site migration.** This is a small, focused PR — the entire diff fits in one file plus its test file.
 
-This is the largest single PR in the plan. Reviewers must read the diff in two passes: bus changes (one file) and emit-site changes (15 files, mechanical).
+**Why this scope (not the original 16-file refactor):** Per the Codex audit and the supersession decision (2026-04-29), bundling the type addition with 40 emit-site migrations was the highest-risk slice in the lane. Splitting them lets reviewers read the type change cleanly, and lets emit-site migrations land *with their consumers* in Phases 2–6.
 
 #### Task 1B.1 — Define the envelope and the new subscribe shape (typecheck-clean)
 
 **Files:**
 - Modify: `apps/web/lib/tak/agent-event-bus.ts`
 
-**Important:** the project's pre-commit hook runs typecheck (memory: "pre-commit only runs typecheck"). Memory also says **never skip hooks** (`--no-verify` forbidden). This task therefore lands the envelope with `userId` **fully optional** so typecheck stays clean throughout Phase 1B; `userId` becomes mandatory in Task 1B.8 after all 15 emit-site sweeps complete.
+**Important:** the project's pre-commit hook runs typecheck. **Never skip hooks** (`--no-verify` forbidden). This task lands the envelope with **all fields optional** so typecheck stays clean throughout. `userId` and `emittedAt` become mandatory in Phase 7 after every consumer phase has populated them.
 
-- [ ] **Step 1:** Read `apps/web/lib/tak/agent-event-bus.ts` end-to-end. Note `subscribe`, `emit`, `requestCancel`, `clearCancel`, `isCancelled`, `markActive`, `markIdle`, `isActive`
-- [ ] **Step 2:** Add the `OrchestrationEnvelope` type (spec §Required Envelope, lines 434–451). All fields **optional** for now: `runId?`, `userId?`, `threadId?`, `taskRunId?`, `agentId?`, `governanceProfile?`, `primitive?`, `emittedAt?`, `cost?`
-- [ ] **Step 3:** Modify the existing `AgentEvent` discriminated union: every variant gets `& Partial<OrchestrationEnvelope>` as a base intersection. **Do not add required fields yet** — that comes in 1B.8
+- [ ] **Step 1:** Read `apps/web/lib/tak/agent-event-bus.ts` end-to-end. Note existing exports: `subscribe`, `emit`, `requestCancel`, `clearCancel`, `isCancelled`, `markActive`, `markIdle`, `isActive`
+- [ ] **Step 2:** Add the `OrchestrationEnvelope` type (per spec §Required Envelope). All fields **optional**: `runId?`, `userId?`, `threadId?`, `taskRunId?`, `agentId?`, `governanceProfile?`, `primitive?`, `emittedAt?`, `cost?`
+- [ ] **Step 3:** Modify the existing `AgentEvent` discriminated union: every variant gets `& Partial<OrchestrationEnvelope>` as a base intersection. **Do not add required fields** — that's Phase 7
 - [ ] **Step 4:** Add subscribe overloads (signatures shown below). Internal storage: keep the existing `Map<threadId, Set<handler>>` AND add `Map<userId, Set<handler>>`. On `emit`, fire to both maps if event has `userId`.
 
 ```ts
@@ -198,67 +215,43 @@ function subscribe(filter: { userId: string }, handler: (e: AgentEvent) => void)
 ```
 
 - [ ] **Step 5:** `pnpm --filter web typecheck` — must be clean (envelope fields are optional)
-- [ ] **Step 6:** Commit: `refactor(bus): add OrchestrationEnvelope and subscribe overloads (typecheck-clean)`
+- [ ] **Step 6:** Commit: `refactor(bus): add OrchestrationEnvelope and subscribe overloads`
 
 #### Task 1B.2 — Test the new bus surface
 
 **Files:**
 - Modify: `apps/web/lib/tak/agent-event-bus.test.ts`
 
-- [ ] **Step 1:** Add tests:
-  - `subscribe({ threadId })` receives only events matching that threadId
-  - `subscribe({ userId })` receives only events matching that userId
-  - An event with both `userId` and `threadId` is delivered to both subscriber types (assert via two parallel subscribers)
-  - The legacy positional `subscribe(threadId, handler)` still works (compatibility)
-- [ ] **Step 2:** Run, expect failures
-- [ ] **Step 3:** Adjust internal `emit` to fan out to both maps
-- [ ] **Step 4:** Run, expect green
-- [ ] **Step 5:** Commit: `test(bus): envelope subscription overloads`
+- [ ] **Step 1:** Write failing tests:
+  - **Red:** `subscribe({ threadId })` receives only events matching that threadId — initially fails because new overload not implemented
+  - **Red:** `subscribe({ userId })` receives only events matching that userId
+  - **Red:** An event with both `userId` and `threadId` is delivered to both subscriber types (assert via two parallel subscribers)
+  - **Red:** The legacy positional `subscribe(threadId, handler)` still works after the refactor (compatibility regression check)
+- [ ] **Step 2:** Run vitest, confirm all four fail
+- [ ] **Step 3:** **Green:** Adjust internal `emit` to fan out to both maps; implement subscribe overloads
+- [ ] **Step 4:** Run vitest, confirm all four pass
+- [ ] **Step 5:** **Induced-failure smoke check:** Temporarily break the userId-map fan-out (comment one line), confirm the userId-subscriber test fails as expected, then restore. This proves the test is actually exercising the new code path
+- [ ] **Step 6:** Commit: `test(bus): envelope subscription overloads`
 
-#### Task 1B.3 — Migrate emit sites by file (one commit per file)
+#### Task 1B.3 — Open Phase 1B PR
 
-This is mechanical. The user-resolution rule: each emit site already has access to context that contains `userId`. Where it's not obvious, derive it once at the top of the function from `getServerSession()` or the existing `userId` parameter.
+- [ ] **Step 1:** Verify gates: typecheck clean, vitest green, next build clean, every commit DCO-signed
+- [ ] **Step 2:** Refactor-budget evidence: this PR is the foundation that *enables* later refactor-budget gains; it doesn't itself retire constants. PR description should call this out: "Phase 1B is intentionally additive — refactor-budget gains begin in Phase 2"
+- [ ] **Step 3:** Open PR `refactor(bus): OrchestrationEnvelope + subscription overloads (Phase 1B)`. Body explicitly notes:
+  - All envelope fields optional in this PR
+  - Legacy positional `subscribe(threadId, handler)` and `emit(threadId, event)` remain as shims (retire in Phase 7)
+  - **No emit-site migrations** in this PR; they happen in Phases 2–6 alongside their consumer migrations
+- [ ] **Step 4:** Wait for review/merge before starting 1C
 
-For each file, the pattern is: find every `emit(threadId, { type: ..., ... })` call, change to `emit(threadId, { type: ..., userId, emittedAt: new Date().toISOString(), ... })`. The legacy positional `emit(threadId, ...)` API stays — it just augments the event before delivery.
+---
 
-**Sub-task list (one PR commit each):**
+### Phase 1C — Wire Substrate to Bus + Cancellation Mapping (PR 3)
 
-- [ ] **1B.3a:** `apps/web/lib/actions/agent-coworker.ts` (11 emit sites: lines 1029, 1092, 1131, 1146, 1173, 1182, 1209, 1212, 1247, 1249, 1280). `userId` is already available as `input.userId`
-- [ ] **1B.3b:** `apps/web/lib/actions/build.ts` (4 sites: 261, 405, 680, 681). `userId` from `build.ownerUserId` or `updatedBuild.ownerUserId`
-- [ ] **1B.3c:** `apps/web/lib/build-flow-state.ts` (1 site: 448). `userId` from build record — fetch if not in scope
-- [ ] **1B.3d:** `apps/web/app/api/agent/send/route.ts` (5 sites: 97, 101, 106, 129, 133). `userId` from session at top of handler
-- [ ] **1B.3e:** `apps/web/lib/queue/inngest-bridge.ts` (1 site: 14). The wrapper passes through; add `userId` to the function signature
-- [ ] **1B.3f:** `apps/web/app/api/agent/build/advance-phase/route.ts` (1 site: 119). `userId` from session
-- [ ] **1B.3g:** `apps/web/lib/mcp-tools.ts` (11 sites: 4014, 4169, 4209, 4380, 4432, 4464, 4537, 4697, 4739, 6808, 6817). `userId` is already in `context` parameter
-- [ ] **1B.3h:** `apps/web/lib/queue/functions/build-review-verification.ts` (5 sites: 57, 74, 134, 142, 149). `userId` from `build.ownerUserId`
-- [ ] **1B.3i:** `apps/web/lib/tak/thread-progress.ts` (1 site: 48). The projection function — add `userId` to `pushThreadProgress` signature, ripple through callers in the same commit
-- [ ] **1B.3j:** `apps/web/lib/tak/mcp-catalog-sync.ts` (2 sites: 129, 167). For sync operations, use the seeded `system` user (Task 1B.6)
-- [ ] **1B.3k:** `apps/web/lib/integrate/build-pipeline.ts` (1 site: 318). `userId` from `thread.ownerUserId`
-- [ ] **1B.3l:** `apps/web/lib/integrate/build-orchestrator.ts` (13 sites: 561, 573, 586, 646, 657, 719, 890, 923, 978, 993, 1075, 1105, 1111). `userId` from build/thread context
-- [ ] **1B.3m:** `apps/web/lib/inference/async-inference.ts` (7 sites: 93, 130, 159, 177, 198, 260, 400). `userId` from operation owner — confirm it's stored on `AsyncInferenceOperation`; if not, add to function signature
-- [ ] **1B.3n:** `apps/web/lib/queue/functions/brand-extract.ts` (3 sites via `pushThreadProgress`). `userId` from task run owner
-- [ ] **1B.3o:** `apps/web/lib/queue/functions/deliberation-run.ts` (5 sites via `pushThreadProgress`). `userId` from deliberation run / task owner
+**Branch:** `feat/orch-phase-1c-substrate-events`
 
-After each sub-task: typecheck file-scoped, then commit `chore(bus): populate userId in <file> emits`.
+**Goal:** Wire substrate primitives to emit through the new envelope, activate the structural terminal-event tests, and map `agentEventBus.requestCancel` into `Outcome.cancelled`. After this PR merges, the substrate is fully usable and consumer migrations can begin.
 
-After all sub-tasks: `pnpm --filter web typecheck` should be fully green.
-
-**Sequencing note:** sub-tasks **1B.3i (`thread-progress.ts`) must run before 1B.3n and 1B.3o** because brand-extract and deliberation-run go through `pushThreadProgress`. The alphabetic ordering already places `i` before `n`/`o`; do not reorder.
-
-#### Task 1B.8 — Tighten envelope: make `userId` and `emittedAt` mandatory
-
-**Files:**
-
-- Modify: `apps/web/lib/tak/agent-event-bus.ts`
-
-After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock the contract.
-
-- [ ] **Step 1:** Change `AgentEvent`'s base intersection from `Partial<OrchestrationEnvelope>` to `{ userId: string; emittedAt: string } & Partial<Omit<OrchestrationEnvelope, "userId" | "emittedAt">>`
-- [ ] **Step 2:** `pnpm --filter web typecheck` — expect green if 1B.3 was complete. Any failure indicates a missed emit site; fix in this task before committing
-- [ ] **Step 3:** Run the full vitest suite for affected files
-- [ ] **Step 4:** Commit: `refactor(bus): require userId and emittedAt on every AgentEvent`
-
-#### Task 1B.4 — Wire orchestration primitives to the bus
+#### Task 1C.1 — Wire orchestration primitives to the bus
 
 **Files:**
 - Modify: `apps/web/lib/orchestration/primitives/sequential.ts`
@@ -267,47 +260,40 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 - Modify: `apps/web/lib/orchestration/primitives/branch.ts`
 - Create: `apps/web/lib/orchestration/events.ts` (typed event constructors)
 
-- [ ] **Step 1:** Write the failing tests in each primitive's `*.test.ts`: assert each primitive emits the correct sequence of events (`*:started`, intermediate, terminal `*:succeeded`/`*:failed`/`*:exhausted`/`*:cancelled`). Use a captured-events array seeded by `subscribe({ userId: testUserId })`
-- [ ] **Step 2:** Implement `events.ts` with typed constructors per spec §Event Families (lines 471–496). Each constructor takes `(envelope, payload)` and returns the discriminated event
-- [ ] **Step 3:** Each primitive imports event constructors and emits at: entry (`*:started`), each step boundary, terminal
-- [ ] **Step 4:** Run tests, verify they pass
-- [ ] **Step 5:** Commit: `feat(orchestration): wire primitives to event bus with typed events`
+- [ ] **Step 1: Red.** Write failing tests in each primitive's `*.test.ts`: assert each primitive emits the correct sequence of events (`*:started`, intermediate, terminal `*:succeeded`/`*:failed`/`*:exhausted`/`*:cancelled`). Use a captured-events array seeded by `subscribe({ userId: testUserId })`. Initial expected count is 0 (primitives don't emit yet); tests fail
+- [ ] **Step 2:** Run vitest on `apps/web/lib/orchestration/**`, confirm new event-emission tests fail
+- [ ] **Step 3: Green.** Implement `events.ts` with typed constructors per spec §Event Families. Each constructor takes `(envelope, payload)` and returns the discriminated event with `emittedAt: new Date().toISOString()` and `runId` from `ctx.runId`
+- [ ] **Step 4:** Each primitive imports event constructors and emits at: entry (`*:started`), each step boundary (`*:step_started`/`*:step_completed` or `*:attempt_started`/`*:attempt_completed` or `*:branch_started`/`*:branch_completed`), terminal (`*:succeeded`/`*:failed`/`*:exhausted`/`*:cancelled`)
+- [ ] **Step 5:** Run vitest, verify all primitive event tests pass
+- [ ] **Step 6: Cost monotonicity proof.** Add a per-primitive test that captures the full event sequence for each terminal path and asserts cumulative `cost.tokens`, `cost.ms`, and `cost.attempts` are non-decreasing across events for the same `runId` (per spec §Cost Monotonicity Invariant)
+- [ ] **Step 7:** Commit: `feat(orchestration): wire primitives to event bus with typed events`
 
-#### Task 1B.5 — Activate structural terminal-event tests
+#### Task 1C.2 — Heartbeat substrate-only reset behavior
+
+**Files:**
+- Modify: `apps/web/lib/orchestration/heartbeat.ts`
+- Modify: `apps/web/lib/orchestration/heartbeat.test.ts`
+- Modify: `apps/web/lib/orchestration/primitives/loop.ts`
+
+Implements the spec §Heartbeat Contract edge-case clarification: only substrate-emitted events reset the quiet timer.
+
+- [ ] **Step 1: Red.** Write a failing test: a `Loop` whose step emits a non-substrate bus event (e.g., `tool:invoked`) every 2 seconds, with `heartbeatMs: 5000`. Assert that `loop:still_working` fires within 5–7 seconds of step entry, *despite* the consumer-emitted events. Initial implementation may incorrectly reset on every event and never fire the heartbeat
+- [ ] **Step 2:** Run vitest, expect failure
+- [ ] **Step 3: Green.** Refactor heartbeat reset path: `noteActivity(runId)` is called *only* by the substrate's own emit path (the typed constructors in `events.ts`), not by the bus's general `emit()`. Consumer code emitting through the bus does not reset the substrate's quiet timer
+- [ ] **Step 4:** Run vitest, expect green
+- [ ] **Step 5: Induced-failure smoke check.** Temporarily call `noteActivity()` from the bus's general `emit()`, confirm the consumer-noise test fails (heartbeat never fires), then restore. Proves the test exercises the actual constraint
+- [ ] **Step 6:** Commit: `fix(orchestration): heartbeat resets only on substrate events, not consumer noise`
+
+#### Task 1C.3 — Activate structural terminal-event tests
 
 **Files:**
 - Modify: `apps/web/lib/orchestration/structural.test.ts`
 
-- [ ] **Step 1:** Remove `it.todo` markers from Phase 1A Task 1A.8
-- [ ] **Step 2:** Run; verify all assertions pass
+- [ ] **Step 1:** Remove `it.todo` markers placed in Phase 1A Task 1A.8
+- [ ] **Step 2:** Run; verify all assertions pass — every primitive emits exactly one terminal event per `runId` for every code path (succeed, fail, exhaust, cancel where applicable)
 - [ ] **Step 3:** Commit: `test(orchestration): activate structural terminal-event invariant`
 
-#### Task 1B.6 — Verify `system` user exists; add seed if missing
-
-**Files:**
-- Modify: (potentially) `packages/db/prisma/seed.ts` or wherever the user seed lives
-- Create: `apps/web/lib/orchestration/system-user.ts`
-
-- [ ] **Step 1:** Check existing seed for a `system` user. Run `pnpm --filter @dpf/db prisma studio` or grep the seed file for `email.*system` / `userId.*system`
-- [ ] **Step 2:** If a system user exists, document its userId in `apps/web/lib/orchestration/system-user.ts` as a constant. If not, add an upsert entry to the **canonical seed file** (`packages/db/prisma/seed.ts` per memory "DB fix = seed + migration") with a stable `userId` like `system-orchestration`. Use Prisma's `upsert` so re-seed is idempotent. Mark the user with a recognizable email (e.g. `system@dpf.local`) and a clear `displayName` like `"System (Orchestration)"`
-- [ ] **Step 3:** Add a test asserting the system user exists after seeding
-- [ ] **Step 4:** Commit: `feat(orchestration): system user constant + idempotent seed for infra-loop emit context`
-
-#### Task 1B.7 — Open Phase 1B PR
-
-- [ ] **Step 1:** Verify gates: typecheck clean, vitest green, next build clean, every commit DCO-signed
-- [ ] **Step 2:** Open PR `feat(orchestration): unified event envelope + bus subscription overloads (Phase 1B)`. Body explicitly notes that legacy positional `subscribe(threadId, handler)` and `emit(threadId, event)` remain as shims and retire in Phase 7
-- [ ] **Step 3:** Wait for review/merge
-
----
-
-### Phase 1C — Cancellation Mapping & Run Lifecycle (PR 3)
-
-**Branch:** `feat/orch-phase-1c-cancellation`
-
-**Goal:** Map existing `agentEventBus.requestCancel` / `isCancelled` / `clearCancel` cancellation signals into `Outcome.cancelled` for primitives. Add a `runId` registry so primitives know whether their context's user has cancelled.
-
-#### Task 1C.1 — Cancellation hook on RunContext
+#### Task 1C.4 — Cancellation hook on RunContext
 
 **Files:**
 - Modify: `apps/web/lib/orchestration/primitives/loop.ts`
@@ -315,18 +301,35 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 - Modify: `apps/web/lib/orchestration/types.ts`
 - Create: `apps/web/lib/orchestration/cancellation.test.ts`
 
-- [ ] **Step 1:** Write the failing test:
-  - A `Loop` whose `RunContext.threadId` has `agentEventBus.requestCancel(threadId)` called mid-run returns `Outcome.cancelled{ reason: "user_cancelled" }`
+- [ ] **Step 1: Red.** Write failing tests:
+  - A `Loop` whose `RunContext.threadId` has `agentEventBus.requestCancel(threadId)` called mid-run returns `Outcome.cancelled{ reason: "user_cancelled" }` and emits `loop:cancelled`
+  - A `Branch` with the same setup cancels in-flight branches and returns `Outcome.cancelled{ reason: "user_cancelled" }`
   - Cancellation is checked at every attempt boundary (Loop) and on every branch settling (Branch)
-- [ ] **Step 2:** Run test, expect failure
-- [ ] **Step 3:** Implement: in `Loop` and `Branch`, before each attempt/branch settling, check `ctx.threadId && agentEventBus.isCancelled(ctx.threadId)`. If cancelled, return `Outcome.cancelled` with `reason: "user_cancelled"`, emit `*:cancelled`, clear the flag with `clearCancel(threadId)`
-- [ ] **Step 4:** Run test, expect green
-- [ ] **Step 5:** Commit: `feat(orchestration): map agentEventBus cancellation into Outcome.cancelled`
+- [ ] **Step 2:** Run, expect failure
+- [ ] **Step 3: Green.** In `Loop` and `Branch`, before each attempt/branch settling, check `ctx.threadId && agentEventBus.isCancelled(ctx.threadId)`. If cancelled, return `Outcome.cancelled` with `reason: "user_cancelled"`, emit `*:cancelled`, clear the flag with `clearCancel(threadId)`
+- [ ] **Step 4:** Run, expect green
+- [ ] **Step 5: Induced-failure smoke check.** Disable the cancellation check in Loop, confirm the test detects the regression, restore
+- [ ] **Step 6:** Commit: `feat(orchestration): map agentEventBus cancellation into Outcome.cancelled`
 
-#### Task 1C.2 — Open Phase 1C PR
+#### Task 1C.5 — `RunContext.runId` ↔ `ToolExecution` linkage (forensics)
 
-- [ ] **Step 1:** Verify gates
-- [ ] **Step 2:** Open PR `feat(orchestration): cancellation mapping (Phase 1C)`. Phase 1 complete after merge
+**Files:**
+- Modify: `apps/web/lib/mcp-governed-execute.ts`
+- Modify: `apps/web/lib/mcp-governed-execute.test.ts`
+
+Per spec §Forensics Linkage: substrate `runId` must be persisted on `ToolExecution.routeContext` so receipts and orchestration runs can be joined.
+
+- [ ] **Step 1: Red.** Write a failing test: when `governedExecuteTool` is called with a context carrying a substrate `runId`, the resulting `ToolExecution` row's `routeContext` field contains the `runId` (or includes it in a structured way alongside route info). Initial code does not pass `runId` through, so the test fails
+- [ ] **Step 2:** Run, expect failure
+- [ ] **Step 3: Green.** Thread `runId` from the calling context through `governedExecuteTool` into the `ToolExecution.routeContext` write. If `routeContext` already carries a structured payload, append `runId` to it; if it's a string field, use a `JSON.stringify` envelope or a documented delimiter
+- [ ] **Step 4:** Run, expect green
+- [ ] **Step 5:** Commit: `feat(orchestration): persist substrate runId on ToolExecution for forensics`
+
+#### Task 1C.6 — Open Phase 1C PR
+
+- [ ] **Step 1:** Verify per-PR gates (note: Phase 1C is foundation work, so it's exempt from the refactor-budget gate — Phase 2 is where retirements begin)
+- [ ] **Step 2:** Open PR `feat(orchestration): wire substrate to event bus, cancellation mapping, ToolExecution forensics (Phase 1C)`. Phase 1 complete after merge
+- [ ] **Step 3:** Wait for review/merge before starting Phase 2
 
 ---
 
@@ -335,6 +338,26 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 **Branch:** `feat/orch-phase-2-polling`
 
 **Goal:** Migrate `sandbox-db.ts` polls and `github-fork.ts` poll. These are infra-tier (use `system` profile), have simple exit predicates, and the github-fork migration **fixes a known silent-failure bug** (`{status: "deferred"}`).
+
+**Refactor-budget targets retired in this PR:**
+- `"deferred"` status string in `github-fork.ts`
+- local poll-deadline constant `POLL_TIMEOUT_MS` in `sandbox-db.ts` (replaced by governance-derived `deadlineMs`)
+- local poll-interval constant `POLL_INTERVAL_MS` (replaced by Loop's strategy delay)
+
+**Emit-site migration scope:** any `agentEventBus.emit(...)` calls inside `sandbox-db.ts`, `github-fork.ts`, or their immediate callers migrate to envelope shape (populating `userId`, `emittedAt`, `runId`) **in this PR**. These are infra-tier emits — Task 2.0 establishes the `system` user constant for that purpose.
+
+### Task 2.0 — `system` user constant for infra-tier emits
+
+**Files:**
+- Modify: `packages/db/prisma/seed.ts` (or wherever the user seed lives)
+- Create: `apps/web/lib/orchestration/system-user.ts`
+
+Per memory `feedback_db_fixes_must_hit_seed`: every DB fix must also update seed/migration. The system user is needed because infra-tier substrate emits (`sandbox-db`, `github-fork`, future `mcp-catalog-sync` migrations) have no caller-supplied `userId`.
+
+- [ ] **Step 1:** Check existing seed for a `system` user. Run `pnpm --filter @dpf/db prisma studio` or grep the canonical seed file for `email.*system` / `userId.*system`
+- [ ] **Step 2:** If a system user exists, document its userId in `apps/web/lib/orchestration/system-user.ts` as a constant. If not, add an idempotent `upsert` entry to the canonical seed file with stable userId (e.g. `system-orchestration`), email `system@dpf.local`, displayName `"System (Orchestration)"`. Use Prisma's `upsert` so re-seed is idempotent
+- [ ] **Step 3:** Add a test asserting the system user exists after seeding **and that the `SYSTEM_USER_ID` constant in `system-user.ts` matches the seeded userId exactly** (assert by reading both and comparing). A typo in either side silently routes infra emits to a non-existent user; the per-PR userId test won't catch a constant/seed mismatch unless this assertion exists
+- [ ] **Step 4:** Commit: `feat(orchestration): system user constant + idempotent seed`
 
 ### Task 2.1 — Migrate `sandbox-db.ts` `pollUntilReady`
 
@@ -381,10 +404,20 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 - [ ] **Step 5:** Run all tests; verify parity AND the new failure-mode assertion
 - [ ] **Step 6:** Commit: `refactor(github-fork): migrate poll to Loop; remove silent "deferred" return`
 
-### Task 2.4 — Open Phase 2 PR
+### Task 2.4 — Migrate emit sites in touched files to envelope shape
 
-- [ ] **Step 1:** Per-PR gates checklist
-- [ ] **Step 2:** Open PR. Body **explicitly highlights** the github-fork behavior change with a "Migration notes for callers" section
+**Files:**
+- Modify: any file touched in Tasks 2.0–2.3 that contains `agentEventBus.emit(...)` calls
+
+- [ ] **Step 1:** Grep the modified files for `emit(` calls. Likely sites: none in `sandbox-db.ts` itself, possibly some in `github-fork.ts`, possibly in the immediate callers updated in Task 2.3
+- [ ] **Step 2:** For each emit call, populate envelope fields: `userId` (from `system-user.ts` constant for infra calls; from caller context otherwise), `emittedAt: new Date().toISOString()`, `runId` from current substrate run if any
+- [ ] **Step 3:** Run typecheck — must stay clean (envelope fields still optional in this phase)
+- [ ] **Step 4:** Commit: `chore(bus): populate envelope on phase 2 emit sites`
+
+### Task 2.5 — Open Phase 2 PR
+
+- [ ] **Step 1:** Per-PR gates checklist (note: refactor-budget evidence required — list deleted constants/strings in PR description)
+- [ ] **Step 2:** Open PR. Body **explicitly highlights** the github-fork behavior change with a "Migration notes for callers" section, lists the deleted constants under "Refactor budget delivered," and lists the emit sites migrated under "Envelope migration"
 - [ ] **Step 3:** Wait for merge
 
 ---
@@ -393,7 +426,24 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 
 **Branch:** `feat/orch-phase-3-build-orch`
 
-**Goal:** Migrate four related surfaces in one coherent PR: phase loop, tasks-within-phase fan-out, specialist retry, optimistic merge retry, and pipeline step retry.
+**Goal:** Migrate four related surfaces in one coherent PR: phase loop, tasks-within-phase fan-out, specialist retry, optimistic merge retry, and pipeline step retry. **This is the audit's recommended first major proving ground** — Build Studio orchestration is concrete, observable, and substrate-worthy without the blast radius of the agentic loop.
+
+**Refactor-budget targets retired in this PR (all four constants must be deleted):**
+- `MAX_SPECIALIST_RETRIES` (`build-orchestrator.ts`)
+- `MAX_MERGE_RETRIES` (`build-orchestrator.ts`)
+- `MAX_RETRIES` table (`build-pipeline.ts` or `build-exec-types.ts`)
+- `RETRY_DELAYS_MS` array (same file)
+
+The PR fails the per-PR refactor-budget gate if any of these survive.
+
+**Emit-site migration scope (in this PR):**
+- `apps/web/lib/integrate/build-orchestrator.ts` (~13 emit sites)
+- `apps/web/lib/integrate/build-pipeline.ts` (~1 emit site)
+- `apps/web/lib/actions/build.ts` (~4 emit sites)
+- `apps/web/lib/build-flow-state.ts` (~1 emit site)
+- `apps/web/lib/queue/functions/build-review-verification.ts` (~5 emit sites)
+
+Each emit gets `userId` (from `build.ownerUserId` or thread context), `emittedAt`, and `runId` from the substrate `RunContext`.
 
 ### Task 3.1 — Migrate phase loop in `build-orchestrator.ts`
 
@@ -443,11 +493,31 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 - [ ] **Step 4:** Update `build-pipeline.test.ts` parity tests
 - [ ] **Step 5:** Commit: `refactor(build-pipeline): migrate to Sequential+Loop; delete MAX_RETRIES/RETRY_DELAYS_MS`
 
-### Task 3.6 — Open Phase 3 PR
+### Task 3.6 — Migrate emit sites in touched files to envelope shape
 
-- [ ] **Step 1:** Per-PR gates
-- [ ] **Step 2:** Open PR. Body lists the four surfaces, the deleted constants, and the governance profiles chosen at each call site
-- [ ] **Step 3:** Wait for merge
+**Files:**
+- Modify: each file touched in Tasks 3.1–3.5 with `agentEventBus.emit(...)` calls
+
+- [ ] **Step 1:** Grep the modified files for `emit(` calls. Sites by file (verified at PR #211 merge time; re-verify line numbers at task entry):
+  - `build-orchestrator.ts` — ~13 sites
+  - `build-pipeline.ts` — ~1 site
+  - `build.ts` — ~4 sites
+  - `build-flow-state.ts` — ~1 site
+  - `build-review-verification.ts` — ~5 sites
+- [ ] **Step 2:** For each, populate `userId` from `build.ownerUserId` or thread context, `emittedAt`, and `runId` from the surrounding substrate `RunContext`
+- [ ] **Step 3:** Typecheck stays clean
+- [ ] **Step 4:** Commit: `chore(bus): populate envelope on Build Studio emit sites`
+
+### Task 3.7 — Open Phase 3 PR
+
+- [ ] **Step 1:** Per-PR gates checklist (refactor-budget evidence required — all four named constants must be deleted)
+- [ ] **Step 2:** Open PR. Body lists:
+  - The five surfaces migrated and their target primitives
+  - **"Refactor budget delivered"** section listing `MAX_SPECIALIST_RETRIES`, `MAX_MERGE_RETRIES`, `MAX_RETRIES`, `RETRY_DELAYS_MS` as deleted
+  - The governance profiles chosen at each call site
+  - **"Envelope migration"** listing the emit sites populated with envelope fields
+- [ ] **Step 3:** UX verification: manually exercise Build Studio against the running app and confirm no progress-stream regressions before requesting review
+- [ ] **Step 4:** Wait for merge
 
 ---
 
@@ -456,6 +526,12 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 **Branch:** `feat/orch-phase-4-fallback`
 
 **Goal:** Migrate `apps/web/lib/routing/fallback.ts:79` `callWithFallbackChain` to `Loop`. This is the cleanest test of `Loop`'s `strategy` function because each attempt genuinely picks a different endpoint.
+
+**Refactor-budget targets retired in this PR:**
+- any local backoff plumbing in `fallback.ts` superseded by `Loop`'s `strategy` and budget resolution (delay tables, attempt counters, etc.)
+- the `throw` wrapper for chain exhaustion if callers can be migrated to handle `Outcome.exhausted` directly
+
+**Emit-site migration scope (in this PR):** routing emits are limited (most routing observability uses the routing telemetry path, not the agent event bus). Migrate any `agentEventBus.emit(...)` calls in `fallback.ts` and immediate callers; expect a small handful.
 
 ### Task 4.1 — Migrate fallback chain
 
@@ -472,10 +548,16 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 - [ ] **Step 4:** Run parity tests
 - [ ] **Step 5:** Commit: `refactor(routing): migrate fallback chain to Loop`
 
-### Task 4.2 — Open Phase 4 PR
+### Task 4.2 — Migrate emit sites in touched files to envelope shape
 
-- [ ] **Step 1:** Per-PR gates
-- [ ] **Step 2:** Open PR
+- [ ] **Step 1:** Grep `fallback.ts` and immediate callers for `emit(` calls; populate envelope fields
+- [ ] **Step 2:** Typecheck clean
+- [ ] **Step 3:** Commit: `chore(bus): populate envelope on routing fallback emit sites`
+
+### Task 4.3 — Open Phase 4 PR
+
+- [ ] **Step 1:** Per-PR gates checklist (refactor-budget evidence required)
+- [ ] **Step 2:** Open PR. Body lists deleted backoff plumbing under "Refactor budget delivered"
 - [ ] **Step 3:** Wait for merge
 
 ---
@@ -485,6 +567,17 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 **Branch:** `feat/orch-phase-5-deliberation`
 
 **Goal:** Migrate `deliberation-run.ts` worker branches and adjudicator to `Branch`. **Important behavior change:** today branches dispatch sequentially (verified at lines 114–260). Migrating to true parallel `Branch` is a semantic upgrade — the spec calls this out explicitly.
+
+**Refactor-budget targets retired in this PR:**
+- duplicated branch-state scaffolding that the substrate now centralizes (per-branch progress tracking helpers, manual synthesis bookkeeping)
+- any `pushThreadProgress` calls in deliberation that the substrate's typed events replace
+
+**Emit-site migration scope (in this PR):**
+- `apps/web/lib/queue/functions/deliberation-run.ts` (~5 sites via `pushThreadProgress`)
+- `apps/web/lib/queue/functions/brand-extract.ts` (~3 sites via `pushThreadProgress`) — included here because brand-extract uses similar `pushThreadProgress` patterns and is small
+- `apps/web/lib/tak/thread-progress.ts` (the projection function itself — add `userId` to its signature)
+
+`thread-progress.ts` is touched first because brand-extract and deliberation-run both go through it.
 
 ### Task 5.1 — Decide: parallel or sequential `Branch` for V1
 
@@ -511,10 +604,22 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 - [ ] **Step 3:** Run tests
 - [ ] **Step 4:** Commit: `refactor(deliberation): fold adjudicator branches into Branch.merge`
 
-### Task 5.4 — Open Phase 5 PR
+### Task 5.4 — Migrate emit sites in touched files to envelope shape
 
-- [ ] **Step 1:** Per-PR gates
-- [ ] **Step 2:** Open PR. Body notes the **deliberate sequential dispatch** preserves today's semantics; opening parallel dispatch is a follow-up
+**Files:**
+- Modify: `apps/web/lib/tak/thread-progress.ts` (add `userId` to `pushThreadProgress` signature; ripple through callers)
+- Modify: `apps/web/lib/queue/functions/deliberation-run.ts`
+- Modify: `apps/web/lib/queue/functions/brand-extract.ts`
+
+- [ ] **Step 1:** Add `userId` to `pushThreadProgress` signature. Update both internal `emit(...)` calls to populate envelope
+- [ ] **Step 2:** Update every caller of `pushThreadProgress` to pass `userId` from their context (deliberation run owner, task run owner, etc.)
+- [ ] **Step 3:** Typecheck clean
+- [ ] **Step 4:** Commit: `chore(bus): populate envelope on deliberation/brand-extract emit sites`
+
+### Task 5.5 — Open Phase 5 PR
+
+- [ ] **Step 1:** Per-PR gates checklist (refactor-budget evidence required)
+- [ ] **Step 2:** Open PR. Body notes the **deliberate sequential dispatch** preserves today's semantics; opening parallel dispatch is a follow-up. Lists deleted branch-state scaffolding under "Refactor budget delivered"
 - [ ] **Step 3:** Wait for merge
 
 ---
@@ -524,6 +629,23 @@ After all 15 sub-tasks of 1B.3 land and every emit site populates `userId`, lock
 **Branch:** `feat/orch-phase-6-agentic-loop`
 
 **Goal:** Migrate `apps/web/lib/tak/agentic-loop.ts:486-1107` (~620 lines) from a hand-rolled `for` loop with 6+ early exit paths to `Loop` with named exit predicates. **This migration explicitly breaks silent-success behavior** in favor of `Outcome.exhausted` per the spec's Agentic Loop Special Handling section.
+
+**Refactor-budget targets retired in this PR:**
+- `MAX_ITERATIONS = 200` (`agentic-loop.ts`)
+- `MAX_DURATION_MS = 120_000` (`agentic-loop.ts`)
+- per-call-site repetition / fabrication / frustration counters that become exit predicates inside `Loop`
+- ambiguous max-iteration fallback path that returns best-available content
+
+**Emit-site migration scope (in this PR):** the agentic loop is the largest emit-site cluster left after Phase 5. Migrate:
+- `apps/web/lib/tak/agentic-loop.ts`
+- `apps/web/lib/actions/agent-coworker.ts` (~11 sites)
+- `apps/web/app/api/agent/send/route.ts` (~5 sites)
+- `apps/web/app/api/agent/build/advance-phase/route.ts` (~1 site)
+- `apps/web/lib/mcp-tools.ts` (~11 sites)
+- `apps/web/lib/inference/async-inference.ts` (~7 sites)
+- `apps/web/lib/queue/inngest-bridge.ts` (~1 site)
+- `apps/web/lib/tak/mcp-catalog-sync.ts` (~2 sites; uses `system` user)
+- any remaining stragglers found by `grep -RE 'agentEventBus.emit\(|emit\(' apps/web/lib/`
 
 ### Task 6.1 — Build replay fixtures
 
@@ -600,12 +722,24 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
 - [ ] **Step 2:** Add an explicit comment: `// FLAG removed in Phase 7 retirement sweep — see plan task 7.X`
 - [ ] **Step 3:** Commit: `feat(agentic-loop): feature flag DPF_AGENTIC_LOOP_V2 for staged rollout`
 
-### Task 6.6 — Open Phase 6 PR
+### Task 6.6 — Migrate emit sites in agentic loop and callers
 
-- [ ] **Step 1:** Per-PR gates with extra emphasis on replay fixtures
+**Files:**
+- Modify: every file in §Emit-site migration scope at the top of Phase 6
+
+**Re-verify line numbers at task entry.** The site counts and line numbers in the Phase 6 scope list were taken from earlier audit recon and will likely have drifted by the time Phase 6 runs. At task entry, grep each file fresh and update the count rather than trusting the listed numbers.
+
+- [ ] **Step 1:** For each file, grep for `emit(` calls; populate envelope fields. `userId` from caller context (input.userId, build.ownerUserId, session, etc.); `mcp-catalog-sync.ts` uses the `system` user constant
+- [ ] **Step 2:** Typecheck clean
+- [ ] **Step 3:** Commit: `chore(bus): populate envelope on agentic-loop and remaining caller emit sites`
+
+### Task 6.7 — Open Phase 6 PR
+
+- [ ] **Step 1:** Per-PR gates with extra emphasis on replay fixtures (refactor-budget evidence required: `MAX_ITERATIONS`, `MAX_DURATION_MS`, plus per-call counters)
 - [ ] **Step 2:** Open PR. Body has a dedicated "Behavior changes" section listing the seven terminal-exit mappings from the table. Reviewers focus on the silent-exhaustion path
-- [ ] **Step 3:** Wait for thorough review and merge. Memory: "Manual test AI Coworker" — **before merge, manually exercise the coworker UI** for each of the six scenarios and confirm the UI handles the new outcomes correctly
-- [ ] **Step 4:** After merge, monitor first 100 production runs (telemetry note in PR per spec §Risks #2). Tune profile budgets if regressions appear
+- [ ] **Step 3:** **Manual UX test before merge** — manually exercise the coworker UI for each of the six replay-fixture scenarios and confirm the UI handles the new outcomes correctly
+- [ ] **Step 4:** Wait for thorough review and merge
+- [ ] **Step 5:** After merge, monitor first 100 production runs (telemetry note in PR per spec §Risks #2). Tune profile budgets if regressions appear
 
 ---
 
@@ -613,31 +747,65 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
 
 **Branch:** `feat/orch-phase-7-retirement`
 
-**Goal:** Delete every legacy retry/loop construct and the legacy positional bus API. Add mechanical grep enforcement so they cannot reappear.
+**Goal:** Tighten the envelope contract to mandatory `userId` / `emittedAt`, delete the legacy positional bus API, retire the agentic-loop feature flag, and add mechanical grep enforcement so legacy patterns cannot reappear.
 
-### Task 7.1 — Delete the legacy positional bus API
+**Refactor-budget targets retired in this PR:**
+- legacy positional `subscribe(threadId, handler)` overload
+- legacy positional `emit(threadId, event)` form
+- top-level `apps/web/lib/agent-event-bus.ts` shim file
+- `DPF_AGENTIC_LOOP_V2` feature flag from Phase 6 Task 6.5
+- any final stragglers detected by the grep sweep
+
+This phase is the *backstop* — most retirements should already have happened in Phases 2–6. The grep enforcement here verifies that the lane is actually clean.
+
+### Task 7.0 — Final emit-site sweep
+
+**Files:**
+- Modify: any straggler files surfaced by `grep -RE 'agentEventBus.emit\(|emit\(' apps/web/lib/`
+
+After Phases 2–6, every consumer should have migrated its emits to envelope shape. This task is the safety net: grep for any remaining bare positional `emit()` calls that lack envelope fields.
+
+- [ ] **Step 1:** Grep `apps/web/lib/` for `emit(` calls. For each match, verify the call passes envelope fields (`userId`, `emittedAt`, `runId` if applicable). If any are bare, migrate them in this task before the tightening step
+- [ ] **Step 2:** Typecheck clean
+- [ ] **Step 3:** Commit: `chore(bus): final emit-site envelope sweep before tightening`
+
+### Task 7.1 — Tighten envelope: make `userId` and `emittedAt` mandatory
 
 **Files:**
 - Modify: `apps/web/lib/tak/agent-event-bus.ts`
 
-- [ ] **Step 1:** Confirm zero callers remain of `subscribe(threadIdString, handler)` (positional first arg). Grep for `subscribe(` and inspect each match. If any remain, migrate them in this PR
-- [ ] **Step 2:** Confirm zero callers remain of `emit(threadIdString, ...)` positional form (now should be the envelope form everywhere)
-- [ ] **Step 3:** Delete the positional overloads from `agent-event-bus.ts`. Remove the legacy code path from internal `emit` (no more `Map<threadId, handlers>` if the object form replaces it; or keep both maps with the only entry point being object-form subscribe)
-- [ ] **Step 4:** Run typecheck — must be clean. If any caller still uses positional, fix in this PR
-- [ ] **Step 5:** Commit: `refactor(bus): retire legacy positional subscribe/emit API`
+After Task 7.0 confirms zero bare emits remain, lock the contract. (This task moved from old Phase 1B.8 to here — the audit's first-slice concern was about doing it as a foundation step. With consumer phases having already populated envelope fields, the tightening becomes a structural typecheck assertion of work already done.)
 
-### Task 7.2 — Delete the shim file
+- [ ] **Step 1:** Change `AgentEvent`'s base intersection from `Partial<OrchestrationEnvelope>` to `{ userId: string; emittedAt: string } & Partial<Omit<OrchestrationEnvelope, "userId" | "emittedAt">>`
+- [ ] **Step 2:** `pnpm --filter web typecheck` — expect green if Phases 2–6 + Task 7.0 were complete. Any failure indicates a missed emit site; fix in this task before committing
+- [ ] **Step 3:** Run the full vitest suite for affected files
+- [ ] **Step 4:** Commit: `refactor(bus): require userId and emittedAt on every AgentEvent`
+
+### Task 7.2 — Retire the legacy positional `subscribe` overload and thread-only storage
 
 **Files:**
-- Delete: `apps/web/lib/agent-event-bus.ts` (the 3-line shim)
-- Modify: 16 importers to point at canonical `apps/web/lib/tak/agent-event-bus.ts`
+- Modify: `apps/web/lib/tak/agent-event-bus.ts`
 
-- [ ] **Step 1:** Update every importer (list from recon: 16 files) to import from `@/lib/tak/agent-event-bus` instead of `@/lib/agent-event-bus`
+**Scope clarification.** The `emit(threadId, event)` two-arg signature is kept — consumers populate envelope fields on the event object's second arg (this is what every consumer phase did). What retires here is the *positional* `subscribe(threadIdString, handler)` overload (replaced by `subscribe({ threadId }, handler)`) and any internal-only thread-only storage path that's now redundant given the envelope subscription overloads.
+
+- [ ] **Step 1:** Confirm zero callers remain of `subscribe(threadIdString, handler)` (positional first arg, plain string). Grep for `subscribe(` and inspect each match. If any remain, migrate them to `subscribe({ threadId: ... }, handler)` in this PR
+- [ ] **Step 2:** Delete the positional `subscribe(threadIdString, handler)` overload from `agent-event-bus.ts`. Calling positional now becomes a typecheck error — that's the enforcement
+- [ ] **Step 3:** If both `Map<threadId, Set<handler>>` and `Map<userId, Set<handler>>` storage paths still exist with only the object-form subscribe entry point, simplify to a single subscriber-list keyed by filter shape. Don't merge if it complicates emit fan-out logic — keep both maps if they read more clearly
+- [ ] **Step 4:** Run typecheck — must be clean. If any caller still uses positional, fix in this PR
+- [ ] **Step 5:** Commit: `refactor(bus): retire legacy positional subscribe overload`
+
+### Task 7.3 — Delete the shim file
+
+**Files:**
+- Delete: `apps/web/lib/agent-event-bus.ts` (the 2-line shim)
+- Modify: importers to point at canonical `apps/web/lib/tak/agent-event-bus.ts`
+
+- [ ] **Step 1:** Grep `from "@/lib/agent-event-bus"` and similar non-`tak/`-scoped imports. Update every importer to import from `@/lib/tak/agent-event-bus` instead
 - [ ] **Step 2:** Delete the shim file
 - [ ] **Step 3:** Typecheck clean
 - [ ] **Step 4:** Commit: `chore(bus): delete shim file; all importers point at canonical path`
 
-### Task 7.3 — Retire the agentic-loop feature flag
+### Task 7.4 — Retire the agentic-loop feature flag
 
 **Files:**
 - Modify: callers from Phase 6 Task 6.5
@@ -647,7 +815,7 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
 - [ ] **Step 3:** Run all replay fixtures
 - [ ] **Step 4:** Commit: `chore(agentic-loop): retire DPF_AGENTIC_LOOP_V2 flag and legacy path`
 
-### Task 7.4 — Mechanical enforcement via pre-push hook
+### Task 7.5 — Mechanical enforcement via pre-push hook
 
 **Files:**
 - Modify: `.githooks/pre-push` (already exists per repo status)
@@ -671,7 +839,7 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
     echo "ERROR: hand-rolled retry-while loops outside orchestration module"; exit 1
   fi
   # NOTE: legacy positional subscribe(threadId, handler) is enforced by the
-  # type system after Task 7.1 deletes the positional overload — calling
+  # type system after Task 7.2 deletes the positional overload — calling
   # positional becomes a typecheck error, which is stronger than grep and
   # avoids false-positives on variable-form object subscriptions like
   # subscribe(filter, handler) where filter holds {threadId} or {userId}.
@@ -680,15 +848,15 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
 - [ ] **Step 3:** Run the hook locally to confirm it fires when patterns reappear (test by intentionally adding a violation, confirming hook blocks, reverting)
 - [ ] **Step 4:** Commit: `chore(hooks): pre-push enforcement of orchestration boundaries`
 
-### Task 7.5 — Verification grep sweep
+### Task 7.6 — Verification grep sweep
 
 - [ ] **Step 1:** Run each enforcement grep manually against the current branch
 - [ ] **Step 2:** Confirm zero matches outside `apps/web/lib/orchestration/`
 - [ ] **Step 3:** Document the final inventory in PR description: which constants were deleted, which files lost their retry loops, which event variants migrated to the envelope
 
-### Task 7.6 — Open Phase 7 PR
+### Task 7.7 — Open Phase 7 PR
 
-- [ ] **Step 1:** Per-PR gates
+- [ ] **Step 1:** Per-PR gates (refactor-budget evidence required: positional bus API, shim file, feature flag all retired in this PR)
 - [ ] **Step 2:** Open PR `feat(orchestration): retirement sweep — one orchestration vocabulary (Phase 7)`
 - [ ] **Step 3:** This PR closes the spec. After merge, the codebase has exactly one way to express each orchestration pattern
 
@@ -697,10 +865,11 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
 ## Risk Register Reminders (per spec §Risks)
 
 - **Phase 6 regression risk** — replay fixtures (Task 6.1) and feature-flag rollout (Task 6.5) mitigate
-- **Bus migration destabilizes UX** — Phase 1B's compatibility shim survives until Phase 7, giving 5 PRs of soak time
+- **Bus migration destabilizes UX** — envelope fields stay optional from Phase 1B all the way through Phase 7 Task 7.0; tightening to mandatory only happens after every consumer phase has populated them. Legacy positional API remains as a shim through every phase up to Phase 7
 - **Budget calibration** — Phase 6 PR description includes a "first 100 runs" telemetry note; tune in Phase 7 if needed
 - **Deliberation semantic drift** — Phase 5 explicitly preserves sequential dispatch; parallel is a follow-up
 - **Caller dependencies on best-effort content** — Phase 6 Task 6.4 forces every caller to handle `Outcome.exhausted`; TypeScript catches non-exhaustive matches
+- **Wrapper-only migration without real debt reduction** — every migration phase has named refactor-budget targets and the per-PR refactor-budget evidence gate. Reviewers reject migrations that don't retire at least one named constant/helper/behavior
 
 ## Out of Scope (deferred per spec)
 
@@ -718,9 +887,12 @@ Per spec §Agentic Loop Special Handling (lines 797–805):
 - [ ] Pre-push hook enforces the four grep boundaries
 - [ ] Zero matches for `MAX_RETRIES`, `MAX_SPECIALIST_RETRIES`, `MAX_MERGE_RETRIES`, `MAX_ITERATIONS`, `MAX_DURATION_MS`, `RETRY_DELAYS_MS` outside `apps/web/lib/orchestration/`
 - [ ] `apps/web/lib/agent-event-bus.ts` shim deleted
-- [ ] Legacy positional `subscribe(threadId, handler)` and `emit(threadId, event)` retired
+- [ ] Legacy positional `subscribe(threadId, handler)` and `emit(threadId, event)` retired (typecheck-enforced after Task 7.2)
+- [ ] `userId` and `emittedAt` mandatory on every `AgentEvent` (typecheck-enforced after Task 7.1)
 - [ ] All `runAgenticLoop` callers handle `Outcome.exhausted` explicitly
+- [ ] `RunContext.runId` persisted on `ToolExecution` rows (Task 1C.5)
 - [ ] First 100 production runs after Phase 6 show no silent-exhaustion regressions
+- [ ] Every migration PR (Phases 2–6 + 7) shipped at least one refactor-budget retirement (constant deleted, helper retired, or ambiguous status behavior eliminated)
 
 ---
 

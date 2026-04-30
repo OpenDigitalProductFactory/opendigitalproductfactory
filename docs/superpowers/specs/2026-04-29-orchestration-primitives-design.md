@@ -1,18 +1,20 @@
-# Orchestration Primitives Design
+# Orchestration Primitives Design — Coworker Execution Substrate
 
 | Field | Value |
 | --- | --- |
-| Status | Draft for review |
+| Status | Draft for review (merged 2026-04-30) |
 | Created | 2026-04-29 |
-| Author | Claude (Opus 4.7) + Mark Bodman |
+| Last revised | 2026-04-30 (merged Codex substrate review per `audits/2026-04-29-orchestration-supersession-decision.md`) |
+| Author | Claude (Opus 4.7) + Codex review + Mark Bodman |
 | Primary audience | Platform architecture, AI runtime, Build Studio orchestration, governance |
 | Related repo areas | `apps/web/lib/tak/*`, `apps/web/lib/integrate/*`, `apps/web/lib/routing/*`, `apps/web/lib/queue/functions/*` |
 | Related standards | `TAK`, `GAID`, `A2A`, Google ADK workflow agents |
-| Distinct from | Inngest durable retries, task-envelope redesign, UI redesign, OpenTelemetry export |
+| Distinct from | Inngest durable retries, task-envelope redesign, UI redesign, OpenTelemetry export, **the routing execution-adapter framework** (see §Naming and Boundary Rule) |
+| Supersedes | `2026-04-29-coworker-execution-adapter-substrate-design.md` (archived) |
 
 ## Purpose
 
-Introduce a small, governed orchestration runtime for DPF with four explicit primitives:
+Introduce a small, governed in-process orchestration runtime for DPF — the **coworker execution substrate** — with four explicit primitives:
 
 - `Sequential`
 - `Parallel`
@@ -25,18 +27,33 @@ The goal is not to rename existing control flow. The goal is to remove three rec
 2. inconsistent event visibility for long-running work
 3. budget and patience rules scattered across inline constants instead of flowing from governance posture
 
-This spec defines the in-process orchestration layer only. It does not replace Inngest's durable execution model, and it does not redesign the A2A-shaped task envelope that already has its own spec.
+This spec defines the in-process orchestration layer only. It does not replace Inngest's durable execution model, it does not redesign the A2A-shaped task envelope that already has its own spec, and it does not replace the routing/provider execution-adapter framework that owns provider-dispatch plumbing inside `callProvider()`.
 
 ## Executive Decision
 
-DPF should add a new `apps/web/lib/orchestration/` module that owns four deterministic primitives, typed outcomes, typed orchestration events, and governance-derived runtime budgets. Existing ad hoc retry loops and fan-out code should migrate to that module in phases, with the riskiest migration (`agentic-loop.ts`) saved for the end.
+DPF should add a new `apps/web/lib/orchestration/` module that owns four deterministic primitives, typed outcomes, typed orchestration events, and governance-derived runtime budgets. Existing ad hoc retry loops and fan-out code should migrate to that module in phases, with the riskiest migration (`agentic-loop.ts`) saved for the end. **Build Studio is the first major proving ground after low-risk polling loops** — its existing phase progression, batched task fan-out, and bounded specialist retry are concrete, observable, and substrate-worthy without the blast radius of the agentic loop.
 
 The important architectural boundary is this:
 
 - Inngest remains the durable outer shell for queued, resumable, cross-restart work.
-- The new orchestration module becomes the single in-process control-flow layer used inside those durable shells and inside request-time agent execution.
+- The routing execution-adapter framework (`apps/web/lib/routing/`) remains the provider-dispatch abstraction around inference calls.
+- The new orchestration module becomes the single in-process control-flow layer used inside Build Studio orchestration, coworker loops, readiness polling, deliberation, and request-time agent execution.
 
-That split keeps DPF honest about what is durable versus what is merely structured.
+That split keeps DPF honest about three distinct concerns: durable execution, provider dispatch, and in-process control flow.
+
+## Naming and Boundary Rule
+
+The repo already approved an [Execution Adapter Framework](./2026-03-20-execution-adapter-framework-design.md) on 2026-03-20. In that document, "execution adapter" means provider-dispatch plumbing inside `callProvider()` and the routing layer — not orchestration semantics.
+
+This spec uses the term **coworker execution substrate** (or simply "the orchestration substrate") for the in-process control-flow runtime. Code lives under `apps/web/lib/orchestration/`. Do not call this layer an "execution adapter" in code, doc prose, PR descriptions, or commit messages — that label is reserved for routing/provider work.
+
+| Layer | Owner | Code path | Concern |
+| --- | --- | --- | --- |
+| Durable outer shell | Inngest | `apps/web/lib/queue/` | queued, resumable, cross-restart |
+| Provider dispatch | Routing execution-adapter framework | `apps/web/lib/routing/` | `callProvider()`, model degradation, auth, retirement |
+| **In-process control flow** | **Orchestration substrate (this spec)** | **`apps/web/lib/orchestration/`** | **Sequential / Parallel / Loop / Branch, typed Outcome, governance budgets** |
+| Task envelope | A2A-aligned coworker runtime | `apps/web/lib/tak/` | TaskRun / TaskMessage / TaskArtifact |
+| Event bus | TAK | `apps/web/lib/tak/agent-event-bus.ts` | thread-keyed pub/sub (canonical); top-level `lib/agent-event-bus.ts` is a 2-line shim re-exporting it (retired in Phase 7) |
 
 ## Problem Statement
 
@@ -450,9 +467,9 @@ export type OrchestrationEnvelope = {
 };
 ```
 
-### Bus Evolution Required In Phase 1
+### Bus Evolution — Sub-Phased
 
-The bus should evolve from:
+The bus needs to evolve from:
 
 - `subscribe(threadId, handler)`
 - `emit(threadId, event)`
@@ -463,10 +480,13 @@ To support:
 - `subscribe({ userId }, handler)`
 - `emit(eventEnvelope)`
 
-Implementation note:
+This evolution is **split across phases** so no single PR has to migrate the bus and 40 emit sites at once:
 
-- V1 should preserve backward compatibility with the thread-keyed path while existing emitters migrate.
-- The old positional `subscribe(threadId, handler)` may remain temporarily as a compatibility shim, but the new orchestration module should emit through the new envelope shape from day one.
+- **Phase 1B** adds the envelope type and the new `subscribe` overloads. Envelope fields (`userId`, `runId`, `taskRunId`, etc.) are **all optional** to keep typecheck clean. The legacy positional `subscribe(threadId, handler)` and `emit(threadId, event)` remain as compatibility shims.
+- **Phases 2–6** migrate emit sites *in the consumer phases that touch them* — the substrate doesn't run a 16-file emit-site refactor as a foundation step. Build Studio's emit sites migrate with the Build Studio consumer migration, deliberation's emit sites migrate with deliberation, and so on.
+- **Phase 7 (Retirement)** tightens the envelope contract: `userId` and `emittedAt` become mandatory after every emit site has populated them. The legacy positional `subscribe(threadId, handler)` is then removed (it becomes a typecheck error to call positionally). A grep enforcement in pre-push hooks prevents reintroduction.
+
+Why this sub-phasing matters: per the Codex substrate audit, the original "Phase 1B = 16-file 40-site bus refactor before any consumer proves the substrate" was the highest-risk slice in the lane. Splitting types-first / consumers-migrate-emits-with-themselves / mandatory-tightening-last keeps every PR reviewable.
 
 ### Event Families
 
@@ -503,13 +523,17 @@ Rules:
 
 - the timer starts when the primitive starts
 - the timer is cleared in `finally`
-- a heartbeat emits only when no other event has been emitted for `heartbeatMs`
-- any event for the same `runId` resets the quiet timer
+- a heartbeat emits only when no **substrate-emitted** event has been emitted for `heartbeatMs`
+- only substrate-emitted progress events on the same `runId` reset the quiet timer
+
+**Edge-case clarification.** The reset rule applies *only* to events the substrate itself emits (`*:started`, `*:step_started`, `*:step_completed`, `*:attempt_started`, `*:attempt_completed`, `*:branch_started`, `*:branch_completed`, etc.). Bus events that consumer code emits *inside* a primitive's step function — for example, a Loop whose step calls a tool that emits `tool:invoked` — do **not** reset the substrate's quiet timer. Otherwise a chatty step inside a stalled Loop would suppress `loop:still_working` indefinitely and recreate the visibility gap this spec exists to close.
+
+Implementation note: the heartbeat module subscribes only to substrate-typed events (or, equivalently, the substrate calls `noteActivity(runId)` from its own emit path and consumer emits never call it).
 
 UI implication:
 
-- `WORKING` means recent events continue to arrive
-- `STALLED` means no event has arrived for more than `2 x heartbeatMs`
+- `WORKING` means recent substrate events continue to arrive
+- `STALLED` means no substrate event has arrived for more than `2 x heartbeatMs`
 
 That gives the coworker surfaces a real stall signal instead of inferring liveness from hope.
 
@@ -587,6 +611,32 @@ That means:
 - the outer primitive's deadline still constrains total wall clock
 
 This is intentionally simple and debuggable.
+
+## Forensics Linkage: `RunContext.runId` ↔ `ToolExecution`
+
+Each substrate run gets a unique `runId` (UUID, generated at primitive entry). For tool invocations made *inside* a primitive's step, that `runId` must be threaded through to `ToolExecution.routeContext` (or an equivalent dedicated column added in a follow-up slice) so the orchestration run and any provenance receipts minted by the [artifact provenance receipts spec](./2026-04-27-artifact-provenance-receipts-design.md) can be joined for forensics:
+
+- "show me every tool call that happened during this Loop run"
+- "this receipt came from which substrate run, in which build, for which user?"
+- "this stalled — which step's tool call hung?"
+
+V1 contract: `governedExecuteTool` reads `RunContext.runId` from its caller and persists it on the `ToolExecution` row in the same field used for thread/route correlation today (`routeContext`). If schema review later promotes `runId` to its own column, that's a follow-up migration; V1 reuses the existing field to avoid blocking foundation work on a schema change.
+
+Non-goal: this spec does not redesign `ToolExecution` storage. It states the contract that `runId` is the join key.
+
+## Mandatory Refactor Budget
+
+Every migration PR (Phases 2–7) must reserve **at least 20% of implementation effort for refactoring and deletion**. This budget is for:
+
+- retiring duplicate retry constants (`MAX_SPECIALIST_RETRIES`, `MAX_MERGE_RETRIES`, `MAX_ITERATIONS`, `MAX_RETRIES`, `RETRY_DELAYS_MS`, etc.)
+- collapsing local backoff tables where the substrate supersedes them
+- removing ambiguous timeout or `"deferred"` semantics after migration
+- simplifying call-site event emission once the substrate owns heartbeat behavior
+- deleting dead helpers that the substrate replaces
+
+This is **not optional cleanup**. It is the structural reason the substrate exists. A migration PR that only adds wrappers without retiring at least one constant, helper, or ambiguous status behavior fails the per-PR test gate and must be rebased to delete its predecessor before merge. Reviewers should reject "wrapper-only" migrations.
+
+Phase 7 (Retirement Sweep) is the *backstop*, not the place where deletion finally happens. Each migration phase deletes the constants it superseded.
 
 ## Primitive Semantics
 
@@ -694,67 +744,114 @@ Examples to remove once call sites move:
 
 ## Migration Sequence
 
-### Phase 1: Foundation
+The phasing below reflects two principles from the Codex audit (PR #350):
+
+1. The first slice that touches business call sites should be a **low-risk polling loop**, not the full bus refactor. The bus envelope refactor has the highest blast radius in the lane and should not be the first migration.
+2. **Build Studio is the first major proving ground** after polling. Its phase loop, batched fan-out, specialist retry, and optimistic merge retry are concrete and observable without the blast radius of the agentic loop.
+
+### Phase 1: Foundation (sub-phased for review tractability)
+
+#### Phase 1A — Module skeleton (✅ shipped 2026-04-29 in PR #353)
+
+Delivered:
+
+- `apps/web/lib/orchestration/` module with `Sequential`, `Parallel`, `Loop`, `Branch`
+- `governance-profiles.ts` registry with `deriveGovernanceProfile()`
+- `heartbeat.ts` runId-scoped timer
+- `types.ts` (`GovernanceProfile`, `RunContext`, `Outcome<T>`, `Evidence`)
+- `assert-never.ts`
+- Structural test scaffolding (`it.todo` until 1B activates events)
+
+No call-site migrations.
+
+#### Phase 1B — Bus envelope foundation (types only)
 
 Deliver:
 
-- new orchestration module
-- profile registry
-- event envelope types
-- bus evolution to support envelope-based subscriptions
-- heartbeat helper
-- unit tests for primitive behavior
+- Define `OrchestrationEnvelope` type on `apps/web/lib/tak/agent-event-bus.ts` with **all fields optional** to preserve typecheck cleanliness
+- Add `subscribe({ threadId })` and `subscribe({ userId })` overloads alongside the legacy positional `subscribe(threadId, handler)`
+- Add unit tests for the new subscribe surface
 
-Do not migrate business call sites yet.
+Do **not** migrate the 40 existing emit sites in this phase. Each emit site migrates **with its consumer** in the phase that touches that consumer. This is the structural change the Codex audit asked for: emit-site work is folded into feature work, not staged as a 16-file bus PR before any consumer proves the substrate.
+
+#### Phase 1C — Wire substrate to bus + cancellation mapping
+
+Deliver:
+
+- substrate primitives emit through the new envelope shape (using a `system` user where no caller-supplied `userId` exists yet — this matures into mandatory `userId` in Phase 7)
+- `events.ts` typed event constructors per primitive
+- `agentEventBus.requestCancel` / `isCancelled` mapping into `Outcome.cancelled`
+- activate the structural terminal-event tests scaffolded in 1A
+
+After 1C, the substrate is fully usable. Consumer migrations begin.
 
 ### Phase 2: Low-Risk Polling And Readiness Loops
 
 Migrate:
 
-- sandbox readiness and health checks
-- GitHub fork readiness
+- `sandbox-db.ts:50` (poll readiness)
+- `sandbox-db.ts:68` (poll health)
+- `github-fork.ts:105` (fork polling — drops silent `"deferred"` return)
+
+Emit-site migration scope: any `emit(...)` calls inside these files migrate to the envelope shape **in the same PR**. That's small (typically 1-2 sites per file).
 
 Why first:
 
 - simple semantics
 - high clarity
-- good proof that exhausted outcomes and heartbeats work
+- `github-fork`'s silent-success bug is a real failure-mode improvement (drop `"deferred"`, return `Outcome.exhausted`)
+- proves that exhausted outcomes and heartbeats work end-to-end before larger surfaces
 
-### Phase 3: Build Pipeline And Build Orchestrator
+Refactor-budget targets retired in this phase: none new (these surfaces don't have named retry constants), but the `"deferred"` status string and any local poll-deadline constants are deleted.
+
+### Phase 3: Build Pipeline And Build Orchestrator (first major proving ground)
 
 Migrate:
 
-- build pipeline step retry
-- specialist retry
-- phase sequencing
-- task-batch fan-out
-- optimistic merge retry
+- `build-orchestrator.ts:912` (phase progression → `Sequential`)
+- `build-orchestrator.ts:950` (task-batch fan-out → `Parallel` with explicit error policy)
+- `build-orchestrator.ts:629` (specialist retry → `Loop`)
+- `build-orchestrator.ts:1036` (optimistic merge retry → `Loop`)
+- `build-pipeline.ts:95` (pipeline step retry → `Loop` inside `Sequential`)
+
+Emit-site migration scope: all emit sites in `build-orchestrator.ts`, `build-pipeline.ts`, `build.ts`, `build-flow-state.ts`, and `queue/functions/build-review-verification.ts` migrate to the envelope shape **in this PR or a closely-coupled follow-up**.
 
 Why together:
 
-- these surfaces are already conceptually related
+- these surfaces are conceptually related
 - one coherent PR keeps Build Studio orchestration easier to review
+- this is the audit's recommended first major proving ground
+
+Refactor-budget targets retired in this phase: `MAX_SPECIALIST_RETRIES`, `MAX_MERGE_RETRIES`, `MAX_RETRIES`, `RETRY_DELAYS_MS`. **All four constants must be deleted** in the merging PR; this phase fails the per-PR refactor-budget gate if any survive.
 
 ### Phase 4: Provider Fallback Chain
 
 Migrate:
 
-- `callWithFallbackChain(...)`
+- `routing/fallback.ts:79` (`callWithFallbackChain` → `Loop`)
+
+Emit-site migration scope: routing emit sites (limited — most routing observability is via the routing telemetry path, not the agent event bus).
 
 Architectural note:
 
 - this is a good test of Loop strategy evolution because attempts genuinely change endpoint/model choice
 
+Refactor-budget targets: any local backoff plumbing in `fallback.ts` superseded by `Loop`'s `strategy` and budget resolution.
+
 ### Phase 5: Deliberation
 
 Migrate:
 
-- worker branch dispatch
-- synthesis/merge flow
+- `queue/functions/deliberation-run.ts:114` (worker branch dispatch → `Branch`)
+- adjudicator branches (folded into `Branch.merge` or as a second `Branch` invocation)
+
+Emit-site migration scope: `deliberation-run.ts`, `brand-extract.ts`, and any agent-coworker emit sites participating in deliberation flows migrate to envelope shape.
 
 Important note:
 
-- current code dispatches worker branches sequentially, so this phase is partly a semantic upgrade, not just a wrapper extraction
+- current code dispatches worker branches sequentially. V1 preserves that with a `dispatchMode: "sequential" | "parallel"` option on `Branch`; flipping deliberation to parallel is a follow-up after soak time, not part of this migration.
+
+Refactor-budget targets: duplicated branch-state scaffolding that the substrate now centralizes.
 
 ### Phase 6: Agentic Loop
 
@@ -766,8 +863,13 @@ Why last:
 
 - highest blast radius
 - most complex combination of looping, nudging, failure recovery, cancellation, and content fallback behavior
+- explicitly breaks the silent-exhaustion behavior current callers depend on
 
-This phase needs extra review and replay testing.
+Emit-site migration scope: `tak/agentic-loop.ts`, `actions/agent-coworker.ts`, `app/api/agent/send/route.ts`, `mcp-tools.ts`, `inference/async-inference.ts`, `tak/thread-progress.ts`, and remaining stragglers — all migrate to envelope shape.
+
+This phase needs extra review and replay testing. See §Agentic Loop Special Handling.
+
+Refactor-budget targets: `MAX_ITERATIONS`, `MAX_DURATION_MS`, all per-call-site repetition/fabrication/frustration counters that become exit predicates inside `Loop`.
 
 ### Phase 7: Retirement Sweep
 
@@ -824,21 +926,37 @@ Required in Phase 1:
 
 1. primitive unit tests for `Sequential`, `Parallel`, `Loop`, `Branch`
 2. event-envelope tests proving `userId`, `runId`, `primitive`, and cumulative cost exist on every orchestration event
-3. heartbeat tests proving quiet runs emit `*:still_working`
+3. heartbeat tests proving quiet runs emit `*:still_working` AND that consumer-emitted events inside a primitive do not reset the timer (per §Heartbeat Contract edge-case clarification)
 4. budget-resolution tests proving explicit -> derived -> system order
 5. negative test proving unknown profile resolution fails loudly at primitive entry
+6. cost monotonicity test (see invariant below) proving cumulative `cost.tokens` and `cost.ms` never decrease across events for the same `runId`
+
+### Cost Monotonicity Invariant
+
+For every `runId`, the substrate guarantees:
+
+- `cost.tokens` is non-decreasing across events emitted with that `runId`
+- `cost.ms` is non-decreasing across events emitted with that `runId`
+- `cost.attempts` is non-decreasing across events emitted with that `runId`
+
+This is load-bearing observability. A consumer reading the event stream can compute "what did this run cost so far?" without buffering or re-summing. Any primitive that decrements these fields (e.g., subtracting a refunded retry) must instead emit a separate `*:refund` event with its own `runId` — the run-scoped cost stream is monotonic.
+
+Test obligation: every primitive's test suite must include a monotonicity assertion across the full event sequence of every code path (succeed, fail, exhaust, cancel where applicable).
 
 ### Migration Gates Per PR
 
-Every migration PR must include:
+Every migration PR must include all ten items below before merge:
 
-1. behavior test for the migrated surface
-2. terminal-outcome test
-3. event emission test
-4. heartbeat test when the surface can run long enough to stall visually
-5. `pnpm --filter web typecheck`
-6. `pnpm --filter web exec vitest run ...` for affected tests
-7. `cd apps/web && npx next build`
+1. **Behavior parity test** — exercises the migrated call site; passes against new primitive (Phase 6 explicitly breaks parity for silent-exhaustion paths and asserts the new fail-loud behavior)
+2. **Terminal-outcome test** — every code path returns a typed `Outcome` (no `null`, no free-text best-effort, no `"deferred"`)
+3. **Event emission test** — at least one terminal event (`*:succeeded` / `*:failed` / `*:exhausted` / `*:cancelled`) per primitive run
+4. **Heartbeat test** when the surface can run long enough to stall visually (skip if surface always completes < `heartbeatMs`)
+5. **Cost monotonicity test** — cumulative `cost.tokens`, `cost.ms`, and `cost.attempts` non-decreasing across events for the same `runId`
+6. **Refactor-budget evidence** — at least one constant, helper, or ambiguous status behavior retired in this PR (per §Mandatory Refactor Budget)
+7. `pnpm --filter web typecheck` clean
+8. `pnpm --filter web exec vitest run <affected>` green
+9. `cd apps/web && npx next build` clean
+10. **DCO sign-off** on every commit
 
 For UI-adjacent runtime behavior, the migration PR also needs route verification against the running app where relevant.
 
@@ -925,14 +1043,15 @@ Mitigation:
 
 ## Recommended Next Slice
 
-The smallest architecture-sound first slice is:
+Phase 1A shipped via PR #353 on 2026-04-29 — module skeleton, primitives, governance-profile registry, heartbeat helper, structural test scaffolding.
 
-1. add `apps/web/lib/orchestration/` with `Loop`, typed `Outcome`, profile registry, and heartbeat helper
-2. extend `agent-event-bus.ts` to support the new event envelope alongside the legacy thread-keyed API
-3. migrate `sandbox-db.ts` polling loops and `github-fork.ts` readiness polling to `Loop`
-4. add tests proving exhausted outcomes and heartbeats work in those low-risk paths
+The next slice (Phase 1B + 1C + Phase 2 in sequence, ideally each as its own PR) is:
 
-That slice proves the substrate without touching the riskiest agent-facing runtime yet.
+1. **Phase 1B (one small PR):** Add `OrchestrationEnvelope` type and `subscribe({ threadId })` / `subscribe({ userId })` overloads to `agent-event-bus.ts` with all envelope fields optional. Tests for the new subscribe surface. **No emit-site migration in this PR.**
+2. **Phase 1C (one PR):** Wire substrate primitives to emit through the envelope. Map `agentEventBus.requestCancel` into `Outcome.cancelled`. Activate the structural terminal-event tests scaffolded in 1A.
+3. **Phase 2 (one PR):** Migrate `sandbox-db.ts:50,68` polling and `github-fork.ts:105` polling to `Loop`. Drop the silent `"deferred"` return. Migrate emit sites in those three files to the envelope shape. Refactor-budget evidence: the `"deferred"` status string is deleted.
+
+That sequence proves the substrate at three increasing scopes (types → wiring → real consumer) without touching the riskiest agent-facing runtime yet, and without the 16-file bus refactor that the Codex audit flagged as too large for a foundation slice.
 
 ## Standards And References
 
@@ -978,6 +1097,8 @@ Rationale:
 
 Implications captured elsewhere in this spec:
 
-- §Bus Evolution Required In Phase 1 — Phase 1 migrates **every** existing `AgentEvent` emit site to the shared envelope, not only orchestration emitters. The existing positional `subscribe(threadId, handler)` may remain temporarily as a compatibility shim **only** for the duration of Phase 1's migration window; it retires in Phase 7.
+- §Bus Evolution — Sub-Phased — every existing `AgentEvent` emit site eventually migrates to the shared envelope, not only orchestration emitters. Per the Codex audit (PR #350), this happens **incrementally across consumer phases**, not as a single foundation-step refactor. Phase 1B adds the envelope type with optional fields; Phases 2–6 migrate emit sites in their consumer files; Phase 7 tightens the contract by making `userId` and `emittedAt` mandatory and deleting the legacy positional API.
 - §Group C / Phase 7 — legacy `AgentEvent` union shape is listed as a retirement target.
-- §Risks — the bus migration risk (§Risks #2) is acknowledged; mitigation is "migrate orchestration events first, then move old emitters incrementally within Phase 1," with the legacy positional API gone by Phase 7.
+- §Risks — the bus migration risk (§Risks #2) is acknowledged; mitigation is "envelope type lands in 1B with optional fields; consumer phases migrate their own emit sites; Phase 7 tightens to mandatory and deletes the legacy positional API."
+
+This resolution explicitly supersedes the original "Phase 1B = 16-file bus refactor" approach. The unified envelope decision stands; the implementation order changed to address the audit's blast-radius concern.
