@@ -6,6 +6,7 @@ import {
   explainEffectiveAuthority,
   type EffectiveAuthorityBinding,
 } from "@/lib/authority/effective-authority";
+import { type AgentIdentitySnapshot } from "@/lib/identity/agent-identity-snapshot";
 
 type AgentInfo = {
   agentId: string;
@@ -45,6 +46,7 @@ type EffectivePermissionsProps = {
   products?: ProductBmr[];
   bindings?: EffectiveAuthorityBinding[];
   bindingHrefBase?: string;
+  agentSnapshots?: AgentIdentitySnapshot[];
 };
 
 /**
@@ -176,6 +178,7 @@ export function EffectivePermissionsPanel({
   products,
   bindings = [],
   bindingHrefBase = "/platform/identity/authorization",
+  agentSnapshots = [],
 }: EffectivePermissionsProps) {
   const [selectedRole, setSelectedRole] = useState(roles[0]?.roleId ?? "");
   const [selectedAgent, setSelectedAgent] = useState(agents[0]?.agentId ?? "");
@@ -218,6 +221,10 @@ export function EffectivePermissionsPanel({
           binding.resourceRef === (selectedRoute || getFirstRouteForAgent(bindings, selectedAgent)),
       ) ?? null,
     [bindings, selectedAgent, selectedRoute],
+  );
+  const selectedAgentSnapshot = useMemo(
+    () => agentSnapshots.find((snapshot) => snapshot.agentId === selectedAgent) ?? null,
+    [agentSnapshots, selectedAgent],
   );
 
   const evaluatedTools = useMemo(() => {
@@ -464,6 +471,78 @@ export function EffectivePermissionsPanel({
           >
             Open binding
           </a>
+        </div>
+      )}
+
+      {selectedAgentSnapshot && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 6,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: "var(--dpf-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                Authority snapshot
+              </span>
+              <p style={{ margin: "4px 0 0 0", fontSize: 11, color: "var(--dpf-text)", fontWeight: 600 }}>
+                {selectedAgentSnapshot.name}
+              </p>
+            </div>
+            <span
+              style={{
+                fontSize: 10,
+                color: "var(--dpf-muted)",
+                alignSelf: "flex-start",
+              }}
+            >
+              {selectedAgentSnapshot.validationState}
+            </span>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontSize: 10, fontFamily: "monospace", color: "var(--dpf-text)" }}>
+              {selectedAgentSnapshot.gaid ?? "No GAID alias"}
+            </span>
+            <span style={{ fontSize: 10, fontFamily: "monospace", color: "var(--dpf-muted)" }}>
+              {selectedAgentSnapshot.operatingProfileFingerprint ?? "No operating profile fingerprint"}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {selectedAgentSnapshot.authorizationClasses.length > 0 ? (
+              selectedAgentSnapshot.authorizationClasses.map((authClass) => (
+                <span
+                  key={`${selectedAgentSnapshot.agentId}-${authClass}`}
+                  style={{
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                    fontSize: 10,
+                    color: "var(--dpf-text)",
+                  }}
+                >
+                  {authClass}
+                </span>
+              ))
+            ) : (
+              <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+                No portable authorization classes projected yet.
+              </span>
+            )}
+          </div>
         </div>
       )}
 
