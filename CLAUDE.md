@@ -49,10 +49,13 @@
 
 ## Git Workflow
 
-- **Solo dev mode (current):** Commit directly to `main` and push. No feature branches, no PRs.
-- **Always push** after committing — local-only commits are invisible to the build pipeline and other agents.
+- **Worktree-branch model (current):** Multiple Claude threads / clients run concurrently. Each thread operates in its own git worktree on its own branch (typically `claude/<worktree-id>`, e.g. `claude/serene-driscoll-ce483c`). Commit + push happen on that worktree branch — never directly to `main` from inside a thread. Integration to `main` (merge / PR / cherry-pick) happens separately, outside the thread.
+- **Why this changed:** Solo-dev direct-to-main caused collisions when multiple threads landed on `main` at once. Worktree-branch isolation is the explicit fix. Do NOT revert to direct-to-main even if a thread is the only one running — the rule is workflow-level, not load-level.
+- **Always push** after committing — local-only commits are invisible to the build pipeline, to other threads, and are lost forever if the thread crashes (which happens). Use `git push -u origin <current-branch>` on first push to set upstream.
+- **Suggest commits proactively** when a unit of work is complete (page built, bug fixed, feature done) — don't wait to be asked. Uncommitted work in a thread that crashes is orphaned permanently.
+- **Do not create extra branches** inside a worktree (no `feat/`, `fix/`, `refactor/` sub-branches). Stay on the worktree branch the thread was launched on.
+- **Do not create new worktrees yourself.** They're spawned by the harness, not by Claude.
 - **Future — customer branch model:** When customers contribute, each customer gets one persistent branch (`customer/<id>`). Branches are not named by fix or feature — they are named by who owns them. Changes flow: `customer/<id>` → PR → `main`. This is the branching rationale when there are thousands of contributors.
-- **Do not create `feat/`, `fix/`, or `refactor/` branches** — these add noise without value for a solo developer.
 
 ## AI Coworker Prompts
 
