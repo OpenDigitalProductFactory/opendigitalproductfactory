@@ -543,6 +543,35 @@ export function EffectivePermissionsPanel({
               </span>
             )}
           </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "var(--dpf-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Memory freshness
+            </span>
+            <span style={{ fontSize: 10, color: "var(--dpf-text)" }}>
+              {selectedAgentSnapshot.memoryFactCurrentCount} current
+            </span>
+            <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+              {selectedAgentSnapshot.memoryFactPendingRevalidationCount} pending
+            </span>
+            <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+              {selectedAgentSnapshot.memoryFactLegacyCount} legacy
+            </span>
+          </div>
         </div>
       )}
 

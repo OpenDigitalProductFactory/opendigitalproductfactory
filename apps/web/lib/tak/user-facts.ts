@@ -19,7 +19,31 @@ export type UserFactRecord = {
   value: string;
   confidence: number;
   sourceRoute: string;
+  sourceMessageId: string | null;
+  sourceAgentId: string | null;
+  sourceOperatingProfileFingerprint: string | null;
+  lastValidatedAt: Date | null;
+  validatedAgainstFingerprint: string | null;
   createdAt: Date;
+};
+
+export type MemoryActionRisk = "advisory" | "consequential";
+export type FactFreshnessState = "current" | "pending-revalidation" | "legacy-untracked";
+
+export type GovernedUserFactRecord = UserFactRecord & {
+  freshnessState: FactFreshnessState;
+};
+
+export type GovernedUserFactsResult = {
+  facts: GovernedUserFactRecord[];
+  includedFacts: GovernedUserFactRecord[];
+  excludedFacts: GovernedUserFactRecord[];
+  counts: {
+    total: number;
+    current: number;
+    pendingRevalidation: number;
+    legacyUntracked: number;
+  };
 };
 
 // ─── Load Active Facts ─────────────────────────────────────────────────────
@@ -50,6 +74,11 @@ export async function loadUserFacts(
       value: true,
       confidence: true,
       sourceRoute: true,
+      sourceMessageId: true,
+      sourceAgentId: true,
+      sourceOperatingProfileFingerprint: true,
+      lastValidatedAt: true,
+      validatedAgainstFingerprint: true,
       createdAt: true,
     },
   });
@@ -91,6 +120,188 @@ export function formatFactsCompressed(facts: UserFactRecord[], maxFacts = 5): st
   return ["", "USER CONTEXT:", ...lines].join("\n");
 }
 
+const FACT_REVALIDATION_PROMPT = `You are validating previously extracted user facts against the original user message.
+Given a source message and a JSON array of candidate facts, return a JSON array of:
+{"category","key","value","status"}
+
+status must be one of:
+- "confirmed" if the message clearly supports the same fact
+- "contradicted" if the message supports a different value for that fact
+- "unsupported" if the message does not clearly support the fact
+
+Return JSON only.`;
+
+function classifyFactFreshness(
+  fact: UserFactRecord,
+  currentOperatingProfileFingerprint: string | null,
+): FactFreshnessState {
+  if (!currentOperatingProfileFingerprint) return "legacy-untracked";
+  if (fact.validatedAgainstFingerprint === currentOperatingProfileFingerprint) return "current";
+  if (!fact.sourceOperatingProfileFingerprint) return "legacy-untracked";
+  return "pending-revalidation";
+}
+
+async function revalidateFactsAgainstSourceMessage(
+  facts: UserFactRecord[],
+  currentOperatingProfileFingerprint: string,
+): Promise<Map<string, "confirmed" | "contradicted" | "unsupported">> {
+  const { utilityInfer } = await import("@/lib/inference/utility-inference");
+  const grouped = new Map<string, UserFactRecord[]>();
+
+  for (const fact of facts) {
+    if (!fact.sourceMessageId) continue;
+    const existing = grouped.get(fact.sourceMessageId) ?? [];
+    existing.push(fact);
+    grouped.set(fact.sourceMessageId, existing);
+  }
+
+  const statuses = new Map<string, "confirmed" | "contradicted" | "unsupported">();
+
+  for (const [messageId, groupedFacts] of grouped.entries()) {
+    const sourceMessage = await prisma.agentMessage.findUnique({
+      where: { id: messageId },
+      select: { id: true, content: true },
+    });
+    if (!sourceMessage?.content) {
+      for (const fact of groupedFacts) statuses.set(fact.id, "unsupported");
+      continue;
+    }
+
+    const result = await utilityInfer({
+      task: "extract_metadata",
+      input: [
+        FACT_REVALIDATION_PROMPT,
+        "",
+        "Source message:",
+        sourceMessage.content,
+        "",
+        "Candidate facts:",
+        JSON.stringify(
+          groupedFacts.map((fact) => ({
+            category: fact.category,
+            key: fact.key,
+            value: fact.value,
+          })),
+        ),
+      ].join("\n"),
+    });
+
+    let parsed: Array<{ category?: string; key?: string; value?: string; status?: string }> = [];
+    try {
+      parsed = JSON.parse(result.output ?? "[]");
+    } catch {
+      parsed = [];
+    }
+
+    const resultByIdentity = new Map<string, "confirmed" | "contradicted" | "unsupported">(
+      parsed.map((entry) => {
+        const normalizedStatus: "confirmed" | "contradicted" | "unsupported" =
+          entry.status === "confirmed" || entry.status === "contradicted"
+            ? entry.status
+            : "unsupported";
+        return [
+          `${entry.category ?? ""}::${entry.key ?? ""}::${entry.value ?? ""}`,
+          normalizedStatus,
+        ] as const;
+      }),
+    );
+
+    for (const fact of groupedFacts) {
+      const identity = `${fact.category}::${fact.key}::${fact.value}`;
+      const status = resultByIdentity.get(identity) ?? "unsupported";
+      statuses.set(fact.id, status);
+
+      if (status === "confirmed") {
+        await prisma.userFact.update({
+          where: { id: fact.id },
+          data: {
+            lastValidatedAt: new Date(),
+            validatedAgainstFingerprint: currentOperatingProfileFingerprint,
+          },
+        });
+      }
+    }
+  }
+
+  return statuses;
+}
+
+export async function loadGovernedUserFacts(params: {
+  userId: string;
+  routeDomain?: string;
+  limit?: number;
+  currentOperatingProfileFingerprint?: string | null;
+  actionRisk?: MemoryActionRisk;
+}): Promise<GovernedUserFactsResult> {
+  const facts = await loadUserFacts(params.userId, params.routeDomain, params.limit);
+  const currentOperatingProfileFingerprint = params.currentOperatingProfileFingerprint ?? null;
+  const actionRisk = params.actionRisk ?? "advisory";
+
+  let governedFacts = facts.map((fact) => ({
+    ...fact,
+    freshnessState: classifyFactFreshness(fact, currentOperatingProfileFingerprint),
+  }));
+
+  if (actionRisk === "consequential" && currentOperatingProfileFingerprint) {
+    const needsRevalidation = governedFacts
+      .filter((fact) => fact.freshnessState === "pending-revalidation" && fact.sourceMessageId)
+      .map((fact) => ({
+        id: fact.id,
+        category: fact.category,
+        key: fact.key,
+        value: fact.value,
+        confidence: fact.confidence,
+        sourceRoute: fact.sourceRoute,
+        sourceMessageId: fact.sourceMessageId,
+        sourceAgentId: fact.sourceAgentId,
+        sourceOperatingProfileFingerprint: fact.sourceOperatingProfileFingerprint,
+        lastValidatedAt: fact.lastValidatedAt,
+        validatedAgainstFingerprint: fact.validatedAgainstFingerprint,
+        createdAt: fact.createdAt,
+      }));
+
+    const statuses = await revalidateFactsAgainstSourceMessage(
+      needsRevalidation,
+      currentOperatingProfileFingerprint,
+    );
+
+    governedFacts = governedFacts.map((fact) => {
+      const status = statuses.get(fact.id);
+      if (status === "confirmed") {
+        return {
+          ...fact,
+          freshnessState: "current" as const,
+          validatedAgainstFingerprint: currentOperatingProfileFingerprint,
+        };
+      }
+      return fact;
+    });
+  }
+
+  const includedFacts =
+    actionRisk === "consequential"
+      ? governedFacts.filter((fact) => fact.freshnessState === "current")
+      : governedFacts;
+  const excludedFacts =
+    actionRisk === "consequential"
+      ? governedFacts.filter((fact) => fact.freshnessState !== "current")
+      : [];
+
+  return {
+    facts: governedFacts,
+    includedFacts,
+    excludedFacts,
+    counts: {
+      total: governedFacts.length,
+      current: governedFacts.filter((fact) => fact.freshnessState === "current").length,
+      pendingRevalidation: governedFacts.filter(
+        (fact) => fact.freshnessState === "pending-revalidation",
+      ).length,
+      legacyUntracked: governedFacts.filter((fact) => fact.freshnessState === "legacy-untracked").length,
+    },
+  };
+}
+
 // ─── Store / Upsert a Fact ─────────────────────────────────────────────────
 
 /**
@@ -105,6 +316,8 @@ export async function upsertUserFact(params: {
   confidence?: number;
   sourceRoute: string;
   sourceMessageId?: string;
+  sourceAgentId?: string;
+  sourceOperatingProfileFingerprint?: string | null;
 }): Promise<void> {
   // Check for existing active fact with same key
   const existing = await prisma.userFact.findFirst({
@@ -122,7 +335,15 @@ export async function upsertUserFact(params: {
       if ((params.confidence ?? 1.0) > existing.confidence) {
         await prisma.userFact.update({
           where: { id: existing.id },
-          data: { confidence: params.confidence ?? 1.0 },
+          data: {
+            confidence: params.confidence ?? 1.0,
+            sourceAgentId: params.sourceAgentId ?? existing.sourceAgentId,
+            sourceOperatingProfileFingerprint:
+              params.sourceOperatingProfileFingerprint ?? existing.sourceOperatingProfileFingerprint,
+            validatedAgainstFingerprint:
+              params.sourceOperatingProfileFingerprint ?? existing.validatedAgainstFingerprint,
+            lastValidatedAt: params.sourceOperatingProfileFingerprint ? new Date() : existing.lastValidatedAt,
+          },
         });
       }
       return;
@@ -138,6 +359,10 @@ export async function upsertUserFact(params: {
         confidence: params.confidence ?? 1.0,
         sourceRoute: params.sourceRoute,
         sourceMessageId: params.sourceMessageId ?? null,
+        sourceAgentId: params.sourceAgentId ?? null,
+        sourceOperatingProfileFingerprint: params.sourceOperatingProfileFingerprint ?? null,
+        validatedAgainstFingerprint: params.sourceOperatingProfileFingerprint ?? null,
+        lastValidatedAt: params.sourceOperatingProfileFingerprint ? new Date() : null,
       },
     });
 
@@ -159,6 +384,10 @@ export async function upsertUserFact(params: {
         confidence: params.confidence ?? 1.0,
         sourceRoute: params.sourceRoute,
         sourceMessageId: params.sourceMessageId ?? null,
+        sourceAgentId: params.sourceAgentId ?? null,
+        sourceOperatingProfileFingerprint: params.sourceOperatingProfileFingerprint ?? null,
+        validatedAgainstFingerprint: params.sourceOperatingProfileFingerprint ?? null,
+        lastValidatedAt: params.sourceOperatingProfileFingerprint ? new Date() : null,
       },
     });
   }
@@ -191,6 +420,8 @@ export async function extractAndStoreFacts(params: {
   messageContent: string;
   routeContext: string;
   messageId?: string;
+  sourceAgentId?: string;
+  operatingProfileFingerprint?: string | null;
 }): Promise<void> {
   try {
     const { utilityInfer } = await import("@/lib/inference/utility-inference");
@@ -222,6 +453,8 @@ export async function extractAndStoreFacts(params: {
         confidence: Math.min(1.0, Math.max(0.0, fact.confidence ?? 0.8)),
         sourceRoute: params.routeContext,
         sourceMessageId: params.messageId,
+        sourceAgentId: params.sourceAgentId,
+        sourceOperatingProfileFingerprint: params.operatingProfileFingerprint ?? null,
       });
     }
   } catch {

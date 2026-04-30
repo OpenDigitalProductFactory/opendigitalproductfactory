@@ -11,6 +11,9 @@ vi.mock("@dpf/db", () => ({
     agentModelConfig: {
       findMany: vi.fn(),
     },
+    userFact: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -95,6 +98,12 @@ describe("listAgentIdentitySnapshots", () => {
         budgetClass: "quality_first",
       },
     ] as never);
+    vi.mocked(prisma.userFact.findMany).mockResolvedValue([
+      {
+        sourceAgentId: "build-specialist",
+        validatedAgainstFingerprint: "legacy-fp",
+      },
+    ] as never);
 
     const snapshots = await listAgentIdentitySnapshots();
 
@@ -105,6 +114,7 @@ describe("listAgentIdentitySnapshots", () => {
       gaid: "gaid:priv:dpf.internal:build-specialist",
       validationState: "validated",
       authorizationClasses: ["observe", "create", "update", "execute"],
+      memoryFactPendingRevalidationCount: 1,
     });
     expect(snapshots[0].operatingProfileFingerprint).toMatch(/^[a-f0-9]{64}$/);
     expect(snapshots[0].toolSurfaceCount).toBeGreaterThan(0);
@@ -115,6 +125,7 @@ describe("listAgentIdentitySnapshots", () => {
       validationState: "unlinked",
       authorizationClasses: [],
       operatingProfileFingerprint: null,
+      memoryFactCurrentCount: 0,
     });
   });
 });
@@ -139,6 +150,9 @@ describe("summarizeAgentIdentitySnapshots", () => {
         validationState: "validated",
         toolSurfaceCount: 4,
         promptClassRefCount: 2,
+        memoryFactCurrentCount: 2,
+        memoryFactPendingRevalidationCount: 1,
+        memoryFactLegacyCount: 0,
       },
       {
         id: "2",
@@ -157,6 +171,9 @@ describe("summarizeAgentIdentitySnapshots", () => {
         validationState: "stale",
         toolSurfaceCount: 2,
         promptClassRefCount: 1,
+        memoryFactCurrentCount: 0,
+        memoryFactPendingRevalidationCount: 1,
+        memoryFactLegacyCount: 2,
       },
       {
         id: "3",
@@ -173,6 +190,9 @@ describe("summarizeAgentIdentitySnapshots", () => {
         validationState: "unlinked",
         toolSurfaceCount: 0,
         promptClassRefCount: 0,
+        memoryFactCurrentCount: 0,
+        memoryFactPendingRevalidationCount: 0,
+        memoryFactLegacyCount: 0,
       },
     ]);
 

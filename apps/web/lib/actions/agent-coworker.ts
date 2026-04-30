@@ -423,37 +423,20 @@ export async function sendMessage(input: {
       ? routeCtx.domainContext + `\nAvailable domain tools: ${routeCtx.domainTools.join(", ")}`
       : routeCtx.domainContext;
 
-    // User facts: structured memory from prior conversations
-    const { loadUserFacts, formatFactsAsContext, formatFactsCompressed } = await import("@/lib/tak/user-facts");
-    const routeDomain = isCrossCuttingOverlay
-      ? undefined
-      : input.routeContext.replace(/^\//, "").split("/")[0] || undefined;
-    const userFacts = await loadUserFacts(user.id!, routeDomain).catch(() => []);
-    const factsContext = formatFactsAsContext(userFacts);
-    const factsCompressed = formatFactsCompressed(userFacts);
-
-    // Semantic memory: recall relevant context from past conversations.
-    // Specialists scope to current route (with global fallback inside the
-    // recall function); cross-cutting overlay agents pass undefined so the
-    // recall function skips its route-scoped first pass.
-    // Pass excludeMessageIds to avoid duplicating content already in the chat window.
-    const { recallRelevantContext } = await import("@/lib/semantic-memory");
-    const recalledContext = await recallRelevantContext({
-      query: input.content,
+    const { buildGovernedMemoryContext } = await import("@/lib/tak/governed-memory");
+    const governedMemory = await buildGovernedMemoryContext({
       userId: user.id!,
+      agentId: agent.agentId,
       routeContext: isCrossCuttingOverlay ? undefined : input.routeContext,
+      query: input.content,
+      currentThreadId: input.threadId,
       limit: 8,
       excludeMessageIds: windowMessageIds,
-    }).catch(() => null);
-
-    // Build compressed version: top 3 results only
-    let compressedRecall: string | undefined;
-    if (recalledContext) {
-      const lines = recalledContext.split("\n");
-      const headerLines = lines.slice(0, 3); // header text
-      const memoryLines = lines.slice(3, 6); // top 3 memories
-      compressedRecall = [...headerLines, ...memoryLines].join("\n");
-    }
+    });
+    const factsContext = governedMemory.factsContext;
+    const factsCompressed = governedMemory.factsCompressed;
+    const recalledContext = governedMemory.recalledContext;
+    const compressedRecall = governedMemory.compressedRecall ?? undefined;
 
     const contextSources = [
       // L1: Route-essential context
@@ -609,14 +592,20 @@ export async function sendMessage(input: {
     // With a short recent window (8 messages), semantic recall is the primary
     // mechanism for remembering older context — both cross-thread and same-thread.
     // Jiminy / cross-cutting overlay passes undefined to skip route-scoped Pass 1.
-    const { recallRelevantContext } = await import("@/lib/semantic-memory");
-    const recalledContext = await recallRelevantContext({
-      query: input.content,
+    const { buildGovernedMemoryContext } = await import("@/lib/tak/governed-memory");
+    const governedMemory = await buildGovernedMemoryContext({
       userId: user.id!,
+      agentId: agent.agentId,
       routeContext: isCrossCuttingOverlay ? undefined : input.routeContext,
-      // Don't exclude current thread — we need older same-thread context too
+      query: input.content,
+      // Don't exclude current thread here — the classic prompt path still benefits
+      // from older same-thread semantic recall when it is freshness-safe.
       limit: 8,
-    }).catch(() => null);
+    });
+    if (governedMemory.factsContext) {
+      promptSections.push(governedMemory.factsContext);
+    }
+    const recalledContext = governedMemory.recalledContext;
     if (recalledContext) {
       promptSections.push(recalledContext);
     }
@@ -1446,6 +1435,11 @@ export async function sendMessage(input: {
     },
   });
 
+  const { resolveAIDocForAgent } = await import("@/lib/identity/aidoc-resolver");
+  const memoryOperatingProfileFingerprint = (
+    await resolveAIDocForAgent(agent.agentId).catch(() => null)
+  )?.operating_profile_fingerprint ?? null;
+
   // Fire-and-forget: store conversation memories in Qdrant
   import("@/lib/semantic-memory").then(({ storeConversationMemory }) => {
     const memBase = {
@@ -1453,6 +1447,7 @@ export async function sendMessage(input: {
       agentId: agent.agentId,
       routeContext: input.routeContext,
       threadId: input.threadId,
+      operatingProfileFingerprint: memoryOperatingProfileFingerprint,
     };
     // Skip trivial messages that add noise to semantic search
     const isSubstantive = (text: string) => text.length > 15 && !/^(?:ok|yes|no|thanks|thank you|sure|got it|hello|hi|hey)$/i.test(text.trim());
@@ -1474,6 +1469,8 @@ export async function sendMessage(input: {
         messageContent: trimmedContent,
         routeContext: input.routeContext,
         messageId: userMsg.id,
+        sourceAgentId: agent.agentId,
+        operatingProfileFingerprint: memoryOperatingProfileFingerprint,
       }).catch((e) => console.warn("[user-facts] extract failed:", e instanceof Error ? e.message : String(e)));
     }).catch((e) => console.warn("[user-facts] import failed:", e instanceof Error ? e.message : String(e)));
   }

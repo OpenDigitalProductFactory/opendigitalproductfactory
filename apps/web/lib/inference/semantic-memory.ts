@@ -32,6 +32,7 @@ export async function storeConversationMemory(params: {
   agentId: string;
   routeContext: string;
   threadId: string;
+  operatingProfileFingerprint?: string | null;
 }): Promise<void> {
   const endTimer = semanticMemoryLatency.startTimer({ operation: "store" });
   try {
@@ -56,6 +57,7 @@ export async function storeConversationMemory(params: {
           threadId: params.threadId,
           role: params.role,
           contentPreview: params.content.slice(0, 300),
+          operatingProfileFingerprint: params.operatingProfileFingerprint ?? null,
           timestamp: new Date().toISOString(),
         },
       },
@@ -80,6 +82,32 @@ export async function recallRelevantContext(params: {
   limit?: number;
   excludeMessageIds?: Set<string>;
 }): Promise<string | null> {
+  const governed = await recallGovernedContext({
+    ...params,
+    actionRisk: "advisory",
+  });
+  return governed.context;
+}
+
+export async function recallGovernedContext(params: {
+  query: string;
+  userId: string;
+  currentThreadId?: string;
+  routeContext?: string;
+  limit?: number;
+  excludeMessageIds?: Set<string>;
+  currentOperatingProfileFingerprint?: string | null;
+  actionRisk?: "advisory" | "consequential";
+}): Promise<{
+  context: string | null;
+  compressedContext: string | null;
+  counts: {
+    included: number;
+    withheld: number;
+    current: number;
+    legacy: number;
+  };
+}> {
   const endTimer = semanticMemoryLatency.startTimer({ operation: "recall" });
   try {
     const embedding = await generateEmbedding(params.query);
@@ -87,7 +115,16 @@ export async function recallRelevantContext(params: {
       semanticMemoryOps.inc({ operation: "recall", status: "skipped" });
       console.warn("[semantic-memory] recall skipped — embedding unavailable");
       endTimer();
-      return null;
+      return {
+        context: null,
+        compressedContext: null,
+        counts: {
+          included: 0,
+          withheld: 0,
+          current: 0,
+          legacy: 0,
+        },
+      };
     }
 
     const limit = params.limit ?? 8;
@@ -149,9 +186,32 @@ export async function recallRelevantContext(params: {
     semanticMemoryOps.inc({ operation: "recall", status: "success" });
     endTimer();
 
-    if (results.length === 0) return null;
+    if (results.length === 0) {
+      return {
+        context: null,
+        compressedContext: null,
+        counts: {
+          included: 0,
+          withheld: 0,
+          current: 0,
+          legacy: 0,
+        },
+      };
+    }
 
-    const contextLines = results.map((r) => {
+    const currentFingerprint = params.currentOperatingProfileFingerprint ?? null;
+    const actionRisk = params.actionRisk ?? "advisory";
+    const shouldEnforceFreshness = actionRisk === "consequential" && !!currentFingerprint;
+    const currentResults = shouldEnforceFreshness
+      ? results.filter(
+          (result) => result.payload["operatingProfileFingerprint"] === currentFingerprint,
+        )
+      : results;
+    const withheldCount = shouldEnforceFreshness ? results.length - currentResults.length : 0;
+    const legacyCount = results.filter((result) => !result.payload["operatingProfileFingerprint"]).length;
+    const activeResults = currentResults;
+
+    const contextLines = activeResults.map((r) => {
       const p = r.payload;
       const role = p["role"] === "user" ? "You" : "Agent";
       const route = p["routeContext"] ?? "unknown";
@@ -159,13 +219,33 @@ export async function recallRelevantContext(params: {
       return `[${role} on ${route}]: ${preview}`;
     });
 
-    return [
+    const context = [
       "",
       "RELEVANT CONTEXT FROM PAST CONVERSATIONS:",
       "These are semantically similar messages from your previous interactions.",
       "Use them to inform your response, but don't reference them explicitly.",
       ...contextLines,
     ].join("\n");
+    const compressedContext =
+      contextLines.length === 0
+        ? null
+        : [
+            "",
+            "RELEVANT CONTEXT FROM PAST CONVERSATIONS:",
+            "These are semantically similar messages from your previous interactions.",
+            ...contextLines.slice(0, 3),
+          ].join("\n");
+
+    return {
+      context: contextLines.length === 0 ? null : context,
+      compressedContext,
+      counts: {
+        included: activeResults.length,
+        withheld: withheldCount,
+        current: activeResults.length,
+        legacy: legacyCount,
+      },
+    };
   } catch (err) {
     semanticMemoryErrors.inc({ operation: "recall" });
     semanticMemoryOps.inc({ operation: "recall", status: "error" });
