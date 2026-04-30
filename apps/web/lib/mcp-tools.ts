@@ -14,6 +14,11 @@ import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import {
+  MARKETING_CHANNELS,
+  MARKETING_REVIEW_CADENCE,
+  recordMarketingStrategistReview,
+} from "@/lib/marketing";
+import {
   DELIBERATION_ARTIFACT_TYPES,
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
@@ -531,6 +536,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_marketing",
     sideEffect: false,
+  },
+  {
+    name: "save_marketing_review",
+    description: "Persist the Marketing Strategist's recommendation as the current marketing review and update the canonical MarketingStrategy. Use this after giving a concrete strategy, cadence, channel, KPI, or campaign recommendation so the page shows what was decided and what changed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "Plain-language recommendation summary shown on the marketing page" },
+        primaryChannels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Recommended primary channels" },
+        secondaryChannels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Optional secondary channels" },
+        skippedChannels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Channels intentionally skipped for now" },
+        kpis: { type: "array", items: { type: "string" }, description: "Small KPI stack used to judge channel fit" },
+        cadence: { type: "string", enum: [...MARKETING_REVIEW_CADENCE], description: "Review cadence for this plan" },
+        suggestedActions: { type: "array", items: { type: "string" }, description: "Action checklist items to display under the strategist review" },
+      },
+      required: ["summary"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
   },
   {
     name: "analyze_seo_opportunity",
@@ -8721,6 +8745,46 @@ export async function executeTool(
           currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
           activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
         },
+      };
+    }
+
+    case "save_marketing_review": {
+      const result = await recordMarketingStrategistReview({
+        recommendation: {
+          summary: String(params["summary"] ?? ""),
+          primaryChannels: Array.isArray(params["primaryChannels"])
+            ? params["primaryChannels"].filter((value): value is string => typeof value === "string")
+            : [],
+          secondaryChannels: Array.isArray(params["secondaryChannels"])
+            ? params["secondaryChannels"].filter((value): value is string => typeof value === "string")
+            : [],
+          skippedChannels: Array.isArray(params["skippedChannels"])
+            ? params["skippedChannels"].filter((value): value is string => typeof value === "string")
+            : [],
+          kpis: Array.isArray(params["kpis"])
+            ? params["kpis"].filter((value): value is string => typeof value === "string")
+            : [],
+          cadence: typeof params["cadence"] === "string" ? params["cadence"] : undefined,
+          suggestedActions: Array.isArray(params["suggestedActions"])
+            ? params["suggestedActions"].filter((value): value is string => typeof value === "string")
+            : [],
+        },
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result) {
+        return {
+          success: false,
+          message: "No organization workspace is configured, so the marketing review could not be saved.",
+          error: "No organization workspace is configured",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.reviewId,
+        message: `${result.message}. The marketing page now has a saved strategist review and updated channel/cadence context.`,
+        data: result,
       };
     }
 

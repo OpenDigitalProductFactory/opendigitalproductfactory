@@ -599,7 +599,8 @@
       "category": "marketing",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "generate_custom_archetype"
+        "generate_custom_archetype",
+        "save_marketing_review"
       ],
       "implies": [
         "marketing_read"

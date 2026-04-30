@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Import pure functions that don't need mocks
-import { shouldNudge, detectFabrication } from "./agentic-loop";
+import {
+  shouldNudge,
+  detectFabrication,
+  buildRepeatedQuestionNudge,
+  buildRepeatedToolStopMessage,
+} from "./agentic-loop";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -117,6 +122,58 @@ describe("shouldNudge", () => {
       continuationNudges: 1, iteration: 0, maxIterations: 40,
       hasTools: true, executedToolCount: 0, responseLength: 44,
     })).toBe(false);
+  });
+});
+
+describe("buildRepeatedToolStopMessage", () => {
+  it("points non-build repeated tool loops to the activity trail instead of build evidence", () => {
+    expect(buildRepeatedToolStopMessage({
+      toolName: "suggest_campaign_ideas",
+      count: 3,
+      routeContext: "/customer/marketing",
+      reasonHint: "",
+    })).toBe(
+      "I called suggest_campaign_ideas 3 times with the same arguments and got stuck. I recorded this as a coworker execution issue and stopped before repeating the same tool again. Check the activity trail for what was attempted, then continue from the last saved recommendation.",
+    );
+  });
+
+  it("keeps build evidence guidance only for Build Studio routes", () => {
+    expect(buildRepeatedToolStopMessage({
+      toolName: "saveBuildEvidence",
+      count: 3,
+      routeContext: "/build",
+      reasonHint: "",
+    })).toContain("Check the build evidence for what was completed.");
+  });
+});
+
+describe("buildRepeatedQuestionNudge", () => {
+  it("uses marketing tools on the marketing route instead of Build Studio tools", () => {
+    const message = buildRepeatedQuestionNudge({
+      routeContext: "/customer/marketing",
+      tools: [
+        { name: "get_marketing_summary", description: "", inputSchema: {}, requiredCapability: null, sideEffect: false },
+        { name: "suggest_campaign_ideas", description: "", inputSchema: {}, requiredCapability: null, sideEffect: false },
+        { name: "save_marketing_review", description: "", inputSchema: {}, requiredCapability: null, sideEffect: true },
+      ],
+    });
+
+    expect(message).toContain("Your marketing tools are active");
+    expect(message).toContain("save_marketing_review");
+    expect(message).not.toContain("saveBuildEvidence");
+  });
+
+  it("keeps Build Studio recovery guidance on build routes", () => {
+    const message = buildRepeatedQuestionNudge({
+      routeContext: "/build",
+      tools: [
+        { name: "saveBuildEvidence", description: "", inputSchema: {}, requiredCapability: null, sideEffect: true },
+        { name: "search_project_files", description: "", inputSchema: {}, requiredCapability: null, sideEffect: false },
+      ],
+    });
+
+    expect(message).toContain("saveBuildEvidence");
+    expect(message).toContain("search_project_files");
   });
 });
 

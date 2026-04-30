@@ -368,6 +368,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domainTools: [
       "get_marketing_summary",
       "suggest_campaign_ideas",
+      "save_marketing_review",
       "analyze_seo_opportunity",
       "create_backlog_item",
       "search_knowledge",

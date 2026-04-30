@@ -49,6 +49,7 @@ export default async function CustomerMarketingStrategyPage() {
       expectedNextStep: "The strategist will draft a campaign path for review, not publish anything.",
     },
   ];
+  const latestRecommendation = snapshot.latestReview?.recommendation ?? null;
 
   return (
     <div className="space-y-6">
@@ -119,6 +120,34 @@ export default async function CustomerMarketingStrategyPage() {
                   </li>
                 ))}
               </ul>
+            )}
+            {latestRecommendation && (
+              <dl className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
+                  <dt className="text-xs text-[var(--dpf-muted)]">Recommended channels</dt>
+                  <dd className="mt-1 text-[var(--dpf-text)]">
+                    {latestRecommendation.primaryChannels.length
+                      ? latestRecommendation.primaryChannels.map(formatMarketingLabel).join(", ")
+                      : "No channels saved"}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
+                  <dt className="text-xs text-[var(--dpf-muted)]">Skipped channels</dt>
+                  <dd className="mt-1 text-[var(--dpf-text)]">
+                    {latestRecommendation.skippedChannels.length
+                      ? latestRecommendation.skippedChannels.map(formatMarketingLabel).join(", ")
+                      : "None recorded"}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2">
+                  <dt className="text-xs text-[var(--dpf-muted)]">KPI stack</dt>
+                  <dd className="mt-1 text-[var(--dpf-text)]">
+                    {latestRecommendation.kpis.length
+                      ? latestRecommendation.kpis.join(", ")
+                      : "No KPI stack saved"}
+                  </dd>
+                </div>
+              </dl>
             )}
           </div>
         ) : (
