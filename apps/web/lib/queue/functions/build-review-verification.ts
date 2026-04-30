@@ -117,10 +117,16 @@ export const buildReviewVerification = inngest.createFunction(
 
     await step.run("persist-results", async () => {
       const { prisma } = await import("@dpf/db");
+      const { saveBuildArtifactRevisionWithDb } = await import("@/lib/build/build-artifact-provenance");
+      await saveBuildArtifactRevisionWithDb(prisma, {
+        buildId,
+        field: "uxTestResults",
+        savedByUserId: "system",
+        value: steps,
+      });
       await prisma.featureBuild.update({
         where: { buildId },
         data: {
-          uxTestResults: steps as unknown as import("@dpf/db").Prisma.InputJsonValue,
           uxVerificationStatus: finalStatus,
         },
       });

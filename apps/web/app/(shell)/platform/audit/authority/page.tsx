@@ -3,7 +3,12 @@ import { getAgentGrantSummaries } from "@/lib/agent-grants";
 import { AuthorityMatrixPanel, type BmrRoleRow } from "@/components/platform/AuthorityMatrixPanel";
 import { DelegationChainPanel, type BmrNode } from "@/components/platform/DelegationChainPanel";
 import { EffectivePermissionsPanel, type ProductBmr } from "@/components/platform/EffectivePermissionsPanel";
+import { IdentityProjectionSummaryGrid } from "@/components/platform/identity/IdentityProjectionSummaryGrid";
 import { listAuthorityBindingRecords } from "@/lib/authority/bindings";
+import {
+  listAgentIdentitySnapshots,
+  summarizeAgentIdentitySnapshots,
+} from "@/lib/identity/agent-identity-snapshot";
 // mcp-tools is imported dynamically inside the component to avoid NFT whole-project tracing
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -50,7 +55,11 @@ export default async function AuditAuthorityPage() {
     }),
     listAuthorityBindingRecords({ statuses: ["active"] }),
   ]);
-  const agentSummaries = await getAgentGrantSummaries();
+  const [agentSummaries, agentSnapshots] = await Promise.all([
+    getAgentGrantSummaries(),
+    listAgentIdentitySnapshots(),
+  ]);
+  const identitySummary = summarizeAgentIdentitySnapshots(agentSnapshots);
 
   // Transform BMR data for panels
   const bmrRows: BmrRoleRow[] = rawBmrData.flatMap((pbm) =>
@@ -130,6 +139,18 @@ export default async function AuditAuthorityPage() {
         </p>
       </div>
 
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 12 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 6px 0" }}>
+            GAID Operating Profile Projection
+          </h2>
+          <p style={{ fontSize: 11, color: "var(--dpf-muted)", margin: 0 }}>
+            Shared AIDoc coverage over the live authority layer. Runtime grants remain execution truth; portable authorization classes and the operating profile fingerprint make that truth legible across identity and audit surfaces.
+          </p>
+        </div>
+        <IdentityProjectionSummaryGrid summary={identitySummary} />
+      </div>
+
       {/* Section 1: Authority Matrix */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: "0 0 12px 0" }}>
@@ -162,6 +183,7 @@ export default async function AuditAuthorityPage() {
         </p>
         <EffectivePermissionsPanel
           agents={agentSummaries.map((a) => ({ agentId: a.agentId, agentName: a.agentName, grants: a.grants }))}
+          agentSnapshots={agentSnapshots}
           roles={ROLES}
           tools={toolsList}
           permissions={permissionsMap}

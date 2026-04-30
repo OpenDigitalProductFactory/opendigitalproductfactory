@@ -229,15 +229,15 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "retire_backlog_item",
-    description: "Retire an active backlog item from the actionable pool as a duplicate, discard, or defer decision. Use for backlog hygiene and duplicate/noise cleanup when the item should become status=deferred with an audited rationale. Writes a status_change activity row and may auto-close the parent epic.",
+    description: "Retire a backlog item as duplicate, deferred, or discarded after review. Use this for governed cleanup of non-buildable or superseded items without requiring backlog triage authority.",
     inputSchema: {
       type: "object",
       properties: {
-        itemId: { type: "string", description: "Semantic backlog item id to retire" },
-        outcome: { type: "string", enum: ["duplicate", "discard", "defer"], description: "Retirement outcome" },
-        rationale: { type: "string", description: "Outcome summary captured as the item resolution" },
-        duplicateOfId: { type: "string", description: "Canonical semantic item id; required when outcome=duplicate" },
-        reason: { type: "string", description: "Operational reason captured as abandonReason. Defaults to rationale when omitted." },
+        itemId: { type: "string", description: "The item ID to retire (e.g. BI-E4A86393)" },
+        outcome: { type: "string", enum: ["duplicate", "defer", "discard"], description: "The retirement decision" },
+        rationale: { type: "string", description: "Short prose rationale for retiring the item" },
+        duplicateOfId: { type: "string", description: "Canonical item ID; required when outcome=duplicate" },
+        reason: { type: "string", description: "Optional reason text for defer/discard outcomes" },
       },
       required: ["itemId", "outcome", "rationale"],
     },
@@ -912,7 +912,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update" },
         value: { type: "object", description: "JSON value to store" },
       },
-      required: ["field", "value"],
+      required: ["field"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -2660,142 +2660,112 @@ export async function executeTool(
     }
 
     case "retire_backlog_item": {
-      const itemId = String(params["itemId"] ?? "").trim();
-      const outcome = String(params["outcome"] ?? "").trim();
+      const itemId = String(params["itemId"] ?? "");
+      const outcome = String(params["outcome"] ?? "");
       const rationale = String(params["rationale"] ?? "").trim();
-      const duplicateOfRaw = typeof params["duplicateOfId"] === "string"
-        ? params["duplicateOfId"].trim()
-        : "";
-      const reason = typeof params["reason"] === "string" && params["reason"].trim()
-        ? params["reason"].trim()
-        : rationale;
+      const reason = typeof params["reason"] === "string" ? params["reason"].trim() : "";
+      const duplicateOfId = typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"].trim() : "";
+      const validOutcomes = new Set(["duplicate", "defer", "discard"]);
+
       if (!itemId) {
         return { success: false, error: "missing_itemId", message: "itemId is required" };
       }
-      if (!["duplicate", "discard", "defer"].includes(outcome)) {
-        return {
-          success: false,
-          error: "invalid_outcome",
-          message: "outcome must be one of duplicate|discard|defer",
-        };
+      if (!validOutcomes.has(outcome)) {
+        return { success: false, error: "invalid_outcome", message: "outcome must be duplicate, defer, or discard" };
       }
       if (!rationale) {
         return { success: false, error: "missing_rationale", message: "rationale is required" };
       }
-      if (outcome === "duplicate" && !duplicateOfRaw) {
-        return {
-          success: false,
-          error: "missing_duplicateOfId",
-          message: "duplicateOfId is required when outcome=duplicate",
-        };
+      if (outcome === "duplicate" && !duplicateOfId) {
+        return { success: false, error: "missing_duplicateOfId", message: "duplicateOfId is required for duplicate retirement" };
       }
 
-      const item = await prisma.backlogItem.findUnique({
-        where: { itemId },
-        select: { id: true, itemId: true, status: true, epicId: true, activeBuildId: true },
-      });
-      if (!item) {
-        return { success: false, error: "not_found", message: `Item ${itemId} not found` };
-      }
-      if (!["triaging", "open", "in-progress"].includes(item.status)) {
-        return {
-          success: false,
-          error: "item_not_active",
-          message: `Item ${itemId} is already terminal (${item.status})`,
-        };
-      }
-      if (item.activeBuildId) {
-        return {
-          success: false,
-          error: "active_build_attached",
-          message: `Item ${itemId} has an active Build Studio build; abandon or resolve the build before retiring the backlog item.`,
-        };
-      }
-
-      let canonicalItem: { id: string; itemId: string } | null = null;
-      if (outcome === "duplicate") {
-        canonicalItem = await prisma.backlogItem.findUnique({
-          where: { itemId: duplicateOfRaw },
-          select: { id: true, itemId: true },
-        });
-        if (!canonicalItem) {
+      const result = await prisma.$transaction(async (tx) => {
+        const item = await tx.backlogItem.findUnique({ where: { itemId } });
+        if (!item) {
+          return { success: false, error: "not_found", message: `Item ${itemId} not found` } satisfies ToolResult;
+        }
+        if ("activeBuildId" in item && item.activeBuildId) {
           return {
             success: false,
-            error: "duplicate_not_found",
-            message: `Canonical duplicate item ${duplicateOfRaw} not found`,
-          };
+            error: "active_build_exists",
+            message: `Item ${itemId} is attached to an active build and cannot be retired`,
+          } satisfies ToolResult;
         }
-        if (canonicalItem.id === item.id) {
-          return {
-            success: false,
-            error: "duplicate_self_reference",
-            message: "duplicateOfId must point to a different backlog item",
-          };
-        }
-      }
 
-      const updated = await prisma.$transaction(async (tx) => {
-        const completedAt = new Date();
-        const next = await tx.backlogItem.update({
+        let canonicalRowId: string | null = null;
+        if (outcome === "duplicate") {
+          const canonical = await tx.backlogItem.findUnique({ where: { itemId: duplicateOfId } });
+          if (!canonical) {
+            return {
+              success: false,
+              error: "duplicate_not_found",
+              message: `Canonical item ${duplicateOfId} not found`,
+            } satisfies ToolResult;
+          }
+          canonicalRowId = canonical.id;
+        }
+
+        const updated = await tx.backlogItem.update({
           where: { id: item.id },
           data: {
             status: "deferred",
             triageOutcome: outcome,
-            effortSize: null,
-            duplicateOfId: canonicalItem?.id ?? null,
+            duplicateOfId: canonicalRowId,
             resolution: rationale,
-            abandonReason: reason,
-            completedAt,
+            abandonReason: reason || rationale,
+            completedAt: new Date(),
           },
-          select: { itemId: true, status: true, completedAt: true, epicId: true },
         });
+
         await tx.backlogItemActivity.create({
           data: {
             backlogItemId: item.id,
             kind: "status_change",
-            summary: `${item.status} -> deferred - retired as ${outcome}`,
+            recordedById: userId,
+            recordedByAgentId: context?.agentId ?? null,
+            summary: `Retired ${itemId} as ${outcome}`,
             payload: {
               from: item.status,
               to: "deferred",
               outcome,
               rationale,
-              reason,
-              duplicateOfId: canonicalItem?.itemId ?? null,
+              reason: reason || null,
+              duplicateOfId: outcome === "duplicate" ? duplicateOfId : null,
             },
-            recordedById: userId,
-            recordedByAgentId: context?.agentId ?? null,
           },
         });
+
         if (item.epicId) {
-          const remaining = await tx.backlogItem.count({
+          const remainingOpenItems = await tx.backlogItem.count({
             where: {
               epicId: item.epicId,
+              status: { in: ["open", "in-progress"] },
               id: { not: item.id },
-              status: { notIn: ["done", "deferred"] },
             },
           });
-          if (remaining === 0) {
+          if (remainingOpenItems === 0) {
             await tx.epic.update({
               where: { id: item.epicId },
-              data: { status: "done", completedAt },
+              data: { status: "done" },
             });
           }
         }
-        return next;
+
+        return {
+          success: true,
+          entityId: updated.itemId,
+          message: `Retired ${itemId} as ${outcome}`,
+          data: {
+            itemId: updated.itemId,
+            status: "deferred",
+            outcome,
+            duplicateOfId: outcome === "duplicate" ? duplicateOfId : null,
+          },
+        } satisfies ToolResult;
       });
 
-      return {
-        success: true,
-        entityId: updated.itemId,
-        message: `${updated.itemId}: ${item.status} -> ${updated.status} (${outcome})`,
-        data: {
-          itemId: updated.itemId,
-          status: updated.status,
-          completedAt: updated.completedAt,
-          outcome,
-          duplicateOfId: canonicalItem?.itemId ?? null,
-        },
-      };
+      return result;
     }
 
     case "size_backlog_item": {
@@ -4334,10 +4304,24 @@ export async function executeTool(
         }
       }
 
-      await prisma.featureBuild.update({
-        where: { buildId },
-        data: updateData,
+      const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
+      await saveBuildArtifactRevision({
+        buildId,
+        field: field as import("@/lib/build/build-artifact-provenance").BuildArtifactField,
+        receiptIds: Array.isArray(params.receiptIds)
+          ? params.receiptIds.filter((value): value is string => typeof value === "string")
+          : [],
+        savedByAgentId: context?.agentId ?? null,
+        savedByUserId: userId,
+        threadId: context?.threadId ?? null,
+        value: fieldValue,
       });
+      if (field === "designDoc" && updateData.brief) {
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: { brief: updateData.brief as import("@dpf/db").Prisma.InputJsonValue },
+        });
+      }
       // When taskResults is written via tool call, bump version for optimistic locking
       if (field === "taskResults") {
         await prisma.featureBuild.update({
@@ -4354,7 +4338,7 @@ export async function executeTool(
       // Removing auto-advance from saveBuildEvidence prevents accidental phase
       // transitions when evidence is saved before review completes.
 
-      return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId };
+      return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId, data: { buildId } };
     }
 
     case "reviewDesignDoc": {
@@ -5086,7 +5070,14 @@ export async function executeTool(
         : `Verification recorded: typecheck failed, unit test output captured for review.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
       logBuildActivity(buildId, "run_sandbox_tests", statusMsg);
 
-      return { success: true, message: statusMsg, data: verificationData };
+      return {
+        success: true,
+        message: statusMsg,
+        data: {
+          ...verificationData,
+          buildId,
+        },
+      };
     }
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
@@ -5323,7 +5314,11 @@ export async function executeTool(
         try {
           const output = await execInSandbox(sandboxId, `cd /workspace && ${command} 2>&1`);
           logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
-          return { success: true, message: `Command completed.`, data: { command, output: truncateOutput(output) } };
+          return {
+            success: true,
+            message: "Command completed.",
+            data: { buildId, command, output: truncateOutput(output) },
+          };
         } catch (err) {
           // Commands like tsc, prisma validate return non-zero exit codes when they
           // find errors. This is NOT a sandbox failure — it's useful output.
@@ -5337,7 +5332,7 @@ export async function executeTool(
             return {
               success: true,
               message: `Command exited with code ${exitCode}. Review the output for errors to fix.`,
-              data: { command, output: truncateOutput(output), exitCode },
+              data: { buildId, command, output: truncateOutput(output), exitCode },
             };
           }
 
@@ -6993,11 +6988,23 @@ export async function executeTool(
             });
           }
         }
-        await prisma.featureBuild.update({ where: { buildId }, data: { uxTestResults: steps as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+        const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
+        await saveBuildArtifactRevision({
+          buildId,
+          field: "uxTestResults",
+          savedByAgentId: context?.agentId ?? null,
+          savedByUserId: userId,
+          threadId: context?.threadId ?? null,
+          value: steps,
+        });
         if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "uxTestResults" });
         const passed = steps.filter((s: { passed: boolean }) => s.passed).length;
         logBuildActivity(buildId, "run_ux_test", `UX tests: ${passed}/${steps.length} passed (browser-use).`);
-        return { success: true, message: `UX tests: ${passed}/${steps.length} passed.`, data: { steps, browserUseResults: testContent } };
+        return {
+          success: true,
+          message: `UX tests: ${passed}/${steps.length} passed.`,
+          data: { buildId, steps, browserUseResults: testContent },
+        };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
         return { success: false, error: `UX test run failed: ${msg}`, message: `UX verification service (browser-use) is unreachable. Run 'docker compose up -d browser-use' or check the browser-use container logs. You can skip UX tests and proceed with the review if you have to.` };

@@ -19,6 +19,7 @@ import {
 } from "@/lib/feature-build-types";
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
+import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
 import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
 import { listReleasableSandboxFiles } from "@/lib/integrate/sandbox/sandbox";
@@ -556,11 +557,11 @@ export async function recordBuildAcceptance(
     evidence: `Reviewed in Build Studio after clean typecheck and completed UX verification.${evidenceSuffix}`,
   }));
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: {
-      acceptanceMet: acceptanceMet as unknown as Prisma.InputJsonValue,
-    },
+  await saveBuildArtifactRevision({
+    buildId,
+    field: "acceptanceMet",
+    savedByUserId: userId,
+    value: acceptanceMet,
   });
 
   prisma.buildActivity.create({
@@ -1140,10 +1141,19 @@ export async function saveBuildEvidence(
   if (!build) throw new Error("Build not found");
   if (build.createdById !== userId) throw new Error("Forbidden");
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { [field]: value as Prisma.InputJsonValue },
+  await saveBuildArtifactRevision({
+    buildId,
+    field: field as BuildArtifactField,
+    savedByUserId: userId,
+    value,
   });
+
+  if (field === "taskResults") {
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: { taskResultsVersion: { increment: 1 } },
+    });
+  }
 }
 
 // ─── Build Disciplines — Reviewer Actions ────────────────────────────────────

@@ -13,6 +13,21 @@ const mockPrisma = {
 
 const mockAdvanceBuildPhase = vi.fn();
 const mockEmit = vi.fn();
+const mockSaveBuildArtifactRevision = vi.fn(async (args: { buildId: string; field: string; value: unknown }) => {
+  await mockPrisma.featureBuild.update({
+    where: { buildId: args.buildId },
+    data: { [args.field]: args.value },
+  });
+
+  return {
+    revisionId: "BAR-1",
+    revisionNumber: 1,
+    status: "accepted",
+    warnings: [],
+    errors: [],
+    receiptIds: [],
+  };
+});
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -26,6 +41,10 @@ vi.mock("@/lib/agent-event-bus", () => ({
   agentEventBus: {
     emit: mockEmit,
   },
+}));
+
+vi.mock("@/lib/build/build-artifact-provenance", () => ({
+  saveBuildArtifactRevision: mockSaveBuildArtifactRevision,
 }));
 
 describe("saveBuildEvidence", () => {

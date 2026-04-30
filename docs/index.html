@@ -194,24 +194,142 @@
     font-size: 13px;
     text-align: center;
   }
+
+  /* Smooth scroll + offset for anchored jumps so headings clear the sticky bar */
+  html { scroll-behavior: smooth; }
+  section { scroll-margin-top: 96px; }
+
+  /* Hero highlights — three short value props directly under the lede */
+  .hero-highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin: 28px 0 8px;
+  }
+  .hero-highlight {
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  @media (prefers-color-scheme: light) {
+    .hero-highlight { background: rgba(0,0,0,0.02); }
+  }
+  .hero-highlight strong { display: block; margin-bottom: 4px; font-size: 14px; }
+  .hero-highlight span { color: var(--fg-muted); font-size: 13px; line-height: 1.5; }
+
+  /* Sticky in-page navigation rail */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    margin: 0;
+  }
+  nav.toc .toc-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    align-items: center;
+    font-size: 13px;
+  }
+  nav.toc .toc-label {
+    color: var(--fg-muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 11px;
+    margin-right: 4px;
+  }
+  nav.toc a {
+    color: var(--fg-muted);
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  nav.toc a:hover {
+    color: var(--fg);
+    background: var(--surface-2);
+    border-color: var(--border);
+    text-decoration: none;
+  }
+
+  /* Back-to-top button */
+  a.back-top {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    opacity: 0.92;
+  }
+  a.back-top:hover { text-decoration: none; opacity: 1; }
 </style>
 </head>
-<body>
+<body id="top">
 <header class="hero">
   <div class="wrap">
     <img class="hero-logo" src="assets/logos/OpenDigitalProductFactory.png" alt="Open Digital Product Factory" width="934" height="688" />
     <h1>An open, AI-native platform that helps your organization build and run itself.</h1>
     <p class="lede">
-      A pre-install tour for people who want to understand the platform before they download it. The Open Digital Product Factory (ODPF) gives small teams and regulated enterprises the same digital-product, architecture, compliance, and AI-workforce capabilities that have historically been locked behind expensive enterprise suites &mdash; on your own hardware, governed end-to-end, and extensible by AI coworkers under human approval.
+      Open Digital Product Factory gives small teams and regulated enterprises the same digital-product, architecture, compliance, and AI-workforce capabilities that have historically been locked behind expensive enterprise suites &mdash; running on your own hardware, governed end-to-end, and extensible by AI coworkers under human approval.
     </p>
+    <div class="hero-highlights">
+      <div class="hero-highlight">
+        <strong>Runs on your hardware</strong>
+        <span>Bundled local AI, single-org install, no data leaves your environment unless you opt in.</span>
+      </div>
+      <div class="hero-highlight">
+        <strong>15 named AI coworkers, governed</strong>
+        <span>Default-deny tool gating, identity for agents (GAID), and an audit log every action passes through.</span>
+      </div>
+      <div class="hero-highlight">
+        <strong>Builds itself, with humans in the loop</strong>
+        <span>Build Studio drafts new features in a sandbox; humans approve design and acceptance; merges land via PR.</span>
+      </div>
+    </div>
     <div class="cta-row">
       <a class="btn primary" href="#install-on-windows">Install on Windows</a>
-      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">View on GitHub</a>
-      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md">Project README</a>
+      <a class="btn" href="#what-it-does">See what it does</a>
+      <a class="btn" href="#audience">Is it for me?</a>
+      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub</a>
       <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Contributing</a>
     </div>
   </div>
 </header>
+
+<nav class="toc" aria-label="In-page navigation">
+  <div class="toc-inner">
+    <span class="toc-label">Jump to</span>
+    <a href="#install-on-windows">Install</a>
+    <a href="#what-it-does">Capabilities</a>
+    <a href="#archetypes">Archetypes</a>
+    <a href="#coworkers">Coworkers</a>
+    <a href="#build-studio">Build Studio</a>
+    <a href="#ai-workforce">AI workforce</a>
+    <a href="#identity">Identity &amp; A2A</a>
+    <a href="#observability">Observability</a>
+    <a href="#compliance">Compliance</a>
+    <a href="#security">Security</a>
+    <a href="#governance">Governance</a>
+    <a href="#hive-mind">Hive Mind</a>
+    <a href="#standards">Standards</a>
+    <a href="#docs">Docs</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#faq">FAQ</a>
+  </div>
+</nav>
 
 <main class="wrap">
 
@@ -324,29 +442,521 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     </div>
   </section>
 
-  <section>
+  <section id="what-it-does">
     <h2>What you can do with it</h2>
-    <p class="sub">A condensed view of the capability surface. Each capability has its own section in the user guide.</p>
+    <p class="sub">A condensed view of the capability surface. Each capability has its own section in the user guide. Capabilities are aligned to the IT4IT v3.0.1 value streams (Evaluate, Explore, Integrate, Deploy, Release, Operate) so governance and lifecycle stay in lock-step with how the rest of your IT estate is modelled.</p>
     <table class="guide">
       <thead>
         <tr><th style="width:32%;">Capability</th><th>What it is for</th></tr>
       </thead>
       <tbody>
         <tr><td>Portfolio Management</td><td>Organize digital products into portfolios with health metrics, investment tracking, and lifecycle management.</td></tr>
-        <tr><td>HR &amp; Workforce</td><td>Manage employees, roles, reviews, timesheets, and organizational structure.</td></tr>
+        <tr><td>HR &amp; Workforce</td><td>Manage employees, roles, reviews, timesheets, and organizational structure. The same role hierarchy (HR-000 through HR-500) drives platform access.</td></tr>
         <tr><td>Customer Relationships</td><td>Track customer accounts, sales pipeline from lead to order, and engagement history.</td></tr>
         <tr><td>Compliance &amp; Regulatory</td><td>Onboard regulations and standards, map controls to obligations, collect evidence, and track posture.</td></tr>
         <tr><td>Financial Management</td><td>Invoices, suppliers and bills, purchase orders, banking and reconciliation, AI-spend visibility.</td></tr>
-        <tr><td>Enterprise Architecture</td><td>Model the application, technology, and business layers with ArchiMate notation.</td></tr>
-        <tr><td>Storefront</td><td>Public-facing storefront for products and services with booking, donations, and checkout.</td></tr>
-        <tr><td>Build Studio</td><td>A guided five-phase pipeline (intake, design, build, review, ship) with AI coworkers and a sandbox.</td></tr>
-        <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking.</td></tr>
-        <tr><td>AI Workforce</td><td>Provider configuration, model routing, agent management, and per-agent grants.</td></tr>
+        <tr><td>Enterprise Architecture</td><td>Model the application, technology, and business layers with ArchiMate notation; graph-backed via Neo4j.</td></tr>
+        <tr><td>Storefront</td><td>Public-facing storefront for products and services with booking, donations, and checkout. Driven by an industry archetype that seeds sections, vocabulary, finance profile, and design.</td></tr>
+        <tr><td>Build Studio</td><td>A guided five-phase pipeline (ideate, plan, build, review, ship) with AI coworkers and a sandbox.</td></tr>
+        <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking. Coworkers create, triage, size, and link items through governed MCP tools.</td></tr>
+        <tr><td>AI Workforce</td><td>Provider configuration, dynamic model discovery, capability-tier routing, agent registry, and per-agent grants.</td></tr>
+        <tr><td>Identity &amp; Federation</td><td>LDAP, Active Directory, and Microsoft Entra federation for sign-in and directory bootstrap; the platform remains the source of truth for roles, route bundles, and coworker associations.</td></tr>
+        <tr><td>Common Skills Library</td><td>A registry of reusable, role-bound AI skills (<code>.skill.md</code> files) declaring tools, triggers, risk band, and which coworkers can invoke them.</td></tr>
+        <tr><td>Agent Interoperability</td><td>Internal coworker runtime structured around an A2A-aligned task envelope; MCP (Model Context Protocol) for tool and context interoperability.</td></tr>
+        <tr><td>Observability &amp; Evidence</td><td>Prometheus-based discovery and metrics, an append-only authorization decision log, and chain-of-custody traces linking principal, agent, tool call, approval, and outcome.</td></tr>
+        <tr><td>Hive Mind</td><td>Opt-in cross-install contribution: features built locally can be reviewed, parameterized, and shared so the next install gets them out of the box.</td></tr>
       </tbody>
     </table>
   </section>
 
   <section>
+    <h2>Themes that shape the experience</h2>
+    <p class="sub">
+      Beyond a list of features, four themes shape what working on the platform feels like day-to-day. Each is a deliberate design stance, not just a checkbox.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Onboarding</div>
+        <strong>An AI COO greets you on first run.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled local AI (Docker Model Runner) starts before the platform does, so an <em>onboarding-coo</em> coworker can introduce itself, explain provider options in plain language, and walk you through identity, branding, and finance setup using the real settings pages &mdash; not a throwaway wizard. Honest about its own limitations (it&rsquo;s running on a local 8B model), interruptible, and resumable.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Archetypes</div>
+        <strong>Pick an industry &mdash; the platform reshapes itself.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Twelve industry archetypes ship with the platform. Choosing one bootstraps your storefront sections, vocabulary, booking and form rules, finance profile, and design system in one move. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Common Skills</div>
+        <strong>Coworkers share a registry of role-bound skills.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Skills are declared as <code>.skill.md</code> files with frontmatter for required tools, triggers, risk band, and which coworkers can invoke them. They are seeded idempotently and gated by the same grant model as every other tool call &mdash; default-deny, audit-logged.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Self-improvement</div>
+        <strong>Every coworker has an improvement loop.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Responses are scored. Conventions are accumulated. Stable conventions graduate into codified tools. Build features go through a Reusability Check at design time so domain-specific instances get parameterized for the hive mind, not hard-coded.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="archetypes">
+    <h2>Twelve industry archetypes ship in the box</h2>
+    <p class="sub">
+      Archetypes are the bootstrap mechanism that turns a fresh install into a working business setup. Each one carries its own role hierarchy, process workflows, capability seeds, finance assumptions, and storefront design. Archetypes can be customized after install &mdash; or contributed back as new templates other installs can adopt.
+    </p>
+    <div class="grid">
+      <div class="card"><h3>Healthcare &amp; Wellness</h3><p>Clinics, practitioners, wellness providers; appointment-centric flows.</p></div>
+      <div class="card"><h3>Beauty &amp; Personal Care</h3><p>Salons, spas, stylists; service menus, booking, deposits.</p></div>
+      <div class="card"><h3>Trades &amp; Maintenance</h3><p>Plumbing, electrical, HVAC, handywork; quote-and-job workflows.</p></div>
+      <div class="card"><h3>Professional Services</h3><p>Consultancies, advisors, agencies; engagements, retainers, deliverables.</p></div>
+      <div class="card"><h3>Software Platform</h3><p>Software products and SaaS; subscription, releases, support.</p></div>
+      <div class="card"><h3>Education &amp; Training</h3><p>Schools, training providers, coaches; cohorts, enrollment, certification.</p></div>
+      <div class="card"><h3>Pet Services</h3><p>Vets, groomers, trainers, boarding; pet records and visit history.</p></div>
+      <div class="card"><h3>Food &amp; Hospitality</h3><p>Restaurants, caterers, hosts; menus, reservations, events.</p></div>
+      <div class="card"><h3>Retail &amp; Goods</h3><p>Retailers and product sellers; inventory, orders, fulfillment.</p></div>
+      <div class="card"><h3>Fitness &amp; Recreation</h3><p>Gyms, studios, leagues; memberships, classes, attendance.</p></div>
+      <div class="card"><h3>Nonprofit &amp; Community</h3><p>Charities, associations, community groups; donations, programs, volunteers.</p></div>
+      <div class="card"><h3>HOA &amp; Property Management</h3><p>Homeowners associations and property managers; residents, dues, violations.</p></div>
+    </div>
+  </section>
+
+  <section id="coworkers">
+    <h2>Meet the coworker workforce</h2>
+    <p class="sub">
+      Coworkers are role-bound AI personas, each scoped to a value stream, each with its own grant set and skill library. They are the platform&rsquo;s primary surface for getting work done &mdash; you talk to the coworker who owns the area you&rsquo;re working in, and the platform routes you correctly based on the page you&rsquo;re on.
+    </p>
+    <div class="grid">
+      <div class="card"><h3>onboarding-coo</h3><p>Hosts first-run setup. Introduces the platform, explains AI providers, walks through identity, branding, and finance configuration.</p></div>
+      <div class="card"><h3>coo</h3><p>Ongoing operational partner once onboarding completes. Cross-functional: pulls from any value stream when the question doesn&rsquo;t fit a single specialist.</p></div>
+      <div class="card"><h3>portfolio-advisor</h3><p>Digital products and portfolios &mdash; health, investment, lifecycle.</p></div>
+      <div class="card"><h3>ea-architect</h3><p>Enterprise architecture &mdash; ArchiMate views, capability maps, dependencies.</p></div>
+      <div class="card"><h3>build-specialist</h3><p>Drives Build Studio: design docs, sandbox builds, test-first decomposition, code review.</p></div>
+      <div class="card"><h3>compliance-officer</h3><p>Standards onboarding, control mapping, evidence collection, posture tracking.</p></div>
+      <div class="card"><h3>hr-specialist</h3><p>Workforce, roles, reviews, timesheets, organizational structure.</p></div>
+      <div class="card"><h3>customer-advisor</h3><p>Customer accounts, sales pipeline, engagement history.</p></div>
+      <div class="card"><h3>storefront-advisor</h3><p>Storefront content, archetype-driven sections, vocabulary, design system.</p></div>
+      <div class="card"><h3>inventory-specialist</h3><p>Items, stock, fulfillment, orders.</p></div>
+      <div class="card"><h3>marketing-specialist</h3><p>Brand voice, content, campaigns &mdash; reads from the same archetype that seeded the storefront.</p></div>
+      <div class="card"><h3>ops-coordinator</h3><p>Operations and backlog: epics, items, priorities, status, scheduling.</p></div>
+      <div class="card"><h3>platform-engineer</h3><p>Platform health: providers, model routing, agent registry, infrastructure observability.</p></div>
+      <div class="card"><h3>docs-specialist</h3><p>Documentation upkeep &mdash; architecture, user guide, in-product help.</p></div>
+      <div class="card"><h3>admin-assistant</h3><p>Cross-cutting administrative work: scheduling, reminders, filing, follow-ups.</p></div>
+    </div>
+  </section>
+
+  <section id="build-studio">
+    <h2>Build Studio: the five-phase pipeline</h2>
+    <p class="sub">
+      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. The Reusability Check at design time decides whether the feature should be one-off or parameterized for the hive mind.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:18%;">Phase</th><th style="width:30%;">What happens</th><th>Gate / artifacts</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Ideate</strong></td>
+          <td>Intake and creative discovery. The onboarding-coo or build-specialist drafts a feature brief, runs the Reusability Check, and creates a backlog item with a constrained goal.</td>
+          <td>Feature brief, backlog item, reusability analysis stored on the design doc.</td>
+        </tr>
+        <tr>
+          <td><strong>2. Plan</strong></td>
+          <td>Architecture review and test-first task decomposition. Build-specialist drafts a design document covering problem statement, data model, reuse plan, and acceptance criteria.</td>
+          <td>Design document approved; severity-driven review (critical fails, important and minor pass).</td>
+        </tr>
+        <tr>
+          <td><strong>3. Build</strong></td>
+          <td>Test-first implementation in a sandbox container. Each task: write failing test &rarr; implement &rarr; code review &rarr; pass &rarr; next task. Commit SHAs and task results captured.</td>
+          <td>All tasks complete; sandbox tests green; commits recorded.</td>
+        </tr>
+        <tr>
+          <td><strong>4. Review</strong></td>
+          <td>Acceptance verification. Full test suite, typecheck, manual acceptance checks, UX verification.</td>
+          <td>Verification output, acceptance criteria checked, manual test steps documented.</td>
+        </tr>
+        <tr>
+          <td><strong>5. Ship</strong></td>
+          <td>Delivery. Pull request opened against <code>main</code> with required CI checks and DCO sign-off; merged; version tagged. Hive contribution mode (<code>fork_only</code>, <code>selective</code>, or <code>contribute_all</code>) decides whether the change is also offered upstream.</td>
+          <td>Merged PR, deployment confirmation, optional hive contribution PR.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      Build Studio captures phase-by-phase evidence so the path from idea to ship is fully reconstructable &mdash; the same evidence trail the compliance module uses when it asks &ldquo;what changed and who authorized it?&rdquo;
+    </p>
+  </section>
+
+  <section id="ai-workforce">
+    <h2>AI workforce: local-first, with optional cloud</h2>
+    <p class="sub">
+      The AI workforce ships ready-to-run on your own hardware and grows as you connect external providers. Routing decisions are dynamic and capability-tier driven &mdash; never hard-pinned to a specific model in seed data &mdash; so the platform can pick the right LLM for each task type and sensitivity level without manual configuration.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Local first</div>
+        <strong>Bundled inference, no signup.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Docker Model Runner is built into Docker Desktop 4.40+ &mdash; the platform pulls an appropriately-sized local model on first run, with real-time progress, and activates it before you see a setup screen.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Optional cloud</div>
+        <strong>Connect Anthropic, OpenAI, and others.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">External providers are an upgrade, not a prerequisite. Sensitivity clearance per provider decides which traffic each one is allowed to see; local stays the default for restricted data.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Dynamic discovery</div>
+        <strong>No stale model catalog.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">When supported, the platform queries each provider&rsquo;s <code>/v1/models</code> endpoint at activation time rather than relying on a hard-coded list, so newly released models become available without a platform update.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Capability-tier routing</div>
+        <strong>The right LLM, picked dynamically.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Routing chooses by capability tier (reasoning, coding, summarization, etc.) and task type, intersected with sensitivity clearance and provider rate budgets. Champion/challenger A/B with promotion gates lets routing improve over time.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Per-agent grants</div>
+        <strong>Default-deny, audit-logged.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Every coworker has an explicit grant set. The TOOL_TO_GRANTS map intersects user capability with agent grants on every call &mdash; missing grants are logged with a rationale code, not silently bypassed.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Spend visibility</div>
+        <strong>AI cost is a financial fact.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Provider usage flows into the finance module so AI spend appears alongside the rest of your operating costs &mdash; per provider, per agent, per workflow.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="data-layer">
+    <h2>The data layer and sandbox containers</h2>
+    <p class="sub">
+      The platform is a containerized stack with a small, deliberate set of stateful services. Knowing what lives where helps you reason about backups, sovereignty, and the boundary between safe iteration and production state.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:24%;">Service</th><th>Role</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>portal</strong></td>
+          <td>The Next.js application surface for everything users touch &mdash; operations, portfolio, architecture, coworkers, storefront, governance. Only service published externally.</td>
+        </tr>
+        <tr>
+          <td><strong>portal-init</strong></td>
+          <td>One-shot startup container that waits for infrastructure, applies Prisma migrations, runs idempotent seeds (archetypes, skills, agents, role bundles), and exits.</td>
+        </tr>
+        <tr>
+          <td><strong>postgres</strong></td>
+          <td>System of record. Transactional platform data: organizations, products, portfolios, backlog, agents, grants, decisions, evidence.</td>
+        </tr>
+        <tr>
+          <td><strong>neo4j</strong></td>
+          <td>Graph storage for relationship-rich models &mdash; enterprise architecture, capability views, dependency chains, delegation chains.</td>
+        </tr>
+        <tr>
+          <td><strong>qdrant</strong></td>
+          <td>Vector database for semantic indexing, retrieval, and memory-style AI support.</td>
+        </tr>
+        <tr>
+          <td><strong>inngest + redis</strong></td>
+          <td>Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks. Long-running coworker work surfaces through the coworker panel rather than blocking the UI.</td>
+        </tr>
+        <tr>
+          <td><strong>Docker Model Runner</strong></td>
+          <td>Local AI inference, built into Docker Desktop 4.40+. Models managed via <code>docker model pull</code>; GPU passthrough is automatic when supported hardware is present.</td>
+        </tr>
+        <tr>
+          <td><strong>Sandbox containers</strong></td>
+          <td>Disposable, on-demand containers used by Build Studio. New features get drafted, tested, and reviewed inside a sandbox before any change touches the running portal. Sandboxes are not part of the steady-state runtime &mdash; they spin up when work needs them and tear down when it ships.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="identity">
+    <h2>Identity, federation, and agent interoperability</h2>
+    <p class="sub">
+      The platform treats human and agent identity as one design surface. Humans sign in through your existing directory; agents carry their own durable identifiers and traceable claims; coworker-to-coworker work travels as a governed task, not as an implicit chat side-effect.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:30%;">Surface</th><th>What it provides</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>LDAP / Active Directory / Entra</strong></td>
+          <td>Federation for sign-in and directory bootstrap. Upstream identities are linked to internal principal records via a principal-linking layer. Directory facts and legacy app compatibility flow through the upstream authority; platform roles, route bundles, and coworker associations stay authoritative inside the platform.</td>
+        </tr>
+        <tr>
+          <td><strong>GAID identifiers</strong></td>
+          <td>Every agent carries a stable identifier formatted as <code>gaid:priv:&lt;issuer&gt;:&lt;agent-id&gt;</code>. The Agent Identity Document (AIDoc) carries badging, assurance claims, and authorization classes. Contributions are obfuscated rather than anonymous &mdash; a stable pseudonym makes contributors distinguishable across the hive mind.</td>
+        </tr>
+        <tr>
+          <td><strong>A2A-aligned task envelope</strong></td>
+          <td>The internal coworker runtime is being refactored into an A2A-shaped, task-native architecture. Coworker-to-coworker handoffs are represented as governed tasks, outputs as task artifacts, clarifications and progress as task messages and status events. TAK runtime controls and GAID receipt semantics layer onto the same envelope, so future private or public A2A endpoint exposure is a projection rather than a rewrite.</td>
+        </tr>
+        <tr>
+          <td><strong>Model Context Protocol (MCP)</strong></td>
+          <td>Tool and context interoperability for the AI workforce. Platform capabilities, backlog operations, build operations, and hive contribution all expose MCP tools that any conformant client can call &mdash; under the same grant and approval gates that the in-product coworkers face.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="observability">
+    <h2>Observability and evidence</h2>
+    <p class="sub">
+      Governance is only worth the policy if you can see what happened. The platform ships with discovery, metrics, and an append-only audit ledger so every meaningful action by a human or an agent is reviewable end-to-end.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Discovery</div>
+        <strong>Prometheus-based estate inventory.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A discovery collector queries Prometheus targets, classifies scrape jobs (postgres, neo4j, qdrant, portal, sandbox, model runner, node exporter), and feeds the estate inventory used by enterprise architecture views.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Decisions</div>
+        <strong>Append-only authorization log.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Every allow/deny decision records actor type, action key, GAID context, rationale code, and timestamp. Tools are gated by a default-deny <em>tool-to-grant</em> map; unapproved calls do not silently succeed.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Receipts</div>
+        <strong>Chain-of-custody traces.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Tool executions are traced with W3C Trace Context, signed message envelopes, and links between principal, delegated authority, approval gate, and resulting state change &mdash; the substrate for compliance answers like &ldquo;what did agent X do, and who authorized it?&rdquo;</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Evidence</div>
+        <strong>Compliance-ready evidence trails.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The compliance module attaches collected evidence to mapped controls. Build Studio captures phase-by-phase artifacts (design doc, verification output, acceptance check) so the path from idea to ship is reconstructable.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="compliance">
+    <h2>Compliance, evidence, and audit</h2>
+    <p class="sub">
+      Compliance is treated as a first-class concern in the data model rather than a reporting layer bolted on top. Standards and regulations are first-class objects, controls map to obligations, evidence is collected against controls, and the audit ledger ties every governed action back to a principal, an authority, and an outcome.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:28%;">Surface</th><th>What it provides</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Standards onboarding</strong></td>
+          <td>Bring in regulations and standards as structured records (e.g., ISO/IEC 27001, SOC 2, HIPAA, PCI-DSS). Each standard&rsquo;s clauses become obligations the platform can map to.</td>
+        </tr>
+        <tr>
+          <td><strong>Control mapping</strong></td>
+          <td>Map your operating controls to obligations across one or more standards. The same control can satisfy clauses in multiple standards without duplication.</td>
+        </tr>
+        <tr>
+          <td><strong>Evidence collection</strong></td>
+          <td>Attach evidence to controls &mdash; screenshots, exported reports, signed records. Build Studio phase artifacts (design doc, verification output, acceptance check) are addressable evidence by default.</td>
+        </tr>
+        <tr>
+          <td><strong>Authorization decision log</strong></td>
+          <td>Append-only record of every allow/deny decision with actor type, action key, GAID context, rationale code, and timestamp. The substrate for the auditor question &ldquo;who authorized this, on what basis?&rdquo;</td>
+        </tr>
+        <tr>
+          <td><strong>Chain-of-custody traces</strong></td>
+          <td>Tool executions are traced with W3C Trace Context and signed message envelopes (RFC 9421-aligned), linking principal, delegated authority, approval gate, and resulting state change.</td>
+        </tr>
+        <tr>
+          <td><strong>Posture tracking</strong></td>
+          <td>Standing posture view across the standards you have onboarded &mdash; which obligations are covered, which controls are stale, where evidence gaps exist.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      Because human and agent actions flow through the same authority resolution, evidence and audit cover the AI workforce on the same footing as the human workforce. An agent is just another principal whose decisions are logged.
+    </p>
+  </section>
+
+  <section id="security">
+    <h2>Security and operational posture</h2>
+    <p class="sub">
+      Security choices follow from the sovereignty stance: the smallest viable network exposure, the smallest viable trust radius, and the smallest viable amount of data leaving your environment.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Network exposure</div>
+        <strong>One service published, the rest internal.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Only the portal is published externally (typically port 3000). Postgres, Neo4j, Qdrant, Redis, Inngest, and the model runner stay on the internal Docker network. Sandbox containers are launched on demand and torn down when they ship.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Secrets handling</div>
+        <strong>Generated, stored locally, never in the seed.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Install-time credentials are generated locally and saved to <code>.admin-credentials</code> in your install directory. External provider credentials live in the platform&rsquo;s credentials store, not in environment files; no provider key is hard-coded or shipped in seed data.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Default-deny tools</div>
+        <strong>Every tool call passes through the gate.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The TOOL_TO_GRANTS map enforces default-deny for both in-product coworkers and external MCP clients. Missing grants are logged with rationale; nothing is silently bypassed. Proposal-mode tools break out for human approval unless an explicit <code>autoApproveWhen</code> predicate matches a pre-authorized flow.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Sandbox isolation</div>
+        <strong>New code runs in a disposable container first.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Build Studio drafts, tests, and reviews changes inside an isolated sandbox container before any change touches the running portal. Production state is read-protected from the sandbox; the sandbox is reset on each build.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">PR-gated change flow</div>
+        <strong>No code reaches main without review and CI.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Every code change &mdash; whether opened by a human, a coworker, or the hive contribution flow &mdash; lands via a pull request with required CI checks and DCO sign-off. Force-push protection on <code>main</code>; the platform never bypasses signing or hooks.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Defenses against prompt-driven misuse</div>
+        <strong>Immutable directives, never user-controlled.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A platform preamble is injected into every coworker&rsquo;s system prompt and never appears in user input. Combined with default-deny tool gating, this defends against prompt-injection attempts that try to widen agent authority through conversation.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="hive-mind">
+    <h2>Hive Mind: how cross-install value travels</h2>
+    <p class="sub">
+      The platform is open-source and runs as a single-organization install &mdash; one company, one database, no multi-tenancy. Cross-company value moves through the Hive Mind: features built locally are reviewed, parameterized, and offered back so the next install gets them out of the box. Sharing is opt-in, contributors are obfuscated but distinguishable (stable pseudonym via GAID), and every contribution flows through a pull request with required CI checks and DCO sign-off.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:22%;">Contribution mode</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>fork_only</strong></td>
+          <td>Build Studio ships the change to your install only. Nothing leaves your environment. The right setting for company-specific customizations.</td>
+        </tr>
+        <tr>
+          <td><strong>selective</strong></td>
+          <td>Each finished build is assessed for community value (the contribution-assessment uses the design-time Reusability Analysis as input). You decide per-build whether to contribute upstream.</td>
+        </tr>
+        <tr>
+          <td><strong>contribute_all</strong></td>
+          <td>Every successful build that passes the contribution gate is offered upstream automatically. The right setting for installs running ahead of the community on shared problems.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      Generic features become better business-model templates for everyone. The HOA example: a customer&rsquo;s violation-logging feature gets reviewed in Build Studio; if broadly applicable, it is re-factored into the HOA archetype so future HOA installs adopt it on day one. This is what &ldquo;the platform grows from within&rdquo; means in practice &mdash; recursive self-improvement, where every platform improvement is also a sellable capability for the next operator.
+    </p>
+  </section>
+
+  <section id="mcp">
+    <h2>The platform as a programmable surface (MCP)</h2>
+    <p class="sub">
+      The Model Context Protocol (MCP) lets external clients drive the platform with the same tools, the same grants, and the same approval gates that the in-product coworkers face. That means you can connect the platform to your existing AI tooling without giving anything a back-door &mdash; every external call is authorized, audited, and traceable, just like a button click.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Tool catalogue</div>
+        <strong>The platform is a tool host.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Backlog operations, digital-product registration, build orchestration, evidence recording, taxonomy placement, hive contribution, and feedback all surface as MCP tools with declared <code>requiredCapability</code>, <code>executionMode</code>, and <code>sideEffect</code> fields.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Same gates</div>
+        <strong>External clients face the same checks.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bearer token maps to a principal; the principal&rsquo;s capabilities intersect with the calling agent&rsquo;s grants on every tool call. Proposal-mode tools still break out for human approval; <code>autoApproveWhen</code> predicates allow pre-authorized flows for autonomous use.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Trace context</div>
+        <strong>Every external call is an auditable event.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Tool execution is logged under <code>[tool-trace]</code> with the request, response, principal, agent, decision, and rationale &mdash; the same trail in-product coworker calls produce.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Compatible clients</div>
+        <strong>Work with the tools you already use.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Any MCP-conformant client (Claude Code, Claude Desktop, Codex CLI, custom orchestrators) can call into the platform once registered, without bespoke integration work. CLI vs Messages-API rate limits are tracked separately so a busy CLI session does not throttle the in-product coworkers.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="roles">
+    <h2>Roles and access</h2>
+    <p class="sub">
+      The platform uses a two-tier role model so platform-wide governance is separated from product-specific operating structures. Tier 1 is six immutable roles aligned to IT4IT v3.0.1 value-stream authority. Tier 2 is per-product roles defined by the business model the product runs on (SaaS, Marketplace, IoT, etc.) &mdash; a user can hold different business-model roles on different products.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:14%;">Role</th><th style="width:30%;">Name</th><th>Authority domain</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>HR-000</strong></td><td>CDIO / Executive Sponsor</td><td>Strategic direction, executive escalation, full platform access including user management and governance settings.</td></tr>
+        <tr><td><strong>HR-100</strong></td><td>Portfolio Manager</td><td>Portfolio governance, investment allocation, approval of Portfolio Backlog Items (PBIs).</td></tr>
+        <tr><td><strong>HR-200</strong></td><td>Digital Product Manager</td><td>Product lifecycle, backlog, delivery; the escalation target for blocked Product Backlog Items (PRODs).</td></tr>
+        <tr><td><strong>HR-300</strong></td><td>Enterprise Architect</td><td>Architecture guardrails, technology standards, capability map ownership.</td></tr>
+        <tr><td><strong>HR-400</strong></td><td>ITFM Director</td><td>Financial governance, cost allocation, AI-spend approval.</td></tr>
+        <tr><td><strong>HR-500</strong></td><td>Operations Manager</td><td>SLA, incident response, operational continuity.</td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      Authorization is the intersection of two systems: the user&rsquo;s platform-role capabilities (e.g., <code>view_portfolio</code>, <code>manage_compliance</code>, <code>manage_users</code>) and the calling agent&rsquo;s declared grants. A coworker can only do what the user is allowed to do <em>and</em> the agent itself is granted to do. Superuser status (intended for initial setup, limited to one or two administrators) bypasses checks; everything else is default-deny and audited.
+    </p>
+  </section>
+
+  <section id="privacy">
+    <h2>Privacy and sovereignty posture</h2>
+    <p class="sub">
+      &ldquo;Runs on your hardware&rdquo; is more than a deployment choice &mdash; it is a posture the rest of the platform is designed around. Local stays the default; cloud is an opt-in upgrade with explicit clearance; sharing is opt-in with a stable but obfuscated identity.
+    </p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="tag">Local default</div>
+        <strong>The platform never phones home.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled local model is activated on first run. Postgres, Neo4j, Qdrant, Inngest, and the model runner stay on your internal Docker network. Only the portal is published externally, and only on the port you choose.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Sensitivity clearance</div>
+        <strong>Each provider has explicit clearance.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">External providers carry a sensitivity-clearance set (<code>public</code>, <code>internal</code>, <code>confidential</code>, <code>restricted</code>). Routing&rsquo;s hard filter refuses to send a request to a provider whose clearance does not cover the data&rsquo;s sensitivity. Local providers are cleared for everything.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Single-org install</div>
+        <strong>Your data is not multi-tenant.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Each install is one Organization &mdash; no multi-tenancy, ever. Cross-company value travels through the Hive Mind contribution flow, not through shared database rows. Company-specific customizations stay local; only what you explicitly contribute leaves.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Customer-brought integrations</div>
+        <strong>The platform is a conduit, not a broker.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Enterprise integrations (ADP, HRIS, ERP, banking) use your accounts, your credentials, and your vendor agreements. The platform connects to them on your behalf; it never enrolls itself as a partner of those vendors.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Obfuscated, not anonymous</div>
+        <strong>Contributions carry a stable pseudonym.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">When you contribute back, GAID provides a durable identifier so distinct contributors are distinguishable across the hive mind &mdash; without exposing your organization&rsquo;s real identity unless you choose to.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Open source</div>
+        <strong>You can see and change anything.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The platform is open source. The seeds, prompts, agent registry, route bundles, archetypes, and migration history are all in the repository. The customizable install is a full source clone &mdash; Build Studio and your local IDE share the same workspace.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="standards">
+    <h2>Standards conformance profiles</h2>
+    <p class="sub">
+      TAK and GAID are not single-tier standards &mdash; they define a ladder so an implementation can declare what it actually supports and earn higher levels over time. The platform is the first proving ground; the conformance assessment in <a href="/architecture/agent-standards-dpf-conformance">architecture/agent-standards-dpf-conformance</a> shows the current mapping.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:24%;">Standard</th><th>Profiles</th><th>What rises with each level</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>TAK</strong></td>
+          <td><code>TAK-Basic</code>, <code>TAK-Managed</code>, <code>TAK-Assured</code></td>
+          <td>From baseline runtime mediation (auth, capability, tool gating, audit) up through delegation chains, immutable directives, evaluation discipline, and non-repudiation evidence sufficient for assurance review.</td>
+        </tr>
+        <tr>
+          <td><strong>GAID</strong></td>
+          <td><code>GAID-Private</code>, <code>GAID-Federated</code>, <code>GAID-Public</code></td>
+          <td>From private namespace identifiers up through federated issuer trust, public AIDoc resolution, badging, and independently certified assurance claims.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:14px;">
+      Both standards reference the broader policy context &mdash; ISO/IEC 42001:2023, NIST AI RMF 1.0, the NIST AI Agent Standards Initiative, the NCCoE concept paper on software-and-AI-agent identity and authorization, MCP, W3C Trace Context, RFC 9421 HTTP Message Signatures, and the OWASP GenAI Security Project &mdash; rather than reinventing them.
+    </p>
+  </section>
+
+  <section id="docs">
     <h2>User guide &mdash; in-product help, also published here</h2>
     <p class="sub">These pages are bundled into the platform's in-app help and also live in the source tree. Start at the User Guide index and follow the section that matches your role.</p>
     <table class="guide">
@@ -391,6 +1001,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>Global AI Agent Identification &amp; Governance (GAID)</td><td><a href="/architecture/GAID">architecture/GAID</a></td></tr>
         <tr><td>Trusted AI Agent Governance white paper</td><td><a href="/architecture/2026-04-18-trusted-ai-agent-governance-white-paper">white paper (markdown)</a></td></tr>
         <tr><td>Standards conformance assessment</td><td><a href="/architecture/agent-standards-dpf-conformance">agent-standards-dpf-conformance</a></td></tr>
+        <tr><td>A2A-aligned coworker runtime design</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-04-23-a2a-aligned-coworker-runtime-design.md">2026-04-23-a2a-aligned-coworker-runtime-design</a></td></tr>
+        <tr><td>COO-led onboarding design</td><td><a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-03-21-coo-led-onboarding-design.md">2026-03-21-coo-led-onboarding-design</a></td></tr>
         <tr><td>AI coworker development principles</td><td><a href="/architecture/ai-coworker-development-principles">ai-coworker-development-principles</a></td></tr>
         <tr><td>Platform usability standards</td><td><a href="/platform-usability-standards">platform-usability-standards</a></td></tr>
       </tbody>
@@ -421,12 +1033,23 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     </div>
   </section>
 
-  <section>
+  <section id="governance">
     <h2>Governance posture (at a glance)</h2>
+    <p class="sub">
+      &ldquo;Humans hold authority. Agents hold capability. The kernel mediates.&rdquo; That single sentence is the operating principle behind TAK and shapes everything below.
+    </p>
     <div class="pillars">
       <div class="pillar">
         <div class="tag">Human-in-the-loop</div>
-        <p style="margin:0; color:var(--fg-muted); font-size:14px;">Agents propose; humans approve. Every meaningful action carries an explicit approval surface.</p>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">HITL tiers (0&ndash;3) decide when an agent can act on its own, when it must propose, and when escalation is mandatory. Proposal mode gates destructive actions; approval surfaces are explicit, not implicit.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Five-layer authority</div>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">Every tool call is resolved through auth &rarr; role &rarr; capability &rarr; per-agent grant &rarr; execution mode. Default-deny at every layer; misses are logged with a rationale code.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Immutable directives</div>
+        <p style="margin:0; color:var(--fg-muted); font-size:14px;">A platform preamble is injected into every coworker&rsquo;s system prompt and is never part of user input &mdash; defending against prompt injection and keeping persona discipline consistent across the workforce.</p>
       </div>
       <div class="pillar">
         <div class="tag">Audit by default</div>
@@ -443,7 +1066,327 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     </div>
   </section>
 
-  <section>
+  <section id="moving">
+    <h2>What&rsquo;s still moving</h2>
+    <p class="sub">
+      The platform is a working system, and it is also actively evolving. This section is the honest list &mdash; what is in production, what is partially in production, and what is currently specced. Read it as a maturity map, not a sales sheet.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:30%;">Area</th><th style="width:20%;">Maturity</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Build Studio (5 phases)</td>
+          <td><strong>Production</strong></td>
+          <td>End-to-end lifecycle complete through ship; design review is strict; severity-gated review reduces iteration loops.</td>
+        </tr>
+        <tr>
+          <td>Coworker workforce, grants, tool gating</td>
+          <td><strong>Production</strong></td>
+          <td>Default-deny grants, route-scoped agent identity, immutable directive injection, audit log all live.</td>
+        </tr>
+        <tr>
+          <td>Archetypes (12 industries)</td>
+          <td><strong>Production</strong></td>
+          <td>Bootstrap on storefront setup; sections, vocabulary, finance profile, design system seeded.</td>
+        </tr>
+        <tr>
+          <td>LDAP / Active Directory / Entra federation</td>
+          <td><strong>Production</strong></td>
+          <td>Federation page live; principal linking from upstream identities to internal records.</td>
+        </tr>
+        <tr>
+          <td>GAID identity issuance &amp; audit</td>
+          <td><strong>Production</strong></td>
+          <td>Identifier issuance, authorization decision logging, chain-of-custody traces all in place.</td>
+        </tr>
+        <tr>
+          <td>Local-first inference (Docker Model Runner)</td>
+          <td><strong>Production</strong></td>
+          <td>Bundled with Docker Desktop 4.40+; auto-pull on first run with progress reporting.</td>
+        </tr>
+        <tr>
+          <td>Capability-tier model routing</td>
+          <td><strong>Production</strong></td>
+          <td>Dynamic, capability-tier driven; sensitivity clearance enforced; champion/challenger A/B with promotion gates.</td>
+        </tr>
+        <tr>
+          <td>MCP tool surface</td>
+          <td><strong>Production</strong></td>
+          <td>Backlog, build, evidence, contribution, and feedback all callable as MCP tools under the same gates as in-product coworkers.</td>
+        </tr>
+        <tr>
+          <td>Hive Mind contribution flow</td>
+          <td><strong>Production</strong></td>
+          <td>Three contribution modes; Reusability Check at design time; assessment uses analysis as input.</td>
+        </tr>
+        <tr>
+          <td>Observability &mdash; Prometheus discovery</td>
+          <td><strong>Production</strong></td>
+          <td>Estate inventory, scrape-job classification, evidence trails.</td>
+        </tr>
+        <tr>
+          <td>A2A-aligned coworker runtime</td>
+          <td><strong>Partial</strong></td>
+          <td>Internal building blocks present (TaskRun, TaskNode, delegation chains, proposal mode). Refactor to a unified A2A-shaped task envelope is specced and underway. External A2A endpoints are deferred until the internal substrate is task-native.</td>
+        </tr>
+        <tr>
+          <td>COO-led onboarding</td>
+          <td><strong>Partial</strong></td>
+          <td>Onboarding-coo coworker, archetype bootstrap, Ollama auto-bootstrap all live. The MCP onboarding step (token paste &amp; restart) has known friction; zero-click provider setup is the goal.</td>
+        </tr>
+        <tr>
+          <td>Improvement loops for every coworker</td>
+          <td><strong>Partial</strong></td>
+          <td>Per-agent scoring and instruction phases (learning &rarr; practicing &rarr; innate) live. Build conventions that feed prompt-level learning back to build specialists are specced; extension to other coworker types is the gap being closed.</td>
+        </tr>
+        <tr>
+          <td>OpenTelemetry tracing</td>
+          <td><strong>Specced</strong></td>
+          <td>Discovery and metrics are live; native OTEL traces are not yet emitted by the runtime, though the architecture supports pluggable collectors.</td>
+        </tr>
+        <tr>
+          <td>Public A2A endpoint exposure</td>
+          <td><strong>Specced</strong></td>
+          <td>Internal substrate must be task-native first; once that is in place, private and public A2A endpoint exposure is a projection rather than a rewrite.</td>
+        </tr>
+        <tr>
+          <td>Build orchestrator resume after restart</td>
+          <td><strong>Specced</strong></td>
+          <td>Phase data persists; resume logic at task granularity after a process restart is tracked work.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="roadmap">
+    <h2>Roadmap and backlog</h2>
+    <p class="sub">
+      Beyond the &ldquo;What&rsquo;s still moving&rdquo; table above (which tracks features already in flight), the platform has a deliberate roadmap of larger initiatives that are designed but not yet delivered, or under active research. They are listed here so evaluators can see where the platform is heading &mdash; not as commitments to a date, but as the shape of the open backlog.
+    </p>
+
+    <h3 style="margin-top:24px; font-size:16px;">Deployment beyond Windows + Docker Desktop</h3>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:24%;">Target</th><th style="width:18%;">Status</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Windows + Docker Desktop</strong></td>
+          <td>Production</td>
+          <td>The current shipped install. PowerShell installer, MSI host-network bridge, auto-pull local model, one-question setup.</td>
+        </tr>
+        <tr>
+          <td><strong>Linux single-host</strong></td>
+          <td>Designed</td>
+          <td>Cloud-deployment reference architecture lists Linux single-host as a supported variant of the Docker Compose stack. Native installer scripts are tracked work, not yet shipped.</td>
+        </tr>
+        <tr>
+          <td><strong>macOS workstation</strong></td>
+          <td>Designed</td>
+          <td>Docker Desktop on macOS supports the same compose stack; the installer experience, host-network bridge, and Apple Silicon model selection need their own targeted work.</td>
+        </tr>
+        <tr>
+          <td><strong>Cloud-managed services (RDS, ElastiCache, Neo4j Aura, Qdrant Cloud)</strong></td>
+          <td>Designed &mdash; low coupling</td>
+          <td>Postgres, Redis, Neo4j, Qdrant, browser-use, and AI inference all reach the portal through environment variables. Swapping any of them for a managed cloud equivalent is a configuration change, not a code change.</td>
+        </tr>
+        <tr>
+          <td><strong>ECS / Container Apps / Cloud Run</strong></td>
+          <td>Designed &mdash; medium coupling</td>
+          <td>Portal and sandbox containers are deployable as container tasks today. The MSI host-network bridge gets replaced by cloud-native ingress (ALB/NLB, App Gateway, Cloud Load Balancing, or a Traefik/Caddy/nginx front). Inngest can run self-hosted or move to Inngest Cloud.</td>
+        </tr>
+        <tr>
+          <td><strong>Kubernetes / Helm chart</strong></td>
+          <td>Designed</td>
+          <td>Reference architecture covers the Kubernetes path. A first-class Helm chart and operator are tracked work, not yet shipped.</td>
+        </tr>
+        <tr>
+          <td><strong>DPF-on-DPF production instance</strong></td>
+          <td>Specced</td>
+          <td>The production instance the project itself runs on, hosted on the platform. Closes the recursive-self-improvement loop end-to-end.</td>
+        </tr>
+        <tr>
+          <td><strong>Mobile companion app (iOS + Android)</strong></td>
+          <td>In progress</td>
+          <td>React Native + Expo SDK 53+ companion app under <code>apps/mobile</code>. Approval surfaces, coworker chat, and offline-cached views are the early targets.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:24px; font-size:16px;">Open backlog &mdash; designed, not yet delivered</h3>
+    <p class="sub" style="margin-top:0;">
+      Each line is anchored in a dated design doc under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers/specs">docs/superpowers/specs</a>. The order is rough thematic grouping, not priority.
+    </p>
+    <table class="guide">
+      <thead>
+        <tr><th style="width:36%;">Initiative</th><th>What it brings</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>External customer AI coworker</strong></td>
+          <td>A storefront-facing assistant separate from internal coworkers, with strong trust disclosure, constrained tool use, customer-safe data access, and adaptive human escalation. GAID-backed trust badging is the future state.</td>
+        </tr>
+        <tr>
+          <td><strong>Public contribution mode (fork-based PR flow)</strong></td>
+          <td>Fork-based contribution so installs without upstream write access can still contribute. Replaces the current upstream-write-token model now that the repo is public.</td>
+        </tr>
+        <tr>
+          <td><strong>Connector factory framework</strong></td>
+          <td>A repeatable factory for adding integrations (HRIS, ERP, banking, CRM) under the conduit-not-broker stance &mdash; customer brings their own account and credentials.</td>
+        </tr>
+        <tr>
+          <td><strong>ADP / payroll MCP integration</strong></td>
+          <td>First connector through the factory: payroll feeds, position management, employment lifecycle.</td>
+        </tr>
+        <tr>
+          <td><strong>Tax remittance</strong></td>
+          <td>Sales-tax / VAT calculation and remittance flow tied to storefront orders and the finance module.</td>
+        </tr>
+        <tr>
+          <td><strong>Coworker execution adapter substrate</strong></td>
+          <td>Unifies the way coworkers dispatch to local LLMs, hosted APIs, and CLI providers (Claude Code, Codex CLI) so adapter-specific quirks stop leaking into the runtime.</td>
+        </tr>
+        <tr>
+          <td><strong>Routing control / data plane split</strong></td>
+          <td>Separates routing decisions (control plane) from inference (data plane) so routing changes can be deployed independently and audited as configuration.</td>
+        </tr>
+        <tr>
+          <td><strong>Orchestration primitives</strong></td>
+          <td>First-class building blocks for multi-step coworker work &mdash; durable handoffs, parallel branches, conditional escalation.</td>
+        </tr>
+        <tr>
+          <td><strong>Artifact provenance receipts</strong></td>
+          <td>Signed receipts attached to every produced artifact (design doc, code change, evidence record) so downstream consumers can verify origin and authority.</td>
+        </tr>
+        <tr>
+          <td><strong>Discovery / fingerprint contribution pipeline</strong></td>
+          <td>Estate discovery feeds fingerprints back into the hive mind so the next install gets better defaults from the community&rsquo;s collected experience.</td>
+        </tr>
+        <tr>
+          <td><strong>Multi-layer topology graph + views</strong></td>
+          <td>Graph views that span business, application, and technology layers (ArchiMate-aligned) with traversal for impact analysis.</td>
+        </tr>
+        <tr>
+          <td><strong>Async coworker messaging</strong></td>
+          <td>Coworker conversations that survive across sessions, devices, and durable background work &mdash; not just one chat thread at a time.</td>
+        </tr>
+        <tr>
+          <td><strong>Browser-use integration</strong></td>
+          <td>A bundled headless browser MCP service so coworkers can carry out web tasks (form fills, lookups, evidence capture) under the same governance as every other tool.</td>
+        </tr>
+        <tr>
+          <td><strong>Lifecycle evidence specialist</strong></td>
+          <td>A dedicated coworker that curates the evidence trail across the lifecycle &mdash; making sure compliance, audit, and contribution all draw from the same canonical record.</td>
+        </tr>
+        <tr>
+          <td><strong>Custom archetype creation and refinement</strong></td>
+          <td>A path to add and refine industry archetypes beyond the bundled twelve, including parameterizable vocabulary, finance profile, and design tokens.</td>
+        </tr>
+        <tr>
+          <td><strong>IT service provider (MSP) archetype</strong></td>
+          <td>Adds a thirteenth archetype for managed-service providers &mdash; a frequent customer profile that doesn&rsquo;t fit the existing twelve cleanly.</td>
+        </tr>
+        <tr>
+          <td><strong>Local-LLM grading (incremental)</strong></td>
+          <td>Lets local models grade local work, reducing dependence on cloud providers for evaluation traffic.</td>
+        </tr>
+        <tr>
+          <td><strong>Build orchestrator resume after restart</strong></td>
+          <td>Task-level resume of an in-flight build after a process restart. Phase data already persists; the resume logic is the gap.</td>
+        </tr>
+        <tr>
+          <td><strong>Zero-click provider setup &amp; MCP onboarding polish</strong></td>
+          <td>Removes the manual paste-and-restart step from MCP setup; OAuth becomes the only required interaction.</td>
+        </tr>
+        <tr>
+          <td><strong>OpenTelemetry tracing</strong></td>
+          <td>Native OTEL trace emission across portal, sandbox, coworker runtime, and MCP tool calls &mdash; complementing the Prometheus discovery already in place.</td>
+        </tr>
+        <tr>
+          <td><strong>Public A2A endpoint exposure</strong></td>
+          <td>Once the internal coworker runtime is fully task-native, expose private and public A2A endpoints so external agents can call into the platform under the same governance gates as in-product coworkers.</td>
+        </tr>
+        <tr>
+          <td><strong>Improvement-loop coverage for every coworker</strong></td>
+          <td>Build conventions feed prompt-level learning back to build specialists today; extending the same observe&nbsp;&rarr;&nbsp;classify&nbsp;&rarr;&nbsp;accumulate&nbsp;&rarr;&nbsp;inject&nbsp;&rarr;&nbsp;graduate pattern to every coworker is the explicit goal.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:24px; font-size:16px;">Research and exploration</h3>
+    <p class="sub" style="margin-top:0;">
+      Areas under active research. They are influencing design today even though no shipped feature depends on them yet.
+    </p>
+    <div class="grid">
+      <div class="card"><h3>Standards engagement</h3><p>Tracking ISO/IEC 42001, NIST AI RMF, the NIST AI Agent Standards Initiative, and the NCCoE concept paper on agent identity and authorization. The platform is intended as a proving ground for TAK and GAID under those frameworks.</p></div>
+      <div class="card"><h3>Open-source agent identity registries</h3><p>How GAID-Federated and GAID-Public profiles interact with public issuer accreditation, revocation, and verifier infrastructure outside any single install.</p></div>
+      <div class="card"><h3>External A2A interoperability</h3><p>What it takes for the platform to be both a caller of external A2A agents and a callee &mdash; specifically how delegation chains and TAK runtime controls cross trust boundaries.</p></div>
+      <div class="card"><h3>Continuous improvement flywheel</h3><p>Portfolio-aware observe &rarr; normalize &rarr; evaluate &rarr; propose &rarr; govern &rarr; execute &rarr; contribute cycle that turns every install&rsquo;s operating data into shared platform improvement.</p></div>
+    </div>
+
+    <p class="note" style="margin-top:18px;">
+      Honest qualifier: dates are not a contract. Priorities follow what installs actually need and what the hive mind is producing. Specs land in <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers/specs">docs/superpowers/specs</a>; plans land in <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers/plans">docs/superpowers/plans</a>. If you want the most current view, that is where to look.
+    </p>
+  </section>
+
+  <section id="faq">
+    <h2>Frequently asked questions</h2>
+    <p class="sub">Common questions from people evaluating the platform pre-install. The user guide and architecture docs go deeper on each.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Is the platform really open source?</h3>
+        <p>Yes. The repository is public and contributions land via pull request with DCO sign-off. The customizable install is a full source clone &mdash; Build Studio and your local IDE share the same workspace.</p>
+      </div>
+      <div class="card">
+        <h3>Does my data leave my environment?</h3>
+        <p>Not unless you opt in. The platform ships with a bundled local model and runs everything on your hardware. External providers are an upgrade with explicit sensitivity clearance per provider; Hive Mind contribution is opt-in and goes through a pull request you review.</p>
+      </div>
+      <div class="card">
+        <h3>Can multiple companies share one install?</h3>
+        <p>No. Each install is one Organization &mdash; no multi-tenancy. The cross-company value path is the Hive Mind, not shared database rows.</p>
+      </div>
+      <div class="card">
+        <h3>Do I need a developer to use it?</h3>
+        <p>No. Build Studio is the development surface for the platform; AI coworkers carry out the build, with humans reviewing design and acceptance. The customizable install adds a local IDE for developers who want one.</p>
+      </div>
+      <div class="card">
+        <h3>What if I do not want to run AI locally?</h3>
+        <p>Plug in a cloud provider (Anthropic, OpenAI, others). Set its sensitivity clearance, and routing will pick it for traffic that the clearance covers. Local stays the default for restricted data.</p>
+      </div>
+      <div class="card">
+        <h3>How do I get help?</h3>
+        <p>The in-product COO coworker is the first stop. Beyond that: the user guide is published in the repo, issues and discussions live on GitHub, and the AI coworker development principles document explains how to extend the workforce.</p>
+      </div>
+      <div class="card">
+        <h3>Can I trust an agent&rsquo;s actions?</h3>
+        <p>Every meaningful action carries an approval surface, a tool grant, and an audit log entry. The platform&rsquo;s posture is &ldquo;humans hold authority, agents hold capability, the kernel mediates.&rdquo; What an agent did, when, and on whose authority is always reconstructable.</p>
+      </div>
+      <div class="card">
+        <h3>What does the install include?</h3>
+        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Twelve industry archetypes, fifteen named coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
+      </div>
+      <div class="card">
+        <h3>How do I uninstall?</h3>
+        <p>Stop the stack with <code>dpf-stop</code>, remove the Docker volumes (your data lives there &mdash; back up first if you want to keep it), and delete the install directory. Nothing is registered outside your machine.</p>
+      </div>
+      <div class="card">
+        <h3>What does it cost?</h3>
+        <p>The platform is free and open source. Cloud provider usage (if you connect external models) is billed by the provider; the platform shows AI spend alongside the rest of your operating costs in the finance module.</p>
+      </div>
+      <div class="card">
+        <h3>What does the &ldquo;ready-to-go&rdquo; vs &ldquo;customizable&rdquo; install mean?</h3>
+        <p>Ready-to-go uses pre-built images; Build Studio is the only development surface. Customizable clones the source and shares the workspace with a local IDE. Same platform either way; you can switch later.</p>
+      </div>
+      <div class="card">
+        <h3>Where do I file an issue or suggest a feature?</h3>
+        <p>The in-product coworker can submit feedback and improvement proposals through governed MCP tools. You can also open issues directly on the GitHub repository.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="audience">
     <h2>Who this is for</h2>
     <div class="grid">
       <div class="card"><h3>Small business owners</h3><p>Enterprise-grade product, finance, and compliance capabilities without enterprise-grade budgets or teams.</p></div>
@@ -461,6 +1404,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub repository</a>
   </div>
 </footer>
+
+<a class="back-top" href="#top" aria-label="Back to top">&uarr; Top</a>
 
 </body>
 </html>
