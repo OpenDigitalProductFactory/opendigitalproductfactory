@@ -7,6 +7,10 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import {
+  buildMarketingAssetTaskArtifact,
+  buildMarketingAutomationCandidateArtifact,
+  buildMarketingCampaignBriefArtifact,
+  buildMarketingKpiCheckpointArtifact,
   buildMarketingReviewArtifact,
   formatMarketingGap,
   formatMarketingLabel,
@@ -26,6 +30,74 @@ describe("marketing language helpers", () => {
     expect(formatMarketingGap("Proof assets are still missing")).toBe(
       "Pick the proof that will make the offer credible: outcomes, testimonials, case studies, or credentials.",
     );
+  });
+});
+
+describe("marketing work product artifacts", () => {
+  it("normalizes a campaign brief into a saved work product shape", () => {
+    const artifact = buildMarketingCampaignBriefArtifact({
+      title: "30-day trust stack",
+      objective: "Generate qualified quote inquiries",
+      audience: "B2B software platform buyers",
+      channels: ["linkedin", "content-seo", "linkedin", "tiktok"],
+      cta: "Get a quote",
+      proofAssets: ["testimonial", "FAQ"],
+      kpis: ["qualified inquiries", "time-to-first-response"],
+      notes: "Skip TikTok for now.",
+    });
+
+    expect(artifact).toMatchObject({
+      title: "30-day trust stack",
+      objective: "Generate qualified quote inquiries",
+      audience: "B2B software platform buyers",
+      channels: ["linkedin", "content-seo", "tiktok"],
+      cta: "Get a quote",
+      proofAssets: ["testimonial", "FAQ"],
+      kpis: ["qualified inquiries", "time-to-first-response"],
+      notes: "Skip TikTok for now.",
+    });
+  });
+
+  it("normalizes execution artifacts for task, KPI, and automation records", () => {
+    expect(buildMarketingAssetTaskArtifact({
+      title: "Draft FAQ v2",
+      assetType: "faq",
+      channel: "content-seo",
+      dueWindow: "week 1",
+      brief: "Answer quote objections.",
+    })).toMatchObject({
+      title: "Draft FAQ v2",
+      assetType: "faq",
+      channel: "content-seo",
+      dueWindow: "week 1",
+      brief: "Answer quote objections.",
+    });
+
+    expect(buildMarketingKpiCheckpointArtifact({
+      metric: "qualified inquiries",
+      target: "3 in 14 days",
+      cadence: "weekly",
+      notes: "Baseline is currently zero.",
+    })).toMatchObject({
+      metric: "qualified inquiries",
+      target: "3 in 14 days",
+      cadence: "weekly",
+      notes: "Baseline is currently zero.",
+    });
+
+    expect(buildMarketingAutomationCandidateArtifact({
+      title: "Quote response SLA follow-up",
+      trigger: "New quote inquiry",
+      action: "Create internal response task",
+      approvalRequired: true,
+      rationale: "Keeps first response inside SLA.",
+    })).toMatchObject({
+      title: "Quote response SLA follow-up",
+      trigger: "New quote inquiry",
+      action: "Create internal response task",
+      approvalRequired: true,
+      rationale: "Keeps first response inside SLA.",
+    });
   });
 });
 
