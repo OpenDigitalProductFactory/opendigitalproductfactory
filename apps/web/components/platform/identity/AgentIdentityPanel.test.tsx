@@ -23,6 +23,9 @@ describe("AgentIdentityPanel", () => {
             operatingProfileFingerprint: "abc123def456",
             toolSurfaceCount: 4,
             promptClassRefCount: 2,
+            memoryFactCurrentCount: 2,
+            memoryFactPendingRevalidationCount: 1,
+            memoryFactLegacyCount: 1,
           },
         ]}
         summary={{
@@ -46,5 +49,8 @@ describe("AgentIdentityPanel", () => {
     expect(html).toContain("abc123def456");
     expect(html).toContain("observe");
     expect(html).toContain("execute");
+    expect(html).toContain("Memory freshness");
+    expect(html).toContain("2 current");
+    expect(html).toContain("1 pending");
   });
 });

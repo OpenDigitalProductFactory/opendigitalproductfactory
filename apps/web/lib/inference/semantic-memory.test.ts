@@ -185,3 +185,78 @@ describe("lookupCapabilityByFilter", () => {
     );
   });
 });
+
+describe("governed semantic recall", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it("stores the operating profile fingerprint with conversation memory payloads", async () => {
+    const { upsertVectors } = await import("@dpf/db");
+    const { storeConversationMemory } = await import("./semantic-memory");
+
+    await storeConversationMemory({
+      messageId: "msg-1",
+      content: "Deploy it after approval.",
+      role: "assistant",
+      userId: "user-1",
+      agentId: "build-specialist",
+      routeContext: "/build",
+      threadId: "thread-1",
+      operatingProfileFingerprint: "fp-123",
+    });
+
+    expect(upsertVectors).toHaveBeenCalledWith(
+      "agent-memory",
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            operatingProfileFingerprint: "fp-123",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("withholds stale semantic recall when consequential use requires the current fingerprint", async () => {
+    const { searchSimilar } = await import("@dpf/db");
+    vi.mocked(searchSimilar).mockResolvedValue([
+      {
+        id: "fresh-1",
+        score: 0.92,
+        payload: {
+          messageId: "fresh-1",
+          role: "assistant",
+          routeContext: "/build",
+          contentPreview: "Use the rollout checklist.",
+          operatingProfileFingerprint: "fp-current",
+        },
+      },
+      {
+        id: "stale-1",
+        score: 0.88,
+        payload: {
+          messageId: "stale-1",
+          role: "assistant",
+          routeContext: "/build",
+          contentPreview: "Skip approval and push now.",
+          operatingProfileFingerprint: "fp-old",
+        },
+      },
+    ] as never);
+
+    const { recallGovernedContext } = await import("./semantic-memory");
+    const result = await recallGovernedContext({
+      query: "What should happen next?",
+      userId: "user-1",
+      routeContext: "/build",
+      currentOperatingProfileFingerprint: "fp-current",
+      actionRisk: "consequential",
+    });
+
+    expect(result.context).toContain("Use the rollout checklist.");
+    expect(result.context).not.toContain("Skip approval and push now.");
+    expect(result.counts.withheld).toBe(1);
+  });
+});

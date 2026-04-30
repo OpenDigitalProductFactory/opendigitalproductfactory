@@ -2684,6 +2684,10 @@ model UserFact {
   confidence      Float      @default(1.0)
   sourceRoute     String
   sourceMessageId String?
+  sourceAgentId   String?
+  sourceOperatingProfileFingerprint String?
+  lastValidatedAt DateTime?
+  validatedAgainstFingerprint String?
   supersededAt    DateTime?
   supersededById  String?
   createdAt       DateTime   @default(now())
@@ -2694,6 +2698,7 @@ model UserFact {
 
   @@index([userId, category, key])
   @@index([userId, supersededAt])
+  @@index([sourceAgentId, supersededAt])
 }
 
 model AgentActionProposal {
