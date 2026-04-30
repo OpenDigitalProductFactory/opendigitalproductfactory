@@ -85,6 +85,47 @@ const STATUS_ONLY_PROGRESS_PATTERN = /(?:next step|ready to (?:proceed|start|dra
 const READ_FAILURE_STALL_PATTERN = /(?:file read command kept failing|could not read|can't read|unable to read|read .* failed|kept failing|I'll pause there|I will pause there|I'll reattempt|I will reattempt)/i;
 const BUILD_ROUTE_PATTERN = /^\/build(?:$|[/?#])/i;
 
+export function buildRepeatedToolStopMessage(params: {
+  toolName: string;
+  count: number;
+  routeContext?: string | null;
+  reasonHint: string;
+}): string {
+  const base = `I called ${params.toolName} ${params.count} times with the same arguments and got stuck.${params.reasonHint}`;
+  if (BUILD_ROUTE_PATTERN.test(params.routeContext ?? "")) {
+    return `${base} Check the build evidence for what was completed.`;
+  }
+  return `${base} I recorded this as a coworker execution issue and stopped before repeating the same tool again. Check the activity trail for what was attempted, then continue from the last saved recommendation.`;
+}
+
+export function buildRepeatedQuestionNudge(params: {
+  tools: ToolDefinition[];
+  routeContext?: string | null;
+}): string {
+  const availableToolNames = new Set(params.tools.map((tool) => tool.name));
+  const routeContext = params.routeContext ?? "";
+
+  if (routeContext.startsWith("/customer/marketing")) {
+    const marketingTools = [
+      "get_marketing_summary",
+      "suggest_campaign_ideas",
+      "save_marketing_review",
+      "analyze_seo_opportunity",
+    ].filter((toolName) => availableToolNames.has(toolName));
+    const toolText = marketingTools.length > 0
+      ? marketingTools.join(", ")
+      : [...availableToolNames].slice(0, 6).join(", ");
+    return `You already asked this question and I already answered it in the conversation above. Do NOT ask again. Proceed with the marketing work using the existing conversation context. Your marketing tools are active: ${toolText}. Call the most relevant marketing tool now; if you make a concrete recommendation, persist it with save_marketing_review.`;
+  }
+
+  if (BUILD_ROUTE_PATTERN.test(routeContext)) {
+    return "You already asked this question and I already answered it in the conversation above. Do NOT ask again. Proceed immediately with the answer I gave. Use your Build Studio tools now — call saveBuildEvidence or search_project_files to make progress.";
+  }
+
+  const toolText = [...availableToolNames].slice(0, 8).join(", ");
+  return `You already asked this question and I already answered it in the conversation above. Do NOT ask again. Proceed immediately with the answer I gave. Your tools are active: ${toolText}. Call the most relevant tool now.`;
+}
+
 // Tools that actually build/write — not just read/search
 const BUILD_TOOL_NAMES = new Set([
   "saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan",
@@ -590,11 +631,39 @@ export async function runAgenticLoop(params: {
         ? ` Last error: ${lastResult.error.slice(0, 120)}.`
         : "";
       console.warn(`[agentic-loop] stuck: ${toolName} called ${count}x with same args in last ${WINDOW} calls.${reasonHint}`);
+      const content = buildRepeatedToolStopMessage({
+        toolName,
+        count,
+        routeContext,
+        reasonHint,
+      });
+      if (!BUILD_ROUTE_PATTERN.test(routeContext ?? "")) {
+        await prisma.platformIssueReport.create({
+          data: {
+            reportId: `PIR-${crypto.randomUUID().slice(0, 5).toUpperCase()}`,
+            type: "agent_stuck",
+            severity: "medium",
+            status: "open",
+            title: `Coworker repeated ${toolName} without progress`,
+            description: [
+              `The coworker called ${toolName} ${count} times with the same arguments and the agentic loop stopped the run.`,
+              reasonHint ? reasonHint.trim() : null,
+              `Route: ${routeContext ?? "unknown"}`,
+            ].filter(Boolean).join("\n"),
+            routeContext: routeContext ?? null,
+            reportedById: userId,
+            agentId: agentId ?? null,
+            source: "coworker_runtime",
+          },
+        }).catch((err) => {
+          console.warn("[agentic-loop] failed to record repeated-tool issue:", err);
+        });
+      }
       // Return immediately — do NOT make another inference call here.
       // The summary inference call was the source of 300s hangs when the preferred provider
       // was unavailable. The executedTools list already contains the full work history.
       return {
-        content: `I called ${toolName} ${count} times with the same arguments and got stuck.${reasonHint} Check the build evidence for what was completed.`,
+        content,
         providerId: "",
         modelId: "",
         downgraded: false,
@@ -745,7 +814,10 @@ export async function runAgenticLoop(params: {
             { role: "assistant" as const, content: result.content },
             {
               role: "user" as const,
-              content: "You already asked this question and I already answered it in the conversation above. Do NOT ask again. Proceed immediately with the answer I gave. Use your tools now — call saveBuildEvidence or search_project_files to make progress.",
+              content: buildRepeatedQuestionNudge({
+                tools,
+                routeContext,
+              }),
             },
           ];
           continue;

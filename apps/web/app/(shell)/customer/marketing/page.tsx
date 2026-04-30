@@ -45,6 +45,16 @@ export default async function CustomerMarketingPage() {
   const proofFocus =
     snapshot.strategy.proofAssets[0]?.label ??
     "No proof asset chosen yet";
+  const latestRecommendation = snapshot.latestReview?.recommendation ?? null;
+  const recommendedChannels = latestRecommendation?.primaryChannels.length
+    ? latestRecommendation.primaryChannels.map(formatMarketingLabel).join(", ")
+    : primaryChannels;
+  const skippedChannels = latestRecommendation?.skippedChannels.length
+    ? latestRecommendation.skippedChannels.map(formatMarketingLabel).join(", ")
+    : "No skipped channels recorded";
+  const kpiStack = latestRecommendation?.kpis.length
+    ? latestRecommendation.kpis.join(", ")
+    : "No saved KPI stack yet";
   const launcherTopics = [
     {
       id: "strategy-review",
@@ -148,9 +158,56 @@ export default async function CustomerMarketingPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
               Channels
             </p>
-            <p className="mt-2 text-sm text-[var(--dpf-text)]">{primaryChannels}</p>
+            <p className="mt-2 text-sm text-[var(--dpf-text)]">{recommendedChannels}</p>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+              Latest strategist recommendation
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+              Saved recommendations make the current plan visible outside the chat.
+            </p>
+          </div>
+          <p className="text-sm font-medium text-[var(--dpf-accent)]">
+            {snapshot.latestReview
+              ? formatMarketingLabel(snapshot.latestReview.reviewType)
+              : "Not saved yet"}
+          </p>
+        </div>
+        {snapshot.latestReview ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                Do next
+              </p>
+              <p className="mt-2 text-sm text-[var(--dpf-text)]">
+                {snapshot.latestReview.summary}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                Skip for now
+              </p>
+              <p className="mt-2 text-sm text-[var(--dpf-text)]">{skippedChannels}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                KPI stack
+              </p>
+              <p className="mt-2 text-sm text-[var(--dpf-text)]">{kpiStack}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-[var(--dpf-muted)]">
+            No saved strategist recommendation yet. Ask the Marketing Strategist
+            for a plan and it should persist the recommendation here.
+          </p>
+        )}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">

@@ -1,13 +1,14 @@
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
 
 type Props = {
-  searchParams?: {
+  searchParams?: Promise<{
     token?: string;
-  };
+  }>;
 };
 
-export default function ResetPasswordPage({ searchParams }: Props) {
-  const token = searchParams?.token ?? "";
+export default async function ResetPasswordPage({ searchParams }: Props) {
+  const params = await searchParams;
+  const token = params?.token ?? "";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">

@@ -17,10 +17,11 @@ vi.mock("@/components/auth/ResetPasswordForm", () => ({
 import ResetPasswordPage from "./page";
 
 describe("ResetPasswordPage", () => {
-  it("renders token-bound password fields", () => {
-    const html = renderToStaticMarkup(
-      <ResetPasswordPage searchParams={{ token: "token-123" }} />,
-    );
+  it("renders token-bound password fields", async () => {
+    const page = await ResetPasswordPage({
+      searchParams: Promise.resolve({ token: "token-123" }),
+    });
+    const html = renderToStaticMarkup(page);
 
     expect(html).toContain("Reset password");
     expect(html).toContain('name="newPassword"');
