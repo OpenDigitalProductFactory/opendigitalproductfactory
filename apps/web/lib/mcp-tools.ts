@@ -223,6 +223,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "retire_backlog_item",
+    description: "Retire an active backlog item from the actionable pool as a duplicate, discard, or defer decision. Use for backlog hygiene and duplicate/noise cleanup when the item should become status=deferred with an audited rationale. Writes a status_change activity row and may auto-close the parent epic.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "Semantic backlog item id to retire" },
+        outcome: { type: "string", enum: ["duplicate", "discard", "defer"], description: "Retirement outcome" },
+        rationale: { type: "string", description: "Outcome summary captured as the item resolution" },
+        duplicateOfId: { type: "string", description: "Canonical semantic item id; required when outcome=duplicate" },
+        reason: { type: "string", description: "Operational reason captured as abandonReason. Defaults to rationale when omitted." },
+      },
+      required: ["itemId", "outcome", "rationale"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "promote_to_build_studio",
     description: "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Authority-gated via the build_promote grant category.",
     inputSchema: {
@@ -2615,6 +2632,145 @@ export async function executeTool(
         success: true,
         entityId: itemId,
         message: `Triaged ${itemId} as ${outcome}`,
+      };
+    }
+
+    case "retire_backlog_item": {
+      const itemId = String(params["itemId"] ?? "").trim();
+      const outcome = String(params["outcome"] ?? "").trim();
+      const rationale = String(params["rationale"] ?? "").trim();
+      const duplicateOfRaw = typeof params["duplicateOfId"] === "string"
+        ? params["duplicateOfId"].trim()
+        : "";
+      const reason = typeof params["reason"] === "string" && params["reason"].trim()
+        ? params["reason"].trim()
+        : rationale;
+      if (!itemId) {
+        return { success: false, error: "missing_itemId", message: "itemId is required" };
+      }
+      if (!["duplicate", "discard", "defer"].includes(outcome)) {
+        return {
+          success: false,
+          error: "invalid_outcome",
+          message: "outcome must be one of duplicate|discard|defer",
+        };
+      }
+      if (!rationale) {
+        return { success: false, error: "missing_rationale", message: "rationale is required" };
+      }
+      if (outcome === "duplicate" && !duplicateOfRaw) {
+        return {
+          success: false,
+          error: "missing_duplicateOfId",
+          message: "duplicateOfId is required when outcome=duplicate",
+        };
+      }
+
+      const item = await prisma.backlogItem.findUnique({
+        where: { itemId },
+        select: { id: true, itemId: true, status: true, epicId: true, activeBuildId: true },
+      });
+      if (!item) {
+        return { success: false, error: "not_found", message: `Item ${itemId} not found` };
+      }
+      if (!["triaging", "open", "in-progress"].includes(item.status)) {
+        return {
+          success: false,
+          error: "item_not_active",
+          message: `Item ${itemId} is already terminal (${item.status})`,
+        };
+      }
+      if (item.activeBuildId) {
+        return {
+          success: false,
+          error: "active_build_attached",
+          message: `Item ${itemId} has an active Build Studio build; abandon or resolve the build before retiring the backlog item.`,
+        };
+      }
+
+      let canonicalItem: { id: string; itemId: string } | null = null;
+      if (outcome === "duplicate") {
+        canonicalItem = await prisma.backlogItem.findUnique({
+          where: { itemId: duplicateOfRaw },
+          select: { id: true, itemId: true },
+        });
+        if (!canonicalItem) {
+          return {
+            success: false,
+            error: "duplicate_not_found",
+            message: `Canonical duplicate item ${duplicateOfRaw} not found`,
+          };
+        }
+        if (canonicalItem.id === item.id) {
+          return {
+            success: false,
+            error: "duplicate_self_reference",
+            message: "duplicateOfId must point to a different backlog item",
+          };
+        }
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const completedAt = new Date();
+        const next = await tx.backlogItem.update({
+          where: { id: item.id },
+          data: {
+            status: "deferred",
+            triageOutcome: outcome,
+            effortSize: null,
+            duplicateOfId: canonicalItem?.id ?? null,
+            resolution: rationale,
+            abandonReason: reason,
+            completedAt,
+          },
+          select: { itemId: true, status: true, completedAt: true, epicId: true },
+        });
+        await tx.backlogItemActivity.create({
+          data: {
+            backlogItemId: item.id,
+            kind: "status_change",
+            summary: `${item.status} -> deferred - retired as ${outcome}`,
+            payload: {
+              from: item.status,
+              to: "deferred",
+              outcome,
+              rationale,
+              reason,
+              duplicateOfId: canonicalItem?.itemId ?? null,
+            },
+            recordedById: userId,
+            recordedByAgentId: context?.agentId ?? null,
+          },
+        });
+        if (item.epicId) {
+          const remaining = await tx.backlogItem.count({
+            where: {
+              epicId: item.epicId,
+              id: { not: item.id },
+              status: { notIn: ["done", "deferred"] },
+            },
+          });
+          if (remaining === 0) {
+            await tx.epic.update({
+              where: { id: item.epicId },
+              data: { status: "done", completedAt },
+            });
+          }
+        }
+        return next;
+      });
+
+      return {
+        success: true,
+        entityId: updated.itemId,
+        message: `${updated.itemId}: ${item.status} -> ${updated.status} (${outcome})`,
+        data: {
+          itemId: updated.itemId,
+          status: updated.status,
+          completedAt: updated.completedAt,
+          outcome,
+          duplicateOfId: canonicalItem?.itemId ?? null,
+        },
       };
     }
 
