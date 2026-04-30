@@ -163,6 +163,14 @@ describe("default-deny: unmapped tools are blocked", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
+  it("retire_backlog_item requires backlog_write without broader triage authority", () => {
+    expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_read"])).toBe(false);
+    expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_triage"])).toBe(false);
+  });
+});
+
 describe("orchestrator with only build-plan grants cannot use sandbox tools", () => {
   const plannerGrants = ["build_plan_write", "backlog_write"];
 

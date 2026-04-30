@@ -5,6 +5,12 @@ description: Common identity block for all build specialist sub-agents — tool-
 category: specialist
 version: 1
 
+# Composition fragment, not a coworker persona. The persona audit
+# (apps/web/scripts/audit-coworker-personas.ts) skips files with
+# kind: fragment so they don't trigger PERSONA-* false positives.
+# Six specialists pull this block in via composesFrom: [specialist/shared-identity].
+kind: fragment
+
 composesFrom: []
 contentFormat: markdown
 variables: []

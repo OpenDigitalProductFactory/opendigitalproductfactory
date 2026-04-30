@@ -200,6 +200,17 @@ function listPersonas(): Persona[] {
   return personas;
 }
 
+// Composition fragments (kind: fragment in frontmatter) are reusable identity
+// blocks pulled in via `composesFrom`. They are not coworker personas and must
+// be skipped by every PERSONA-* persona-check, otherwise they fire false
+// positives across the board (no agent_id, no required body sections, no
+// registry counterpart — all correct, because they aren't personas).
+// They DO need to remain visible to PERSONA-010 (composesFrom resolution) so
+// other personas referencing them as composition targets resolve cleanly.
+function isFragment(p: Persona): boolean {
+  return p.frontmatter.kind === "fragment";
+}
+
 // ─── Registry ──────────────────────────────────────────────────────────────
 
 interface RegistryAgent {
@@ -265,6 +276,7 @@ function checkPersona001(registry: RegistryAgent[], personaByAgentId: Map<string
 function checkPersona002(registry: RegistryAgent[], personas: Persona[]): void {
   const registryIds = new Set(registry.map((a) => a.agent_id));
   for (const p of personas) {
+    if (isFragment(p)) continue;
     const aid = p.frontmatter.agent_id;
     if (typeof aid !== "string" || !aid) {
       // Reported under PERSONA-003
@@ -298,6 +310,7 @@ function checkPersona003(personas: Persona[]): void {
     { key: "status", type: "string" },
   ];
   for (const p of personas) {
+    if (isFragment(p)) continue;
     const missing: string[] = [];
     for (const f of required) {
       const v = p.frontmatter[f.key];
@@ -373,6 +386,7 @@ function checkPersona004(registry: RegistryAgent[], personaByAgentId: Map<string
 
 function checkPersona005(personas: Persona[]): void {
   for (const p of personas) {
+    if (isFragment(p)) continue;
     const missing: string[] = [];
     let lastIdx = -1;
     let outOfOrder = false;
@@ -457,6 +471,7 @@ function checkPersona007(registry: RegistryAgent[], personaByAgentId: Map<string
 
 function checkPersona008(personas: Persona[]): void {
   for (const p of personas) {
+    if (isFragment(p)) continue;
     const desc = p.frontmatter.description;
     if (typeof desc === "string" && desc.length > 120) {
       record(

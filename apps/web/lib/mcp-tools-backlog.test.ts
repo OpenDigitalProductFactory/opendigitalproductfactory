@@ -4,6 +4,13 @@ const mockPrisma = {
   backlogItem: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
+  },
+  backlogItemActivity: {
+    create: vi.fn(),
+  },
+  epic: {
+    update: vi.fn(),
   },
   featureBuild: {
     create: vi.fn(),
@@ -189,5 +196,138 @@ describe("backlog MCP tool execution", () => {
         requestedByAgentId: "AGT-1",
       },
     });
+  });
+
+  it("retire_backlog_item marks duplicate items as deferred with canonical linkage and activity", async () => {
+    const duplicateRow = {
+      id: "duplicate-row-1",
+      itemId: "BI-DUP",
+      status: "open",
+      epicId: "epic-row-1",
+      activeBuildId: null,
+    };
+    const canonicalRow = {
+      id: "canonical-row-1",
+      itemId: "BI-CANON",
+      status: "done",
+    };
+
+    mockPrisma.backlogItem.findUnique
+      .mockResolvedValueOnce(duplicateRow)
+      .mockResolvedValueOnce(canonicalRow);
+    mockPrisma.backlogItem.update.mockResolvedValue({
+      itemId: "BI-DUP",
+      status: "deferred",
+      completedAt: new Date("2026-04-29T12:00:00.000Z"),
+    });
+    mockPrisma.backlogItem.count.mockResolvedValue(0);
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "retire_backlog_item",
+      {
+        itemId: "BI-DUP",
+        outcome: "duplicate",
+        duplicateOfId: "BI-CANON",
+        rationale: "Superseded by the canonical implemented item.",
+      },
+      "user-1",
+      { agentId: "AGT-1" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "duplicate-row-1" },
+        data: expect.objectContaining({
+          status: "deferred",
+          triageOutcome: "duplicate",
+          duplicateOfId: "canonical-row-1",
+          resolution: "Superseded by the canonical implemented item.",
+          abandonReason: "Superseded by the canonical implemented item.",
+        }),
+      }),
+    );
+    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          backlogItemId: "duplicate-row-1",
+          kind: "status_change",
+          recordedById: "user-1",
+          recordedByAgentId: "AGT-1",
+          payload: expect.objectContaining({
+            outcome: "duplicate",
+            duplicateOfId: "BI-CANON",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("retire_backlog_item discards triaging verification fixtures without backlog_triage", async () => {
+    const fixtureRow = {
+      id: "fixture-row-1",
+      itemId: "BI-FIXTURE",
+      status: "triaging",
+      epicId: null,
+      activeBuildId: null,
+    };
+
+    mockPrisma.backlogItem.findUnique.mockResolvedValue(fixtureRow);
+    mockPrisma.backlogItem.update.mockResolvedValue({
+      itemId: "BI-FIXTURE",
+      status: "deferred",
+      completedAt: new Date("2026-04-29T12:00:00.000Z"),
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "retire_backlog_item",
+      {
+        itemId: "BI-FIXTURE",
+        outcome: "discard",
+        rationale: "Verification fixture, not product work.",
+        reason: "Created to exercise the MCP backlog surface.",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "fixture-row-1" },
+        data: expect.objectContaining({
+          status: "deferred",
+          triageOutcome: "discard",
+          duplicateOfId: null,
+          resolution: "Verification fixture, not product work.",
+          abandonReason: "Created to exercise the MCP backlog surface.",
+        }),
+      }),
+    );
+  });
+
+  it("retire_backlog_item requires duplicateOfId for duplicate retirement", async () => {
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({
+      id: "duplicate-row-1",
+      itemId: "BI-DUP",
+      status: "open",
+      activeBuildId: null,
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "retire_backlog_item",
+      {
+        itemId: "BI-DUP",
+        outcome: "duplicate",
+        rationale: "Duplicate row.",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("missing_duplicateOfId");
+    expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
   });
 });

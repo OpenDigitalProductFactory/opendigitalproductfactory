@@ -20,6 +20,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_backlog_items: ["backlog_read"],
   get_backlog_item: ["backlog_read"],
   update_backlog_item_status: ["backlog_write"],
+  retire_backlog_item: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
   record_execution_evidence: ["backlog_write"],
