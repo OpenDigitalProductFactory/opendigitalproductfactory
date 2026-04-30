@@ -8,6 +8,7 @@
 // external-MCP transport a stable hook.
 
 import { prisma } from "@dpf/db";
+import { createHash } from "crypto";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
 import {
   PLATFORM_TOOLS,
@@ -70,11 +71,13 @@ export function _setGovernanceForTests(overrides: {
     ctx?: { agentId?: string; threadId?: string; routeContext?: string; taskRunId?: string },
   ) => Promise<ToolResult>) | null;
   toolExecutionCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
+  toolExecutionReceiptCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
   _executeToolOverride = overrides.executeTool ?? null;
   _toolExecutionCreateOverride = overrides.toolExecutionCreate ?? null;
+  _toolExecutionReceiptCreateOverride = overrides.toolExecutionReceiptCreate ?? null;
 }
 
 let _executeToolOverride:
@@ -92,6 +95,10 @@ let _executeToolOverride:
   | null = null;
 
 let _toolExecutionCreateOverride:
+  | ((data: Record<string, unknown>) => Promise<unknown>)
+  | null = null;
+
+let _toolExecutionReceiptCreateOverride:
   | ((data: Record<string, unknown>) => Promise<unknown>)
   | null = null;
 
@@ -130,7 +137,7 @@ async function writeAudit(data: {
   source: GovernedExecuteSource;
   context?: GovernedExecuteContext;
   durationMs: number;
-}): Promise<void> {
+}): Promise<{ id: string } | null> {
   const auditClass = deriveAuditClassForTool(data.toolName);
   const capabilityId = deriveCapabilityId(data.toolName);
   const isMetricsOnly = auditClass === "metrics_only";
@@ -156,9 +163,15 @@ async function writeAudit(data: {
   };
   try {
     if (_toolExecutionCreateOverride) {
-      await _toolExecutionCreateOverride(row);
+      const created = await _toolExecutionCreateOverride(row);
+      return typeof (created as { id?: unknown } | undefined)?.id === "string"
+        ? { id: String((created as { id: string }).id) }
+        : null;
     } else {
-      await prisma.toolExecution.create({ data: row });
+      return await prisma.toolExecution.create({
+        data: row,
+        select: { id: true },
+      });
     }
   } catch (err) {
     // Audit MUST NOT silently fail. Log with enough context to investigate
@@ -166,6 +179,73 @@ async function writeAudit(data: {
     // execution).
     console.error(
       `[governed-execute] audit write failed tool=${data.toolName} source=${data.source}:`,
+      err,
+    );
+    return null;
+  }
+}
+
+function deriveReceiptKind(toolName: string): string | null {
+  switch (toolName) {
+    case "run_sandbox_tests":
+      return "sandbox-test-run";
+    case "run_sandbox_command":
+      return "sandbox-command";
+    case "run_ux_test":
+      return "ux-run";
+    default:
+      return null;
+  }
+}
+
+function digestPayload(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(value ?? null))
+    .digest("hex");
+}
+
+async function writeReceipt(data: {
+  auditRowId: string;
+  buildId: string;
+  rawParams: Record<string, unknown>;
+  result: ToolResult;
+  toolName: string;
+}): Promise<void> {
+  const receiptKind = deriveReceiptKind(data.toolName);
+  if (!receiptKind) {
+    return;
+  }
+
+  const row = {
+    buildId: data.buildId,
+    executionStatus: data.result.success ? "succeeded" : "failed",
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    inputFingerprint: digestPayload({
+      params: data.rawParams,
+      toolName: data.toolName,
+    }),
+    outputDigest: {
+      sha256: digestPayload({
+        data: data.result.data ?? null,
+        error: data.result.error ?? null,
+        message: data.result.message ?? null,
+        success: data.result.success,
+      }),
+    },
+    receiptKind,
+    receiptStatus: data.result.success ? "valid" : "invalid",
+    toolExecutionId: data.auditRowId,
+  };
+
+  try {
+    if (_toolExecutionReceiptCreateOverride) {
+      await _toolExecutionReceiptCreateOverride(row);
+    } else {
+      await prisma.toolExecutionReceipt.create({ data: row });
+    }
+  } catch (err) {
+    console.error(
+      `[governed-execute] receipt write failed tool=${data.toolName} build=${data.buildId}:`,
       err,
     );
   }
@@ -267,7 +347,7 @@ export async function governedExecuteTool(
   }
   const durationMs = Date.now() - t0;
 
-  await writeAudit({
+  const auditRow = await writeAudit({
     toolName: args.toolName,
     rawParams: args.rawParams,
     result,
@@ -276,6 +356,22 @@ export async function governedExecuteTool(
     context: args.context,
     durationMs,
   });
+
+  const resultBuildId =
+    result.data
+    && typeof result.data === "object"
+    && typeof (result.data as Record<string, unknown>).buildId === "string"
+      ? String((result.data as Record<string, unknown>).buildId)
+      : null;
+  if (auditRow?.id && resultBuildId) {
+    await writeReceipt({
+      auditRowId: auditRow.id,
+      buildId: resultBuildId,
+      rawParams: args.rawParams,
+      result,
+      toolName: args.toolName,
+    });
+  }
 
   return { ...result, governance: { durationMs } };
 }

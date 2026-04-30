@@ -31,10 +31,12 @@ type ExecuteFn = (
 ) => Promise<ToolResult>;
 
 let auditRows: AuditRow[];
+let receiptRows: AuditRow[];
 let executeMock: ReturnType<typeof vi.fn> & ExecuteFn;
 
 beforeEach(() => {
   auditRows = [];
+  receiptRows = [];
   executeMock = vi.fn(
     async (): Promise<ToolResult> => ({
       success: true,
@@ -47,6 +49,7 @@ beforeEach(() => {
     isAllowedByGrants: () => true,
     executeTool: executeMock,
     toolExecutionCreate: captureAudit(auditRows),
+    toolExecutionReceiptCreate: captureAudit(receiptRows),
   });
 });
 
@@ -56,6 +59,7 @@ afterEach(() => {
     isAllowedByGrants: null,
     executeTool: null,
     toolExecutionCreate: null,
+    toolExecutionReceiptCreate: null,
   });
 });
 
@@ -122,6 +126,48 @@ describe("governedExecuteTool — happy path", () => {
       source: "agentic-loop",
     });
     expect(auditRows[0]?.apiTokenId).toBeNull();
+  });
+
+  it("mints a provenance receipt for verification tools when the tool result includes buildId", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ["build_write"],
+      isAllowedByGrants: () => true,
+      executeTool: vi.fn(
+        async (): Promise<ToolResult> => ({
+          success: true,
+          message: "tests passed",
+          data: {
+            buildId: "FB-200",
+            testsPassed: 4,
+            testsFailed: 0,
+          },
+        }),
+      ) as ReturnType<typeof vi.fn> & ExecuteFn,
+      toolExecutionCreate: async (data: AuditRow) => {
+        auditRows.push(data);
+        return { id: "tool-exec-1" };
+      },
+      toolExecutionReceiptCreate: captureAudit(receiptRows),
+    });
+
+    await governedExecuteTool({
+      toolName: "run_sandbox_tests",
+      rawParams: { auto_fix: false },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "agentic-loop",
+    });
+
+    expect(receiptRows).toHaveLength(1);
+    expect(receiptRows[0]).toEqual(
+      expect.objectContaining({
+        buildId: "FB-200",
+        executionStatus: "succeeded",
+        receiptKind: "sandbox-test-run",
+        receiptStatus: "valid",
+        toolExecutionId: "tool-exec-1",
+      }),
+    );
   });
 });
 

@@ -26,6 +26,10 @@ const { mockQueueBuildReviewVerification } = vi.hoisted(() => ({
   mockQueueBuildReviewVerification: vi.fn(),
 }));
 
+const { mockSaveBuildArtifactRevision } = vi.hoisted(() => ({
+  mockSaveBuildArtifactRevision: vi.fn(),
+}));
+
 const { mockListReleasableSandboxFiles } = vi.hoisted(() => ({
   mockListReleasableSandboxFiles: vi.fn(),
 }));
@@ -45,6 +49,10 @@ vi.mock("@/lib/integrate/sandbox/build-branch", () => ({
 
 vi.mock("@/lib/build-review-verification-trigger", () => ({
   queueBuildReviewVerification: mockQueueBuildReviewVerification,
+}));
+
+vi.mock("@/lib/build/build-artifact-provenance", () => ({
+  saveBuildArtifactRevision: mockSaveBuildArtifactRevision,
 }));
 
 vi.mock("@/lib/integrate/sandbox/sandbox", () => ({
@@ -67,6 +75,14 @@ describe("governed build start approvals", () => {
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
     mockQueueBuildReviewVerification.mockResolvedValue(undefined);
+    mockSaveBuildArtifactRevision.mockResolvedValue({
+      revisionId: "rev-1",
+      revisionNumber: 1,
+      status: "accepted",
+      receiptIds: [],
+      warnings: [],
+      errors: [],
+    });
     mockListReleasableSandboxFiles.mockResolvedValue(["apps/web/components/build/BuildStudio.tsx"]);
   });
 
@@ -328,25 +344,23 @@ describe("governed build start approvals", () => {
         { step: "Continue action stays in view", passed: true },
       ],
     });
-    mockPrisma.featureBuild.update.mockResolvedValue({});
-
     await recordBuildAcceptance("FB-321");
 
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+    expect(mockSaveBuildArtifactRevision).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { buildId: "FB-321" },
-        data: expect.objectContaining({
-          acceptanceMet: [
-            expect.objectContaining({
-              criterion: "The workflow header no longer overlaps content.",
-              met: true,
-            }),
-            expect.objectContaining({
-              criterion: "The operator can continue from review into release.",
-              met: true,
-            }),
-          ],
-        }),
+        buildId: "FB-321",
+        field: "acceptanceMet",
+        savedByUserId: "user-1",
+        value: [
+          expect.objectContaining({
+            criterion: "The workflow header no longer overlaps content.",
+            met: true,
+          }),
+          expect.objectContaining({
+            criterion: "The operator can continue from review into release.",
+            met: true,
+          }),
+        ],
       }),
     );
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(

@@ -223,23 +223,6 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "retire_backlog_item",
-    description: "Retire an active backlog item from the actionable pool as a duplicate, discard, or defer decision. Use for backlog hygiene and duplicate/noise cleanup when the item should become status=deferred with an audited rationale. Writes a status_change activity row and may auto-close the parent epic.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        itemId: { type: "string", description: "Semantic backlog item id to retire" },
-        outcome: { type: "string", enum: ["duplicate", "discard", "defer"], description: "Retirement outcome" },
-        rationale: { type: "string", description: "Outcome summary captured as the item resolution" },
-        duplicateOfId: { type: "string", description: "Canonical semantic item id; required when outcome=duplicate" },
-        reason: { type: "string", description: "Operational reason captured as abandonReason. Defaults to rationale when omitted." },
-      },
-      required: ["itemId", "outcome", "rationale"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
-  {
     name: "promote_to_build_studio",
     description: "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Authority-gated via the build_promote grant category.",
     inputSchema: {
@@ -2635,145 +2618,6 @@ export async function executeTool(
       };
     }
 
-    case "retire_backlog_item": {
-      const itemId = String(params["itemId"] ?? "").trim();
-      const outcome = String(params["outcome"] ?? "").trim();
-      const rationale = String(params["rationale"] ?? "").trim();
-      const duplicateOfRaw = typeof params["duplicateOfId"] === "string"
-        ? params["duplicateOfId"].trim()
-        : "";
-      const reason = typeof params["reason"] === "string" && params["reason"].trim()
-        ? params["reason"].trim()
-        : rationale;
-      if (!itemId) {
-        return { success: false, error: "missing_itemId", message: "itemId is required" };
-      }
-      if (!["duplicate", "discard", "defer"].includes(outcome)) {
-        return {
-          success: false,
-          error: "invalid_outcome",
-          message: "outcome must be one of duplicate|discard|defer",
-        };
-      }
-      if (!rationale) {
-        return { success: false, error: "missing_rationale", message: "rationale is required" };
-      }
-      if (outcome === "duplicate" && !duplicateOfRaw) {
-        return {
-          success: false,
-          error: "missing_duplicateOfId",
-          message: "duplicateOfId is required when outcome=duplicate",
-        };
-      }
-
-      const item = await prisma.backlogItem.findUnique({
-        where: { itemId },
-        select: { id: true, itemId: true, status: true, epicId: true, activeBuildId: true },
-      });
-      if (!item) {
-        return { success: false, error: "not_found", message: `Item ${itemId} not found` };
-      }
-      if (!["triaging", "open", "in-progress"].includes(item.status)) {
-        return {
-          success: false,
-          error: "item_not_active",
-          message: `Item ${itemId} is already terminal (${item.status})`,
-        };
-      }
-      if (item.activeBuildId) {
-        return {
-          success: false,
-          error: "active_build_attached",
-          message: `Item ${itemId} has an active Build Studio build; abandon or resolve the build before retiring the backlog item.`,
-        };
-      }
-
-      let canonicalItem: { id: string; itemId: string } | null = null;
-      if (outcome === "duplicate") {
-        canonicalItem = await prisma.backlogItem.findUnique({
-          where: { itemId: duplicateOfRaw },
-          select: { id: true, itemId: true },
-        });
-        if (!canonicalItem) {
-          return {
-            success: false,
-            error: "duplicate_not_found",
-            message: `Canonical duplicate item ${duplicateOfRaw} not found`,
-          };
-        }
-        if (canonicalItem.id === item.id) {
-          return {
-            success: false,
-            error: "duplicate_self_reference",
-            message: "duplicateOfId must point to a different backlog item",
-          };
-        }
-      }
-
-      const updated = await prisma.$transaction(async (tx) => {
-        const completedAt = new Date();
-        const next = await tx.backlogItem.update({
-          where: { id: item.id },
-          data: {
-            status: "deferred",
-            triageOutcome: outcome,
-            effortSize: null,
-            duplicateOfId: canonicalItem?.id ?? null,
-            resolution: rationale,
-            abandonReason: reason,
-            completedAt,
-          },
-          select: { itemId: true, status: true, completedAt: true, epicId: true },
-        });
-        await tx.backlogItemActivity.create({
-          data: {
-            backlogItemId: item.id,
-            kind: "status_change",
-            summary: `${item.status} -> deferred - retired as ${outcome}`,
-            payload: {
-              from: item.status,
-              to: "deferred",
-              outcome,
-              rationale,
-              reason,
-              duplicateOfId: canonicalItem?.itemId ?? null,
-            },
-            recordedById: userId,
-            recordedByAgentId: context?.agentId ?? null,
-          },
-        });
-        if (item.epicId) {
-          const remaining = await tx.backlogItem.count({
-            where: {
-              epicId: item.epicId,
-              id: { not: item.id },
-              status: { notIn: ["done", "deferred"] },
-            },
-          });
-          if (remaining === 0) {
-            await tx.epic.update({
-              where: { id: item.epicId },
-              data: { status: "done", completedAt },
-            });
-          }
-        }
-        return next;
-      });
-
-      return {
-        success: true,
-        entityId: updated.itemId,
-        message: `${updated.itemId}: ${item.status} -> ${updated.status} (${outcome})`,
-        data: {
-          itemId: updated.itemId,
-          status: updated.status,
-          completedAt: updated.completedAt,
-          outcome,
-          duplicateOfId: canonicalItem?.itemId ?? null,
-        },
-      };
-    }
-
     case "size_backlog_item": {
       const itemId = String(params["itemId"] ?? "");
       const size = String(params["size"] ?? "");
@@ -4310,10 +4154,24 @@ export async function executeTool(
         }
       }
 
-      await prisma.featureBuild.update({
-        where: { buildId },
-        data: updateData,
+      const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
+      await saveBuildArtifactRevision({
+        buildId,
+        field: field as import("@/lib/build/build-artifact-provenance").BuildArtifactField,
+        receiptIds: Array.isArray(params.receiptIds)
+          ? params.receiptIds.filter((value): value is string => typeof value === "string")
+          : [],
+        savedByAgentId: context?.agentId ?? null,
+        savedByUserId: userId,
+        threadId: context?.threadId ?? null,
+        value: fieldValue,
       });
+      if (field === "designDoc" && updateData.brief) {
+        await prisma.featureBuild.update({
+          where: { buildId },
+          data: { brief: updateData.brief as import("@dpf/db").Prisma.InputJsonValue },
+        });
+      }
       // When taskResults is written via tool call, bump version for optimistic locking
       if (field === "taskResults") {
         await prisma.featureBuild.update({
@@ -4330,7 +4188,7 @@ export async function executeTool(
       // Removing auto-advance from saveBuildEvidence prevents accidental phase
       // transitions when evidence is saved before review completes.
 
-      return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId };
+      return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId, data: { buildId } };
     }
 
     case "reviewDesignDoc": {
@@ -5062,7 +4920,14 @@ export async function executeTool(
         : `Verification recorded: typecheck failed, unit test output captured for review.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
       logBuildActivity(buildId, "run_sandbox_tests", statusMsg);
 
-      return { success: true, message: statusMsg, data: verificationData };
+      return {
+        success: true,
+        message: statusMsg,
+        data: {
+          ...verificationData,
+          buildId,
+        },
+      };
     }
 
     // ─── Sandbox File Tools ──────────────────────────────────────────────────
@@ -5299,7 +5164,11 @@ export async function executeTool(
         try {
           const output = await execInSandbox(sandboxId, `cd /workspace && ${command} 2>&1`);
           logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
-          return { success: true, message: `Command completed.`, data: { command, output: truncateOutput(output) } };
+          return {
+            success: true,
+            message: "Command completed.",
+            data: { buildId, command, output: truncateOutput(output) },
+          };
         } catch (err) {
           // Commands like tsc, prisma validate return non-zero exit codes when they
           // find errors. This is NOT a sandbox failure — it's useful output.
@@ -5313,7 +5182,7 @@ export async function executeTool(
             return {
               success: true,
               message: `Command exited with code ${exitCode}. Review the output for errors to fix.`,
-              data: { command, output: truncateOutput(output), exitCode },
+              data: { buildId, command, output: truncateOutput(output), exitCode },
             };
           }
 
@@ -6969,11 +6838,23 @@ export async function executeTool(
             });
           }
         }
-        await prisma.featureBuild.update({ where: { buildId }, data: { uxTestResults: steps as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+        const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
+        await saveBuildArtifactRevision({
+          buildId,
+          field: "uxTestResults",
+          savedByAgentId: context?.agentId ?? null,
+          savedByUserId: userId,
+          threadId: context?.threadId ?? null,
+          value: steps,
+        });
         if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "uxTestResults" });
         const passed = steps.filter((s: { passed: boolean }) => s.passed).length;
         logBuildActivity(buildId, "run_ux_test", `UX tests: ${passed}/${steps.length} passed (browser-use).`);
-        return { success: true, message: `UX tests: ${passed}/${steps.length} passed.`, data: { steps, browserUseResults: testContent } };
+        return {
+          success: true,
+          message: `UX tests: ${passed}/${steps.length} passed.`,
+          data: { buildId, steps, browserUseResults: testContent },
+        };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 200) ?? "Unknown error";
         return { success: false, error: `UX test run failed: ${msg}`, message: `UX verification service (browser-use) is unreachable. Run 'docker compose up -d browser-use' or check the browser-use container logs. You can skip UX tests and proceed with the review if you have to.` };
