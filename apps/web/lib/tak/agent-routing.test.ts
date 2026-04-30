@@ -74,6 +74,16 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("gives the marketing specialist an operator lifecycle for persistent work", () => {
+    const result = resolveAgentForRoute("/customer/marketing/strategy", superuser);
+
+    expect(result.systemPrompt).toContain("ACTIVE MARKETING WORK");
+    expect(result.systemPrompt).toContain("If the user replies with ok, yes, continue, next, or similar");
+    expect(result.systemPrompt).toContain("call save_marketing_review before your final response");
+    expect(result.systemPrompt).toContain("Do not repeat the same baseline diagnosis");
+    expect(result.systemPrompt).toContain("log the issue");
+  });
+
   it("keeps marketing access gated separately from core customer routes", () => {
     const result = resolveAgentForRoute("/customer/marketing", opsUser);
     expect(result.agentId).toBe("marketing-specialist");

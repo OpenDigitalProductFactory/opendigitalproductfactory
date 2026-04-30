@@ -126,6 +126,81 @@ export type MarketingSuggestion = {
   priority?: string | null;
 };
 
+export type MarketingReviewRecommendation = {
+  primaryChannels: MarketingChannel[];
+  skippedChannels: MarketingChannel[];
+  cadence: MarketingReviewCadence | null;
+  kpis: string[];
+};
+
+export type MarketingCampaignBriefArtifactInput = {
+  title: string;
+  objective: string;
+  audience?: string;
+  channels?: string[];
+  cta?: string;
+  proofAssets?: string[];
+  kpis?: string[];
+  notes?: string;
+};
+
+export type MarketingCampaignBriefArtifact = {
+  title: string;
+  objective: string;
+  audience: string | null;
+  channels: MarketingChannel[];
+  cta: string | null;
+  proofAssets: string[];
+  kpis: string[];
+  notes: string | null;
+};
+
+export type MarketingAssetTaskArtifactInput = {
+  title: string;
+  assetType: string;
+  channel?: string;
+  dueWindow?: string;
+  brief?: string;
+};
+
+export type MarketingAssetTaskArtifact = {
+  title: string;
+  assetType: string;
+  channel: MarketingChannel | null;
+  dueWindow: string | null;
+  brief: string | null;
+};
+
+export type MarketingKpiCheckpointArtifactInput = {
+  metric: string;
+  target?: string;
+  cadence?: string;
+  notes?: string;
+};
+
+export type MarketingKpiCheckpointArtifact = {
+  metric: string;
+  target: string | null;
+  cadence: MarketingReviewCadence | null;
+  notes: string | null;
+};
+
+export type MarketingAutomationCandidateArtifactInput = {
+  title: string;
+  trigger: string;
+  action: string;
+  approvalRequired?: boolean;
+  rationale?: string;
+};
+
+export type MarketingAutomationCandidateArtifact = {
+  title: string;
+  trigger: string;
+  action: string;
+  approvalRequired: boolean;
+  rationale: string | null;
+};
+
 export type MarketingWorkspaceSnapshot = {
   organization: {
     id: string;
@@ -169,7 +244,30 @@ export type MarketingWorkspaceSnapshot = {
     summary: string;
     createdAt: Date;
     suggestedActions: MarketingSuggestion[];
+    recommendation: MarketingReviewRecommendation | null;
   } | null;
+  workProducts: {
+    campaignBriefs: Array<MarketingCampaignBriefArtifact & {
+      briefId: string;
+      status: string;
+      createdAt: Date;
+    }>;
+    assetTasks: Array<MarketingAssetTaskArtifact & {
+      taskId: string;
+      status: string;
+      createdAt: Date;
+    }>;
+    kpiCheckpoints: Array<MarketingKpiCheckpointArtifact & {
+      checkpointId: string;
+      status: string;
+      createdAt: Date;
+    }>;
+    automationCandidates: Array<MarketingAutomationCandidateArtifact & {
+      candidateId: string;
+      status: string;
+      createdAt: Date;
+    }>;
+  };
   staleAreas: string[];
 };
 
@@ -561,6 +659,355 @@ export function formatMarketingDate(value: Date | null): string {
   }).format(value);
 }
 
+export type MarketingReviewArtifactInput = {
+  summary: string;
+  primaryChannels?: string[];
+  secondaryChannels?: string[];
+  skippedChannels?: string[];
+  kpis?: string[];
+  cadence?: string;
+  suggestedActions?: Array<string | MarketingSuggestion>;
+};
+
+export type MarketingReviewArtifact = {
+  review: {
+    reviewType: MarketingReviewType;
+    summary: string;
+    detectedChanges: {
+      primaryChannels: MarketingChannel[];
+      skippedChannels: MarketingChannel[];
+      cadence: MarketingReviewCadence;
+    };
+    funnelAssessment: {
+      kpis: string[];
+    };
+    suggestedActions: MarketingSuggestion[];
+  };
+  strategyUpdate: {
+    status: MarketingStrategyStatus;
+    primaryChannels: MarketingChannel[];
+    secondaryChannels?: MarketingChannel[];
+    reviewCadence: MarketingReviewCadence;
+    lastReviewedAt: Date;
+    nextReviewAt: Date;
+    specialistNotes: string;
+  };
+};
+
+function normalizeChannelList(values: string[] | undefined): MarketingChannel[] {
+  return dedupeStrings(values ?? []).filter((channel): channel is MarketingChannel =>
+    MARKETING_CHANNELS.includes(channel as MarketingChannel),
+  );
+}
+
+function normalizeChannel(value: string | null | undefined): MarketingChannel | null {
+  const cleaned = cleanText(value);
+  return cleaned && MARKETING_CHANNELS.includes(cleaned as MarketingChannel)
+    ? (cleaned as MarketingChannel)
+    : null;
+}
+
+function normalizeReviewCadence(value: string | undefined): MarketingReviewCadence {
+  return MARKETING_REVIEW_CADENCE.includes(value as MarketingReviewCadence)
+    ? (value as MarketingReviewCadence)
+    : "weekly";
+}
+
+function removeUndefinedFields<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined),
+  ) as T;
+}
+
+function normalizeSuggestedActions(
+  values: Array<string | MarketingSuggestion> | undefined,
+): MarketingSuggestion[] {
+  return (values ?? [])
+    .map((value) => {
+      if (typeof value === "string") {
+        return { description: value, priority: "normal" };
+      }
+      return removeUndefinedFields({
+        kind: value.kind,
+        target: value.target,
+        description: value.description,
+        priority: value.priority ?? "normal",
+      });
+    })
+    .filter((value) => cleanText(value.description));
+}
+
+export function buildMarketingReviewArtifact(
+  input: MarketingReviewArtifactInput,
+  now = new Date(),
+): MarketingReviewArtifact {
+  const summary = cleanText(input.summary) ?? "Marketing strategist recommendation";
+  const cadence = normalizeReviewCadence(input.cadence);
+  const skippedChannels = normalizeChannelList(input.skippedChannels);
+  const skippedSet = new Set(skippedChannels);
+  const primaryChannels = normalizeChannelList(input.primaryChannels).filter(
+    (channel) => !skippedSet.has(channel),
+  );
+  const secondaryChannels = normalizeChannelList(input.secondaryChannels);
+  const kpis = dedupeStrings(input.kpis ?? []);
+  const nextReviewAt = addDays(now, getCadenceWindow(cadence));
+
+  return {
+    review: {
+      reviewType: "ai-proactive",
+      summary,
+      detectedChanges: {
+        primaryChannels,
+        skippedChannels,
+        cadence,
+      },
+      funnelAssessment: {
+        kpis,
+      },
+      suggestedActions: normalizeSuggestedActions(input.suggestedActions),
+    },
+    strategyUpdate: {
+      status: "active",
+      primaryChannels,
+      ...(secondaryChannels.length > 0 ? { secondaryChannels } : {}),
+      reviewCadence: cadence,
+      lastReviewedAt: now,
+      nextReviewAt,
+      specialistNotes: summary,
+    },
+  };
+}
+
+export function buildMarketingCampaignBriefArtifact(
+  input: MarketingCampaignBriefArtifactInput,
+): MarketingCampaignBriefArtifact {
+  return {
+    title: cleanText(input.title) ?? "Marketing campaign brief",
+    objective: cleanText(input.objective) ?? "Create measurable marketing demand",
+    audience: cleanText(input.audience),
+    channels: normalizeChannelList(input.channels),
+    cta: cleanText(input.cta),
+    proofAssets: dedupeStrings(input.proofAssets ?? []),
+    kpis: dedupeStrings(input.kpis ?? []),
+    notes: cleanText(input.notes),
+  };
+}
+
+export function buildMarketingAssetTaskArtifact(
+  input: MarketingAssetTaskArtifactInput,
+): MarketingAssetTaskArtifact {
+  return {
+    title: cleanText(input.title) ?? "Marketing asset task",
+    assetType: cleanText(input.assetType) ?? "content",
+    channel: normalizeChannel(input.channel),
+    dueWindow: cleanText(input.dueWindow),
+    brief: cleanText(input.brief),
+  };
+}
+
+export function buildMarketingKpiCheckpointArtifact(
+  input: MarketingKpiCheckpointArtifactInput,
+): MarketingKpiCheckpointArtifact {
+  return {
+    metric: cleanText(input.metric) ?? "qualified inquiries",
+    target: cleanText(input.target),
+    cadence: cleanText(input.cadence) ? normalizeReviewCadence(input.cadence) : null,
+    notes: cleanText(input.notes),
+  };
+}
+
+export function buildMarketingAutomationCandidateArtifact(
+  input: MarketingAutomationCandidateArtifactInput,
+): MarketingAutomationCandidateArtifact {
+  return {
+    title: cleanText(input.title) ?? "Marketing automation candidate",
+    trigger: cleanText(input.trigger) ?? "Manual review",
+    action: cleanText(input.action) ?? "Create an internal follow-up task",
+    approvalRequired: input.approvalRequired ?? true,
+    rationale: cleanText(input.rationale),
+  };
+}
+
+function normalizeReviewRecommendation(
+  detectedChanges: Prisma.JsonValue | null | undefined,
+  funnelAssessment: Prisma.JsonValue | null | undefined,
+): MarketingReviewRecommendation | null {
+  if (!isRecord(detectedChanges) && !isRecord(funnelAssessment)) return null;
+  const changes = isRecord(detectedChanges) ? detectedChanges : {};
+  const funnel = isRecord(funnelAssessment) ? funnelAssessment : {};
+  const primaryChannels = Array.isArray(changes.primaryChannels)
+    ? normalizeChannelList(changes.primaryChannels.filter((value): value is string => typeof value === "string"))
+    : [];
+  const skippedChannels = Array.isArray(changes.skippedChannels)
+    ? normalizeChannelList(changes.skippedChannels.filter((value): value is string => typeof value === "string"))
+    : [];
+  const cadence = typeof changes.cadence === "string" &&
+    MARKETING_REVIEW_CADENCE.includes(changes.cadence as MarketingReviewCadence)
+    ? (changes.cadence as MarketingReviewCadence)
+    : null;
+  const kpis = Array.isArray(funnel.kpis)
+    ? dedupeStrings(funnel.kpis.filter((value): value is string => typeof value === "string"))
+    : [];
+
+  if (primaryChannels.length === 0 && skippedChannels.length === 0 && !cadence && kpis.length === 0) {
+    return null;
+  }
+
+  return { primaryChannels, skippedChannels, cadence, kpis };
+}
+
+export async function recordMarketingStrategistReview(input: {
+  recommendation: MarketingReviewArtifactInput;
+  createdByAgentId?: string | null;
+}): Promise<{ reviewId: string; strategyId: string; message: string } | null> {
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  if (!snapshot) return null;
+
+  const artifact = buildMarketingReviewArtifact(input.recommendation);
+  const review = await prisma.marketingReview.create({
+    data: {
+      organizationId: snapshot.organization.id,
+      strategyId: snapshot.strategy.strategyId,
+      reviewType: artifact.review.reviewType,
+      summary: artifact.review.summary,
+      detectedChanges: artifact.review.detectedChanges as Prisma.InputJsonValue,
+      funnelAssessment: artifact.review.funnelAssessment as Prisma.InputJsonValue,
+      suggestedActions: artifact.review.suggestedActions as Prisma.InputJsonValue,
+      createdByAgentId: input.createdByAgentId ?? null,
+    },
+    select: { reviewId: true },
+  });
+
+  await prisma.marketingStrategy.update({
+    where: { strategyId: snapshot.strategy.strategyId },
+    data: artifact.strategyUpdate,
+  });
+
+  return {
+    reviewId: review.reviewId,
+    strategyId: snapshot.strategy.strategyId,
+    message: `Saved marketing review ${review.reviewId}`,
+  };
+}
+
+export async function createMarketingCampaignBrief(input: {
+  brief: MarketingCampaignBriefArtifactInput;
+  createdByAgentId?: string | null;
+}): Promise<{ briefId: string; strategyId: string; message: string } | null> {
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  if (!snapshot) return null;
+
+  const artifact = buildMarketingCampaignBriefArtifact(input.brief);
+  const record = await prisma.marketingCampaignBrief.create({
+    data: {
+      organizationId: snapshot.organization.id,
+      strategyId: snapshot.strategy.strategyId,
+      title: artifact.title,
+      objective: artifact.objective,
+      audience: artifact.audience,
+      channels: artifact.channels,
+      cta: artifact.cta,
+      proofAssets: artifact.proofAssets,
+      kpis: artifact.kpis,
+      notes: artifact.notes,
+      createdByAgentId: input.createdByAgentId ?? null,
+    },
+    select: { briefId: true },
+  });
+
+  return {
+    briefId: record.briefId,
+    strategyId: snapshot.strategy.strategyId,
+    message: `Saved marketing campaign brief ${record.briefId}`,
+  };
+}
+
+export async function createMarketingAssetTask(input: {
+  task: MarketingAssetTaskArtifactInput;
+  createdByAgentId?: string | null;
+}): Promise<{ taskId: string; strategyId: string; message: string } | null> {
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  if (!snapshot) return null;
+
+  const artifact = buildMarketingAssetTaskArtifact(input.task);
+  const record = await prisma.marketingAssetTask.create({
+    data: {
+      organizationId: snapshot.organization.id,
+      strategyId: snapshot.strategy.strategyId,
+      title: artifact.title,
+      assetType: artifact.assetType,
+      channel: artifact.channel,
+      dueWindow: artifact.dueWindow,
+      brief: artifact.brief,
+      createdByAgentId: input.createdByAgentId ?? null,
+    },
+    select: { taskId: true },
+  });
+
+  return {
+    taskId: record.taskId,
+    strategyId: snapshot.strategy.strategyId,
+    message: `Saved marketing asset task ${record.taskId}`,
+  };
+}
+
+export async function recordMarketingKpiCheckpoint(input: {
+  checkpoint: MarketingKpiCheckpointArtifactInput;
+  createdByAgentId?: string | null;
+}): Promise<{ checkpointId: string; strategyId: string; message: string } | null> {
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  if (!snapshot) return null;
+
+  const artifact = buildMarketingKpiCheckpointArtifact(input.checkpoint);
+  const record = await prisma.marketingKpiCheckpoint.create({
+    data: {
+      organizationId: snapshot.organization.id,
+      strategyId: snapshot.strategy.strategyId,
+      metric: artifact.metric,
+      target: artifact.target,
+      cadence: artifact.cadence,
+      notes: artifact.notes,
+      createdByAgentId: input.createdByAgentId ?? null,
+    },
+    select: { checkpointId: true },
+  });
+
+  return {
+    checkpointId: record.checkpointId,
+    strategyId: snapshot.strategy.strategyId,
+    message: `Saved marketing KPI checkpoint ${record.checkpointId}`,
+  };
+}
+
+export async function createMarketingAutomationCandidate(input: {
+  candidate: MarketingAutomationCandidateArtifactInput;
+  createdByAgentId?: string | null;
+}): Promise<{ candidateId: string; strategyId: string; message: string } | null> {
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  if (!snapshot) return null;
+
+  const artifact = buildMarketingAutomationCandidateArtifact(input.candidate);
+  const record = await prisma.marketingAutomationCandidate.create({
+    data: {
+      organizationId: snapshot.organization.id,
+      strategyId: snapshot.strategy.strategyId,
+      title: artifact.title,
+      trigger: artifact.trigger,
+      action: artifact.action,
+      approvalRequired: artifact.approvalRequired,
+      rationale: artifact.rationale,
+      createdByAgentId: input.createdByAgentId ?? null,
+    },
+    select: { candidateId: true },
+  });
+
+  return {
+    candidateId: record.candidateId,
+    strategyId: snapshot.strategy.strategyId,
+    message: `Saved marketing automation candidate ${record.candidateId}`,
+  };
+}
+
 export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspaceSnapshot | null> {
   const organization = await prisma.organization.findFirst({
     orderBy: { createdAt: "asc" },
@@ -677,6 +1124,34 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     orderBy: { createdAt: "desc" },
   });
 
+  const [
+    campaignBriefs,
+    assetTasks,
+    kpiCheckpoints,
+    automationCandidates,
+  ] = await Promise.all([
+    prisma.marketingCampaignBrief.findMany({
+      where: { strategyId: strategy.strategyId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    prisma.marketingAssetTask.findMany({
+      where: { strategyId: strategy.strategyId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    prisma.marketingKpiCheckpoint.findMany({
+      where: { strategyId: strategy.strategyId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    prisma.marketingAutomationCandidate.findMany({
+      where: { strategyId: strategy.strategyId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+  ]);
+
   const normalizedSnapshot: MarketingWorkspaceSnapshot = {
     organization: {
       id: organization.id,
@@ -721,8 +1196,58 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
           summary: latestReview.summary,
           createdAt: latestReview.createdAt,
           suggestedActions: normalizeSuggestions(latestReview.suggestedActions),
+          recommendation: normalizeReviewRecommendation(
+            latestReview.detectedChanges,
+            latestReview.funnelAssessment,
+          ),
         }
       : null,
+    workProducts: {
+      campaignBriefs: campaignBriefs.map((brief) => ({
+        briefId: brief.briefId,
+        title: brief.title,
+        objective: brief.objective,
+        audience: cleanText(brief.audience),
+        channels: normalizeChannelList(brief.channels),
+        cta: cleanText(brief.cta),
+        proofAssets: dedupeStrings(brief.proofAssets),
+        kpis: dedupeStrings(brief.kpis),
+        notes: cleanText(brief.notes),
+        status: brief.status,
+        createdAt: brief.createdAt,
+      })),
+      assetTasks: assetTasks.map((task) => ({
+        taskId: task.taskId,
+        title: task.title,
+        assetType: task.assetType,
+        channel: normalizeChannel(task.channel),
+        dueWindow: cleanText(task.dueWindow),
+        brief: cleanText(task.brief),
+        status: task.status,
+        createdAt: task.createdAt,
+      })),
+      kpiCheckpoints: kpiCheckpoints.map((checkpoint) => ({
+        checkpointId: checkpoint.checkpointId,
+        metric: checkpoint.metric,
+        target: cleanText(checkpoint.target),
+        cadence: cleanText(checkpoint.cadence)
+          ? normalizeReviewCadence(checkpoint.cadence ?? undefined)
+          : null,
+        notes: cleanText(checkpoint.notes),
+        status: checkpoint.status,
+        createdAt: checkpoint.createdAt,
+      })),
+      automationCandidates: automationCandidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        title: candidate.title,
+        trigger: candidate.trigger,
+        action: candidate.action,
+        approvalRequired: candidate.approvalRequired,
+        rationale: cleanText(candidate.rationale),
+        status: candidate.status,
+        createdAt: candidate.createdAt,
+      })),
+    },
     staleAreas: [],
   };
 

@@ -160,6 +160,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Marketing / Storefront
   get_marketing_summary:        ["marketing_read"],
   suggest_campaign_ideas:       ["marketing_read"],
+  save_marketing_review:        ["marketing_write"],
+  create_marketing_campaign_brief: ["marketing_write"],
+  create_marketing_asset_task:   ["marketing_write"],
+  record_marketing_kpi_checkpoint: ["marketing_write"],
+  create_marketing_automation_candidate: ["marketing_write"],
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],
@@ -221,7 +226,7 @@ export function getAgentToolGrants(agentId: string): string[] | null {
   if (grantCache.has(agentId)) return grantCache.get(agentId)!;
   // Fallback: JSON registry lookup (synchronous, always available)
   const agent = (agentRegistry.agents as AgentEntry[]).find(
-    (a) => a.agent_id === agentId,
+    (a) => a.agent_id === agentId || a.agent_name === agentId,
   );
   if (!agent) return null;
   const grants = agent.config_profile.tool_grants;

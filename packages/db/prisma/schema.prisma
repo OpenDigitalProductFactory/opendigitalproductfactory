@@ -2102,6 +2102,10 @@ model Organization {
   businessContext       BusinessContext?
   marketingStrategy     MarketingStrategy?
   marketingReviews      MarketingReview[]
+  marketingCampaignBriefs MarketingCampaignBrief[]
+  marketingAssetTasks   MarketingAssetTask[]
+  marketingKpiCheckpoints MarketingKpiCheckpoint[]
+  marketingAutomationCandidates MarketingAutomationCandidate[]
   taxProfile            OrganizationTaxProfile?
   platformSetupProgress PlatformSetupProgress?  @relation("OrgSetupProgress")
 }
@@ -4770,6 +4774,10 @@ model MarketingStrategy {
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   storefront   StorefrontConfig? @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
   reviews      MarketingReview[]
+  campaignBriefs MarketingCampaignBrief[]
+  assetTasks   MarketingAssetTask[]
+  kpiCheckpoints MarketingKpiCheckpoint[]
+  automationCandidates MarketingAutomationCandidate[]
 
   @@index([status])
   @@index([storefrontId])
@@ -4795,6 +4803,96 @@ model MarketingReview {
   @@index([organizationId, createdAt])
   @@index([strategyId, createdAt])
   @@index([reviewType])
+}
+
+model MarketingCampaignBrief {
+  briefId          String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  title            String
+  objective        String
+  audience         String?
+  channels         String[] @default([])
+  cta              String?
+  proofAssets      String[] @default([])
+  kpis             String[] @default([])
+  notes            String?
+  status           String   @default("draft")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([status])
+}
+
+model MarketingAssetTask {
+  taskId           String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  title            String
+  assetType        String
+  channel          String?
+  dueWindow        String?
+  brief            String?
+  status           String   @default("draft")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([status])
+}
+
+model MarketingKpiCheckpoint {
+  checkpointId     String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  metric           String
+  target           String?
+  cadence          String?
+  notes            String?
+  status           String   @default("active")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([metric])
+}
+
+model MarketingAutomationCandidate {
+  candidateId      String   @id @default(cuid())
+  organizationId   String
+  strategyId       String
+  title            String
+  trigger          String
+  action           String
+  approvalRequired Boolean  @default(true)
+  rationale        String?
+  status           String   @default("draft")
+  createdByAgentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  strategy     MarketingStrategy @relation(fields: [strategyId], references: [strategyId], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([strategyId, createdAt])
+  @@index([status])
 }
 
 model StorefrontSection {

@@ -14,6 +14,15 @@ import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import {
+  MARKETING_CHANNELS,
+  MARKETING_REVIEW_CADENCE,
+  createMarketingAssetTask,
+  createMarketingAutomationCandidate,
+  createMarketingCampaignBrief,
+  recordMarketingKpiCheckpoint,
+  recordMarketingStrategistReview,
+} from "@/lib/marketing";
+import {
   DELIBERATION_ARTIFACT_TYPES,
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
@@ -531,6 +540,95 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "view_marketing",
     sideEffect: false,
+  },
+  {
+    name: "save_marketing_review",
+    description: "Persist the Marketing Strategist's recommendation as the current marketing review and update the canonical MarketingStrategy. Use this after giving a concrete strategy, cadence, channel, KPI, or campaign recommendation so the page shows what was decided and what changed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "Plain-language recommendation summary shown on the marketing page" },
+        primaryChannels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Recommended primary channels" },
+        secondaryChannels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Optional secondary channels" },
+        skippedChannels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Channels intentionally skipped for now" },
+        kpis: { type: "array", items: { type: "string" }, description: "Small KPI stack used to judge channel fit" },
+        cadence: { type: "string", enum: [...MARKETING_REVIEW_CADENCE], description: "Review cadence for this plan" },
+        suggestedActions: { type: "array", items: { type: "string" }, description: "Action checklist items to display under the strategist review" },
+      },
+      required: ["summary"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "create_marketing_campaign_brief",
+    description: "Create a durable campaign brief from the Marketing Strategist's active plan. Use this after a user confirms a campaign direction or says ok/continue after a concrete campaign recommendation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short campaign name" },
+        objective: { type: "string", description: "Specific marketing objective" },
+        audience: { type: "string", description: "Target audience or buyer segment" },
+        channels: { type: "array", items: { type: "string", enum: [...MARKETING_CHANNELS] }, description: "Channels used in the campaign" },
+        cta: { type: "string", description: "Primary call to action" },
+        proofAssets: { type: "array", items: { type: "string" }, description: "Proof assets needed to support the campaign" },
+        kpis: { type: "array", items: { type: "string" }, description: "Metrics used to judge the campaign" },
+        notes: { type: "string", description: "Execution notes or exclusions" },
+      },
+      required: ["title", "objective"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "create_marketing_asset_task",
+    description: "Create a durable proof/content asset task from the Marketing Strategist's plan, such as an FAQ, testimonial, case study, landing page, LinkedIn post, or email draft.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Task title" },
+        assetType: { type: "string", description: "Asset type, for example FAQ, testimonial, case-study, LinkedIn post, SEO page, email" },
+        channel: { type: "string", enum: [...MARKETING_CHANNELS], description: "Primary channel for this asset" },
+        dueWindow: { type: "string", description: "Plain-language timing, for example week 1 or next 14 days" },
+        brief: { type: "string", description: "Short instructions for the asset" },
+      },
+      required: ["title", "assetType"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "record_marketing_kpi_checkpoint",
+    description: "Record a KPI checkpoint or target for the active marketing plan so the workspace can show what will be measured.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        metric: { type: "string", description: "Metric name" },
+        target: { type: "string", description: "Target value or baseline" },
+        cadence: { type: "string", enum: [...MARKETING_REVIEW_CADENCE], description: "Review cadence" },
+        notes: { type: "string", description: "Measurement notes" },
+      },
+      required: ["metric"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "create_marketing_automation_candidate",
+    description: "Create an internal automation candidate for a marketing workflow. This does not publish, send, or schedule anything; external actions still require approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Automation candidate name" },
+        trigger: { type: "string", description: "Event or condition that starts the automation" },
+        action: { type: "string", description: "Internal action to prepare or propose" },
+        approvalRequired: { type: "boolean", description: "Whether explicit human approval is required before execution" },
+        rationale: { type: "string", description: "Why this automation would reduce work or improve outcomes" },
+      },
+      required: ["title", "trigger", "action"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
   },
   {
     name: "analyze_seo_opportunity",
@@ -8721,6 +8819,168 @@ export async function executeTool(
           currentMonth: new Date().toLocaleString("en-GB", { month: "long", year: "numeric" }),
           activeItems: items.map((i) => ({ name: i.name, priceType: i.priceType, ctaType: i.ctaType })),
         },
+      };
+    }
+
+    case "save_marketing_review": {
+      const result = await recordMarketingStrategistReview({
+        recommendation: {
+          summary: String(params["summary"] ?? ""),
+          primaryChannels: Array.isArray(params["primaryChannels"])
+            ? params["primaryChannels"].filter((value): value is string => typeof value === "string")
+            : [],
+          secondaryChannels: Array.isArray(params["secondaryChannels"])
+            ? params["secondaryChannels"].filter((value): value is string => typeof value === "string")
+            : [],
+          skippedChannels: Array.isArray(params["skippedChannels"])
+            ? params["skippedChannels"].filter((value): value is string => typeof value === "string")
+            : [],
+          kpis: Array.isArray(params["kpis"])
+            ? params["kpis"].filter((value): value is string => typeof value === "string")
+            : [],
+          cadence: typeof params["cadence"] === "string" ? params["cadence"] : undefined,
+          suggestedActions: Array.isArray(params["suggestedActions"])
+            ? params["suggestedActions"].filter((value): value is string => typeof value === "string")
+            : [],
+        },
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result) {
+        return {
+          success: false,
+          message: "No organization workspace is configured, so the marketing review could not be saved.",
+          error: "No organization workspace is configured",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.reviewId,
+        message: `${result.message}. The marketing page now has a saved strategist review and updated channel/cadence context.`,
+        data: result,
+      };
+    }
+
+    case "create_marketing_campaign_brief": {
+      const result = await createMarketingCampaignBrief({
+        brief: {
+          title: String(params["title"] ?? ""),
+          objective: String(params["objective"] ?? ""),
+          audience: typeof params["audience"] === "string" ? params["audience"] : undefined,
+          channels: Array.isArray(params["channels"])
+            ? params["channels"].filter((value): value is string => typeof value === "string")
+            : [],
+          cta: typeof params["cta"] === "string" ? params["cta"] : undefined,
+          proofAssets: Array.isArray(params["proofAssets"])
+            ? params["proofAssets"].filter((value): value is string => typeof value === "string")
+            : [],
+          kpis: Array.isArray(params["kpis"])
+            ? params["kpis"].filter((value): value is string => typeof value === "string")
+            : [],
+          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+        },
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result) {
+        return {
+          success: false,
+          message: "No organization workspace is configured, so the campaign brief could not be saved.",
+          error: "No organization workspace is configured",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.briefId,
+        message: `${result.message}. The marketing workspace now has a saved campaign brief.`,
+        data: result,
+      };
+    }
+
+    case "create_marketing_asset_task": {
+      const result = await createMarketingAssetTask({
+        task: {
+          title: String(params["title"] ?? ""),
+          assetType: String(params["assetType"] ?? ""),
+          channel: typeof params["channel"] === "string" ? params["channel"] : undefined,
+          dueWindow: typeof params["dueWindow"] === "string" ? params["dueWindow"] : undefined,
+          brief: typeof params["brief"] === "string" ? params["brief"] : undefined,
+        },
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result) {
+        return {
+          success: false,
+          message: "No organization workspace is configured, so the marketing asset task could not be saved.",
+          error: "No organization workspace is configured",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.taskId,
+        message: `${result.message}. The marketing workspace now has a saved proof/content task.`,
+        data: result,
+      };
+    }
+
+    case "record_marketing_kpi_checkpoint": {
+      const result = await recordMarketingKpiCheckpoint({
+        checkpoint: {
+          metric: String(params["metric"] ?? ""),
+          target: typeof params["target"] === "string" ? params["target"] : undefined,
+          cadence: typeof params["cadence"] === "string" ? params["cadence"] : undefined,
+          notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+        },
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result) {
+        return {
+          success: false,
+          message: "No organization workspace is configured, so the KPI checkpoint could not be saved.",
+          error: "No organization workspace is configured",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.checkpointId,
+        message: `${result.message}. The marketing workspace now has a saved KPI checkpoint.`,
+        data: result,
+      };
+    }
+
+    case "create_marketing_automation_candidate": {
+      const result = await createMarketingAutomationCandidate({
+        candidate: {
+          title: String(params["title"] ?? ""),
+          trigger: String(params["trigger"] ?? ""),
+          action: String(params["action"] ?? ""),
+          approvalRequired: typeof params["approvalRequired"] === "boolean"
+            ? params["approvalRequired"]
+            : true,
+          rationale: typeof params["rationale"] === "string" ? params["rationale"] : undefined,
+        },
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result) {
+        return {
+          success: false,
+          message: "No organization workspace is configured, so the automation candidate could not be saved.",
+          error: "No organization workspace is configured",
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.candidateId,
+        message: `${result.message}. The marketing workspace now has a saved automation candidate awaiting review.`,
+        data: result,
       };
     }
 

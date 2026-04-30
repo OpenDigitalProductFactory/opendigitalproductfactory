@@ -32,6 +32,10 @@ function Pill({ children }: { children: React.ReactNode }) {
   );
 }
 
+function EmptyWorkProduct({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-[var(--dpf-muted)]">{children}</p>;
+}
+
 export function MarketingStrategyOverview({
   snapshot,
   mode = "summary",
@@ -50,8 +54,9 @@ export function MarketingStrategyOverview({
     : [];
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Section title="Market and buyer">
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="Market and buyer">
         <dl className="grid gap-3 text-sm">
           <div>
             <dt className="text-[var(--dpf-muted)]">Business</dt>
@@ -86,9 +91,9 @@ export function MarketingStrategyOverview({
             </div>
           )}
         </dl>
-      </Section>
+        </Section>
 
-      <Section title="Channels and proof">
+        <Section title="Channels and proof">
         <div className="mb-4">
           <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
             Likely channels
@@ -127,9 +132,9 @@ export function MarketingStrategyOverview({
             </p>
           )}
         </div>
-      </Section>
+        </Section>
 
-      <Section title="Audience">
+        <Section title="Audience">
         <div className="mb-4">
           <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
             Buyer groups
@@ -176,9 +181,9 @@ export function MarketingStrategyOverview({
             </ul>
           </div>
         )}
-      </Section>
+        </Section>
 
-      <Section title="Review rhythm">
+        <Section title="Review rhythm">
         <dl className="grid gap-3 text-sm">
           <div>
             <dt className="text-[var(--dpf-muted)]">Strategy check-in</dt>
@@ -232,6 +237,102 @@ export function MarketingStrategyOverview({
             </div>
           )}
         </dl>
+        </Section>
+      </div>
+
+      <Section title="Strategist work products">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-[var(--dpf-text)]">Campaign briefs</h3>
+            {snapshot.workProducts.campaignBriefs.length > 0 ? (
+              <ul className="space-y-3 text-sm">
+                {snapshot.workProducts.campaignBriefs.map((brief) => (
+                  <li key={brief.briefId} className="border-l border-[var(--dpf-border)] pl-3">
+                    <p className="font-medium text-[var(--dpf-text)]">{brief.title}</p>
+                    <p className="text-[var(--dpf-muted)]">{brief.objective}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {brief.channels.map((channel) => (
+                        <Pill key={channel}>{formatMarketingLabel(channel)}</Pill>
+                      ))}
+                      <Pill>{formatMarketingLabel(brief.status)}</Pill>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyWorkProduct>
+                No campaign brief has been saved yet. Ask the strategist to turn the current plan into a brief.
+              </EmptyWorkProduct>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-[var(--dpf-text)]">Proof and content tasks</h3>
+            {snapshot.workProducts.assetTasks.length > 0 ? (
+              <ul className="space-y-3 text-sm">
+                {snapshot.workProducts.assetTasks.map((task) => (
+                  <li key={task.taskId} className="border-l border-[var(--dpf-border)] pl-3">
+                    <p className="font-medium text-[var(--dpf-text)]">{task.title}</p>
+                    <p className="text-[var(--dpf-muted)]">
+                      {formatMarketingLabel(task.assetType)}
+                      {task.dueWindow ? ` - ${task.dueWindow}` : ""}
+                    </p>
+                    {task.brief && <p className="mt-1 text-[var(--dpf-text)]">{task.brief}</p>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyWorkProduct>
+                No proof or content tasks are queued yet.
+              </EmptyWorkProduct>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-[var(--dpf-text)]">KPI checkpoints</h3>
+            {snapshot.workProducts.kpiCheckpoints.length > 0 ? (
+              <ul className="space-y-3 text-sm">
+                {snapshot.workProducts.kpiCheckpoints.map((checkpoint) => (
+                  <li key={checkpoint.checkpointId} className="border-l border-[var(--dpf-border)] pl-3">
+                    <p className="font-medium text-[var(--dpf-text)]">{checkpoint.metric}</p>
+                    <p className="text-[var(--dpf-muted)]">
+                      {checkpoint.target ?? "Target not set"}
+                      {checkpoint.cadence ? ` - ${formatMarketingLabel(checkpoint.cadence)}` : ""}
+                    </p>
+                    {checkpoint.notes && <p className="mt-1 text-[var(--dpf-text)]">{checkpoint.notes}</p>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyWorkProduct>
+                No KPI checkpoint has been recorded yet.
+              </EmptyWorkProduct>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-[var(--dpf-text)]">Automation candidates</h3>
+            {snapshot.workProducts.automationCandidates.length > 0 ? (
+              <ul className="space-y-3 text-sm">
+                {snapshot.workProducts.automationCandidates.map((candidate) => (
+                  <li key={candidate.candidateId} className="border-l border-[var(--dpf-border)] pl-3">
+                    <p className="font-medium text-[var(--dpf-text)]">{candidate.title}</p>
+                    <p className="text-[var(--dpf-muted)]">
+                      {candidate.trigger} -&gt; {candidate.action}
+                    </p>
+                    <p className="mt-1 text-[var(--dpf-text)]">
+                      {candidate.approvalRequired ? "Requires approval" : "Internal-only automation"}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyWorkProduct>
+                No automation candidates are waiting for review.
+              </EmptyWorkProduct>
+            )}
+          </div>
+        </div>
       </Section>
     </div>
   );
