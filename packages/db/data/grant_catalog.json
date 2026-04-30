@@ -140,6 +140,7 @@
         "record_execution_evidence",
         "register_digital_product_from_build",
         "register_tech_debt",
+        "retire_backlog_item",
         "report_quality_issue",
         "saveBuildEvidence",
         "save_build_notes",
