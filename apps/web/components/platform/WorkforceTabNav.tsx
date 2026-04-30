@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { label: "Overview", href: "/platform/ai" },
   { label: "Assignments", href: "/platform/ai/assignments" },
+  { label: "Registry", href: "/platform/ai/registry" },
   { label: "Routing & Calibration", href: "/platform/ai/providers" },
   { label: "Build Studio CLI", href: "/platform/ai/build-studio" },
   { label: "Skills", href: "/platform/ai/skills" },

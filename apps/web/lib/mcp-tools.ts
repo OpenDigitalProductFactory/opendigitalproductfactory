@@ -1389,6 +1389,29 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "list_ai_coworkers",
+    description: "List the AI coworkers (agents) registered on this platform. Returns BOTH the user-facing coworker roster (the agents shown in Platform > AI > Assignments) AND the canonical IT4IT-aligned agent registry (orchestrators + specialists in agent_registry.json). Use this whenever the user asks 'how many AI coworkers do we have', 'list the agents', 'does X agent exist', or anything about workforce composition. Do NOT guess counts or names — call this tool. Returns a structured payload with separate uiManaged and registry arrays plus reconciled counts so you can answer precisely.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        scope: {
+          type: "string",
+          enum: ["all", "ui_managed", "registry"],
+          description: "Which set to return. 'all' (default) returns both. 'ui_managed' returns only the AGENT_NAMES roster shown in the Assignments page. 'registry' returns only the canonical agent_registry.json entries (orchestrators + specialists).",
+        },
+        nameContains: {
+          type: "string",
+          description: "Optional case-insensitive substring filter on agent name or ID — useful when the user asks about a specific agent like 'deploy-orchestrator'.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "create_employee",
     description: "Create a new employee record. Department and position can be supplied as an ID or a name/title — the system resolves names automatically. Call list_departments and list_positions first if you need to show the user their options.",
     inputSchema: {
@@ -5358,6 +5381,108 @@ export async function executeTool(
         success: true,
         message: `${positions.length} active position${positions.length !== 1 ? "s" : ""}:\n${list}`,
         data: { positions: positions.map((p) => ({ id: p.positionId, title: p.title, jobFamily: p.jobFamily ?? null })) },
+      };
+    }
+
+    case "list_ai_coworkers": {
+      // Two registries are deliberately separate:
+      //   - uiManaged: the user-facing coworker roster (Agent table, type=coworker)
+      //   - registry: the canonical IT4IT-aligned registry (agent_registry.json)
+      // We return BOTH so the agent can answer "how many coworkers" honestly
+      // instead of guessing from whatever page context it happens to have.
+      const scope = typeof params["scope"] === "string" ? params["scope"] : "all";
+      const nameFilter = typeof params["nameContains"] === "string"
+        ? params["nameContains"].trim().toLowerCase()
+        : null;
+
+      const matches = (name: string, id: string): boolean =>
+        !nameFilter || name.toLowerCase().includes(nameFilter) || id.toLowerCase().includes(nameFilter);
+
+      // UI-managed coworkers from the Agent table. Falls back to empty if DB unreachable.
+      let uiManaged: Array<{
+        agentId: string; name: string; tier: number; valueStream: string; description: string;
+      }> = [];
+      if (scope === "all" || scope === "ui_managed") {
+        try {
+          const rows = await prisma.agent.findMany({
+            where: { type: "coworker", archived: false },
+            select: { agentId: true, slugId: true, name: true, tier: true, valueStream: true, description: true },
+            orderBy: [{ tier: "asc" }, { name: "asc" }],
+          });
+          uiManaged = rows
+            .filter((r) => matches(r.name, r.slugId ?? r.agentId))
+            .map((r) => ({
+              agentId: r.slugId ?? r.agentId,
+              name: r.name,
+              tier: r.tier,
+              valueStream: r.valueStream ?? "cross-cutting",
+              description: r.description ?? "",
+            }));
+        } catch {
+          // DB unavailable — leave uiManaged empty and surface that in the message.
+          uiManaged = [];
+        }
+      }
+
+      // Canonical registry. getAgentGrantSummaries already falls back to JSON
+      // when the Agent table is empty / unreachable, but it returns a unified
+      // shape so we re-key for clarity.
+      let registry: Array<{
+        agentId: string; name: string; tier: string; valueStream: string;
+      }> = [];
+      if (scope === "all" || scope === "registry") {
+        try {
+          const { getAgentGrantSummaries } = await import("./tak/agent-grants");
+          const summaries = await getAgentGrantSummaries();
+          registry = summaries
+            .filter((s) => matches(s.agentName, s.agentId))
+            .map((s) => ({
+              agentId: s.agentId,
+              name: s.agentName,
+              tier: s.tier,
+              valueStream: s.valueStream,
+            }));
+        } catch {
+          registry = [];
+        }
+      }
+
+      // Build a deterministic, agent-friendly message. The agent will read this
+      // verbatim when answering — we want it grounded, not interpreted.
+      const lines: string[] = [];
+      if (scope === "all" || scope === "ui_managed") {
+        lines.push(`UI-managed coworkers (Platform > AI > Assignments): ${uiManaged.length}`);
+        for (const a of uiManaged) {
+          lines.push(`  - ${a.name} [${a.agentId}] · tier ${a.tier} · ${a.valueStream}`);
+        }
+      }
+      if (scope === "all" || scope === "registry") {
+        if (lines.length > 0) lines.push("");
+        lines.push(`Canonical agent registry (IT4IT-aligned, agent_registry.json): ${registry.length}`);
+        for (const a of registry) {
+          lines.push(`  - ${a.name} [${a.agentId}] · ${a.tier} · ${a.valueStream}`);
+        }
+      }
+      if (nameFilter) {
+        lines.unshift(`Filter: nameContains="${nameFilter}"`, "");
+      }
+
+      return {
+        success: true,
+        message: lines.join("\n") || "No coworkers found.",
+        data: {
+          scope,
+          nameFilter,
+          uiManagedCount: uiManaged.length,
+          registryCount: registry.length,
+          uiManaged,
+          registry,
+          notes: [
+            "uiManaged is sourced from the Agent table (type=coworker) and matches the Platform > AI > Assignments page.",
+            "registry is sourced from packages/db/data/agent_registry.json (the IT4IT-aligned canonical list of orchestrators + specialists).",
+            "These two sets overlap by role but use different ID schemes (slug IDs vs AGT-* IDs). They are NOT the same count.",
+          ],
+        },
       };
     }
 

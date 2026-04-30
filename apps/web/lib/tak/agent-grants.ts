@@ -156,6 +156,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
+
+  // AI Workforce introspection — read-only roster of registered coworkers/agents.
+  // Mapped to registry_read so it's available to any agent with that grant
+  // (the AI Ops Engineer, COO, and other registry-aware agents all hold it).
+  list_ai_coworkers: ["registry_read"],
 };
 
 const grantCache = new Map<string, string[]>();
