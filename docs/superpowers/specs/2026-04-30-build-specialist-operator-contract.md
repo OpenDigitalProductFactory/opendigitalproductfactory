@@ -4,11 +4,21 @@
 | - | - |
 | Status | Draft |
 | Date | 2026-04-30 |
-| Pattern | [AI Coworker Operator Pattern](./2026-04-30-ai-coworker-operator-pattern.md) (wave 1: Marketing Strategist, lands on main from the `coworker-marketing-recovery` worktree before this wave starts) |
+| Pattern | AI Coworker Operator Pattern (wave 1: Marketing Strategist; the canonical pattern file is not present in this worktree yet, so Slice 1 must not start until the wave-1 artifact is merged or this spec is updated with the canonical link) |
 | Scope | Apply the AI Coworker Operator Pattern to the user-facing Build Studio coworker (`AGT-WS-BUILD` / `build-specialist`) as wave 2 |
 | Exemplar precedent | Marketing Strategist (wave 1) |
 
-This spec is a domain instance of the canonical operator pattern. It does not redefine the pattern; it applies it. Read the pattern spec first.
+This spec is a domain instance of the canonical operator pattern. It does not redefine the pattern; it applies it. Before implementation, resolve the canonical pattern dependency above and read that artifact first. Until then, this document is the build-specialist domain contract plus the minimum Slice 1 plan boundary, not the final source for cross-coworker policy.
+
+## 0. Current Repo Truth Checked
+
+This pass verified the current worktree shape before tightening the design:
+
+- `docs/superpowers/specs/2026-04-30-ai-coworker-operator-pattern.md` is not present in this worktree; the original relative link would be broken for an implementer.
+- `prompts/route-persona/build-specialist.prompt.md` still has `version: 3` and the stale `# Tools Available` language that says registry grants are currently empty.
+- `/build` domain tools are declared in `apps/web/lib/tak/route-context-map.ts`; `report_quality_issue` is not currently in that list.
+- The single-agent fallback calls `runAgenticLoop()` from `apps/web/lib/actions/agent-coworker.ts`; the existing call does not pass the active `FeatureBuild.phase` or build identifier.
+- `PlatformIssueReport` currently has `agentId` and `routeContext` but no `featureBuildId`; `FeatureBuild` has the expected work-product fields (`designDoc`, `buildPlan`, `taskResults`, `verificationOut`, `acceptanceMet`).
 
 ## 1. Problem
 
@@ -92,9 +102,9 @@ A tool-callable approval-request surface (so the agent can name the proposed ext
 
 The agent's contractual obligation is to **report honestly**: never claim a tool is unavailable when it appears in the delivered tool list; never fabricate success; never silently skip a phase-required action.
 
-The platform's enforcement obligation is to **detect and log automatically**:
+The platform's enforcement obligation is to **detect and log automatically**, using conservative guards that avoid flagging normal status answers or one allowed clarification round:
 
-- The agentic loop already counts `toolCalls=0` per iteration. When that count is zero AND the phase contract required a tool call (per the active skill playbook), the platform writes a `PlatformIssueReport` row tagged with the agent, route, build, and phase before the chat turn is shown to the user.
+- The agentic loop already counts `toolCalls=0` per iteration. When that count is zero AND the build phase plus response shape show that the agent was attempting phase work (for example: refusing a required tool, claiming phase progress, or presenting phase evidence), the platform writes a `PlatformIssueReport` row tagged with the agent, route, build, and phase before the chat turn is shown to the user. A simple status answer, a read-only explanation, or the first clarification question is not enough by itself.
 - When the agent's text response asserts a tool is unavailable AND that tool name appears in the iteration's delivered tool list, the platform writes a `PlatformIssueReport` row with `type=runtime_error`, title prefixed `[coworker-process] tool-refused-despite-availability`, and the offending tool name in the description.
 
 The agent does not need to call `report_quality_issue` itself for these conditions — a hallucinating LLM cannot be relied on to self-report its own hallucination. The platform owns the detection. The agent owns honesty.
@@ -127,18 +137,18 @@ Each skill is loadable via the existing skill-discovery substrate; the build-spe
 
 ## 4. Tool Surface
 
-Currently delivered to `AGT-WS-BUILD`: 21 tools (verified in portal logs `[tools] route=/build agent=build-specialist count=21`). Coverage by operator-pattern category:
+Currently delivered to `AGT-WS-BUILD`: portal logs from the failed test reported 21 tools, while the current `/build` route map in this worktree lists the route-level domain tools in `apps/web/lib/tak/route-context-map.ts`. Treat the log count as runtime evidence from the test and the route map as code evidence to reconcile during Slice 1. Coverage by operator-pattern category:
 
 - read context: `read_project_file`, `search_project_files`, `list_project_directory`, `query_backlog`, `describe_model`, `search_design_intelligence`, `search_portfolio_context` ✓
 - create/update internal work product: `update_feature_brief`, `saveBuildEvidence`, `save_build_notes`, `confirm_taxonomy_placement`, `analyze_reusability`, `propose_decomposition`, `assess_complexity` ✓
 - create tasks/follow-ups: `propose_decomposition`, `save_phase_handoff` ✓
 - request approval for risky actions: UI-driven via `FeatureBuild` state transitions (existing) ✓ (sufficient for wave 2; tool-callable variant is wave-3)
 - record execution evidence: `saveBuildEvidence` ✓
-- log operational issues: `report_quality_issue` exists at platform level; ensure it is in the build-specialist's delivered tool set ✗ (gap, small)
+- log operational issues: `report_quality_issue` exists at platform level; add it to the build-specialist's `/build` route domain tools ✗ (gap, small)
 
 One firm gap to close before the contract is enforceable:
 
-1. **Add `report_quality_issue` to build-specialist's tool delivery** so clause 2.6's agent-side reporting path is available. Platform-side detection (also clause 2.6) is implemented in the agentic-loop guard, not as a tool.
+1. **Add `report_quality_issue` to build-specialist's `/build` route tool delivery** so clause 2.6's agent-side reporting path is available. Platform-side detection (also clause 2.6) is implemented in the agentic-loop guard, not as a tool.
 
 Approval-gate tool surface is intentionally deferred — wave 2 relies on the existing UI-driven gate which already works. Adding a tool layer too early would create a parallel path before we know its shape.
 
@@ -187,24 +197,22 @@ Wave 2 lands as three sequential PRs. Each slice has a standalone acceptance and
 
 The behavioral fix. No UI changes. No new skill files. Smallest shippable change that proves the operator contract repairs the symptom.
 
-1. **Prompt rewrite** — in `build-specialist.prompt.md`, replace **only** `# Tools Available` + `# Operating Rules` with the unified `# Operator Contract` from §2. Preserve `# Role`, `# Accountable For`, `# Interfaces With`, `# Out Of Scope`. Bump frontmatter `version: 3` → `4`. (Skills declaration deferred to Slice 3.)
-2. **Tool delivery** — ensure `report_quality_issue` is in the build-specialist's delivered tool set (clause 2.6 agent path).
-3. **Platform-side enforcement** — agentic-loop guards for clause 2.6 platform path:
-   - zero-tool-call detection on phase-required turns
+1. **Dependency check** — confirm the canonical AI Coworker Operator Pattern from wave 1 is merged or update this spec with the correct link. Do this before code edits so Slice 1 does not implement against a missing pattern.
+2. **Prompt rewrite** — in `build-specialist.prompt.md`, replace **only** `# Tools Available` + `# Operating Rules` with the unified `# Operator Contract` from §2. Preserve `# Role`, `# Accountable For`, `# Interfaces With`, `# Out Of Scope`. Bump frontmatter `version: 3` → `4`. (Skills declaration deferred to Slice 3.)
+3. **Tool delivery** — ensure `report_quality_issue` is in the build-specialist's delivered `/build` route tool set (clause 2.6 agent path).
+4. **Platform-side enforcement** — agentic-loop guards for clause 2.6 platform path:
+   - zero-tool-call detection only when the response is attempting phase work, not for ordinary status or clarification turns
    - tool-refused-despite-availability detection (agent text asserts unavailability of a tool present in the iteration's delivered tool list)
    Both write `PlatformIssueReport` rows.
-4. **Schema migration** — add `featureBuildId` foreign key to `PlatformIssueReport` (additive, nullable, low-risk). Slice 1 writers populate it from day 1 so Slice 2 UI consumes a populated field rather than backfilling.
-5. **Save-before-final-response enforcement** — the agentic loop verifies that a turn which produced phase-required output also produced the matching `saveBuildEvidence` call before the closing message reaches the user. Failure writes a `PlatformIssueReport` and surfaces the issue in chat per clause 2.6.
-6. **Tests** — one test per contract clause exercising the agent loop:
+5. **Schema migration** — add `featureBuildId` foreign key to `PlatformIssueReport` (additive, nullable, low-risk). Slice 1 writers populate it from day 1 so Slice 2 UI consumes a populated field rather than backfilling.
+6. **Save-before-final-response enforcement** — the agentic loop verifies that a turn which produced phase-required output also produced the matching `saveBuildEvidence` call before the closing message reaches the user. Failure writes a `PlatformIssueReport` and surfaces the issue in chat per clause 2.6.
+7. **Tests** — deterministic unit coverage for platform-enforced clauses plus prompt-structure tests for prompt-only clauses:
    - clause 2.2 (phase advance illegal without saved evidence)
-   - clause 2.3 (short confirmations advance, do not restart)
    - clause 2.4 (save before final response)
    - clause 2.6 (zero-tool-call detection writes issue; tool-refused-despite-availability writes issue)
-   - clause 2.7 (no-repeat-diagnosis when prior evidence covers the message)
-   - clause 2.8 (turn ends with a clear next step)
-   - clause 2.9 (one clarification round maximum)
+   - prompt text includes clauses 2.3, 2.7, 2.8, and 2.9 without stale tool-grant leakage
    - regression: today's BI-E9CD1B92 failure mode (build-specialist refusing `start_ideate_research` while it is in the delivered list)
-7. **Acceptance demo** — re-run BI-E9CD1B92 → FB-2A2C2AC5 lifecycle. Build-specialist must drive Ideate to a saved `designDoc` without operator intervention. The user sees no UI changes yet (Slice 2's job) but the contract behavior is correct: tool calls happen, evidence saves, phase handoffs fire, and any process miss writes a `PlatformIssueReport`.
+8. **Acceptance demo** — re-run the BI-E9CD1B92 / FB-2A2C2AC5 Ideate path. Build-specialist must drive Ideate to a saved `designDoc` without operator intervention. Continue through later phases only if the implementation branch already contains the product fix under test; otherwise stop after contract behavior is proven and record the remaining feature work separately.
 
 ### Slice 2 — Build Studio Visibility
 
@@ -241,9 +249,9 @@ Inherits the operator-pattern §6 acceptance criteria. Build-specific specializa
 - The build-specialist names the phase-required work product before producing it ("I'm going to draft the designDoc and save it").
 - After Ideate, `FeatureBuild.designDoc` is non-null, OR a `PlatformIssueReport` exists explaining why not.
 - `ok` from the user advances the phase if the prior turn saved evidence; restarts diagnosis only if no evidence is saved or the user asks.
-- A turn that produces zero tool calls when the phase recipe requires one results in a `PlatformIssueReport` row before the chat closes.
+- A turn that produces zero tool calls while attempting phase work that requires a tool results in a `PlatformIssueReport` row before the chat closes; ordinary status answers and the first clarification question do not.
 - The build-specialist does not assert tool unavailability for any tool name present in its delivered tool list. Such an assertion writes a `PlatformIssueReport` automatically.
-- BI-E9CD1B92 → FB-2A2C2AC5 lifecycle completes through Ideate → Plan → Build → Review → Ship and the production portal `/workspace/my-queue` shows the design-token fix, without operator intervention past phase-boundary approvals.
+- BI-E9CD1B92 → FB-2A2C2AC5 proves the operator contract at least through Ideate: `designDoc` is saved, review/handoff tools fire when applicable, and any process miss writes a build-linked `PlatformIssueReport`. A full Ideate → Plan → Build → Review → Ship replay is valuable but is not required for Slice 1 unless the branch also contains the underlying product fix being built.
 
 ### Slice 2 acceptance
 
