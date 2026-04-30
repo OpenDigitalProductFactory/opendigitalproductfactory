@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isToolAllowedByGrants, getToolGrantMapping } from "./agent-grants";
+import { isToolAllowedByGrants, getAgentToolGrants, getToolGrantMapping } from "./agent-grants";
 
 describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
   it("write_sandbox_file requires sandbox_execute", () => {
@@ -69,6 +69,25 @@ describe("TOOL_TO_GRANTS — Marketing entries", () => {
   it("generate_custom_archetype requires marketing_write", () => {
     expect(isToolAllowedByGrants("generate_custom_archetype", ["marketing_write"])).toBe(true);
     expect(isToolAllowedByGrants("generate_custom_archetype", ["marketing_read"])).toBe(false);
+  });
+
+  it("save_marketing_review requires marketing_write", () => {
+    expect(isToolAllowedByGrants("save_marketing_review", ["marketing_write"])).toBe(true);
+    expect(isToolAllowedByGrants("save_marketing_review", ["marketing_read"])).toBe(false);
+  });
+
+  it("marketing work product tools require marketing_write", () => {
+    const tools = [
+      "create_marketing_campaign_brief",
+      "create_marketing_asset_task",
+      "record_marketing_kpi_checkpoint",
+      "create_marketing_automation_candidate",
+    ];
+
+    for (const tool of tools) {
+      expect(isToolAllowedByGrants(tool, ["marketing_write"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["marketing_read"])).toBe(false);
+    }
   });
 
   it("customer-advisor's read-only marketing grant can use read marketing tools", () => {
@@ -268,6 +287,11 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["get_marketing_summary"]).toEqual(["marketing_read"]);
     expect(mapping["suggest_campaign_ideas"]).toEqual(["marketing_read"]);
     expect(mapping["analyze_seo_opportunity"]).toEqual(["marketing_read"]);
+    expect(mapping["save_marketing_review"]).toEqual(["marketing_write"]);
+    expect(mapping["create_marketing_campaign_brief"]).toEqual(["marketing_write"]);
+    expect(mapping["create_marketing_asset_task"]).toEqual(["marketing_write"]);
+    expect(mapping["record_marketing_kpi_checkpoint"]).toEqual(["marketing_write"]);
+    expect(mapping["create_marketing_automation_candidate"]).toEqual(["marketing_write"]);
     expect(mapping["generate_custom_archetype"]).toEqual(["marketing_write"]);
   });
 
@@ -299,5 +323,16 @@ describe("getToolGrantMapping reflects all entries", () => {
     const mapping = getToolGrantMapping();
     expect(mapping["get_code_graph_freshness"]).toEqual(["code_graph_read"]);
     expect(mapping["inspect_build_code_impact"]).toEqual(["code_graph_read"]);
+  });
+});
+
+describe("agent registry grant lookup", () => {
+  it("resolves routed coworker persona slugs as well as canonical registry ids", () => {
+    expect(getAgentToolGrants("marketing-specialist")).toEqual(
+      expect.arrayContaining(["marketing_read", "marketing_write"]),
+    );
+    expect(getAgentToolGrants("AGT-WS-MARKETING")).toEqual(
+      expect.arrayContaining(["marketing_read", "marketing_write"]),
+    );
   });
 });
