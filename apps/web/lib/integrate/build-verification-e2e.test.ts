@@ -108,16 +108,18 @@ describe("coworker-driven UX verification — gate behavior", () => {
 
 describe("coworker-driven UX verification — handler does not touch designReview", () => {
   it("the handler's persistence shape only writes uxTestResults + uxVerificationStatus", async () => {
-    // The Inngest handler uses prisma.featureBuild.update with the fields
-    // it writes explicitly listed. We assert the SHAPE of that write to
-    // lock in the intent rather than running the full handler.
+    // The Inngest handler persists UX evidence through artifact provenance
+    // and writes only the status directly on the build row. Assert the shape
+    // to lock in ownership without running the full handler.
     // Path is relative to vitest cwd (apps/web).
     const source = await import("fs/promises").then((fs) =>
       fs.readFile(new URL("../queue/functions/build-review-verification.ts", import.meta.url), "utf-8"),
     );
 
-    // Must update both of our fields
-    expect(source).toMatch(/uxTestResults:\s*steps/);
+    // Must persist UX results and update the status.
+    expect(source).toMatch(/saveBuildArtifactRevisionWithDb\(prisma,\s*{/);
+    expect(source).toMatch(/field:\s*"uxTestResults"/);
+    expect(source).toMatch(/value:\s*steps/);
     expect(source).toMatch(/uxVerificationStatus:\s*finalStatus/);
 
     // Must NOT write to designReview (the reviewer pipeline owns that

@@ -223,6 +223,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "retire_backlog_item",
+    description: "Retire a backlog item as duplicate, deferred, or discarded after review. Use this for governed cleanup of non-buildable or superseded items without requiring backlog triage authority.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: { type: "string", description: "The item ID to retire (e.g. BI-E4A86393)" },
+        outcome: { type: "string", enum: ["duplicate", "defer", "discard"], description: "The retirement decision" },
+        rationale: { type: "string", description: "Short prose rationale for retiring the item" },
+        duplicateOfId: { type: "string", description: "Canonical item ID; required when outcome=duplicate" },
+        reason: { type: "string", description: "Optional reason text for defer/discard outcomes" },
+      },
+      required: ["itemId", "outcome", "rationale"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "promote_to_build_studio",
     description: "Promote a triaged backlog item (status=open, triageOutcome=build) to a FeatureBuild in Build Studio. Runs the Definition of Ready capacity check under an advisory-lock transaction. Authority-gated via the build_promote grant category.",
     inputSchema: {
@@ -871,7 +888,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update" },
         value: { type: "object", description: "JSON value to store" },
       },
-      required: ["field", "value"],
+      required: ["field"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -2616,6 +2633,115 @@ export async function executeTool(
         entityId: itemId,
         message: `Triaged ${itemId} as ${outcome}`,
       };
+    }
+
+    case "retire_backlog_item": {
+      const itemId = String(params["itemId"] ?? "");
+      const outcome = String(params["outcome"] ?? "");
+      const rationale = String(params["rationale"] ?? "").trim();
+      const reason = typeof params["reason"] === "string" ? params["reason"].trim() : "";
+      const duplicateOfId = typeof params["duplicateOfId"] === "string" ? params["duplicateOfId"].trim() : "";
+      const validOutcomes = new Set(["duplicate", "defer", "discard"]);
+
+      if (!itemId) {
+        return { success: false, error: "missing_itemId", message: "itemId is required" };
+      }
+      if (!validOutcomes.has(outcome)) {
+        return { success: false, error: "invalid_outcome", message: "outcome must be duplicate, defer, or discard" };
+      }
+      if (!rationale) {
+        return { success: false, error: "missing_rationale", message: "rationale is required" };
+      }
+      if (outcome === "duplicate" && !duplicateOfId) {
+        return { success: false, error: "missing_duplicateOfId", message: "duplicateOfId is required for duplicate retirement" };
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const item = await tx.backlogItem.findUnique({ where: { itemId } });
+        if (!item) {
+          return { success: false, error: "not_found", message: `Item ${itemId} not found` } satisfies ToolResult;
+        }
+        if ("activeBuildId" in item && item.activeBuildId) {
+          return {
+            success: false,
+            error: "active_build_exists",
+            message: `Item ${itemId} is attached to an active build and cannot be retired`,
+          } satisfies ToolResult;
+        }
+
+        let canonicalRowId: string | null = null;
+        if (outcome === "duplicate") {
+          const canonical = await tx.backlogItem.findUnique({ where: { itemId: duplicateOfId } });
+          if (!canonical) {
+            return {
+              success: false,
+              error: "duplicate_not_found",
+              message: `Canonical item ${duplicateOfId} not found`,
+            } satisfies ToolResult;
+          }
+          canonicalRowId = canonical.id;
+        }
+
+        const updated = await tx.backlogItem.update({
+          where: { id: item.id },
+          data: {
+            status: "deferred",
+            triageOutcome: outcome,
+            duplicateOfId: canonicalRowId,
+            resolution: rationale,
+            abandonReason: reason || rationale,
+            completedAt: new Date(),
+          },
+        });
+
+        await tx.backlogItemActivity.create({
+          data: {
+            backlogItemId: item.id,
+            kind: "status_change",
+            recordedById: userId,
+            recordedByAgentId: context?.agentId ?? null,
+            summary: `Retired ${itemId} as ${outcome}`,
+            payload: {
+              from: item.status,
+              to: "deferred",
+              outcome,
+              rationale,
+              reason: reason || null,
+              duplicateOfId: outcome === "duplicate" ? duplicateOfId : null,
+            },
+          },
+        });
+
+        if (item.epicId) {
+          const remainingOpenItems = await tx.backlogItem.count({
+            where: {
+              epicId: item.epicId,
+              status: { in: ["open", "in-progress"] },
+              id: { not: item.id },
+            },
+          });
+          if (remainingOpenItems === 0) {
+            await tx.epic.update({
+              where: { id: item.epicId },
+              data: { status: "done" },
+            });
+          }
+        }
+
+        return {
+          success: true,
+          entityId: updated.itemId,
+          message: `Retired ${itemId} as ${outcome}`,
+          data: {
+            itemId: updated.itemId,
+            status: "deferred",
+            outcome,
+            duplicateOfId: outcome === "duplicate" ? duplicateOfId : null,
+          },
+        } satisfies ToolResult;
+      });
+
+      return result;
     }
 
     case "size_backlog_item": {
