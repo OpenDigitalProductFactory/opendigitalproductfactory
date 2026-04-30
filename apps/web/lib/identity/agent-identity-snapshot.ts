@@ -7,7 +7,7 @@ import {
 } from "./aidoc-resolver";
 import { type GaidAuthorizationClass } from "./authorization-classes";
 
-type SnapshotDb = Pick<typeof prisma, "agent" | "principalAlias" | "agentModelConfig">;
+type SnapshotDb = Pick<typeof prisma, "agent" | "principalAlias" | "agentModelConfig" | "userFact">;
 
 export type AgentIdentitySnapshot = {
   id: string;
@@ -24,6 +24,9 @@ export type AgentIdentitySnapshot = {
   validationState: InternalAIDoc["validation_state"] | "unlinked";
   toolSurfaceCount: number;
   promptClassRefCount: number;
+  memoryFactCurrentCount: number;
+  memoryFactPendingRevalidationCount: number;
+  memoryFactLegacyCount: number;
 };
 
 export type AgentIdentitySnapshotSummary = {
@@ -81,7 +84,7 @@ export async function listAgentIdentitySnapshots(
     },
   });
 
-  const [aliases, modelConfigs] = await Promise.all([
+  const [aliases, modelConfigs, memoryFacts] = await Promise.all([
     db.principalAlias.findMany({
       where: {
         aliasType: { in: ["agent", "gaid"] },
@@ -107,6 +110,15 @@ export async function listAgentIdentitySnapshots(
         budgetClass: true,
       },
     }),
+    db.userFact.findMany({
+      where: {
+        supersededAt: null,
+      },
+      select: {
+        sourceAgentId: true,
+        validatedAgainstFingerprint: true,
+      },
+    }),
   ]);
 
   const principalIdByAgentId = new Map(
@@ -122,6 +134,16 @@ export async function listAgentIdentitySnapshots(
   const modelConfigByAgentId = new Map(
     modelConfigs.map((config) => [config.agentId, config]),
   );
+  const memoryFactsByAgentId = new Map<
+    string,
+    Array<{ sourceAgentId: string | null; validatedAgainstFingerprint: string | null }>
+  >();
+  for (const fact of memoryFacts) {
+    if (!fact.sourceAgentId) continue;
+    const existing = memoryFactsByAgentId.get(fact.sourceAgentId) ?? [];
+    existing.push(fact);
+    memoryFactsByAgentId.set(fact.sourceAgentId, existing);
+  }
 
   return agents.map((agent) => {
     const linkedPrincipalId = principalIdByAgentId.get(agent.agentId) ?? null;
@@ -134,6 +156,23 @@ export async function listAgentIdentitySnapshots(
           modelConfig: modelConfigByAgentId.get(agent.agentId) ?? null,
         })
       : null;
+    const operatingProfileFingerprint = aidoc?.operating_profile_fingerprint ?? null;
+    const memoryFactsForAgent = memoryFactsByAgentId.get(agent.agentId) ?? [];
+    const memoryFactCurrentCount = operatingProfileFingerprint
+      ? memoryFactsForAgent.filter(
+          (fact) => fact.validatedAgainstFingerprint === operatingProfileFingerprint,
+        ).length
+      : 0;
+    const memoryFactPendingRevalidationCount = operatingProfileFingerprint
+      ? memoryFactsForAgent.filter(
+          (fact) =>
+            fact.validatedAgainstFingerprint !== null &&
+            fact.validatedAgainstFingerprint !== operatingProfileFingerprint,
+        ).length
+      : 0;
+    const memoryFactLegacyCount = memoryFactsForAgent.filter(
+      (fact) => fact.validatedAgainstFingerprint === null,
+    ).length;
 
     return {
       id: agent.id,
@@ -146,10 +185,13 @@ export async function listAgentIdentitySnapshots(
       gaid,
       aidoc,
       authorizationClasses: aidoc?.authorization_classes ?? [],
-      operatingProfileFingerprint: aidoc?.operating_profile_fingerprint ?? null,
+      operatingProfileFingerprint,
       validationState: aidoc?.validation_state ?? "unlinked",
       toolSurfaceCount: aidoc?.tool_surface.length ?? 0,
       promptClassRefCount: aidoc?.prompt_class_refs.length ?? 0,
+      memoryFactCurrentCount,
+      memoryFactPendingRevalidationCount,
+      memoryFactLegacyCount,
     };
   });
 }

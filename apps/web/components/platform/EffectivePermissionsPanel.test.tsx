@@ -93,6 +93,9 @@ describe("EffectivePermissionsPanel", () => {
             validationState: "validated",
             toolSurfaceCount: 1,
             promptClassRefCount: 2,
+            memoryFactCurrentCount: 3,
+            memoryFactPendingRevalidationCount: 1,
+            memoryFactLegacyCount: 2,
           },
         ]}
       />,
@@ -103,5 +106,8 @@ describe("EffectivePermissionsPanel", () => {
     expect(html).toContain("fp-fin-001");
     expect(html).toContain("observe");
     expect(html).toContain("approve");
+    expect(html).toContain("Memory freshness");
+    expect(html).toContain("3 current");
+    expect(html).toContain("1 pending");
   });
 });

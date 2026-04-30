@@ -142,6 +142,19 @@ export function AgentIdentityPanel({
                 )}
               </div>
             </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+                Memory freshness
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                <span className="text-[var(--dpf-text)]">{agent.memoryFactCurrentCount} current</span>
+                <span className="text-[var(--dpf-muted)]">
+                  {agent.memoryFactPendingRevalidationCount} pending
+                </span>
+                <span className="text-[var(--dpf-muted)]">{agent.memoryFactLegacyCount} legacy</span>
+              </div>
+            </div>
           </article>
         ))}
       </div>
