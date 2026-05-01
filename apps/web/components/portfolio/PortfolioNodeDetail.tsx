@@ -119,7 +119,7 @@ export function PortfolioNodeDetail({
 
       {/* Products */}
       {products.length > 0 && (
-        <ProductList products={products} colour="var(--dpf-accent)" />
+        <ProductList products={products} />
       )}
 
       {/* Empty state */}

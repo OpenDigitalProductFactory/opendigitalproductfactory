@@ -10,7 +10,6 @@ type Product = {
 
 type Props = {
   products: Product[];
-  colour: string;
   className?: string;
 };
 
@@ -20,7 +19,7 @@ const STATUS_COLOURS: Record<string, string> = {
   inactive: "var(--dpf-muted)",
 };
 
-export function ProductList({ products, colour, className = "" }: Props) {
+export function ProductList({ products, className = "" }: Props) {
   return (
     <div className={className}>
       <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
