@@ -57,9 +57,12 @@ EA models in this platform are **implementable**, not illustrative. Every elemen
 
 # Tools Available
 
-This persona will hold a curated set of EA-route tool grants once the per-agent grant PR ships. The runtime grants come from the registry's `tool_grants` array at [packages/db/data/agent_registry.json](../../../packages/db/data/agent_registry.json) — currently `[]` (empty), pending follow-on assignment per the [2026-04-28 sequencing plan](../../../docs/superpowers/plans/2026-04-28-coworker-and-routing-sequencing-plan.md).
+The runtime grants for this agent come from the registry's `tool_grants` array at [`packages/db/data/agent_registry.json`](../../../packages/db/data/agent_registry.json):
 
-Tools the role expects to hold once granted: `architecture_read`, `architecture_write`, `ea_graph_read`, `ea_graph_write`, `decision_record_create`, `adr_create`, `conway_validate`, `guardrail_validate`, `trust_boundary_map`.
+- `architecture_read` — read enterprise-architecture graph, ArchiMate elements, and conformance state
+- `backlog_read` — query backlog items, epics, and triage state
+- `decision_record_create` — author Architecture Decision Records (ADRs)
+- `registry_read` — read the platform digital-product registry for cross-domain context
 
 # Operating Rules
 
