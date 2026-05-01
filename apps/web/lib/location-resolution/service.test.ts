@@ -93,10 +93,10 @@ describe("searchLocalities", () => {
     expect(prisma.city.findMany).toHaveBeenCalledWith({
       where: {
         regionId: "region-tx",
-        status: "active",
+        status: { in: ["active", "needs-review"] },
         name: { contains: "thor", mode: "insensitive" },
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, status: true },
       orderBy: { name: "asc" },
       take: 20,
     });
@@ -130,22 +130,34 @@ describe("createLocality", () => {
 
   it("creates locality with current City table shape when no duplicate exists", async () => {
     vi.mocked(prisma.city.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.city.create).mockResolvedValue({ id: "city-new", name: "Thorndale" } as never);
+    vi.mocked(prisma.city.create).mockResolvedValue({
+      id: "city-new",
+      name: "Thorndale",
+      status: "needs-review",
+    } as never);
 
-    const result = await createLocality({ regionId: "region-tx", name: " Thorndale " });
+    const result = await createLocality({
+      regionId: "region-tx",
+      name: " Thorndale ",
+      addedByUserId: "user-1",
+    });
 
     expect(result).toEqual({
       ok: true,
-      message: 'Locality "Thorndale" created.',
-      created: { id: "city-new", name: "Thorndale" },
+      message: 'Town / city "Thorndale" was added for review.',
+      created: { id: "city-new", name: "Thorndale", status: "needs-review" },
     });
     expect(prisma.city.create).toHaveBeenCalledWith({
       data: {
         name: "Thorndale",
+        nameNormalized: "thorndale",
         regionId: "region-tx",
-        status: "active",
+        status: "needs-review",
+        localityType: "town",
+        source: "user",
+        addedByUserId: "user-1",
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, status: true },
     });
   });
 
@@ -168,10 +180,13 @@ describe("forceCreateLocality", () => {
     expect(prisma.city.create).toHaveBeenCalledWith({
       data: {
         name: "Springfield",
+        nameNormalized: "springfield",
         regionId: "region-1",
         status: "active",
+        localityType: "town",
+        source: "user",
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, status: true },
     });
   });
 });

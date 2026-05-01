@@ -116,10 +116,10 @@ describe("searchCities", () => {
     expect(prisma.city.findMany).toHaveBeenCalledWith({
       where: {
         regionId: "region-1",
-        status: "active",
+        status: { in: ["active", "needs-review"] },
         name: { contains: "syd", mode: "insensitive" },
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, status: true },
       orderBy: { name: "asc" },
       take: 20,
     });
@@ -204,19 +204,24 @@ describe("createCity", () => {
     vi.mocked(prisma.city.create).mockResolvedValue({
       id: "ci-new",
       name: "Hobart",
+      status: "needs-review",
     } as never);
 
     const result = await createCity("region-1", "Hobart");
 
     expect(result.ok).toBe(true);
-    expect(result.created).toEqual({ id: "ci-new", name: "Hobart" });
+    expect(result.created).toEqual({ id: "ci-new", name: "Hobart", status: "needs-review" });
     expect(prisma.city.create).toHaveBeenCalledWith({
       data: {
         name: "Hobart",
+        nameNormalized: "hobart",
         regionId: "region-1",
-        status: "active",
+        status: "needs-review",
+        localityType: "town",
+        source: "user",
+        addedByUserId: "test-user-1",
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, status: true },
     });
     expect(revalidatePath).toHaveBeenCalledWith("/employee");
     expect(revalidatePath).toHaveBeenCalledWith("/admin/reference-data");

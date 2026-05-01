@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { normalizeLocalityName } from "@dpf/db/location-normalize";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -113,7 +114,10 @@ export async function updateCity(
     const city = await prisma.city.findUnique({ where: { id }, select: { id: true } });
     if (!city) return { ok: false, message: "City not found." };
 
-    await prisma.city.update({ where: { id }, data: { name: trimmed } });
+    await prisma.city.update({
+      where: { id },
+      data: { name: trimmed, nameNormalized: normalizeLocalityName(trimmed) },
+    });
   }
 
   revalidateAdminPaths();
