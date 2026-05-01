@@ -65,8 +65,8 @@ beforeEach(() => {
     },
   });
   vi.mocked(prisma.integrationCredential.findMany).mockResolvedValue([
-    { provider: "quickbooks", status: "connected" },
-    { provider: "adp", status: "error" },
+    { integrationId: "quickbooks-online-accounting", status: "connected" },
+    { integrationId: "adp-workforce-now", status: "error" },
   ] as never);
 });
 
@@ -74,8 +74,8 @@ describe("getConnectionCatalog", () => {
   it("aggregates MCP, native, and built-in entries into separate sections", async () => {
     const result = await getConnectionCatalog({ query: "" });
 
-    expect(result.totalCount).toBe(4);
-    expect(result.counts).toEqual({ mcp: 1, native: 2, builtIn: 1 });
+    expect(result.totalCount).toBe(12);
+    expect(result.counts).toEqual({ mcp: 1, native: 10, builtIn: 1 });
     expect(result.sections.map((section) => section.title)).toEqual([
       "MCP Catalog",
       "Native Integrations",
@@ -90,6 +90,8 @@ describe("getConnectionCatalog", () => {
       expect.arrayContaining([
         expect.objectContaining({ kind: "native", id: "adp", statusLabel: "Needs attention" }),
         expect.objectContaining({ kind: "native", id: "quickbooks", statusLabel: "Configured" }),
+        expect.objectContaining({ kind: "native", id: "facebook-pages", name: "Facebook Pages" }),
+        expect.objectContaining({ kind: "native", id: "google-business-profile", name: "Google Business Profile" }),
       ]),
     );
     expect(result.sections[2].entries[0]).toMatchObject({

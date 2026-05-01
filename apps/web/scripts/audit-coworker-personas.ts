@@ -240,14 +240,22 @@ function loadRegistry(): RegistryAgent[] {
 // beginning of a line. Section presence is what's checked; order is checked
 // by index-of comparison.
 
-const REQUIRED_SECTIONS = [
+// Sections every persona must have, in this relative order. The pair
+// `# Tools Available` + `# Operating Rules` may be replaced by a single
+// `# Operator Contract` section (the AI Coworker Operator Pattern shape —
+// see docs/superpowers/specs/2026-04-30-ai-coworker-operator-pattern.md and
+// docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md).
+// Personas that have migrated to the operator-contract shape pass with the
+// alternate suffix; legacy personas keep the original two sections.
+const ALWAYS_REQUIRED_SECTIONS = [
   "# Role",
   "# Accountable For",
   "# Interfaces With",
   "# Out Of Scope",
-  "# Tools Available",
-  "# Operating Rules",
 ] as const;
+const LEGACY_TAIL_SECTIONS = ["# Tools Available", "# Operating Rules"] as const;
+const OPERATOR_CONTRACT_TAIL_SECTIONS = ["# Operator Contract"] as const;
+const REQUIRED_SECTIONS = [...ALWAYS_REQUIRED_SECTIONS, ...LEGACY_TAIL_SECTIONS] as const;
 
 function findSectionIndex(body: string, heading: string): number {
   // Match heading at start of line (anchor), case-sensitive, allow trailing whitespace.
@@ -387,10 +395,19 @@ function checkPersona004(registry: RegistryAgent[], personaByAgentId: Map<string
 function checkPersona005(personas: Persona[]): void {
   for (const p of personas) {
     if (isFragment(p)) continue;
+
+    // Decide which tail-section variant this persona uses. Operator-contract
+    // shape wins if present; otherwise expect the legacy pair.
+    const hasOperatorContract = findSectionIndex(p.composedBody, "# Operator Contract") >= 0;
+    const tailSections: readonly string[] = hasOperatorContract
+      ? OPERATOR_CONTRACT_TAIL_SECTIONS
+      : LEGACY_TAIL_SECTIONS;
+    const expectedSections: readonly string[] = [...ALWAYS_REQUIRED_SECTIONS, ...tailSections];
+
     const missing: string[] = [];
     let lastIdx = -1;
     let outOfOrder = false;
-    for (const heading of REQUIRED_SECTIONS) {
+    for (const heading of expectedSections) {
       const idx = findSectionIndex(p.composedBody, heading);
       if (idx < 0) {
         missing.push(heading);
@@ -408,8 +425,9 @@ function checkPersona005(personas: Persona[]): void {
         p.relPath,
         `Persona ${p.relPath} missing or misordered required body sections`,
         (missing.length > 0 ? `Missing: ${missing.join(", ")}\n` : "") +
-          (outOfOrder ? `Sections present but out of order. Required order: ${REQUIRED_SECTIONS.join(" → ")}\n` : "") +
-          "\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2.",
+          (outOfOrder ? `Sections present but out of order. Required order: ${expectedSections.join(" → ")}\n` : "") +
+          "\nNote: personas may use either the legacy '# Tools Available' + '# Operating Rules' pair OR the new '# Operator Contract' section." +
+          "\nFix: see schema in docs/superpowers/specs/2026-04-27-coworker-persona-audit-design.md §3.2 and the AI Coworker Operator Pattern spec.",
       );
     }
   }

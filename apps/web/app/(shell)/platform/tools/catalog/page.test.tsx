@@ -81,8 +81,53 @@ vi.mock("@/lib/actions/connection-catalog", () => ({
   }),
 }));
 
+vi.mock("@/lib/actions/tool-marketplace-readiness", () => ({
+  getToolMarketplaceReadiness: vi.fn().mockResolvedValue({
+    summary: {
+      total: 4,
+      ready: 1,
+      available: 1,
+      needsSetup: 1,
+      needsGrant: 1,
+      blocked: 0,
+    },
+    entries: [
+      {
+        id: "adp",
+        kind: "native",
+        name: "ADP Workforce Now",
+        description: "Payroll anchor",
+        category: "hr",
+        readiness: "needs_grant",
+        readinessLabel: "Needs grant",
+        guidance: "ADP is configured, but this coworker still needs the required grant before using it.",
+        href: "/platform/tools/integrations/adp",
+        enables: ["Payroll guidance"],
+        missingSetup: [],
+        missingGrants: ["consumer_read"],
+        relevantAgentIds: ["finance-controller", "coo"],
+      },
+      {
+        id: "build-studio-frontier-tool-model",
+        kind: "model_requirement",
+        name: "Build Studio Frontier Tool Model",
+        description: "Build Studio model requirement",
+        category: "model-routing",
+        readiness: "needs_setup",
+        readinessLabel: "Needs setup",
+        guidance: "Build Studio implementation needs an active frontier, tool-capable model.",
+        href: "/platform/ai/providers",
+        enables: ["Build Studio implementation"],
+        missingSetup: ["Activate a frontier, tool-capable model provider"],
+        missingGrants: [],
+        relevantAgentIds: ["build-specialist", "coo"],
+      },
+    ],
+  }),
+}));
+
 vi.mock("@/components/platform/IntegrationCatalogFilters", () => ({
-  IntegrationCatalogFilters: () => <div>integration-catalog-filters</div>,
+  IntegrationCatalogFilters: () => <div>Search tools, integrations, or tasks Any readiness Build Studio</div>,
 }));
 
 vi.mock("next/link", () => ({
@@ -100,11 +145,17 @@ describe("ToolsCatalogPage", () => {
       await ToolsCatalogPage({ searchParams: Promise.resolve({}) }),
     );
 
-    expect(html).toContain("Connection Catalog");
-    expect(html).toContain("integration-catalog-filters");
+    expect(html).toContain("Agent Tool Marketplace");
+    expect(html).toContain("Search tools, integrations, or tasks");
+    expect(html).toContain("Any readiness");
+    expect(html).toContain("Build Studio");
     expect(html).toContain("MCP Catalog");
     expect(html).toContain("Native Integrations");
     expect(html).toContain("Built-in Tools");
+    expect(html).toContain("Coworker Readiness");
+    expect(html).toContain("ADP Workforce Now");
+    expect(html).toContain("consumer_read");
+    expect(html).toContain("Build Studio Frontier Tool Model");
     expect(html).toContain("QuickBooks Online");
     expect(html).toContain("Brave Search");
     expect(html).toContain("Stripe MCP");

@@ -3,6 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateOrganizationTaxProfile } from "@/lib/actions/tax-remittance";
+import { TaxAuthorityCredentialPanel } from "@/components/finance/TaxAuthorityCredentialPanel";
+import { TaxExecutionPanel } from "@/components/finance/TaxExecutionPanel";
+import { TaxLiabilityLedgerCard } from "@/components/finance/TaxLiabilityLedgerCard";
 import { TaxRegistrationEditor } from "@/components/finance/TaxRegistrationEditor";
 import { TaxObligationPeriodsTable } from "@/components/finance/TaxObligationPeriodsTable";
 import type { UpdateOrganizationTaxProfileInput } from "@/lib/finance/tax-remittance-validation";
@@ -259,7 +262,20 @@ export function TaxRemittanceSettingsPanel({ workspace }: Props) {
         issues={workspace.openIssues}
       />
 
+      <TaxAuthorityCredentialPanel
+        registrations={workspace.registrations}
+        authorityCredentials={workspace.authorityCredentials}
+      />
+
       <TaxObligationPeriodsTable periods={workspace.periods} monitoring={workspace.monitoring} />
+
+      <TaxLiabilityLedgerCard periods={workspace.periods} />
+
+      <TaxExecutionPanel
+        periods={workspace.periods}
+        filingOwner={form.filingOwner}
+        handoffMode={form.handoffMode}
+      />
 
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-start justify-between gap-4">

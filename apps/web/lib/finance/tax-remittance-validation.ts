@@ -28,6 +28,38 @@ export const TAX_FILING_ARTIFACT_TYPES = [
   "confirmation",
   "supporting_note",
 ] as const;
+export const TAX_CREDENTIAL_OWNER_MODES = [
+  "business_shared",
+  "dpf_managed",
+  "accountant_managed",
+  "partner_managed",
+] as const;
+export const TAX_CREDENTIAL_STATUSES = ["draft", "active", "blocked", "revoked"] as const;
+export const TAX_CREDENTIAL_AUTH_MODES = [
+  "portal_username_password",
+  "api_key",
+  "oauth",
+  "delegated_partner",
+] as const;
+export const TAX_CREDENTIAL_MFA_MODES = [
+  "human_step_up",
+  "totp_shared",
+  "email_code",
+  "sms_code",
+] as const;
+export const TAX_REMITTANCE_RUN_STATUSES = [
+  "draft",
+  "scheduled",
+  "blocked",
+  "submitted",
+  "paid",
+  "failed",
+] as const;
+export const TAX_REMITTANCE_EXECUTION_MODES = [
+  "manual",
+  "scheduled_coworker",
+  "external_handoff",
+] as const;
 
 const blankToNull = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => {
@@ -82,8 +114,36 @@ export const addTaxFilingArtifactSchema = z.object({
   notes: blankToNull(z.string().trim().max(2000)),
 });
 
+export const saveTaxAuthorityCredentialSchema = z.object({
+  registrationId: z.string().min(1),
+  portalBaseUrl: blankToNull(z.url().trim().max(500)),
+  credentialOwnerMode: z.enum(TAX_CREDENTIAL_OWNER_MODES),
+  status: z.enum(TAX_CREDENTIAL_STATUSES),
+  authMode: z.enum(TAX_CREDENTIAL_AUTH_MODES),
+  secretRef: blankToNull(z.string().trim().max(1000)),
+  mfaMode: z.enum(TAX_CREDENTIAL_MFA_MODES),
+  notes: blankToNull(z.string().trim().max(2000)),
+});
+
+export const prepareTaxRemittanceRunSchema = z.object({
+  periodId: z.string().min(1),
+  executionMode: z.enum(TAX_REMITTANCE_EXECUTION_MODES),
+  scheduleFor: blankToNull(z.iso.datetime()),
+});
+
+export const updateTaxRemittanceRunStatusSchema = z.object({
+  runId: z.string().min(1),
+  status: z.enum(TAX_REMITTANCE_RUN_STATUSES),
+  confirmationRef: blankToNull(z.string().trim().max(255)),
+  failureCode: blankToNull(z.string().trim().max(120)),
+  failureDetails: blankToNull(z.string().trim().max(2000)),
+});
+
 export type UpdateOrganizationTaxProfileInput = z.infer<typeof updateOrganizationTaxProfileSchema>;
 export type CreateTaxRegistrationInput = z.infer<typeof createTaxRegistrationSchema>;
 export type VerifyTaxRegistrationInput = z.infer<typeof verifyTaxRegistrationSchema>;
 export type PrepareTaxFilingPacketInput = z.infer<typeof prepareTaxFilingPacketSchema>;
 export type AddTaxFilingArtifactInput = z.infer<typeof addTaxFilingArtifactSchema>;
+export type SaveTaxAuthorityCredentialInput = z.infer<typeof saveTaxAuthorityCredentialSchema>;
+export type PrepareTaxRemittanceRunInput = z.infer<typeof prepareTaxRemittanceRunSchema>;
+export type UpdateTaxRemittanceRunStatusInput = z.infer<typeof updateTaxRemittanceRunStatusSchema>;

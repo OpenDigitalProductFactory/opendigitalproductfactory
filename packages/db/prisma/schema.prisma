@@ -2172,6 +2172,9 @@ model OrganizationTaxProfile {
   organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   registrations TaxRegistration[]
   issues        TaxIssue[]
+  decisionSnapshots  TaxDecisionSnapshot[]
+  liabilityEntries   TaxLiabilityEntry[]
+  authorityCredentials TaxAuthorityCredential[]
 }
 
 model TaxJurisdictionReference {
@@ -2232,10 +2235,72 @@ model TaxRegistration {
   jurisdictionReference  TaxJurisdictionReference @relation(fields: [jurisdictionReferenceId], references: [id], onDelete: Restrict)
   obligationPeriods      TaxObligationPeriod[]
   issues                 TaxIssue[]
+  decisionSnapshots      TaxDecisionSnapshot[]
+  liabilityEntries       TaxLiabilityEntry[]
+  authorityCredentials   TaxAuthorityCredential[]
 
   @@index([organizationTaxProfileId])
   @@index([jurisdictionReferenceId])
   @@index([registrationStatus])
+}
+
+model TaxDecisionSnapshot {
+  id                       String    @id @default(cuid())
+  snapshotId               String    @unique
+  organizationTaxProfileId String
+  registrationId           String
+  sourceType               String
+  sourceId                 String
+  sourceLineItemId         String?
+  taxType                  String
+  taxCode                  String?
+  direction                String
+  taxableAmount            Decimal   @default(0)
+  taxRate                  Decimal?
+  taxAmount                Decimal   @default(0)
+  jurisdictionRefId        String?
+  occurredAt               DateTime
+  evidence                 Json      @default("{}")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  liabilityEntries       TaxLiabilityEntry[]
+
+  @@index([organizationTaxProfileId, occurredAt])
+  @@index([registrationId, occurredAt])
+  @@index([sourceType, sourceId])
+}
+
+model TaxLiabilityEntry {
+  id                       String    @id @default(cuid())
+  entryId                  String    @unique
+  organizationTaxProfileId String
+  registrationId           String
+  periodId                 String?
+  decisionSnapshotId       String?
+  sourceType               String
+  sourceId                 String
+  sourceLineItemId         String?
+  direction                String
+  taxableAmount            Decimal   @default(0)
+  taxAmount                Decimal   @default(0)
+  currency                 String    @default("GBP")
+  notes                    String?
+  occurredAt               DateTime
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  period                 TaxObligationPeriod?   @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  decisionSnapshot       TaxDecisionSnapshot?   @relation(fields: [decisionSnapshotId], references: [id], onDelete: SetNull)
+
+  @@index([organizationTaxProfileId, occurredAt])
+  @@index([registrationId, periodId])
+  @@index([sourceType, sourceId])
+  @@index([decisionSnapshotId])
 }
 
 model TaxObligationPeriod {
@@ -2263,6 +2328,8 @@ model TaxObligationPeriod {
   registration TaxRegistration     @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   artifacts    TaxFilingArtifact[]
   issues       TaxIssue[]
+  liabilityEntries TaxLiabilityEntry[]
+  remittanceRuns   TaxRemittanceRun[]
 
   @@index([registrationId])
   @@index([status, dueDate])
@@ -2310,6 +2377,61 @@ model TaxIssue {
   @@index([registrationId])
   @@index([periodId])
   @@index([status, severity])
+}
+
+model TaxAuthorityCredential {
+  id                       String    @id @default(cuid())
+  credentialId             String    @unique
+  organizationTaxProfileId String
+  registrationId           String
+  authorityName            String
+  portalBaseUrl            String?
+  credentialOwnerMode      String    @default("business_shared")
+  status                   String    @default("draft")
+  authMode                 String    @default("portal_username_password")
+  secretRef                String?   @db.Text
+  mfaMode                  String    @default("human_step_up")
+  lastVerifiedAt           DateTime?
+  lastFailureAt            DateTime?
+  lastFailureReason        String?
+  notes                    String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organizationTaxProfile OrganizationTaxProfile @relation(fields: [organizationTaxProfileId], references: [id], onDelete: Cascade)
+  registration           TaxRegistration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  remittanceRuns         TaxRemittanceRun[]
+
+  @@index([organizationTaxProfileId])
+  @@index([registrationId, status])
+}
+
+model TaxRemittanceRun {
+  id               String    @id @default(cuid())
+  runId            String    @unique
+  periodId         String
+  credentialId     String?
+  status           String    @default("draft")
+  executionMode    String    @default("manual")
+  scheduledFor     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  submittedAt      DateTime?
+  paidAt           DateTime?
+  confirmationRef  String?
+  failureCode      String?
+  failureDetails   String?
+  createdByAgentId String?
+  createdByUserId  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  period     TaxObligationPeriod    @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  credential TaxAuthorityCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+
+  @@index([periodId, status])
+  @@index([credentialId])
+  @@index([scheduledFor, status])
 }
 
 model PlatformSetupProgress {
