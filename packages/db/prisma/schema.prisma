@@ -66,6 +66,7 @@ model User {
   adminActivities              AdminActivity[]
   userFacts                    UserFact[]
   scheduledAgentTasks          ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
+  addedLocalities              City[]                        @relation("CityAddedByUser")
 }
 
 model UserGroup {
@@ -396,18 +397,30 @@ model Region {
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model City {
-  id        String    @id @default(cuid())
-  name      String
-  regionId  String
-  status    String    @default("active")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  addresses Address[]
-  region    Region    @relation(fields: [regionId], references: [id])
+  id              String    @id @default(cuid())
+  name            String
+  nameNormalized  String    @default("")
+  regionId        String
+  localityType    String    @default("city")
+  source          String    @default("seed")
+  sourceProvider  String?
+  sourceRef       String?
+  confidence      Decimal?  @db.Decimal(5, 4)
+  disambiguator   String?
+  addedByUserId   String?
+  status          String    @default("active")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  addedByUser     User?     @relation("CityAddedByUser", fields: [addedByUserId], references: [id])
+  addresses       Address[]
+  region          Region    @relation(fields: [regionId], references: [id])
 
   @@index([regionId, name])
   @@index([regionId])
+  @@index([regionId, nameNormalized])
   @@index([status])
+  @@index([source])
+  @@index([addedByUserId])
 }
 
 model Address {

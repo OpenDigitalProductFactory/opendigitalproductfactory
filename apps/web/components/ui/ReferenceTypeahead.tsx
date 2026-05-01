@@ -190,6 +190,7 @@ export function ReferenceTypeahead({
         disabled={disabled}
         value={query}
         placeholder={placeholder}
+        data-add-new-label={addNewLabel}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onFocus={() => {

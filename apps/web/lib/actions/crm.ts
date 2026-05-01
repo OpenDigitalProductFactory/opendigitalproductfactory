@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { normalizeLocalityName } from "@dpf/db/location-normalize";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
@@ -167,10 +168,7 @@ export async function createCustomerSite(input: {
       where: {
         regionId: region.id,
         status: "active",
-        name: {
-          equals: validatedAddress.city,
-          mode: "insensitive",
-        },
+        nameNormalized: normalizeLocalityName(validatedAddress.city),
       },
       select: { id: true },
     });
@@ -180,6 +178,9 @@ export async function createCustomerSite(input: {
         data: {
           regionId: region.id,
           name: validatedAddress.city,
+          nameNormalized: normalizeLocalityName(validatedAddress.city),
+          source: "validated-address",
+          sourceProvider: validatedAddress.validationSource,
           status: "active",
         },
         select: { id: true },
