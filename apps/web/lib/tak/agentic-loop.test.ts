@@ -6,6 +6,9 @@ import {
   detectFabrication,
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
+  detectToolRefusedDespiteAvailability,
+  phaseRequiresToolCall,
+  detectUnsavedEvidence,
 } from "./agentic-loop";
 
 vi.mock("@dpf/db", () => ({
@@ -880,5 +883,107 @@ describe("runAgenticLoop", () => {
     const thirdCallMessages = mockRoute.mock.calls[2]?.[0] ?? [];
     const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
     expect(lastUserMessage?.content).toContain("Do not pause after a failed read");
+  });
+});
+
+// ─── Build-specialist Operator Contract platform guards ────────────────────
+// Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
+
+describe("detectToolRefusedDespiteAvailability (clause 2.6)", () => {
+  const tools = [{ name: "start_ideate_research" }, { name: "saveBuildEvidence" }];
+
+  it("returns the tool name when response asserts unavailability of a delivered tool", () => {
+    const out = detectToolRefusedDespiteAvailability(
+      "Blocker: start_ideate_research is not available in the current runtime.",
+      tools,
+    );
+    expect(out).toBe("start_ideate_research");
+  });
+
+  it("returns null when response does not assert unavailability", () => {
+    const out = detectToolRefusedDespiteAvailability("I'll call start_ideate_research now.", tools);
+    expect(out).toBeNull();
+  });
+
+  it("returns null when the named tool is not in the delivered list", () => {
+    const out = detectToolRefusedDespiteAvailability(
+      "I cannot call do_something_else because it's not available.",
+      tools,
+    );
+    expect(out).toBeNull();
+  });
+
+  it("matches alternate phrasings", () => {
+    expect(
+      detectToolRefusedDespiteAvailability("saveBuildEvidence isn't enabled yet — pending grants.", tools),
+    ).toBe("saveBuildEvidence");
+  });
+
+  it("returns the unspecified sentinel for generic 'currently []' refusals", () => {
+    const out = detectToolRefusedDespiteAvailability(
+      "The tool grants are currently `[]` for this persona.",
+      tools,
+    );
+    expect(out).not.toBeNull();
+    expect(out).toContain("unspecified");
+  });
+});
+
+describe("phaseRequiresToolCall (clause 2.2)", () => {
+  it("returns true for ideate/plan/build/review", () => {
+    expect(phaseRequiresToolCall("ideate")).toBe(true);
+    expect(phaseRequiresToolCall("plan")).toBe(true);
+    expect(phaseRequiresToolCall("build")).toBe(true);
+    expect(phaseRequiresToolCall("review")).toBe(true);
+  });
+
+  it("returns false for ship/complete/null/undefined", () => {
+    expect(phaseRequiresToolCall("ship")).toBe(false);
+    expect(phaseRequiresToolCall("complete")).toBe(false);
+    expect(phaseRequiresToolCall(null)).toBe(false);
+    expect(phaseRequiresToolCall(undefined)).toBe(false);
+  });
+});
+
+describe("detectUnsavedEvidence (clause 2.4)", () => {
+  it("flags ideate response that contains a design-doc structure but no saveBuildEvidence call", () => {
+    const out = detectUnsavedEvidence(
+      "Here's the design doc:\n\n## Approach\nReplace gray classes with var(--dpf-*) tokens.",
+      [],
+      "ideate",
+    );
+    expect(out).toBe("designDoc");
+  });
+
+  it("returns null when saveBuildEvidence(designDoc) was called", () => {
+    const out = detectUnsavedEvidence(
+      "Saved the design doc.",
+      [{ name: "saveBuildEvidence", args: { field: "designDoc", value: {} } }],
+      "ideate",
+    );
+    expect(out).toBeNull();
+  });
+
+  it("flags plan response with task list but no saved buildPlan", () => {
+    const out = detectUnsavedEvidence(
+      "Here is the implementation plan with tasks: 1) ... 2) ...",
+      [],
+      "plan",
+    );
+    expect(out).toBe("buildPlan");
+  });
+
+  it("flags review response with verification verdict but no saved verificationOut", () => {
+    const out = detectUnsavedEvidence(
+      "Typecheck passed and tests passed; verification complete.",
+      [],
+      "review",
+    );
+    expect(out).toBe("verificationOut");
+  });
+
+  it("returns null when phase is not ideate/plan/review", () => {
+    expect(detectUnsavedEvidence("design doc", [], "build")).toBeNull();
+    expect(detectUnsavedEvidence("design doc", [], null)).toBeNull();
   });
 });

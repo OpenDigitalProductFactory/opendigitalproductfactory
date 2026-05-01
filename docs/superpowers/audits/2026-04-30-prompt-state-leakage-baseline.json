@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-05-01T01:08:52.428Z",
+  "generatedAt": "2026-05-01T02:34:36.006Z",
   "spec": "docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md",
   "rulesChecked": 4,
-  "errorCount": 42,
+  "errorCount": 38,
   "warnCount": 111,
   "findings": [
     {
@@ -40,46 +40,6 @@
       "severity": "error",
       "file": "prompts/route-persona/admin-assistant.prompt.md",
       "line": 58,
-      "column": 14,
-      "match": "will hold a curated set",
-      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
-      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
-    },
-    {
-      "invariantId": "PSL-001",
-      "severity": "error",
-      "file": "prompts/route-persona/build-specialist.prompt.md",
-      "line": 64,
-      "column": 65,
-      "match": "once the per-agent grant",
-      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
-      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
-    },
-    {
-      "invariantId": "PSL-001",
-      "severity": "error",
-      "file": "prompts/route-persona/build-specialist.prompt.md",
-      "line": 64,
-      "column": 279,
-      "match": "pending follow-on assignment",
-      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
-      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
-    },
-    {
-      "invariantId": "PSL-001",
-      "severity": "error",
-      "file": "prompts/route-persona/build-specialist.prompt.md",
-      "line": 66,
-      "column": 1,
-      "match": "Tools the role expects to hold once granted",
-      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
-      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
-    },
-    {
-      "invariantId": "PSL-001",
-      "severity": "error",
-      "file": "prompts/route-persona/build-specialist.prompt.md",
-      "line": 64,
       "column": 14,
       "match": "will hold a curated set",
       "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",

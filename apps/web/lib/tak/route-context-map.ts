@@ -489,6 +489,7 @@ When generating or reviewing UI code, enforce these rules:
       "propose_decomposition",
       "register_tech_debt",
       "save_build_notes",
+      "report_quality_issue",
       // Build Studio lifecycle (EP-SELF-DEV-002)
       "saveBuildEvidence",
       "reviewDesignDoc",
