@@ -1,4 +1,8 @@
-import { request, type Dispatcher } from "undici";
+import type { Dispatcher } from "undici";
+import {
+  requestFacebookGraphJson,
+  resolveFacebookGraphApiBaseUrl,
+} from "../facebook/shared-client";
 
 export interface FacebookLeadAdsPage {
   id: string;
@@ -44,9 +48,7 @@ export class FacebookLeadAdsApiError extends Error {
   }
 }
 
-export function resolveFacebookGraphApiBaseUrl(): string {
-  return process.env.FACEBOOK_GRAPH_API_BASE_URL ?? "https://graph.facebook.com";
-}
+export { resolveFacebookGraphApiBaseUrl };
 
 export async function probeFacebookLeadAds(
   params: FacebookLeadAdsRequestParams,
@@ -66,18 +68,21 @@ export async function probeFacebookLeadAds(
 async function getPageDetails(
   params: FacebookLeadAdsRequestParams,
 ): Promise<FacebookLeadAdsPage> {
-  const searchParams = new URLSearchParams({
-    fields: "id,name,category",
-    access_token: params.accessToken,
-  });
-  const url = `${resolveFacebookGraphApiBaseUrl()}/${encodeURIComponent(params.pageId)}?${searchParams.toString()}`;
-
-  const response = await performRequest(url, params.dispatcher);
-  const payload = (await response.body.json()) as {
+  const payload = await requestFacebookGraphJson<{
     id?: string;
     name?: string;
     category?: string;
-  };
+  }, FacebookLeadAdsApiError>({
+    path: encodeURIComponent(params.pageId),
+    searchParams: new URLSearchParams({
+      fields: "id,name,category",
+      access_token: params.accessToken,
+    }),
+    dispatcher: params.dispatcher,
+    surfaceLabel: "Lead Ads",
+    invalidAccessMessage: "invalid Meta page access",
+    createError: (message, opts) => new FacebookLeadAdsApiError(message, opts),
+  });
 
   return {
     id: payload.id ?? params.pageId,
@@ -89,15 +94,7 @@ async function getPageDetails(
 async function listLeadForms(
   params: FacebookLeadAdsRequestParams,
 ): Promise<FacebookLeadAdsForm[]> {
-  const searchParams = new URLSearchParams({
-    fields: "id,name,status,locale,created_time",
-    access_token: params.accessToken,
-    limit: "5",
-  });
-  const url = `${resolveFacebookGraphApiBaseUrl()}/${encodeURIComponent(params.pageId)}/leadgen_forms?${searchParams.toString()}`;
-
-  const response = await performRequest(url, params.dispatcher);
-  const payload = (await response.body.json()) as {
+  const payload = await requestFacebookGraphJson<{
     data?: Array<{
       id?: string;
       name?: string;
@@ -105,7 +102,18 @@ async function listLeadForms(
       locale?: string;
       created_time?: string;
     }>;
-  };
+  }, FacebookLeadAdsApiError>({
+    path: `${encodeURIComponent(params.pageId)}/leadgen_forms`,
+    searchParams: new URLSearchParams({
+      fields: "id,name,status,locale,created_time",
+      access_token: params.accessToken,
+      limit: "5",
+    }),
+    dispatcher: params.dispatcher,
+    surfaceLabel: "Lead Ads",
+    invalidAccessMessage: "invalid Meta page access",
+    createError: (message, opts) => new FacebookLeadAdsApiError(message, opts),
+  });
 
   return Array.isArray(payload.data)
     ? payload.data
@@ -123,15 +131,7 @@ async function listLeadForms(
 async function listRecentLeads(
   params: FacebookLeadAdsRequestParams & { formId: string },
 ): Promise<FacebookLeadAdsLead[]> {
-  const searchParams = new URLSearchParams({
-    fields: "id,created_time,ad_id,form_id,field_data{name}",
-    access_token: params.accessToken,
-    limit: "5",
-  });
-  const url = `${resolveFacebookGraphApiBaseUrl()}/${encodeURIComponent(params.formId)}/leads?${searchParams.toString()}`;
-
-  const response = await performRequest(url, params.dispatcher);
-  const payload = (await response.body.json()) as {
+  const payload = await requestFacebookGraphJson<{
     data?: Array<{
       id?: string;
       created_time?: string;
@@ -141,7 +141,18 @@ async function listRecentLeads(
         name?: string;
       }>;
     }>;
-  };
+  }, FacebookLeadAdsApiError>({
+    path: `${encodeURIComponent(params.formId)}/leads`,
+    searchParams: new URLSearchParams({
+      fields: "id,created_time,ad_id,form_id,field_data{name}",
+      access_token: params.accessToken,
+      limit: "5",
+    }),
+    dispatcher: params.dispatcher,
+    surfaceLabel: "Lead Ads",
+    invalidAccessMessage: "invalid Meta page access",
+    createError: (message, opts) => new FacebookLeadAdsApiError(message, opts),
+  });
 
   return Array.isArray(payload.data)
     ? payload.data
@@ -160,50 +171,8 @@ async function listRecentLeads(
     : [];
 }
 
-async function performRequest(url: string, dispatcher?: Dispatcher): Promise<Dispatcher.ResponseData> {
-  let response: Dispatcher.ResponseData;
-  try {
-    response = await request(url, {
-      method: "GET",
-      dispatcher,
-      headers: {
-        accept: "application/json",
-      },
-    });
-  } catch {
-    throw new FacebookLeadAdsApiError(
-      "Meta Lead Ads request failed — check network reachability and try again.",
-    );
-  }
-
-  if (response.statusCode === 401 || response.statusCode === 403) {
-    await safelyDrainBody(response.body);
-    throw new FacebookLeadAdsApiError("invalid Meta page access", {
-      statusCode: response.statusCode,
-    });
-  }
-
-  if (response.statusCode !== 200) {
-    await safelyDrainBody(response.body);
-    throw new FacebookLeadAdsApiError(
-      `Meta Lead Ads request failed with status ${response.statusCode}`,
-      { statusCode: response.statusCode },
-    );
-  }
-
-  return response;
-}
-
 function normalizeTimestamp(value: string | undefined): string | null {
   if (typeof value !== "string" || !value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
-}
-
-async function safelyDrainBody(body: { text: () => Promise<string> }): Promise<void> {
-  try {
-    await body.text();
-  } catch {
-    // ignore
-  }
 }

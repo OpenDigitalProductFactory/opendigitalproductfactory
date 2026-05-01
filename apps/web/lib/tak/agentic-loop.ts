@@ -272,6 +272,69 @@ export function shouldNudge(params: {
   return false;
 }
 
+// ─── Build-specialist Operator Contract — clause 2.6 platform-side guards ────
+// Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
+// Hallucinating LLMs cannot be trusted to self-report; the platform detects.
+
+/**
+ * Clause 2.6 platform path: detect when the agent's text asserts a tool
+ * is unavailable AND that tool name appears in its delivered tool list.
+ * Returns the offending tool name (or `(unspecified — generic refusal)`
+ * for blanket "currently empty / pending" claims), or null.
+ */
+export function detectToolRefusedDespiteAvailability(
+  responseText: string,
+  deliveredTools: Array<{ name: string }>,
+): string | null {
+  if (!responseText) return null;
+  const refusalPattern = /(?:not (?:available|enabled|granted|callable|in (?:my )?tool list|exposed)|isn['’]t (?:available|enabled|granted|callable|in (?:my )?tool list|exposed)|is missing|currently `?\[\]`?|pending (?:follow-on |grant)|don['’]t have (?:access|the ability))(?:\s+(?:in|for|to|yet|now|here))?/i;
+  if (!refusalPattern.test(responseText)) return null;
+  for (const tool of deliveredTools) {
+    if (responseText.includes(tool.name)) return tool.name;
+  }
+  if (/currently `?\[\]`?|pending (?:follow-on |grant)/i.test(responseText)) {
+    return "(unspecified — generic refusal)";
+  }
+  return null;
+}
+
+/**
+ * Clause 2.2: phase advance is illegal without saved evidence; therefore
+ * a turn in a build phase that produces zero tool calls is a contract
+ * violation. Returns true when the phase requires a tool call before close.
+ */
+export function phaseRequiresToolCall(phase: string | null | undefined): boolean {
+  if (!phase) return false;
+  return ["ideate", "plan", "build", "review"].includes(phase);
+}
+
+/**
+ * Clause 2.4: if a turn produces specific phase-evidence content in the
+ * response text but does not call saveBuildEvidence with the matching field,
+ * the evidence is ephemeral. Returns the field name that should have been
+ * saved, or null. Conservative — only fires on clear evidence-content signals.
+ */
+export function detectUnsavedEvidence(
+  responseText: string,
+  executedTools: Array<{ name: string; args?: Record<string, unknown> }>,
+  phase: string | null | undefined,
+): string | null {
+  if (!phase) return null;
+  const phaseFieldMap: Record<string, { field: string; signal: RegExp }> = {
+    ideate: { field: "designDoc", signal: /\b(?:design\s+doc|design\s+document|approach[:\s]|here['’]s\s+the\s+design)\b/i },
+    plan: { field: "buildPlan", signal: /\b(?:build\s+plan|implementation\s+plan|tasks?[:\s]|file\s+structure)\b/i },
+    review: { field: "verificationOut", signal: /\b(?:typecheck\s+(?:passed|failed)|tests?\s+(?:passed|failed)|verification\s+(?:complete|done))\b/i },
+  };
+  const entry = phaseFieldMap[phase];
+  if (!entry) return null;
+  if (!entry.signal.test(responseText)) return null;
+  const wasSaved = executedTools.some(
+    (t) => t.name === "saveBuildEvidence" &&
+      (t.args as Record<string, unknown> | undefined)?.field === entry.field,
+  );
+  return wasSaved ? null : entry.field;
+}
+
 export type AgenticResult = {
   /** Final text response from the agent */
   content: string;
@@ -425,6 +488,19 @@ export async function runAgenticLoop(params: {
    * by name rather than becoming a generic "AI Assistant".
    */
   agentDisplayName?: string;
+  /**
+   * Optional active build phase ('ideate' | 'plan' | 'build' | 'review' | 'ship'
+   * | 'complete'). Set by /build route callers from FeatureBuild.phase. When
+   * set and equal to a phase that requires a tool call, a turn that produces
+   * zero tool calls writes a PlatformIssueReport (Build Specialist Operator
+   * Contract clause 2.6 platform path).
+   */
+  buildPhase?: string | null;
+  /**
+   * Optional active FeatureBuild.id for attribution on guard-written
+   * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
+   */
+  featureBuildId?: string | null;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -731,6 +807,67 @@ export async function runAgenticLoop(params: {
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      // Build-specialist Operator Contract clause 2.6 — platform-side guards.
+      // Detect contract violations the LLM cannot self-report. Each guard
+      // writes a PlatformIssueReport tagged to the active build (when known).
+      // Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
+      const writeContractIssue = (
+        category: "tool-refused-despite-availability" | "zero-tool-call" | "unsaved-evidence",
+        title: string,
+        description: string,
+        severity: "high" | "medium" = "high",
+      ): void => {
+        prisma.platformIssueReport.create({
+          data: {
+            reportId: `coworker-process-${Date.now()}-${threadId.slice(0, 8)}-${category}`,
+            type: "runtime_error",
+            severity,
+            status: "open",
+            title: `[coworker-process] ${title}`,
+            description,
+            routeContext,
+            agentId,
+            featureBuildId: params.featureBuildId ?? null,
+            source: "agentic-loop-guard",
+          },
+        }).catch((err) => {
+          console.warn(`[agentic-loop] failed to write contract issue (${category}):`, err);
+        });
+      };
+
+      // 2.6a: tool-refused-despite-availability
+      const refusedToolName = detectToolRefusedDespiteAvailability(trimmed, tools);
+      if (refusedToolName) {
+        console.warn(`[agentic-loop] contract-violation tool-refused-despite-availability: ${refusedToolName}`);
+        writeContractIssue(
+          "tool-refused-despite-availability",
+          `tool-refused-despite-availability: ${refusedToolName}`,
+          `Agent ${agentId} on route ${routeContext} asserted that ${refusedToolName} is unavailable in iteration ${iteration}, but the tool was in the delivered tool list. Response excerpt: ${trimmed.slice(0, 500)}`,
+        );
+      }
+
+      // 2.6b: zero-tool-call on phase-required turn
+      if (executedTools.length === 0 && phaseRequiresToolCall(params.buildPhase)) {
+        console.warn(`[agentic-loop] contract-violation zero-tool-call phase=${params.buildPhase}`);
+        writeContractIssue(
+          "zero-tool-call",
+          `zero-tool-call on phase=${params.buildPhase}`,
+          `Agent ${agentId} on route ${routeContext} closed iteration ${iteration} of build phase '${params.buildPhase}' with zero tool calls. Response excerpt: ${trimmed.slice(0, 500)}`,
+        );
+      }
+
+      // 2.4: save-before-final-response — evidence in text but not persisted
+      const unsavedField = detectUnsavedEvidence(trimmed, executedTools, params.buildPhase);
+      if (unsavedField) {
+        console.warn(`[agentic-loop] contract-violation unsaved-evidence: ${unsavedField} described but not saved`);
+        writeContractIssue(
+          "unsaved-evidence",
+          `unsaved-evidence: ${unsavedField}`,
+          `Agent ${agentId} on route ${routeContext} produced ${unsavedField} content in iteration ${iteration} but did not call saveBuildEvidence({ field: "${unsavedField}", ... }). Response excerpt: ${trimmed.slice(0, 500)}`,
+          "medium",
+        );
+      }
 
       // Empty response guard: if the model returns empty content AND zero tool calls,
       // it can't handle the request (wrong tool format, model doesn't support tools, etc).

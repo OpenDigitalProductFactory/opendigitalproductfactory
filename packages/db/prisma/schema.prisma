@@ -843,35 +843,35 @@ model ServiceOffering {
 }
 
 model TaxonomyNode {
-  id                     String                  @id @default(cuid())
-  nodeId                 String                  @unique
-  name                   String
-  portfolioId            String?
-  parentId               String?
-  status                 String                  @default("active")
-  governance             Json?
-  description            String?
-  enrichment             Json?
-  backlogItems           BacklogItem[]
-  products               DigitalProduct[]
-  eaElements             EaElement[]
-  fingerprintRules       DiscoveryFingerprintRule[]
-  inventoryEntities      InventoryEntity[]
-  portfolioQualityIssues PortfolioQualityIssue[]
-  triageSelectionDecisions DiscoveryTriageDecision[] @relation("DiscoveryTriageDecisionSelectedTaxonomy")
-  parent                 TaxonomyNode?           @relation("TaxonomyTree", fields: [parentId], references: [id])
-  children               TaxonomyNode[]          @relation("TaxonomyTree")
+  id                       String                     @id @default(cuid())
+  nodeId                   String                     @unique
+  name                     String
+  portfolioId              String?
+  parentId                 String?
+  status                   String                     @default("active")
+  governance               Json?
+  description              String?
+  enrichment               Json?
+  backlogItems             BacklogItem[]
+  products                 DigitalProduct[]
+  eaElements               EaElement[]
+  fingerprintRules         DiscoveryFingerprintRule[]
+  inventoryEntities        InventoryEntity[]
+  portfolioQualityIssues   PortfolioQualityIssue[]
+  triageSelectionDecisions DiscoveryTriageDecision[]  @relation("DiscoveryTriageDecisionSelectedTaxonomy")
+  parent                   TaxonomyNode?              @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children                 TaxonomyNode[]             @relation("TaxonomyTree")
 }
 
 model BacklogItem {
-  id                    String           @id @default(cuid())
-  itemId                String           @unique
+  id                    String                @id @default(cuid())
+  itemId                String                @unique
   title                 String
   status                String
   type                  String
   body                  String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
   priority              Int?
   digitalProductId      String?
   taxonomyNodeId        String?
@@ -880,12 +880,12 @@ model BacklogItem {
   triageOutcome         String?
   effortSize            String?
   proposedOutcome       String?
-  activeBuildId         String?          @unique
+  activeBuildId         String?               @unique
   duplicateOfId         String?
   resolution            String?
   abandonReason         String?
   stalenessDetectedAt   DateTime?
-  occurrenceCount       Int              @default(1)
+  occurrenceCount       Int                   @default(1)
   lastSeenAt            DateTime?
   submittedById         String?
   completedAt           DateTime?
@@ -898,15 +898,15 @@ model BacklogItem {
   upstreamIssueNumber   Int?
   upstreamIssueUrl      String?
   upstreamSyncedAt      DateTime?
-  accountableEmployee   EmployeeProfile? @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
-  activeBuild           FeatureBuild?    @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
-  digitalProduct        DigitalProduct?  @relation(fields: [digitalProductId], references: [id])
-  duplicateOf           BacklogItem?     @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
-  duplicates            BacklogItem[]    @relation("BacklogItemDuplicates")
-  epic                  Epic?            @relation(fields: [epicId], references: [id])
-  featureBuilds         FeatureBuild[]   @relation("BacklogItemOriginator")
-  submittedBy           User?            @relation("BacklogSubmissions", fields: [submittedById], references: [id])
-  taxonomyNode          TaxonomyNode?    @relation(fields: [taxonomyNodeId], references: [id])
+  accountableEmployee   EmployeeProfile?      @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
+  activeBuild           FeatureBuild?         @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
+  digitalProduct        DigitalProduct?       @relation(fields: [digitalProductId], references: [id])
+  duplicateOf           BacklogItem?          @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
+  duplicates            BacklogItem[]         @relation("BacklogItemDuplicates")
+  epic                  Epic?                 @relation(fields: [epicId], references: [id])
+  featureBuilds         FeatureBuild[]        @relation("BacklogItemOriginator")
+  submittedBy           User?                 @relation("BacklogSubmissions", fields: [submittedById], references: [id])
+  taxonomyNode          TaxonomyNode?         @relation(fields: [taxonomyNodeId], references: [id])
   activities            BacklogItemActivity[]
 }
 
@@ -1144,25 +1144,25 @@ model DeviceCodeSession {
 }
 
 model ModelProvider {
-  id                       String                     @id @default(cuid())
-  providerId               String                     @unique
+  id                       String                    @id @default(cuid())
+  providerId               String                    @unique
   name                     String
   families                 Json
-  status                   String                     @default("unconfigured")
-  updatedAt                DateTime                   @updatedAt
+  status                   String                    @default("unconfigured")
+  updatedAt                DateTime                  @updatedAt
   authHeader               String?
   computeWatts             Float?
   cliEngine                String? // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
-  costModel                String                     @default("token")
+  costModel                String                    @default("token")
   electricityRateKwh       Float?
-  enabledFamilies          Json                       @default("[]")
+  enabledFamilies          Json                      @default("[]")
   endpoint                 String?
   inputPricePerMToken      Float?
   outputPricePerMToken     Float?
-  category                 String                     @default("direct")
+  category                 String                    @default("direct")
   baseUrl                  String?
-  authMethod               String                     @default("api_key")
-  supportedAuthMethods     Json                       @default("[\"api_key\"]")
+  authMethod               String                    @default("api_key")
+  supportedAuthMethods     Json                      @default("[\"api_key\"]")
   consoleUrl               String?
   docsUrl                  String?
   billingLabel             String?
@@ -1171,40 +1171,40 @@ model ModelProvider {
   oauthClientId            String?
   oauthRedirectUri         String?
   costPerformanceNotes     String?
-  endpointType             String                     @default("llm")
+  endpointType             String                    @default("llm")
   serviceKind              String?
-  sensitivityClearance     String[]                   @default([])
-  capabilityTier           String                     @default("basic")
-  costBand                 String                     @default("free")
-  taskTags                 String[]                   @default([])
+  sensitivityClearance     String[]                  @default([])
+  capabilityTier           String                    @default("basic")
+  costBand                 String                    @default("free")
+  taskTags                 String[]                  @default([])
   mcpTransport             String?
   maxConcurrency           Int?
-  catalogVisibility        String                     @default("visible")
+  catalogVisibility        String                    @default("visible")
   catalogEntry             Json?
   avgLatencyMs             Float?
-  codegen                  Int                        @default(50)
-  contextRetention         Int                        @default(50)
-  conversational           Int                        @default(50)
-  customScores             Json                       @default("{}")
-  evalCount                Int                        @default(0)
-  instructionFollowing     Int                        @default(50)
+  codegen                  Int                       @default(50)
+  contextRetention         Int                       @default(50)
+  conversational           Int                       @default(50)
+  customScores             Json                      @default("{}")
+  evalCount                Int                       @default(0)
+  instructionFollowing     Int                       @default(50)
   lastCallAt               DateTime?
   lastEvalAt               DateTime?
   maxContextTokens         Int?
   maxOutputTokens          Int?
-  modelRestrictions        String[]                   @default([])
-  profileConfidence        String                     @default("low")
-  profileSource            String                     @default("seed")
-  reasoning                Int                        @default(50)
-  recentFailureRate        Float                      @default(0)
+  modelRestrictions        String[]                  @default([])
+  profileConfidence        String                    @default("low")
+  profileSource            String                    @default("seed")
+  reasoning                Int                       @default(50)
+  recentFailureRate        Float                     @default(0)
   retiredAt                DateTime?
   retiredReason            String?
-  structuredOutput         Int                        @default(50)
-  supportedModalities      Json                       @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
-  supportsStreaming        Boolean                    @default(true)
-  supportsStructuredOutput Boolean                    @default(false)
-  supportsToolUse          Boolean                    @default(false)
-  toolFidelity             Int                        @default(50)
+  structuredOutput         Int                       @default(50)
+  supportedModalities      Json                      @default("{\"input\": [\"text\"], \"output\": [\"text\"]}")
+  supportsStreaming        Boolean                   @default(true)
+  supportsStructuredOutput Boolean                   @default(false)
+  supportsToolUse          Boolean                   @default(false)
+  toolFidelity             Int                       @default(50)
   userFacingDescription    Json?
   authMode                 String?
   credentialOwnerMode      String?
@@ -1700,8 +1700,8 @@ model AgentPromptContext {
 }
 
 model AuthorizationDecisionLog {
-  id                  String           @id @default(cuid())
-  decisionId          String           @unique
+  id                  String            @id @default(cuid())
+  decisionId          String            @unique
   actorType           String
   actorRef            String
   humanContextRef     String?
@@ -1712,14 +1712,14 @@ model AuthorizationDecisionLog {
   objectRef           String?
   decision            String
   rationale           Json
-  createdAt           DateTime         @default(now())
+  createdAt           DateTime          @default(now())
   endpointUsed        String?
   mode                String?
   routeContext        String?
   sensitivityLevel    String?
   sensitivityOverride Boolean?
   authorityBinding    AuthorityBinding? @relation(fields: [authorityBindingId], references: [id])
-  delegationGrant     DelegationGrant? @relation(fields: [delegationGrantId], references: [id])
+  delegationGrant     DelegationGrant?  @relation(fields: [delegationGrantId], references: [id])
 
   @@index([decision])
   @@index([createdAt])
@@ -2096,31 +2096,31 @@ model Activity {
 }
 
 model Organization {
-  id                    String                  @id @default(cuid())
-  orgId                 String                  @unique
-  name                  String
-  legalName             String?
-  slug                  String                  @unique
-  industry              String?
-  website               String?
-  email                 String?
-  phone                 String?
-  address               Json?
-  logoUrl               String?
-  designSystem          Json?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  brandingConfig        BrandingConfig?
-  storefrontConfig      StorefrontConfig?
-  businessContext       BusinessContext?
-  marketingStrategy     MarketingStrategy?
-  marketingReviews      MarketingReview[]
-  marketingCampaignBriefs MarketingCampaignBrief[]
-  marketingAssetTasks   MarketingAssetTask[]
-  marketingKpiCheckpoints MarketingKpiCheckpoint[]
+  id                            String                         @id @default(cuid())
+  orgId                         String                         @unique
+  name                          String
+  legalName                     String?
+  slug                          String                         @unique
+  industry                      String?
+  website                       String?
+  email                         String?
+  phone                         String?
+  address                       Json?
+  logoUrl                       String?
+  designSystem                  Json?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  brandingConfig                BrandingConfig?
+  storefrontConfig              StorefrontConfig?
+  businessContext               BusinessContext?
+  marketingStrategy             MarketingStrategy?
+  marketingReviews              MarketingReview[]
+  marketingCampaignBriefs       MarketingCampaignBrief[]
+  marketingAssetTasks           MarketingAssetTask[]
+  marketingKpiCheckpoints       MarketingKpiCheckpoint[]
   marketingAutomationCandidates MarketingAutomationCandidate[]
-  taxProfile            OrganizationTaxProfile?
-  platformSetupProgress PlatformSetupProgress?  @relation("OrgSetupProgress")
+  taxProfile                    OrganizationTaxProfile?
+  platformSetupProgress         PlatformSetupProgress?         @relation("OrgSetupProgress")
 }
 
 model BusinessContext {
@@ -2457,21 +2457,21 @@ model RuntimeAdvisory {
 }
 
 model DiscoveryRun {
-  id                  String                   @id @default(cuid())
-  runKey              String                   @unique
-  sourceSlug          String
-  trigger             String                   @default("bootstrap")
-  status              String                   @default("running")
-  startedAt           DateTime                 @default(now())
-  completedAt         DateTime?
-  itemCount           Int                      @default(0)
-  relationshipCount   Int                      @default(0)
-  notes               Json?
-  discoveredItems     DiscoveredItem[]
-  discoveredRelations DiscoveredRelationship[]
+  id                      String                            @id @default(cuid())
+  runKey                  String                            @unique
+  sourceSlug              String
+  trigger                 String                            @default("bootstrap")
+  status                  String                            @default("running")
+  startedAt               DateTime                          @default(now())
+  completedAt             DateTime?
+  itemCount               Int                               @default(0)
+  relationshipCount       Int                               @default(0)
+  notes                   Json?
+  discoveredItems         DiscoveredItem[]
+  discoveredRelations     DiscoveredRelationship[]
   fingerprintObservations DiscoveryFingerprintObservation[]
-  confirmedEntities   InventoryEntity[]        @relation("InventoryEntityConfirmedRun")
-  confirmedRelations  InventoryRelationship[]  @relation("InventoryRelationshipConfirmedRun")
+  confirmedEntities       InventoryEntity[]                 @relation("InventoryEntityConfirmedRun")
+  confirmedRelations      InventoryRelationship[]           @relation("InventoryRelationshipConfirmedRun")
 }
 
 model DiscoveredItem {
@@ -2546,9 +2546,9 @@ model DiscoveryFingerprintObservation {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  inventoryEntity InventoryEntity?              @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
-  discoveryRun    DiscoveryRun?                 @relation(fields: [discoveryRunId], references: [id], onDelete: SetNull)
-  approvedRule    DiscoveryFingerprintRule?     @relation("ApprovedFingerprintRule", fields: [approvedRuleId], references: [id], onDelete: SetNull)
+  inventoryEntity InventoryEntity?             @relation(fields: [inventoryEntityId], references: [id], onDelete: SetNull)
+  discoveryRun    DiscoveryRun?                @relation(fields: [discoveryRunId], references: [id], onDelete: SetNull)
+  approvedRule    DiscoveryFingerprintRule?    @relation("ApprovedFingerprintRule", fields: [approvedRuleId], references: [id], onDelete: SetNull)
   reviews         DiscoveryFingerprintReview[]
 
   @@index([sourceKind])
@@ -2601,7 +2601,7 @@ model DiscoveryFingerprintRule {
 
   catalogVersion       DiscoveryFingerprintCatalogVersion? @relation(fields: [catalogVersionId], references: [id], onDelete: SetNull)
   taxonomyNode         TaxonomyNode?                       @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
-  approvedObservations DiscoveryFingerprintObservation[]    @relation("ApprovedFingerprintRule")
+  approvedObservations DiscoveryFingerprintObservation[]   @relation("ApprovedFingerprintRule")
 
   @@index([status])
   @@index([scope])
@@ -2644,8 +2644,8 @@ model DiscoveredRelationship {
 }
 
 model InventoryEntity {
-  id                          String                       @id @default(cuid())
-  entityKey                   String                       @unique
+  id                          String                            @id @default(cuid())
+  entityKey                   String                            @unique
   entityType                  String
   name                        String
   technicalClass              String?
@@ -2654,14 +2654,14 @@ model InventoryEntity {
   productModel                String?
   observedVersion             String?
   normalizedVersion           String?
-  supportStatus               String                       @default("unknown")
-  status                      String                       @default("active")
-  attributionStatus           String                       @default("needs_review")
+  supportStatus               String                            @default("unknown")
+  status                      String                            @default("active")
+  attributionStatus           String                            @default("needs_review")
   confidence                  Float?
-  providerView                String                       @default("foundational")
-  properties                  Json                         @default("{}")
-  firstSeenAt                 DateTime                     @default(now())
-  lastSeenAt                  DateTime                     @default(now())
+  providerView                String                            @default("foundational")
+  properties                  Json                              @default("{}")
+  firstSeenAt                 DateTime                          @default(now())
+  lastSeenAt                  DateTime                          @default(now())
   lastConfirmedRunId          String?
   portfolioId                 String?
   taxonomyNodeId              String?
@@ -2671,20 +2671,20 @@ model InventoryEntity {
   attributionEvidence         Json?
   candidateTaxonomy           Json?
   discoveredItems             DiscoveredItem[]
-  digitalProduct              DigitalProduct?              @relation(fields: [digitalProductId], references: [id])
-  lastConfirmedRun            DiscoveryRun?                @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id])
-  portfolio                   Portfolio?                   @relation(fields: [portfolioId], references: [id])
-  taxonomyNode                TaxonomyNode?                @relation(fields: [taxonomyNodeId], references: [id])
-  fromRelationships           InventoryRelationship[]      @relation("InventoryRelationshipFromEntity")
-  toRelationships             InventoryRelationship[]      @relation("InventoryRelationshipToEntity")
+  digitalProduct              DigitalProduct?                   @relation(fields: [digitalProductId], references: [id])
+  lastConfirmedRun            DiscoveryRun?                     @relation("InventoryEntityConfirmedRun", fields: [lastConfirmedRunId], references: [id])
+  portfolio                   Portfolio?                        @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                TaxonomyNode?                     @relation(fields: [taxonomyNodeId], references: [id])
+  fromRelationships           InventoryRelationship[]           @relation("InventoryRelationshipFromEntity")
+  toRelationships             InventoryRelationship[]           @relation("InventoryRelationshipToEntity")
   qualityIssues               PortfolioQualityIssue[]
   triageDecisions             DiscoveryTriageDecision[]
   changeItems                 ChangeItem[]
   softwareEvidence            DiscoveredSoftwareEvidence[]
   fingerprintObservations     DiscoveryFingerprintObservation[]
-  discoveryConnectionGateways DiscoveryConnection[]        @relation("DiscoveryConnectionGateway")
+  discoveryConnectionGateways DiscoveryConnection[]             @relation("DiscoveryConnectionGateway")
   discoveredViaConnectionId   String?
-  discoveredViaConnection     DiscoveryConnection?         @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
+  discoveredViaConnection     DiscoveryConnection?              @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
 
   @@index([entityType])
   @@index([attributionStatus])
@@ -2717,26 +2717,26 @@ model InventoryRelationship {
 }
 
 model PortfolioQualityIssue {
-  id                      String                 @id @default(cuid())
-  issueKey                String                 @unique
+  id                      String                    @id @default(cuid())
+  issueKey                String                    @unique
   issueType               String
-  status                  String                 @default("open")
-  severity                String                 @default("warn")
+  status                  String                    @default("open")
+  severity                String                    @default("warn")
   summary                 String
   details                 Json?
-  firstDetectedAt         DateTime               @default(now())
-  lastDetectedAt          DateTime               @default(now())
+  firstDetectedAt         DateTime                  @default(now())
+  lastDetectedAt          DateTime                  @default(now())
   resolvedAt              DateTime?
   inventoryEntityId       String?
   inventoryRelationshipId String?
   portfolioId             String?
   taxonomyNodeId          String?
   digitalProductId        String?
-  digitalProduct          DigitalProduct?        @relation(fields: [digitalProductId], references: [id])
-  inventoryEntity         InventoryEntity?       @relation(fields: [inventoryEntityId], references: [id])
-  inventoryRelationship   InventoryRelationship? @relation(fields: [inventoryRelationshipId], references: [id])
-  portfolio               Portfolio?             @relation(fields: [portfolioId], references: [id])
-  taxonomyNode            TaxonomyNode?          @relation(fields: [taxonomyNodeId], references: [id])
+  digitalProduct          DigitalProduct?           @relation(fields: [digitalProductId], references: [id])
+  inventoryEntity         InventoryEntity?          @relation(fields: [inventoryEntityId], references: [id])
+  inventoryRelationship   InventoryRelationship?    @relation(fields: [inventoryRelationshipId], references: [id])
+  portfolio               Portfolio?                @relation(fields: [portfolioId], references: [id])
+  taxonomyNode            TaxonomyNode?             @relation(fields: [taxonomyNodeId], references: [id])
   triageDecisions         DiscoveryTriageDecision[]
 
   @@index([issueType])
@@ -2815,25 +2815,25 @@ model AgentMessage {
 }
 
 model UserFact {
-  id              String     @id @default(cuid())
-  userId          String
-  category        String // preference | decision | constraint | domain_context
-  key             String
-  value           String
-  confidence      Float      @default(1.0)
-  sourceRoute     String
-  sourceMessageId String?
-  sourceAgentId   String?
+  id                                String     @id @default(cuid())
+  userId                            String
+  category                          String // preference | decision | constraint | domain_context
+  key                               String
+  value                             String
+  confidence                        Float      @default(1.0)
+  sourceRoute                       String
+  sourceMessageId                   String?
+  sourceAgentId                     String?
   sourceOperatingProfileFingerprint String?
-  lastValidatedAt DateTime?
-  validatedAgainstFingerprint String?
-  supersededAt    DateTime?
-  supersededById  String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  supersededBy    UserFact?  @relation("FactSupersession", fields: [supersededById], references: [id])
-  supersedes      UserFact[] @relation("FactSupersession")
+  lastValidatedAt                   DateTime?
+  validatedAgainstFingerprint       String?
+  supersededAt                      DateTime?
+  supersededById                    String?
+  createdAt                         DateTime   @default(now())
+  updatedAt                         DateTime   @updatedAt
+  user                              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supersededBy                      UserFact?  @relation("FactSupersession", fields: [supersededById], references: [id])
+  supersedes                        UserFact[] @relation("FactSupersession")
 
   @@index([userId, category, key])
   @@index([userId, supersededAt])
@@ -2917,7 +2917,7 @@ model AdminActivity {
 }
 
 model ToolExecution {
-  id            String   @id @default(cuid())
+  id            String                @id @default(cuid())
   threadId      String
   agentId       String
   userId        String
@@ -2928,7 +2928,7 @@ model ToolExecution {
   executionMode String
   routeContext  String?
   durationMs    Int?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime              @default(now())
   // Phase 3: audit enrichment — nullable; backfill via backfill-capability-ids.ts
   auditClass    String?
   capabilityId  String?
@@ -2948,18 +2948,18 @@ model ToolExecution {
 }
 
 model ToolExecutionReceipt {
-  id               String   @id @default(cuid())
-  toolExecutionId  String   @unique
+  id               String                 @id @default(cuid())
+  toolExecutionId  String                 @unique
   buildId          String?
   receiptKind      String
-  receiptStatus    String   @default("valid")
+  receiptStatus    String                 @default("valid")
   inputFingerprint String
   outputDigest     Json
   executionStatus  String
   expiresAt        DateTime
-  createdAt        DateTime @default(now())
-  build            FeatureBuild? @relation(fields: [buildId], references: [buildId])
-  toolExecution    ToolExecution  @relation(fields: [toolExecutionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime               @default(now())
+  build            FeatureBuild?          @relation(fields: [buildId], references: [buildId])
+  toolExecution    ToolExecution          @relation(fields: [toolExecutionId], references: [id], onDelete: Cascade)
   usages           ArtifactReceiptUsage[]
 
   @@index([buildId, createdAt(sort: Desc)])
@@ -2972,20 +2972,20 @@ model ToolExecutionReceipt {
 // at rest, scoped to a subset of the user's grants, optionally bound to a
 // specific Agent identity for grant-narrowing.
 model McpApiToken {
-  id              String    @id @default(cuid())
-  userId          String
-  agentId         String?
-  name            String
-  tokenHash       String    @unique
-  prefix          String
-  scopes          String[]  @default([])
-  capability      String    @default("read")
-  lastUsedAt      DateTime?
-  expiresAt       DateTime?
-  revokedAt       DateTime?
-  revokedReason   String?
-  createdAt       DateTime  @default(now())
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  userId        String
+  agentId       String?
+  name          String
+  tokenHash     String    @unique
+  prefix        String
+  scopes        String[]  @default([])
+  capability    String    @default("read")
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@index([tokenHash])
@@ -3036,9 +3036,9 @@ model Notification {
 
 model PlatformNotification {
   id         String    @id @default(cuid())
-  severity   String    // "info" | "warning" | "critical" | "expired"
-  category   String    // e.g. "token-expiry"
-  subjectId  String?   // e.g. CredentialEntry.providerId
+  severity   String // "info" | "warning" | "critical" | "expired"
+  category   String // e.g. "token-expiry"
+  subjectId  String? // e.g. CredentialEntry.providerId
   message    String    @db.Text
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
@@ -3082,11 +3082,11 @@ model DynamicView {
 }
 
 model PlatformIssueReport {
-  id                  String    @id @default(cuid())
-  reportId            String    @unique
+  id                  String        @id @default(cuid())
+  reportId            String        @unique
   type                String
-  severity            String    @default("medium")
-  status              String    @default("open")
+  severity            String        @default("medium")
+  status              String        @default("open")
   title               String
   description         String?
   routeContext        String?
@@ -3096,13 +3096,17 @@ model PlatformIssueReport {
   digitalProductId    String?
   portfolioId         String?
   agentId             String?
-  source              String    @default("manual")
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  featureBuildId      String?
+  source              String        @default("manual")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
   upstreamIssueNumber Int?
   upstreamIssueUrl    String?
   upstreamSyncedAt    DateTime?
-  reportedBy          User?     @relation(fields: [reportedById], references: [id])
+  reportedBy          User?         @relation(fields: [reportedById], references: [id])
+  featureBuild        FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+
+  @@index([featureBuildId])
 }
 
 model ExternalEvidenceRecord {
@@ -3123,62 +3127,63 @@ model ExternalEvidenceRecord {
 }
 
 model FeatureBuild {
-  id                    String            @id @default(cuid())
-  buildId               String            @unique
-  title                 String
-  description           String?
-  portfolioId           String?
+  id                       String                  @id @default(cuid())
+  buildId                  String                  @unique
+  title                    String
+  description              String?
+  portfolioId              String?
   originatingBacklogItemId String?
-  brief                 Json?
-  plan                  Json?
-  phase                 String            @default("ideate")
-  sandboxId             String?
-  sandboxPort           Int?
-  buildBranch           String? // git branch in sandbox: "build/<buildId>"
-  diffSummary           String?
-  diffPatch             String?
-  codingProvider        String?
-  threadId              String?
-  createdById           String
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  digitalProductId      String?
-  designDoc             Json?
-  designReview          Json?
-  buildPlan             Json?
-  planReview            Json?
-  taskResults           Json?
-  taskResultsVersion    Int               @default(0)
-  verificationOut       Json?
-  acceptanceMet         Json?
-  scoutFindings         Json?
-  accountableEmployeeId String?
-  claimedByAgentId      String?
-  claimedAt             DateTime?
-  claimStatus           String?
-  gitCommitHashes       String[]          @default([])
-  uxTestResults         Json?
-  uxVerificationStatus  String? // null | "running" | "complete" | "failed" | "skipped"
-  deliberationSummary   Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
-  buildExecState        Json?
-  taxonomyAttribution   Json?
-  releaseBundleId       String?
-  calendarEventId       String?
-  abandonedAt           DateTime?
-  abandonReason         String?
-  draftApprovedAt       DateTime?
-  activities            BuildActivity[]
-  artifactRevisions     BuildArtifactRevision[]
-  phaseHandoffs         PhaseHandoff[]
-  toolExecutionReceipts ToolExecutionReceipt[]
-  activeForBacklogItem  BacklogItem?      @relation("BacklogItemActiveBuild")
-  accountableEmployee   EmployeeProfile?  @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
-  createdBy             User              @relation(fields: [createdById], references: [id])
-  digitalProduct        DigitalProduct?   @relation(fields: [digitalProductId], references: [id])
-  originator            BacklogItem?      @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
-  releaseBundle         ReleaseBundle?    @relation(fields: [releaseBundleId], references: [id])
-  productVersions       ProductVersion[]
-  promotionBackups      PromotionBackup[]
+  brief                    Json?
+  plan                     Json?
+  phase                    String                  @default("ideate")
+  sandboxId                String?
+  sandboxPort              Int?
+  buildBranch              String? // git branch in sandbox: "build/<buildId>"
+  diffSummary              String?
+  diffPatch                String?
+  codingProvider           String?
+  threadId                 String?
+  createdById              String
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  digitalProductId         String?
+  designDoc                Json?
+  designReview             Json?
+  buildPlan                Json?
+  planReview               Json?
+  taskResults              Json?
+  taskResultsVersion       Int                     @default(0)
+  verificationOut          Json?
+  acceptanceMet            Json?
+  scoutFindings            Json?
+  accountableEmployeeId    String?
+  claimedByAgentId         String?
+  claimedAt                DateTime?
+  claimStatus              String?
+  gitCommitHashes          String[]                @default([])
+  uxTestResults            Json?
+  uxVerificationStatus     String? // null | "running" | "complete" | "failed" | "skipped"
+  deliberationSummary      Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
+  buildExecState           Json?
+  taxonomyAttribution      Json?
+  releaseBundleId          String?
+  calendarEventId          String?
+  abandonedAt              DateTime?
+  abandonReason            String?
+  draftApprovedAt          DateTime?
+  activities               BuildActivity[]
+  artifactRevisions        BuildArtifactRevision[]
+  phaseHandoffs            PhaseHandoff[]
+  toolExecutionReceipts    ToolExecutionReceipt[]
+  activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
+  accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
+  createdBy                User                    @relation(fields: [createdById], references: [id])
+  digitalProduct           DigitalProduct?         @relation(fields: [digitalProductId], references: [id])
+  originator               BacklogItem?            @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
+  releaseBundle            ReleaseBundle?          @relation(fields: [releaseBundleId], references: [id])
+  productVersions          ProductVersion[]
+  promotionBackups         PromotionBackup[]
+  issueReports             PlatformIssueReport[]
 
   @@index([phase])
   @@index([createdById])
@@ -3188,7 +3193,7 @@ model FeatureBuild {
 }
 
 model BuildArtifactRevision {
-  id             String   @id @default(cuid())
+  id             String                 @id @default(cuid())
   buildId        String
   field          String
   revisionNumber Int
@@ -3197,10 +3202,10 @@ model BuildArtifactRevision {
   savedByUserId  String
   savedByAgentId String?
   threadId       String?
-  status         String   @default("accepted")
-  legacyEvidence Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  build          FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+  status         String                 @default("accepted")
+  legacyEvidence Boolean                @default(false)
+  createdAt      DateTime               @default(now())
+  build          FeatureBuild           @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
   receiptUsages  ArtifactReceiptUsage[]
 
   @@unique([buildId, field, revisionNumber])
@@ -3208,11 +3213,11 @@ model BuildArtifactRevision {
 }
 
 model ArtifactReceiptUsage {
-  id                 String   @id @default(cuid())
+  id                 String                @id @default(cuid())
   artifactRevisionId String
   receiptId          String
   role               String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime              @default(now())
   artifactRevision   BuildArtifactRevision @relation(fields: [artifactRevisionId], references: [id], onDelete: Cascade)
   receipt            ToolExecutionReceipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 
@@ -3475,34 +3480,34 @@ model PlatformConfig {
 }
 
 model PlatformDevConfig {
-  id                   String    @id @default("singleton")
-  contributionMode     String    @default("selective")
+  id                     String    @id @default("singleton")
+  contributionMode       String    @default("selective")
   // Values: "fork_only" | "selective" | "contribute_all"
-  gitRemoteUrl         String? // Reserved for future git push capability
-  updatePending        Boolean   @default(false)
-  pendingVersion       String?
-  configuredAt         DateTime  @default(now())
-  configuredById       String?
-  configuredBy         User?     @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
-  dcoAcceptedAt        DateTime?
-  dcoAcceptedById      String?
-  dcoAcceptedBy        User?     @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
-  upstreamRemoteUrl    String?
+  gitRemoteUrl           String? // Reserved for future git push capability
+  updatePending          Boolean   @default(false)
+  pendingVersion         String?
+  configuredAt           DateTime  @default(now())
+  configuredById         String?
+  configuredBy           User?     @relation("PlatformDevConfiguredBy", fields: [configuredById], references: [id])
+  dcoAcceptedAt          DateTime?
+  dcoAcceptedById        String?
+  dcoAcceptedBy          User?     @relation("PlatformDevDcoAcceptedBy", fields: [dcoAcceptedById], references: [id])
+  upstreamRemoteUrl      String?
   // Client identity — generated once at install, never changes.
   // Used as the git author for all agent commits so contributions are
   // indistinguishable by name but unique and traceable by email hash.
-  clientId             String? // UUID, generated at first seed
-  gitAgentEmail        String? // agent-<sha256(clientId)[:16]>@hive.dpf
+  clientId               String? // UUID, generated at first seed
+  gitAgentEmail          String? // agent-<sha256(clientId)[:16]>@hive.dpf
   // Which push model to use when contributionMode is selective | contribute_all.
   // null = unconfigured; explicit value required before contribute_to_hive runs.
   // "maintainer-direct" — push directly to upstream (legacy path, requires upstream write)
   // "fork-pr"          — push to contributor-owned fork, open cross-repo PR (public-repo default)
-  contributionModel    String?
-  contributorForkOwner String?
-  contributorForkRepo  String?
-  forkVerifiedAt       DateTime?
-  backlogTeeUpDailyCap Int       @default(3)
-  governedBacklogEnabled Boolean @default(false)
+  contributionModel      String?
+  contributorForkOwner   String?
+  contributorForkRepo    String?
+  forkVerifiedAt         DateTime?
+  backlogTeeUpDailyCap   Int       @default(3)
+  governedBacklogEnabled Boolean   @default(false)
 }
 
 model EaNotation {
@@ -4906,12 +4911,12 @@ model MarketingStrategy {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  storefront   StorefrontConfig? @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
-  reviews      MarketingReview[]
-  campaignBriefs MarketingCampaignBrief[]
-  assetTasks   MarketingAssetTask[]
-  kpiCheckpoints MarketingKpiCheckpoint[]
+  organization         Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storefront           StorefrontConfig?              @relation(fields: [storefrontId], references: [id], onDelete: SetNull)
+  reviews              MarketingReview[]
+  campaignBriefs       MarketingCampaignBrief[]
+  assetTasks           MarketingAssetTask[]
+  kpiCheckpoints       MarketingKpiCheckpoint[]
   automationCandidates MarketingAutomationCandidate[]
 
   @@index([status])
@@ -5459,31 +5464,31 @@ model Supplier {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  bills          Bill[]
-  purchaseOrders PurchaseOrder[]
+  bills              Bill[]
+  purchaseOrders     PurchaseOrder[]
   aiProviderProfiles AiProviderFinanceProfile[]
-  supplierContracts SupplierContract[]
-  financeWorkItems  FinanceWorkItem[]
+  supplierContracts  SupplierContract[]
+  financeWorkItems   FinanceWorkItem[]
 
   @@index([status])
 }
 
 model AiProviderFinanceProfile {
-  id                     String   @id @default(cuid())
-  providerId             String   @unique
+  id                     String    @id @default(cuid())
+  providerId             String    @unique
   supplierId             String?
-  status                 String   @default("seeded")
-  reconciliationStrategy String   @default("provider_portal")
-  valuationMethod        String   @default("commitment_first")
-  planCurrency           String   @default("USD")
+  status                 String    @default("seeded")
+  reconciliationStrategy String    @default("provider_portal")
+  valuationMethod        String    @default("commitment_first")
+  planCurrency           String    @default("USD")
   monthlyBudget          Decimal?
   billingUrl             String?
   usageUrl               String?
   notes                  String?
   lastEvaluatedAt        DateTime?
   lastSnapshotAt         DateTime?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   provider          ModelProvider      @relation(fields: [providerId], references: [providerId], onDelete: Cascade)
   supplier          Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -5495,19 +5500,19 @@ model AiProviderFinanceProfile {
 }
 
 model SupplierContract {
-  id                     String   @id @default(cuid())
-  contractId             String   @unique
+  id                     String    @id @default(cuid())
+  contractId             String    @unique
   profileId              String
   supplierId             String
   accountableEmployeeId  String?
-  status                 String   @default("draft")
-  contractType           String   @default("subscription")
-  billingCadence         String   @default("monthly")
-  currency               String   @default("USD")
+  status                 String    @default("draft")
+  contractType           String    @default("subscription")
+  billingCadence         String    @default("monthly")
+  currency               String    @default("USD")
   monthlyCommittedAmount Decimal?
   budgetAmount           Decimal?
-  budgetWindow           String   @default("monthly")
-  allowsOverage          Boolean  @default(false)
+  budgetWindow           String    @default("monthly")
+  allowsOverage          Boolean   @default(false)
   usageUnit              String?
   billingUrl             String?
   usageUrl               String?
@@ -5515,8 +5520,8 @@ model SupplierContract {
   startDate              DateTime?
   endDate                DateTime?
   notes                  String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   profile             AiProviderFinanceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   supplier            Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
@@ -5549,21 +5554,21 @@ model ContractAllowance {
 }
 
 model ContractUsageSnapshot {
-  id                      String   @id @default(cuid())
-  contractId              String
-  snapshotDate            DateTime
-  sourceType              String   @default("internal_observed")
-  confidence              String   @default("medium")
-  consumedQuantity        Decimal  @default(0)
-  includedQuantity        Decimal?
-  remainingQuantity       Decimal?
-  utilizationPct          Float?
+  id                        String   @id @default(cuid())
+  contractId                String
+  snapshotDate              DateTime
+  sourceType                String   @default("internal_observed")
+  confidence                String   @default("medium")
+  consumedQuantity          Decimal  @default(0)
+  includedQuantity          Decimal?
+  remainingQuantity         Decimal?
+  utilizationPct            Float?
   projectedMonthEndQuantity Decimal?
-  projectedUnusedValue    Decimal?
-  projectedOverageCost    Decimal?
-  metadata                Json?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  projectedUnusedValue      Decimal?
+  projectedOverageCost      Decimal?
+  metadata                  Json?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   contract SupplierContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
@@ -5572,22 +5577,22 @@ model ContractUsageSnapshot {
 }
 
 model FinanceWorkItem {
-  id              String   @id @default(cuid())
-  workItemId      String   @unique
+  id              String    @id @default(cuid())
+  workItemId      String    @unique
   profileId       String?
   contractId      String?
   supplierId      String?
   ownerEmployeeId String?
   type            String
-  status          String   @default("open")
-  severity        String   @default("medium")
+  status          String    @default("open")
+  severity        String    @default("medium")
   title           String
   description     String?
   dueAt           DateTime?
   resolvedAt      DateTime?
   metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   profile       AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
   contract      SupplierContract?         @relation(fields: [contractId], references: [id], onDelete: SetNull)

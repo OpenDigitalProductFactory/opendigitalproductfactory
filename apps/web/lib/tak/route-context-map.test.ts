@@ -195,3 +195,22 @@ describe("FALLBACK_ROUTE_CONTEXT", () => {
     expect(FALLBACK_ROUTE_CONTEXT.domain).toBe("Workspace");
   });
 });
+
+describe("ROUTE_CONTEXT_MAP /build operator-contract tooling", () => {
+  // Build specialist operator contract clause 2.6 requires the build-specialist
+  // to be able to call report_quality_issue when it detects a genuine process
+  // issue. Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
+  it("delivers report_quality_issue so the build-specialist can log process issues", () => {
+    const buildRoute = ROUTE_CONTEXT_MAP["/build"];
+    expect(buildRoute).toBeDefined();
+    expect(buildRoute!.domainTools).toContain("report_quality_issue");
+  });
+
+  it("still delivers the core build-lifecycle tools used by the operator contract", () => {
+    const buildRoute = ROUTE_CONTEXT_MAP["/build"];
+    const required = ["saveBuildEvidence", "reviewDesignDoc", "reviewBuildPlan"];
+    for (const tool of required) {
+      expect(buildRoute!.domainTools).toContain(tool);
+    }
+  });
+});
