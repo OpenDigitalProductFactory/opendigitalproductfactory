@@ -1,9 +1,35 @@
 // discovery-promotion.ts
 // Auto-promotes high-confidence InventoryEntity records to DigitalProduct records.
 // Called after each discovery sweep's persistence pass.
+//
+// As of Task 2.1, this runner delegates type/policy decisions to
+// resolvePromotionDecision (./discovery-promotion-policy) and surfaces every
+// skip as a PortfolioQualityIssue via openOrUpdateQualityIssue
+// (./portfolio-quality-issue-writer). The Prisma `findMany` filter no longer
+// constrains entityType — all attributed, taxonomy-placed, high-confidence
+// entities flow through the resolver, which decides promote vs. skip based on
+// taxonomy `governance.promotion` (preferred) or the legacy type allowlist
+// (fallback).
+
+import {
+  resolvePromotionDecision,
+  type PromotionTaxonomyNodeInput,
+} from "./discovery-promotion-policy";
+import {
+  openOrUpdateQualityIssue,
+  type QualityIssueDb,
+  type QualityIssueType,
+} from "./portfolio-quality-issue-writer";
 
 export const AUTO_PROMOTE_THRESHOLD = 0.90;
 
+/**
+ * Legacy type allowlist. Retained as an export because (a) external callers
+ * still reference it, and (b) the resolver consults it as a fallback when a
+ * taxonomy node has no `governance.promotion` policy. Source of truth for the
+ * fallback list now lives in `./discovery-promotion-policy` (LEGACY_PROMOTABLE_TYPES);
+ * the value here is the historical export surface kept stable.
+ */
 export const PROMOTABLE_TYPES = [
   "host",
   "runtime",
@@ -34,7 +60,7 @@ export function generateProductId(entityType: string, name: string): string {
   return entityType === "host" ? `host-${slug}` : `infra-${slug}`;
 }
 
-type PromotionDb = {
+type PromotionDb = QualityIssueDb & {
   inventoryEntity: {
     findMany(args: {
       where: Record<string, unknown>;
@@ -44,6 +70,7 @@ type PromotionDb = {
       entityKey: string;
       entityType: string;
       name: string;
+      attributionStatus?: string;
       attributionConfidence: number | null;
       taxonomyNodeId: string | null;
       digitalProductId: string | null;
@@ -52,7 +79,13 @@ type PromotionDb = {
     update(args: { where: { id: string }; data: { digitalProductId: string } }): Promise<unknown>;
   };
   taxonomyNode: {
-    findUnique(args: { where: { id: string }; select: { id: true; nodeId: true } }): Promise<{ id: string; nodeId: string } | null>;
+    findUnique(args: {
+      where: { id: string };
+      select: { id: true; nodeId: true; governance: true };
+    }): Promise<
+      | (PromotionTaxonomyNodeInput & Record<string, unknown>)
+      | null
+    >;
   };
   portfolio: {
     findUnique(args: { where: { slug: string }; select: { id: true } }): Promise<{ id: string } | null>;
@@ -68,6 +101,26 @@ type PromotionDb = {
   };
 };
 
+/**
+ * Human-readable one-liners for each skip reason. Stored as `summary` on the
+ * PortfolioQualityIssue row so admins skimming the queue see why a row was
+ * held back without having to interpret the type.
+ */
+function skipSummaryFor(reason: QualityIssueType, entityKey: string, entityType: string): string {
+  switch (reason) {
+    case "no_taxonomy":
+      return `Entity ${entityKey} has no resolvable taxonomy node`;
+    case "low_confidence_promotion":
+      return `Entity ${entityKey} attribution confidence below auto-promote threshold`;
+    case "no_portfolio_root":
+      return `Entity ${entityKey} taxonomy root does not map to a known portfolio`;
+    case "type_not_promotable":
+      return `Entity type ${entityType} is not promotable under current taxonomy policy (${entityKey})`;
+    default:
+      return `Entity ${entityKey} skipped: ${reason}`;
+  }
+}
+
 export async function promoteInventoryEntities(db: PromotionDb): Promise<PromotionSummary> {
   const summary: PromotionSummary = { promoted: 0, skipped: 0, errors: 0 };
 
@@ -77,13 +130,13 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
       attributionConfidence: { gte: AUTO_PROMOTE_THRESHOLD },
       digitalProductId: null,
       taxonomyNodeId: { not: null },
-      entityType: { in: PROMOTABLE_TYPES },
     },
     select: {
       id: true,
       entityKey: true,
       entityType: true,
       name: true,
+      attributionStatus: true,
       attributionConfidence: true,
       taxonomyNodeId: true,
       digitalProductId: true,
@@ -93,42 +146,68 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
 
   for (const entity of entities) {
     try {
-      // Skip if already linked (double-check since query should filter)
-      if (entity.digitalProductId) {
-        summary.skipped++;
-        continue;
-      }
+      // Resolve taxonomy node (now selecting governance for policy lookup).
+      const taxonomyNode = entity.taxonomyNodeId
+        ? await db.taxonomyNode.findUnique({
+            where: { id: entity.taxonomyNodeId },
+            select: { id: true, nodeId: true, governance: true },
+          })
+        : null;
 
-      // Skip if no taxonomy placement
-      if (!entity.taxonomyNodeId) {
-        summary.skipped++;
-        continue;
-      }
-
-      // Resolve taxonomy node to get nodeId path
-      const taxonomyNode = await db.taxonomyNode.findUnique({
-        where: { id: entity.taxonomyNodeId },
-        select: { id: true, nodeId: true },
-      });
-      if (!taxonomyNode) {
-        summary.skipped++;
-        continue;
-      }
-
-      // Resolve portfolio from taxonomy root segment
-      const rootSlug = taxonomyNode.nodeId.split("/")[0];
-      const portfolio = rootSlug
+      // Resolve portfolio from taxonomy root segment (when we have one).
+      const rootSlug = taxonomyNode ? taxonomyNode.nodeId.split("/")[0] : null;
+      const portfolioRow = rootSlug
         ? await db.portfolio.findUnique({ where: { slug: rootSlug }, select: { id: true } })
         : null;
-      if (!portfolio) {
-        // No portfolio found — can't promote, send to exception queue
+      const portfolio = portfolioRow && rootSlug
+        ? { id: portfolioRow.id, slug: rootSlug }
+        : null;
+
+      // Delegate the promote/skip decision to the pure policy resolver.
+      const decision = resolvePromotionDecision(
+        {
+          entityType: entity.entityType,
+          attributionStatus: entity.attributionStatus,
+          attributionConfidence: entity.attributionConfidence ?? 0,
+          digitalProductId: entity.digitalProductId,
+          taxonomyNodeId: entity.taxonomyNodeId,
+        },
+        taxonomyNode,
+        portfolio,
+      );
+
+      if (decision.decision === "skip") {
+        await openOrUpdateQualityIssue({
+          db,
+          issueType: decision.reason,
+          scope: {
+            inventoryEntityId: entity.id,
+            taxonomyNodeId: taxonomyNode?.id,
+            portfolioId: portfolio?.id,
+          },
+          summary: skipSummaryFor(decision.reason, entity.entityKey, entity.entityType),
+          details: decision.evidence,
+        });
         summary.skipped++;
+        continue;
+      }
+
+      // Promote path. Below this point, taxonomyNode and portfolio are
+      // guaranteed by the resolver's gate ordering.
+      if (!taxonomyNode || !portfolio) {
+        // Defensive: should be unreachable given the resolver's gates.
+        summary.errors++;
+        console.error(
+          `[discovery-promotion] Resolver returned promote but taxonomy/portfolio missing for ${entity.entityKey}`,
+        );
         continue;
       }
 
       const productId = generateProductId(entity.entityType, entity.name);
+      const observationConfig = decision.classifyAs
+        ? { classifyAs: decision.classifyAs }
+        : undefined;
 
-      // Upsert the DigitalProduct (update if exists, create if not)
       const product = await db.digitalProduct.upsert({
         where: { productId },
         update: {
@@ -137,6 +216,7 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
           lifecycleStatus: "active",
           taxonomyNodeId: taxonomyNode.id,
           portfolioId: portfolio.id,
+          ...(observationConfig ? { observationConfig } : {}),
         },
         create: {
           productId,
@@ -145,11 +225,11 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
           lifecycleStatus: "active",
           taxonomyNodeId: taxonomyNode.id,
           portfolioId: portfolio.id,
+          ...(observationConfig ? { observationConfig } : {}),
         },
         select: { id: true, productId: true },
       });
 
-      // Link entity back to the product
       await db.inventoryEntity.update({
         where: { id: entity.id },
         data: { digitalProductId: product.id },
