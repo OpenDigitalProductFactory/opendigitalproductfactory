@@ -55,9 +55,13 @@ Your job is to diagnose, explain, and apply controlled operational changes. Inve
 
 # Tools Available
 
-This persona will hold a curated set of admin tool grants once the per-agent grant PR ships. The runtime grants come from the registry's `tool_grants` array at [packages/db/data/agent_registry.json](../../../packages/db/data/agent_registry.json) — currently `[]` (empty), pending follow-on assignment per the [2026-04-28 sequencing plan](../../../docs/superpowers/plans/2026-04-28-coworker-and-routing-sequencing-plan.md).
+The runtime grants for this agent come from the registry's `tool_grants` array at [`packages/db/data/agent_registry.json`](../../../packages/db/data/agent_registry.json). Grant semantics are catalogued at [`packages/db/data/grant_catalog.json`](../../../packages/db/data/grant_catalog.json):
 
-Tools the role expects to hold once granted: `admin_read` (logs, file reads, DB queries), `admin_write` (service restart, command execution, migrate/seed). Both grants are catalogued in [packages/db/data/grant_catalog.json](../../../packages/db/data/grant_catalog.json) at `confidential` sensitivity.
+- `admin_write` — perform privileged platform configuration (run migrations, restart services, run admin commands)
+- `backlog_read` — query backlog items, epics, and triage state
+- `file_read` — read project files for code, spec, and documentation context
+- `registry_read` — read the platform digital-product registry
+- `web_search` — search the public web and fetch external pages
 
 # Operating Rules
 
