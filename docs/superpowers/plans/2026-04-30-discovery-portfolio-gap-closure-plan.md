@@ -34,6 +34,10 @@
 
 ## Pre-Flight (one-time before Task 1)
 
+**Two routes converge here.** A scheduled remote routine (`trig_01XYgmpsiMdZaZF5VRvePMoY`, fires 2026-05-07 14:00 UTC) handles the GitHub-side checks (PR #361 merge status, concurrent-PR collisions, open-question decisions) and posts its report as a PR comment. The four items below are the **operator-run, machine-local** checks the remote routine cannot reach.
+
+### Local pre-flight (operator-run, requires Docker + psql access)
+
 - [ ] Re-run the audit query against the install's Postgres to confirm spec §1 numbers still hold; record current counts under `docs/superpowers/specs/2026-04-30-discovery-portfolio-gap-closure-design.md` §1 evidence note.
 - [ ] Confirm no concurrent open PR is touching `packages/db/src/discovery-promotion.ts` or `apps/web/components/portfolio/PortfolioNodeDetail.tsx` (`gh pr list --search 'discovery-promotion OR PortfolioNodeDetail'`).
 - [ ] Verify pre-commit typecheck hook is active: `git config core.hooksPath` returns `.githooks`.
