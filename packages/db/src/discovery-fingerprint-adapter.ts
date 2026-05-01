@@ -4,11 +4,27 @@ import {
   type FingerprintRuleObservation,
 } from "./discovery-fingerprint-rules";
 
-/** Tightened view of `DiscoveryFingerprintRule` for adapter consumption. */
+/**
+ * Status values the adapter honors. Only `"active"` rules participate in
+ * matching; `"draft"` and `"deprecated"` are filtered out. Open to extension
+ * via the `(string & {})` escape hatch for future statuses (e.g. `"archived"`)
+ * without losing autocomplete on the known set.
+ */
+export type AdapterRuleStatus = "draft" | "active" | "deprecated" | (string & {});
+
+/**
+ * Tightened view of `DiscoveryFingerprintRule` for adapter consumption.
+ *
+ * Intentionally narrow: the adapter only needs the fields required to
+ * evaluate the rule and project a match into classification + enrichment
+ * hints. Rule fields not used here (`excludedSignals`, `scope`,
+ * `catalogVersionId`, etc.) are deliberately omitted — they belong to the
+ * underlying rules engine, not this projection.
+ */
 export interface AdapterRule {
   id: string;
   ruleKey: string;
-  status: string; // "draft" | "active" | "deprecated" — only "active" is honored
+  status: AdapterRuleStatus;
   matchExpression: FingerprintMatchExpression;
   requiredEvidenceFamilies: string[];
   taxonomyNodeId: string | null;
@@ -28,6 +44,12 @@ export interface AdapterMatch {
   taxonomyNodeId: string | null;
   identityConfidence: number;
   taxonomyConfidence: number;
+  /**
+   * `identityConfidence + taxonomyConfidence` (sum, NOT average). Carried in
+   * the result for ranking across adapters / candidate sets. Callers comparing
+   * scores from multiple sources should use this consistently or normalize
+   * before combining.
+   */
   combinedConfidence: number;
   manufacturer?: string;
   productModel?: string;

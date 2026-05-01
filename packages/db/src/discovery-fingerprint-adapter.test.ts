@@ -92,4 +92,43 @@ describe("matchInventoryEntity", () => {
     expect(result!.technicalClass).toBeUndefined();
     expect(result!.iconKey).toBeUndefined();
   });
+
+  it("breaks ties by preferring the earlier rule in the input list", () => {
+    const firstRule: AdapterRule = {
+      ...baseRule,
+      id: "r_first",
+      ruleKey: "rule.first",
+      identityConfidence: 0.5,
+      taxonomyConfidence: 0.5,
+    };
+    const secondRule: AdapterRule = {
+      ...baseRule,
+      id: "r_second",
+      ruleKey: "rule.second",
+      identityConfidence: 0.5,
+      taxonomyConfidence: 0.5,
+    };
+    // Both match obsPostgres; both have combinedConfidence = 1.0. First wins.
+    const result = matchInventoryEntity(obsPostgres, { rules: [firstRule, secondRule] });
+    expect(result!.ruleId).toBe("r_first");
+    // Reversing the order flips the winner — confirms tiebreak is positional.
+    const reversed = matchInventoryEntity(obsPostgres, { rules: [secondRule, firstRule] });
+    expect(reversed!.ruleId).toBe("r_second");
+  });
+
+  it("returns a match with taxonomyNodeId: null for identity-only rules (taxonomy gap)", () => {
+    const identityOnlyRule: AdapterRule = {
+      ...baseRule,
+      id: "r_identity_only",
+      ruleKey: "rule.identity_only",
+      taxonomyNodeId: null,
+      taxonomyConfidence: 0,
+    };
+    const result = matchInventoryEntity(obsPostgres, { rules: [identityOnlyRule] });
+    expect(result).not.toBeNull();
+    expect(result!.taxonomyNodeId).toBeNull();
+    expect(result!.manufacturer).toBe("PostgreSQL Global Development Group");
+    // Combined confidence still derived from sum, just with taxonomy=0.
+    expect(result!.combinedConfidence).toBeCloseTo(0.9);
+  });
 });
