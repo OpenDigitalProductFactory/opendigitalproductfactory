@@ -29,7 +29,7 @@ export default async function TaxRemittanceSettingsPage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Tax Remittance</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Track tax setup posture, jurisdiction registrations, and the first filing-readiness surfaces for the finance coworker.
+          Track tax setup posture, jurisdiction registrations, liability lineage, and controlled remittance execution readiness for the finance coworker.
         </p>
       </div>
 

@@ -156,7 +156,7 @@ export function TaxObligationPeriodsTable({ periods, monitoring }: Props) {
             Generate filing periods, prepare packet-ready workpapers, and attach factual audit evidence for each remittance cycle.
           </p>
           <p className="mt-2 text-xs text-[var(--dpf-muted)]">
-            Period totals use platform-wide invoice and bill tax capture only when one verified active registration exists. Multi-jurisdiction allocation stays manual until tax is linked per transaction.
+            Period totals now refresh through liability lineage entries captured from invoices, bills, credit notes, and manual adjustments. Cross-jurisdiction allocation still depends on tax being linked to the right registration at transaction time.
           </p>
         </div>
         <div className="flex items-center gap-3">
