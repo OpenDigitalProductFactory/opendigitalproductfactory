@@ -1,0 +1,88 @@
+name: Prompt State-Leakage Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "prompts/**/*.prompt.md"
+      - "apps/web/scripts/audit-prompt-state-leakage.ts"
+      - "apps/web/scripts/audit-prompt-state-leakage.test.ts"
+      - "docs/superpowers/audits/2026-04-30-prompt-state-leakage-baseline.json"
+      - ".github/workflows/audit-prompt-state-leakage.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: audit-prompt-state-leakage-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Runs apps/web/scripts/audit-prompt-state-leakage.ts against the prompt
+# library. Compares against a tracked baseline at
+# docs/superpowers/audits/2026-04-30-prompt-state-leakage-baseline.json
+# and fails ONLY when NEW error-level violations appear vs. the baseline.
+# Pre-existing violations are tracked as backfill items and do not block
+# merges.
+#
+# The shrink-only guard fetches the base branch's copy of the baseline
+# and refuses any PR that adds keys to the baseline (laundering protection).
+#
+# Spec: docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md
+
+jobs:
+  audit:
+    name: Prompt State-Leakage Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # need base branch for shrink-only guard
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch base branch baseline (for shrink-only guard)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          mkdir -p /tmp/base-baseline
+          git show origin/${{ github.base_ref }}:docs/superpowers/audits/2026-04-30-prompt-state-leakage-baseline.json \
+            > /tmp/base-baseline/baseline.json 2>/dev/null \
+            || echo '{"generatedAt":"","spec":"","rulesChecked":4,"errorCount":0,"warnCount":0,"findings":[]}' > /tmp/base-baseline/baseline.json
+
+      - name: Run prompt state-leakage audit (PR with shrink-only guard)
+        if: github.event_name == 'pull_request'
+        run: |
+          pnpm --filter web exec tsx \
+            scripts/audit-prompt-state-leakage.ts \
+            --baseline docs/superpowers/audits/2026-04-30-prompt-state-leakage-baseline.json \
+            --baseline-may-only-shrink-from /tmp/base-baseline/baseline.json \
+            > audit-current.json
+        continue-on-error: false
+
+      - name: Run prompt state-leakage audit (push to main)
+        if: github.event_name == 'push'
+        run: |
+          pnpm --filter web exec tsx \
+            scripts/audit-prompt-state-leakage.ts \
+            --baseline docs/superpowers/audits/2026-04-30-prompt-state-leakage-baseline.json \
+            > audit-current.json
+        continue-on-error: false
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-state-leakage-audit
+          path: audit-current.json
+          retention-days: 14
