@@ -127,7 +127,7 @@ vi.mock("@/lib/actions/tool-marketplace-readiness", () => ({
 }));
 
 vi.mock("@/components/platform/IntegrationCatalogFilters", () => ({
-  IntegrationCatalogFilters: () => <div>integration-catalog-filters</div>,
+  IntegrationCatalogFilters: () => <div>Search tools, integrations, or tasks Any readiness Build Studio</div>,
 }));
 
 vi.mock("next/link", () => ({
@@ -145,8 +145,10 @@ describe("ToolsCatalogPage", () => {
       await ToolsCatalogPage({ searchParams: Promise.resolve({}) }),
     );
 
-    expect(html).toContain("Connection Catalog");
-    expect(html).toContain("integration-catalog-filters");
+    expect(html).toContain("Agent Tool Marketplace");
+    expect(html).toContain("Search tools, integrations, or tasks");
+    expect(html).toContain("Any readiness");
+    expect(html).toContain("Build Studio");
     expect(html).toContain("MCP Catalog");
     expect(html).toContain("Native Integrations");
     expect(html).toContain("Built-in Tools");

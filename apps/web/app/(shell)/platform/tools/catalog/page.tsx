@@ -10,7 +10,14 @@ import {
 import { IntegrationCard } from "@/components/platform/IntegrationCard";
 import { IntegrationCatalogFilters } from "@/components/platform/IntegrationCatalogFilters";
 
-type SearchParams = Promise<{ q?: string; category?: string; pricing?: string; archetype?: string; agent?: string }>;
+type SearchParams = Promise<{
+  q?: string;
+  category?: string;
+  pricing?: string;
+  archetype?: string;
+  agent?: string;
+  readiness?: ToolMarketplaceReadiness;
+}>;
 
 const READINESS_STYLES: Record<ToolMarketplaceReadiness, string> = {
   ready: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]",
@@ -103,7 +110,7 @@ function ReadinessCard({ entry }: { entry: ToolMarketplaceEntry }) {
 export default async function ToolsCatalogPage({ searchParams }: { searchParams: SearchParams }) {
   await runMcpCatalogSyncIfDue();
 
-  const { q = "", category, pricing, archetype, agent = "coo" } = await searchParams;
+  const { q = "", category, pricing, archetype, agent = "coo", readiness: readinessFilter } = await searchParams;
 
   const [catalog, readiness] = await Promise.all([
     getConnectionCatalog({
@@ -116,15 +123,18 @@ export default async function ToolsCatalogPage({ searchParams }: { searchParams:
     getToolMarketplaceReadiness({ query: q, agentId: agent, limit: 60 }),
   ]);
 
-  const actionEntries = readiness.entries.filter((entry) => entry.readiness !== "ready").slice(0, 6);
+  const filteredReadinessEntries = readinessFilter
+    ? readiness.entries.filter((entry) => entry.readiness === readinessFilter)
+    : readiness.entries;
+  const actionEntries = filteredReadinessEntries.filter((entry) => entry.readiness !== "ready").slice(0, 6);
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--dpf-text)]">Connection Catalog</h1>
+          <h1 className="text-2xl font-bold text-[var(--dpf-text)]">Agent Tool Marketplace</h1>
           <p className="text-sm text-[var(--dpf-muted)]">
-            {catalog.totalCount.toLocaleString()} connection entries with readiness guidance for {agent}
+            {catalog.totalCount.toLocaleString()} known agent tools with readiness guidance for {agent}
           </p>
         </div>
         <a href="/platform/tools/catalog/sync" className="text-sm text-[var(--dpf-accent)] hover:underline">
@@ -133,7 +143,7 @@ export default async function ToolsCatalogPage({ searchParams }: { searchParams:
       </div>
 
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 text-sm text-[var(--dpf-muted)]">
-        Use this catalog to discover what DPF can connect to, what is already ready for coworkers, and what still needs setup or grants. Move into{" "}
+        Use this marketplace to discover what DPF can connect to, what coworkers can use, and what setup, model, or grant is still missing. Move into{" "}
         <Link href="/platform/tools/services" className="text-[var(--dpf-accent)] underline">
           MCP Services
         </Link>{" "}
@@ -178,7 +188,7 @@ export default async function ToolsCatalogPage({ searchParams }: { searchParams:
         </div>
         {actionEntries.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6 text-sm text-[var(--dpf-muted)]">
-            No setup or grant gaps match the current filters.
+            No setup, model, or grant gaps match the current filters.
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
