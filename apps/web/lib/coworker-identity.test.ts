@@ -128,3 +128,18 @@ describe("resolveCoworkerIdentity (default registry source)", () => {
     expect(result?.agentName).toBe("inventory-specialist");
   });
 });
+
+describe("resolveCoworkerIdentity (default registry source) — Chunk 6 alias landed", () => {
+  it("AGT-WS-INVENTORY now carries displayName 'Digital Product Estate Specialist'", () => {
+    const result = resolveCoworkerIdentity("AGT-WS-INVENTORY");
+    expect(result?.displayName).toBe("Digital Product Estate Specialist");
+  });
+
+  it("'estate-specialist' alias resolves to AGT-WS-INVENTORY via the default loader", () => {
+    expect(resolveCoworkerIdentity("estate-specialist")?.agentId).toBe("AGT-WS-INVENTORY");
+  });
+
+  it("'inventory-specialist' alias still resolves (compatibility)", () => {
+    expect(resolveCoworkerIdentity("inventory-specialist")?.agentId).toBe("AGT-WS-INVENTORY");
+  });
+});
