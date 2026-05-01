@@ -98,6 +98,28 @@ function isKnownIssueType(value: string): value is QualityIssueType {
   return (QUALITY_ISSUE_TYPES as readonly string[]).includes(value);
 }
 
+/**
+ * Upsert a `PortfolioQualityIssue` keyed deterministically by
+ * `(issueType, primary scope FK)`.
+ *
+ * Behavior by `status` arg:
+ * - `"open"` (default) — create as `status:"open"` if new; if a row already
+ *   exists, refresh `lastDetectedAt` plus latest `severity`/`summary`/`details`
+ *   but **do NOT change `status`**. This means re-detecting an issue against
+ *   a row already marked `resolved` will refresh the detection timestamp /
+ *   summary while leaving the row resolved. Callers that want to re-open a
+ *   resolved row must do so explicitly (e.g. via direct DB update); this
+ *   writer never silently reverses a resolve.
+ * - `"resolve"` — set `status:"resolved"` + `resolvedAt:now` on both create
+ *   and update paths. Idempotent: resolving an already-resolved row just
+ *   refreshes `resolvedAt`.
+ *
+ * `firstDetectedAt` and the scope FK columns are written on `create` only;
+ * the update payload never touches them.
+ *
+ * Validates `issueType` against `QUALITY_ISSUE_TYPES` BEFORE touching the DB.
+ * Validates that `scope` contains at least one FK BEFORE the upsert.
+ */
 export async function openOrUpdateQualityIssue(
   args: OpenOrUpdateQualityIssueArgs,
 ): Promise<{ id: string; issueKey: string; status: string }> {

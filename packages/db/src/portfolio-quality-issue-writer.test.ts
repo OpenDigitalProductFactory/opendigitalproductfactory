@@ -24,6 +24,18 @@ describe("computeIssueKey", () => {
     );
   });
 
+  it("falls back to portfolioId when narrower keys are absent", () => {
+    expect(computeIssueKey("no_portfolio_root", { portfolioId: "p_1" })).toBe(
+      "no_portfolio_root:portfolioId:p_1",
+    );
+  });
+
+  it("falls back to inventoryRelationshipId as the lowest priority", () => {
+    expect(
+      computeIssueKey("incomplete_detail", { inventoryRelationshipId: "rel_1" }),
+    ).toBe("incomplete_detail:inventoryRelationshipId:rel_1");
+  });
+
   it("throws when scope is empty", () => {
     expect(() => computeIssueKey("type_not_promotable", {})).toThrow(/scope/);
   });
@@ -95,6 +107,54 @@ describe("openOrUpdateQualityIssue", () => {
     expect(args.create.resolvedAt).toBeInstanceOf(Date);
     expect(args.update.status).toBe("resolved");
     expect(args.update.resolvedAt).toBeInstanceOf(Date);
+  });
+
+  it("populates every passed scope FK on create so the row carries the breadcrumb", async () => {
+    const { db, upsert } = mockDb();
+    await openOrUpdateQualityIssue({
+      db: db as never,
+      issueType: "incomplete_detail",
+      scope: {
+        inventoryEntityId: "ent_1",
+        digitalProductId: "dp_1",
+        taxonomyNodeId: "tn_1",
+        portfolioId: "p_1",
+      },
+      summary: "missing manufacturer",
+    });
+    const args = upsert.mock.calls[0][0];
+    expect(args.create.inventoryEntityId).toBe("ent_1");
+    expect(args.create.digitalProductId).toBe("dp_1");
+    expect(args.create.taxonomyNodeId).toBe("tn_1");
+    expect(args.create.portfolioId).toBe("p_1");
+    expect(args.create.inventoryRelationshipId).toBe(null);
+  });
+
+  it("omits details from update payload when caller does not pass it", async () => {
+    const { db, upsert } = mockDb();
+    await openOrUpdateQualityIssue({
+      db: db as never,
+      issueType: "type_not_promotable",
+      scope: { inventoryEntityId: "ent_1" },
+      summary: "no details this time",
+    });
+    const args = upsert.mock.calls[0][0];
+    expect("details" in args.update).toBe(false);
+    expect("details" in args.create).toBe(false);
+  });
+
+  it("includes details on both create and update payloads when passed", async () => {
+    const { db, upsert } = mockDb();
+    await openOrUpdateQualityIssue({
+      db: db as never,
+      issueType: "type_not_promotable",
+      scope: { inventoryEntityId: "ent_1" },
+      summary: "with context",
+      details: { entityType: "network_client", source: "legacy-list" },
+    });
+    const args = upsert.mock.calls[0][0];
+    expect(args.create.details).toEqual({ entityType: "network_client", source: "legacy-list" });
+    expect(args.update.details).toEqual({ entityType: "network_client", source: "legacy-list" });
   });
 
   it("QUALITY_ISSUE_TYPES contains the canonical seven values", () => {
