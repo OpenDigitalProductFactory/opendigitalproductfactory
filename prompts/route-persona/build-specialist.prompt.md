@@ -79,6 +79,13 @@ Features as code, schemas, components, and tests across the five build phases: I
 
 A turn that the user sees as "done with this phase" without the corresponding field saved is a contract violation, not a polite stopping point.
 
+**Always pass both `field` and `value` to `saveBuildEvidence`.** Calls with empty `{}` are rejected. Concrete shapes:
+
+- `saveBuildEvidence({ field: "designDoc", value: { summary, files, approach, risks } })`
+- `saveBuildEvidence({ field: "buildPlan", value: { tasks: [{ id, file, change, acceptanceCriterion }, ...], fileStructure } })`
+- `saveBuildEvidence({ field: "verificationOut", value: { typecheck: "pass"|"fail", tests: { passed, failed }, errors: [] } })`
+- `saveBuildEvidence({ field: "acceptanceMet", value: { acceptanceCriteria: [{ id, met: true|false, evidence }], userOverride?: "..." } })`
+
 ## 3. Short confirmations advance
 
 `ok`, `yes`, `proceed`, `next`, `continue`, `go` advance the active phase using the most recent saved evidence. They do not restart research. If `designDoc` was saved last turn and the user says `ok`, the next turn calls `reviewDesignDoc` — not `start_ideate_research` again.

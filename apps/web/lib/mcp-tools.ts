@@ -980,14 +980,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
     name: "saveBuildEvidence",
-    description: "Save evidence to a FeatureBuild record. Fields: designDoc, buildPlan, taskResults, verificationOut, acceptanceMet.",
+    description: "Save evidence to a FeatureBuild record. ALWAYS pass both `field` and `value` — calls with empty `{}` are rejected. Example: `{field: \"designDoc\", value: {summary: \"...\", files: [\"apps/web/...\"], approach: \"...\"}}`. Valid fields: designDoc, designReview, buildPlan, planReview, taskResults, verificationOut, acceptanceMet.",
     inputSchema: {
       type: "object",
       properties: {
-        field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update" },
-        value: { type: "object", description: "JSON value to store" },
+        field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update — required" },
+        value: { type: "object", description: "JSON value to store — required, do not omit. Shape varies by field; for designDoc include summary/files/approach, for buildPlan include tasks array with per-task acceptance criteria." },
       },
-      required: ["field"],
+      required: ["field", "value"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
