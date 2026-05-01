@@ -8,6 +8,15 @@
 
 **Tech Stack:** Next.js 16 app router, TypeScript, Prisma, Vitest, server actions, existing DPF MCP tool definitions, DPF CSS custom properties.
 
+## Implementation Status
+
+Implemented in PR #371 with two small path/name adjustments from the original draft:
+
+- Readiness resolver landed as `apps/web/lib/actions/tool-marketplace-readiness.ts` because it queries Prisma and built-in server actions directly.
+- Coworker tool coverage landed in `apps/web/lib/mcp-tools-tool-marketplace.test.ts` instead of `mcp-tools-integrations.test.ts` to keep the marketplace-specific tool assertions isolated.
+- The human surface now presents `/platform/tools/catalog` as **Agent Tool Marketplace**, with readiness and coworker filters in `apps/web/components/platform/IntegrationCatalogFilters.tsx`.
+- The first slice remains migration-free: it is a governed read model over `McpIntegration`, `McpServer`, `McpServerTool`, `IntegrationCredential`, built-in tool configuration, `AgentToolGrant`, and model/provider readiness.
+
 ---
 
 ## File Structure
