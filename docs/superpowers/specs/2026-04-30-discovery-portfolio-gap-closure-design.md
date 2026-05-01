@@ -465,6 +465,30 @@ Renders the three `TaxonomyNode` JSON columns (`description`, `governance`, `enr
 - The `colour` prop on `ProductList` is now effectively dead (detail callers pass a literal token string the component ignores). Cleanup candidate.
 - `AgentGovernanceCard.tsx` still falls back to a hardcoded hex `"#555566"` — flag for the next theme-token sweep.
 
+### Chunk 6 — Operator Identity Rename (compatibility-safe, landed 2026-04-30)
+
+Display + alias only; the durable `agent_id` `AGT-WS-INVENTORY` is preserved. Both "estate-specialist" (new canonical handle) and "inventory-specialist" (historical name) resolve to the same coworker record.
+
+| Task | Files | Tests |
+| - | - | - |
+| 6.1 Alias on AGT-WS-INVENTORY | `packages/db/data/agent_registry.json` (added `displayName` + `aliases`); `apps/web/lib/coworker-identity.test.ts` (+3 default-loader tests) | 16/16 |
+| 6.2 Persona prompt copy | `prompts/route-persona/inventory-specialist.prompt.md` (displayName + role title updated); `prompts/route-persona/estate-specialist.prompt.md` (new, near-duplicate); `prompts/route-persona/explore-orchestrator.prompt.md` (peer label updated) | n/a (prompts) |
+
+**Build gate (Task 6.3):** `pnpm --filter @dpf/db exec vitest run` → 315 pass / 54 files. `pnpm --filter web exec vitest run` → 4465 pass / 14 skipped / 13 todo / 558 files. `cd apps/web && npx next build` → exit 0.
+
+**Deviations from plan.**
+
+- **Two prompt files share content.** Plan called for `estate-specialist.prompt.md` to be a near-duplicate of `inventory-specialist.prompt.md`. They are. Both files set `agent_id: AGT-WS-INVENTORY` so the prompt loader treats them as two `PromptTemplate` rows pointing at the same canonical agent. The duplication risk (drift if one is edited without the other) is flagged with an HTML comment at the top of `estate-specialist.prompt.md`. A future loader-level aliasing pass can collapse the two files into one source.
+- **HTML duplication-warning comment placed AFTER frontmatter, not before.** The prompt loader's frontmatter regex (`packages/db/src/seed-prompt-templates.ts`) requires the file to start with `---\n`. Putting the warning comment at the top would silently fail frontmatter parsing. Comment moved to the first line of the body — still the first thing a maintainer sees inside the markdown body.
+- **Three "Product Manager" mentions intentionally NOT updated.** `prompts/specialist/release-acceptance-agent.prompt.md` and `prompts/specialist/roadmap-assembly-agent.prompt.md` reference "Digital Product Manager (HR-200)" — the human supervisor role, not AGT-WS-INVENTORY. `packages/db/src/seed.ts:929` has a legacy fallback seed entry `name: "Product Manager"` which is now superseded by the registry's `displayName` patch (registry wins at runtime). Tracked for a future cleanup sweep but not in scope for Chunk 6.
+- **No DB schema migration for aliases.** The Prisma `Agent` model has no `aliases` or `displayName` columns. The resolver (`apps/web/lib/coworker-identity.ts`) reads `agent_registry.json` directly from disk, bypassing the DB; all other registry consumers I found do the same. If a future feature wants to query aliases via Prisma, a schema migration would add the columns and the seed mapping would need explicit fields.
+
+**Carry-overs.**
+
+- `packages/db/src/seed.ts:929` legacy "Product Manager" fallback can be removed once we confirm no caller depends on it.
+- `packages/db/data/agent_registry.json` `capability_domain` copy for `AGT-WS-INVENTORY` still describes the role in product-management language; refresh in a future sweep.
+- A loader-level aliasing pass in `seed-prompt-templates.ts` could let `estate-specialist.prompt.md` redirect to `inventory-specialist.prompt.md` instead of duplicating content.
+
 ---
 
 ## 14. References

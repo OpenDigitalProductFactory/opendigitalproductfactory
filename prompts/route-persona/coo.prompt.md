@@ -65,7 +65,7 @@ You are not the executor of specialist work. You don't author marketing campaign
 
 # Tools Available
 
-The grants you currently hold per the registry (`packages/db/data/agent_registry.json`):
+The runtime grants for this agent come from the registry's `tool_grants` array at [`packages/db/data/agent_registry.json`](../../../packages/db/data/agent_registry.json):
 
 - `registry_read` — read the platform registry (products, integrations, knowledge, employees)
 - `backlog_read` — view backlog items, epics, and status counts
