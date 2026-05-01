@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   resolveCoworkerIdentity,
   getCanonicalAgentId,
@@ -84,6 +84,37 @@ describe("getCanonicalAgentId", () => {
 
   it("returns null for unknown input", () => {
     expect(getCanonicalAgentId("nope", fixtureRegistry)).toBeNull();
+  });
+});
+
+describe("resolveCoworkerIdentity edge cases", () => {
+  it("agents with empty aliases array do not break the alias loop", () => {
+    const reg: CoworkerRegistry = {
+      agents: [
+        {
+          agentId: "AGT-EDGE-1",
+          agentName: "edge-one",
+          aliases: [],
+        },
+      ],
+    };
+    expect(resolveCoworkerIdentity("AGT-EDGE-1", reg)?.agentId).toBe("AGT-EDGE-1");
+    expect(resolveCoworkerIdentity("edge-one", reg)?.agentId).toBe("AGT-EDGE-1");
+    expect(resolveCoworkerIdentity("not-a-real-alias", reg)).toBeNull();
+  });
+
+  it("agent_id wins over an alias on a different agent that happens to match", () => {
+    // Edge case: agent B has an alias that collides with agent A's agent_id.
+    // The agent_id pass runs first, so agent A wins for that lookup.
+    const reg: CoworkerRegistry = {
+      agents: [
+        { agentId: "AGT-A", agentName: "agent-a" },
+        { agentId: "AGT-B", agentName: "agent-b", aliases: ["AGT-A"] },
+      ],
+    };
+    const result = resolveCoworkerIdentity("AGT-A", reg);
+    expect(result?.agentId).toBe("AGT-A");
+    expect(result?.agentName).toBe("agent-a");
   });
 });
 
