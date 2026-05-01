@@ -29,8 +29,7 @@ export type PromotionSkipReason =
   | "no_taxonomy"
   | "low_confidence_promotion"
   | "no_portfolio_root"
-  | "type_not_promotable"
-  | "already_linked";
+  | "type_not_promotable";
 
 export type PromotionDecision =
   | { decision: "promote"; classifyAs?: string; reason?: undefined; evidence: object }
@@ -103,18 +102,10 @@ export function resolvePromotionDecision(
     };
   }
 
-  // Gate 4: don't double-link entities that already point at a digital product.
-  if (entity.digitalProductId !== null) {
-    return {
-      decision: "skip",
-      reason: "already_linked",
-      evidence: {
-        source: "gate",
-        gate: "already_linked",
-        digitalProductId: entity.digitalProductId,
-      },
-    };
-  }
+  // Note: the caller is responsible for filtering out entities that already
+  // point at a digital product (Task 2.1's promoteInventoryEntities filters
+  // digitalProductId: null at the Prisma query level). The resolver does not
+  // gate on digitalProductId — keeping it pure over (entity, node, portfolio).
 
   // Policy lookup: governance.promotion on the taxonomy node wins.
   const promotionPolicy = taxonomyNode.governance?.promotion ?? null;
