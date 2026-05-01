@@ -13,6 +13,7 @@
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
+    "./location-normalize": "./src/location-normalize.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts"
   },
   "scripts": {
