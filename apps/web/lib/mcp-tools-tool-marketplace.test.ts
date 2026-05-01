@@ -49,6 +49,7 @@ describe("search_tool_marketplace", () => {
       requiredCapability: "view_platform",
       executionMode: "immediate",
       sideEffect: false,
+      buildPhases: ["ideate", "plan", "build", "review", "ship"],
     });
     expect(tool?.annotations).toMatchObject({ readOnlyHint: true });
   });

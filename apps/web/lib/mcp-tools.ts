@@ -2085,6 +2085,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
     annotations: {
       readOnlyHint: true,
       idempotentHint: true,
