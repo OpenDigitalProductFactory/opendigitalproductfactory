@@ -1,0 +1,1539 @@
+{
+  "generatedAt": "2026-05-01T01:08:52.428Z",
+  "spec": "docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md",
+  "rulesChecked": 4,
+  "errorCount": 42,
+  "warnCount": 111,
+  "findings": [
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/admin-assistant.prompt.md",
+      "line": 58,
+      "column": 59,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/admin-assistant.prompt.md",
+      "line": 58,
+      "column": 273,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/admin-assistant.prompt.md",
+      "line": 60,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/admin-assistant.prompt.md",
+      "line": 58,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/build-specialist.prompt.md",
+      "line": 64,
+      "column": 65,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/build-specialist.prompt.md",
+      "line": 64,
+      "column": 279,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/build-specialist.prompt.md",
+      "line": 66,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/build-specialist.prompt.md",
+      "line": 64,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/customer-advisor.prompt.md",
+      "line": 56,
+      "column": 68,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/customer-advisor.prompt.md",
+      "line": 56,
+      "column": 282,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/customer-advisor.prompt.md",
+      "line": 58,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/customer-advisor.prompt.md",
+      "line": 56,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ea-architect.prompt.md",
+      "line": 60,
+      "column": 62,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ea-architect.prompt.md",
+      "line": 60,
+      "column": 276,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ea-architect.prompt.md",
+      "line": 62,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ea-architect.prompt.md",
+      "line": 60,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/hr-specialist.prompt.md",
+      "line": 57,
+      "column": 62,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/hr-specialist.prompt.md",
+      "line": 57,
+      "column": 276,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/hr-specialist.prompt.md",
+      "line": 59,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/hr-specialist.prompt.md",
+      "line": 57,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ops-coordinator.prompt.md",
+      "line": 58,
+      "column": 63,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ops-coordinator.prompt.md",
+      "line": 58,
+      "column": 277,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ops-coordinator.prompt.md",
+      "line": 60,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/ops-coordinator.prompt.md",
+      "line": 58,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/platform-engineer.prompt.md",
+      "line": 58,
+      "column": 68,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/platform-engineer.prompt.md",
+      "line": 58,
+      "column": 282,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/platform-engineer.prompt.md",
+      "line": 60,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/platform-engineer.prompt.md",
+      "line": 58,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/portfolio-advisor.prompt.md",
+      "line": 60,
+      "column": 69,
+      "match": "once the per-agent grant",
+      "summary": "[PSL-001] forbidden state phrase: \"once the per-agent grant\"",
+      "detail": "The phrase \"once the per-agent grant\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/portfolio-advisor.prompt.md",
+      "line": 60,
+      "column": 283,
+      "match": "pending follow-on assignment",
+      "summary": "[PSL-001] forbidden state phrase: \"pending follow-on assignment\"",
+      "detail": "The phrase \"pending follow-on assignment\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/portfolio-advisor.prompt.md",
+      "line": 62,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/route-persona/portfolio-advisor.prompt.md",
+      "line": 60,
+      "column": 14,
+      "match": "will hold a curated set",
+      "summary": "[PSL-001] forbidden state phrase: \"will hold a curated set\"",
+      "detail": "The phrase \"will hold a curated set\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/specialist/data-architect.prompt.md",
+      "line": 61,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/specialist/frontend-engineer.prompt.md",
+      "line": 65,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/specialist/qa-engineer.prompt.md",
+      "line": 61,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-001",
+      "severity": "error",
+      "file": "prompts/specialist/software-engineer.prompt.md",
+      "line": 62,
+      "column": 1,
+      "match": "Tools the role expects to hold once granted",
+      "summary": "[PSL-001] forbidden state phrase: \"tools the role expects to hold once granted\"",
+      "detail": "The phrase \"tools the role expects to hold once granted\" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001."
+    },
+    {
+      "invariantId": "PSL-003",
+      "severity": "error",
+      "file": "prompts/route-persona/coo.prompt.md",
+      "line": 68,
+      "column": 16,
+      "match": "currently hold",
+      "summary": "[PSL-003] current-state grant snapshot: \"currently holds\"",
+      "detail": "The phrase \"currently holds\" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003."
+    },
+    {
+      "invariantId": "PSL-003",
+      "severity": "error",
+      "file": "prompts/route-persona/coo.prompt.md",
+      "line": 68,
+      "column": 5,
+      "match": "grants you currently hold",
+      "summary": "[PSL-003] current-state grant snapshot: \"grants you currently hold\"",
+      "detail": "The phrase \"grants you currently hold\" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003."
+    },
+    {
+      "invariantId": "PSL-003",
+      "severity": "error",
+      "file": "prompts/specialist/data-architect.prompt.md",
+      "line": 59,
+      "column": 167,
+      "match": "currently `[\"sandbox_execute\"]`",
+      "summary": "[PSL-003] current-state grant snapshot: \"currently [\"...\"]\"",
+      "detail": "The phrase \"currently [\"...\"]\" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003."
+    },
+    {
+      "invariantId": "PSL-003",
+      "severity": "error",
+      "file": "prompts/specialist/frontend-engineer.prompt.md",
+      "line": 63,
+      "column": 167,
+      "match": "currently `[\"sandbox_execute\"]`",
+      "summary": "[PSL-003] current-state grant snapshot: \"currently [\"...\"]\"",
+      "detail": "The phrase \"currently [\"...\"]\" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003."
+    },
+    {
+      "invariantId": "PSL-003",
+      "severity": "error",
+      "file": "prompts/specialist/qa-engineer.prompt.md",
+      "line": 59,
+      "column": 167,
+      "match": "currently `[\"sandbox_execute\"]`",
+      "summary": "[PSL-003] current-state grant snapshot: \"currently [\"...\"]\"",
+      "detail": "The phrase \"currently [\"...\"]\" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003."
+    },
+    {
+      "invariantId": "PSL-003",
+      "severity": "error",
+      "file": "prompts/specialist/software-engineer.prompt.md",
+      "line": 60,
+      "column": 167,
+      "match": "currently `[\"sandbox_execute\"]`",
+      "summary": "[PSL-003] current-state grant snapshot: \"currently [\"...\"]\"",
+      "detail": "The phrase \"currently [\"...\"]\" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/consume-orchestrator.prompt.md",
+      "line": 73,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/consume-orchestrator.prompt.md",
+      "line": 74,
+      "column": 43,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/consume-orchestrator.prompt.md",
+      "line": 75,
+      "column": 35,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/consume-orchestrator.prompt.md",
+      "line": 76,
+      "column": 37,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/coo.prompt.md",
+      "line": 77,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/coo.prompt.md",
+      "line": 78,
+      "column": 45,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/coo.prompt.md",
+      "line": 79,
+      "column": 59,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/coo.prompt.md",
+      "line": 80,
+      "column": 42,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/deploy-orchestrator.prompt.md",
+      "line": 72,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/deploy-orchestrator.prompt.md",
+      "line": 74,
+      "column": 55,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/deploy-orchestrator.prompt.md",
+      "line": 75,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/evaluate-orchestrator.prompt.md",
+      "line": 74,
+      "column": 63,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/evaluate-orchestrator.prompt.md",
+      "line": 75,
+      "column": 44,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/explore-orchestrator.prompt.md",
+      "line": 71,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/explore-orchestrator.prompt.md",
+      "line": 75,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/governance-orchestrator.prompt.md",
+      "line": 72,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/governance-orchestrator.prompt.md",
+      "line": 73,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/governance-orchestrator.prompt.md",
+      "line": 74,
+      "column": 52,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/governance-orchestrator.prompt.md",
+      "line": 75,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/integrate-orchestrator.prompt.md",
+      "line": 77,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/integrate-orchestrator.prompt.md",
+      "line": 78,
+      "column": 29,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/integrate-orchestrator.prompt.md",
+      "line": 79,
+      "column": 66,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/integrate-orchestrator.prompt.md",
+      "line": 80,
+      "column": 44,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/operate-orchestrator.prompt.md",
+      "line": 71,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/operate-orchestrator.prompt.md",
+      "line": 72,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/operate-orchestrator.prompt.md",
+      "line": 74,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/release-orchestrator.prompt.md",
+      "line": 72,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/release-orchestrator.prompt.md",
+      "line": 73,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/release-orchestrator.prompt.md",
+      "line": 74,
+      "column": 54,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/route-persona/release-orchestrator.prompt.md",
+      "line": 75,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-agent.prompt.md",
+      "line": 65,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-agent.prompt.md",
+      "line": 66,
+      "column": 58,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-agent.prompt.md",
+      "line": 67,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-definition-agent.prompt.md",
+      "line": 67,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-guardrail-agent.prompt.md",
+      "line": 68,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-guardrail-agent.prompt.md",
+      "line": 70,
+      "column": 59,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/architecture-guardrail-agent.prompt.md",
+      "line": 71,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/catalog-publication-agent.prompt.md",
+      "line": 65,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/catalog-publication-agent.prompt.md",
+      "line": 66,
+      "column": 68,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/constraint-validation-agent.prompt.md",
+      "line": 66,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/constraint-validation-agent.prompt.md",
+      "line": 67,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/consumer-onboarding-agent.prompt.md",
+      "line": 67,
+      "column": 53,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/data-governance-agent.prompt.md",
+      "line": 65,
+      "column": 64,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/data-governance-agent.prompt.md",
+      "line": 66,
+      "column": 56,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/data-governance-agent.prompt.md",
+      "line": 67,
+      "column": 28,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/data-governance-agent.prompt.md",
+      "line": 68,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/data-governance-agent.prompt.md",
+      "line": 69,
+      "column": 66,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/data-governance-agent.prompt.md",
+      "line": 70,
+      "column": 59,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/deployment-planning-agent.prompt.md",
+      "line": 65,
+      "column": 55,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/deployment-planning-agent.prompt.md",
+      "line": 66,
+      "column": 51,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/evidence-chain-agent.prompt.md",
+      "line": 66,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/evidence-chain-agent.prompt.md",
+      "line": 67,
+      "column": 49,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/gap-analysis-agent.prompt.md",
+      "line": 63,
+      "column": 42,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/gap-analysis-agent.prompt.md",
+      "line": 64,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/iac-execution-agent.prompt.md",
+      "line": 68,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/iac-execution-agent.prompt.md",
+      "line": 69,
+      "column": 62,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/incident-detection-agent.prompt.md",
+      "line": 65,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/incident-detection-agent.prompt.md",
+      "line": 66,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/incident-detection-agent.prompt.md",
+      "line": 67,
+      "column": 47,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/incident-resolution-agent.prompt.md",
+      "line": 68,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/incident-resolution-agent.prompt.md",
+      "line": 69,
+      "column": 52,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/incident-resolution-agent.prompt.md",
+      "line": 70,
+      "column": 63,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/investment-analysis-agent.prompt.md",
+      "line": 65,
+      "column": 63,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/investment-analysis-agent.prompt.md",
+      "line": 66,
+      "column": 65,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/investment-analysis-agent.prompt.md",
+      "line": 67,
+      "column": 68,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/investment-analysis-agent.prompt.md",
+      "line": 68,
+      "column": 65,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/investment-analysis-agent.prompt.md",
+      "line": 69,
+      "column": 45,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/monitoring-agent.prompt.md",
+      "line": 65,
+      "column": 46,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/monitoring-agent.prompt.md",
+      "line": 66,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/order-fulfillment-agent.prompt.md",
+      "line": 65,
+      "column": 61,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/order-fulfillment-agent.prompt.md",
+      "line": 66,
+      "column": 41,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/policy-enforcement-agent.prompt.md",
+      "line": 63,
+      "column": 45,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/policy-enforcement-agent.prompt.md",
+      "line": 65,
+      "column": 67,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/policy-specialist.prompt.md",
+      "line": 65,
+      "column": 45,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/policy-specialist.prompt.md",
+      "line": 66,
+      "column": 43,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/portfolio-backlog-agent.prompt.md",
+      "line": 65,
+      "column": 54,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/portfolio-backlog-specialist.prompt.md",
+      "line": 65,
+      "column": 53,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/portfolio-backlog-specialist.prompt.md",
+      "line": 66,
+      "column": 43,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/portfolio-rationalization-agent.prompt.md",
+      "line": 62,
+      "column": 69,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/product-backlog-prioritization-agent.prompt.md",
+      "line": 66,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/product-backlog-specialist.prompt.md",
+      "line": 66,
+      "column": 45,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/release-acceptance-agent.prompt.md",
+      "line": 67,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/release-acceptance-agent.prompt.md",
+      "line": 68,
+      "column": 59,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/release-planning-agent.prompt.md",
+      "line": 65,
+      "column": 49,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/release-planning-agent.prompt.md",
+      "line": 66,
+      "column": 50,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/resource-reservation-agent.prompt.md",
+      "line": 65,
+      "column": 55,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/resource-reservation-agent.prompt.md",
+      "line": 66,
+      "column": 42,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/roadmap-assembly-agent.prompt.md",
+      "line": 66,
+      "column": 56,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/sbom-management-agent.prompt.md",
+      "line": 66,
+      "column": 29,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/sbom-management-agent.prompt.md",
+      "line": 67,
+      "column": 39,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/sbom-management-agent.prompt.md",
+      "line": 68,
+      "column": 52,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/sbom-management-agent.prompt.md",
+      "line": 70,
+      "column": 63,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/sbom-management-agent.prompt.md",
+      "line": 71,
+      "column": 64,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/scope-agreement-agent.prompt.md",
+      "line": 65,
+      "column": 64,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 65,
+      "column": 59,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 66,
+      "column": 61,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 67,
+      "column": 41,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 68,
+      "column": 55,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 69,
+      "column": 58,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 70,
+      "column": 59,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/security-auditor-agent.prompt.md",
+      "line": 71,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/service-offer-definition-agent.prompt.md",
+      "line": 66,
+      "column": 55,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/service-offer-definition-agent.prompt.md",
+      "line": 67,
+      "column": 45,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/service-support-agent.prompt.md",
+      "line": 65,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/service-support-agent.prompt.md",
+      "line": 66,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/service-support-agent.prompt.md",
+      "line": 67,
+      "column": 36,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/strategy-alignment-agent.prompt.md",
+      "line": 64,
+      "column": 66,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/strategy-alignment-agent.prompt.md",
+      "line": 65,
+      "column": 63,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/subscription-management-agent.prompt.md",
+      "line": 66,
+      "column": 57,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/subscription-management-agent.prompt.md",
+      "line": 67,
+      "column": 52,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    },
+    {
+      "invariantId": "PSL-004",
+      "severity": "warn",
+      "file": "prompts/specialist/subscription-management-agent.prompt.md",
+      "line": 68,
+      "column": 48,
+      "match": "currently aspirational",
+      "summary": "[PSL-004] runtime-disabling instruction: \"currently aspirational\"",
+      "detail": "This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family."
+    }
+  ]
+}
