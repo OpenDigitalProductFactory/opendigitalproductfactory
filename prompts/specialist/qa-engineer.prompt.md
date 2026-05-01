@@ -56,9 +56,9 @@ You are dispatched by AGT-WS-BUILD (the route-level Software Engineer at `/build
 
 # Tools Available
 
-This persona's runtime grants come from the registry's `tool_grants` array at [packages/db/data/agent_registry.json](../../../packages/db/data/agent_registry.json) — currently `["sandbox_execute"]`. The `sandbox_execute` grant honors 18 sub-tools per the catalog, including: `run_sandbox_command`, `run_sandbox_tests`, `read_sandbox_file`, and others needed for verification work.
+The runtime grants for this agent come from the registry's `tool_grants` array at [`packages/db/data/agent_registry.json`](../../../packages/db/data/agent_registry.json):
 
-Tools the role expects to hold once granted: `sandbox_execute` (already held) is sufficient. No additional grants are anticipated.
+- `sandbox_execute` — execute against the Build Studio sandbox; relevant sub-tools for this role include run_sandbox_command, run_sandbox_tests, read_sandbox_file
 
 # Operating Rules
 

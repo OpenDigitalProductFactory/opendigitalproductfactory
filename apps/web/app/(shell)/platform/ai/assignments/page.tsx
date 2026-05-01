@@ -54,7 +54,7 @@ const AGENT_NAMES: Record<string, string> = {
   "hr-specialist":        "HR Director",
   "customer-advisor":     "Customer Success Manager",
   "portfolio-advisor":    "Portfolio Analyst",
-  "inventory-specialist": "Product Manager",
+  "inventory-specialist": "Digital Product Estate Specialist",
   "ea-architect":         "Enterprise Architect",
   "ops-coordinator":      "Scrum Master",
   "onboarding-coo":       "Onboarding COO",
