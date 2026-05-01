@@ -3,6 +3,11 @@
 import { prisma } from "@dpf/db";
 import { getBuiltInToolsOverview } from "@/lib/actions/built-in-tools";
 import { queryMcpIntegrations } from "@/lib/actions/mcp-catalog";
+import {
+  NATIVE_INTEGRATIONS,
+  getNativeIntegrationIds,
+  type NativeIntegrationId,
+} from "@/lib/tools/native-integration-catalog";
 
 type CatalogSearchParams = {
   query: string;
@@ -11,39 +16,6 @@ type CatalogSearchParams = {
   pricingModel?: string;
   limit?: number;
 };
-
-type NativeIntegrationId = "adp" | "quickbooks";
-
-type NativeIntegrationDescriptor = {
-  id: NativeIntegrationId;
-  name: string;
-  description: string;
-  href: string;
-  category: string;
-  pricingModel: "paid";
-  model: "native";
-};
-
-const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
-  {
-    id: "adp",
-    name: "ADP Workforce Now",
-    description: "Payroll and workforce anchor using the dedicated ADP runtime and enterprise credential custody.",
-    href: "/platform/tools/integrations/adp",
-    category: "hr",
-    pricingModel: "paid",
-    model: "native",
-  },
-  {
-    id: "quickbooks",
-    name: "QuickBooks Online",
-    description: "Finance anchor for company, customer, and invoice context on the native integration substrate.",
-    href: "/platform/tools/integrations/quickbooks",
-    category: "finance",
-    pricingModel: "paid",
-    model: "native",
-  },
-];
 
 type ConnectionCatalogBase = {
   id: string;
@@ -126,7 +98,7 @@ export async function getConnectionCatalog(params: CatalogSearchParams): Promise
     }),
     getBuiltInToolsOverview(),
     prisma.integrationCredential.findMany({
-      where: { provider: { in: NATIVE_INTEGRATIONS.map((integration) => integration.id) } },
+      where: { provider: { in: getNativeIntegrationIds() } },
       select: { provider: true, status: true },
     }),
   ]);
@@ -181,7 +153,7 @@ export async function getConnectionCatalog(params: CatalogSearchParams): Promise
         href: integration.href,
         configured: status.configured,
         statusLabel,
-        provider: integration.id,
+        provider: integration.provider,
         model: integration.model,
       };
     })
