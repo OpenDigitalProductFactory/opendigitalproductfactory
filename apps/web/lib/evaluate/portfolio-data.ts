@@ -30,7 +30,17 @@ export const getFullPortfolioTree = cache(async () => {
   const [nodes, totalCounts, activeCounts] = await Promise.all([
     prisma.taxonomyNode.findMany({
       where: { status: "active" },
-      select: { id: true, nodeId: true, name: true, parentId: true, portfolioId: true },
+      select: {
+        id: true,
+        nodeId: true,
+        name: true,
+        parentId: true,
+        portfolioId: true,
+        // Detail page (Task 3.3) renders these via toPortfolioNodeViewModel.
+        description: true,
+        governance: true,
+        enrichment: true,
+      },
     }),
     prisma.digitalProduct.groupBy({
       by: ["taxonomyNodeId"],
