@@ -391,7 +391,34 @@ Order matters because Slice 1 widens the promotion gate before enrichment exists
 
 ---
 
-## 13. References
+## 13. Implementation Status
+
+### Chunk 1 — Refactoring Foundation (landed 2026-04-30)
+
+Pure helpers shipping zero production behavior change. All four foundation modules unit-tested; full @dpf/db + apps/web vitest suites green; production `next build` exit 0.
+
+| Task | Commits | Tests |
+| - | - | - |
+| 1.1 Promotion policy resolver | `cea88828`, `5e889ab0` (spec fix), `0b438144` (polish) | 7/7 |
+| 1.2 Shared quality-issue writer | `a631d8af`, `e1ed27e8` (polish) | 13/13 |
+| 1.3 Fingerprint-rule adapter | `0e0fcaad`, `203d0dbc` (polish) | 9/9 |
+| 1.4 Coworker identity alias resolver | `f67080c4`, `799047f6` (polish) | 13/13 |
+
+**Build gate (Task 1.5):** `pnpm --filter @dpf/db exec vitest run` → 299 pass / 52 files. `pnpm --filter web exec vitest run` → 4389 pass / 14 skipped / 13 todo / 541 files. `cd apps/web && npx next build` → exit 0. 102 pre-existing Turbopack NFT-tracing warnings in `next.config.mjs` predate this chunk; tracked separately.
+
+**Deviations from plan.** Task 1.1 originally included `already_linked` as a `PromotionSkipReason`; spec compliance reviewer caught that the spec's resolution order delegates that gate to the caller (Task 2.1's Prisma query). Removed in `5e889ab0`. Task 1.4 implementer used a `findRepoRoot()` walk-up (looks for `pnpm-workspace.yaml`) rather than `process.cwd()` for cross-context portability — matches the existing pattern in `apps/web/scripts/internal/build-grant-catalog.ts`. No other deviations.
+
+**Open questions still pending (gating later chunks):**
+- #2 Model cost guardrail (gates Chunk 4 Task 4.3 description-enricher).
+- #3 Signature seed scope (gates Chunk 4 Task 4.3 fingerprint-enricher).
+- #4 Required-field gates default (gates Chunk 7 Task 7.3).
+- #5 Freshness thresholds (gates Chunk 4 Task 4.6).
+
+**Pre-flight blocker for Chunks 4–5.** `DiscoveryFingerprintCatalogVersion` table is empty (0 rows) on the bootstrap install. The fingerprint adapter (Task 1.3) is already shippable — it just returns `null` for empty input — but Chunks 4–5 depend on rules existing in the catalog. Either the upstream fingerprint contribution slice needs to ship its seed, or this plan needs to bootstrap a small initial catalog before Chunk 4.
+
+---
+
+## 14. References
 
 - [2026-03-13 Bootstrap Infrastructure Discovery and Portfolio Quality Foundation](./2026-03-13-bootstrap-infrastructure-discovery-and-portfolio-quality-foundation-design.md)
 - [2026-04-30 AI Coworker Operator Pattern](./2026-04-30-ai-coworker-operator-pattern.md)
