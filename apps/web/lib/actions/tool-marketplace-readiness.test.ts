@@ -41,8 +41,8 @@ beforeEach(() => {
   });
 
   vi.mocked(prisma.integrationCredential.findMany).mockResolvedValue([
-    { provider: "adp", status: "connected" },
-    { provider: "quickbooks", status: "connected" },
+    { integrationId: "adp-workforce-now", status: "connected" },
+    { integrationId: "quickbooks-online-accounting", status: "connected" },
   ] as never);
 
   vi.mocked(prisma.mcpIntegration.findMany).mockResolvedValue([
@@ -119,10 +119,10 @@ describe("getToolMarketplaceReadiness", () => {
     const result = await getToolMarketplaceReadiness({ agentId: "coo" });
 
     expect(result.summary).toMatchObject({
-      total: 13,
+      total: 15,
       ready: 3,
       available: 1,
-      needsSetup: 6,
+      needsSetup: 8,
       needsGrant: 3,
       blocked: 0,
     });
@@ -141,6 +141,14 @@ describe("getToolMarketplaceReadiness", () => {
         expect.objectContaining({
           id: "quickbooks",
           readiness: "ready",
+        }),
+        expect.objectContaining({
+          id: "facebook-pages",
+          readiness: "needs_setup",
+        }),
+        expect.objectContaining({
+          id: "google-business-profile",
+          readiness: "needs_setup",
         }),
         expect.objectContaining({
           id: "brave-search",

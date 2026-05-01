@@ -5,13 +5,15 @@ export type NativeIntegrationId =
   | "microsoft365"
   | "hubspot"
   | "google"
+  | "google-business-profile"
   | "facebook"
+  | "facebook-pages"
   | "mailchimp";
 
 export type NativeIntegrationDescriptor = {
   id: NativeIntegrationId;
   integrationId: string;
-  provider: NativeIntegrationId;
+  provider: string;
   name: string;
   description: string;
   href: string;
@@ -87,7 +89,7 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
   },
   {
     id: "hubspot",
-    integrationId: "hubspot-crm-marketing",
+    integrationId: "hubspot-marketing-crm",
     provider: "hubspot",
     name: "HubSpot CRM & Marketing",
     description: "Marketing and CRM anchor for account details, contacts, and lead-capture forms.",
@@ -131,6 +133,36 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     requiredGrantKeys: ["marketing_read"],
   },
   {
+    id: "facebook-pages",
+    integrationId: "facebook-pages",
+    provider: "facebook",
+    name: "Facebook Pages",
+    description: "Localized social presence anchor for page details, recent posts, and comment activity.",
+    href: "/platform/tools/integrations/facebook-pages",
+    category: "local-social-presence",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["facebook", "pages", "social", "posts", "comments", "local presence"],
+    enables: ["Page profile context", "Recent post context", "Recent comment context", "Local social presence guidance"],
+    relevantAgentIds: ["customer-advisor", "coo"],
+    requiredGrantKeys: ["marketing_read"],
+  },
+  {
+    id: "google-business-profile",
+    integrationId: "google-business-profile",
+    provider: "google",
+    name: "Google Business Profile",
+    description: "Localized presence anchor for business listings, location details, and recent review context.",
+    href: "/platform/tools/integrations/google-business-profile",
+    category: "local-presence",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["google", "business profile", "local presence", "reviews", "locations"],
+    enables: ["Business listing context", "Location context", "Review context", "Local presence guidance"],
+    relevantAgentIds: ["customer-advisor", "coo"],
+    requiredGrantKeys: ["marketing_read"],
+  },
+  {
     id: "mailchimp",
     integrationId: "mailchimp-marketing",
     provider: "mailchimp",
@@ -149,4 +181,8 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
 
 export function getNativeIntegrationIds(): NativeIntegrationId[] {
   return NATIVE_INTEGRATIONS.map((integration) => integration.id);
+}
+
+export function getNativeIntegrationCredentialIds(): string[] {
+  return NATIVE_INTEGRATIONS.map((integration) => integration.integrationId);
 }

@@ -5,7 +5,7 @@ import { getBuiltInToolsOverview } from "@/lib/actions/built-in-tools";
 import { getAgentToolGrantsAsync, getToolGrantMapping } from "@/lib/tak/agent-grants";
 import {
   NATIVE_INTEGRATIONS,
-  getNativeIntegrationIds,
+  getNativeIntegrationCredentialIds,
   type NativeIntegrationDescriptor,
   type NativeIntegrationId,
 } from "@/lib/tools/native-integration-catalog";
@@ -173,18 +173,22 @@ function nativeReadinessEntry(
 
 async function getNativeEntries(agentGrantKeys: string[]) {
   const credentials = await prisma.integrationCredential.findMany({
-    where: { provider: { in: getNativeIntegrationIds() } },
-    select: { provider: true, status: true },
+    where: { integrationId: { in: getNativeIntegrationCredentialIds() } },
+    select: { integrationId: true, status: true },
   });
-  const statusByProvider = new Map<NativeIntegrationId, { configured: boolean; hasError: boolean }>();
+  const statusByIntegration = new Map<NativeIntegrationId, { configured: boolean; hasError: boolean }>();
+  const idByCredentialId = new Map(
+    NATIVE_INTEGRATIONS.map((integration) => [integration.integrationId, integration.id]),
+  );
 
   for (const integration of NATIVE_INTEGRATIONS) {
-    statusByProvider.set(integration.id, { configured: false, hasError: false });
+    statusByIntegration.set(integration.id, { configured: false, hasError: false });
   }
 
   for (const credential of credentials) {
-    const provider = credential.provider as NativeIntegrationId;
-    const current = statusByProvider.get(provider);
+    const descriptorId = idByCredentialId.get(credential.integrationId);
+    if (!descriptorId) continue;
+    const current = statusByIntegration.get(descriptorId);
     if (!current) continue;
     current.configured ||= credential.status === "connected";
     current.hasError ||= credential.status === "error";
@@ -193,7 +197,7 @@ async function getNativeEntries(agentGrantKeys: string[]) {
   return NATIVE_INTEGRATIONS.map((integration) =>
     nativeReadinessEntry(
       integration,
-      statusByProvider.get(integration.id) ?? { configured: false, hasError: false },
+      statusByIntegration.get(integration.id) ?? { configured: false, hasError: false },
       agentGrantKeys,
     ),
   );

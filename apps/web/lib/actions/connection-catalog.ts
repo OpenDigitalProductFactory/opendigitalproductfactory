@@ -5,7 +5,7 @@ import { getBuiltInToolsOverview } from "@/lib/actions/built-in-tools";
 import { queryMcpIntegrations } from "@/lib/actions/mcp-catalog";
 import {
   NATIVE_INTEGRATIONS,
-  getNativeIntegrationIds,
+  getNativeIntegrationCredentialIds,
   type NativeIntegrationId,
 } from "@/lib/tools/native-integration-catalog";
 
@@ -42,7 +42,7 @@ export type NativeConnectionCatalogEntry = ConnectionCatalogBase & {
   href: string;
   configured: boolean;
   statusLabel: "Configured" | "Needs attention" | "Available";
-  provider: NativeIntegrationId;
+  provider: string;
   model: "native";
 };
 
@@ -98,8 +98,8 @@ export async function getConnectionCatalog(params: CatalogSearchParams): Promise
     }),
     getBuiltInToolsOverview(),
     prisma.integrationCredential.findMany({
-      where: { provider: { in: getNativeIntegrationIds() } },
-      select: { provider: true, status: true },
+      where: { integrationId: { in: getNativeIntegrationCredentialIds() } },
+      select: { integrationId: true, status: true },
     }),
   ]);
 
@@ -110,9 +110,14 @@ export async function getConnectionCatalog(params: CatalogSearchParams): Promise
     nativeStatusMap.set(descriptor.id, { configured: false, hasError: false });
   }
 
+  const idByCredentialId = new Map(
+    NATIVE_INTEGRATIONS.map((integration) => [integration.integrationId, integration.id]),
+  );
+
   for (const credential of nativeCredentials) {
-    const provider = credential.provider as NativeIntegrationId;
-    const current = nativeStatusMap.get(provider);
+    const descriptorId = idByCredentialId.get(credential.integrationId);
+    if (!descriptorId) continue;
+    const current = nativeStatusMap.get(descriptorId);
     if (!current) continue;
 
     current.configured ||= credential.status === "connected";
