@@ -2777,6 +2777,8 @@
     {
       "agent_id": "AGT-WS-INVENTORY",
       "agent_name": "inventory-specialist",
+      "displayName": "Digital Product Estate Specialist",
+      "aliases": ["estate-specialist", "inventory-specialist"],
       "tier": "specialist",
       "value_stream": "explore",
       "capability_domain": "Product Manager. Product lifecycle, maturity, and market fit analysis. Owns the daily Discovery Taxonomy Gap Triage scheduled task that runs run_discovery_triage at 08:00 UTC.",
