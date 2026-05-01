@@ -217,4 +217,12 @@ describe("assembleSystemPrompt", () => {
       "Do NOT game tests, acceptance criteria, approval flows, or tooling",
     );
   });
+
+  it("guides coworkers to query the tool marketplace for unavailable tools", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+    expect(prompt).toContain("TOOL MARKETPLACE");
+    expect(prompt).toContain("search_tool_marketplace");
+    expect(prompt).toContain("unconfigured");
+    expect(prompt).toContain("ungranted");
+  });
 });

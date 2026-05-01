@@ -37,6 +37,7 @@ import {
   type IntegrationTreatment,
 } from "@/lib/integrate/integration-benchmarking";
 import { normalizeBuildPlanPaths } from "@/lib/integrate/build-plan-paths";
+import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2056,8 +2057,39 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
           limit: { type: "number", description: "Max results to return. Default 10." },
         },
         required: ["query"],
-      },
+    },
     requiredCapability: null,
+  },
+  {
+    name: "search_tool_marketplace",
+    description: "Search the cross-source tool marketplace readiness catalog. Use when the user asks what integrations, MCP servers, built-in tools, model requirements, or ungranted/unconfigured tools are available for an AI coworker.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Need or domain to search for, such as 'payroll', 'ADP', 'Build Studio', 'finance', or 'web search'.",
+        },
+        agentId: {
+          type: "string",
+          description: "Optional coworker id or slug to evaluate grants against. Defaults to the current coworker when available.",
+        },
+        includeKinds: {
+          type: "array",
+          items: { type: "string", enum: ["mcp", "native", "built_in", "model_requirement"] },
+          description: "Optional source types to include.",
+        },
+        limit: { type: "number", description: "Max readiness entries to return. Default 12." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
   },
   {
     name: "prefill_onboarding_wizard",
@@ -8116,6 +8148,29 @@ export async function executeTool(
           .map(({ tags: _tags, rawMetadata: _rawMetadata, slug: _slug, ...row }) => row);
         return { success: true, message: `Found ${results.length} integration(s).`, data: { results } };
       }
+
+    case "search_tool_marketplace": {
+      const includeKinds = Array.isArray(params["includeKinds"])
+        ? params["includeKinds"].filter((kind): kind is "mcp" | "native" | "built_in" | "model_requirement" =>
+          typeof kind === "string" && ["mcp", "native", "built_in", "model_requirement"].includes(kind),
+        )
+        : undefined;
+      const readiness = await getToolMarketplaceReadiness({
+        query: typeof params["query"] === "string" ? params["query"] : "",
+        agentId: typeof params["agentId"] === "string" ? params["agentId"] : context?.agentId,
+        includeKinds: includeKinds && includeKinds.length > 0 ? includeKinds : undefined,
+        limit: typeof params["limit"] === "number" ? params["limit"] : 12,
+      });
+
+      return {
+        success: true,
+        message: `Found ${readiness.entries.length} marketplace readiness entr${readiness.entries.length === 1 ? "y" : "ies"}.`,
+        data: {
+          summary: readiness.summary,
+          entries: readiness.entries,
+        },
+      };
+    }
 
     case "prefill_onboarding_wizard": {
       const data = {

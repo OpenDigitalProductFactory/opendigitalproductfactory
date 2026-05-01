@@ -53,6 +53,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   analyze_public_website_branding: ["web_search"],
   extract_brand_design_system: ["web_search", "file_read", "admin_write"],
   search_integrations: ["external_registry_search", "registry_read"],
+  search_tool_marketplace: ["registry_read"],
   search_knowledge: ["registry_read"],
   search_knowledge_base: ["registry_read"],
   create_knowledge_article: ["registry_write"],
