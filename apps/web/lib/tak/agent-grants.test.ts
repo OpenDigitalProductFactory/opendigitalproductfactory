@@ -182,6 +182,13 @@ describe("default-deny: unmapped tools are blocked", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS — Tool marketplace entries", () => {
+  it("search_tool_marketplace requires registry_read", () => {
+    expect(isToolAllowedByGrants("search_tool_marketplace", ["registry_read"])).toBe(true);
+    expect(isToolAllowedByGrants("search_tool_marketplace", ["web_search"])).toBe(false);
+  });
+});
+
 describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
   it("retire_backlog_item requires backlog_write without broader triage authority", () => {
     expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_write"])).toBe(true);
