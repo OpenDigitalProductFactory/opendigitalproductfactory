@@ -489,6 +489,37 @@ Display + alias only; the durable `agent_id` `AGT-WS-INVENTORY` is preserved. Bo
 - `packages/db/data/agent_registry.json` `capability_domain` copy for `AGT-WS-INVENTORY` still describes the role in product-management language; refresh in a future sweep.
 - A loader-level aliasing pass in `seed-prompt-templates.ts` could let `estate-specialist.prompt.md` redirect to `inventory-specialist.prompt.md` instead of duplicating content.
 
+### Chunk 7 — Portfolio Analyst Governance Loop (PARTIAL — Tasks 7.1 + 7.2 only, landed 2026-04-30)
+
+Ships the *measurement* surface of the governance loop today. The remaining tasks (MCP tools, skill, scheduled review) are gated on Open Questions #4 (required-field gates default) and on Chunk 4's enrichment schema landing — they will land in a follow-up PR.
+
+| Task | Files | Tests | Status |
+| - | - | - | - |
+| 7.1 Completeness scoring (pure helper) | `apps/web/lib/portfolio/completeness.ts` + test | 9/9 | ✅ |
+| 7.2 CompletenessStrip component | `apps/web/components/portfolio/CompletenessStrip.tsx` + test; wired into `apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx` | 6/6 | ✅ |
+| 7.3 Portfolio Analyst MCP tools (`approve_taxonomy_gap_proposal`, `set_node_required_fields`, `request_re_enrichment`) | — | — | ⏸ DEFERRED |
+| 7.4 `portfolio-completeness-review` skill | — | — | ⏸ DEFERRED |
+| 7.5 Daily review queue function | — | — | ⏸ DEFERRED |
+
+**Build gate (Task 7.6 partial):** `pnpm --filter @dpf/db exec vitest run` → 315 pass / 54 files. `pnpm --filter web exec vitest run` → 4539 pass / 14 skipped / 13 todo / 568 files. `cd apps/web && npx next build` → exit 0 (after one transient post-build segfault on Node v24 + Turbopack — retry was clean).
+
+**Forward compatibility.** Both `requiredFieldsScore` and `enrichmentScore` return `null` until their underlying data sources land:
+
+- `requiredFieldsScore` returns null until any `TaxonomyNode.governance.requiredFields` is non-empty. Task 7.3's `set_node_required_fields` MCP tool will start populating this. Until then the strip shows an em-dash with a tooltip explaining why.
+- `enrichmentScore` returns null until `DigitalProduct.enrichmentStatus` exists on the schema. Chunk 4 Task 4.1 adds the column; the helper checks for the field's presence via `hasOwnProperty` so it flips to a real percentage automatically when Chunk 4 ships.
+
+**Why 7.3–7.5 deferred.** Each has a hard dependency that hasn't been resolved:
+
+- 7.3 `set_node_required_fields` requires Open Question #4 (default policy: strict-everywhere vs opt-in per node). `request_re_enrichment` enqueues a Chunk 4 queue function that doesn't exist yet.
+- 7.4 + 7.5 build on top of 7.3's tool surface and on the Coworker Operator Pattern's `PortfolioReview` work-product table, which is not yet in the schema.
+
+**Next steps for the governance loop slice:**
+
+1. Resolve Open Question #4 (whose answer determines the default `requiredFields` seed pattern).
+2. Land Chunk 4 Task 4.1 (`DigitalProduct.enrichmentStatus` column) — at which point `enrichmentScore` lights up automatically.
+3. Land Chunk 4 Task 4.4 (`enrich-digital-product` queue function) — at which point `request_re_enrichment` becomes implementable.
+4. Then ship Tasks 7.3–7.5 in a single follow-up PR.
+
 ---
 
 ## 14. References
