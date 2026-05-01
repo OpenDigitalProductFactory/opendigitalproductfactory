@@ -227,7 +227,50 @@ function checkPsl003(promptFiles: string[]): void {
   }
 }
 
-// checkPsl004 — added in next task
+// ─── PSL-004: runtime-disabling instruction (warn-only) ───────────────────
+
+const PSL_004_PATTERNS: Array<{ regex: RegExp; phrase: string }> = [
+  { regex: /do not use [^.]+because [^.]+(?:pending|aspirational|unavailable|unhonored)/i, phrase: "do not use ... because pending/aspirational" },
+  { regex: /\bcurrently aspirational\b/i, phrase: "currently aspirational" },
+  { regex: /\bgrants? are not (?:yet )?(?:live|honored)\b/i, phrase: "grants are not (yet) live/honored" },
+];
+
+const PSL_004_RUNTIME_EVIDENCE_RE = /\b(?:PAGE DATA|runtime tool list|delivered tool list)\b/i;
+
+export function matchPsl004(body: string, file: string): Finding[] {
+  const out: Finding[] = [];
+  const lines = body.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const context = [lines[i - 1] ?? "", line, lines[i + 1] ?? ""].join(" ");
+    if (PSL_004_RUNTIME_EVIDENCE_RE.test(context)) continue;
+    for (const { regex, phrase } of PSL_004_PATTERNS) {
+      const m = line.match(regex);
+      if (m && typeof m.index === "number") {
+        out.push({
+          invariantId: "PSL-004",
+          severity: "warn",
+          file,
+          line: i + 1,
+          column: m.index + 1,
+          match: m[0],
+          summary: `[PSL-004] runtime-disabling instruction: "${phrase}"`,
+          detail:
+            `This line tells the model that listed tools are pending/aspirational/unhonored without pointing the model at the runtime tool list as authoritative. Either remove the framing or add an explicit pointer to the runtime / PAGE DATA.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-004 — warn-only until a separate review covers the broader 'currently aspirational' family.`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function checkPsl004(promptFiles: string[]): void {
+  for (const relPath of promptFiles) {
+    const abs = join(ROOT, relPath);
+    const text = readFileSync(abs, "utf8");
+    for (const f of matchPsl004(text, relPath)) findings.push(f);
+  }
+}
 
 // ─── Baseline diff (added in Task 6) ──────────────────────────────────────
 
@@ -275,6 +318,7 @@ function main(): void {
   checkPsl001(promptFiles);
   checkPsl002(promptFiles);
   checkPsl003(promptFiles);
+  checkPsl004(promptFiles);
 
   const errorCount = findings.filter((f) => f.severity === "error").length;
   const warnCount = findings.filter((f) => f.severity === "warn").length;

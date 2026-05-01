@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchPsl001, matchPsl002, matchPsl003 } from "./audit-prompt-state-leakage";
+import { matchPsl001, matchPsl002, matchPsl003, matchPsl004 } from "./audit-prompt-state-leakage";
 
 describe("PSL-001 forbidden phrases", () => {
   it("matches `currently []`", () => {
@@ -146,6 +146,28 @@ describe("PSL-003 current-state grant snapshots", () => {
     const text =
       "Tool list is delivered by the runtime via PAGE DATA. The registry path is a non-authoritative reference; you currently have whatever PAGE DATA shows.";
     const out = matchPsl003(text, "x.md");
+    expect(out).toHaveLength(0);
+  });
+});
+
+describe("PSL-004 runtime-disabling instruction", () => {
+  it("warns on `do not use X tools because they are pending`", () => {
+    const out = matchPsl004("Do not use sandbox tools because they are pending grant assignment.", "x.md");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.severity).toBe("warn");
+  });
+
+  it("warns on `aspirational` framing without runtime evidence pointer", () => {
+    const out = matchPsl004("These tool grants are currently aspirational.", "x.md");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.severity).toBe("warn");
+  });
+
+  it("does not warn when the line points at runtime evidence", () => {
+    const out = matchPsl004(
+      "These tool grants are currently aspirational; check the runtime tool list (PAGE DATA) for what is actually delivered.",
+      "x.md",
+    );
     expect(out).toHaveLength(0);
   });
 });
