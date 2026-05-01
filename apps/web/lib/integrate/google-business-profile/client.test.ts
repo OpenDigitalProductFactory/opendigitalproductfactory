@@ -80,7 +80,7 @@ describe("probeGoogleBusinessProfile", () => {
     await mockAgent.close();
   });
 
-  it("returns account, location, recent review data, and recent local posts", async () => {
+  it("returns account, location, recent review data, local posts, and location media", async () => {
     mockAgent
       .get("https://mybusinessaccountmanagement.googleapis.com")
       .intercept({
@@ -158,6 +158,39 @@ describe("probeGoogleBusinessProfile", () => {
         ],
       });
 
+    mockAgent
+      .get("https://mybusiness.googleapis.com")
+      .intercept({
+        path: "/v4/accounts/123/locations/456/media?pageSize=6",
+        method: "GET",
+      })
+      .reply(200, {
+        totalMediaItemCount: 12,
+        mediaItems: [
+          {
+            name: "accounts/123/locations/456/media/photo-1",
+            mediaFormat: "PHOTO",
+            googleUrl: "https://maps.google.com/photo-1",
+            thumbnailUrl: "https://lh3.googleusercontent.com/photo-1",
+            createTime: "2026-04-29T15:00:00Z",
+            locationAssociation: {
+              category: "EXTERIOR",
+            },
+            dimensions: {
+              widthPixels: 1600,
+              heightPixels: 900,
+            },
+            insights: {
+              viewCount: "3421",
+            },
+            attribution: {
+              profileName: "Acme Managed Services",
+              profileUrl: "https://maps.google.com/acme",
+            },
+          },
+        ],
+      });
+
     const result = await probeGoogleBusinessProfile({
       accessToken: "google-token",
       accountId: "123",
@@ -173,6 +206,12 @@ describe("probeGoogleBusinessProfile", () => {
       "Free network review for Austin businesses this Friday.",
     );
     expect(result.localPosts[0]?.callToAction?.actionType).toBe("LEARN_MORE");
+    expect(result.media.totalMediaItemCount).toBe(12);
+    expect(result.media.items[0]?.thumbnailUrl).toBe(
+      "https://lh3.googleusercontent.com/photo-1",
+    );
+    expect(result.media.items[0]?.locationAssociation?.category).toBe("EXTERIOR");
+    expect(result.media.items[0]?.insights?.viewCount).toBe("3421");
   });
 
   it("throws a redacted error when Google rejects the credentials", async () => {

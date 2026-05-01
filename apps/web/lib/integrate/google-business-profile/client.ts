@@ -62,11 +62,46 @@ export interface GoogleBusinessLocalPostRecord {
   [key: string]: unknown;
 }
 
+export interface GoogleBusinessMediaRecord {
+  name?: string;
+  mediaFormat?: string;
+  locationAssociation?: {
+    category?: string;
+    priceListItemId?: string;
+    [key: string]: unknown;
+  };
+  googleUrl?: string;
+  thumbnailUrl?: string;
+  createTime?: string;
+  dimensions?: {
+    widthPixels?: number;
+    heightPixels?: number;
+    [key: string]: unknown;
+  };
+  insights?: {
+    viewCount?: string;
+    [key: string]: unknown;
+  };
+  attribution?: {
+    profileName?: string;
+    profileUrl?: string;
+    [key: string]: unknown;
+  };
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface GoogleBusinessMediaPreview {
+  items: GoogleBusinessMediaRecord[];
+  totalMediaItemCount: number;
+}
+
 export interface GoogleBusinessProfileProbeResult {
   account: GoogleBusinessAccountRecord;
   location: GoogleBusinessLocationRecord;
   reviews: GoogleBusinessReviewRecord[];
   localPosts: GoogleBusinessLocalPostRecord[];
+  media: GoogleBusinessMediaPreview;
 }
 
 interface GoogleBusinessProfileRequestParams {
@@ -116,10 +151,11 @@ export async function probeGoogleBusinessProfile(
     );
   }
 
-  const [location, reviews, localPosts] = await Promise.all([
+  const [location, reviews, localPosts, media] = await Promise.all([
     getLocation(params),
     listReviews(params),
     listLocalPosts(params),
+    listMedia(params),
   ]);
 
   return {
@@ -127,6 +163,7 @@ export async function probeGoogleBusinessProfile(
     location,
     reviews,
     localPosts,
+    media,
   };
 }
 
@@ -202,6 +239,33 @@ async function listLocalPosts(
   });
 
   return Array.isArray(response.localPosts) ? response.localPosts : [];
+}
+
+async function listMedia(
+  params: GoogleBusinessProfileRequestParams,
+): Promise<GoogleBusinessMediaPreview> {
+  const query = new URLSearchParams({
+    pageSize: "6",
+  }).toString();
+
+  const response = await fetchGoogleBusinessJson<{
+    mediaItems?: GoogleBusinessMediaRecord[];
+    totalMediaItemCount?: number;
+  }>({
+    url: `${resolveGoogleBusinessProfileApiBaseUrl()}/v4/accounts/${params.accountId}/locations/${params.locationId}/media?${query}`,
+    accessToken: params.accessToken,
+    dispatcher: params.dispatcher,
+    unauthorizedMessage:
+      "invalid Google Business Profile media permissions for this account and location",
+    unconfiguredMessage:
+      "Google Business Profile Media API is not enabled or location media could not be read.",
+  });
+
+  return {
+    items: Array.isArray(response.mediaItems) ? response.mediaItems : [],
+    totalMediaItemCount:
+      typeof response.totalMediaItemCount === "number" ? response.totalMediaItemCount : 0,
+  };
 }
 
 async function fetchGoogleBusinessJson<T>({
