@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { matchPsl001, matchPsl002, matchPsl003, matchPsl004 } from "./audit-prompt-state-leakage";
+import {
+  matchPsl001,
+  matchPsl002,
+  matchPsl003,
+  matchPsl004,
+  diffAgainstBaseline,
+  detectBaselineGrowth,
+  type Finding,
+  type Report,
+} from "./audit-prompt-state-leakage";
 
 describe("PSL-001 forbidden phrases", () => {
   it("matches `currently []`", () => {
@@ -169,5 +178,54 @@ describe("PSL-004 runtime-disabling instruction", () => {
       "x.md",
     );
     expect(out).toHaveLength(0);
+  });
+});
+
+describe("baseline diff", () => {
+  const baselineReport: Report = {
+    generatedAt: "x", spec: "x", rulesChecked: 4, errorCount: 1, warnCount: 0,
+    findings: [
+      { invariantId: "PSL-001", severity: "error", file: "a.md", line: 1, column: 1, match: "currently []", summary: "x", detail: "x" },
+    ],
+  };
+  it("reports new findings as new", () => {
+    const current: Finding[] = [
+      ...baselineReport.findings,
+      { invariantId: "PSL-001", severity: "error", file: "b.md", line: 1, column: 1, match: "currently []", summary: "x", detail: "x" },
+    ];
+    const diff = diffAgainstBaseline(current, baselineReport);
+    expect(diff.newViolations).toHaveLength(1);
+    expect(diff.newViolations[0]!.file).toBe("b.md");
+    expect(diff.unchanged).toHaveLength(1);
+  });
+  it("reports resolved findings", () => {
+    const diff = diffAgainstBaseline([], baselineReport);
+    expect(diff.resolvedViolations).toHaveLength(1);
+  });
+});
+
+describe("shrink-only baseline guard", () => {
+  const make = (file: string, match: string): Finding => ({
+    invariantId: "PSL-001",
+    severity: "error",
+    file, line: 1, column: 1, match, summary: "x", detail: "x",
+  });
+  const base: Report = {
+    generatedAt: "x", spec: "x", rulesChecked: 4, errorCount: 1, warnCount: 0,
+    findings: [make("a.md", "currently []")],
+  };
+  it("passes when current baseline is a subset of base baseline", () => {
+    const current: Report = { ...base, findings: [] };
+    const grew = detectBaselineGrowth(base, current);
+    expect(grew).toEqual([]);
+  });
+  it("fails when current baseline added a key", () => {
+    const current: Report = {
+      ...base,
+      findings: [...base.findings, make("b.md", "pending follow-on assignment")],
+    };
+    const grew = detectBaselineGrowth(base, current);
+    expect(grew).toHaveLength(1);
+    expect(grew[0]!.file).toBe("b.md");
   });
 });

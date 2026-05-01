@@ -24,10 +24,10 @@
 import { readFileSync, existsSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-type Severity = "error" | "warn";
-type InvariantId = "PSL-001" | "PSL-002" | "PSL-003" | "PSL-004";
+export type Severity = "error" | "warn";
+export type InvariantId = "PSL-001" | "PSL-002" | "PSL-003" | "PSL-004";
 
-interface Finding {
+export interface Finding {
   invariantId: InvariantId;
   severity: Severity;
   file: string;        // repo-relative, forward slashes
@@ -38,7 +38,7 @@ interface Finding {
   detail: string;
 }
 
-interface Report {
+export interface Report {
   generatedAt: string;
   spec: string;
   rulesChecked: number;
@@ -272,9 +272,36 @@ function checkPsl004(promptFiles: string[]): void {
   }
 }
 
-// ─── Baseline diff (added in Task 6) ──────────────────────────────────────
+// ─── Baseline diff ─────────────────────────────────────────────────────────
 
-// ─── Shrink-only guard (added in Task 7) ──────────────────────────────────
+export interface BaselineDiff {
+  newViolations: Finding[];
+  resolvedViolations: Finding[];
+  unchanged: Finding[];
+}
+
+export function diffAgainstBaseline(current: Finding[], baseline: Report): BaselineDiff {
+  const baselineKeys = new Set(baseline.findings.map(findingKey));
+  const currentKeys = new Set(current.map(findingKey));
+  return {
+    newViolations: current.filter((f) => !baselineKeys.has(findingKey(f))),
+    resolvedViolations: baseline.findings.filter((f) => !currentKeys.has(findingKey(f))),
+    unchanged: current.filter((f) => baselineKeys.has(findingKey(f))),
+  };
+}
+
+function loadBaseline(path: string): Report | null {
+  if (!existsSync(path)) return null;
+  const raw = readFileSync(path, "utf8");
+  return JSON.parse(raw) as Report;
+}
+
+// ─── Shrink-only guard ────────────────────────────────────────────────────
+
+export function detectBaselineGrowth(base: Report, current: Report): Finding[] {
+  const baseKeys = new Set(base.findings.map(findingKey));
+  return current.findings.filter((f) => !baseKeys.has(findingKey(f)));
+}
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 
@@ -340,10 +367,46 @@ function main(): void {
   }
 
   let exitCode = 0;
-  // Baseline diff and shrink-only guard wired in Tasks 6–7
-  if (errorCount > 0 && !baselinePath) exitCode = 1;
-  void baselinePath;
-  void shrinkFromPath;
+  if (baselinePath) {
+    const baseline = loadBaseline(baselinePath);
+    if (baseline === null) {
+      console.error(`[audit] baseline ${baselinePath} not found — treating all findings as new`);
+      exitCode = errorCount > 0 ? 1 : 0;
+    } else {
+      const diff = diffAgainstBaseline(report.findings, baseline);
+      console.error(
+        `[audit] baseline diff: unchanged=${diff.unchanged.length} ` +
+        `resolved=${diff.resolvedViolations.length} new=${diff.newViolations.length}`,
+      );
+      const newErrors = diff.newViolations.filter((f) => f.severity === "error");
+      if (newErrors.length > 0) {
+        console.error(`\n[audit] NEW ERROR-LEVEL VIOLATIONS BLOCK MERGE:`);
+        for (const f of newErrors) console.error(`  [${f.invariantId}] ${f.file}:${f.line} ${f.match}`);
+        exitCode = 1;
+      }
+      if (diff.resolvedViolations.length > 0) {
+        console.error(`\n[audit] resolved (can be removed from baseline):`);
+        for (const f of diff.resolvedViolations) console.error(`  [${f.invariantId}] ${f.file} ${f.match}`);
+      }
+    }
+  } else {
+    exitCode = errorCount > 0 ? 1 : 0;
+  }
+
+  if (shrinkFromPath) {
+    const shrinkBase = loadBaseline(shrinkFromPath);
+    const currentBaseline = baselinePath ? loadBaseline(baselinePath) : null;
+    if (shrinkBase && currentBaseline) {
+      const grew = detectBaselineGrowth(shrinkBase, currentBaseline);
+      if (grew.length > 0) {
+        console.error(`\n[audit] BASELINE GROWTH BLOCKED — these keys were added vs. ${shrinkFromPath}:`);
+        for (const f of grew) console.error(`  [${f.invariantId}] ${f.file} ${f.match}`);
+        exitCode = 1;
+      }
+    } else {
+      console.error(`[audit] could not load shrink-from baseline at ${shrinkFromPath}, skipping`);
+    }
+  }
 
   process.exit(exitCode);
 }
