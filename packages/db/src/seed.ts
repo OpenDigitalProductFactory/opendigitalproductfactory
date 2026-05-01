@@ -3,6 +3,7 @@ import "./load-env.js";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { prisma } from "./client.js";
+import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
@@ -19,6 +20,7 @@ import { seedSkills } from "./seed-skills.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { syncCapabilities } from "./sync-capabilities.js";
+import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -387,6 +389,7 @@ async function seedTaxonomyNodes(): Promise<void> {
   for (const entry of entries) {
     const parentCuid = entry.parentNodeId ? (nodeIdToCuid.get(entry.parentNodeId) ?? null) : null;
     const portfolioCuid = portfolioIdMap.get(entry.portfolioId) ?? null;
+    const governance = defaultGovernanceFor(entry.nodeId);
     const node = await prisma.taxonomyNode.upsert({
       where: { nodeId: entry.nodeId },
       create: {
@@ -397,6 +400,7 @@ async function seedTaxonomyNodes(): Promise<void> {
         status:      "active",
         description: entry.description,
         enrichment:  entry.enrichment ? JSON.parse(JSON.stringify(entry.enrichment)) : undefined,
+        governance:  JSON.parse(JSON.stringify(governance)),
       },
       update: {
         name:        entry.name,
@@ -405,10 +409,24 @@ async function seedTaxonomyNodes(): Promise<void> {
         status:      "active",
         description: entry.description,
         enrichment:  entry.enrichment ? JSON.parse(JSON.stringify(entry.enrichment)) : undefined,
+        governance:  JSON.parse(JSON.stringify(governance)),
       },
       select: { id: true },
     });
     nodeIdToCuid.set(entry.nodeId, node.id);
+  }
+
+  // Invariant guard: every TaxonomyNode must carry governance after seed.
+  // This catches future regressions where a code path adds rows but skips
+  // the governance payload (per the "fix the seed, not the runtime" principle).
+  const missing = await prisma.taxonomyNode.count({
+    where: { governance: { equals: Prisma.DbNull } },
+  });
+  if (missing > 0) {
+    throw new Error(
+      `Invariant violation: ${missing} TaxonomyNode rows have null governance after seed. ` +
+        `Did seedTaxonomyNodes skip the upsert payload? See packages/db/src/taxonomy-governance-defaults.ts.`,
+    );
   }
 
   console.log(`Seeded ${entries.length} taxonomy nodes`);
