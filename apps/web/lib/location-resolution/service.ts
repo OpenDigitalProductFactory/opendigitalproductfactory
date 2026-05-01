@@ -1,17 +1,28 @@
 import { prisma } from "@dpf/db";
 import { normalizeLocalityName } from "./normalize";
+import {
+  DEFAULT_LOCALITY_SOURCE,
+  DEFAULT_LOCALITY_TYPE,
+  LOCALITY_STATUSES,
+  type LocalityStatus,
+} from "./locality-enums";
 
 export type LocationRefResult = {
   ok: boolean;
   message: string;
-  created?: { id: string; name: string; code?: string | null };
+  created?: { id: string; name: string; code?: string | null; status?: LocalityStatus };
   suggestions?: { id: string; name: string; code?: string | null }[];
 };
 
 export type CreateLocalityInput = {
   regionId: string;
   name: string;
+  addedByUserId?: string | null;
 };
+
+function toLocalityStatus(status: string): LocalityStatus | undefined {
+  return LOCALITY_STATUSES.includes(status as LocalityStatus) ? (status as LocalityStatus) : undefined;
+}
 
 export async function searchCountriesForLocation(query: string) {
   const trimmed = query.trim();
@@ -58,10 +69,10 @@ export async function searchLocalities(regionId: string, query: string) {
   return prisma.city.findMany({
     where: {
       regionId,
-      status: "active",
+      status: { in: ["active", "needs-review"] },
       name: { contains: trimmed, mode: "insensitive" },
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, status: true },
     orderBy: { name: "asc" },
     take: 20,
   });
@@ -89,7 +100,7 @@ export async function suggestDuplicateLocalities(regionId: string, name: string)
 export async function createLocality(input: CreateLocalityInput): Promise<LocationRefResult> {
   const trimmedName = input.name.trim();
   if (!trimmedName) {
-    return { ok: false, message: "Locality name is required." };
+    return { ok: false, message: "Town / city name is required." };
   }
 
   const suggestions = await suggestDuplicateLocalities(input.regionId, trimmedName);
@@ -104,29 +115,45 @@ export async function createLocality(input: CreateLocalityInput): Promise<Locati
   const created = await prisma.city.create({
     data: {
       name: trimmedName,
+      nameNormalized: normalizeLocalityName(trimmedName),
       regionId: input.regionId,
-      status: "active",
+      status: "needs-review",
+      localityType: DEFAULT_LOCALITY_TYPE,
+      source: DEFAULT_LOCALITY_SOURCE,
+      ...(input.addedByUserId ? { addedByUserId: input.addedByUserId } : {}),
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, status: true },
   });
 
-  return { ok: true, message: `Locality "${created.name}" created.`, created };
+  return {
+    ok: true,
+    message: `Town / city "${created.name}" was added for review.`,
+    created: { ...created, status: toLocalityStatus(created.status) },
+  };
 }
 
 export async function forceCreateLocality(input: CreateLocalityInput): Promise<LocationRefResult> {
   const trimmedName = input.name.trim();
   if (!trimmedName) {
-    return { ok: false, message: "Locality name is required." };
+    return { ok: false, message: "Town / city name is required." };
   }
 
   const created = await prisma.city.create({
     data: {
       name: trimmedName,
+      nameNormalized: normalizeLocalityName(trimmedName),
       regionId: input.regionId,
       status: "active",
+      localityType: DEFAULT_LOCALITY_TYPE,
+      source: DEFAULT_LOCALITY_SOURCE,
+      ...(input.addedByUserId ? { addedByUserId: input.addedByUserId } : {}),
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, status: true },
   });
 
-  return { ok: true, message: `Locality "${created.name}" created.`, created };
+  return {
+    ok: true,
+    message: `Town / city "${created.name}" created.`,
+    created: { ...created, status: toLocalityStatus(created.status) },
+  };
 }

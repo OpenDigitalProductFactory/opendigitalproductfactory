@@ -1016,6 +1016,16 @@ export async function sendMessage(input: {
     // EP-INF-009b: The loop handles V2 routing internally via routeAndCall().
     const { runAgenticLoop } = await import("@/lib/agentic-loop");
     const { agentEventBus } = await import("@/lib/agent-event-bus");
+
+    // Build Specialist Operator Contract platform guards (clauses 2.2/2.4/2.6)
+    // need to know the active FeatureBuild's phase + id for attribution.
+    // findFirst returns null on non-build threads; the guards no-op when
+    // buildPhase is null/non-build.
+    const activeBuild = await prisma.featureBuild.findFirst({
+      where: { threadId: input.threadId },
+      select: { id: true, phase: true },
+    }).catch(() => null);
+
     const agenticResult = await runAgenticLoop({
       chatHistory,
       systemPrompt: populatedPrompt,
@@ -1028,6 +1038,8 @@ export async function sendMessage(input: {
       threadId: input.threadId,
       taskType: taskTypeId,
       agentDisplayName: agent.agentName,
+      buildPhase: activeBuild?.phase ?? null,
+      featureBuildId: activeBuild?.id ?? null,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });

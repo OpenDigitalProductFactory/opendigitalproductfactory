@@ -9,6 +9,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { PrismaClient } from "../generated/client/client";
+import { normalizeLocalityName } from "./location-normalize";
 
 // ---------------------------------------------------------------------------
 // Data types matching the JSON file schemas
@@ -144,7 +145,7 @@ async function seedCities(
     if (!regionDbId) continue;
 
     const found = await prisma.city.findFirst({
-      where: { regionId: regionDbId, name: c.name },
+      where: { regionId: regionDbId, nameNormalized: normalizeLocalityName(c.name) },
       select: { id: true },
     });
 
@@ -154,6 +155,7 @@ async function seedCities(
       await prisma.city.create({
         data: {
           name: c.name,
+          nameNormalized: normalizeLocalityName(c.name),
           regionId: regionDbId,
         },
       });
