@@ -438,6 +438,33 @@ Replaces the hardcoded `PROMOTABLE_TYPES` SQL filter with the Chunk 1 policy res
 
 **Open questions still pending (gating later chunks):** unchanged from Chunk 1 — #2 (model cost guardrail), #3 (signature seed scope), #4 (required-field gates default), #5 (freshness thresholds). All gate Chunks 4 and 7.
 
+### Chunk 3 — Detail Page Rendering (landed 2026-04-30)
+
+Renders the three `TaxonomyNode` JSON columns (`description`, `governance`, `enrichment`) that the schema already had but the detail UI was ignoring. Adds a full `DigitalProduct` detail page with a typed view-model abstraction. Theme-token cleanup of `PortfolioNodeDetail` lands as part of the chunk per spec §6.4.
+
+| Task | Files | Tests |
+| - | - | - |
+| 3.1 Portfolio node view model | `apps/web/lib/portfolio/portfolio-node-view-model.ts` + test | 12/12 |
+| 3.2 Theme-token cleanup of PortfolioNodeDetail | `PortfolioNodeDetail.tsx` (refactored — `PORTFOLIO_COLOURS` import dropped, every hardcoded color replaced with `var(--dpf-*)` tokens) | n/a (build verified) |
+| 3.3 About/Governance/Enrichment sections | 3 new components + tests; widened `PortfolioTreeNode` type + `getFullPortfolioTree` Prisma select | 15/15 |
+| 3.4 Digital product detail page | `digital-product-view-model.ts` + 3 components + page (4 files + 4 tests) | 35/35 (after multi-row table extension) |
+
+**Build gate (Task 3.5):** `pnpm --filter @dpf/db exec vitest run` → 304 pass / 53 files. `pnpm --filter web exec vitest run` → 4494 pass / 14 skipped / 13 todo / 557 files. `cd apps/web && npx next build` → exit 0.
+
+**Deviations from plan.**
+
+- **Task 3.4 route path forced to relocate** from `/portfolio/[[...slug]]/products/[productId]` to `/portfolio/products/[productId]`. Next.js refuses children under optional catch-all routes ("Optional catch-all must be the last part of the URL"). Static segments still win route matching, so the new URL resolves correctly. Documented in the page header comment.
+- **Task 3.4 deferred sections to Chunk 4.** `enrichmentStatus` / `lastEnrichedAt` / "recent change items" not rendered yet — dependent on Chunk 4 schema columns (`InventoryEntity.freshness`, `DigitalProduct.enrichmentStatus`, `DigitalProduct.lastEnrichedAt`). View model accepts them as optional inputs (forward-compatible); component carries `TODO(Chunk 4 Task 4.3)` comments at the insertion points. `FreshnessBadge` degrades to muted "Unknown" when freshness is undefined.
+- **Per-portfolio-root color differentiation removed** from `PortfolioNodeDetail` (Task 3.2). Spec §6.4 endorsed replacing `PORTFOLIO_COLOURS` with theme tokens; the four other consumers (`PortfolioTreeNode`, `PortfolioOverview`, `DiscoveryOperationsPage`, `AgentGovernanceCard`) still import the constant from `apps/web/lib/evaluate/portfolio.ts` and remain unchanged.
+- **Manual UX verification deferred.** Plan Task 3.2 calls for "light + dark + brand override" check; Task 3.3 calls for "view a foundational node with description/governance present and one without"; Task 3.4 calls for "drill into an existing promoted product, confirm all sections render". All three are owed against the running portal once this branch lands and the install is re-deployed. Theme-token grep is empty across all new TSX files; component tests assert empty-state behavior + raw-JSON-leak prevention.
+
+**Carry-overs to Chunk 4.**
+
+- Render an Enrichment section in `DigitalProductDetail` reading `vm.enrichmentStatus` + `vm.lastEnrichedAt` once the schema columns land.
+- Render recent `ChangeItem` rollups for a product (spec §6.4 calls this out; per-product query helper does not exist yet).
+- The `colour` prop on `ProductList` is now effectively dead (detail callers pass a literal token string the component ignores). Cleanup candidate.
+- `AgentGovernanceCard.tsx` still falls back to a hardcoded hex `"#555566"` — flag for the next theme-token sweep.
+
 ---
 
 ## 14. References
