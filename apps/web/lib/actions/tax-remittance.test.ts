@@ -29,6 +29,26 @@ vi.mock("@dpf/db", () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    taxDecisionSnapshot: {
+      upsert: vi.fn(),
+    },
+    taxLiabilityEntry: {
+      deleteMany: vi.fn(),
+      upsert: vi.fn(),
+      findMany: vi.fn(),
+    },
+    taxAuthorityCredential: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    taxRemittanceRun: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
     notification: {
       create: vi.fn(),
     },
@@ -50,9 +70,11 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
     },
     invoice: {
+      findMany: vi.fn(),
       aggregate: vi.fn(),
     },
     bill: {
+      findMany: vi.fn(),
       aggregate: vi.fn(),
     },
   },
@@ -66,10 +88,13 @@ import {
   createTaxRegistration,
   generateTaxObligationPeriods,
   getTaxRemittanceWorkspace,
-  reviewTaxDeadlineNotifications,
   ensureTaxDeadlineMonitoringTask,
   prepareTaxFilingPacket,
+  prepareTaxRemittanceRun,
+  reviewTaxDeadlineNotifications,
+  saveTaxAuthorityCredential,
   updateOrganizationTaxProfile,
+  updateTaxRemittanceRunStatus,
   verifyTaxRegistration,
 } from "./tax-remittance";
 
@@ -104,6 +129,30 @@ beforeEach(() => {
     Promise.resolve({ id: where.id, ...data }),
   );
   mockPrisma.taxFilingArtifact.findMany.mockResolvedValue([]);
+  mockPrisma.taxDecisionSnapshot.upsert.mockImplementation(({ create, update }: any) =>
+    Promise.resolve({ id: create?.snapshotId ?? update?.snapshotId ?? "snapshot-1", ...(create ?? update) }),
+  );
+  mockPrisma.taxLiabilityEntry.deleteMany.mockResolvedValue({ count: 0 });
+  mockPrisma.taxLiabilityEntry.upsert.mockImplementation(({ create, update }: any) =>
+    Promise.resolve({ id: create?.entryId ?? update?.entryId ?? "entry-1", ...(create ?? update) }),
+  );
+  mockPrisma.taxLiabilityEntry.findMany.mockResolvedValue([]);
+  mockPrisma.taxAuthorityCredential.findMany.mockResolvedValue([]);
+  mockPrisma.taxAuthorityCredential.findFirst.mockResolvedValue(null);
+  mockPrisma.taxAuthorityCredential.create.mockImplementation(({ data }: any) =>
+    Promise.resolve({ id: data.credentialId, ...data }),
+  );
+  mockPrisma.taxAuthorityCredential.update.mockImplementation(({ where, data }: any) =>
+    Promise.resolve({ id: where.id, ...data }),
+  );
+  mockPrisma.taxRemittanceRun.findMany.mockResolvedValue([]);
+  mockPrisma.taxRemittanceRun.findFirst.mockResolvedValue(null);
+  mockPrisma.taxRemittanceRun.create.mockImplementation(({ data }: any) =>
+    Promise.resolve({ id: data.runId, ...data }),
+  );
+  mockPrisma.taxRemittanceRun.update.mockImplementation(({ where, data }: any) =>
+    Promise.resolve({ id: where.id, ...data }),
+  );
   mockPrisma.notification.create.mockImplementation(({ data }: any) =>
     Promise.resolve({ id: `notif-${data.title}`, ...data }),
   );
@@ -192,13 +241,51 @@ describe("getTaxRemittanceWorkspace", () => {
       },
     ]);
     mockPrisma.taxJurisdictionReference.findMany.mockResolvedValue([{ id: "jur-1", jurisdictionRefId: "TAX-JUR-US-WA" }]);
-    mockPrisma.taxObligationPeriod.findMany.mockResolvedValue([{ id: "period-1", periodId: "TAX-PER-1" }]);
+    mockPrisma.taxObligationPeriod.findMany.mockResolvedValue([
+      {
+        id: "period-1",
+        periodId: "TAX-PER-1",
+        liabilityEntries: [
+          {
+            id: "liability-1",
+            entryId: "TAX-LIAB-1",
+            sourceType: "invoice_tax",
+            direction: "output",
+            taxableAmount: 400,
+            taxAmount: 33,
+            occurredAt: new Date("2026-03-20T00:00:00.000Z"),
+          },
+        ],
+        remittanceRuns: [
+          {
+            id: "run-1",
+            runId: "TAX-RUN-1",
+            status: "scheduled",
+            executionMode: "scheduled_coworker",
+            scheduledFor: new Date("2026-04-20T10:00:00.000Z"),
+          },
+        ],
+      },
+    ]);
+    mockPrisma.taxAuthorityCredential.findMany.mockResolvedValue([
+      {
+        id: "cred-1",
+        credentialId: "TAX-CRED-1",
+        registrationId: "reg-1",
+        authorityName: "Washington Department of Revenue",
+        status: "active",
+        authMode: "portal_username_password",
+      },
+    ]);
 
     const result = await getTaxRemittanceWorkspace();
 
     expect(result.profile).toEqual(profile);
     expect(result.registrations).toHaveLength(1);
     expect(result.periods).toHaveLength(1);
+    expect(result.periods[0]?.liabilityEntries).toHaveLength(1);
+    expect(result.periods[0]?.remittanceRuns).toHaveLength(1);
+    expect(result.authorityCredentials).toHaveLength(1);
     expect(result.jurisdictionOptions).toHaveLength(1);
     expect(result.coworkerGuide.summary).toContain("already configured");
   });
@@ -442,7 +529,8 @@ describe("verifyTaxRegistration", () => {
 });
 
 describe("generateTaxObligationPeriods", () => {
-  it("creates tracked periods for verified active registrations using invoice and bill tax totals", async () => {
+  it("creates tracked periods for verified active registrations using liability lineage instead of raw aggregates", async () => {
+    const activePeriodStart = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
     mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({
       id: "profile-1",
       organizationId: bootstrapOrg.id,
@@ -470,9 +558,9 @@ describe("generateTaxObligationPeriods", () => {
         filingFrequency: "quarterly",
         filingBasis: "accrual",
         remitterRole: "business",
-        effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+        effectiveFrom: activePeriodStart,
         effectiveTo: null,
-        firstPeriodStart: new Date("2026-01-01T00:00:00.000Z"),
+        firstPeriodStart: activePeriodStart,
         portalAccountNotes: null,
         verifiedFromSourceUrl: "https://www.revenue.alabama.gov/sales-use/one-spot/",
         lastVerifiedAt: new Date("2026-01-15T00:00:00.000Z"),
@@ -491,8 +579,57 @@ describe("generateTaxObligationPeriods", () => {
       },
     ]);
     mockPrisma.taxObligationPeriod.findMany.mockResolvedValue([]);
-    mockPrisma.invoice.aggregate.mockResolvedValue({ _sum: { taxAmount: 125.5 } });
-    mockPrisma.bill.aggregate.mockResolvedValue({ _sum: { taxAmount: 20.25 } });
+    mockPrisma.invoice.findMany.mockResolvedValue([
+      {
+        id: "invoice-1",
+        invoiceRef: "INV-001",
+        type: "standard",
+        currency: "USD",
+        issueDate: new Date("2026-02-15T00:00:00.000Z"),
+        lineItems: [
+          {
+            id: "invoice-line-1",
+            description: "Managed services",
+            lineTotal: 500,
+            taxRate: 8.25,
+            taxAmount: 41.25,
+          },
+        ],
+      },
+      {
+        id: "invoice-credit-1",
+        invoiceRef: "CRN-001",
+        type: "credit_note",
+        currency: "USD",
+        issueDate: new Date("2026-02-20T00:00:00.000Z"),
+        lineItems: [
+          {
+            id: "invoice-credit-line-1",
+            description: "Service credit",
+            lineTotal: 100,
+            taxRate: 8.25,
+            taxAmount: 8.25,
+          },
+        ],
+      },
+    ]);
+    mockPrisma.bill.findMany.mockResolvedValue([
+      {
+        id: "bill-1",
+        billRef: "BILL-001",
+        currency: "USD",
+        issueDate: new Date("2026-02-18T00:00:00.000Z"),
+        lineItems: [
+          {
+            id: "bill-line-1",
+            description: "Taxable vendor input",
+            lineTotal: 200,
+            taxRate: 5,
+            taxAmount: 10,
+          },
+        ],
+      },
+    ]);
     mockPrisma.taxObligationPeriod.create.mockImplementation(({ data }: any) =>
       Promise.resolve({ id: `period-${data.periodId}`, ...data }),
     );
@@ -500,14 +637,18 @@ describe("generateTaxObligationPeriods", () => {
     await generateTaxObligationPeriods();
 
     expect(mockPrisma.taxObligationPeriod.create).toHaveBeenCalled();
-    expect(mockPrisma.invoice.aggregate).toHaveBeenCalled();
-    expect(mockPrisma.bill.aggregate).toHaveBeenCalled();
+    expect(mockPrisma.taxLiabilityEntry.deleteMany).toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalled();
+    expect(mockPrisma.bill.findMany).toHaveBeenCalled();
+    expect(mockPrisma.taxDecisionSnapshot.upsert).toHaveBeenCalledTimes(3);
+    expect(mockPrisma.taxLiabilityEntry.upsert).toHaveBeenCalledTimes(3);
     expect(mockPrisma.taxObligationPeriod.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         registrationId: "reg-1",
-        salesTaxAmount: expect.anything(),
-        inputTaxAmount: expect.anything(),
-        netTaxAmount: expect.anything(),
+        salesTaxAmount: 33,
+        inputTaxAmount: 10,
+        manualAdjustmentAmount: 0,
+        netTaxAmount: 23,
       }),
     });
   });
@@ -556,6 +697,213 @@ describe("prepareTaxFilingPacket", () => {
       data: expect.objectContaining({
         status: "ready",
         exportStatus: "prepared",
+      }),
+    });
+  });
+});
+
+describe("saveTaxAuthorityCredential", () => {
+  it("stores authority credential custody metadata for a registration", async () => {
+    mockPrisma.taxRegistration.findFirst.mockResolvedValue({
+      id: "reg-1",
+      organizationTaxProfileId: "profile-1",
+      jurisdictionReference: {
+        authorityName: "Alabama Department of Revenue",
+      },
+    });
+
+    await saveTaxAuthorityCredential({
+      registrationId: "reg-1",
+      portalBaseUrl: "https://myalabamataxes.alabama.gov",
+      credentialOwnerMode: "dpf_managed",
+      status: "active",
+      authMode: "portal_username_password",
+      secretRef: "portal-user|super-secret",
+      mfaMode: "totp_shared",
+      notes: "Stored for coworker-run submissions.",
+    });
+
+    expect(mockPrisma.taxAuthorityCredential.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        registrationId: "reg-1",
+        organizationTaxProfileId: "profile-1",
+        authorityName: "Alabama Department of Revenue",
+        status: "active",
+        credentialOwnerMode: "dpf_managed",
+        authMode: "portal_username_password",
+        mfaMode: "totp_shared",
+        secretRef: expect.any(String),
+      }),
+    });
+  });
+});
+
+describe("prepareTaxRemittanceRun", () => {
+  it("creates a scheduled execution run for a ready period with an active credential", async () => {
+    mockPrisma.taxObligationPeriod.findFirst.mockResolvedValue({
+      id: "period-1",
+      periodId: "TAX-PER-1",
+      status: "ready",
+      dueDate: new Date("2026-04-30T00:00:00.000Z"),
+      registrationId: "reg-1",
+      registration: {
+        id: "reg-1",
+        organizationTaxProfileId: "profile-1",
+        filingFrequency: "monthly",
+        jurisdictionReference: {
+          authorityName: "Alabama Department of Revenue",
+        },
+      },
+    });
+    mockPrisma.taxAuthorityCredential.findFirst.mockResolvedValue({
+      id: "cred-1",
+      credentialId: "TAX-CRED-1",
+      registrationId: "reg-1",
+      status: "active",
+      mfaMode: "totp_shared",
+    });
+
+    await prepareTaxRemittanceRun({
+      periodId: "period-1",
+      executionMode: "scheduled_coworker",
+      scheduleFor: "2026-04-25T15:00:00.000Z",
+    });
+
+    expect(mockPrisma.taxRemittanceRun.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        periodId: "period-1",
+        credentialId: "cred-1",
+        status: "scheduled",
+        executionMode: "scheduled_coworker",
+        scheduledFor: new Date("2026-04-25T15:00:00.000Z"),
+      }),
+    });
+  });
+
+  it("creates a blocked run and issue when execution is requested without an active credential", async () => {
+    mockPrisma.taxObligationPeriod.findFirst.mockResolvedValue({
+      id: "period-2",
+      periodId: "TAX-PER-2",
+      status: "ready",
+      dueDate: new Date("2026-04-30T00:00:00.000Z"),
+      registrationId: "reg-2",
+      registration: {
+        id: "reg-2",
+        organizationTaxProfileId: "profile-1",
+        jurisdictionReference: {
+          authorityName: "Washington Department of Revenue",
+        },
+      },
+    });
+    mockPrisma.taxAuthorityCredential.findFirst.mockResolvedValue(null);
+
+    await prepareTaxRemittanceRun({
+      periodId: "period-2",
+      executionMode: "scheduled_coworker",
+      scheduleFor: "2026-04-26T15:00:00.000Z",
+    });
+
+    expect(mockPrisma.taxRemittanceRun.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        periodId: "period-2",
+        status: "blocked",
+        failureCode: "missing_credential",
+      }),
+    });
+    expect(mockPrisma.taxIssue.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        issueType: "tax_execution_credential_missing",
+        periodId: "period-2",
+        registrationId: "reg-2",
+      }),
+    });
+  });
+});
+
+describe("updateTaxRemittanceRunStatus", () => {
+  it("records a successful submission and creates an FYI notification", async () => {
+    mockPrisma.taxRemittanceRun.findFirst.mockResolvedValue({
+      id: "run-1",
+      runId: "TAX-RUN-1",
+      status: "scheduled",
+      periodId: "period-1",
+      period: {
+        id: "period-1",
+        periodId: "TAX-PER-1",
+        registration: {
+          jurisdictionReference: {
+            authorityName: "Alabama Department of Revenue",
+          },
+        },
+      },
+    });
+
+    await updateTaxRemittanceRunStatus({
+      runId: "run-1",
+      status: "submitted",
+      confirmationRef: "AL-SUB-123",
+    });
+
+    expect(mockPrisma.taxRemittanceRun.update).toHaveBeenCalledWith({
+      where: { id: "run-1" },
+      data: expect.objectContaining({
+        status: "submitted",
+        confirmationRef: "AL-SUB-123",
+        submittedAt: expect.any(Date),
+      }),
+    });
+    expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: expect.stringContaining("submitted"),
+      }),
+    });
+  });
+
+  it("records a failed submission and raises an execution issue", async () => {
+    mockPrisma.taxRemittanceRun.findFirst.mockResolvedValue({
+      id: "run-2",
+      runId: "TAX-RUN-2",
+      status: "scheduled",
+      periodId: "period-2",
+      period: {
+        id: "period-2",
+        periodId: "TAX-PER-2",
+        registrationId: "reg-2",
+        registration: {
+          organizationTaxProfileId: "profile-1",
+          jurisdictionReference: {
+            authorityName: "Washington Department of Revenue",
+          },
+        },
+      },
+    });
+
+    await updateTaxRemittanceRunStatus({
+      runId: "run-2",
+      status: "failed",
+      failureCode: "login_error",
+      failureDetails: "Portal rejected the stored password.",
+    });
+
+    expect(mockPrisma.taxRemittanceRun.update).toHaveBeenCalledWith({
+      where: { id: "run-2" },
+      data: expect.objectContaining({
+        status: "failed",
+        failureCode: "login_error",
+        failureDetails: "Portal rejected the stored password.",
+        completedAt: expect.any(Date),
+      }),
+    });
+    expect(mockPrisma.taxIssue.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        issueType: "tax_execution_failed",
+        periodId: "period-2",
+        registrationId: "reg-2",
+      }),
+    });
+    expect(mockPrisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: expect.stringContaining("failed"),
       }),
     });
   });
