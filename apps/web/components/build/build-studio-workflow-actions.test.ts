@@ -119,6 +119,38 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.message).toContain("before planning");
   });
 
+  it("surfaces an Advance to Plan button when ideate review has passed and intake is ready (BI-77A1973C)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("advance-phase");
+    expect(action.primaryLabel).toBe("Advance to Plan");
+    expect(action.targetPhase).toBe("plan");
+    expect(action.disabledReason).toBeNull();
+  });
+
+  it("disables Advance to Plan with the gate reason when ideate evidence is incomplete", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "ideate",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        designDoc: null,
+        designReview: null,
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("advance-phase");
+    expect(action.targetPhase).toBe("plan");
+    expect(action.disabledReason).not.toBeNull();
+    expect(action.disabledReason).toMatch(/design document|design review/i);
+  });
+
   it("surfaces implementation when planning is ready to advance", () => {
     const action = deriveBuildStudioWorkflowAction({
       build: makeBuild({

@@ -183,6 +183,29 @@ export function deriveBuildStudioWorkflowAction({
     };
   }
 
+  if (build.phase === "ideate") {
+    // BI-77A1973C: previously the ideate phase fell through to review-only,
+    // hiding the advance affordance even after design review passed and the
+    // intake gate auto-derived. The agent's chat said "Ready to advance to
+    // Plan? Confirm and I'll structure the decomposition" but there was no
+    // UI button to act on it — only chat-driven confirmation. Now there's an
+    // explicit Advance to Plan button that mirrors the existing plan→build
+    // pattern below. Disabled state surfaces the gate reason from
+    // checkPhaseGate so users see exactly what's blocking (missing
+    // designDoc, designReview pending, or intake anchors not satisfied).
+    return {
+      kind: "advance-phase",
+      title: "Ready for Planning",
+      message: "Move this reviewed design into planning so the coworker can decompose the work into sandbox tasks with acceptance criteria.",
+      primaryLabel: "Advance to Plan",
+      targetPhase: "plan",
+      disabledReason: getPhaseGateReason(build, "plan"),
+      coworkerLabel: "Refine the design",
+      coworkerPrompt:
+        "Use the saved Build Studio design evidence to confirm or revise the design now. If revisions are needed, save the updated design with saveBuildEvidence field designDoc and re-run reviewDesignDoc. Otherwise tell me Advance to Plan is the next approval.",
+    };
+  }
+
   if (build.phase === "plan") {
     return {
       kind: "advance-phase",
