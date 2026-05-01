@@ -140,6 +140,16 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="WhatsApp Business"
+          description="Localized messaging readiness anchor for phone quality, approved templates, and language coverage on the enterprise substrate."
+          href="/platform/tools/integrations/whatsapp-business"
+          accent="var(--dpf-success)"
+          metrics={[
+            { label: "Category", value: "Localized Messaging" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Mailchimp Marketing"
           description="Email marketing anchor for audiences, recent campaigns, and approved customer outreach context on the enterprise substrate."
           href="/platform/tools/integrations/mailchimp"
