@@ -35,4 +35,15 @@ describe("EnterpriseIntegrationsPage", () => {
     expect(html).toContain("Localized Messaging");
     expect(html).toContain("/platform/tools/integrations/whatsapp-business");
   });
+
+  it("surfaces Instagram Business on the native integrations landing page", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain("Instagram Business");
+    expect(html).toContain("Local Visual Presence");
+    expect(html).toContain("/platform/tools/integrations/instagram-business");
+  });
 });
