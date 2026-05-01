@@ -9,6 +9,9 @@
 import { prisma } from "@dpf/db";
 import {
   getPromotionAudit,
+  REASON_LIST,
+  REASON_LABELS,
+  REASON_HINTS,
   type PromotionAudit,
   type PromotionAuditCounts,
   type PromotionAuditDb,
@@ -16,31 +19,6 @@ import {
   type PromotionSkipReason,
   type BlockedReasonGroup,
 } from "@/lib/discovery/promotion-audit";
-
-const REASON_LIST: readonly PromotionSkipReason[] = [
-  "type_not_promotable",
-  "no_taxonomy",
-  "no_portfolio_root",
-  "low_confidence_promotion",
-] as const;
-
-const REASON_LABELS: Record<PromotionSkipReason, string> = {
-  type_not_promotable: "Type not promotable",
-  no_taxonomy: "Missing taxonomy placement",
-  no_portfolio_root: "No portfolio root",
-  low_confidence_promotion: "Low confidence",
-};
-
-const REASON_HINTS: Record<PromotionSkipReason, string> = {
-  type_not_promotable:
-    "The taxonomy node either has no governance.promotion policy, or its policy is not auto. Add governance via the seed (Task 2.2) or admin UI.",
-  no_taxonomy:
-    "Entity has no taxonomy node attribution. Run discovery triage to attribute.",
-  no_portfolio_root:
-    "Entity's taxonomy node root segment does not match any Portfolio.slug. Likely a malformed taxonomy or missing portfolio seed.",
-  low_confidence_promotion:
-    "Attribution confidence < 0.90. Re-run attribution or hand-review.",
-};
 
 export default async function PromotionAuditPage() {
   // PrismaClient is a structural superset of PromotionAuditDb (the helper's
@@ -266,7 +244,7 @@ function BlockedTable({
 // ---------------------------------------------------------------------------
 
 function formatConfidence(c: number | null): string {
-  if (c === null || Number.isNaN(c)) return "—"; // em dash
+  if (c === null || Number.isNaN(c)) return "—"; // em dash (U+2014)
   return `${Math.round(c * 100)}%`;
 }
 

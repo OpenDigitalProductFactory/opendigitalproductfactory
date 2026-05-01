@@ -80,12 +80,38 @@ export interface PromotionAuditDb {
   };
 }
 
-const REASON_LIST: readonly PromotionSkipReason[] = [
+/**
+ * Canonical order of `PromotionSkipReason` values. Exported so UI surfaces
+ * (e.g. the audit page in Task 2.4) iterate in the same order they're shown.
+ * Adding a fifth reason: update this list AND `PromotionSkipReason` AND
+ * `REASON_LABELS` / `REASON_HINTS` together.
+ */
+export const REASON_LIST: readonly PromotionSkipReason[] = [
   "type_not_promotable",
   "no_taxonomy",
   "no_portfolio_root",
   "low_confidence_promotion",
 ] as const;
+
+/** Humanized labels per skip reason — UI uses these as section headings. */
+export const REASON_LABELS: Record<PromotionSkipReason, string> = {
+  type_not_promotable: "Type not promotable",
+  no_taxonomy: "Missing taxonomy placement",
+  no_portfolio_root: "No portfolio root",
+  low_confidence_promotion: "Low confidence",
+};
+
+/** Actionable hints surfaced under each reason group on the audit page. */
+export const REASON_HINTS: Record<PromotionSkipReason, string> = {
+  type_not_promotable:
+    "The taxonomy node either has no governance.promotion policy, or its policy is not auto. Add governance via the seed (Task 2.2) or admin UI.",
+  no_taxonomy:
+    "Entity has no taxonomy node attribution. Run discovery triage to attribute.",
+  no_portfolio_root:
+    "Entity's taxonomy node root segment does not match any Portfolio.slug. Likely a malformed taxonomy or missing portfolio seed.",
+  low_confidence_promotion:
+    "Attribution confidence < 0.90. Re-run attribution or hand-review.",
+};
 
 const SAMPLE_LIMIT = 10;
 
