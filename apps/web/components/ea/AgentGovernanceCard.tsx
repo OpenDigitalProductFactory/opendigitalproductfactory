@@ -1,5 +1,3 @@
-import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
-
 type AgentGovernanceCardModel = {
   id: string;
   agentId: string;
@@ -30,15 +28,8 @@ function formatAutonomyLabel(autonomyLevel: string | null): string {
 }
 
 export function AgentGovernanceCard({ agent }: Props) {
-  const colour = agent.portfolioSlug
-    ? (PORTFOLIO_COLOURS[agent.portfolioSlug] ?? "#555566")
-    : "#555566";
-
   return (
-    <div
-      className="rounded-lg bg-[var(--dpf-surface-1)] p-4"
-      style={{ borderLeft: `4px solid ${colour}` }}
-    >
+    <div className="rounded-lg bg-[var(--dpf-surface-1)] p-4 border-l-4 border-[var(--dpf-accent)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[9px] font-mono text-[var(--dpf-muted)]">{agent.agentId}</p>
@@ -77,7 +68,7 @@ export function AgentGovernanceCard({ agent }: Props) {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-[10px] font-medium" style={{ color: colour }}>
+        <p className="text-[10px] font-medium text-[var(--dpf-accent)]">
           {agent.portfolioName ?? "Cross-cutting"}
         </p>
         <span className="rounded-full bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-medium text-[var(--dpf-text)]">
