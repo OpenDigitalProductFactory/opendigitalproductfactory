@@ -5,6 +5,10 @@ import type { OwnerRoleInfo } from "@/lib/portfolio";
 import { ProductList } from "./ProductList";
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 import type { GraphData } from "@/lib/actions/graph";
+import { toPortfolioNodeViewModel } from "@/lib/portfolio/portfolio-node-view-model";
+import { PortfolioNodeAbout } from "./PortfolioNodeAbout";
+import { PortfolioNodeGovernance } from "./PortfolioNodeGovernance";
+import { PortfolioNodeEnrichment } from "./PortfolioNodeEnrichment";
 
 type Product = { id: string; productId: string; name: string; lifecycleStatus: string };
 
@@ -34,6 +38,16 @@ export function PortfolioNodeDetail({
   taxonomyNodeId,
 }: Props) {
   const subLabel = node.parentId === null ? "Capability Domains" : "Functional Groups";
+
+  // Task 3.3: typed view model for the description / governance / enrichment
+  // JSON columns. View model handles null/empty input gracefully and the three
+  // section components return null when there's nothing to render -- so this is
+  // a no-op for nodes that have none of these fields populated.
+  const vm = toPortfolioNodeViewModel({
+    description: node.description ?? null,
+    governance: node.governance ?? null,
+    enrichment: node.enrichment ?? null,
+  });
 
   return (
     <div>
@@ -71,6 +85,12 @@ export function PortfolioNodeDetail({
         <StatBox label="Health" value={health} />
         <StatBox label="Budget" value={investment} />
       </div>
+
+      {/* About / Governance / Enrichment (Task 3.3): each renders null when its
+       *  source view-model field is empty -- no empty bands. */}
+      <PortfolioNodeAbout about={vm.about} />
+      <PortfolioNodeGovernance governance={vm.governance} />
+      <PortfolioNodeEnrichment enrichment={vm.enrichment} />
 
       {/* Sub-nodes */}
       {subNodes.length > 0 && (
