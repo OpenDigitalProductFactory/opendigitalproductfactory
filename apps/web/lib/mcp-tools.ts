@@ -4640,6 +4640,59 @@ export async function executeTool(
             }
           }
 
+          // Auto-derive constrainedGoal if missing — fall back to the build
+          // title. For triaged-BI builds the title was generated from the BI
+          // body which itself was triaged, so the title IS the constrained
+          // goal for governance purposes. For ad-hoc free-text builds where
+          // the user explicitly set a goal via update_feature_brief, this
+          // path is a no-op (the goal is already populated).
+          //
+          // Closes BI-0B3EAAC8: the existing reviewDesignDoc auto-advance
+          // already auto-creates epic + backlog item but did NOT auto-derive
+          // constrainedGoal or taxonomyNodeId, so triaged-BI builds got
+          // stuck in ideate forever even when the BI body fully described
+          // the work.
+          if (!happyPathState.intake.constrainedGoal && updatedBuild.title) {
+            try {
+              const goal = updatedBuild.title.trim().slice(0, 280);
+              await updateBuildHappyPathState(userId, {
+                intake: { constrainedGoal: goal },
+              }, buildId);
+              happyPathState = {
+                ...happyPathState,
+                intake: { ...happyPathState.intake, constrainedGoal: goal },
+              };
+              logBuildActivity(buildId, "auto-intake:constrained-goal", `Auto-set constrainedGoal from build title`);
+            } catch (err) {
+              console.warn("[reviewDesignDoc] auto-set constrainedGoal failed:", err);
+            }
+          }
+
+          // Auto-derive taxonomyNodeId for triaged-BI builds. The BI's
+          // existence + triage outcome IS the categorization for governance
+          // purposes — we just need a stable, traceable anchor that
+          // satisfies isHappyPathIntakeReady. Use the originating BI id as
+          // a "triaged-bi:" prefixed anchor so downstream UI can recognize
+          // the difference between a real taxonomy node and a triaged-BI
+          // bypass. For ad-hoc builds without an originating BI, leave
+          // taxonomyNodeId null — the agent must call
+          // confirm_taxonomy_placement explicitly for those.
+          if (!happyPathState.intake.taxonomyNodeId && updatedBuild.originatingBacklogItemId) {
+            try {
+              const anchor = `triaged-bi:${updatedBuild.originatingBacklogItemId}`;
+              await updateBuildHappyPathState(userId, {
+                intake: { taxonomyNodeId: anchor },
+              }, buildId);
+              happyPathState = {
+                ...happyPathState,
+                intake: { ...happyPathState.intake, taxonomyNodeId: anchor },
+              };
+              logBuildActivity(buildId, "auto-intake:taxonomy-anchor", `Auto-set taxonomyNodeId=${anchor}`);
+            } catch (err) {
+              console.warn("[reviewDesignDoc] auto-set taxonomyNodeId failed:", err);
+            }
+          }
+
           const gate = checkPhaseGate("ideate", "plan", {
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
