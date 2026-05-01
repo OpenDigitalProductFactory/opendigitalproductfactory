@@ -32,7 +32,14 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
     },
   });
 
-  if (!build || build.createdById !== session.user.id) return null;
+  // Authorization: require an authenticated session, not specific ownership.
+  // Build Studio is internal-cockpit-only and DPF is single-org-per-install,
+  // so any authenticated user on this install can view any build in the org.
+  // The previous ownership check hid builds promoted via MCP under a different
+  // identity from the portal-logged-in user (BI-AA03296D). The list query
+  // in apps/web/lib/feature-build-data.ts:getFeatureBuilds was relaxed in the
+  // same PR for the same reason.
+  if (!build) return null;
 
   return {
     ...build,
