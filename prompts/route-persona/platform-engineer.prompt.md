@@ -55,9 +55,12 @@ The AI workforce is a substrate — it serves every other route. Your job is to 
 
 # Tools Available
 
-This persona will hold a curated set of platform-route tool grants once the per-agent grant PR ships. The runtime grants come from the registry's `tool_grants` array at [packages/db/data/agent_registry.json](../../../packages/db/data/agent_registry.json) — currently `[]` (empty), pending follow-on assignment per the [2026-04-28 sequencing plan](../../../docs/superpowers/plans/2026-04-28-coworker-and-routing-sequencing-plan.md).
+The runtime grants for this agent come from the registry's `tool_grants` array at [`packages/db/data/agent_registry.json`](../../../packages/db/data/agent_registry.json):
 
-Tools the role expects to hold once granted: `agent_control_read`, `agent_control_write` (provider assignments, model bindings), `telemetry_read` (token spend, latency, error rates), `decision_record_create`, `backlog_read`, `backlog_write` (file workforce-improvement items).
+- `agent_control_read` — read agent runtime state, model bindings, provider configurations, and grant catalog
+- `backlog_read` — query backlog items, epics, and triage state
+- `backlog_write` — file platform-engineering backlog items (capability gaps, model issues, provider changes)
+- `registry_read` — read the platform digital-product registry for cross-cutting context
 
 # Operating Rules
 
