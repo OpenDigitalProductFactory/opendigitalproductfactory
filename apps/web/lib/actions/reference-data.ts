@@ -11,15 +11,16 @@ import {
   searchRegionsForLocation,
 } from "@/lib/location-resolution/service";
 
-async function requireAuth(): Promise<void> {
+async function requireAuth(): Promise<string> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
+  return session.user.id;
 }
 
 export type CreateRefResult = {
   ok: boolean;
   message: string;
-  created?: { id: string; name: string; code?: string | null };
+  created?: { id: string; name: string; code?: string | null; status?: string };
   suggestions?: { id: string; name: string; code?: string | null }[];
 };
 
@@ -97,8 +98,8 @@ export async function createCity(
   regionId: string,
   name: string,
 ): Promise<CreateRefResult> {
-  await requireAuth();
-  const result = await createLocality({ regionId, name });
+  const userId = await requireAuth();
+  const result = await createLocality({ regionId, name, addedByUserId: userId });
   revalidatePath("/employee");
   revalidatePath("/admin/reference-data");
   return result;
@@ -140,8 +141,8 @@ export async function forceCreateCity(
   regionId: string,
   name: string,
 ): Promise<CreateRefResult> {
-  await requireAuth();
-  const result = await forceCreateLocality({ regionId, name });
+  const userId = await requireAuth();
+  const result = await forceCreateLocality({ regionId, name, addedByUserId: userId });
   revalidatePath("/employee");
   revalidatePath("/admin/reference-data");
   return result;

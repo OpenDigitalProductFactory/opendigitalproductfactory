@@ -102,16 +102,17 @@ describe("LocationCascadePicker", () => {
 
     expect(html).toMatch(/<label[^>]*for="location-country"[^>]*>Country<\/label>/);
     expect(html).toMatch(/<label[^>]*for="location-region"[^>]*>Region<\/label>/);
-    expect(html).toMatch(/<label[^>]*for="location-locality"[^>]*>Locality<\/label>/);
+    expect(html).toMatch(/<label[^>]*for="location-locality"[^>]*>Town \/ City<\/label>/);
+    expect(html).not.toContain(">Locality</label>");
     expect(html).toMatch(/role="combobox"/);
   });
 
-  it("offers an Add-new affordance for region when a country is selected and onCreateRegion is provided", () => {
+  it("uses request language for missing towns and cities instead of arbitrary active creation", () => {
     const html = renderToStaticMarkup(
       <LocationCascadePicker
         value={{
           country: { id: "country-us", label: "United States (US)" },
-          region: null,
+          region: { id: "region-tx", label: "Texas (TX)" },
           locality: null,
         }}
         onChange={vi.fn()}
@@ -123,11 +124,9 @@ describe("LocationCascadePicker", () => {
       />,
     );
 
-    // ReferenceTypeahead exposes the add-new affordance through the placeholder
-    // copy + onAddNew wiring; the dropdown itself only renders after async
-    // search results, which static markup cannot trigger. Asserting on the
-    // search-input contracts is enough to prove the wiring exists.
     expect(html).toContain('placeholder="Search regions..."');
-    expect(html).toContain('placeholder="Search towns, cities, or localities..."');
+    expect(html).toContain('placeholder="Search towns or cities..."');
+    expect(html).toContain('data-add-new-label="Request missing town / city"');
+    expect(html).not.toContain("Add new locality");
   });
 });

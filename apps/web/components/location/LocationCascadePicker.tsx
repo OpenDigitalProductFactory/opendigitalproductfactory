@@ -4,7 +4,7 @@ import { useCallback, useState, useTransition } from "react";
 import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
 import type { CreateRefResult } from "@/lib/actions/reference-data";
 
-export type RefItem = { id: string; label: string };
+export type RefItem = { id: string; label: string; status?: string };
 
 export type LocationSelection = {
   country: RefItem | null;
@@ -12,7 +12,7 @@ export type LocationSelection = {
   locality: RefItem | null;
 };
 
-type Suggestion = { id: string; name: string; code?: string | null };
+type Suggestion = { id: string; name: string; code?: string | null; status?: string };
 
 type Props = {
   value: LocationSelection;
@@ -98,7 +98,11 @@ export function LocationCascadePicker({
       startTransition(async () => {
         const result = await onCreateLocality(name, value.region!.id);
         if (result.ok && result.created) {
-          setLocality({ id: result.created.id, label: result.created.name });
+          setLocality({
+            id: result.created.id,
+            label: result.created.name,
+            status: result.created.status,
+          });
         } else {
           setMessage(result.message);
           setSuggestions(result.suggestions ?? []);
@@ -173,18 +177,21 @@ export function LocationCascadePicker({
       </div>
 
       <div>
-        <label htmlFor="location-locality" className={labelCls}>Locality</label>
+        <label htmlFor="location-locality" className={labelCls}>Town / City</label>
         <ReferenceTypeahead
           inputId="location-locality"
-          placeholder="Search towns, cities, or localities..."
+          placeholder="Search towns or cities..."
           onSearch={(query) => (value.region ? searchLocalities(value.region.id, query) : Promise.resolve([]))}
           onSelect={setLocality}
           onAddNew={value.region && onCreateLocality ? createLocality : undefined}
-          addNewLabel="Add new locality"
+          addNewLabel="Request missing town / city"
           value={value.locality}
           disabled={!value.region || isPending}
         />
         {!value.region && <p className={helpCls}>Select a region first.</p>}
+        {value.locality?.status === "needs-review" && (
+          <p className={helpCls}>Pending verification by a reference-data steward.</p>
+        )}
       </div>
     </div>
   );

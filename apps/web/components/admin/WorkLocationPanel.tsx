@@ -140,7 +140,7 @@ export function WorkLocationPanel({ workLocations }: Props) {
 
   function handleLink(locationId: string) {
     if (!city) {
-      setError("Please select a locality.");
+      setError("Please select a town / city.");
       return;
     }
     if (!addressLine1.trim()) {
