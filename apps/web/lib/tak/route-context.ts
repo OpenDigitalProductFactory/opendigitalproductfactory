@@ -315,7 +315,7 @@ async function getWorkspaceContext(): Promise<string> {
 async function getFinanceContext(): Promise<string> {
   const sections: string[] = ["\nPAGE DATA — Finance:"];
 
-  const [taxProfile, registrationCount, openIssueCount, recurringCount, overdueInvoices] = await Promise.all([
+  const [taxProfile, registrationCount, openIssueCount, recurringCount, overdueInvoices, activeCredentialCount, blockedRunCount, readyPeriodCount] = await Promise.all([
     prisma.organizationTaxProfile.findFirst({
       orderBy: { createdAt: "asc" },
       select: {
@@ -333,6 +333,9 @@ async function getFinanceContext(): Promise<string> {
     prisma.taxIssue.count({ where: { status: "open" } }),
     prisma.recurringSchedule.count({ where: { status: "active" } }),
     prisma.invoice.count({ where: { status: { in: ["sent", "overdue"] } } }),
+    prisma.taxAuthorityCredential.count({ where: { status: "active" } }),
+    prisma.taxRemittanceRun.count({ where: { status: { in: ["blocked", "failed"] } } }),
+    prisma.taxObligationPeriod.count({ where: { status: "ready" } }),
   ]);
 
   if (!taxProfile) {
@@ -340,6 +343,7 @@ async function getFinanceContext(): Promise<string> {
       "No organization tax profile has been configured yet.",
       `Recurring schedules: ${recurringCount}`,
       `Outstanding customer invoices: ${overdueInvoices}`,
+      `Ready tax periods: ${readyPeriodCount}`,
     );
     return sections.join("\n");
   }
@@ -354,6 +358,9 @@ async function getFinanceContext(): Promise<string> {
     `External system: ${taxProfile.externalSystem ?? "none recorded"}`,
     `Registrations recorded: ${registrationCount}`,
     `Open tax setup issues: ${openIssueCount}`,
+    `Active authority credentials: ${activeCredentialCount}`,
+    `Ready tax periods: ${readyPeriodCount}`,
+    `Blocked or failed remittance runs: ${blockedRunCount}`,
     `Recurring schedules: ${recurringCount}`,
     `Outstanding customer invoices: ${overdueInvoices}`,
   );

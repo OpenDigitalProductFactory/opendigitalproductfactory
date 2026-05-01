@@ -106,7 +106,7 @@ export default function AddressSection({
 
   function handleSave() {
     if (!city) {
-      setError("Please select a locality.");
+      setError("Please select a town / city.");
       return;
     }
     if (!addressLine1.trim()) {

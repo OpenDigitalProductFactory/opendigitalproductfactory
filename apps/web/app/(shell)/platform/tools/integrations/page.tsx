@@ -130,6 +130,16 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Facebook Pages"
+          description="Localized social presence anchor for page details, recent posts, and comment activity on the enterprise substrate."
+          href="/platform/tools/integrations/facebook-pages"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Category", value: "Local Social Presence" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Mailchimp Marketing"
           description="Email marketing anchor for audiences, recent campaigns, and approved customer outreach context on the enterprise substrate."
           href="/platform/tools/integrations/mailchimp"

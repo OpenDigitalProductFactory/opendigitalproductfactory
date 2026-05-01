@@ -245,7 +245,7 @@ describe("updateCity", () => {
     expect(result.ok).toBe(true);
     expect(prisma.city.update).toHaveBeenCalledWith({
       where: { id: "ci1" },
-      data: { name: "Sydney" },
+      data: { name: "Sydney", nameNormalized: "sydney" },
     });
   });
 
