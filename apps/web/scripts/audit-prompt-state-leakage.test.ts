@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchPsl001, matchPsl002 } from "./audit-prompt-state-leakage";
+import { matchPsl001, matchPsl002, matchPsl003 } from "./audit-prompt-state-leakage";
 
 describe("PSL-001 forbidden phrases", () => {
   it("matches `currently []`", () => {
@@ -113,5 +113,39 @@ describe("PSL-002 unsourced grant enumeration", () => {
       "  - backlog_write — author backlog items\n";
     const out = matchPsl002(indented, "x.md");
     expect(out).toHaveLength(1);
+  });
+});
+
+describe("PSL-003 current-state grant snapshots", () => {
+  it('matches `currently ["foo","bar"]`', () => {
+    const out = matchPsl003('the grants are currently ["backlog_read","sandbox_execute"]', "x.md");
+    expect(out).toHaveLength(1);
+  });
+
+  it("matches `currently holds`", () => {
+    const out = matchPsl003("This agent currently holds backlog_read", "x.md");
+    expect(out).toHaveLength(1);
+  });
+
+  it("matches `you currently have`", () => {
+    const out = matchPsl003("You currently have these grants:", "x.md");
+    expect(out).toHaveLength(1);
+  });
+
+  it("matches `grants you currently hold`", () => {
+    const out = matchPsl003("List of grants you currently hold:", "x.md");
+    // Multiple patterns may legitimately match this line (the dedicated
+    // `grants you currently hold` regex AND the broader `currently holds?`).
+    // Both are valid findings; assert at least one fires with the expected
+    // phrase content.
+    expect(out.length).toBeGreaterThanOrEqual(1);
+    expect(out.some((f) => f.match.toLowerCase().includes("currently hold"))).toBe(true);
+  });
+
+  it("does not match a citation that says PAGE DATA is authoritative", () => {
+    const text =
+      "Tool list is delivered by the runtime via PAGE DATA. The registry path is a non-authoritative reference; you currently have whatever PAGE DATA shows.";
+    const out = matchPsl003(text, "x.md");
+    expect(out).toHaveLength(0);
   });
 });

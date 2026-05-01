@@ -177,7 +177,57 @@ function checkPsl002(promptFiles: string[]): void {
   }
 }
 
-// checkPsl003, checkPsl004 — added in subsequent tasks
+// ─── PSL-003: current-state grant snapshots ────────────────────────────────
+
+const PSL_003_PATTERNS: Array<{ regex: RegExp; phrase: string }> = [
+  { regex: /currently\s+`?\[[^\]]*"[^"]+"[^\]]*\]`?/i, phrase: "currently [\"...\"]" },
+  { regex: /currently holds?\b/i, phrase: "currently holds" },
+  { regex: /you currently have\b/i, phrase: "you currently have" },
+  { regex: /grants you currently hold/i, phrase: "grants you currently hold" },
+];
+
+// The escape clause from spec §6 PSL-003 — if the line points the model at
+// PAGE DATA / runtime as authoritative, the legacy phrasing is allowed.
+const PSL_003_AUTHORITATIVE_HINT_RE = /\b(?:PAGE DATA|runtime tool list)\b.{0,200}\b(?:authoritative|delivered|non-authoritative)\b/i;
+
+export function matchPsl003(body: string, file: string): Finding[] {
+  const out: Finding[] = [];
+  const lines = body.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    // Look at a sliding window of ±1 line so we can see the "PAGE DATA is authoritative"
+    // exception when it's split across the same paragraph.
+    const context = [lines[i - 1] ?? "", line, lines[i + 1] ?? ""].join(" ");
+    if (PSL_003_AUTHORITATIVE_HINT_RE.test(context)) continue;
+    for (const { regex, phrase } of PSL_003_PATTERNS) {
+      const m = line.match(regex);
+      if (m && typeof m.index === "number") {
+        out.push({
+          invariantId: "PSL-003",
+          severity: "error",
+          file,
+          line: i + 1,
+          column: m.index + 1,
+          match: m[0],
+          summary: `[PSL-003] current-state grant snapshot: "${phrase}"`,
+          detail:
+            `The phrase "${phrase}" frames the prompt as a snapshot of current runtime grants, which rots. Either remove the snapshot, or annotate the paragraph so the runtime tool list / PAGE DATA is authoritative.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-003.`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function checkPsl003(promptFiles: string[]): void {
+  for (const relPath of promptFiles) {
+    const abs = join(ROOT, relPath);
+    const text = readFileSync(abs, "utf8");
+    for (const f of matchPsl003(text, relPath)) findings.push(f);
+  }
+}
+
+// checkPsl004 — added in next task
 
 // ─── Baseline diff (added in Task 6) ──────────────────────────────────────
 
@@ -224,6 +274,7 @@ function main(): void {
   const promptFiles = listPromptFiles();
   checkPsl001(promptFiles);
   checkPsl002(promptFiles);
+  checkPsl003(promptFiles);
 
   const errorCount = findings.filter((f) => f.severity === "error").length;
   const warnCount = findings.filter((f) => f.severity === "warn").length;
