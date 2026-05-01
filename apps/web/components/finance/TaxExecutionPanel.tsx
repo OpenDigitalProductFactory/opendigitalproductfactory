@@ -58,6 +58,56 @@ function formatDateTime(value: Date | string | null | undefined) {
   });
 }
 
+function formatRunStatus(status: string) {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function buildRunOutcomeSummary(run: RunRecord) {
+  const summary: Array<{ label: string; value: string }> = [
+    { label: "Current status", value: formatRunStatus(run.status) },
+  ];
+
+  if (run.submittedAt) {
+    summary.push({
+      label: "Submitted",
+      value: formatDateTime(run.submittedAt),
+    });
+  }
+
+  if (run.paidAt) {
+    summary.push({
+      label: "Paid",
+      value: formatDateTime(run.paidAt),
+    });
+  }
+
+  if (run.confirmationRef) {
+    summary.push({
+      label: "Confirmation",
+      value: run.confirmationRef,
+    });
+  }
+
+  if (run.failureCode) {
+    summary.push({
+      label: "Failure code",
+      value: run.failureCode,
+    });
+  }
+
+  if (run.failureDetails) {
+    summary.push({
+      label: "Failure detail",
+      value: run.failureDetails,
+    });
+  }
+
+  return summary;
+}
+
 export function TaxExecutionPanel({ periods, filingOwner, handoffMode }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -202,6 +252,7 @@ export function TaxExecutionPanel({ periods, filingOwner, handoffMode }: Props) 
           periods.map((period) => {
             const latestRun = period.remittanceRuns?.[0] ?? null;
             const createForm = createForms[period.id] ?? createDefaults[period.id]!;
+            const outcomeSummary = latestRun ? buildRunOutcomeSummary(latestRun) : [];
             const statusForm = latestRun
               ? (statusForms[latestRun.id] ?? {
                   runId: latestRun.id,
@@ -291,10 +342,31 @@ export function TaxExecutionPanel({ periods, filingOwner, handoffMode }: Props) 
                     <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Latest outcome</p>
                     {latestRun && statusForm ? (
                       <div className="mt-3 space-y-3">
-                        <p className="text-xs text-[var(--dpf-muted)]">
-                          Scheduled {formatDateTime(latestRun.scheduledFor)}
-                          {latestRun.failureDetails ? ` · ${latestRun.failureDetails}` : ""}
-                        </p>
+                        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-bg)] p-3">
+                          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+                            Persisted outcome
+                          </p>
+                          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+                                Scheduled
+                              </dt>
+                              <dd className="mt-1 text-sm text-[var(--dpf-text)]">
+                                {formatDateTime(latestRun.scheduledFor)}
+                              </dd>
+                            </div>
+                            {outcomeSummary.map((item) => (
+                              <div key={`${latestRun.id}-${item.label}`}>
+                                <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">
+                                  {item.label}
+                                </dt>
+                                <dd className="mt-1 text-sm text-[var(--dpf-text)]">
+                                  {item.value}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
 
                         <label className="block text-xs text-[var(--dpf-muted)]">
                           Confirmation reference
