@@ -127,7 +127,57 @@ function checkPsl001(promptFiles: string[]): void {
   }
 }
 
-// checkPsl002, checkPsl003, checkPsl004 — added in subsequent tasks
+// ─── PSL-002: unsourced grant enumeration ──────────────────────────────────
+
+const TOOLS_HEADING_RE = /^#+\s*(?:Tools Available|Tool Use)\s*$/m;
+const NEXT_HEADING_RE = /^#+\s+/m;
+const GRANT_BULLET_RE =
+  /^\s*[-*]\s+`?[a-z][a-z0-9_]*(?:_(?:read|write|create|execute|publish|emit|validate|provision|trigger|promote|triage))`?\b/m;
+const REGISTRY_CITATION_RE = /packages\/db\/data\/agent_registry\.json/;
+
+export function matchPsl002(body: string, file: string): Finding[] {
+  const out: Finding[] = [];
+  const headingMatch = body.match(TOOLS_HEADING_RE);
+  if (!headingMatch || typeof headingMatch.index !== "number") return out;
+
+  const sectionStart = headingMatch.index;
+  const tail = body.slice(sectionStart + headingMatch[0].length);
+  const nextH = tail.match(NEXT_HEADING_RE);
+  const sectionEnd = nextH && typeof nextH.index === "number"
+    ? sectionStart + headingMatch[0].length + nextH.index
+    : body.length;
+  const section = body.slice(sectionStart, sectionEnd);
+
+  if (!GRANT_BULLET_RE.test(section)) return out;
+  if (REGISTRY_CITATION_RE.test(section)) return out;
+
+  // Compute line of the heading
+  const before = body.slice(0, sectionStart);
+  const lineNo = before.split(/\r?\n/).length;
+
+  out.push({
+    invariantId: "PSL-002",
+    severity: "error",
+    file,
+    line: lineNo,
+    column: 1,
+    match: headingMatch[0].trim(),
+    summary: `[PSL-002] '${headingMatch[0].trim()}' enumerates grants without citing packages/db/data/agent_registry.json`,
+    detail:
+      `A Tools Available / Tool Use section that lists grant-like bullets must cite the canonical grant source: packages/db/data/agent_registry.json. Without that anchor, the prompt is making a state claim that will rot when the registry changes.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-002. The marketing-specialist prompt at prompts/route-persona/marketing-specialist.prompt.md is the reference shape.`,
+  });
+  return out;
+}
+
+function checkPsl002(promptFiles: string[]): void {
+  for (const relPath of promptFiles) {
+    const abs = join(ROOT, relPath);
+    const text = readFileSync(abs, "utf8");
+    for (const f of matchPsl002(text, relPath)) findings.push(f);
+  }
+}
+
+// checkPsl003, checkPsl004 — added in subsequent tasks
 
 // ─── Baseline diff (added in Task 6) ──────────────────────────────────────
 
@@ -173,6 +223,7 @@ function main(): void {
   // Run rule checks
   const promptFiles = listPromptFiles();
   checkPsl001(promptFiles);
+  checkPsl002(promptFiles);
 
   const errorCount = findings.filter((f) => f.severity === "error").length;
   const warnCount = findings.filter((f) => f.severity === "warn").length;

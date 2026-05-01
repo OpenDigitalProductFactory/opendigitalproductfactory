@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchPsl001 } from "./audit-prompt-state-leakage";
+import { matchPsl001, matchPsl002 } from "./audit-prompt-state-leakage";
 
 describe("PSL-001 forbidden phrases", () => {
   it("matches `currently []`", () => {
@@ -54,5 +54,64 @@ describe("PSL-001 forbidden phrases", () => {
     const text = "line one\nline two\ncurrently [] line three\nline four";
     const out = matchPsl001(text, "x.md");
     expect(out[0]!.line).toBe(3);
+  });
+});
+
+describe("PSL-002 unsourced grant enumeration", () => {
+  const goodSection =
+    "# Tools Available\n\n" +
+    "From `packages/db/data/agent_registry.json`:\n\n" +
+    "- backlog_read — read backlog\n" +
+    "- backlog_write — author backlog items\n";
+
+  const badSection =
+    "# Tools Available\n\n" +
+    "This agent uses these grants once the PR ships:\n\n" +
+    "- backlog_read — read backlog\n" +
+    "- backlog_write — author backlog items\n";
+
+  const noBulletsSection =
+    "# Tools Available\n\n" +
+    "Refer to the registry for the live list.\n";
+
+  it("flags a Tools Available section with grant bullets and no source citation", () => {
+    const out = matchPsl002(badSection, "x.md");
+    expect(out).toHaveLength(1);
+    expect(out[0]!.invariantId).toBe("PSL-002");
+  });
+
+  it("does not flag a Tools Available section that cites packages/db/data/agent_registry.json", () => {
+    const out = matchPsl002(goodSection, "x.md");
+    expect(out).toHaveLength(0);
+  });
+
+  it("does not flag a Tools Available section without grant-like bullets", () => {
+    const out = matchPsl002(noBulletsSection, "x.md");
+    expect(out).toHaveLength(0);
+  });
+
+  it("flags a Tool Use section the same way", () => {
+    const text = badSection.replace("# Tools Available", "# Tool Use");
+    const out = matchPsl002(text, "x.md");
+    expect(out).toHaveLength(1);
+  });
+
+  it("does not accept seed.ts as the sole citation", () => {
+    const text = badSection.replace(
+      "This agent uses these grants once the PR ships:",
+      "Mirroring `packages/db/src/seed.ts`:",
+    );
+    const out = matchPsl002(text, "x.md");
+    expect(out).toHaveLength(1);
+  });
+
+  it("flags indented sub-bullets with grant suffixes", () => {
+    const indented =
+      "# Tools Available\n\n" +
+      "Some narrative here:\n\n" +
+      "  - backlog_read — read backlog\n" +
+      "  - backlog_write — author backlog items\n";
+    const out = matchPsl002(indented, "x.md");
+    expect(out).toHaveLength(1);
   });
 });
