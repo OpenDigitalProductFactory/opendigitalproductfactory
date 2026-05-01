@@ -7,8 +7,20 @@ import type { BuildContext } from "@/lib/build-agent-prompts";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
+  // Build Studio is internal-cockpit-only and DPF is single-org-per-install
+  // (per project memory `single_org_per_install`). All authenticated users on
+  // this install belong to the same Org and have full visibility into Org-
+  // scoped build work. Filtering by createdById hid builds promoted via MCP
+  // under a different identity from the portal-logged-in user (BI-AA03296D),
+  // which broke the natural cross-identity workflow of MCP-driven promotion +
+  // portal-driven supervision. The userId param is retained for backwards
+  // compatibility (and so cache keys remain user-scoped) but no longer used
+  // as a filter. The per-build authorization check in
+  // apps/web/lib/actions/build-read.ts:getFeatureBuild was relaxed in the same
+  // PR for the same reason.
+  void userId;
   const rows = await prisma.featureBuild.findMany({
-    where: { createdById: userId, phase: { not: "failed" } },
+    where: { phase: { not: "failed" } },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
