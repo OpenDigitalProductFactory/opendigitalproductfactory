@@ -15,6 +15,7 @@ const emptyVm: DigitalProductView = {
   taxonomyLineage: [],
   portfolio: null,
   primaryEntity: null,
+  linkedEntities: [],
   linkedEntityCount: 0,
   freshness: null,
   enrichmentStatus: null,
@@ -51,6 +52,50 @@ const fullVm: DigitalProductView = {
     attributionConfidence: 0.98,
     lastSeenAt: new Date("2026-04-30T12:00:00Z"),
   },
+  linkedEntities: [
+    {
+      id: "ent_1",
+      name: "PostgreSQL Container",
+      entityKey: "container:dpf-postgres-1",
+      entityType: "container",
+      manufacturer: "PostgreSQL Global Development Group",
+      productModel: "PostgreSQL",
+      technicalClass: "relational_database",
+      iconKey: "postgres",
+      observedVersion: "16.0",
+      normalizedVersion: "16.0.0",
+      attributionConfidence: 0.98,
+      lastSeenAt: new Date("2026-04-30T12:00:00Z"),
+    },
+    {
+      id: "ent_2",
+      name: "Postgres Replica",
+      entityKey: "container:dpf-postgres-2",
+      entityType: "container",
+      manufacturer: null,
+      productModel: null,
+      technicalClass: null,
+      iconKey: null,
+      observedVersion: "16.0",
+      normalizedVersion: "16.0.0",
+      attributionConfidence: 0.92,
+      lastSeenAt: new Date("2026-04-30T11:00:00Z"),
+    },
+    {
+      id: "ent_3",
+      name: "Postgres Backup Job",
+      entityKey: "container:dpf-postgres-backup",
+      entityType: "container",
+      manufacturer: null,
+      productModel: null,
+      technicalClass: null,
+      iconKey: null,
+      observedVersion: null,
+      normalizedVersion: null,
+      attributionConfidence: null,
+      lastSeenAt: new Date("2026-04-29T08:00:00Z"),
+    },
+  ],
   linkedEntityCount: 3,
   freshness: "fresh",
   enrichmentStatus: "enriched",
@@ -141,13 +186,21 @@ describe("DigitalProductDetail", () => {
       expect(html).toContain("Database");
     });
 
-    it("renders Linked Inventory Entities section with primary entity and count", () => {
+    it("renders Linked Inventory Entities section with all entities, not just the primary", () => {
       const html = renderToStaticMarkup(<DigitalProductDetail vm={fullVm} />);
       expect(html).toContain(">Linked Inventory Entities<");
+      // All three entities render in the table, in order.
       expect(html).toContain("PostgreSQL Container");
       expect(html).toContain("container:dpf-postgres-1");
-      // Count of others = total - 1 = 2
-      expect(html).toMatch(/2\s*(?:other|more)/i);
+      expect(html).toContain("Postgres Replica");
+      expect(html).toContain("container:dpf-postgres-2");
+      expect(html).toContain("Postgres Backup Job");
+      expect(html).toContain("container:dpf-postgres-backup");
+      // Three <tr> rows in <tbody> (header row is in <thead>).
+      const tbodyMatch = html.match(/<tbody>([\s\S]*?)<\/tbody>/);
+      expect(tbodyMatch).not.toBeNull();
+      const trCount = (tbodyMatch![1].match(/<tr\b/g) ?? []).length;
+      expect(trCount).toBe(3);
     });
 
     it("renders Open Quality Issues section with summary text", () => {

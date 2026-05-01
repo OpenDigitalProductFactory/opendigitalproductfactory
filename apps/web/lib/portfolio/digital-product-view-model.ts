@@ -34,20 +34,16 @@ export interface DigitalProductView {
   portfolio: { id: string; slug: string; name: string } | null;
 
   // Pulled from a primary linked InventoryEntity (or null when none).
-  primaryEntity: {
-    id: string;
-    name: string;
-    entityKey: string;
-    entityType: string;
-    manufacturer: string | null;
-    productModel: string | null;
-    technicalClass: string | null;
-    iconKey: string | null;
-    observedVersion: string | null;
-    normalizedVersion: string | null;
-    attributionConfidence: number | null;
-    lastSeenAt: Date;
-  } | null;
+  // Same shape as `linkedEntities[0]` — kept as a separate field for ergonomic
+  // identity-row rendering without indexing.
+  primaryEntity: LinkedEntitySummary | null;
+
+  /**
+   * Full set of linked InventoryEntity rows, in the order returned by the
+   * caller. The detail page renders these in the "Linked Inventory Entities"
+   * table; consumers who only need identity hints can read `primaryEntity`.
+   */
+  linkedEntities: LinkedEntitySummary[];
 
   linkedEntityCount: number;
 
@@ -64,6 +60,26 @@ export interface DigitalProductView {
     summary: string;
     lastDetectedAt: Date;
   }>;
+}
+
+/**
+ * Summary shape used by both `primaryEntity` and `linkedEntities`. Keep the
+ * fields aligned with what `DigitalProductDetail`'s linked-entities table
+ * renders — adding a column here means adding a column there.
+ */
+export interface LinkedEntitySummary {
+  id: string;
+  name: string;
+  entityKey: string;
+  entityType: string;
+  manufacturer: string | null;
+  productModel: string | null;
+  technicalClass: string | null;
+  iconKey: string | null;
+  observedVersion: string | null;
+  normalizedVersion: string | null;
+  attributionConfidence: number | null;
+  lastSeenAt: Date;
 }
 
 export interface ToDigitalProductViewModelInput {
@@ -138,25 +154,23 @@ function projectTaxonomyLineage(
   return lineage;
 }
 
-function projectPrimaryEntity(
+function projectLinkedEntities(
   entities: ToDigitalProductViewModelInput["inventoryEntities"],
-): DigitalProductView["primaryEntity"] {
-  const first = entities[0];
-  if (!first) return null;
-  return {
-    id: first.id,
-    name: first.name,
-    entityKey: first.entityKey,
-    entityType: first.entityType,
-    manufacturer: first.manufacturer,
-    productModel: first.productModel,
-    technicalClass: first.technicalClass,
-    iconKey: first.iconKey,
-    observedVersion: first.observedVersion,
-    normalizedVersion: first.normalizedVersion,
-    attributionConfidence: first.attributionConfidence,
-    lastSeenAt: first.lastSeenAt,
-  };
+): LinkedEntitySummary[] {
+  return entities.map((e) => ({
+    id: e.id,
+    name: e.name,
+    entityKey: e.entityKey,
+    entityType: e.entityType,
+    manufacturer: e.manufacturer,
+    productModel: e.productModel,
+    technicalClass: e.technicalClass,
+    iconKey: e.iconKey,
+    observedVersion: e.observedVersion,
+    normalizedVersion: e.normalizedVersion,
+    attributionConfidence: e.attributionConfidence,
+    lastSeenAt: e.lastSeenAt,
+  }));
 }
 
 function projectOpenQualityIssues(
@@ -194,7 +208,8 @@ export function toDigitalProductViewModel(
     observationConfig: projectObservationConfig(product.observationConfig),
     taxonomyLineage: projectTaxonomyLineage(taxonomyAncestors, product.taxonomyNode),
     portfolio: product.portfolio,
-    primaryEntity: projectPrimaryEntity(inventoryEntities),
+    primaryEntity: projectLinkedEntities(inventoryEntities)[0] ?? null,
+    linkedEntities: projectLinkedEntities(inventoryEntities),
     linkedEntityCount: inventoryEntities.length,
     freshness: input.freshness ?? null,
     enrichmentStatus: input.enrichmentStatus ?? null,

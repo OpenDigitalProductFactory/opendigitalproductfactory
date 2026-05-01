@@ -128,9 +128,7 @@ function TaxonomySection({
 // --- Linked inventory entities -----------------------------------------
 
 function LinkedEntitiesSection({ vm }: { vm: DigitalProductView }): ReactElement | null {
-  const entity = vm.primaryEntity;
-  if (entity === null || vm.linkedEntityCount === 0) return null;
-  const others = Math.max(0, vm.linkedEntityCount - 1);
+  if (vm.linkedEntities.length === 0) return null;
 
   return (
     <section className="mt-6 pt-6 border-t border-[var(--dpf-border)]">
@@ -150,33 +148,39 @@ function LinkedEntitiesSection({ vm }: { vm: DigitalProductView }): ReactElement
             </tr>
           </thead>
           <tbody>
-            <tr className="border-t border-[var(--dpf-border)]">
-              <td className="py-2 pr-3 text-[var(--dpf-text)]">{entity.name}</td>
-              <td className="py-2 pr-3 font-mono text-xs text-[var(--dpf-muted)]">
-                {entity.entityKey}
-              </td>
-              <td className="py-2 pr-3 text-[var(--dpf-text)]">{entity.entityType}</td>
-              <td className="py-2 pr-3 text-[var(--dpf-text)]">{entity.observedVersion ?? "—"}</td>
-              <td className="py-2 pr-3 text-[var(--dpf-text)]">
-                {entity.attributionConfidence === null
-                  ? "—"
-                  : entity.attributionConfidence.toFixed(2)}
-              </td>
-              <td className="py-2 pr-3 text-[var(--dpf-muted)] text-xs">
-                {entity.lastSeenAt.toISOString().slice(0, 10)}
-              </td>
-            </tr>
+            {vm.linkedEntities.map((entity) => (
+              <tr key={entity.id} className="border-t border-[var(--dpf-border)]">
+                <td className="py-2 pr-3 text-[var(--dpf-text)]">{entity.name}</td>
+                <td className="py-2 pr-3 font-mono text-xs text-[var(--dpf-muted)]">
+                  {entity.entityKey}
+                </td>
+                <td className="py-2 pr-3 text-[var(--dpf-text)]">{entity.entityType}</td>
+                <td className="py-2 pr-3 text-[var(--dpf-text)]">
+                  {entity.observedVersion ?? "—"}
+                </td>
+                <td className="py-2 pr-3 text-[var(--dpf-text)]">
+                  {entity.attributionConfidence === null
+                    ? "—"
+                    : entity.attributionConfidence.toFixed(2)}
+                </td>
+                <td className="py-2 pr-3 text-[var(--dpf-muted)] text-xs">
+                  {entity.lastSeenAt.toISOString().slice(0, 10)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-      {others > 0 && (
-        <p className="mt-2 text-xs text-[var(--dpf-muted)]">
-          and {others} other{others === 1 ? "" : "s"} linked
-        </p>
-      )}
     </section>
   );
 }
+
+// TODO(Chunk 4 Task 4.3): render an Enrichment section reading
+// vm.enrichmentStatus + vm.lastEnrichedAt once the schema columns land.
+//
+// TODO(Chunk 4+): render recent ChangeItem rows once a query helper exists;
+// the spec calls for "recent change items" but ChangeItem rollups for a
+// product are out of scope for Chunk 3.
 
 // --- Open quality issues -----------------------------------------------
 
