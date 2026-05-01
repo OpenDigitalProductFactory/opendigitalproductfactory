@@ -150,6 +150,16 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Instagram Business"
+          description="Local visual presence anchor for profile, recent media, and comment context on the enterprise substrate."
+          href="/platform/tools/integrations/instagram-business"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Category", value: "Local Visual Presence" },
+            { label: "Model", value: "Native" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="Mailchimp Marketing"
           description="Email marketing anchor for audiences, recent campaigns, and approved customer outreach context on the enterprise substrate."
           href="/platform/tools/integrations/mailchimp"
