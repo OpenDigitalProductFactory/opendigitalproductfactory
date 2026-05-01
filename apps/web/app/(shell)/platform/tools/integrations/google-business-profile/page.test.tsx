@@ -72,10 +72,10 @@ describe("GoogleBusinessProfileIntegrationPage", () => {
     const { default: GoogleBusinessProfileIntegrationPage } = await import("./page");
     const html = renderToStaticMarkup(await GoogleBusinessProfileIntegrationPage());
 
-    expect(html).toContain("recent reviews and local posts");
+    expect(html).toContain("recent reviews, local posts, and profile media");
   });
 
-  it("renders the local profile preview from live Google Business Profile data", async () => {
+  it("renders the local profile preview with live Google Business Profile media", async () => {
     mockAuth.mockResolvedValue({
       user: { platformRole: "superadmin", isSuperuser: true },
     });
@@ -126,6 +126,31 @@ describe("GoogleBusinessProfileIntegrationPage", () => {
             },
           },
         ],
+        media: {
+          totalMediaItemCount: 8,
+          items: [
+            {
+              name: "accounts/123/locations/456/media/photo-1",
+              mediaFormat: "PHOTO",
+              thumbnailUrl: "https://lh3.googleusercontent.com/photo-1",
+              googleUrl: "https://maps.google.com/photo-1",
+              createTime: "2026-04-29T15:00:00Z",
+              locationAssociation: {
+                category: "EXTERIOR",
+              },
+              dimensions: {
+                widthPixels: 1600,
+                heightPixels: 900,
+              },
+              insights: {
+                viewCount: "3421",
+              },
+              attribution: {
+                profileName: "Acme Managed Services",
+              },
+            },
+          ],
+        },
         loadedAt: "2026-04-24T11:30:00.000Z",
       },
     });
@@ -141,5 +166,9 @@ describe("GoogleBusinessProfileIntegrationPage", () => {
     expect(html).toContain("Recent local posts");
     expect(html).toContain("Free network review for Austin businesses this Friday.");
     expect(html).toContain("LEARN_MORE");
+    expect(html).toContain("Local profile media");
+    expect(html).toContain("8 media items");
+    expect(html).toContain("EXTERIOR");
+    expect(html).toContain("3,421 views");
   });
 });

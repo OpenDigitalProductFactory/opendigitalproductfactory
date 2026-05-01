@@ -81,6 +81,20 @@ describe("loadGoogleBusinessProfilePreview", () => {
           comment: "Fast response and great local support.",
         },
       ],
+      localPosts: [],
+      media: {
+        totalMediaItemCount: 4,
+        items: [
+          {
+            name: "accounts/123/locations/456/media/photo-1",
+            mediaFormat: "PHOTO",
+            thumbnailUrl: "https://lh3.googleusercontent.com/photo-1",
+            locationAssociation: {
+              category: "COVER",
+            },
+          },
+        ],
+      },
     });
 
     const result = await loadGoogleBusinessProfilePreview();
@@ -92,6 +106,8 @@ describe("loadGoogleBusinessProfilePreview", () => {
 
     expect(result.preview.location.title).toBe("Acme MSP - Austin");
     expect(result.preview.reviews[0]?.reviewId).toBe("review-1");
+    expect(result.preview.media.totalMediaItemCount).toBe(4);
+    expect(result.preview.media.items[0]?.locationAssociation?.category).toBe("COVER");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdate.mock.calls[0][0].data.status).toBe("connected");
   });

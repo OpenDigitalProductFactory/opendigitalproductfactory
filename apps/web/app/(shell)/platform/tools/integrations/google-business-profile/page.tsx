@@ -57,7 +57,7 @@ export default async function GoogleBusinessProfileIntegrationPage() {
         <h2 className="font-semibold text-[var(--dpf-text)]">What this integration enables</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--dpf-muted)]">
           <li>Verifies customer-owned Google Business Profile connectivity with offline OAuth credentials.</li>
-          <li>Reads local location details, recent reviews and local posts through the official Google Business Profile APIs.</li>
+          <li>Reads local location details, recent reviews, local posts, and profile media through the official Google Business Profile APIs.</li>
           <li>Supports localized reputation and listing awareness for the marketing specialist before write workflows exist.</li>
           <li>Sets the platform up for later review-response, posting, and local campaign automation without skipping governance.</li>
         </ul>
@@ -182,7 +182,7 @@ function GoogleBusinessProfilePreviewSection({
         </p>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <PreviewCard title="Account" fallback="No account details returned.">
           <PreviewRow label="Account" value={previewData.account.accountName ?? null} />
           <PreviewRow label="Type" value={previewData.account.type ?? null} />
@@ -202,6 +202,12 @@ function GoogleBusinessProfilePreviewSection({
         </PreviewCard>
         <PreviewCard title="Recent local posts" fallback="No local posts returned yet.">
           <PreviewLocalPostList items={previewData.localPosts} />
+        </PreviewCard>
+        <PreviewCard title="Local profile media" fallback="No media items returned yet.">
+          <PreviewMediaList
+            items={previewData.media.items}
+            totalMediaItemCount={previewData.media.totalMediaItemCount}
+          />
         </PreviewCard>
       </div>
     </section>
@@ -337,11 +343,113 @@ function PreviewLocalPostList({
   );
 }
 
+function PreviewMediaList({
+  items,
+  totalMediaItemCount,
+}: {
+  items: Array<{
+    name?: string;
+    mediaFormat?: string;
+    thumbnailUrl?: string;
+    googleUrl?: string;
+    createTime?: string;
+    locationAssociation?: {
+      category?: string;
+      priceListItemId?: string;
+    };
+    dimensions?: {
+      widthPixels?: number;
+      heightPixels?: number;
+    };
+    insights?: {
+      viewCount?: string;
+    };
+    attribution?: {
+      profileName?: string;
+    };
+  }>;
+  totalMediaItemCount: number;
+}) {
+  const visibleItems = items.filter(
+    (item) =>
+      (typeof item.name === "string" && item.name.length > 0) ||
+      (typeof item.thumbnailUrl === "string" && item.thumbnailUrl.length > 0) ||
+      (typeof item.googleUrl === "string" && item.googleUrl.length > 0),
+  );
+  if (visibleItems.length === 0) return null;
+
+  const countLabel =
+    totalMediaItemCount === 1 ? "1 media item" : `${formatNumber(totalMediaItemCount)} media items`;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[var(--dpf-muted)]">{countLabel}</p>
+      <div className="grid gap-2">
+        {visibleItems.slice(0, 3).map((item) => {
+          const category =
+            item.locationAssociation?.category ?? item.locationAssociation?.priceListItemId ?? null;
+          const dimensions =
+            typeof item.dimensions?.widthPixels === "number" &&
+            typeof item.dimensions?.heightPixels === "number"
+              ? `${item.dimensions.widthPixels} x ${item.dimensions.heightPixels}`
+              : null;
+          const viewCount =
+            typeof item.insights?.viewCount === "string"
+              ? `${formatNumber(Number(item.insights.viewCount))} views`
+              : null;
+
+          return (
+            <div
+              key={item.name ?? item.thumbnailUrl ?? item.googleUrl}
+              className="overflow-hidden rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)]"
+            >
+              {item.thumbnailUrl && (
+                <img
+                  src={item.thumbnailUrl}
+                  alt=""
+                  className="h-24 w-full object-cover"
+                  loading="lazy"
+                />
+              )}
+              <div className="space-y-1 px-3 py-2 text-xs">
+                <div className="flex flex-wrap gap-2">
+                  {item.mediaFormat && (
+                    <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 font-medium text-[var(--dpf-muted)]">
+                      {item.mediaFormat}
+                    </span>
+                  )}
+                  {category && (
+                    <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 font-medium text-[var(--dpf-muted)]">
+                      {category}
+                    </span>
+                  )}
+                </div>
+                {viewCount && <p className="text-[var(--dpf-text)]">{viewCount}</p>}
+                {dimensions && <p className="text-[var(--dpf-muted)]">{dimensions}</p>}
+                {item.attribution?.profileName && (
+                  <p className="text-[var(--dpf-muted)]">
+                    By <span className="text-[var(--dpf-text)]">{item.attribution.profileName}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function hasRenderableChildren(value: React.ReactNode): boolean {
   if (Array.isArray(value)) {
     return value.some(Boolean);
   }
   return Boolean(value);
+}
+
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  return new Intl.NumberFormat().format(value);
 }
 
 function formatDateTime(iso: string): string {
