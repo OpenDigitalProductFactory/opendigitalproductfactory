@@ -31,9 +31,18 @@ export type PromotionSkipReason =
   | "no_portfolio_root"
   | "type_not_promotable";
 
+/**
+ * Evidence is a small, JSON-serializable bag of decision context. The set
+ * of keys varies by `source`; downstream consumers (e.g. Task 1.2's quality
+ * issue writer, Task 2.1's promotion runner) read `source` first, then the
+ * source-specific fields. Values are restricted to JSON primitives so the
+ * envelope can be stored directly in `PortfolioQualityIssue.details`.
+ */
+export type PromotionEvidence = Record<string, string | number | null>;
+
 export type PromotionDecision =
-  | { decision: "promote"; classifyAs?: string; reason?: undefined; evidence: object }
-  | { decision: "skip"; classifyAs?: undefined; reason: PromotionSkipReason; evidence: object };
+  | { decision: "promote"; classifyAs?: string; reason?: undefined; evidence: PromotionEvidence }
+  | { decision: "skip"; classifyAs?: undefined; reason: PromotionSkipReason; evidence: PromotionEvidence };
 
 /**
  * Loose input shapes — callers may pass richer Prisma rows; only these
@@ -53,7 +62,10 @@ export interface PromotionTaxonomyNodeInput {
   governance:
     | {
         promotion?: {
-          mode?: string;
+          // "auto" is the only mode the resolver acts on today; other values
+          // (e.g. a future "manual") fall through to the type_not_promotable
+          // skip path. Open to extension via the (string & {}) escape hatch.
+          mode?: "auto" | (string & {});
           classifyAs?: string;
         } | null;
       }
