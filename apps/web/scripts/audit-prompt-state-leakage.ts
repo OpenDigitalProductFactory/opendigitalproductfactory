@@ -84,9 +84,50 @@ function listPromptFiles(): string[] {
   return out.sort();
 }
 
-// ─── Rule implementations (added in Tasks 2–5) ────────────────────────────
+// ─── PSL-001: stale future-state grant phrases ─────────────────────────────
 
-// checkPsl001, checkPsl002, checkPsl003, checkPsl004 — added in subsequent tasks
+const PSL_001_PATTERNS: Array<{ regex: RegExp; phrase: string }> = [
+  { regex: /currently\s+\[\]/i, phrase: "currently []" },
+  { regex: /pending follow-on assignment/i, phrase: "pending follow-on assignment" },
+  { regex: /once the per-agent grant/i, phrase: "once the per-agent grant" },
+  { regex: /will hold a curated set/i, phrase: "will hold a curated set" },
+  { regex: /tools? the role expects to hold once granted/i, phrase: "tools the role expects to hold once granted" },
+];
+
+export function matchPsl001(body: string, file: string): Finding[] {
+  const out: Finding[] = [];
+  const lines = body.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    for (const { regex, phrase } of PSL_001_PATTERNS) {
+      const m = line.match(regex);
+      if (m && typeof m.index === "number") {
+        out.push({
+          invariantId: "PSL-001",
+          severity: "error",
+          file,
+          line: i + 1,
+          column: m.index + 1,
+          match: m[0],
+          summary: `[PSL-001] forbidden state phrase: "${phrase}"`,
+          detail:
+            `The phrase "${phrase}" tells the model that runtime grants are not yet available, even when the runtime delivers them. Remove this language. The runtime tool list is authoritative — describe behavior in the prompt, not state.\n\nSee docs/superpowers/specs/2026-04-30-prompt-state-leakage-lint-design.md §6 PSL-001.`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function checkPsl001(promptFiles: string[]): void {
+  for (const relPath of promptFiles) {
+    const abs = join(ROOT, relPath);
+    const text = readFileSync(abs, "utf8");
+    for (const f of matchPsl001(text, relPath)) findings.push(f);
+  }
+}
+
+// checkPsl002, checkPsl003, checkPsl004 — added in subsequent tasks
 
 // ─── Baseline diff (added in Task 6) ──────────────────────────────────────
 
@@ -129,9 +170,9 @@ function main(): void {
   shrinkFromPath = absolutize(shrinkFromPath);
   jsonOutPath = absolutize(jsonOutPath);
 
-  // Run rule checks (no-op until Tasks 2–5 add them)
+  // Run rule checks
   const promptFiles = listPromptFiles();
-  void promptFiles;
+  checkPsl001(promptFiles);
 
   const errorCount = findings.filter((f) => f.severity === "error").length;
   const warnCount = findings.filter((f) => f.severity === "warn").length;
@@ -161,4 +202,10 @@ function main(): void {
   process.exit(exitCode);
 }
 
-main();
+// Auto-run main() only when invoked as a script (not when imported by tests).
+// Without this guard, importing the rule matchers from the test file would
+// trigger process.exit during test setup and Vitest would report "no tests".
+const invokedDirectly =
+  typeof process.argv[1] === "string" &&
+  process.argv[1].endsWith("audit-prompt-state-leakage.ts");
+if (invokedDirectly) main();
