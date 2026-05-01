@@ -85,6 +85,35 @@ describe("getPromotionAudit", () => {
     });
   });
 
+  it("count per reason reflects total open issues, not sample length", async () => {
+    // Regression: BlockedReasonGroup.count should equal the total open issues
+    // for a reason (via per-reason count() call), NOT the sample length which
+    // is capped at SAMPLE_LIMIT (10).
+    const { db, inventoryEntityCount, qualityIssueCount, qualityIssueFindMany } = mockDb();
+    inventoryEntityCount.mockResolvedValue(0);
+    qualityIssueFindMany.mockResolvedValue([]); // no samples
+    qualityIssueCount.mockImplementation(({ where }) => {
+      // Global blocked count
+      if (where.issueType && typeof where.issueType === "object" && "in" in where.issueType) {
+        return Promise.resolve(78);
+      }
+      // Per-reason counts: 50 type_not_promotable, 25 no_taxonomy, 2 no_portfolio_root, 1 low_confidence
+      if (where.issueType === "type_not_promotable") return Promise.resolve(50);
+      if (where.issueType === "no_taxonomy") return Promise.resolve(25);
+      if (where.issueType === "no_portfolio_root") return Promise.resolve(2);
+      if (where.issueType === "low_confidence_promotion") return Promise.resolve(1);
+      return Promise.resolve(0);
+    });
+
+    const result = await getPromotionAudit(db as never);
+    expect(result.counts.blocked).toBe(78);
+    expect(result.blockedByReason.type_not_promotable.count).toBe(50);
+    expect(result.blockedByReason.type_not_promotable.sample.length).toBe(0); // sample empty (mock)
+    expect(result.blockedByReason.no_taxonomy.count).toBe(25);
+    expect(result.blockedByReason.no_portfolio_root.count).toBe(2);
+    expect(result.blockedByReason.low_confidence_promotion.count).toBe(1);
+  });
+
   it("filters out blocked rows with null inventoryEntity (defensive)", async () => {
     const { db, inventoryEntityCount, qualityIssueCount, qualityIssueFindMany } = mockDb();
     inventoryEntityCount.mockResolvedValue(0);

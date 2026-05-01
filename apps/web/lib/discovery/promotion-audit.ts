@@ -38,6 +38,7 @@ export interface PromotionAuditCounts {
 }
 
 export interface BlockedReasonGroup {
+  /** Total open quality issues for this reason. May exceed `sample.length`. */
   count: number;
   /** Up to 10 most-recent blocked entities for this reason. */
   sample: PromotionAuditEntitySummary[];
@@ -103,21 +104,30 @@ export async function getPromotionAudit(db: PromotionAuditDb): Promise<Promotion
     where: { issueType: { in: REASON_LIST as unknown as string[] }, status: "open" },
   });
 
-  // Per-reason sample queries run in parallel — same DB, independent reads.
-  const sampleResults = await Promise.all(
-    REASON_LIST.map((reason) =>
-      db.portfolioQualityIssue.findMany({
-        where: { issueType: reason, status: "open" },
-        orderBy: { lastDetectedAt: "desc" },
-        take: SAMPLE_LIMIT,
-        include: { inventoryEntity: { include: { taxonomyNode: true } } },
-      }),
-    ),
+  // Per-reason sample + count queries run in parallel — same DB, independent
+  // reads. `count` is the total open issues for that reason (may exceed 10);
+  // `sample` is capped at SAMPLE_LIMIT.
+  const perReasonResults = await Promise.all(
+    REASON_LIST.map(async (reason) => {
+      const [count, rows] = await Promise.all([
+        db.portfolioQualityIssue.count({
+          where: { issueType: reason, status: "open" },
+        }),
+        db.portfolioQualityIssue.findMany({
+          where: { issueType: reason, status: "open" },
+          orderBy: { lastDetectedAt: "desc" },
+          take: SAMPLE_LIMIT,
+          include: { inventoryEntity: { include: { taxonomyNode: true } } },
+        }),
+      ]);
+      return { reason, count, rows };
+    }),
   );
 
-  const blockedByReason = REASON_LIST.reduce<Record<PromotionSkipReason, BlockedReasonGroup>>(
-    (acc, reason, index) => {
-      const rows = sampleResults[index] ?? [];
+  const blockedByReason = perReasonResults.reduce<
+    Record<PromotionSkipReason, BlockedReasonGroup>
+  >(
+    (acc, { reason, count, rows }) => {
       const sample: PromotionAuditEntitySummary[] = rows
         .filter((row) => row.inventoryEntity !== null)
         .map((row) => {
@@ -133,7 +143,7 @@ export async function getPromotionAudit(db: PromotionAuditDb): Promise<Promotion
             lastSeenAt: entity.lastSeenAt,
           };
         });
-      acc[reason] = { count: sample.length, sample };
+      acc[reason] = { count, sample };
       return acc;
     },
     {
