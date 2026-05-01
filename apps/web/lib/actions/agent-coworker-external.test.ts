@@ -128,6 +128,16 @@ vi.mock("@dpf/db", () => ({
     toolExecution: {
       create: vi.fn(),
     },
+    // Build Specialist Operator Contract (Slice 1) — sendMessage looks up the
+    // active FeatureBuild by threadId so platform-side guards in the agentic
+    // loop can attribute PlatformIssueReport rows. findFirst returns null on
+    // non-build threads (the tests don't cover the build route).
+    featureBuild: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    platformIssueReport: {
+      create: vi.fn(),
+    },
   },
 }));
 
