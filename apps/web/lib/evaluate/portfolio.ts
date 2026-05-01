@@ -10,6 +10,12 @@ export type PortfolioTreeNode = {
   directCount: number;
   totalCount: number;
   activeCount: number;   // ← new: active products in subtree, rolled up
+  /** Optional TaxonomyNode.description -- detail page consumers populate when present. */
+  description?: string | null;
+  /** Optional TaxonomyNode.governance JSON column (Prisma `Json?`). */
+  governance?: unknown;
+  /** Optional TaxonomyNode.enrichment JSON column (Prisma `Json?`). */
+  enrichment?: unknown;
   children: PortfolioTreeNode[];
 };
 
@@ -42,6 +48,9 @@ type RawNode = {
   name: string;
   parentId: string | null;
   portfolioId: string | null | undefined;
+  description?: string | null;
+  governance?: unknown;
+  enrichment?: unknown;
 };
 
 type CountRow = {
@@ -96,6 +105,9 @@ export function buildPortfolioTree(
       directCount: countById.get(n.id) ?? 0,
       totalCount: 0,
       activeCount: 0,   // populated during DFS below
+      description: n.description ?? null,
+      governance: n.governance ?? null,
+      enrichment: n.enrichment ?? null,
       children: [],
     });
   }
