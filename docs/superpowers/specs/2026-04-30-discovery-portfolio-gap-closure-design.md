@@ -416,6 +416,28 @@ Pure helpers shipping zero production behavior change. All four foundation modul
 
 **Pre-flight blocker for Chunks 4–5.** `DiscoveryFingerprintCatalogVersion` table is empty (0 rows) on the bootstrap install. The fingerprint adapter (Task 1.3) is already shippable — it just returns `null` for empty input — but Chunks 4–5 depend on rules existing in the catalog. Either the upstream fingerprint contribution slice needs to ship its seed, or this plan needs to bootstrap a small initial catalog before Chunk 4.
 
+### Chunk 2 — Promotion Gate Fix + Audit Visibility (landed 2026-04-30)
+
+Replaces the hardcoded `PROMOTABLE_TYPES` SQL filter with the Chunk 1 policy resolver, seeds default `governance.promotion` on every `TaxonomyNode`, surfaces every promotion skip as a `PortfolioQualityIssue`, and ships an admin audit page.
+
+| Task | Commits | Tests |
+| - | - | - |
+| 2.1 Promotion uses policy resolver + writes quality issues | `a919096e` | 24/24 (10 promotion + 14 sibling helpers) |
+| 2.2 Seed default promotion governance | `f788e69b` | 6/6 pure helper + invariant guard wired |
+| 2.3 Promotion-audit query helper | `88e837cf`, `bdafea75` (count fix) | 7/7 |
+| 2.4 Promotion-audit page UI | `0aaf9c02`, `98f93c3e` (REASON_LIST extraction) | 1/1 light load test |
+
+**Build gate (Task 2.5):** `pnpm --filter @dpf/db exec vitest run` → 310 pass / 53 files. `pnpm --filter web exec vitest run` → 4397 pass / 14 skipped / 13 todo / 543 files. `cd apps/web && npx next build` → exit 0. Pre-existing Turbopack NFT warnings unchanged.
+
+**Net runtime effect on the bootstrap install** (predicted; pending re-verification on the live install):
+- 78 previously-orphaned `InventoryEntity` rows (`network_client`, `access_point`, `vlan`, `switch`, `service`) now flow through the resolver.
+- After re-seeding (which writes `governance.promotion.mode: "auto"` on the foundational subtree, with `classifyAs: "infrastructure_endpoint"` on `foundational/network_management/*`), those 78 rows promote to `DigitalProduct` with `observationConfig.classifyAs: "infrastructure_endpoint"`.
+- Any remaining skips appear as open `PortfolioQualityIssue` rows visible at `/platform/tools/discovery/promotion-audit`.
+
+**Deviations from plan.** Task 2.3's first commit set `BlockedReasonGroup.count = sample.length` (capped at 10) which would have shown "10" instead of the real total on the audit page; fixed in `bdafea75` to issue per-reason `count()` queries in parallel with `findMany()`. Task 2.4 manual UX verification (plan Step 4) deferred — page compiles, theme tokens grep-clean, light load test passes, but a logged-in `/platform/tools/discovery/promotion-audit` smoke check still owed against the running portal once the branch is rebased to main.
+
+**Open questions still pending (gating later chunks):** unchanged from Chunk 1 — #2 (model cost guardrail), #3 (signature seed scope), #4 (required-field gates default), #5 (freshness thresholds). All gate Chunks 4 and 7.
+
 ---
 
 ## 14. References
