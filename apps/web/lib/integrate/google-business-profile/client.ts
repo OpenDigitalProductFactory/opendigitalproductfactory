@@ -45,10 +45,28 @@ export interface GoogleBusinessReviewRecord {
   [key: string]: unknown;
 }
 
+export interface GoogleBusinessLocalPostRecord {
+  name?: string;
+  languageCode?: string;
+  summary?: string;
+  topicType?: string;
+  state?: string;
+  searchUrl?: string;
+  createTime?: string;
+  updateTime?: string;
+  callToAction?: {
+    actionType?: string;
+    url?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface GoogleBusinessProfileProbeResult {
   account: GoogleBusinessAccountRecord;
   location: GoogleBusinessLocationRecord;
   reviews: GoogleBusinessReviewRecord[];
+  localPosts: GoogleBusinessLocalPostRecord[];
 }
 
 interface GoogleBusinessProfileRequestParams {
@@ -98,15 +116,17 @@ export async function probeGoogleBusinessProfile(
     );
   }
 
-  const [location, reviews] = await Promise.all([
+  const [location, reviews, localPosts] = await Promise.all([
     getLocation(params),
     listReviews(params),
+    listLocalPosts(params),
   ]);
 
   return {
     account,
     location,
     reviews,
+    localPosts,
   };
 }
 
@@ -162,6 +182,26 @@ async function listReviews(
   });
 
   return Array.isArray(response.reviews) ? response.reviews : [];
+}
+
+async function listLocalPosts(
+  params: GoogleBusinessProfileRequestParams,
+): Promise<GoogleBusinessLocalPostRecord[]> {
+  const query = new URLSearchParams({
+    pageSize: "5",
+  }).toString();
+
+  const response = await fetchGoogleBusinessJson<{ localPosts?: GoogleBusinessLocalPostRecord[] }>({
+    url: `${resolveGoogleBusinessProfileApiBaseUrl()}/v4/accounts/${params.accountId}/locations/${params.locationId}/localPosts?${query}`,
+    accessToken: params.accessToken,
+    dispatcher: params.dispatcher,
+    unauthorizedMessage:
+      "invalid Google Business Profile local post permissions for this account and location",
+    unconfiguredMessage:
+      "Google Business Profile Local Posts API is not enabled or location posts could not be read.",
+  });
+
+  return Array.isArray(response.localPosts) ? response.localPosts : [];
 }
 
 async function fetchGoogleBusinessJson<T>({
