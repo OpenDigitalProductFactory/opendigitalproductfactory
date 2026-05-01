@@ -57,7 +57,7 @@ export default async function GoogleBusinessProfileIntegrationPage() {
         <h2 className="font-semibold text-[var(--dpf-text)]">What this integration enables</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--dpf-muted)]">
           <li>Verifies customer-owned Google Business Profile connectivity with offline OAuth credentials.</li>
-          <li>Reads local location details and recent reviews through the official Google Business Profile APIs.</li>
+          <li>Reads local location details, recent reviews and local posts through the official Google Business Profile APIs.</li>
           <li>Supports localized reputation and listing awareness for the marketing specialist before write workflows exist.</li>
           <li>Sets the platform up for later review-response, posting, and local campaign automation without skipping governance.</li>
         </ul>
@@ -182,7 +182,7 @@ function GoogleBusinessProfilePreviewSection({
         </p>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <PreviewCard title="Account" fallback="No account details returned.">
           <PreviewRow label="Account" value={previewData.account.accountName ?? null} />
           <PreviewRow label="Type" value={previewData.account.type ?? null} />
@@ -199,6 +199,9 @@ function GoogleBusinessProfilePreviewSection({
         </PreviewCard>
         <PreviewCard title="Recent reviews" fallback="No reviews returned yet.">
           <PreviewReviewList items={previewData.reviews} />
+        </PreviewCard>
+        <PreviewCard title="Recent local posts" fallback="No local posts returned yet.">
+          <PreviewLocalPostList items={previewData.localPosts} />
         </PreviewCard>
       </div>
     </section>
@@ -270,6 +273,64 @@ function PreviewReviewList({
             )}
           </div>
           {item.comment && <div className="mt-1 text-xs text-[var(--dpf-muted)]">{item.comment}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PreviewLocalPostList({
+  items,
+}: {
+  items: Array<{
+    name?: string;
+    summary?: string;
+    topicType?: string;
+    state?: string;
+    searchUrl?: string;
+    callToAction?: {
+      actionType?: string;
+      url?: string;
+    };
+  }>;
+}) {
+  const visibleItems = items.filter(
+    (item) =>
+      (typeof item.name === "string" && item.name.length > 0) ||
+      (typeof item.summary === "string" && item.summary.length > 0),
+  );
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {visibleItems.map((item) => (
+        <div
+          key={item.name ?? item.summary}
+          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {item.topicType && (
+              <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]">
+                {item.topicType}
+              </span>
+            )}
+            {item.state && (
+              <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]">
+                {item.state}
+              </span>
+            )}
+          </div>
+          {item.summary && <p className="mt-2 text-xs text-[var(--dpf-text)]">{item.summary}</p>}
+          {(item.callToAction?.actionType || item.searchUrl) && (
+            <div className="mt-2 space-y-1 text-xs text-[var(--dpf-muted)]">
+              {item.callToAction?.actionType && (
+                <div>CTA: <span className="text-[var(--dpf-text)]">{item.callToAction.actionType}</span></div>
+              )}
+              {item.searchUrl && (
+                <div>Search URL: <span className="text-[var(--dpf-text)]">{item.searchUrl}</span></div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

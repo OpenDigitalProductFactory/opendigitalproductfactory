@@ -62,6 +62,19 @@ vi.mock("@/components/integrations/GoogleBusinessProfileConnectPanel", () => ({
 }));
 
 describe("GoogleBusinessProfileIntegrationPage", () => {
+  it("describes local posts as part of the unconfigured local presence capability", async () => {
+    mockAuth.mockResolvedValue({
+      user: { platformRole: "superadmin", isSuperuser: true },
+    });
+    mockCan.mockReturnValue(true);
+    mockFindUnique.mockResolvedValue(null);
+
+    const { default: GoogleBusinessProfileIntegrationPage } = await import("./page");
+    const html = renderToStaticMarkup(await GoogleBusinessProfileIntegrationPage());
+
+    expect(html).toContain("recent reviews and local posts");
+  });
+
   it("renders the local profile preview from live Google Business Profile data", async () => {
     mockAuth.mockResolvedValue({
       user: { platformRole: "superadmin", isSuperuser: true },
@@ -100,6 +113,19 @@ describe("GoogleBusinessProfileIntegrationPage", () => {
             starRating: "FIVE",
           },
         ],
+        localPosts: [
+          {
+            name: "accounts/123/locations/456/localPosts/post-1",
+            summary: "Free network review for Austin businesses this Friday.",
+            topicType: "STANDARD",
+            state: "LIVE",
+            searchUrl: "https://posts.gle/acme",
+            callToAction: {
+              actionType: "LEARN_MORE",
+              url: "https://acme.example.com/austin-review",
+            },
+          },
+        ],
         loadedAt: "2026-04-24T11:30:00.000Z",
       },
     });
@@ -112,5 +138,8 @@ describe("GoogleBusinessProfileIntegrationPage", () => {
     expect(html).toContain("Live local profile preview");
     expect(html).toContain("Acme MSP - Austin");
     expect(html).toContain("Fast response and great local support.");
+    expect(html).toContain("Recent local posts");
+    expect(html).toContain("Free network review for Austin businesses this Friday.");
+    expect(html).toContain("LEARN_MORE");
   });
 });

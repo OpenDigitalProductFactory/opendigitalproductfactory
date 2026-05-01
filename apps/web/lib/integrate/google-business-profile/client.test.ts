@@ -80,7 +80,7 @@ describe("probeGoogleBusinessProfile", () => {
     await mockAgent.close();
   });
 
-  it("returns account, location, and recent review data", async () => {
+  it("returns account, location, recent review data, and recent local posts", async () => {
     mockAgent
       .get("https://mybusinessaccountmanagement.googleapis.com")
       .intercept({
@@ -134,6 +134,30 @@ describe("probeGoogleBusinessProfile", () => {
         ],
       });
 
+    mockAgent
+      .get("https://mybusiness.googleapis.com")
+      .intercept({
+        path: "/v4/accounts/123/locations/456/localPosts?pageSize=5",
+        method: "GET",
+      })
+      .reply(200, {
+        localPosts: [
+          {
+            name: "accounts/123/locations/456/localPosts/post-1",
+            summary: "Free network review for Austin businesses this Friday.",
+            topicType: "STANDARD",
+            state: "LIVE",
+            searchUrl: "https://posts.gle/acme",
+            createTime: "2026-04-28T15:00:00Z",
+            updateTime: "2026-04-29T12:00:00Z",
+            callToAction: {
+              actionType: "LEARN_MORE",
+              url: "https://acme.example.com/austin-review",
+            },
+          },
+        ],
+      });
+
     const result = await probeGoogleBusinessProfile({
       accessToken: "google-token",
       accountId: "123",
@@ -144,6 +168,11 @@ describe("probeGoogleBusinessProfile", () => {
     expect(result.account.accountName).toBe("Acme Managed Services");
     expect(result.location.title).toBe("Acme MSP - Austin");
     expect(result.reviews[0]?.reviewId).toBe("review-1");
+    expect(result.localPosts[0]?.name).toBe("accounts/123/locations/456/localPosts/post-1");
+    expect(result.localPosts[0]?.summary).toBe(
+      "Free network review for Austin businesses this Friday.",
+    );
+    expect(result.localPosts[0]?.callToAction?.actionType).toBe("LEARN_MORE");
   });
 
   it("throws a redacted error when Google rejects the credentials", async () => {
