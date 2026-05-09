@@ -48,7 +48,7 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 - **Always push** after committing. Local-only commits are invisible to CI.
 - **Squash-and-delete on merge:** `gh pr merge <n> --squash --delete-branch`.
 - **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps.
-- **Keep `d:\DPF` (root) as the merge/release worktree** — read-only for active feature work.
+- **Keep the root clone as the merge/release worktree** — read-only for active feature work. Conventional locations: `d:\DPF` on Windows, `~/dpf` on macOS/Linux. Topic worktrees go alongside (`d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`).
 - **Branch guard before commit:** if `git branch --show-current` returns `main`, abort.
 
 ## 5. Verification — Build Gate (mandatory)
