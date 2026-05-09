@@ -16,31 +16,38 @@ updates:
     ignore:
       # Expo SDK is a lockstep upgrade: `expo` core and every `expo-*`
       # companion package must move together to the same SDK line.
-      # Major-version PRs cross SDK boundaries and break the mobile
-      # build. Minor/patch updates within the current SDK are fine.
+      # Cross-SDK PRs break the mobile build. Expo's companion packages
+      # live at 0.x where a "minor" bump (e.g. expo-notifications
+      # 0.31 → 0.32) ships with a new SDK and a new RN/React baseline,
+      # so block both major and minor — only patches within the
+      # pinned SDK are safe.
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "expo-*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@expo/*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # React Native and its ecosystem packages are version-coupled to
-      # the Expo SDK line (see note above). Block major bumps for the
-      # same reason.
+      # the Expo SDK line (see note above). RN itself is at 0.x where
+      # every minor bump (0.79 → 0.85, etc.) is a breaking release
+      # that requires a matching Expo SDK upgrade. Allow patches only.
       - dependency-name: "react-native"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-native-*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@react-native/*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # React majors land across web + mobile. The mobile workspace
-      # can only take React 19+ after RN 0.78+ / a matching Expo SDK
-      # upgrade, so React needs to move alongside that plan, not
-      # independently.
+      # can only take a new React minor after a matching Expo SDK
+      # upgrade pulls it in, so React must move alongside that plan,
+      # not independently. `react-test-renderer` is pinned to the
+      # exact React version and follows the same rule.
       - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-test-renderer"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # TypeScript majors usually surface type errors across strict
       # mode code. Upgrade deliberately, not through Dependabot.
       - dependency-name: "typescript"
