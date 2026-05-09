@@ -268,16 +268,19 @@ model EdgeNode {
 
 model EdgeNodeCapability {
   id          String   @id @default(cuid())
-  nodeId      String
+  edgeNodeId  String   // FK to EdgeNode.id (the cuid surrogate);
+                       // distinct from EdgeNode.nodeId (the stable
+                       // external identifier used in API URLs and
+                       // tokens). Don't conflate the two.
   capability  String
   mode        String   // enabled | reporting-only | disabled
   status      String   // healthy | degraded | failing
   evidence    Json?
   reportedAt  DateTime @default(now())
 
-  node        EdgeNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  node        EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
 
-  @@unique([nodeId, capability])
+  @@unique([edgeNodeId, capability])
 }
 ```
 
@@ -316,11 +319,40 @@ Authorization: Bearer dpfedge_<token>
 
 Or expose it as an MCP tool (`submit_discovery_observations`) that
 goes through the same `/api/mcp/v1` machinery so all governance,
-audit, and rate-limiting applies uniformly. The server side normalizes
-through the existing pipeline:
-`executeBootstrapDiscovery` → `persistBootstrapDiscoveryRun` →
-Postgres + Neo4j projection. Existing downstream consumers
-unchanged.
+audit, and rate-limiting applies uniformly.
+
+**Server-side ingestion pipeline (corrected):** Edge Node
+submissions must **not** rerun local collectors. Today's
+`executeBootstrapDiscovery` is portal-context code that invokes
+host/docker/network/etc. collectors *inside the portal container* —
+exactly the path the Edge Node exists to escape. For submitted
+observations, the server skips collector execution and goes
+straight to normalization + persistence:
+
+```
+Edge Node submission
+  → validate envelope (auth, schema, freshness, edgeNodeId trust)
+  → normalizeDiscoveredFacts(submittedItems, submittedRelationships)
+  → inferCrossCollectorRelationships
+  → persistSubmittedDiscoveryRun({
+       edgeNodeId,
+       agentMode,
+       agentVersion,
+       submittedOutput,
+       trigger: "edge_node",
+     })
+  → Postgres (DiscoveryRun + DiscoveredItem + DiscoveredRelationship
+              → InventoryEntity + InventoryRelationship)
+  → Neo4j projection (InfraCI + relationship types)
+```
+
+`persistSubmittedDiscoveryRun` is a sibling of
+`persistBootstrapDiscoveryRun` that takes a *prepared* observation
+set instead of running collectors. The downstream
+deduplication / promotion / Neo4j-projection logic is shared between
+them; only the source of the observation set differs. This is the
+function this epic introduces alongside the
+`/api/v1/edge/discovery-runs` route.
 
 ## Authentication-provider implications
 
