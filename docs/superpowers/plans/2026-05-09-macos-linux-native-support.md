@@ -550,6 +550,23 @@ any host being onboarded as a managed node. The DPF host itself becomes
 one such node, treated the same way as any other. This is the umbrella
 under which the discovery plane refactor naturally lands.
 
+### Customer-cloud deployment
+
+> **Canonical location for this epic:**
+> `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`
+> (DRAFT). Depends on Edge Node spec landing first.
+
+The Edge Node split makes deploying DPF on a customer's own AWS / GCP
+/ Azure account a deployment-template exercise rather than a product
+fork: Authority Core no longer needs LAN proximity to the managed
+estate, so it can run on managed container services / managed
+databases anywhere, while Edge Nodes phone in over standard outbound
+HTTPS. **DPF stays single-tenant** — each customer runs their own
+instance on their own resources; no SaaS multi-tenancy is introduced.
+The Linux installer from this roadmap (Phase 6's `--headless` flag in
+particular) becomes the bootstrap step inside Terraform / Helm
+templates rather than being replaced.
+
 ## End-to-end verification (after Phase 9)
 
 1. **Fresh Apple Silicon Mac**: clean macOS 14 VM → install Xcode CLT →
