@@ -1139,3 +1139,80 @@ The March unified identity spec remains the foundation. This document narrows it
 - external product federation
 - ADP-backed manager separation
 - coworker route/tool access
+
+---
+
+## Addendum (2026-05-09): Identity edge deployment modes
+
+Added in the doctrinal deployment refactor at
+`docs/superpowers/specs/2026-05-09-deployment-contracts.md`. The
+authority/edge split this spec already chose now needs a deployment-
+mode vocabulary so different DPF deployment targets can wire identity
+consistently.
+
+### Modes
+
+- **`dpf-managed`** — DPF deploys and owns its own authentik
+  instance. Default for the cloud-deployment shapes (Single VM,
+  Managed container service, Managed Kubernetes) and the Mac /
+  Linux installer-parity targets. The customer's upstream IdP
+  (Entra ID / Okta / Google Workspace / etc.) connects into this
+  authentik via OIDC or SAML.
+- **`customer-provided`** — the customer already runs an identity
+  edge (their own authentik, Keycloak, Auth0, Azure AD B2C, or
+  similar OIDC-compliant IdP). DPF treats it as the upstream and
+  consumes OIDC tokens from it; DPF does not deploy a parallel
+  authentik. Recommended when the customer has invested in their
+  own IdP and the operational overhead of a second one isn't
+  justified.
+- **`tappaas-upstream`** — only valid in the TAPPaaS packaging
+  target (per `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`).
+  TAPPaaS's own Authentik is used as upstream OIDC into DPF's
+  identity edge, or directly as the identity edge **only if
+  isolation and automation maturity are explicitly validated**. Per
+  the cloud-deployment spec's verified TAPPaaS facts: TAPPaaS
+  identity automation is currently documented as "TODO: Not
+  tested," so this mode is gated until that maturity bar is met.
+
+### Authority preservation (binding)
+
+Regardless of `identityEdgeMode`:
+
+> TAPPaaS Authentik (or any other identity edge) may authenticate
+> users into DPF. It does **not** own DPF authorization semantics.
+> DPF Authority Core remains authoritative for roles, route
+> capabilities, coworker grants, Edge Node trust, and downstream
+> app assignments.
+
+This preserves the principle this spec already establishes: "DPF
+owns identity meaning and authority. The identity edge owns protocol
+presentation." `identityEdgeMode` selects *which* edge presents
+protocols; it does not move authorization out of the Authority
+Core.
+
+### Deployment configuration
+
+`identityEdgeMode` is a runtime configuration value (contract 2 of
+the deployment doctrine: runtime configuration). Each deployment
+wrapper sets it appropriately:
+
+- Linux installer / Single VM substrate / Marketplace image:
+  defaults to `dpf-managed`. Customer can set `customer-provided`
+  via env var to skip the bundled authentik.
+- Managed container service / Managed Kubernetes: defaults to
+  `dpf-managed`; the Helm chart and Terraform modules expose it as
+  a values flag.
+- TAPPaaS module: defaults to `dpf-managed` for v1; supports
+  `tappaas-upstream` once TAPPaaS identity automation is
+  production-ready.
+
+### Open questions for this addendum
+
+- **Validation criteria for `tappaas-upstream` graduation:** what
+  tests / contracts must TAPPaaS identity automation pass before
+  `tappaas-upstream` is recommended over a parallel `dpf-managed`
+  authentik in TAPPaaS deployments?
+- **Mode migration:** how does a customer move from `dpf-managed`
+  to `customer-provided` (or vice versa) without re-issuing every
+  user? Probably an SCIM-based handoff per the main spec, but
+  needs concrete flow.
