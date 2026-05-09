@@ -1216,3 +1216,91 @@ wrapper sets it appropriately:
   to `customer-provided` (or vice versa) without re-issuing every
   user? Probably an SCIM-based handoff per the main spec, but
   needs concrete flow.
+
+---
+
+## Addendum (2026-05-09): Principal convergence
+
+Added in the deeper-review backlog pass. Today the platform has
+multiple distinct identity-bearing entities — `User`,
+`CustomerContact`, `Agent`, plus newer ones introduced in this
+branch's deployment-architecture work (`EdgeNode`, `MobileDevice`,
+`ServiceAccount`). Each has its own table, lifecycle, and auth
+surface. Without an explicit convergence direction, these will
+silently become parallel identity islands.
+
+This addendum states the binding direction.
+
+### The convergence rule
+
+`User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and
+`ServiceAccount` all eventually resolve to a single
+`Principal` / `PrincipalAlias` model. The convergence is gradual
+(existing tables remain; the `Principal` row + alias is added as a
+second-tier index), but the rule for new work is binding:
+
+> Any new identity-bearing entity introduced after 2026-05-09 must
+> be modeled as a `PrincipalAlias` linked to a `Principal`, not as
+> a parallel identity table.
+
+`Principal` is the universal identity row (id + status + creation
+metadata + canonical type). `PrincipalAlias` is the per-surface
+representation (kind = workforce-user / customer-contact /
+agent / edge-node / mobile-device / service-account / etc.; surface-
+specific identifiers; surface-specific auth handles).
+
+### What this means for each entity
+
+| Entity | Today's table | Principal alias kind | Notes |
+|---|---|---|---|
+| `User` (workforce) | `User` | `workforce-user` | existing surface; aliases retroactively created during convergence migration |
+| `CustomerContact` | `CustomerContact` | `customer-contact` | storefront/portal customer auth resolves to a Principal |
+| `Agent` (AI coworker) | `Agent` | `agent` | per AGENTS.md §8: agent identity for tool-grant enforcement |
+| `EdgeNode` | `EdgeNode` (per Edge Node spec) | `edge-node` | machine principal; `dpfedge_*` token tied to the alias |
+| `MobileDevice` | `MobileDevice` (per Mobile spec) | `mobile-device` | user-bound; many devices per `User` Principal alias of kind `workforce-user` |
+| `ServiceAccount` | not yet implemented | `service-account` | for non-human, non-Edge automation accounts; deferred to a follow-up spec |
+
+A user with a phone running the mobile app has **one** Principal of
+kind `workforce-user` (or `customer-contact`) and a `PrincipalAlias`
+of kind `mobile-device` linked to that same Principal — not two
+unrelated Principals. An Edge Node has **its own** Principal of
+kind `edge-node`; it does not share a Principal with the workforce
+user who installed it.
+
+### Authorization is on the Principal, not the alias
+
+Tool grants, route capabilities, manager-scope checks, and audit
+attribution all resolve to the `Principal`. The alias kind tells
+the platform *how* the principal authenticated for this request
+(browser session, mobile JWT, `dpfedge_*` token, etc.) but the
+authorization decision is on the principal's role/grant set.
+
+This preserves Doctrine Contract 4: "DPF Authority Core owns
+authorization semantics" — the alias is the protocol-presentation
+edge; the principal is the identity edge's anchor in DPF.
+
+### Storefront customer auth migration
+
+Today's storefront auth resolution
+(`apps/web/lib/storefront/...` — see Storefront spec) distinguishes
+`User` vs `CustomerContact` directly. Under the convergence model,
+storefront auth resolves the request to a `Principal` and reads
+the alias kind to know whether the request is from a workforce
+user or a customer contact. The application-level distinction
+(workforce-only routes vs customer routes) stays the same; the
+backing identity model is unified.
+
+### Open questions for this addendum
+
+- **Migration sequencing:** which entity converges first? `User`
+  first (largest install base); `CustomerContact` second; `Agent`
+  third; new entities (`EdgeNode`, `MobileDevice`,
+  `ServiceAccount`) born already converged.
+- **Cross-alias merge / split:** if a workforce user is later also
+  registered as a customer contact (shared email, etc.), does that
+  collapse to one Principal with two aliases, or stay as two
+  Principals? Needs a concrete rule.
+- **Audit attribution under convergence:** existing audit rows
+  reference `User.id` or `Agent.id`; under convergence they
+  reference `Principal.id`. Migration script preserves both for a
+  period; eventually the older columns retire.
