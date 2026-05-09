@@ -100,6 +100,30 @@ Phase-1 exploration confirmed the following are already cross-platform:
 
 ## Cross-cutting decisions
 
+> **Doctrine reference:** this roadmap wraps the eight canonical
+> deployment contracts at
+> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`.
+> Decisions below are this roadmap's *deltas* — substrate- and
+> wrapper-specific implementations. Anything that's the same across
+> deployments belongs in the doctrine, not here.
+
+### Deployment wrapper compatibility
+
+The Linux installer is the canonical VM-shaped install surface. It
+must remain usable by:
+
+- bare-metal Linux installs,
+- customer cloud VMs (Shape 1 of the cloud-deployment spec),
+- TAPPaaS VM modules (packaging target wrapping Shape 1),
+- future marketplace VM images.
+
+Therefore `install-dpf.sh --headless` (Phase 6 below) must not
+assume an interactive desktop environment, local-only DNS, or a
+human prompt flow. Deployment wrappers may provision infrastructure,
+secrets, ingress, and backups around the installer — they must not
+fork the installer or runtime contract. This keeps TAPPaaS and cloud
+VM from becoming separate installers.
+
 - **Three distinct script contracts.** `scripts/setup.sh` = contributor
   bootstrap. `install-dpf.sh` = end-user release installer. `dpf-{start,
   stop,reinstall,release,uninstall}.sh` = lifecycle. They share helpers in
