@@ -284,26 +284,195 @@ array, capability gate, optional agent narrowing) is the right
 template; the data model differs only in ownership (machine, not user)
 and rotation cadence.
 
+## Enrollment, rotation, and lifecycle (first-draft contract)
+
+Promoted from open question because for an agent that runs outside
+Docker and can see the LAN, **enrollment is not a detail — it is the
+dragon's name tag**. Pattern borrowed from Fleet / osquery (enroll
+secret → durable node key) and Tailscale (one-off / reusable /
+ephemeral / pre-approved / tagged auth keys).
+
+### Enrollment ceremony
+
+```
+┌─────────────────────┐       ┌──────────────────────┐
+│  Authority Core     │       │  Edge Node binary    │
+│                     │       │                      │
+│  Admin > Platform   │       │                      │
+│  Development        │       │                      │
+│  generates a        │       │                      │
+│  bootstrap token    │       │                      │
+│  (short-lived,      │       │                      │
+│  one-time,          │       │                      │
+│  scope:edge:enroll) │       │                      │
+│                     │       │                      │
+│  Operator pastes    │──────▶│  --bootstrap-token=…│
+│  / scans QR         │       │  --core-url=…       │
+│                     │       │                      │
+│                     │       │  POST /api/v1/edge/  │
+│                     │◀──────│       enroll         │
+│  Validates token,   │       │  with platform,      │
+│  consumes it        │       │  arch, host          │
+│  (single-use),      │       │  fingerprint,        │
+│  records            │       │  attestation         │
+│  enrollmentTokenId  │       │                      │
+│  on EdgeNode row,   │       │                      │
+│  issues machine-    │       │                      │
+│  bound dpfedge_*    │       │                      │
+│  node token,        │       │                      │
+│  marks node as      │       │                      │
+│  trustState=pending │       │                      │
+│  (or =trusted if    │       │                      │
+│  auto-approve       │       │                      │
+│  policy)            │──────▶│  Stores node token   │
+│                     │       │  in OS secure store  │
+└─────────────────────┘       └──────────────────────┘
+```
+
+### Token namespaces and lifecycle
+
+| Token | Scope | Lifetime | Issuer | Storage |
+|---|---|---|---|---|
+| **Bootstrap token** | `edge:enroll` only | one-time, ≤ 15 min default TTL | Authority Core (Admin > Platform Development action; or installer auto-issued for local-host enrollment) | not persisted on Edge Node — consumed and discarded |
+| **Node token** (`dpfedge_*`) | `edge:heartbeat`, `discovery:submit`, plus capability-specific scopes from §"Token model" above | rotating; default 24h with refresh | Authority Core after successful enroll | OS-native secure store (Keychain / Credential Manager / libsecret); never written to plaintext config |
+| **Refresh** | `edge:rotate` | bound to machine fingerprint + recent heartbeat | Authority Core | Edge Node calls heartbeat with current node token; Authority Core mints replacement token in response |
+
+Bootstrap tokens are **never reusable**. Operators wanting bulk
+enrollment must request N bootstrap tokens (Tailscale's one-off-key
+pattern); a long-lived shared bootstrap token would replicate the
+"shared API key in CI" anti-pattern.
+
+### Approval policy
+
+The default policy is **operator approval required for remote nodes,
+auto-approval for local-host nodes**:
+
+- **Auto-approve** when the bootstrap token is issued by the local
+  installer for the DPF host's own Edge Node — same machine, no
+  remote attack surface; node moves directly to
+  `trustState: trusted`.
+- **Operator approval** for any node where the bootstrap token is
+  paste-provisioned or QR-provisioned: node lands in
+  `trustState: pending` after enroll; an operator must approve in
+  Admin > Platform Development before the node may submit
+  observations (`trustState: trusted`).
+- **Per-deployment override:** customers in low-friction
+  environments may flip the default to auto-approve for any node;
+  customers in high-friction (regulated, fleet-onboarding)
+  environments may require operator approval for the local-host
+  node too. Configurable but defaulted as above.
+
+### Quarantine
+
+A node moves to `trustState: quarantined` when:
+
+- the platform's anomaly detection flags the node's submissions
+  (e.g. observation deltas exceed configured deviance thresholds),
+- the operator manually quarantines via Admin > Platform
+  Development,
+- the node fails a periodic re-attestation check
+  (binary-signature mismatch, host-fingerprint drift),
+- the node misses heartbeats beyond the soft-fail window plus a
+  configured grace period.
+
+**Quarantined behavior:** the node may still heartbeat (so operators
+can see it's alive) but **must not** submit observations that flow
+into trusted inventory. Submissions from quarantined nodes are
+dropped (or archived to a separate `QuarantinedSubmission` table if
+the operator opts in for forensic review). Quarantine never
+auto-clears; an operator action is required to restore trust or
+revoke.
+
+### Revocation
+
+A node moves to `trustState: revoked` when:
+
+- the operator explicitly revokes (Admin > Platform Development
+  action),
+- the host the node ran on is decommissioned,
+- a security incident invalidates the node's tokens.
+
+**Revoked behavior:** the node's tokens are invalidated server-side;
+the node row is preserved for audit (never deleted) with
+`revokedAt` and `revocationReason`. The node cannot heartbeat,
+cannot submit, cannot re-enroll without explicit operator
+re-enrollment action that issues a fresh bootstrap token.
+
+### Re-enrollment
+
+Re-enrollment is always **operator-explicit**. There is no
+"auto-recover from revoked." The operator runs an Admin >
+Platform Development action that:
+
+1. (optional) creates a new `EdgeNode` row vs reusing the existing
+   row's `nodeId` — usually a new row to preserve audit history.
+2. issues a fresh bootstrap token.
+3. operator delivers the bootstrap token to the host (paste / QR
+   / installer rerun).
+4. the binary on the host enrolls anew per the ceremony above.
+
+Stale state on the host (old node token in secure store) is
+explicitly cleared by the binary before re-enrollment so the node
+never holds two valid token versions simultaneously.
+
+### Soft-fail policy windows (when Authority Core unreachable)
+
+When the Edge Node cannot reach the Authority Core, default
+behavior is **deny new principals/scopes; honor positive cached
+decisions for known-good scopes only**. Per-scope soft-fail windows
+are operator-configurable:
+
+| Scope | Default soft-fail window | Notes |
+|---|---|---|
+| `edge:heartbeat` | unbounded (offline tolerance) | so node can resume cleanly after Authority Core returns |
+| `discovery:submit` | 24h | submissions queue locally; flushed on reconnect; older submissions stamp the original `observedAt` |
+| `mcp:gateway`, `a2a:gateway` | 0 (deny) | high-stakes; never operate without live policy |
+| `policy:fetch` | 1h | policy decisions cached; refresh on reconnect |
+
 ## Edge Node registry (proposed Prisma models)
 
 ```prisma
 model EdgeNode {
-  id           String    @id @default(cuid())
-  nodeId       String    @unique
-  displayName  String
-  platform     String    // darwin | win32 | linux
-  installMode  String    // native | container-host | container-vm
-  version      String
-  status       String    // pending | active | offline | quarantined
-  trustState   String    // pending | trusted | quarantined | revoked
-  lastSeenAt   DateTime?
-  capabilities Json
-  metadata     Json?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  nodeId                String    @unique
+  displayName           String
+  platform              String    // darwin | win32 | linux
+  installMode           String    // native | container-host | container-vm
+  version               String
+  status                String    // pending | active | offline | quarantined
+  trustState            String    // pending | trusted | quarantined | revoked
+  lastSeenAt            DateTime?
+  capabilities          Json
+  metadata              Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Enrollment lifecycle (first-draft contract above).
+  enrollmentTokenId     String?           // FK to BootstrapToken.id; cleared after consumption
+  enrolledAt            DateTime?         // set when enroll succeeded
+  approvedAt            DateTime?         // null until operator (or auto-approve policy) trusts the node
+  approvedByPrincipalId String?           // FK to Principal who approved; null for auto-approve
+  tokenRotatedAt        DateTime?         // last successful node-token rotation
+  quarantinedAt         DateTime?
+  quarantineReason      String?
+  revokedAt             DateTime?
+  revocationReason      String?
 
   capabilityRows EdgeNodeCapability[]
   observations   DiscoveryRun[]      @relation("EdgeNodeObservations")
+}
+
+model BootstrapToken {
+  id            String   @id @default(cuid())
+  tokenHash     String   @unique          // hashed at rest (mirrors McpApiToken pattern)
+  prefix        String                    // for visual identification only
+  issuedAt      DateTime @default(now())
+  issuedByPrincipalId String              // FK to Principal who issued
+  expiresAt     DateTime
+  consumedAt    DateTime?                 // single-use; one EdgeNode consumes exactly one token
+  consumedByEdgeNodeId String?            // FK to EdgeNode that enrolled
+  revokedAt     DateTime?                 // operator can pre-revoke before consumption
+  scope         String   @default("edge:enroll")
 }
 
 model EdgeNodeCapability {
