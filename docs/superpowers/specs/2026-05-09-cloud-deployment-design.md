@@ -3,6 +3,13 @@
 > Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
 > this needs full "Research & Benchmarking" before finalization.
 >
+> **Doctrine reference:** this spec wraps the eight canonical
+> deployment contracts at
+> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`. Anything
+> below that's the same across deployments belongs in the doctrine,
+> not here. This spec captures only the cloud-substrate and
+> packaging-target *deltas*.
+>
 > Source plan: `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
 > (the macOS / Linux installer-parity roadmap that establishes the
 > bash-installable Linux deployment surface this spec extends).
@@ -72,12 +79,16 @@ Agent. This is the architectural unlock.
 
 ## Deployment substrates
 
-Three customer-cloud substrates are in scope. All three host the same
-DPF codebase and Authority Core; they differ in the *infrastructure*
-DPF runs on. Substrates are orthogonal to **packaging targets** (next
-section), which are *distribution channels* that wrap a substrate.
+A **substrate** is the infrastructure shape DPF runs on. Three
+customer-cloud substrates are in scope; together with the local
+substrates from the installer-parity roadmap (Windows / macOS /
+Linux on a developer or customer-prem machine), they cover every
+DPF deployment.
 
-### Shape 1 — Single cloud VM (lift-and-shift)
+Substrates are orthogonal to **packaging targets** (next section),
+which are *distribution channels* that wrap a substrate.
+
+### Single cloud VM (lift-and-shift)
 
 The Linux installer from the Mac/Linux installer-parity roadmap runs
 on an EC2 / Compute Engine / Azure VM. Compose stack runs locally on
@@ -92,7 +103,7 @@ backup is the customer's responsibility (snapshot the volumes).
 templates (Terraform / CloudFormation / ARM / Deployment Manager)
 wrap the installer rather than replacing it.
 
-### Shape 2 — Container service with managed databases
+### Managed container service
 
 Authority Core runs on ECS Fargate / Cloud Run / Azure Container
 Apps. Postgres → RDS / Cloud SQL / Azure Database. Neo4j → AuraDB /
@@ -108,28 +119,28 @@ Phase 1 of the installer-parity roadmap. Cloud deployment is a
 matter of pointing managed services at compose-equivalent
 environment variables.
 
-### Shape 3 — Managed Kubernetes (EKS / GKE / AKS)
+### Managed Kubernetes (EKS / GKE / AKS)
 
-Authority Core as a Helm chart. Same managed databases as Shape 2.
-Build Studio sandboxes as ephemeral pods.
+Authority Core deployed via the Helm chart packaging target (below).
+Same managed databases as the container-service substrate. Build
+Studio sandboxes as ephemeral pods.
 
 **Trade-offs:** most operational complexity, but the standard target
 for customers who already run k8s. Most flexibility for HA, scaling,
 and integration with existing customer GitOps / observability.
 
-**Reuses:** same images, but adds a Helm chart as a separate
-artifact. Helm chart can be considered the "cloud-native installer"
-counterpart to `install-dpf.sh`.
+**Reuses:** same GHCR images plus the Helm chart packaging target.
 
-## Private-platform packaging targets
+## Packaging and distribution targets
 
-Distinct from substrates: a packaging target is a **distribution
-channel** that wraps one of the substrates above for a specific
-customer environment. The DPF artifacts (images, installer, Edge Node
-binary, Helm chart, Terraform modules) remain canonical; packaging
-targets reuse them rather than forking the runtime.
+Distinct from substrates: a packaging target is an **artifact +
+distribution channel** that wraps one of the substrates above for a
+specific customer environment. Canonical DPF artifacts (GHCR images,
+Linux installer, Edge Node binary, Helm chart, Terraform modules)
+remain canonical; packaging targets reuse them rather than forking
+the runtime.
 
-### Shape 4 — TAPPaaS module (wraps Shape 1)
+### TAPPaaS module (wraps Single VM substrate)
 
 [TAPPaaS](https://tappaas.org/) — "Trusted Automated Private Platform
 as a (self-hosted) Service" — is **not** a fourth cloud substrate. It
@@ -158,10 +169,10 @@ cloud substrate.
 
 #### What a DPF TAPPaaS module is
 
-The first DPF TAPPaaS module is a **VM wrapper around Shape 1**. It
-provisions a dedicated VM via TAPPaaS's `cluster:vm`, then runs DPF's
-Linux installer (`install-dpf.sh --headless`) inside that VM.
-Suggested module dependencies:
+The first DPF TAPPaaS module is a **VM wrapper around the Single VM
+substrate**. It provisions a dedicated VM via TAPPaaS's `cluster:vm`,
+then runs DPF's Linux installer (`install-dpf.sh --headless`) inside
+that VM. Suggested module dependencies:
 
 ```json
 {
@@ -177,7 +188,8 @@ Suggested module dependencies:
 
 `templates:debian` is the lowest-risk choice; `templates:nixos` can
 come later if/when DPF supports a NixOS / Podman-native packaging,
-which is gated on a Build Studio provider abstraction (below).
+which is gated on the Build Studio provider abstraction
+(`docs/superpowers/specs/2026-05-09-build-execution-provider-design.md`).
 
 #### Canonical artifacts stay canonical
 
@@ -186,8 +198,8 @@ DPF artifacts remain:
 
 1. GHCR multi-arch images (installer-parity Phase 1)
 2. Linux installer (`install-dpf.sh`, installer-parity Phase 6/7)
-3. Helm chart (Shape 3)
-4. Terraform modules (Shapes 1/2)
+3. Helm chart (packaging target below)
+4. Terraform modules (packaging target below)
 5. Edge Node binary (Edge Node spec, Mode B)
 
 The TAPPaaS module wraps these. It does not replace them.
@@ -285,8 +297,8 @@ therefore targets one of two modes:
 
 | Mode | Cost | Status |
 |---|---|---|
-| **First release** — DPF runs inside a VM via Docker Compose, preserving Build Studio parity. | Low; reuses Shape 1 verbatim. | Recommended for v1 of the TAPPaaS module. |
-| **Native TAPPaaS mode** — DPF re-implemented as a NixOS / Podman module pattern with sandbox lifecycle reworked accordingly. | High; requires a Build Studio provider abstraction in `apps/web/lib/integrate/sandbox/sandbox.ts`. | Defer until that abstraction exists. |
+| **First release** — DPF runs inside a VM via Docker Compose, preserving Build Studio parity. | Low; reuses Single VM substrate verbatim. | Recommended for v1 of the TAPPaaS module. |
+| **Native TAPPaaS mode** — DPF re-implemented as a NixOS / Podman module pattern with sandbox lifecycle reworked accordingly. | High; requires the Build Studio provider abstraction. | Defer until that abstraction exists. |
 
 **TAPPaaS is a full-parity DPF target only when DPF runs in its own
 VM with Docker available.** Don't promise NixOS/Podman-native parity
@@ -326,36 +338,86 @@ canonical deployment contracts independent.
   or do they remain the Edge Node binary outside TAPPaaS's module
   system?
 
-### Shape 5 — Cloud marketplace image / package (wraps Shape 1)
+### Cloud marketplace image / package (wraps Single VM substrate)
 
 AWS Marketplace AMI, GCP Marketplace, Azure Marketplace listings.
-Same wrap as Shape 4: a marketplace listing bootstraps a Shape 1 VM
-with `install-dpf.sh --headless` baked in, plus marketplace-specific
-licensing / billing metadata.
+Same wrap as TAPPaaS: a marketplace listing bootstraps a Single VM
+substrate with `install-dpf.sh --headless` baked in, plus
+marketplace-specific licensing / billing metadata.
 
-This shape is a **distribution channel decision**, not an
+This packaging target is a **distribution channel decision**, not an
 architectural one — covered here so the spec accounts for the option,
 not because it changes anything technical. Decide per-marketplace
 based on customer demand.
+
+### Helm chart (wraps Managed Kubernetes substrate)
+
+A Helm chart published to a public OCI registry (or as a
+git-checkout-able artifact under `deploy/helm/`) is the canonical
+packaging target for the Managed Kubernetes substrate. Customer
+runs `helm install dpf <chart>` against their EKS / GKE / AKS / on-
+prem cluster.
+
+The chart wraps:
+
+- The same GHCR multi-arch images the installer uses.
+- Values for the runtime configuration schema (contract 2 of the
+  doctrine): public URL, auth, database URLs, LLM provider,
+  observability targets, Edge Node endpoint, Build Studio config.
+- Optional dependency charts for Postgres / Neo4j / Qdrant when the
+  customer doesn't bring their own managed services. (When they do,
+  set `postgresql.enabled=false` etc. and the chart consumes
+  external connection strings.)
+- The Build Studio provider configuration — see the build-execution-
+  provider spec; on Kubernetes the default provider is
+  `kubernetes-job` once that lands.
+
+The Helm chart can be considered the "cloud-native installer"
+counterpart to `install-dpf.sh`. It does not replace the installer;
+it wraps the same artifacts via a different orchestration mechanism.
+
+### Terraform modules (wraps any cloud substrate)
+
+Terraform modules under `deploy/terraform/{aws,gcp,azure}/` provision
+the substrate and bootstrap DPF inside it. Per substrate:
+
+- **Single VM:** Terraform module creates the VM, attaches storage,
+  configures security groups, runs `install-dpf.sh --headless` via
+  cloud-init or an SSH provisioner, returns the Authority Core URL
+  output.
+- **Managed container service:** module creates the container service
+  + managed databases + secret store + load balancer; deploys the
+  GHCR images directly.
+- **Managed Kubernetes:** module creates the cluster + node pools +
+  ingress + DNS, then `helm install`s the chart above.
+
+Terraform is the primary cross-substrate IaC because it's
+hyperscaler-portable and most customer infra teams already use it.
+CloudFormation / ARM / Deployment Manager are secondary, considered
+only on customer demand.
 
 ## Deployment priority
 
 Subject to the open questions, the recommended ordering is:
 
-1. **Shape 1 — Single VM.** First GA customer-cloud and
+1. **Single VM substrate.** First GA customer-cloud and
    private-platform target. Lowest risk, reuses the installer-parity
    roadmap directly.
-2. **Shape 4 — TAPPaaS module wrapping Shape 1.** High-value
+2. **TAPPaaS module wrapping Single VM.** High-value
    self-hosted distribution channel. Build after installer parity
    ships and GHCR images publish multi-arch (Phase 1 of the
    installer-parity roadmap).
-3. **Shape 3 — Helm / Kubernetes.** Strategic enterprise target.
-   Requires the Build Studio provider abstraction.
-4. **Shape 2 — Managed container services.** Preview-only until the
-   Build Studio provider abstraction lands. Without it, Shape 2
-   ships a degraded DPF (no Build Studio).
-5. **Shape 5 — Cloud marketplace listings.** Distribution-channel
+3. **Helm chart on Managed Kubernetes substrate.** Strategic
+   enterprise target. Requires the Build Studio provider abstraction
+   to ship Build Studio capability; without it, ships
+   Build-Studio-disabled.
+4. **Managed container service substrate.** Preview-only until the
+   Build Studio provider abstraction lands. Without it, ships a
+   degraded DPF (no Build Studio).
+5. **Cloud marketplace image / package.** Distribution-channel
    work; sequenced based on demand, not capability.
+6. **Terraform modules** ship in parallel with the substrates they
+   target (each module gates on its substrate's readiness).
 
 ## Authority Core in cloud — service mapping
 
@@ -374,16 +436,16 @@ Subject to the open questions, the recommended ordering is:
 | prometheus + grafana | Managed Prometheus + Managed Grafana, or self-host | Managed Prometheus + Managed Grafana | Managed Prometheus + Managed Grafana | Customer choice |
 
 The mapping is **not part of the spec contract** — it's a starting
-point. The actual deployment templates (next section) pick one
-target per cloud rather than offering all permutations.
+point. The actual deployment templates pick one target per cloud
+rather than offering all permutations.
 
 ## Build Studio in cloud — the hard part
 
 Today's sandbox is a privileged sibling container that the portal
 shells out to via the host Docker socket
 (`apps/web/lib/integrate/sandbox/sandbox.ts`,
-`apps/web/lib/mcp-tools.ts:1025-1162`). On a single-VM cloud install
-this works unchanged.
+`apps/web/lib/mcp-tools.ts:1025-1162`). On a Single VM substrate
+install this works unchanged.
 
 On managed container services and serverless platforms, Docker
 socket access is restricted or unavailable:
@@ -396,30 +458,29 @@ socket access is restricted or unavailable:
 - **EKS / GKE / AKS:** Docker-in-Docker requires privileged pods,
   which most customer security postures forbid.
 
-Architectural choices for this:
+The right answer is the **Build Studio provider abstraction** at
+`docs/superpowers/specs/2026-05-09-build-execution-provider-design.md`,
+which decouples sandbox lifecycle from any specific runtime.
 
-- **Option A — Sandbox as ephemeral cloud-native job.** Replace
-  `docker run sandbox` with `aws ecs run-task` / `gcloud run jobs
-  execute` / `az containerapp job start`. Sandbox container image
-  unchanged; lifecycle layer becomes cloud-aware.
-- **Option B — Dedicated sandbox node pool.** k8s shapes only. A
-  taint-isolated, privileged-permitted node pool for sandbox pods.
-  Customer's k8s admin opts in.
-- **Option C — Single-VM deployment only for Build Studio.** Don't
-  cloud-deploy Build Studio in container-service shapes; require
-  Shape 1 (single VM) for any install that uses Build Studio.
+Until that abstraction ships, the constraints translate to:
 
-Decision deferred to the cloud-deployment epic. **Build Studio
-cloud-compatibility is the bottleneck** for Shapes 2 and 3, not the
-Authority Core itself.
+- **Single VM substrate:** Build Studio works (provider:
+  `local-docker`).
+- **TAPPaaS module:** Build Studio works (provider: `local-docker`
+  inside the provisioned VM, or future `tappaas-vm` provider).
+- **Cloud marketplace image:** Build Studio works (same as Single VM).
+- **Managed container service:** Build Studio is preview-only; needs
+  `cloud-run-job` / `ecs-task` / `azure-containerapp-job` providers.
+- **Managed Kubernetes:** Build Studio is preview-only; needs
+  `kubernetes-job` provider, optionally backed by a privileged
+  node pool if a customer opts in.
 
-**Shape 4 (TAPPaaS) inherits Shape 1's Build Studio compatibility**
-because the TAPPaaS module provisions a dedicated VM and runs
-`install-dpf.sh` inside it — Docker is available, sibling containers
-work, no socket-access restrictions. This is one of the strongest
-arguments for Shape 4: Build Studio works on day one without waiting
-for the sandbox lifecycle to be cloud-native-rewritten. Shape 5
-(marketplace image) inherits the same way.
+**Build Studio cloud-compatibility is the bottleneck** for the
+container-service and Kubernetes substrates, not the Authority Core
+itself. The Single VM substrate, the TAPPaaS module, and the
+marketplace image all inherit Build Studio compatibility from
+`local-docker` and ship Build Studio on day one without waiting for
+the cloud-native sandbox rewrite.
 
 ## LLM provider routing across deployment options
 
@@ -479,18 +540,18 @@ The **port 1455 lock-in for Codex** is the single biggest deployment
 constraint. Codex's shared OAuth client requires that specific port
 for its redirect URI; customers cannot freely remap it.
 
-### Compatibility matrix (compatibility × default per shape)
+### Compatibility matrix (compatibility × default per deployment)
 
 | Deployment | Mode 1 — public API | Mode 1 — Docker Model Runner | Mode 1 — Ollama (in-cluster) | Mode 1 — external Ollama / LiteLLM | Mode 2 — provider OAuth | Mode 3 — Anthropic sub | Mode 4 — Codex CLI | Mode 4 — Claude Code CLI |
 |---|---|---|---|---|---|---|---|---|
 | Win + Docker Desktop (today) | ✓ | **default** | alt | ✓ | ✓ if public DNS | ✓ if public DNS | ✓ (port 1455 local) | ✓ |
 | Mac + Docker Desktop (Phase 7) | ✓ | **default** | alt | ✓ | ✓ if public DNS | ✓ if public DNS | ✓ | ✓ |
 | Linux native Docker (Phase 7) | ✓ | unavailable | **default** | ✓ | ✓ if public DNS | ✓ if public DNS | ✓ | ✓ |
-| Shape 1 — Single cloud VM | ✓ | unavailable | default | ✓ | ✓ — straightforward | ✓ | ✓ if 1455 exposed | ✓ |
-| Shape 2 — Container service | ✓ | unavailable | impractical (GPU + state) | **recommended** | requires sticky callback host | requires sticky callback host | impractical (port lock-in) | ✓ |
-| Shape 3 — Managed k8s | ✓ | unavailable | via Helm + GPU node pool | ✓ | ✓ via Ingress | ✓ via Ingress | requires explicit 1455 Ingress rule | ✓ |
-| Shape 4 — TAPPaaS module | ✓ | unavailable | possible but redundant | **default** (AI Stack Ollama) | ✓ via Caddy `proxyDomain` | ✓ via Caddy `proxyDomain` | needs Caddy rule for 1455 | ✓ |
-| Shape 5 — Marketplace image | ✓ | unavailable | default (self-hosted) | ✓ | ✓ if customer wires DNS | ✓ | ✓ if 1455 exposed | ✓ |
+| Single VM substrate | ✓ | unavailable | default | ✓ | ✓ — straightforward | ✓ | ✓ if 1455 exposed | ✓ |
+| Managed container service | ✓ | unavailable | impractical (GPU + state) | **recommended** | requires sticky callback host | requires sticky callback host | impractical (port lock-in) | ✓ |
+| Managed Kubernetes | ✓ | unavailable | via Helm + GPU node pool | ✓ | ✓ via Ingress | ✓ via Ingress | requires explicit 1455 Ingress rule | ✓ |
+| TAPPaaS module | ✓ | unavailable | possible but redundant | **default** (AI Stack Ollama) | ✓ via Caddy `proxyDomain` | ✓ via Caddy `proxyDomain` | needs Caddy rule for 1455 | ✓ |
+| Marketplace image | ✓ | unavailable | default (self-hosted) | ✓ | ✓ if customer wires DNS | ✓ | ✓ if 1455 exposed | ✓ |
 
 ### Compliance and data-residency
 
@@ -522,35 +583,35 @@ for its redirect URI; customers cannot freely remap it.
 LiteLLM is the recommended fan-out point for customers running mixed
 modes — it gives a single `LLM_BASE_URL` target that internally routes
 by class (PII to local, general to public, premium to subscription).
-Shape 4 (TAPPaaS) gets this for free if the customer already runs the
-AI Stack.
+The TAPPaaS packaging target gets this for free if the customer
+already runs the AI Stack.
 
 ### Deployment-specific guidance
 
-- **Shape 1 — Single cloud VM:** default to Ollama (in compose) for
+- **Single VM substrate:** default to Ollama (in compose) for
   inference; expose port 1455 if Build Studio with Codex is in scope;
   document that customers in regulated industries should pick local
   Ollama and disable the sandbox CLIs (mode 4) until a local-routed
   config is wired.
-- **Shape 2 — Container service:** strongly recommend external
+- **Managed container service:** strongly recommend external
   Ollama or LiteLLM as the LLM_BASE_URL target. Codex CLI (mode 4)
-  is impractical on this shape due to the port-1455 lock-in
+  is impractical on this substrate due to the port-1455 lock-in
   combined with the substrate's port-mapping restrictions; document
   Build Studio as Codex-disabled / Claude-Code-only here.
-- **Shape 3 — Managed k8s:** Ingress can route mode 2/3 callbacks
+- **Managed Kubernetes:** Ingress can route mode 2/3 callbacks
   cleanly; mode 4 Codex requires an explicit 1455-routed Ingress rule
   and is fragile if the customer's k8s cluster is multi-tenant. Helm
   chart should expose this as a values flag, default off.
-- **Shape 4 — TAPPaaS module:** default to mode 1 external pointing
+- **TAPPaaS module:** default to mode 1 external pointing
   at the customer's TAPPaaS AI Stack (Ollama or LiteLLM). OAuth
   callbacks (modes 2/3) work via Caddy's `proxyDomain`. Codex (mode 4
   with port 1455) requires a Caddy rule that publishes 1455
   externally — feasible but worth documenting as a Build-Studio
   prerequisite. Claude Code CLI (mode 4) works without the port
   constraint and is the lower-friction default for the TAPPaaS shape.
-- **Shape 5 — Marketplace image:** identical to Shape 1; whatever the
-  marketplace image bakes in becomes the customer's default unless
-  they override.
+- **Marketplace image:** identical to Single VM substrate; whatever
+  the marketplace image bakes in becomes the customer's default
+  unless they override.
 
 The runtime contract from installer-parity Phase 4 (`DPF_LLM_PROVIDER`,
 `LLM_BASE_URL`, `DPF_MODEL_PULL_MODE`, `EMBEDDING_MODEL`,
@@ -574,7 +635,7 @@ the Edge Node spec:
 
 The same Edge Node binary, with the same registration flow, supports
 Authority Cores hosted on a Windows server, a Linux box, a macOS
-workstation, or any of the three cloud shapes above. **No
+workstation, or any of the cloud substrates above. **No
 deployment-target awareness in the binary.**
 
 ## Identity in cloud
@@ -595,30 +656,6 @@ DPF uses authentik as the Identity Edge. In cloud:
 This matches the single-tenant premise: identity stays the
 customer's, end-to-end.
 
-## Deployment templates
-
-The cloud-deployment epic ships infrastructure-as-code rather than
-a wizard. Proposed primary artifacts:
-
-- **`deploy/terraform/aws/`** — modules for Shape 1 (single VM) and
-  Shape 2 (ECS Fargate + RDS + ElastiCache + AuraDB).
-- **`deploy/terraform/gcp/`** — same for Cloud Run + Cloud SQL.
-- **`deploy/terraform/azure/`** — same for Container Apps + Azure
-  Database.
-- **`deploy/helm/`** — Helm chart for Shape 3 (any managed k8s).
-- **`deploy/cloudformation/`**, **`deploy/arm/`**,
-  **`deploy/deployment-manager/`** — secondary, only if customer
-  demand justifies.
-
-Terraform is the primary because it's hyperscaler-portable and most
-customer infra teams already use it. Helm is the parallel for k8s
-shops.
-
-**Reuses the Linux installer:** Shape 1's Terraform module bootstraps
-a Linux VM, runs `install-dpf.sh --headless`, returns the Authority
-Core URL. The installer-parity roadmap's Phase 6 (`--headless` flag)
-is the dependency. No new installer codepath.
-
 ## Open questions
 
 These need answers before this stub becomes a finalized spec:
@@ -627,13 +664,14 @@ These need answers before this stub becomes a finalized spec:
 - **Managed Neo4j availability:** AuraDB is multi-cloud but is
   Neo4j-the-company's hosted service. Customers in regulated
   industries may require single-cloud-account deployment, which
-  forces self-managed Neo4j on a VM. Default? Per-shape choice?
+  forces self-managed Neo4j on a VM. Default? Per-substrate choice?
 - **Inngest hosting:** Inngest Cloud, self-hosted Inngest, or
   customer choice? The current compose includes a self-hosted
   inngest service.
-- **Build Studio cloud-compatibility:** Option A / B / C above. The
-  decision shapes whether Shapes 2 and 3 are first-class or
-  documented-as-degraded.
+- **Build Studio cloud-compatibility:** see the build-execution-
+  provider spec for the architectural decision; the question for
+  this spec is which substrate ships Build-Studio-enabled vs
+  preview at v1.
 
 ### Operational
 - **Backup / DR:** managed DB PITR is the easy answer. What about
@@ -686,10 +724,11 @@ the customer to bring.
 VM / shell-script-based — not Kubernetes**). Already ships Ollama /
 vLLM / LiteLLM / OpenWebUI in its AI Stack — direct alignment with
 DPF's LLM provider contract. Reclassified in this spec as a
-private-platform **packaging target** (Shape 4) rather than a fourth
-cloud substrate; it wraps Shape 1 (single VM) inside a TAPPaaS module
-contract. See Shape 4 above for the full analysis including
-identity / network / storage / Build Studio integration guidance.
+private-platform **packaging target** rather than a fourth cloud
+substrate; it wraps the Single VM substrate inside a TAPPaaS module
+contract. See the TAPPaaS module section above for the full
+analysis including identity / network / storage / Build Studio
+integration guidance.
 
 **Open source — fleet/observability with cloud control plane:**
 Datadog Agent (open-source agent, closed-source server — so only the
@@ -716,17 +755,24 @@ installer with `--headless`). Customer-cloud deployment depends on:
    Phase 6 / Phase 7).
 2. Multi-arch GHCR images (installer-parity Phase 1).
 3. Edge Node connectivity contract (Edge Node spec).
-4. Build Studio cloud-compatibility decision (this spec, open
-   question).
+4. Build Execution Provider abstraction
+   (`docs/superpowers/specs/2026-05-09-build-execution-provider-design.md`)
+   for substrates beyond Single VM / TAPPaaS / Marketplace.
 
-Order: installer-parity → Edge Node → cloud deployment templates.
+Order: installer-parity → Edge Node → Build Execution Provider →
+cloud deployment templates.
 
 ## Source documents
 
+- `docs/superpowers/specs/2026-05-09-deployment-contracts.md` — the
+  doctrine this spec wraps.
 - `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
   — Linux installer that this spec wraps in IaC.
 - `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`
   — Edge Node spec; required prerequisite.
+- `docs/superpowers/specs/2026-05-09-build-execution-provider-design.md`
+  — Build Studio provider abstraction; gates the cloud substrates
+  beyond Single VM.
 - `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`
   — authentik as the Identity Edge runtime, single-instance per
   customer.
