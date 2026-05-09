@@ -187,6 +187,37 @@ require deployment-specific Edge Node behavior should add capability
 flags or policy entries in the Authority Core, not branches in the
 Edge Node binary.
 
+## Edge Node vs Mobile Device — distinct concepts
+
+Before the identity boundary section, an important disambiguation:
+**Edge Node and Mobile Device are not the same thing.** They both
+register with the Authority Core, both can be Principals or
+Principal-linked, but their trust semantics, capability envelopes,
+and lifecycle are distinct:
+
+| | EdgeNode | MobileDevice |
+|---|---|---|
+| Role | managed host / network participant — discovers and reports about its environment | user client endpoint — receives notifications, runs the mobile app, holds offline cache |
+| Trust posture | machine principal under Authority Core policy; runs unattended; long-lived credentials with rotation | user-bound principal (one or more user sessions per device); attended; credentials tied to user auth |
+| Capability envelope | discovery, host metrics, identity broker, MCP/A2A gateway, policy enforcement, tunnel — i.e. *infrastructure* roles | notifications, offline queueing, deep-link routing, biometric local-auth, geofence-aware actions — i.e. *user-experience* roles |
+| Token namespace | `dpfedge_*` (machine, machine-bound, short-lived, rotated via heartbeat) | mobile JWT today; OIDC + PKCE refresh tokens per the Mobile spec evolution (see Doctrine Contract 10) |
+| Owns physical-host visibility? | yes (the entire reason the Edge Node exists) | no |
+| Stored in `EdgeNode` table? | yes | no — has its own `MobileDevice` table per the Mobile spec |
+| Per-Principal model? | one EdgeNode → one machine principal | many MobileDevices → one user principal (multi-device) |
+
+Both surfaces converge on the Principal model per the Enterprise
+Auth spec's principal-convergence addendum, but **they should not
+share registry tables, token namespaces, or capability semantics**.
+An Edge Node onboarded for a host's discovery sweep is not a phone
+running the mobile app, and the inverse. Wrappers and packaging
+targets must keep them separate to avoid trust-model conflation.
+
+Future cross-pollination is fine in narrow places — for instance, a
+mobile device might *receive* alerts from observations an Edge Node
+submitted — but those interactions go through the Authority Core's
+audit and policy envelope, not through any direct Edge-Node-to-
+Mobile-Device coupling.
+
 ## Identity boundary
 
 The Edge Node holds:
