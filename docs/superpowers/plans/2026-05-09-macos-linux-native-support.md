@@ -10,12 +10,21 @@
 >   LLM-provider contracts to first-class phases ahead of the installer;
 >   re-numbered to 10 phases; added install-state contract and Docker-context
 >   discovery; expanded risk register.
-> - 2026-05-09 — monitoring-scope amendment: installer is no longer
->   responsible for any host exporter on any OS. Managed-fleet observability
->   (`windows_exporter`, `node_exporter`, `telegraf`, etc. deployed to
->   monitored hosts including the DPF host itself) is a separate platform
->   feature. Phase 3 now removes `windows-host` scrape and `install-dpf.ps1`
->   lines 281-328 (windows_exporter MSI install).
+> - 2026-05-09 — monitoring-scope amendment (now partially reversed below):
+>   first attempt to scope all host exporters out of the installer.
+> - 2026-05-09 — sweep-dependency correction: the previous amendment was
+>   wrong. The network sweep at `packages/db/src/discovery-collectors/network.ts`
+>   queries `windows_net_nic_address_info` (Windows) and `node_network_info`
+>   (Linux) from Prometheus to enumerate real host NICs; without those
+>   metrics it falls back to container-local interfaces with degraded
+>   confidence (0.70 vs 0.95). `windows_exporter` therefore stays in
+>   `install-dpf.ps1`; the `windows-host` scrape stays in `prometheus.yml`.
+>   Added a "Network sweep data path" cross-cutting decision documenting the
+>   per-platform contract. Added a Phase 3 fix for the hardcoded Grafana URL
+>   at `apps/web/components/monitoring/SystemHealthDashboard.tsx:158`. Added
+>   Qdrant-silent-failure historical context. Future direction section now
+>   sketches a cleaner discovery-plane architecture to replace the
+>   exporter-on-host pattern over time.
 
 ## Context
 
@@ -42,6 +51,16 @@ platforms:
 **Out of scope:** Intel Mac, Windows on ARM, BSD/illumos, WSL2 without
 Docker Desktop, Podman/containerd, rootless Docker, air-gapped Linux,
 distros older than Ubuntu 22.04 / Fedora 39 / Debian 12.
+
+**Why the observability stack exists (durable context):** the AI Coworker's
+semantic memory subsystem (Qdrant-backed) was once completely non-functional
+for an unknown period. No alert fired. No dashboard showed the failure. The
+team discovered it by accident during unrelated testing. See
+`docs/superpowers/specs/2026-04-01-platform-operational-health-monitoring-design.md`.
+Anything in this roadmap that touches Prometheus, Grafana, or the discovery
+sweep must preserve the post-incident invariants: silent failures of
+critical infrastructure (databases, vector store, model runner, sandbox)
+must produce alerts and dashboard signal.
 
 ## Chief architect amendment
 
@@ -121,16 +140,28 @@ Phase-1 exploration confirmed the following are already cross-platform:
   on Linux (`~/.config/systemd/user/dpf.service` with `loginctl
   enable-linger`). Both unprivileged.
 - **Monitoring scope.** The installer's Prometheus + Grafana stack
-  monitors **only the DPF runtime** — its own containers, its own
-  databases, its own app metrics. Physical-network and managed-fleet
-  observability (the original purpose of `windows_exporter` on Windows)
-  is **not** an installer concern. Onboarding a host as a managed node —
-  whether the DPF host itself or any other machine — belongs to a
-  separate platform feature ("Add a managed host" UX in the portal) that
-  deploys the appropriate agent (`node_exporter`, `windows_exporter`,
-  `telegraf`, etc.) for the target's OS. That feature is out of scope
-  for installer-parity work and tracked separately. The installer's only
-  monitoring responsibility is "don't break what's already there."
+  monitors the DPF runtime (its own containers, databases, app metrics)
+  **plus the local host exporter the discovery sweep depends on** — see
+  the next decision. Onboarding *other* machines as managed nodes
+  remains a separate platform feature ("Add a managed host" UX) and is
+  out of scope for installer-parity work.
+- **Network sweep data path.** The discovery sweep at
+  `packages/db/src/discovery-collectors/network.ts` is load-bearing for
+  network topology and writes to both Postgres (`InventoryEntity`,
+  `InventoryRelationship`) and Neo4j (`InfraCI` nodes with OSI-layered
+  relationships). Its data sources per platform:
+
+  | Platform | Real-host NIC source | Confidence | Action |
+  |---|---|---|---|
+  | Windows | `windows_exporter` on host (port 9182) → Prometheus metric `windows_net_nic_address_info` | 0.95 | **Keep** `windows_exporter` install in `install-dpf.ps1`; **keep** `windows-host` scrape job. |
+  | Linux | `node-exporter` (in `linux-monitoring` profile, container with `network_mode: host` or equivalent) → metric `node_network_info` | 0.95 | Already in compose; ensure `linux-monitoring` profile is on by default in `docker-compose.linux.yml`. |
+  | macOS | None reachable from container — Docker Desktop's Linux VM hides Mac NICs | 0.70 (container-local fallback) | Document inherent limitation; sweep operates in degraded mode for the DPF host. See "Future direction" for the cleaner long-term architecture. |
+
+  The sweep gracefully degrades if its preferred source is unavailable
+  (3-second Prometheus timeout, then `os.networkInterfaces()`). It is
+  acceptable for the macOS dev install to operate in degraded mode for
+  *its own* host; managed *fleet* topology comes from the separate
+  managed-fleet feature regardless of where DPF itself is installed.
 
 ## Phases (each = one PR)
 
@@ -200,25 +231,29 @@ macOS Docker Desktop and on native Linux Docker Engine.
   478-481) behind `profiles: ["linux-monitoring"]` — their `/proc`, `/sys`,
   `/var/lib/docker`, `/` bind mounts cannot work on macOS.
 - `docker-compose.macos.yml` **(new)** — Docker Desktop + Model Runner
-  defaults. **No host node_exporter integration** — managed-host
-  observability is out of scope per the monitoring-scope decision.
+  defaults. No host node_exporter integration (Docker Desktop VM boundary
+  blocks it; sweep operates in degraded mode on macOS — see Future
+  direction for the cleaner long-term path).
 - `docker-compose.linux.yml` **(new)** — adds `ollama` service; opts in to
-  the `linux-monitoring` profile (cadvisor + node-exporter for **DPF's
-  own containers only**, not the physical host).
-- `monitoring/prometheus/prometheus.yml` — **delete** the `windows-host`
-  scrape job (currently lines 78-86 in the active config). The installer
-  no longer scrapes any host exporter on any OS. Re-add via the
-  managed-fleet feature when that lands.
-- `monitoring/prometheus/alerts.yml` (line 73) — update the comment block
-  to reflect the new scope ("physical-host network monitoring is provided
-  by the managed-fleet feature, not the installer"). The
-  `HostNetworkInterfaceDown` alert at line 74 already uses `node_network_up`
-  from the in-cluster node-exporter and continues to work for cluster-side
-  interfaces.
-- `install-dpf.ps1` lines 281-328 — **delete**. Removes the
-  `windows_exporter` MSI download/install/service-poll dance from the
-  Windows installer. This is the "moving piece prone to fail" that
-  motivated this amendment.
+  the `linux-monitoring` profile by default. The `node-exporter` in that
+  profile must run with `network_mode: host` (or equivalent) so the sweep
+  sees the Linux host's real NICs via `node_network_info`.
+- `monitoring/prometheus/prometheus.yml` — **keep** the `windows-host`
+  scrape job. Reverses the prior amendment; the sweep needs it on
+  Windows. (When the cleaner discovery-plane architecture in Future
+  direction lands, the sweep moves off this scrape and the job retires
+  cleanly.)
+- `monitoring/prometheus/alerts.yml` (line 73) — comment unchanged; the
+  `HostNetworkInterfaceDown` alert at line 74 uses `node_network_up`
+  from the in-cluster node-exporter and continues to work.
+- `install-dpf.ps1` lines 281-328 — **keep**. Reverses the prior
+  amendment. `windows_exporter` install stays until the
+  discovery-plane refactor in Future direction replaces it.
+- `apps/web/components/monitoring/SystemHealthDashboard.tsx` line 158 —
+  replace `href="http://localhost:3002"` with
+  `href={process.env.NEXT_PUBLIC_GRAFANA_URL || "http://localhost:3002"}`
+  so Mac/Linux Docker Desktop users with a non-default port or remote
+  Grafana aren't broken.
 - `scripts/installer/lib/compose.sh` **(new)** — single source of truth for
   the `-f` chain assembly. Used by installer, lifecycle scripts, and CI.
 **Verify:** `docker compose -f docker-compose.yml -f docker-compose.release.yml
@@ -378,6 +413,8 @@ installed runtime works on Apple Silicon and Linux.
 | **Sandbox `bubblewrap` on Apple Silicon** — `Dockerfile.sandbox:3` adds `bubblewrap` | Alpine ships arm64. Codex's `sandbox_mode="danger-full-access"` (Dockerfile.sandbox:21) already disables bubblewrap at runtime, but install must still succeed. |
 | **macOS Gatekeeper / quarantine on LaunchAgent plist** | Phase 7 verification on a fresh Gatekeeper-enabled machine; installer strips `com.apple.quarantine` xattr if present. |
 | **Monitoring scope creep** — well-meaning future PR re-adds host-exporter auto-install logic to `install-dpf.{ps1,sh}` because "we used to have it on Windows" | Phase 3 commit message + this plan's monitoring-scope decision are the durable record. The alerts.yml comment update points to the managed-fleet feature for anyone who notices the gap. |
+| **Sweep regression** — a future PR removes `windows_exporter` install or the `windows-host` scrape job without realizing the network sweep depends on its metrics for accurate Windows-host topology | The "Network sweep data path" cross-cutting decision documents the per-platform contract. Anyone proposing to remove the scrape must first refactor the sweep onto the discovery-plane architecture in Future direction. |
+| **Grafana URL hardcoded in portal frontend** — `apps/web/components/monitoring/SystemHealthDashboard.tsx:158` ships `http://localhost:3002` so non-default Docker Desktop port mappings or remote Grafana break the link-out | Phase 3 file edit makes it env-var-driven. |
 
 ## Critical files referenced
 
@@ -402,19 +439,101 @@ installed runtime works on Apple Silicon and Linux.
 ## Future direction (out of scope for this roadmap)
 
 These are noted so follow-up plans don't accidentally reverse the
-decisions in this one:
+decisions in this one, and so the cleaner architecture is captured
+while the context is fresh.
 
-- **Managed-fleet observability** — a portal feature ("Add a managed
-  host") that deploys the appropriate exporter (`windows_exporter`,
-  `node_exporter`, `telegraf`, etc.) to any host being onboarded as a
-  managed node. The DPF host itself becomes one such node, treated the
-  same way as any other. This replaces the install-time
-  `windows_exporter` step that this roadmap removes.
 - **SDN reduction** — long-term simplification of DPF's own software-
   defined network footprint. Fewer custom services, fewer compose
   overlays per service, fewer extra_hosts entries. Any new compose
   service introduced by this roadmap should justify itself against this
   direction.
+
+### Discovery plane refactor (replaces the host-exporter pattern)
+
+The current pattern — install `windows_exporter` as a Windows service,
+scrape it from a container, parse `windows_net_nic_address_info` to
+recover the host's real NICs — is fragile (MSI install can fail,
+firewall holes, port collisions) and OS-specific. A cleaner architecture
+exists, but its constraints are physical:
+
+**Hard constraint:** on macOS and Windows with Docker Desktop, the
+container fleet runs inside a Linux VM. **No software configuration
+exposes the Mac/Windows host's physical NICs to a container** — there
+is no Docker network driver, CNI plugin, or "magic IP" that pierces the
+Docker Desktop VM boundary. macvlan/ipvlan/network_mode-host all operate
+inside the VM. This is a Docker Desktop architectural limit, not a
+configuration gap.
+
+Given that constraint, the elegant cross-platform answer is a
+**three-mode discovery plane** that produces identical data into the
+existing `InventoryEntity` / `InventoryRelationship` / `InfraCI` schema:
+
+**Mode A — Linux container with `network_mode: host` (default for Linux
+installs).** A new `discovery-agent` service in `docker-compose.linux.yml`
+that ships with `nmap`, `arp-scan`, `lldpd`, and the sweep code. Joins
+the host network namespace directly — gets a real LAN IP, sees real
+NICs, walks the real ARP table. Replaces the round-trip through
+Prometheus + node_exporter for the sweep's purposes. macvlan is the
+alternative if multi-tenancy or static IP per agent is needed; for a
+single sweep agent, `network_mode: host` is simpler.
+
+**Mode B — Native helper binary (for Mac/Windows hosts that need
+accurate local-host topology).** A small statically-linked Go or Rust
+binary (~5 MB), bundled with the installer (no separate MSI download).
+Installs as a LaunchAgent on macOS / scheduled task or service on
+Windows, using the same auto-start mechanism the installer already
+configures for the platform itself. Runs the same scan logic as Mode A
+and POSTs results to the existing `/api/v1/discovery/sweep` endpoint
+using an MCP bearer token. Downstream consumers unchanged. **This is
+also the same code path the eventual "Add a managed host" feature
+needs** — the DPF host is just the first managed node onboarded by the
+binary.
+
+**Mode C — In-VM container (Mac/Windows fallback when Mode B not
+installed).** Same `discovery-agent` service running inside Docker
+Desktop's Linux VM. Sees the VM's network, not the Mac/Windows host's
+physical NICs. Sweep flags affected `DiscoveredItem` rows with reduced
+`confidence`. Acceptable for dev installs that don't care about
+host-LAN topology.
+
+**Why this beats the current pattern:**
+- One sweep implementation, three deployment modes — no per-OS
+  collector branches in TypeScript.
+- The native helper binary (Mode B) is dramatically lighter than
+  `windows_exporter` (~5 MB vs ~30 MB MSI), uses the platform's
+  existing API surface, and inherits the platform's auth model.
+- Mode B is reusable as the foundation for managed-fleet
+  observability — every managed host gets the same binary.
+- Honest about the Docker Desktop VM boundary on Mac/Windows; provides
+  a real escape hatch (Mode B) instead of pretending containers can
+  reach the host's NICs.
+- `windows_exporter` and the `windows-host` scrape job retire cleanly
+  once Mode B is shipped, removing the moving piece this plan currently
+  has to keep.
+
+**Sequencing:** the discovery plane refactor is its own epic, ordered
+after this roadmap's Phase 7 (full installer ships). Until it lands,
+the sweep keeps its current data path on Windows (`windows_exporter`)
+and Linux (`node-exporter` in `linux-monitoring` profile). Mac sweep
+operates in degraded Mode-C semantics by default.
+
+**Open questions for that future epic:**
+- Distribution: ship Mode B's binary inside the GHCR-published portal
+  image and have the installer extract it on first run, or publish
+  separately as a GitHub Release asset?
+- Auth: re-use existing MCP `dpfmcp_*` tokens (Admin > Platform
+  Development), or introduce a narrower `dpfagent_*` scope?
+- Update path: how does Mode B self-update when the platform upgrades?
+- Telemetry parity: what subset of `windows_exporter` /
+  `node_exporter` metrics, if any, need to keep flowing for Grafana
+  host-resource panels independent of the sweep?
+
+### Managed-fleet observability
+
+A portal feature ("Add a managed host") that deploys Mode B above to
+any host being onboarded as a managed node. The DPF host itself becomes
+one such node, treated the same way as any other. This is the umbrella
+under which the discovery plane refactor naturally lands.
 
 ## End-to-end verification (after Phase 9)
 
