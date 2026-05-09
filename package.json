@@ -49,7 +49,7 @@
     ]
   },
   "devDependencies": {
-    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "@mermaid-js/mermaid-cli": "^11.14.0",
     "@playwright/test": "^1.59.1",
     "docx": "^9.6.1"
   }
