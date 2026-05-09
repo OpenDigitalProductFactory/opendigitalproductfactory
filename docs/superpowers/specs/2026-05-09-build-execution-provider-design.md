@@ -54,6 +54,20 @@ without behavior change for current Windows / macOS / Linux installs.
 
 ## The provider interface (proposed)
 
+The provider abstraction owns **two responsibilities**, not one:
+
+1. **Sandbox lifecycle** — create, start, copy files in/out,
+   launch the dev server, exec arbitrary commands, destroy. This
+   is what `apps/web/lib/integrate/sandbox/sandbox.ts` does today.
+2. **Agent command execution** — dispatch CLI agents (Codex,
+   Claude Code) into the sandbox with credentials injected. This
+   is what `apps/web/lib/integrate/codex-dispatch.ts` and
+   `apps/web/lib/integrate/claude-dispatch.ts` do today; both
+   shell out to `docker exec ${SANDBOX_CONTAINER}`. Without this
+   in the provider interface, every non-`local-docker` provider
+   would have to reimplement the dispatch logic — exactly the
+   per-substrate scatter the abstraction exists to prevent.
+
 ```typescript
 type BuildExecutionProvider =
   | "local-docker"
@@ -64,8 +78,33 @@ type BuildExecutionProvider =
   | "azure-containerapp-job"
   | "disabled";
 
+type SandboxAgent = "codex" | "claude";
+
+interface AgentCommandSpec {
+  prompt?: string;
+  workspaceSubdir?: string;
+  timeoutMs?: number;
+  approvalPolicy?: "never" | "ask";   // default "never" for autonomous
+  sandboxMode?: "danger-full-access" | "restricted";
+  envOverrides?: Record<string, string>;
+}
+
+interface AgentRunResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  toolExecutionId: string;            // linkage to ToolExecution audit row
+}
+
+interface AgentCredential {
+  agent: SandboxAgent;
+  type: "oauth" | "api-key";
+  payload: Record<string, string>;    // never logged; written via injectAgentCredential
+}
+
 interface BuildExecutionProviderImpl {
-  // Lifecycle — what the existing docker-cli layer abstracts today
+  // Sandbox lifecycle — what the existing docker-cli layer abstracts today
   createSandbox(spec: SandboxSpec): Promise<SandboxHandle>;
   startSandbox(handle: SandboxHandle): Promise<void>;
   copyAppsWebInto(handle: SandboxHandle, source: string): Promise<void>;
@@ -75,6 +114,12 @@ interface BuildExecutionProviderImpl {
   writeFile(handle: SandboxHandle, path: string, content: string): Promise<void>;
   destroySandbox(handle: SandboxHandle): Promise<void>;
 
+  // Agent command execution — owns Codex / Claude dispatch so
+  // non-local-docker providers don't reimplement docker exec.
+  injectAgentCredential(handle: SandboxHandle, credential: AgentCredential): Promise<void>;
+  runAgentCommand(handle: SandboxHandle, agent: SandboxAgent, spec: AgentCommandSpec): Promise<AgentRunResult>;
+  getPreviewUrl(handle: SandboxHandle): Promise<string>;
+
   // Capability advertisement — Authority Core uses this to decide
   // which Build Studio features to enable for this deployment.
   capabilities(): {
@@ -83,15 +128,69 @@ interface BuildExecutionProviderImpl {
     networkPolicy: "host" | "namespaced" | "isolated";
     maxConcurrent: number | "unbounded";
     cleanupModel: "explicit" | "ttl";
+    cliAgents: {                         // which CLI agents this provider supports
+      codex: boolean;
+      claudeCode: boolean;
+      codexCallbackPort1455: boolean;    // can the substrate expose port 1455?
+    };
   };
 }
 ```
 
 `SandboxSpec`, `SandboxHandle`, `ExecResult` shapes inherit from the
-current implementation. Selection is configured at install time
-(contract 2 of the deployment doctrine: runtime configuration) via
-an env var like `DPF_BUILD_PROVIDER=<provider>` plus
-provider-specific config (cluster name, namespace, IAM role, etc.).
+current implementation. `AgentCommandSpec` / `AgentRunResult` /
+`AgentCredential` are new shapes the agent-execution refactor
+introduces. Selection is configured at install time (contract 2 of
+the deployment doctrine: runtime configuration) via an env var like
+`DPF_BUILD_PROVIDER=<provider>` plus provider-specific config
+(cluster name, namespace, IAM role, etc.).
+
+`getPreviewUrl(handle)` returns the URL where the sandbox's Next.js
+dev server is reachable. `local-docker` returns `http://localhost:3035`;
+`kubernetes-job` returns the Service / Ingress URL the cluster
+allocated; `ecs-task` returns the ALB target group URL; etc. This
+lets the portal's Build Studio UI link to a preview without knowing
+which provider is in use.
+
+## Sandbox image variants and CLI agent runtime flags
+
+The current `Dockerfile.sandbox` bundles both Codex CLI and Claude
+Code CLI unconditionally (`Dockerfile.sandbox:6,9`). For regulated
+or local-only deployments the bundle either needs runtime
+disablement or compile-time exclusion:
+
+### Runtime flags (read by the dispatchers and by every provider)
+
+```
+DPF_SANDBOX_ENABLE_CODEX=true|false              # default true
+DPF_SANDBOX_ENABLE_CLAUDE=true|false             # default true
+DPF_SANDBOX_OPENAI_BASE_URL                      # optional; redirects Codex to local OpenAI-compat endpoint
+DPF_SANDBOX_ANTHROPIC_BASE_URL                   # optional; redirects Claude Code similarly
+```
+
+Provider implementations that don't support a CLI agent (e.g. an
+`ecs-task` provider that can't expose port 1455 for Codex's OAuth
+callback) advertise this via `capabilities().cliAgents` and refuse
+`runAgentCommand` calls for the unsupported agent with a clear
+error rather than silently failing.
+
+### Image variants (compile-time exclusion)
+
+For deployments that require the CLI binaries to be physically
+absent — air-gapped customers, supply-chain-restricted environments,
+or compliance regimes that forbid bundled vendor tooling — ship
+multiple sandbox image tags:
+
+| Tag | Codex CLI | Claude Code CLI | Use case |
+|---|---|---|---|
+| `dpf-sandbox:full` (default) | yes | yes | unrestricted installs |
+| `dpf-sandbox:local-only` | yes (with `OPENAI_BASE_URL` override required) | yes (with override) | air-gapped with local-routed CLIs |
+| `dpf-sandbox:no-cli-agents` | no | no | maximum compliance posture |
+
+The Dockerfile.sandbox refactor that supports this lands as part of
+this provider epic; the image-publish workflow
+(`.github/workflows/publish-image.yml`, currently the focus of
+installer-parity Phase 1) adds matrix tags accordingly.
 
 ## Per-deployment-target defaults
 
