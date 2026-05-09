@@ -522,142 +522,61 @@ marketplace image all inherit Build Studio compatibility from
 `local-docker` and ship Build Studio on day one without waiting for
 the cloud-native sandbox rewrite.
 
-## LLM provider routing across deployment options
+## LLM provider routing — cloud-substrate deltas
 
-DPF supports **four provider modes** today, with distinct credential
-flows and deployment requirements. The right default per deployment
-shape isn't obvious from the substrate alone — the auth/credential
-axis matters as much as the substrate axis.
+> The universal LLM provider contract — runtime envvars, the four
+> provider modes, reachability requirements, the port-1455 Codex
+> constraint, compliance and cost/capacity model, and the
+> default-mode-per-deployment table — lives in
+> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`
+> Contract 9. This section captures only the **cloud-substrate
+> deltas** customers and operators need beyond that contract.
 
-### Provider modes
-
-1. **Inference via OpenAI-compatible HTTP endpoint** (`LLM_BASE_URL`).
-   Routes to OpenAI / Anthropic public APIs, Ollama, Docker Model
-   Runner, vLLM, or a LiteLLM gateway. Auth is API key (long-lived
-   secret in DPF's encrypted credentials), or none for local Ollama.
-   This is the inference path the installer-parity Phase 4 contract
-   formalizes (`DPF_LLM_PROVIDER`, `LLM_BASE_URL`,
-   `DPF_MODEL_PULL_MODE`).
-2. **Provider OAuth (authorization-code)** for upstream provider
-   accounts that don't accept API keys, or where the customer wants
-   per-user authorization. Spec:
-   `docs/superpowers/specs/2026-03-21-provider-oauth-authorization-code-design.md`.
-   Implementation: `apps/web/lib/{provider-oauth,actions/provider-oauth,govern/provider-oauth}.ts`,
-   callback at `apps/web/app/api/v1/auth/provider-oauth/callback/route.ts`.
-   Auth is a refreshable token tied to a provider account (e.g.
-   Anthropic console, GitHub).
-3. **Anthropic subscription OAuth** specifically for Claude Pro /
-   Max subscription accounts (different cost model: subscription, not
-   per-token). Spec:
-   `docs/superpowers/specs/2026-03-22-anthropic-sub-oauth-design.md`.
-4. **CLI agents inside the sandbox.** `Dockerfile.sandbox:6,9`
-   bundles `@openai/codex` and `@anthropic-ai/claude-code`. These
-   tools make their own LLM calls *bypassing* DPF's `LLM_BASE_URL`
-   contract, using their own auth (Codex OAuth or OpenAI API key;
-   Claude Code OAuth or Anthropic API key). Specs:
-   `2026-03-15-codex-provider-integration-design.md`,
-   `2026-04-08-claude-code-cli-dispatch-design.md`.
-
-The four modes coexist. A typical install uses:
-- mode 1 (Ollama or Docker Model Runner) for the platform's own
-  agents and inference,
-- mode 4 (CLIs) inside Build Studio sandboxes,
-- mode 2/3 (OAuth) when a customer plugs an external account into
-  the provider registry.
-
-### Reachability requirements per provider mode
-
-| Mode | Outbound | Inbound callback | Specific port lock-in | DPF secret store |
-|---|---|---|---|---|
-| 1 — `LLM_BASE_URL` API key | HTTPS to provider or in-cluster Ollama | none | none | API key |
-| 1 — `LLM_BASE_URL` local | none (in-cluster) | none | none | none |
-| 2 — Provider OAuth | HTTPS to provider | **publicly reachable callback URL** at `/api/v1/auth/provider-oauth/callback` | varies by provider | refresh token |
-| 3 — Anthropic sub OAuth | HTTPS to Anthropic | publicly reachable callback URL | varies | refresh token |
-| 4 — Codex CLI in sandbox | HTTPS from sandbox container to OpenAI | **port 1455** (`docker-compose.yml:79`, "shared client requires this port") | **yes — port 1455 hardcoded** | per-account in CLI config volume |
-| 4 — Claude Code CLI in sandbox | HTTPS from sandbox container to Anthropic | varies (OAuth or API key) | none if API key | per-account in CLI config volume |
-
-The **port 1455 lock-in for Codex** is the single biggest deployment
-constraint. Codex's shared OAuth client requires that specific port
-for its redirect URI; customers cannot freely remap it.
-
-### Compatibility matrix (compatibility × default per deployment)
-
-| Deployment | Mode 1 — public API | Mode 1 — Docker Model Runner | Mode 1 — Ollama (in-cluster) | Mode 1 — external Ollama / LiteLLM | Mode 2 — provider OAuth | Mode 3 — Anthropic sub | Mode 4 — Codex CLI | Mode 4 — Claude Code CLI |
-|---|---|---|---|---|---|---|---|---|
-| Win + Docker Desktop (today) | ✓ | **default** | alt | ✓ | ✓ if public DNS | ✓ if public DNS | ✓ (port 1455 local) | ✓ |
-| Mac + Docker Desktop (Phase 7) | ✓ | **default** | alt | ✓ | ✓ if public DNS | ✓ if public DNS | ✓ | ✓ |
-| Linux native Docker (Phase 7) | ✓ | unavailable | **default** | ✓ | ✓ if public DNS | ✓ if public DNS | ✓ | ✓ |
-| Single VM substrate | ✓ | unavailable | default | ✓ | ✓ — straightforward | ✓ | ✓ if 1455 exposed | ✓ |
-| Managed container service | ✓ | unavailable | impractical (GPU + state) | **recommended** | requires sticky callback host | requires sticky callback host | impractical (port lock-in) | ✓ |
-| Managed Kubernetes | ✓ | unavailable | via Helm + GPU node pool | ✓ | ✓ via Ingress | ✓ via Ingress | requires explicit 1455 Ingress rule | ✓ |
-| TAPPaaS module | ✓ | unavailable | possible but redundant | **default** (AI Stack Ollama) | ✓ via Caddy `proxyDomain` | ✓ via Caddy `proxyDomain` | needs Caddy rule for 1455 | ✓ |
-| Marketplace image | ✓ | unavailable | default (self-hosted) | ✓ | ✓ if customer wires DNS | ✓ | ✓ if 1455 exposed | ✓ |
-
-### Compliance and data-residency
-
-- **Modes 1 (public API), 2, 3, 4** all ship customer prompts and
-  context to vendor APIs. Incompatible with air-gapped deployments
-  out of the box. HIPAA / FedRAMP customers need explicit BAAs / FedRAMP
-  authorization with each provider before enabling.
-- **Mode 1 local (Ollama / Docker Model Runner)** keeps data inside
-  the customer's environment. The default for compliance-sensitive
-  installs.
-- **CLI agents (mode 4)** are the most subtle compliance pitfall:
-  they're bundled with the platform image but their network calls
-  bypass the LLM_BASE_URL contract and the platform's audit envelope.
-  An air-gapped customer must either configure the CLIs to use a
-  local OpenAI-compatible endpoint (Codex CLI now supports
-  `OPENAI_BASE_URL`; Claude Code CLI similar config) or disable them
-  in the sandbox image.
-
-### Cost / capacity models
-
-| Mode | Cost model | Capacity model | Customer billing relationship |
-|---|---|---|---|
-| 1 — public API | per-token, metered | per-API-key rate limit | direct with provider |
-| 1 — local LLM | capex / fixed compute | concurrent-capacity ceiling | none (customer's hardware) |
-| 2 / 3 — provider OAuth | per-account (metered or subscription) | per-account rate limit | direct with provider |
-| 4 — CLI agents | per-account, blended (subscription + per-token) | per-account rate limit | direct with provider |
-| LiteLLM gateway | aggregates all of the above | configured per-route | customer-defined |
-
-LiteLLM is the recommended fan-out point for customers running mixed
-modes — it gives a single `LLM_BASE_URL` target that internally routes
-by class (PII to local, general to public, premium to subscription).
-The TAPPaaS packaging target gets this for free if the customer
-already runs the AI Stack.
-
-### Deployment-specific guidance
+### Per-substrate guidance
 
 - **Single VM substrate:** default to Ollama (in compose) for
   inference; expose port 1455 if Build Studio with Codex is in scope;
-  document that customers in regulated industries should pick local
-  Ollama and disable the sandbox CLIs (mode 4) until a local-routed
+  customers in regulated industries should pick local Ollama and
+  disable the sandbox CLIs (Contract 9 mode 4) until a local-routed
   config is wired.
-- **Managed container service:** strongly recommend external
-  Ollama or LiteLLM as the LLM_BASE_URL target. Codex CLI (mode 4)
-  is impractical on this substrate due to the port-1455 lock-in
-  combined with the substrate's port-mapping restrictions; document
-  Build Studio as Codex-disabled / Claude-Code-only here.
-- **Managed Kubernetes:** Ingress can route mode 2/3 callbacks
-  cleanly; mode 4 Codex requires an explicit 1455-routed Ingress rule
-  and is fragile if the customer's k8s cluster is multi-tenant. Helm
-  chart should expose this as a values flag, default off.
-- **TAPPaaS module:** default to mode 1 external pointing
-  at the customer's TAPPaaS AI Stack (Ollama or LiteLLM). OAuth
-  callbacks (modes 2/3) work via Caddy's `proxyDomain`. Codex (mode 4
-  with port 1455) requires a Caddy rule that publishes 1455
-  externally — feasible but worth documenting as a Build-Studio
-  prerequisite. Claude Code CLI (mode 4) works without the port
-  constraint and is the lower-friction default for the TAPPaaS shape.
+- **Managed container service:** strongly recommend external Ollama
+  or LiteLLM as the `LLM_BASE_URL` target. Codex CLI is impractical
+  on this substrate due to the port-1455 lock-in combined with the
+  substrate's port-mapping restrictions; document Build Studio as
+  Codex-disabled / Claude-Code-only here.
+- **Managed Kubernetes:** Ingress can route OAuth callbacks (modes
+  2/3) cleanly; Codex (mode 4) requires an explicit 1455-routed
+  Ingress rule and is fragile if the customer's k8s cluster is
+  multi-tenant. Helm chart should expose this as a values flag,
+  default off.
+- **TAPPaaS module:** default to mode 1 external pointing at the
+  customer's TAPPaaS AI Stack (Ollama or LiteLLM at
+  `http://ollama.mgmt.internal:11434/v1`). OAuth callbacks
+  (modes 2/3) work via Caddy's `proxyDomain`. Codex (mode 4 with
+  port 1455) requires a Caddy rule that publishes 1455 externally —
+  feasible but worth documenting as a Build-Studio prerequisite.
+  Claude Code CLI works without the port constraint and is the
+  lower-friction default for the TAPPaaS shape.
 - **Marketplace image:** identical to Single VM substrate; whatever
   the marketplace image bakes in becomes the customer's default
   unless they override.
 
-The runtime contract from installer-parity Phase 4 (`DPF_LLM_PROVIDER`,
-`LLM_BASE_URL`, `DPF_MODEL_PULL_MODE`, `EMBEDDING_MODEL`,
-`BROWSER_USE_MODEL`) does **not** change across deployment options.
-What changes is which modes are *available* and which are *reachable*
-on each shape.
+### Cloud-substrate-specific gotchas
+
+- **Sticky callback hosts on managed container services** —
+  OAuth callbacks need a stable hostname, but stateless container
+  services scale instances elastically. Wire a fixed Cloud Run /
+  Container Apps custom-domain or pin the load-balancer host so
+  refresh-token flows survive instance churn.
+- **Port-1455 publishing on managed Kubernetes** — when Codex is
+  in scope, the Helm chart's Ingress values must expose 1455
+  alongside the standard 3000 port. Default off; opt-in via a
+  values flag because most customer clusters won't want a
+  non-standard port published.
+- **TAPPaaS Caddy rules for 1455** — TAPPaaS's standard ingress
+  via `proxyDomain` / `proxyPort` covers port 3000; port 1455
+  needs an additional Caddy directive. Document this in the
+  TAPPaaS module's `install.sh` or `services/` folder.
 
 ## Edge Node connectivity from anywhere
 

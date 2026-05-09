@@ -33,6 +33,11 @@ All DPF deployment targets must wrap these contracts. Wrappers may
 provision infrastructure, secrets, ingress, and backups around each
 contract; they must not fork or replace the contract itself.
 
+(Originally seeded with 8 contracts; Contract 9 added 2026-05-09 to
+unify LLM and agent-provider routing across deployments — that
+material was previously scattered across the cloud and installer
+specs.)
+
 ### 1. Release artifacts
 
 Every installed-runtime service ships as a versioned multi-arch
@@ -161,6 +166,122 @@ Wrappers must not invent new secret semantics. If a deployment
 needs a new logical secret, it goes into the runtime config schema
 (contract 2) and propagates to every other wrapper.
 
+### 9. LLM and agent-provider routing
+
+Every deployment uses the same LLM provider contract. Wrappers may
+default to different providers (Docker Model Runner on Mac/Windows
+Docker Desktop, Ollama on Linux, the customer's TAPPaaS AI Stack on
+TAPPaaS deployments) but **must not fork the provider semantics**.
+
+#### Runtime envvars (universal across deployments)
+
+```
+DPF_LLM_PROVIDER          # model-runner | ollama | external
+LLM_BASE_URL              # OpenAI-compatible base URL
+LLM_MODEL                 # default chat-completions model
+EMBEDDING_MODEL           # default embedding model
+BROWSER_USE_MODEL         # browser-use service model selection
+DPF_MODEL_PULL_MODE       # auto | skip | verify-only
+```
+
+The portal's inference layer (`apps/web/lib/ai-inference.ts`)
+honors these unchanged across every substrate.
+
+#### Provider modes (universal)
+
+DPF supports **four** provider modes; they coexist within a single
+deployment:
+
+1. **Inference via OpenAI-compatible HTTP endpoint** (`LLM_BASE_URL`).
+   Routes to OpenAI / Anthropic public APIs, Ollama, Docker Model
+   Runner, vLLM, or a LiteLLM gateway. Auth is API key (long-lived
+   secret in DPF's encrypted credentials), or none for local Ollama.
+2. **Provider OAuth (authorization-code)** for upstream provider
+   accounts that don't accept API keys, or where the customer wants
+   per-user authorization. Spec:
+   `docs/superpowers/specs/2026-03-21-provider-oauth-authorization-code-design.md`.
+   Implementation: `apps/web/lib/{provider-oauth,actions/provider-oauth,govern/provider-oauth}.ts`,
+   callback at `apps/web/app/api/v1/auth/provider-oauth/callback/route.ts`.
+3. **Anthropic subscription OAuth** for Claude Pro / Max subscription
+   accounts (different cost model: subscription, not per-token).
+   Spec:
+   `docs/superpowers/specs/2026-03-22-anthropic-sub-oauth-design.md`.
+4. **CLI agents inside the sandbox.** `Dockerfile.sandbox:6,9`
+   bundles `@openai/codex` and `@anthropic-ai/claude-code`. These
+   tools make their own LLM calls *bypassing* DPF's `LLM_BASE_URL`
+   contract, using their own auth (Codex OAuth or OpenAI API key;
+   Claude Code OAuth or Anthropic API key). Specs:
+   `2026-03-15-codex-provider-integration-design.md`,
+   `2026-04-08-claude-code-cli-dispatch-design.md`.
+
+#### Reachability requirements (universal)
+
+| Mode | Outbound | Inbound callback | Specific port lock-in | DPF secret store |
+|---|---|---|---|---|
+| 1 — `LLM_BASE_URL` API key | HTTPS to provider or in-cluster | none | none | API key |
+| 1 — `LLM_BASE_URL` local | none (in-cluster) | none | none | none |
+| 2 — Provider OAuth | HTTPS to provider | publicly reachable callback at `/api/v1/auth/provider-oauth/callback` | varies by provider | refresh token |
+| 3 — Anthropic sub OAuth | HTTPS to Anthropic | publicly reachable callback URL | varies | refresh token |
+| 4 — Codex CLI in sandbox | HTTPS from sandbox to OpenAI | **port 1455** (`docker-compose.yml:79`, "shared client requires this port") | **yes — port 1455 hardcoded** | per-account in CLI config volume |
+| 4 — Claude Code CLI in sandbox | HTTPS from sandbox to Anthropic | varies (OAuth or API key) | none if API key | per-account in CLI config volume |
+
+The **port 1455 lock-in for Codex** is the single biggest deployment
+constraint. Wrappers must either expose port 1455 reachably from the
+user's browser or document Codex CLI as unsupported.
+
+#### Compliance and data-residency (universal)
+
+- **Modes 1 (public API), 2, 3, 4** all ship customer prompts and
+  context to vendor APIs. Incompatible with air-gapped deployments
+  out of the box. HIPAA / FedRAMP customers need explicit BAAs /
+  FedRAMP authorization with each provider before enabling.
+- **Mode 1 local (Ollama / Docker Model Runner)** keeps data inside
+  the customer's environment. The default for compliance-sensitive
+  installs.
+- **CLI agents (mode 4)** are the most subtle compliance pitfall:
+  bundled with the platform image but their network calls bypass the
+  `LLM_BASE_URL` contract and the platform's audit envelope. An
+  air-gapped customer must either configure the CLIs to use a local
+  OpenAI-compatible endpoint (Codex CLI now supports
+  `OPENAI_BASE_URL`; Claude Code CLI similar config) or disable them
+  in the sandbox image.
+
+#### Cost / capacity model (universal)
+
+| Mode | Cost model | Capacity model | Customer billing relationship |
+|---|---|---|---|
+| 1 — public API | per-token, metered | per-API-key rate limit | direct with provider |
+| 1 — local LLM | capex / fixed compute | concurrent-capacity ceiling | none (customer's hardware) |
+| 2 / 3 — provider OAuth | per-account (metered or subscription) | per-account rate limit | direct with provider |
+| 4 — CLI agents | per-account, blended (subscription + per-token) | per-account rate limit | direct with provider |
+| LiteLLM gateway | aggregates all of the above | configured per-route | customer-defined |
+
+LiteLLM is the recommended fan-out point for customers running mixed
+modes — one `LLM_BASE_URL` target that internally routes by class
+(PII to local, general to public, premium to subscription).
+
+#### Default mode per deployment (universal)
+
+| Deployment | Default for inference (mode 1) | CLI agents (mode 4) |
+|---|---|---|
+| Win + Docker Desktop | Docker Model Runner | available (port 1455 local) |
+| Mac + Docker Desktop | Docker Model Runner | available |
+| Linux native Docker | Ollama (in compose) | available |
+| Single VM substrate (cloud) | Ollama (in compose) | available if 1455 exposed |
+| Managed container service substrate | external Ollama / LiteLLM | impractical (port lock-in) |
+| Managed Kubernetes substrate | Ollama via Helm + GPU node pool, or external | requires explicit 1455 Ingress |
+| TAPPaaS module | external (TAPPaaS AI Stack Ollama / LiteLLM) | needs Caddy 1455 rule |
+| Marketplace image | inherits Single VM | inherits Single VM |
+
+Substrate-specific deltas live in
+`docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` (cloud
+shapes) and the Mac/Linux installer-parity roadmap (local shapes);
+this contract is the universal frame they wrap.
+
+The runtime envvar contract above does **not** change across
+deployment options. What changes per deployment is which modes are
+*available* and which are *reachable*.
+
 ## What deployment specs are required to do
 
 Every deployment-target spec must:
@@ -211,12 +332,6 @@ This doctrine does **not** specify:
 
 ## Open questions
 
-- **Where does the LLM-provider contract live long term — in this
-  doctrine, in the cloud-deployment spec, or in a dedicated LLM
-  routing spec?** Currently captured in installer-parity Phase 4
-  and elaborated in the cloud-deployment spec's "LLM provider
-  routing" section. Decide whether to lift it here as a ninth
-  contract.
 - **Versioning the doctrine.** When a new logical secret or
   lifecycle operation is added, every deployment spec needs to
   catch up. Is the answer a doctrine `version:` field with
