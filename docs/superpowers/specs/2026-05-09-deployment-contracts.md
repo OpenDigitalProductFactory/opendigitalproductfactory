@@ -299,6 +299,34 @@ Every deployment-target spec must:
 Specs that violate this rule should be brought back into compliance
 rather than allowed to drift.
 
+## Spec ownership map
+
+Where does any given DPF concern live? This map prevents readers
+from spelunking through five docs to find the canonical answer.
+
+| Concern | Canonical spec |
+|---|---|
+| Release artifacts (multi-arch GHCR images) | This doctrine + `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md` (installer-parity roadmap) |
+| Runtime configuration (env / config schema) | This doctrine |
+| Local installation (Windows / macOS / Linux) | `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md` |
+| Cloud deployment substrates | `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` |
+| TAPPaaS packaging | `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` |
+| Cloud marketplace / Helm chart / Terraform packaging | `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` |
+| Edge Node (host trust, discovery, MCP/A2A gateway) | `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` |
+| Build Studio providers (sandbox lifecycle abstraction) | `docs/superpowers/specs/2026-05-09-build-execution-provider-design.md` |
+| Identity edge (OIDC / SAML / LDAP / SCIM, authentik) | `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` |
+| Identity edge deployment modes (`identityEdgeMode`) | `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` (2026-05-09 addendum) |
+| LLM and agent-provider routing | This doctrine (Contract 9) |
+| Observability invariants (Qdrant-silent-failure precedent, alerts) | `docs/superpowers/specs/2026-04-01-platform-operational-health-monitoring-design.md` |
+| Secrets (logical schema; substrate-specific stores) | This doctrine (Contract 8) |
+| Discovery sweep ingestion (Edge Node submissions) | `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` |
+
+When a concern is in flight (under active design) it stays in
+whichever spec spawned the discussion until landed; once landed, it
+either stays in that spec or moves to this doctrine if it's
+universally applicable. **Universal == doctrine. Substrate or
+target-specific == owning spec.**
+
 ## Specs that wrap this doctrine
 
 - `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
