@@ -148,6 +148,45 @@ Windows with Docker Desktop, no software trick exposes the host's
 physical NICs to a container running inside the Docker Desktop VM. The
 native deployment mode is the escape hatch, not a temporary workaround.
 
+## Deployment target neutrality
+
+The Edge Node binary has **no deployment-target awareness**. It
+registers with an Authority Core URL (passed at install or via
+config) and receives its policy and capability configuration from
+the Authority Core after registration.
+
+The same binary supports every Authority Core deployment shape
+described in
+`docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` and
+`docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`:
+
+- Windows local installs
+- macOS local installs
+- Linux local installs (bare-metal or VM)
+- Single VM substrate (cloud)
+- Managed container service substrate
+- Managed Kubernetes substrate
+- TAPPaaS module deployments
+- Cloud marketplace image deployments
+- Remote managed hosts onboarded as nodes #2..N in a customer fleet
+
+TAPPaaS may reduce the *need* for some local-network discovery
+capability because it already controls parts of the private platform
+network (VLAN zones, OPNsense, Caddy). It does **not** replace the
+Edge Node contract. The Edge Node still owns host-local trust,
+private-network MCP / A2A gateway capabilities, capability
+attestation, and the policy-cache + audit envelope. Anything in the
+Edge Node capability envelope that TAPPaaS happens to overlap on
+gets disabled per-node by the Authority Core's capability policy,
+not by forking the binary or the contract.
+
+This neutrality is a binding contract: any future deployment target
+must work with the same Edge Node binary, registration flow, token
+namespace (`dpfedge_*`), and ingestion endpoint. Wrappers that
+require deployment-specific Edge Node behavior should add capability
+flags or policy entries in the Authority Core, not branches in the
+Edge Node binary.
+
 ## Identity boundary
 
 The Edge Node holds:
