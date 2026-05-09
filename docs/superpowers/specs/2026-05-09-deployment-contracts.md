@@ -36,7 +36,11 @@ contract; they must not fork or replace the contract itself.
 (Originally seeded with 8 contracts; Contract 9 added 2026-05-09 to
 unify LLM and agent-provider routing across deployments — that
 material was previously scattered across the cloud and installer
-specs.)
+specs. Contract 10 added 2026-05-09 to capture client/API surface
+governance — browser admin, storefront, customer portal, mobile API,
+MCP, Edge Node ingestion, OAuth and Codex callbacks all converge on
+the same Authority Core but with distinct auth models and ingress
+needs.)
 
 ### 1. Release artifacts
 
@@ -173,6 +177,13 @@ default to different providers (Docker Model Runner on Mac/Windows
 Docker Desktop, Ollama on Linux, the customer's TAPPaaS AI Stack on
 TAPPaaS deployments) but **must not fork the provider semantics**.
 
+This contract has two distinct sub-paths: **inference** (modes 1–3
+below, governed by the runtime envvars and the OAuth callback flow)
+and **CLI agents** (mode 4, separate execution + credential path
+that **bypasses** `LLM_BASE_URL`). Both are part of the contract
+because both can be present in any deployment, but they have
+different governance and compliance implications.
+
 #### Runtime envvars (universal across deployments)
 
 ```
@@ -282,6 +293,121 @@ The runtime envvar contract above does **not** change across
 deployment options. What changes per deployment is which modes are
 *available* and which are *reachable*.
 
+#### CLI agent sub-contract (Codex, Claude Code)
+
+Mode 4 — CLI agents bundled in the sandbox image
+(`Dockerfile.sandbox:6,9` installs `@openai/codex` and
+`@anthropic-ai/claude-code` globally) — is a **separate execution
+and credential path from `LLM_BASE_URL`-routed inference**. The
+dispatchers at `apps/web/lib/integrate/codex-dispatch.ts` and
+`apps/web/lib/integrate/claude-dispatch.ts` inject provider
+credentials into the sandbox and invoke the CLIs via `docker exec`.
+Codex writes `~/.codex/auth.json` inside the sandbox and runs
+`codex exec --dangerously-bypass-approvals-and-sandbox`. Claude Code
+mounts OAuth/API-key auth and runs analogously.
+
+These calls do **not** flow through the inference layer; they reach
+provider APIs directly from the sandbox. Per-deployment policy must
+therefore answer:
+
+- **Enabled?** Whether Codex and/or Claude Code CLIs are enabled at
+  all. Default on for consumer/SaaS-equivalent installs; default
+  off for regulated / air-gapped installs that cannot tolerate
+  uncontrolled egress to vendor APIs.
+- **Endpoint redirection?** Whether the CLIs are configured to use
+  a local OpenAI-compatible endpoint (Codex CLI honors
+  `OPENAI_BASE_URL`; Claude Code CLI similar config). For
+  air-gapped installs that still want the CLI ergonomics, this is
+  the only safe path.
+- **Credential lifecycle.** How `~/.codex/auth.json` and Claude
+  Code's auth state are stored, mounted into the sandbox, rotated
+  when refreshed, and audited. Today these are injected by
+  dispatchers; the Build Execution Provider abstraction is the
+  right home for this contract long-term (per
+  `docs/superpowers/specs/2026-05-09-build-execution-provider-design.md`).
+- **Audit.** Authority Core's `ToolExecution` table records the
+  dispatch invocation but cannot record the LLM payload (the CLI
+  call goes direct to provider). Operators of regulated installs
+  must accept this gap or disable mode 4.
+- **Build Provider compatibility.** On non-`local-docker`
+  providers (k8s-job, ECS-task, etc.), CLI dispatch must go
+  through the provider's `runAgentCommand` interface, not direct
+  `docker exec`. See the Build Execution Provider spec.
+
+Runtime envvars per deployment for CLI agents:
+
+```
+DPF_SANDBOX_ENABLE_CODEX=true|false
+DPF_SANDBOX_ENABLE_CLAUDE=true|false
+CLI_AGENT_CALLBACK_PORTS                 # comma-separated, e.g. "1455"
+CODEX_OAUTH_CALLBACK_PORT=1455           # locked by upstream Codex client
+DPF_SANDBOX_OPENAI_BASE_URL              # optional redirect for Codex
+DPF_SANDBOX_ANTHROPIC_BASE_URL           # optional redirect for Claude Code
+```
+
+`docker-compose.yml:79` reserves port 1455 for Codex's OAuth
+callback; this port lock-in is the single biggest CLI-agent
+deployment constraint. Wrappers must either expose port 1455
+reachably from the user's browser or document Codex CLI as
+unsupported.
+
+The sandbox image itself may need variants (`dpf-sandbox:full`,
+`dpf-sandbox:no-cli-agents`, `dpf-sandbox:local-only`) for
+deployments that mandate compile-time exclusion rather than runtime
+disablement. The Build Execution Provider spec owns that decision
+along with the rest of the sandbox lifecycle.
+
+### 10. Client and API surfaces
+
+The Authority Core has multiple distinct **client surfaces**,
+each with its own auth model, public-vs-private exposure, and
+ingress requirements. Wrappers must wire them all consistently.
+
+| Surface | Path / port | Auth | Typical exposure | Notes |
+|---|---|---|---|---|
+| Workforce admin shell | `/storefront`, `/platform`, `/admin` | workforce session (Identity Edge OIDC) | private (VPN) or public-with-strict-IP | Identity Edge contract 4 |
+| Storefront public | `/s/**` | public / customer | public (often custom domain) | tenant-branded; CORS rules differ from admin |
+| Customer portal | `/portal/**` | customer session | public | CustomerContact-scoped |
+| Mobile API | `/api/v1/**` | JWT today; OIDC + PKCE per Mobile spec evolution | public or private | mobile clients |
+| External MCP transport | `/api/mcp/v1` | `dpfmcp_*` bearer | usually private (origin + TLS validated) | spec § 8 of AGENTS.md; ingress must pass `X-Forwarded-Proto` / `X-Forwarded-Host` |
+| Edge Node ingestion | `/api/v1/edge/**` | `dpfedge_*` machine token | public HTTPS or private mesh | per Edge Node spec |
+| OAuth callback | `/api/v1/auth/provider-oauth/callback` | OAuth state | publicly reachable | provider OAuth + Anthropic sub OAuth |
+| Codex CLI callback | `:1455` | Codex shared client | optional; off in regulated installs | port locked by upstream |
+
+**Client identity convergence (binding direction).** Browser UI,
+mobile app, Edge Node, and external MCP clients are all clients
+of the Authority Core but use different auth surfaces (browser
+session, mobile JWT/OIDC, `dpfedge_*` machine token, `dpfmcp_*`
+MCP token). Per the Enterprise Auth spec's principal-convergence
+addendum: `User`, `CustomerContact`, `Agent`, `EdgeNode`,
+`MobileDevice`, and `ServiceAccount` all eventually resolve to a
+single `Principal` / `PrincipalAlias` model. New surfaces must not
+become parallel identity islands.
+
+**Ingress requirements** (substrate-specific; cloud-deployment
+spec carries the matrix):
+
+- MCP and OAuth callbacks need stable hostnames; managed
+  container services with elastic instances must pin the
+  load-balancer host so refresh-token flows survive instance
+  churn.
+- The MCP route (`apps/web/app/api/mcp/v1/route.ts:120-142`)
+  reads `MCP_ALLOWED_ORIGIN_HOSTS`, `x-forwarded-proto`, and
+  `x-forwarded-host`. Wrappers must:
+  - set `MCP_PUBLIC_URL` and `MCP_ALLOWED_ORIGIN_HOSTS`
+    deliberately;
+  - set `TRUST_PROXY_HEADERS=true` only when the ingress is
+    actually a trusted proxy that strips client-supplied
+    `X-Forwarded-*` before forwarding;
+  - configure Caddy (TAPPaaS) / ALB (AWS) / Application Gateway
+    (Azure) / Cloud Run frontend / k8s Ingress to forward
+    `X-Forwarded-Proto` and `X-Forwarded-Host` correctly.
+
+Surface-specific deltas live in the cloud-deployment spec
+(`docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`)
+and the per-surface specs (`Mobile`, `Storefront`, `External
+MCP Surface`); this contract is the universal frame they wrap.
+
 ## What deployment specs are required to do
 
 Every deployment-target spec must:
@@ -317,6 +443,11 @@ from spelunking through five docs to find the canonical answer.
 | Identity edge (OIDC / SAML / LDAP / SCIM, authentik) | `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` |
 | Identity edge deployment modes (`identityEdgeMode`) | `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` (2026-05-09 addendum) |
 | LLM and agent-provider routing | This doctrine (Contract 9) |
+| CLI agent dispatch (Codex, Claude Code) | This doctrine (Contract 9 sub-contract) + `docs/superpowers/specs/2026-05-09-build-execution-provider-design.md` |
+| Client / API surface governance | This doctrine (Contract 10) |
+| MCP transport hardening (origin, forwarded headers) | This doctrine (Contract 10) + `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` |
+| Mobile client packaging | `docs/superpowers/specs/2026-03-19-mobile-companion-app-design.md` (treated as a Contract-10 client packaging target) |
+| Storefront / customer portal surfaces | `docs/superpowers/specs/2026-03-19-storefront-foundation-design.md` |
 | Observability invariants (Qdrant-silent-failure precedent, alerts) | `docs/superpowers/specs/2026-04-01-platform-operational-health-monitoring-design.md` |
 | Secrets (logical schema; substrate-specific stores) | This doctrine (Contract 8) |
 | Discovery sweep ingestion (Edge Node submissions) | `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` |
