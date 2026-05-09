@@ -12,6 +12,19 @@
 
 ---
 
+## 0. Relationship to Existing Memory Infrastructure
+
+Added 2026-05-09 after review of prior specs in `docs/superpowers/specs/`. The reflection mechanism here is **constrained by [TAK §12.1](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md)**, which prohibits agent-self-edited `core` memory at production tier. The constraints:
+
+- Reflection runs at the `archival_knowledge` class (per the five-class governed memory model in [EP-TAK-3F9A21 §5.7](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md)), never at `core`.
+- Every reflection writes through the existing `executionMode: "proposal"` path. A human approves the resulting `WikiPage` revision before publish, exactly as ingest does in [EP-WIKI-001 §3.4](2026-05-09-platform-kernel-wiki-design.md).
+- Reflection on a kernel page is **never** automatic — kernel writes remain PR-only, per EP-WIKI-001 §3.3.
+- Demand-driven reflection replaces the lint-only `stance-extraction-needed` check; both still classify as `archival_knowledge` and inherit its freshness/revalidation gates.
+
+Importance scoring leverages the existing embedding pipeline (`nomic-embed-text` via Ollama, established by [EP-MEMORY-001 (2026-03-17)](2026-03-17-shared-memory-vector-db-design.md)). No new model deployment. Model-name references below (`WikiReflectionTrigger`, `WikiPage`, `WikiPageRevision`) assume EP-WIKI-001 §11 has shipped.
+
+---
+
 ## 1. Problem
 
 EP-WIKI-001 detects "summary pages without an extracted stance" via a daily lint check (`stance-extraction-needed`). The lint catches the gap *after* it has formed — the wiki's judgment surface lags reality.

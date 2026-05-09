@@ -12,6 +12,20 @@
 
 ---
 
+## 0. Relationship to Existing Memory Infrastructure
+
+Added 2026-05-09 after review of prior specs in `docs/superpowers/specs/`. PPR layers **on top of** the existing Qdrant similarity search introduced by [EP-MEMORY-001 (2026-03-17)](2026-03-17-shared-memory-vector-db-design.md), not parallel to it:
+
+- Vector seeds come from the existing `searchWikiPages()` helper (post-EP-WIKI-001 §11 migration; previously `searchKnowledgeArticles()` against the `platform-knowledge` Qdrant collection).
+- The recognition-memory pre-filter is a normal LLM tool call — no new infrastructure.
+- The per-tenant subgraph is built from the `WikiPageLink` table introduced by [EP-WIKI-001 §4](2026-05-09-platform-kernel-wiki-design.md). No new edge store.
+- Embedding model stays `nomic-embed-text` (768-dim, Ollama). No parallel embedding pipeline.
+- PPR results are still classified as `archival_knowledge` retrieval (per the five-class model in [EP-TAK-3F9A21 §5.7](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md)), inherit the same freshness gates per TAK §12.5, and remain advisory until validated for consequential actions.
+
+This is the cleanest of the three follow-up specs against the existing infrastructure — it adds a re-rank stage and a per-tenant in-memory graph cache, nothing else.
+
+---
+
 ## 1. Problem
 
 EP-WIKI-001's retrieval is vector-only: `searchWikiPages()` does a two-pass overlay-aware cosine search and returns top-K. This misses **second-order relevance** — pages that don't match the query directly but are linked from pages that do, or that link to pages that do. Multi-hop questions ("how do these two stances interact across portfolios") are exactly the questions an org's overlay should be able to answer, and they're exactly what vector-only retrieval is bad at.

@@ -4,12 +4,51 @@
 |-------|-------|
 | **Epic** | EP-WIKI-001 |
 | **IT4IT Alignment** | Cross-cutting; primarily Evaluate (capture decisions and stances), Explore (research synthesis), Consume (self-service judgment lookup) |
-| **Depends On** | EP-KM-001 (Knowledge Management — implemented), EP-MEMORY-001 (Semantic Memory infrastructure — implemented) |
-| **Predecessor Specs** | Shared Memory Vector DB (2026-03-17), Knowledge Management (2026-04-02), Discovery Fingerprint Contribution Pipeline (2026-04-25) |
+| **Depends On** | [EP-MEMORY-001 — Shared Memory Vector DB (2026-03-17, implemented)](2026-03-17-shared-memory-vector-db-design.md), [EP-TAK-3F9A21 — TAK/GAID Auth+Identity+Memory Refresh (2026-04-25, drafted; defines the five-class governed memory model and reviews open-brain/personal-wiki applicability)](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) |
+| **Absorbs** | [EP-KM-001 — Knowledge Management (2026-04-02, drafted but `KnowledgeArticle` was never populated; the wiki page model in §4 is the merged successor)](2026-04-02-knowledge-management-design.md) |
+| **Predecessor Specs** | [Shared Memory Vector DB (2026-03-17)](2026-03-17-shared-memory-vector-db-design.md), [Knowledge-Driven Agent Capabilities (2026-03-18)](2026-03-18-knowledge-driven-agent-capabilities-design.md), [Knowledge Management (2026-04-02)](2026-04-02-knowledge-management-design.md), [TAK/GAID Auth+Identity+Memory Refresh (2026-04-25)](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) |
 | **Status** | Draft |
 | **Created** | 2026-05-09 |
 | **Author** | Mark Bodman (founder) + Claude (design partner) |
 | **Inspiration** | Andrej Karpathy, *On LLM-maintained wikis* (<https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f>) |
+
+---
+
+## 0. Relationship to Existing Memory Infrastructure
+
+This spec was first drafted without full reconciliation against four prior specs that govern memory in DPF. The sections that follow have been adjusted to fit them; this section names the constraints up front.
+
+### 0.1 Five-class governed memory model (TAK/GAID 2026-04-25)
+
+EP-TAK-3F9A21 defined a five-class taxonomy that all DPF memory now lives under:
+
+| Class | Role |
+|-------|------|
+| `core` | Identity-spine memory; system / supervisor write only. **Agent-self-edit is prohibited at production tier (TAK §12.1).** |
+| `user_fact` | Structured per-principal facts; supersession-driven; today populated via `UserFact`. |
+| `semantic_recall` | Episodic conversation memory; today the `agent-memory` Qdrant collection via `recallRelevantContext()`. Always advisory. |
+| `archival_knowledge` | Curated organizational knowledge with freshness gates. The wiki proposed here **classifies as `archival_knowledge`** and inherits its policy posture. |
+| `audit_evidence` | Decision logs, receipts, fingerprints. Never used for prompt injection. |
+
+The five-class model also reviewed Letta, mem0/OpenMemory, Anthropic memory blocks, and Logseq/Obsidian/SiliconBrain-style "open brain" personal wikis, and decided: **personal-wiki is an optional knowledge layer, not the runtime control plane** (TAK rules, immutable directives, and `AgentGovernanceProfile` remain the authoritative control plane). EP-WIKI-001 lives inside that frame — it is a knowledge layer, not a policy layer.
+
+### 0.2 Vector storage is Qdrant, not pgvector
+
+EP-MEMORY-001 (implemented) defines two Qdrant collections — `agent-memory` and `platform-knowledge` — embedded with `nomic-embed-text` (768-dim, Ollama). The `wiki-pages` collection introduced in §5 is a **third sibling** in the same Qdrant deployment, not a new substrate. Where this spec previously could be read to imply pgvector or a parallel index, treat it as Qdrant throughout.
+
+The `platform-knowledge` collection already carries `entityType: "knowledge-article"` points from EP-KM-001's design. After the merge described in §11, those points re-emerge as `entityType: "wiki-page"` in the new `wiki-pages` collection.
+
+### 0.3 KnowledgeArticle is being absorbed, not bridged
+
+EP-KM-001 specified a `KnowledgeArticle` Prisma model with revisions, product/portfolio anchoring, IT4IT value-stream tags, and Qdrant indexing. The model was never populated in production — its IT4IT framing was too narrow for general-purpose use. This spec **absorbs `KnowledgeArticle`** rather than coexisting with it. §4 documents the merged shape; §11 documents the migration. The previous draft's `linkedArticleId` bridge field is removed accordingly.
+
+### 0.4 Self-edit prohibition shapes the ingest design
+
+TAK §12.1 prohibits agent-self-edited `core` memory at production tier. EP-WIKI-001's ingest pipeline already routes every wiki write through `executionMode: "proposal"` with HITL approval (§3.4 step 5; §13 risks), and kernel pages are PR-only. That posture is what makes this spec compliant with TAK §12.1 by construction. Any future change that lets the agent commit wiki writes without human approval would have to clear that bar explicitly.
+
+### 0.5 Freshness gates are first-class, not lint-only
+
+TAK §12.5 introduced `validation_state ∈ {current, stale, advisory, advisory_until_revalidated}` for retrieval-time freshness checks, and a deny-with-reason `archival_overdue_for_consequential_action`. The lint contract in §6 detects staleness; the **runtime freshness gate is enforced at retrieval time** (TAK §12.5 path), not at lint time. EP-WIKI-002 (bi-temporal revisions) generalizes the system-time projection that drives these gates.
 
 ---
 
@@ -36,9 +75,11 @@ This design applies that pattern to a multi-tenant SaaS: the kernel ships in the
 
 ### 1.3 What This Is NOT
 
-- **Not a replacement for `KnowledgeArticle`** (EP-KM-001). That stays the org-authored, persona-anchored corpus. Wiki pages bridge to it via `linkedArticleId` so existing curated articles surface as wiki pages without duplication.
-- **Not a replacement for conversation memory** (EP-MEMORY-001). Wiki content is declarative; memory is episodic.
+- **Not a replacement for conversation memory** ([EP-MEMORY-001](2026-03-17-shared-memory-vector-db-design.md)). Wiki content is declarative `archival_knowledge`; conversation memory is episodic `semantic_recall` (per the five-class model in §0.1). Both remain.
+- **Not the runtime control plane.** TAK rules, immutable directives, and `AgentGovernanceProfile` stay authoritative. The wiki is a knowledge layer, not a policy layer.
 - **Not a chat product.** The wiki is consumed by agents at prompt-assembly time and by humans through a browse/edit UI.
+
+(The previous draft listed "not a replacement for `KnowledgeArticle`." After review of [EP-KM-001](2026-04-02-knowledge-management-design.md) and confirmation that the `KnowledgeArticle` table was never populated, this spec **does** absorb that model — see §0.3 and §11.)
 
 ---
 
@@ -62,7 +103,7 @@ This design applies that pattern to a multi-tenant SaaS: the kernel ships in the
 | Karpathy layer | DPF realization |
 |----------------|-----------------|
 | **Raw sources** (immutable) | New `RawSource` model. Markdown abstracts + locators under `docs/founder-kernel/raw-sources/` (kernel) or per-org uploads (overlay). |
-| **The wiki** (LLM-maintained pages) | New `WikiPage` + `WikiPageRevision` + `WikiPageLink` + `WikiPageSource` models. Markdown source for kernel under `docs/founder-kernel/wiki/`; DB-only for org overlays. |
+| **The wiki** (LLM-maintained pages) | `WikiPage` + `WikiPageRevision` + `WikiPageLink` + `WikiPageSource` models. `WikiPage` is the merged successor of `KnowledgeArticle` (see §0.3 and §11) — table rename + additive columns, not a parallel model. Markdown source for kernel under `docs/founder-kernel/wiki/`; DB-only for org overlays. |
 | **The schema** (CLAUDE.md-equivalent) | `docs/founder-kernel/SCHEMA.md` — page-kind contract, canonical entity registry, cross-link rules, edit policy, lint rules, versioning. Loaded into prompt assembly (excerpt) and lint job (full). |
 
 ### 3.2 Storage Layering
@@ -97,7 +138,7 @@ Schema-grounded, not free-form. The LLM does not invent structure; it slots clai
    `target_slug` must resolve to an existing page or carry a `propose_new: true` flag with rationale.
 3. **Pass 3 — stance/heuristic extraction (judgment kernel).** Separate prompt: "Where does the author take a position? Recommend a tradeoff? Formalize a rule of thumb?" These become `stance` and `heuristic` pages — never buried inside `summary` pages. Lint flags summary pages with no extracted stance and asks the agent to extract one.
 4. **Diff proposal per target page.** Markdown patch (≤30% of page; larger requires human approval) plus new-page proposals plus cross-link additions.
-5. **Proposal → review → commit.** Agent invocations write through `executionMode: "proposal"` (existing DPF pattern). Lint blocks publish if `WikiPageSource[]` is empty or if any `[[...]]` is dangling. Kernel pages are PR-only — never written by the runtime.
+5. **Proposal → review → commit.** Agent invocations write through `executionMode: "proposal"` (existing DPF pattern). Lint blocks publish if `WikiPageSource[]` is empty or if any `[[...]]` is dangling. Kernel pages are PR-only — never written by the runtime. This proposal-only posture is what keeps EP-WIKI-001 compliant with [TAK §12.1](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md)'s prohibition on agent-self-edited `core` memory; see §0.4.
 
 ### 3.5 How the Graph Forms and Evolves
 
@@ -118,7 +159,9 @@ Each ingest reads existing pages first, so new content is structured against wha
 
 ## 4. Data Model
 
-### 4.1 New Prisma Models
+### 4.1 Prisma Models
+
+The block below shows the wiki-shaped fields. Per §0.3 and §11, `WikiPage` is the **merged successor of `KnowledgeArticle`** — the existing fields on `KnowledgeArticle` (`category`, `valueStreams`, `tags`, `reviewIntervalDays`, `lastReviewedAt`, plus the `KnowledgeArticleProduct` / `KnowledgeArticlePortfolio` join tables) are preserved as **optional** fields on the merged model and not re-shown here. Migration is a `RENAME TABLE` plus additive columns; full merged Prisma schema is documented in the Phase 1 implementation spec.
 
 ```prisma
 model RawSource {
@@ -163,8 +206,6 @@ model WikiPage {
   kernelPage               WikiPage? @relation("WikiPageOverride", fields: [kernelPageId], references: [id])
   overrides                WikiPage[] @relation("WikiPageOverride")
   derivedFromKernelVersion String?
-  linkedArticleId          String?
-  linkedArticle            KnowledgeArticle? @relation(fields: [linkedArticleId], references: [id])
   abstract                 String?
   lastReviewedAt           DateTime?
   createdAt                DateTime @default(now())
@@ -251,12 +292,12 @@ model WikiLintFinding {
 ### 4.2 Relations Added to Existing Models
 
 - `Organization`: `wikiPages WikiPage[]`, `wikiRawSources RawSource[]`.
-- `KnowledgeArticle`: `wikiPages WikiPage[]` (bridge via `linkedArticleId`).
+- The previous draft added a `wikiPages` reverse relation to `KnowledgeArticle`. After the merge described in §0.3 and §11, that relation is dropped — `WikiPage` *is* the merged model.
 
-### 4.3 Why Not Extend Existing Models
+### 4.3 Why This Shape
 
-- **Not `KnowledgeArticle`.** Product/portfolio-anchored with persona/audience semantics. Wiki pages are entity- or topic-anchored, follow the SCHEMA contract, and need `kernelPageId` ancestry plus stricter lint. Bridge via `linkedArticleId` instead.
-- **Not `EvidenceSource`.** FK-bound to `EvidenceBundle` (deliberation runs). Forcing every kernel paper into a deliberation bundle is semantically wrong. `RawSource` is the standalone primitive.
+- **`WikiPage` absorbs `KnowledgeArticle`** rather than running parallel to it. The product/portfolio/persona/IT4IT-value-stream fields from [EP-KM-001](2026-04-02-knowledge-management-design.md) are preserved as optional on the merged model — they're useful for tagging but not required, since the founder kernel is general-purpose, not ITIL-shaped. Migration is in §11.
+- **Not `EvidenceSource`.** That model is FK-bound to `EvidenceBundle` (deliberation runs). Forcing every kernel paper into a deliberation bundle is semantically wrong. `RawSource` is the standalone primitive.
 
 ---
 
@@ -285,6 +326,8 @@ Findings produced daily by `apps/web/lib/queue/functions/wiki-lint.ts` (mirrors 
 | `stance-extraction-needed` | `summary` page whose body has no extracted stance/heuristic links. | info |
 
 The `stance-extraction-needed` check exists because the kernel's purpose is judgment, not summarization. Summary-only pages defeat the "what would Mark do?" goal.
+
+**Lint vs runtime freshness gate.** The lint job *detects* and surfaces findings; the **runtime freshness gate** (per [TAK §12.5](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md), see §0.5) is enforced at retrieval time, not at lint time. A wiki page used to back a consequential action evaluates `validation_state ∈ {current, stale, advisory, advisory_until_revalidated}` per the TAK contract and may trigger the deny-with-reason `archival_overdue_for_consequential_action`. Lint produces the underlying signals (`stale`, `kernel-drift`, etc.); the gate is the policy that consumes them.
 
 ---
 
@@ -353,12 +396,18 @@ Choice of `docs/founder-kernel/` (not `data/`): it is documentation-shaped (mark
 
 ---
 
-## 11. Migration & Coexistence with `KnowledgeArticle`
+## 11. Migration: `KnowledgeArticle` → `WikiPage`
 
-- `KnowledgeArticle` stays the org-authored corpus searched via `search_knowledge_base`.
-- One-time admin-triggered backfill scans `KnowledgeArticle` and offers to create matching `WikiPage` rows with `linkedArticleId` set, slug derived from `KA-001` → `summaries/<slug>`, `pageKind = "summary"`.
-- Agent skill `find-knowledge.skill.md` waterfall updated: `wiki_query` → `search_knowledge_base` → `search_knowledge`.
-- Knowledge UI (`/portfolio/product/[id]/knowledge`) gets a "Wiki" sub-tab listing wiki pages where `linkedArticleId` matches the product's KAs or where `WikiPageSource → KnowledgeArticleProduct` chain matches.
+Per §0.3, [EP-KM-001](2026-04-02-knowledge-management-design.md) was drafted but the `KnowledgeArticle` table was never populated in production. This spec absorbs it. The migration is therefore additive in shape, not destructive:
+
+1. **Rename** `KnowledgeArticle` to `WikiPage` (and `KnowledgeArticleRevision` to `WikiPageRevision`). The IT4IT-flavored join tables `KnowledgeArticleProduct` / `KnowledgeArticlePortfolio` are renamed to `WikiPageProduct` / `WikiPagePortfolio` and remain **optional** anchoring — they tag a wiki page to a product or portfolio when useful but are not required by the wiki contract.
+2. **Add** the wiki-shaped columns from §4.1 (`slug`, `pageKind`, `isKernel`, `kernelVersion`, `kernelPageId`, `derivedFromKernelVersion`, `abstract`).
+3. **Add** the join tables `WikiPageLink`, `WikiPageSource`, plus `RawSource`, `WikiIngestEvent`, `WikiLintFinding`.
+4. **Re-key** the existing Qdrant points from `entityType: "knowledge-article"` in `platform-knowledge` to `entityType: "wiki-page"` in the new `wiki-pages` collection. With zero production rows today, this is a no-op against live data; it's documented so the index pipeline lands cleanly on first install.
+5. **Retire** the EP-KM-001-era `search_knowledge_base` MCP tool in favor of `wiki_query` (§8). Existing route-context references are updated in the same PR. The previous "waterfall through three search tools" plan is gone; there is one wiki search tool.
+6. **Repoint** the planned `/portfolio/product/[id]/knowledge` UI tab at the merged `WikiPage` model. The persona-banner / value-stream / staleness machinery from EP-KM-001 §6 carries over for products that opt into anchoring.
+
+Implementation note: because `KnowledgeArticle` carries zero production rows, the migration can be a clean rename in one PR rather than a coexistence period. If a deployment is found that did populate the table, the rename becomes additive (add `WikiPage` columns and backfill `slug = lowerKebab(title)`, `pageKind = "summary"`, `isKernel = false`).
 
 ---
 

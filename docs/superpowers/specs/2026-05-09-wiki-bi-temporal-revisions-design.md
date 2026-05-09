@@ -12,6 +12,23 @@
 
 ---
 
+## 0. Relationship to Existing Memory Infrastructure
+
+Added 2026-05-09 after review of prior specs in `docs/superpowers/specs/`. The bi-temporal extension proposed here **generalizes** the freshness mechanism already present in two places:
+
+- `KnowledgeArticle.reviewIntervalDays` + `lastReviewedAt` from [EP-KM-001 (2026-04-02)](2026-04-02-knowledge-management-design.md), absorbed by EP-WIKI-001 §11 into `WikiPage`.
+- The `validation_state ∈ {current, stale, advisory, advisory_until_revalidated}` retrieval-time gate from [EP-TAK-3F9A21 (2026-04-25)](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) §12.5, including the deny-with-reason `archival_overdue_for_consequential_action`.
+
+The world-time / system-time fields proposed below strengthen those gates with explicit retroactive-correction support — they don't replace them. Specifically:
+
+- `systemExpiredAt` is the projection that drives `validation_state = stale` for wiki rows.
+- `worldValidFrom` / `worldValidTo` add the orthogonal axis (when the claim is true *in reality*) that the existing single-timestamp model cannot express.
+- The runtime freshness gate per TAK §12.5 continues to fire from the system-time projection; nothing in the gate's contract changes.
+
+This spec assumes EP-WIKI-001 §11 has shipped and `WikiPage` is the canonical model name. References to "WikiPageRevision / WikiPageLink / WikiPageSource" below are the post-migration models.
+
+---
+
 ## 1. Problem
 
 EP-WIKI-001 detects two kinds of fact rot via a **daily lint job**:
