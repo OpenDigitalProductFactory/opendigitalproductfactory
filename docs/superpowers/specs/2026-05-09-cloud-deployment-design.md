@@ -721,6 +721,39 @@ installer with `--headless`). Customer-cloud deployment depends on:
 Order: installer-parity → Edge Node → Build Execution Provider →
 cloud deployment templates.
 
+## Maturity gates before implementation
+
+This spec moves from research to binding when all of these are
+complete (uniform with the doctrine and sibling specs):
+
+- [ ] Research & Benchmarking section complete (per AGENTS.md §10).
+- [ ] Open questions resolved or explicitly deferred (managed Neo4j
+      availability, Inngest hosting, Build Studio cloud-compatibility
+      decision per substrate, backup/DR, update path, secret
+      management, observability stack hosting, public vs private
+      Authority Core exposure, Edge Node enrollment ceremony for
+      cloud cores, default compliance posture, customer-managed
+      encryption keys).
+- [ ] TAPPaaS source-review claims re-verified against stable
+      upstream URLs or pinned commit hashes (see Appendix); Tool
+      Evaluation Pipeline (AGENTS.md §9) run before DPF commits to
+      a hard TAPPaaS dependency.
+- [ ] Schema impact reviewed.
+- [ ] Canonical contracts updated if this spec changes shared
+      behavior (currently does not — all universal material lives
+      in the doctrine).
+- [ ] Security review complete — public ingress exposure model per
+      substrate, secret store wiring, OAuth callback host-stickiness
+      on container services, port-1455 exposure decisions per
+      substrate.
+- [ ] Release / rollback story defined per substrate — Terraform
+      module versioning, Helm chart versioning, marketplace image
+      retirement / rollback.
+- [ ] Test / verification gates defined — `terraform plan` /
+      `helm template` smoke tests, fresh install end-to-end on each
+      target substrate, Build Studio compatibility per substrate
+      via the Build Provider contract test.
+
 ## Source documents
 
 - `docs/superpowers/specs/2026-05-09-deployment-contracts.md` — the

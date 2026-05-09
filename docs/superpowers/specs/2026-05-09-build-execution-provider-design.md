@@ -267,6 +267,50 @@ taxonomy. Implementation order:
 4. **Remaining cloud-native providers** — sequenced by customer
    demand and substrate priority.
 
+## Maturity gates before implementation
+
+This spec moves from research to binding when all of these are
+complete. **Security review is weighted heavier than other specs
+because the Build Execution Provider owns sandbox execution and
+inherits all of Build Studio's privileged-runtime concerns —
+arbitrary code execution, credentials, network egress, file system
+access.**
+
+- [ ] Research & Benchmarking section complete (per AGENTS.md §10)
+      — patterns from GitHub Actions self-hosted runners, GitLab
+      Runner, Buildkite Agent, Drone CI agent, plus the Firecracker
+      / gVisor / Kata Containers isolation primitives.
+- [ ] Open questions resolved or explicitly deferred (interface
+      design for long-lived vs ephemeral, file-system abstraction,
+      networking abstraction; cost / capacity / concurrency limits;
+      audit-trail consistency; refactor sequencing).
+- [ ] Schema impact reviewed — `Sandbox.provider` field,
+      `ToolExecution.routeContext` provider attribution.
+- [ ] Canonical contracts updated if this spec changes shared
+      behavior (Contract 6 of the doctrine references this spec).
+- [ ] **Security review complete (heavy):**
+      - Sandbox image acquisition path per provider (registry auth,
+        signed image verification)
+      - Resource isolation enforcement (memory / CPU caps; preventing
+        sandbox-to-host escape)
+      - Network policy per provider (sandbox can reach what; LLM CLI
+        agents in mode 4 still bypass `LLM_BASE_URL` audit envelope —
+        documented and accepted, not silently allowed)
+      - Credentials propagation into sandbox (no host secrets leak;
+        per-task credentials)
+      - Cleanup guarantees (`destroySandbox` actually runs; TTL
+        enforcement on provider that uses it)
+      - Audit envelope (`ToolExecution` records emitted by every
+        provider; provider attribution is accurate)
+- [ ] Release / rollback story defined — interface extraction is a
+      no-op refactor first; subsequent provider implementations ship
+      behind feature flags so a bad provider can be disabled per
+      deployment without touching the others.
+- [ ] Test / verification gates defined — `sandbox-provider-contract.test.ts`
+      that every provider must pass; smoke test per provider on a
+      representative substrate; chaos test for cleanup failure
+      modes (orphaned sandboxes after portal crash).
+
 ## Source documents
 
 - `docs/superpowers/specs/2026-05-09-deployment-contracts.md` —

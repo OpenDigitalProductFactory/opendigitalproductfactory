@@ -490,6 +490,46 @@ The installer-parity roadmap does **not** retire `windows_exporter`
 or the `windows-host` Prometheus scrape — those retire when this
 epic ships the Edge Node's `capability.discovery.network` slice.
 
+## Maturity gates before implementation
+
+This spec moves from research to binding when all of these are
+complete. **Security review is weighted heavier than other specs
+because the Edge Node touches sandbox execution, network scanning,
+credentials, policy caching, and host-local trust — an
+architectural defect here has wider blast radius than a deployment-
+target misconfiguration.**
+
+- [ ] Research & Benchmarking section complete (per AGENTS.md §10).
+- [ ] Open questions resolved or explicitly deferred.
+- [ ] Schema impact reviewed — `EdgeNode`, `EdgeNodeCapability`,
+      `DiscoveryRun.edgeNodeId` migration; the
+      `persistSubmittedDiscoveryRun` function added alongside
+      `persistBootstrapDiscoveryRun`.
+- [ ] Canonical contracts updated if this spec changes shared
+      behavior (Contract 5 of the doctrine references this spec;
+      Contract 9's mode 4 — CLI agents — is orthogonal but
+      adjacent).
+- [ ] **Security review complete (heavy):**
+      - `dpfedge_*` token issuance and rotation flow
+      - Bootstrap-token enrollment ceremony (TOFU vs paste vs
+        operator approval)
+      - Quarantine / revocation triggers and effects
+      - Soft-fail policy windows when Authority Core unreachable
+      - Policy-cache integrity (signing, freshness)
+      - Edge Node binary signing / attestation
+      - Linux capability surface (`CAP_NET_RAW`, `CAP_NET_ADMIN`)
+        documented and minimized
+      - macOS entitlements minimized
+      - Audit-trail consistency for Edge Node observation
+        submissions
+- [ ] Release / rollback story defined — binary distribution,
+      self-update flow, downgrade path if a release is bad.
+- [ ] Test / verification gates defined — fresh install on
+      Windows / macOS / Linux; submission contract test against
+      `persistSubmittedDiscoveryRun`; air-gap behavior verified;
+      capability advertisement / Authority Core policy round-trip
+      verified.
+
 ## Source documents
 
 - `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`

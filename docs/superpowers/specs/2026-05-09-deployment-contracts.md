@@ -368,6 +368,36 @@ This doctrine does **not** specify:
   flags deployment specs claiming behavior that contradicts the
   doctrine? Probably not in v1 — humans review specs.
 
+## Maturity gates before implementation
+
+This doctrine moves from research to binding when all of these are
+complete. The same checklist applies to every spec that wraps this
+doctrine; that's the point of having a uniform gate.
+
+- [ ] Research & Benchmarking section complete (per AGENTS.md §10).
+- [ ] Open questions resolved or explicitly deferred to a named
+      follow-up spec / epic.
+- [ ] Schema impact reviewed (Prisma, Neo4j, Postgres) — including
+      backward-compat implications and migration story.
+- [ ] Canonical contracts updated if the spec changes shared
+      behavior (this doctrine; or another doctrine if one is
+      added).
+- [ ] Security review complete — credentials, secrets propagation,
+      network exposure, sandbox / privileged-execution concerns,
+      audit-trail integrity. Sign-off recorded.
+- [ ] Release / rollback story defined — how it ships, how it backs
+      out if a regression appears, what the operator sees.
+- [ ] Test / verification gates defined — unit tests, integration
+      tests, smoke install on a fresh host, contract tests for any
+      cross-spec interfaces.
+
+For specs that own privileged execution or host-local trust
+(Edge Node, Build Execution Provider), the security review gate is
+weighted heavier than the others — those specs touch sandbox
+execution, network scanning, credentials, policy caching, and
+host-local trust, and an architectural defect there has wider
+blast radius than a substrate misconfiguration.
+
 ## Source documents
 
 - `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
