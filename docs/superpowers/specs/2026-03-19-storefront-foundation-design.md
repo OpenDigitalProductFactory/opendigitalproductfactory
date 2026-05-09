@@ -585,3 +585,135 @@ Path-based routing means zero special configuration in development:
 | EP-STORE-004 | Custom domain / subdomain routing |
 | EP-STORE-005 | Payment processing — connect orders/bookings to payment gateway |
 | EP-STORE-006 | CRM enrichment — `CustomerAccount` industry, size, website from storefront sign-up |
+
+---
+
+## Addendum (2026-05-09): Deployment surface contract
+
+Added in the deeper-review backlog pass. The storefront is now
+classified as a **public client surface** under Doctrine Contract
+10 (`docs/superpowers/specs/2026-05-09-deployment-contracts.md`).
+This addendum captures the deployment-architecture deltas the
+foundation spec didn't account for.
+
+### Three distinct domains, one Authority Core
+
+A single DPF install surfaces three logically distinct sets of
+routes that may live on different domains:
+
+| Surface | Path prefix | Auth | Public exposure |
+|---|---|---|---|
+| Storefront public | `/s/**` | public + optional customer session | always public, often on a customer-branded domain |
+| Customer portal | `/portal/**` | customer session | public, may share storefront domain or live on a separate one |
+| Workforce admin | `/storefront`, `/platform`, `/admin` | workforce session via Identity Edge OIDC | private (VPN), or public with strict IP / IdP enforcement |
+
+Per the cloud-deployment spec's "Public surfaces and ingress per
+substrate" matrix, each substrate wires these routes through its
+own ingress mechanism (Caddy on Single VM / TAPPaaS, Ingress on
+Managed Kubernetes, ALB on managed container service). The
+storefront foundation must not assume any particular ingress
+shape.
+
+### Domain configuration
+
+Per-deployment runtime envvars (added to Doctrine Contract 2 —
+runtime configuration):
+
+```
+STOREFRONT_PUBLIC_DOMAIN          # e.g. shop.acme.com
+CUSTOMER_PORTAL_DOMAIN            # may equal STOREFRONT_PUBLIC_DOMAIN
+                                  # or differ (e.g. portal.acme.com)
+WORKFORCE_ADMIN_DOMAIN            # e.g. dpf.acme.internal
+```
+
+If the customer hosts all three on a single domain, the surfaces
+share the same hostname and the path-prefix routing in this spec
+already handles them. If the customer separates them (common for
+customer-branded storefronts on `shop.brand.com` while admin lives
+on `dpf.brand-internal.com`), the deployment wrapper provisions
+multi-domain TLS certificates and routes per surface.
+
+### CORS and origin policy
+
+The storefront's public APIs (`/api/storefront/**` per the route
+classification) must answer pre-flight CORS for browsers loading
+from the storefront domain. The workforce admin's APIs must not.
+The customer portal sits in between.
+
+Per-surface CORS rules:
+
+| Surface | Allowed origins | Credentials |
+|---|---|---|
+| `/api/storefront/**` (public) | configured per tenant; typically the storefront domain plus any preview / staging hosts | `false` (anonymous) for public reads; cookie-bearing only on customer-session paths |
+| `/api/portal/**` (customer) | customer portal domain | `true` (cookie sessions) |
+| `/api/v1/**` (mobile / workforce REST) | mobile app origin (`null` for native fetch); workforce admin domain | `true` for workforce; mobile bears Bearer tokens |
+| `/api/mcp/v1` | strict allowlist via `MCP_ALLOWED_ORIGIN_HOSTS` (per Doctrine Contract 10) | not browser-style; clients are MCP agents |
+| `/api/v1/edge/**` | not browser-callable; called by Edge Node native binary | n/a |
+
+Storefront wrappers (TAPPaaS module's Caddy directive, Helm chart
+values, Terraform Cloud Run service config) must encode these
+rules per surface. The storefront foundation provides the
+in-application logic; the wrappers provide the ingress-level
+enforcement (CSP, frame-ancestors, etc.).
+
+### Customer identity migration path
+
+Today's storefront auth distinguishes `User` vs `CustomerContact`
+directly when resolving a session
+(`apps/web/lib/storefront/...`). Under the principal-convergence
+addendum on the enterprise auth spec
+(`docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`,
+2026-05-09), both resolve to a single `Principal` with the alias
+kind (`workforce-user` or `customer-contact`) telling the
+application which audience the request belongs to.
+
+Migration steps for the storefront:
+
+1. **Phase 1 (current):** keep direct `User` / `CustomerContact`
+   resolution; storefront unchanged.
+2. **Phase 2:** when convergence migration runs, every existing
+   `User` and `CustomerContact` row gets a backing `Principal` +
+   `PrincipalAlias`. Storefront auth resolution gains a
+   "find-by-alias" path alongside the legacy direct lookup; both
+   produce the same outcome.
+3. **Phase 3:** legacy direct lookup retires; storefront auth
+   resolves to `Principal` only and reads alias kind. Customer-
+   vs-workforce branching at the application layer is unchanged
+   in behavior; the underlying identity model is unified.
+
+The storefront's customer audience does **not** require the
+Identity Edge (Identity Edge is workforce-facing; customers
+authenticate against the storefront's own customer auth flow,
+which may be passwordless email / social sign-in / etc. per the
+existing customer-auth spec). The convergence rule is about the
+*data model*, not about routing customer logins through workforce
+SSO.
+
+### Storefront ↔ Mobile interaction
+
+When the mobile companion app (per the mobile spec's 2026-05-09
+addendum) is in `customer-contact` mode in the future, it
+authenticates against the same `CustomerContact` Principal the
+storefront uses. The mobile API surface (`/api/v1/**`) and the
+customer portal API (`/api/portal/**`) must agree on the
+Principal model so a customer using both clients sees consistent
+state — explicitly tracked here so future mobile-customer work
+doesn't fork the customer identity model.
+
+### Open questions for this addendum
+
+- **Multi-tenant domain provisioning:** can a single DPF install
+  serve multiple storefront tenants on different domains today
+  via path-prefix routing, or does it require subdomain-per-tenant?
+  (DPF is single-tenant per the cloud-deployment premise — this
+  is about a single tenant offering multiple storefront brands.)
+- **Storefront-served `apple-app-site-association` /
+  `assetlinks.json`:** the mobile spec's universal-link contract
+  needs these served at `/.well-known/...`. Does the storefront
+  framework own that, or is it the workforce admin's
+  responsibility? Probably the workforce admin domain since
+  that's where the Authority Core lives.
+- **CSP / frame-ancestors per surface:** the storefront may want
+  to allow embedding in customer marketing sites (with a CSP
+  allowlist); the workforce admin must not. Document the
+  per-surface CSP defaults.
