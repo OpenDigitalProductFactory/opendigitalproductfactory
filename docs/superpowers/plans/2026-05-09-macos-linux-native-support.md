@@ -450,6 +450,11 @@ while the context is fresh.
 
 ### Discovery plane refactor (replaces the host-exporter pattern)
 
+> **Canonical location for this epic:**
+> `docs/superpowers/specs/2026-05-09-discovery-plane-architecture.md`
+> (DRAFT). The summary below is preserved for context; further design
+> work happens in that spec, not here.
+
 The current pattern — install `windows_exporter` as a Windows service,
 scrape it from a container, parse `windows_net_nic_address_info` to
 recover the host's real NICs — is fragile (MSI install can fail,
