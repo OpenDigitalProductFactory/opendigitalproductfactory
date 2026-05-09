@@ -120,6 +120,100 @@ and integration with existing customer GitOps / observability.
 artifact. Helm chart can be considered the "cloud-native installer"
 counterpart to `install-dpf.sh`.
 
+### Shape 4 — TAPPaaS module (customer's self-hosted private PaaS)
+
+[TAPPaaS](https://tappaas.org/) — "Trusted Automated Private Platform
+as a (self-hosted) Service" — is an MPL-2.0 self-hosted PaaS that
+targets small business / NGO / government / community deployments on
+the customer's own hardware. It is single-tenant by design (one
+cluster per organization), cluster-based, and organizes workloads
+into "Stacks" (Foundation, AI, Productivity, Home, DevOps) installed
+as "TAPPaaS Modules" via `install-module.sh` /
+`update-module.sh` / `delete-module.sh` shell scripts.
+
+The premise alignment with DPF is strong:
+
+- **Single-tenant by design** — matches DPF's binding non-goal
+  exactly.
+- **Customer-owned hardware or cloud** — matches DPF's premise
+  that "the project can run on the customer's own hardware,
+  including their own cloud resources if chosen."
+- **Open source under permissive license** — both projects.
+- **Multi-service stack support** — DPF's 8-service compose layout
+  fits the TAPPaaS stack model.
+- **AI Stack already ships compatible components:** Ollama, vLLM,
+  OpenWebUI, LiteLLM. DPF's `LLM_BASE_URL` provider contract
+  (Phase 4 of the installer-parity roadmap) can target the customer's
+  pre-existing TAPPaaS Ollama service directly without requiring
+  DPF to bring its own LLM runtime.
+- **Hardware tiering** — TAPPaaS publishes Minimal / Standard /
+  Performance tiers (8GB / 16GB / 32GB+ RAM); DPF sits firmly in
+  Performance given Postgres + Neo4j + Qdrant + Build Studio +
+  browser-use Chromium.
+
+**Trade-offs:** TAPPaaS imposes its own platform conventions (SSO,
+networking, firewall, storage layers are architectural sections of
+TAPPaaS itself, see [tappaas.org/architecture/](https://tappaas.org/architecture/)).
+DPF must decide where to integrate (use TAPPaaS-provided platform
+services) and where to keep ownership (DPF's authentik Identity
+Edge, DPF's own Postgres / Neo4j / Qdrant).
+
+**Reuses:** same images from the GHCR multi-arch publish (Phase 1 of
+the installer-parity roadmap). Packaging adds a `deploy/tappaas/`
+directory with `install-module.sh` / `update-module.sh` /
+`delete-module.sh` that internally drive whatever TAPPaaS uses —
+which is itself an open question (see below).
+
+**Strategic upside:** publishing DPF as a TAPPaaS module gives the
+project distribution into a community of organizations (small
+business, NGO, government, community of homes) that explicitly want
+self-hosted infrastructure. That is exactly the audience this
+roadmap and the single-tenant premise are designed for.
+
+**Open questions specific to TAPPaaS** (overlap with the global open
+questions further below):
+
+- **Packaging format:** what does TAPPaaS's `install-module.sh`
+  invoke under the covers — Helm, Kustomize, kubectl apply,
+  Docker Compose, or something custom? Verify by reading
+  [tappaas.org/installation/](https://tappaas.org/installation/)
+  and the linked module-design pages, or by reading the source on
+  the project's repository. The answer determines whether DPF's
+  Helm chart from Shape 3 is reusable directly or needs a
+  TAPPaaS-specific wrapper.
+- **Platform-provided services vs module-provided services:** does
+  TAPPaaS provide a shared cluster Postgres / object store /
+  ingress controller that modules consume, or does each module
+  install its own everything? The TAPPaaS Foundation Stack lists
+  Network / Firewall / Storage as platform layers, suggesting some
+  shared services exist; the exact contract is undocumented in the
+  pages reviewed.
+- **Image registries and multi-arch:** does TAPPaaS pull from
+  external registries like `ghcr.io/<owner>/dpf-portal:<tag>`?
+  Multi-arch (`linux/amd64` + `linux/arm64`) support? GHCR auth for
+  customers running early-access (private) images?
+- **SSO integration:** TAPPaaS has its own SSO architecture
+  section. The enterprise auth spec selects authentik as DPF's
+  Identity Edge. If TAPPaaS's SSO is also authentik (or
+  interoperable via OIDC), the integration is clean — one
+  authentik per cluster, shared by TAPPaaS and DPF. If TAPPaaS
+  ships a different IdP, the customer must pick: TAPPaaS SSO
+  upstream of DPF authentik via OIDC federation, or two parallel
+  IdPs. **This is the single most important integration question.**
+- **Build Studio:** TAPPaaS's cluster runtime constraints around
+  privileged pods determine whether Build Studio works as-is or
+  needs the cloud-shape Option A / B / C decision (see "Build
+  Studio in cloud").
+- **Module catalog:** is there an officially-published catalog of
+  TAPPaaS modules, and what's the vetting process for inclusion?
+  A DPF module published to that catalog would amplify the
+  project's reach into the TAPPaaS audience.
+- **Project maturity and governance:** TAPPaaS lists copyright as
+  "TAPPaaS Contributors (2026)" but the team size, release cadence,
+  and SLA expectations aren't documented in the overview pages
+  reviewed. Do the [tool-evaluation pipeline](../../specs/2026-03-25-tool-evaluation-pipeline-design.md)
+  per AGENTS.md §9 before committing DPF to a TAPPaaS dependency.
+
 ## Authority Core in cloud — service mapping
 
 | Compose service | AWS | GCP | Azure | Notes |
@@ -298,6 +392,15 @@ Before finalization, compare the deployment patterns of:
 self-managed, Authentik, Wazuh, Plausible Analytics. Read their
 cloud deployment templates and what they chose to manage vs require
 the customer to bring.
+
+**Open source — self-hosted PaaS as a deployment target:**
+[TAPPaaS](https://tappaas.org/) (MPL-2.0, single-tenant, k8s-shaped,
+module-driven). Already ships Ollama / vLLM / LiteLLM / OpenWebUI in
+its AI Stack — direct alignment with DPF's LLM provider contract.
+Open question for the epic: what `install-module.sh` actually invokes
+under the covers, and how DPF's authentik Identity Edge interacts
+with TAPPaaS's SSO architecture. See Shape 4 above for the full
+analysis.
 
 **Open source — fleet/observability with cloud control plane:**
 Datadog Agent (open-source agent, closed-source server — so only the
