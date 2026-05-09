@@ -37,6 +37,15 @@ git config core.hooksPath .githooks
 
 `scripts/fresh-install.ps1` and `scripts/setup.ps1` / `scripts/setup.sh` configure this automatically when you use them to set the repo up. Run the one-liner above manually if you cloned without those helpers.
 
+### Setup on macOS / Linux
+
+> **Status:** the canonical macOS / Linux contributor flow is being landed via Phase 2 of the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) (rewriting `scripts/setup.sh` and adding `osx` / `linux` overrides to `.vscode/tasks.json`). Until that ships, two paths work:
+>
+> - Run `bash scripts/setup.sh` directly. The current script is stale (uses Ollama, has BSD-`sed -i` portability bugs) but boots a contributor environment well enough to start work; it will be cleanly replaced when Phase 2 lands.
+> - Use the dev container at [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) — fully cross-platform, runs the workspace inside a Linux container regardless of host OS.
+>
+> The full macOS / Linux contributor experience (native installer, native VS Code task overrides, Apple-Silicon-aware hardware detection, LaunchAgent / systemd auto-start) is sequenced through the installer-parity roadmap.
+
 ## Before you start
 
 - Have an install running. See the repo [README](README.md) Quick Start for the Windows installer, or [docs/user-guide/getting-started/developer-setup.md](docs/user-guide/getting-started/developer-setup.md) for the native pnpm + Docker sidecar setup.
