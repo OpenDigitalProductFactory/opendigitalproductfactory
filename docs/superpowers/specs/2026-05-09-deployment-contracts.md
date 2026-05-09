@@ -426,6 +426,70 @@ Every deployment-target spec must:
 Specs that violate this rule should be brought back into compliance
 rather than allowed to drift.
 
+## Deployment support matrix
+
+What works on which deployment, at what status. Every cell is one
+of: **GA** (production-ready), **Preview** (works but not yet
+release-gated), **Planned** (designed, implementation pending),
+**Unsupported** (out of scope; documented in Source plan), **Degraded**
+(works with reduced fidelity, see notes), or **Blocked** (waiting on
+external dependency).
+
+This table is the at-a-glance answer to "what breaks where" so
+buried prose elsewhere doesn't become accidental truth. Inspired by
+GitLab Runner's executor compatibility matrix.
+
+Capability rows borrow from the spec ownership map directly below
+this section.
+
+| Capability | Win + DD | Mac + DD (AS) | Linux native Docker | Single cloud VM | Container service | Managed K8s | TAPPaaS module | Marketplace image |
+|---|---|---|---|---|---|---|---|---|
+| **Release & install** | | | | | | | | |
+| Release images (GHCR multi-arch) | GA (amd64) | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
+| Installer (`install-dpf.{ps1,sh}`) | GA | Planned | Planned | Planned (via cloud-init) | Planned (via Helm/Terraform) | Planned (via Helm) | Planned (via TAPPaaS module) | Planned |
+| Auto-start on boot | GA (Scheduled Task) | Planned (LaunchAgent) | Planned (systemd user) | Planned | Substrate-managed | Substrate-managed | TAPPaaS-managed | Inherits Single VM |
+| **LLM provider** | | | | | | | | |
+| Default mode | Docker Model Runner | Docker Model Runner | Ollama (in compose) | Ollama (in compose) | External Ollama / LiteLLM | Ollama via Helm + GPU pool | TAPPaaS AI Stack (LiteLLM/Ollama) | Inherits Single VM |
+| Codex CLI (port 1455) | GA | Planned | Planned (1455 firewall) | Planned (firewall) | Unsupported (port lock-in) | Planned (Ingress, default off) | Planned (Caddy directive) | Inherits Single VM |
+| Claude Code CLI | GA | Planned | Planned | Planned | Planned | Planned | Planned | Inherits Single VM |
+| **Build Studio** | | | | | | | | |
+| Build Studio via `local-docker` provider | GA | Planned | Planned | Planned | Unsupported | Unsupported | Planned (in VM) | Inherits Single VM |
+| Build Studio via cloud-native job providers (`kubernetes-job`, `ecs-task`, `cloud-run-job`, `azure-containerapp-job`) | n/a | n/a | n/a | n/a | Planned (gates Build Studio readiness) | Planned (gates Build Studio readiness) | n/a | n/a |
+| **Surfaces & ingress (Contract 10)** | | | | | | | | |
+| MCP transport hardening (`MCP_PUBLIC_URL`, `MCP_ALLOWED_ORIGIN_HOSTS`, `TRUST_PROXY_HEADERS`) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
+| OAuth provider callbacks | GA | Planned | Planned | Planned (sticky host) | Planned (sticky LB host) | Planned (Ingress) | Planned (Caddy proxyDomain) | Inherits Single VM |
+| Mobile API + universal links (`/.well-known/...`) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
+| Storefront custom domains (multi-domain TLS) | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Inherits Single VM |
+| **Edge Node (Contract 5)** | | | | | | | | |
+| Edge Node binary (Mode B) | Planned | Planned | n/a (Mode A container preferred) | n/a | n/a | n/a | n/a | n/a |
+| Edge Node container w/ `network_mode: host` (Mode A) | n/a | n/a | Planned | Planned | Unsupported (substrate restriction) | Planned (privileged node pool) | Planned (in VM) | Inherits Single VM |
+| Network sweep — full host topology fidelity | Planned (via `windows_exporter`; Edge Node post-Epic B) | Degraded (Docker Desktop VM hides Mac NICs; Mode B native binary closes gap) | Planned (via node-exporter) | Planned (via node-exporter) | Degraded (no host topology truth in container service substrate) | Degraded | Planned | Inherits Single VM |
+| Host metrics (cadvisor + node-exporter) | Degraded (WSL2 VM hides physical NICs; `windows_exporter` substitutes today) | Degraded (Docker Desktop VM) | Planned (`linux-monitoring` profile) | Planned | Substrate-native (CloudWatch / Stackdriver / Azure Monitor) | Substrate-native | Substrate-native | Inherits Single VM |
+| **Identity (Contract 4)** | | | | | | | | |
+| `identityEdgeMode=dpf-managed` (bundled authentik) | Planned | Planned | Planned | Planned | Planned (Helm dep) | Planned (Helm dep) | Planned (alongside TAPPaaS Authentik) | Inherits Single VM |
+| `identityEdgeMode=customer-provided` | Planned | Planned | Planned | Planned | Planned | Planned | Planned | Planned |
+| `identityEdgeMode=tappaas-upstream` | n/a | n/a | n/a | n/a | n/a | n/a | Blocked (TAPPaaS identity automation maturity) | n/a |
+| **Lifecycle (Contract 3)** | | | | | | | | |
+| Backup / restore (logical Postgres / Neo4j / Qdrant exports) | Planned | Planned | Planned | Planned | Substrate-managed (PITR + snapshots) | Substrate-managed | Inherits Single VM + TAPPaaS VM snapshots | Inherits Single VM |
+| Update / rollback | GA (`dpf-reinstall.ps1`) | Planned | Planned | Planned (Terraform re-apply) | Planned (Helm/Terraform) | Planned (Helm) | TAPPaaS-managed (snapshot + post-update tests + rollback on fatal) | Marketplace listing version |
+
+### Reading the matrix
+
+- A **Planned** cell does not commit to a delivery date; it asserts
+  the architecture supports the capability and the implementing epic
+  is named in the Source plan. Status moves to **Preview** when the
+  capability ships behind a feature flag, and **GA** when it passes
+  the spec's maturity gates and is the documented default.
+- **Degraded** cells must always carry a note in their owning spec
+  explaining what fidelity is reduced and what remediation closes
+  the gap. Cell content names the remediation when known.
+- **Blocked** cells must name the external dependency (TAPPaaS
+  identity automation in this case). When the dependency clears,
+  the cell graduates to Planned and an implementing epic is named.
+- This matrix is the **single canonical answer** to "does X work on
+  Y?" Owning specs link here rather than restating; updates land
+  via a doctrine PR, not a substrate-spec PR.
+
 ## Spec ownership map
 
 Where does any given DPF concern live? This map prevents readers
