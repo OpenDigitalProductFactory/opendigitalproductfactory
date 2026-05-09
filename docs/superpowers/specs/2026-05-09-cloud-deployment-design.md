@@ -742,3 +742,77 @@ cloud deployment templates.
   must reproduce.
 - `Dockerfile`, `Dockerfile.sandbox`, `Dockerfile.promoter` — image
   artifacts the cloud deployment consumes.
+
+## Appendix: TAPPaaS source-review evidence
+
+The "Verified TAPPaaS facts" subsection inside the TAPPaaS module
+section makes claims about TAPPaaS architecture that originate from
+two source paths: pages on `tappaas.org` (verifiable by WebFetch)
+and a chief-architect review of the TAPPaaS GitHub repository (not
+WebFetch-verifiable in this session, but cited from a senior
+reviewer with direct repo access). Listing the evidence so future
+contributors can re-verify or refresh:
+
+### Verified by direct fetch of `tappaas.org`
+
+- **Proxmox VE virtualization foundation:**
+  [tappaas.org/installation/foundation/](https://tappaas.org/installation/foundation/)
+  references "Proxmox VE Cluster" and "Proxmox Node" in module time
+  estimates.
+- **OPNsense Firewall:** same page, listed as foundation module 2
+  ("OPNsense Firewall deployment").
+- **NixOS Template:** same page, listed in module time estimates;
+  Debian template implied by parallel structure.
+- **AI Stack components:**
+  [tappaas.org/installation/ai-stack/](https://tappaas.org/installation/ai-stack/)
+  lists OpenWebUI ("Web interface for interacting with LLMs"),
+  LiteLLM ("Unified API gateway for multiple LLM providers"), and
+  Ollama / vLLM ("Local LLM serving engines").
+- **Hardware tiering:** same page documents Minimal (8GB) /
+  Standard (16GB) / Performance (32GB+) RAM tiers.
+- **MPL-2.0 license:**
+  [tappaas.org/](https://tappaas.org/) — "Fully open source under
+  the Mozilla Public License 2.0".
+
+### From chief-architect review of TAPPaaS GitHub repository (2026-05-09)
+
+These claims rest on the architect's direct repo read; spec
+contributors who want to refresh them should clone the TAPPaaS
+upstream and confirm. Captured here so the citations in the main
+TAPPaaS section trace back to a documented evidence trail.
+
+- **Module file contract:** `<module>.json` + `install.sh` +
+  `update.sh` + optional `pre-update.sh` / `delete.sh` + service
+  scripts under `services/`.
+- **Module JSON fields:** `vmid`, `vmname`, `node`, `cores`,
+  `memory`, `diskSize`, `storage`, `imageType`, `bridge0`, `zone0`,
+  `proxyDomain`, `proxyPort`, `dependsOn`.
+- **`install-module.sh` flow:** validate config → check
+  dependencies → call dependency `install-service.sh` scripts →
+  run module's own `install.sh`.
+- **`update-module.sh` flow:** snapshot → pre-update tests →
+  dependency updates → module update → post-update tests → rollback
+  on fatal failure.
+- **Authentik as preferred TAPPaaS SSO solution.**
+- **Identity-guide maturity note:** TAPPaaS identity guide
+  documented as "TODO: Not tested" with central API key management
+  not yet implemented.
+- **ZFS-based storage pools** with cross-node snapshots and
+  replication; synchronous replication not provided (best
+  replication may lag several minutes).
+- **OpenWebUI module precedent:** runs as a NixOS VM with a Podman
+  container — supports the spec's claim that DPF could eventually
+  ship a NixOS / Podman packaging once the Build Studio provider
+  abstraction lands.
+- **Ollama OpenAI-compatible endpoint:**
+  `http://ollama.mgmt.internal:11434/v1` for in-cluster consumers.
+
+### Re-verification protocol
+
+Before the cloud-deployment spec graduates from research stub to
+finalized spec (per AGENTS.md §10), each claim above should be
+either (a) re-verified against the live `tappaas.org` site / docs
+URL with a stable link, or (b) cited to a permanent commit hash in
+the TAPPaaS upstream repository. The Tool Evaluation Pipeline
+(AGENTS.md §9) is the formal mechanism for that re-verification
+before DPF commits to a hard TAPPaaS dependency.
