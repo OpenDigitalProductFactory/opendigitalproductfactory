@@ -451,9 +451,19 @@ while the context is fresh.
 ### Discovery plane refactor (replaces the host-exporter pattern)
 
 > **Canonical location for this epic:**
-> `docs/superpowers/specs/2026-05-09-discovery-plane-architecture.md`
+> `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`
 > (DRAFT). The summary below is preserved for context; further design
 > work happens in that spec, not here.
+>
+> **Scope evolved:** what started as a narrow "discovery agent" has
+> been reframed as a broader **DPF Edge Node** — a host-resident
+> trust and connectivity component with modular capabilities
+> (network discovery first, then host metrics, MCP/A2A gatewaying,
+> identity/device attestation, private-link tunneling, managed-fleet
+> onboarding). Identity authority remains in the DPF core
+> (per `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`);
+> Edge Nodes are least-privilege participants. Discovery is the
+> first capability slice, not the whole product.
 
 The current pattern — install `windows_exporter` as a Windows service,
 scrape it from a container, parse `windows_net_nic_address_info` to
