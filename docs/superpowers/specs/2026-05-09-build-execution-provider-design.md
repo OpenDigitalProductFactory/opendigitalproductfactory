@@ -122,20 +122,112 @@ interface BuildExecutionProviderImpl {
 
   // Capability advertisement — Authority Core uses this to decide
   // which Build Studio features to enable for this deployment.
-  capabilities(): {
-    persistentSandbox: boolean;          // long-lived between exec calls
-    dockerInsideSandbox: boolean;        // can run docker from within (most don't)
-    networkPolicy: "host" | "namespaced" | "isolated";
-    maxConcurrent: number | "unbounded";
-    cleanupModel: "explicit" | "ttl";
-    cliAgents: {                         // which CLI agents this provider supports
-      codex: boolean;
-      claudeCode: boolean;
-      codexCallbackPort1455: boolean;    // can the substrate expose port 1455?
-    };
-  };
+  capabilities(): BuildExecutionProviderCapabilities;
 }
+
+// Capability metadata Authority Core uses for routing, policy
+// enforcement, and UI gating. Pattern borrowed from CI runner
+// frameworks (GitHub Actions Runner Controller, GitLab Runner,
+// Drone, Buildkite) — explicit trust levels, isolation classes,
+// log-sink contracts, and concurrency bounds, advertised by the
+// provider rather than implicit per substrate.
+type BuildExecutionProviderCapabilities = {
+  // Isolation class — what kind of boundary protects the host
+  // from untrusted sandbox code.
+  //   none         — direct on-host execution; never use for
+  //                  untrusted code.
+  //   container    — namespaced container (today's local-docker).
+  //   pod          — Kubernetes pod (kubernetes-job provider).
+  //   vm           — full VM (e.g. tappaas-vm; firecracker / kata).
+  //   managed-job  — substrate-managed ephemeral job
+  //                  (ecs-task / cloud-run-job /
+  //                  azure-containerapp-job).
+  isolation: "none" | "container" | "pod" | "vm" | "managed-job";
+
+  // Trust level — policy gate for what kinds of work the
+  // Authority Core may route to this provider. Per GitLab's
+  // Shell-executor warning and Drone's Exec-runner warning.
+  //   trusted-code-only — Build Studio can run vetted DPF agent
+  //                       code only; never customer-supplied code.
+  //                       Today's local-docker on the DPF host
+  //                       falls here unless the host is hardened.
+  //   customer-trusted  — provider runs in customer's own
+  //                       environment with isolation; OK for
+  //                       customer-supplied code from the
+  //                       customer's own users.
+  //   untrusted-ok      — strong isolation (vm or managed-job)
+  //                       suitable for arbitrary external code.
+  trustLevel: "trusted-code-only" | "customer-trusted" | "untrusted-ok";
+
+  // Workspace persistence between sandbox exec calls.
+  //   ephemeral — destroyed at end of run; used for short-lived
+  //               "run a command and exit" providers
+  //               (cloud-run-job, ecs-task).
+  //   ttl       — survives until TTL expiry; used by
+  //               kubernetes-job with pod TTL.
+  //   durable   — long-lived between many exec calls; today's
+  //               local-docker.
+  workspacePersistence: "ephemeral" | "ttl" | "durable";
+
+  // Log destination contract. GitHub recommends ephemeral runners
+  // forward logs externally because the runner is destroyed.
+  //   authority-core    — provider streams logs to Authority Core
+  //                       via existing audit envelope.
+  //   external-required — provider can't retain logs after job;
+  //                       Authority Core MUST attach an external
+  //                       sink (CloudWatch, Stackdriver, GELF) or
+  //                       refuse to mark this provider production-
+  //                       capable.
+  //   provider-native   — substrate-native logs (e.g. Cloud Run
+  //                       logs); Authority Core links rather than
+  //                       streams.
+  logSink: "authority-core" | "external-required" | "provider-native";
+
+  // Existing flags retained for backward compatibility with the
+  // earlier capabilities() shape.
+  persistentSandbox: boolean;          // shorthand for workspacePersistence === "durable"
+  dockerInsideSandbox: boolean;        // can run docker from within (most don't)
+  networkPolicy: "host" | "namespaced" | "isolated";
+  cleanupModel: "explicit" | "ttl";
+
+  // Sandbox feature support. Authority Core's Build Studio UI
+  // disables features the active provider can't deliver.
+  supportsCliAgents: {                  // which CLI agents this provider supports
+    codex: boolean;
+    claudeCode: boolean;
+    codexCallbackPort1455: boolean;     // can the substrate expose port 1455?
+  };
+  supportsPortCallbacks: boolean;       // arbitrary host-reachable port mappings
+  supportsPreviewUrl: boolean;          // getPreviewUrl returns a usable URL
+  supportsFileCopy: boolean;            // copyAppsWebInto + readFile + writeFile
+  supportsSnapshot: boolean;            // can capture a sandbox snapshot for
+                                        // resume / replay (TAPPaaS VM mode, e.g.)
+
+  // Concurrency advertisement. Authority Core enforces per-policy.
+  maxConcurrentSandboxes?: number;      // omitted == unbounded subject to host
+};
 ```
+
+The contract test (`apps/web/__tests__/sandbox-provider-contract.test.ts`,
+introduced when this provider abstraction lands) asserts these
+**semantics**, not just that the methods are callable. Specifically:
+
+- a provider claiming `trustLevel: "untrusted-ok"` must also claim
+  `isolation: "vm"` or `"managed-job"` — the test fails on
+  `"container"` because container isolation is not strong enough
+  for arbitrary external code.
+- a provider claiming `logSink: "authority-core"` must actually
+  emit log events to `ToolExecution`; the test asserts a known
+  log line appears.
+- a provider claiming `workspacePersistence: "ephemeral"` must NOT
+  claim `persistentSandbox: true`.
+- a provider claiming `supportsCliAgents.codex: true` but
+  `supportsCliAgents.codexCallbackPort1455: false` must reject Codex
+  CLI calls that require OAuth (only the API-key flow is supportable).
+
+These are the runner-playbook lessons made enforceable so a future
+provider can't quietly weaken trust or log guarantees by setting
+booleans.
 
 `SandboxSpec`, `SandboxHandle`, `ExecResult` shapes inherit from the
 current implementation. `AgentCommandSpec` / `AgentRunResult` /
