@@ -479,6 +479,101 @@ The mapping is **not part of the spec contract** — it's a starting
 point. The actual deployment templates pick one target per cloud
 rather than offering all permutations.
 
+## Public surfaces and ingress per substrate
+
+Doctrine Contract 10 enumerates the eight client / API surfaces of
+the Authority Core (admin shell, storefront, customer portal,
+mobile API, MCP transport, Edge Node ingestion, OAuth callback,
+Codex CLI callback). This section captures the **substrate-specific
+ingress wiring** each surface needs.
+
+### MCP transport hardening (substrate-specific)
+
+The MCP route at `apps/web/app/api/mcp/v1/route.ts:120-142` reads
+three deployment-supplied envvars to validate transport:
+
+| Envvar | Required when | Purpose |
+|---|---|---|
+| `MCP_PUBLIC_URL` | always | the canonical external URL of `/api/mcp/v1`; embedded in tool registry responses |
+| `MCP_ALLOWED_ORIGIN_HOSTS` | always when MCP transport is exposed publicly | comma-separated hostnames; `Origin` header validation |
+| `TRUST_PROXY_HEADERS` | when behind a proxy | gates whether `X-Forwarded-Proto` / `X-Forwarded-Host` are honored for HTTPS-detection |
+
+Per substrate:
+
+- **Single VM:** if Caddy / nginx terminates TLS in front of the
+  Next.js portal, `TRUST_PROXY_HEADERS=true` and the proxy must
+  set `X-Forwarded-Proto` and `X-Forwarded-Host`. Direct exposure
+  (no proxy) → leave `TRUST_PROXY_HEADERS=false`.
+- **Managed container service:** Cloud Run / Container Apps /
+  Fargate behind ALB are all proxies — set
+  `TRUST_PROXY_HEADERS=true`. The substrate's ingress automatically
+  sets `X-Forwarded-Proto` and `X-Forwarded-Host`; verify per-cloud
+  documentation.
+- **Managed Kubernetes:** Ingress controller (Traefik / nginx /
+  ALB Controller) terminates TLS;
+  `TRUST_PROXY_HEADERS=true` plus standard
+  `X-Forwarded-*` forwarding. Helm chart values document this
+  with sane defaults.
+- **TAPPaaS module:** Caddy at `proxyDomain` terminates TLS and
+  forwards headers; `TRUST_PROXY_HEADERS=true`. Caddy's default
+  forwarding is correct.
+- **Marketplace image:** inherits Single VM behavior.
+
+### Surface-by-substrate matrix
+
+| Surface | Single VM | Container service | Managed k8s | TAPPaaS module | Marketplace |
+|---|---|---|---|---|---|
+| Admin shell (`/storefront`, `/platform`, `/admin`) | direct or behind Caddy | LB → service | Ingress + TLS | `proxyDomain` (admin domain) | inherits Single VM |
+| Storefront public (`/s/**`) | direct, multi-domain optional | LB host-routed by tenant | Ingress with multi-host TLS | `proxyDomain` (separate storefront domain) | inherits Single VM |
+| Customer portal (`/portal/**`) | direct or admin-proxy | LB → service | Ingress | `proxyDomain` | inherits Single VM |
+| Mobile API (`/api/v1/**`) | public over TLS | public LB | Ingress with mobile-friendly CORS | `proxyDomain` | inherits Single VM |
+| MCP transport (`/api/mcp/v1`) | private VLAN preferred; public OK with strict origin | private endpoint or strict-origin public | Ingress + NetworkPolicy | private TAPPaaS zone | inherits Single VM |
+| Edge Node ingestion (`/api/v1/edge/**`) | public HTTPS | public LB | public Ingress | `proxyDomain` (publicly reachable) | inherits Single VM |
+| OAuth callback (`/api/v1/auth/provider-oauth/callback`) | needs stable hostname | requires sticky LB host (instance churn breaks token refresh otherwise) | Ingress with stable cert | `proxyDomain` (stable) | inherits Single VM |
+| Codex CLI callback (`:1455`) | port-mapped, optional | impractical (substrate port restrictions) | needs explicit 1455 Ingress rule, default off | needs Caddy directive for 1455 | inherits Single VM |
+
+### Codex callback port — first-class deployment concern
+
+Codex's shared OAuth client locks the callback to port 1455
+(`docker-compose.yml:79`, "shared client requires this port"). This
+is a hard upstream constraint, not a DPF design choice. Per
+substrate:
+
+- **Single VM / Marketplace image:** add port 1455 to the cloud
+  firewall / security group when Build Studio with Codex is in
+  scope. Document in the install template.
+- **Managed container service:** port 1455 cannot be remapped or
+  exposed alongside 3000 in any of Fargate / Cloud Run / Container
+  Apps without significant gymnastics. **Recommendation: ship
+  Build Studio with `DPF_SANDBOX_ENABLE_CODEX=false` on this
+  substrate.** Claude Code CLI works without the port lock-in.
+- **Managed Kubernetes:** Helm chart exposes a `codex.callback.enabled`
+  values flag, default `false`. When enabled, generates an Ingress
+  rule for port 1455 alongside the standard 3000.
+- **TAPPaaS module:** the module's `install.sh` / `services/`
+  scripts add a Caddy directive that publishes port 1455
+  externally. Default off; opt-in per customer.
+
+### Ingress requirements summary per substrate
+
+- **Single VM:** Caddy or nginx in front of the portal handles
+  TLS, cert renewal, multi-host routing for storefront/admin/MCP
+  separation. Trust proxy headers, forward X-Forwarded-*.
+- **Managed container service:** the substrate's load balancer
+  handles TLS and proxy headers. Sticky callback hosts are
+  configurable via Cloud Run domain mappings, ALB target groups,
+  Container Apps custom domains.
+- **Managed Kubernetes:** an Ingress controller (Traefik / nginx /
+  AWS ALB Controller / Cloud Native HTTP) handles TLS, multi-host
+  routing, NetworkPolicy for MCP transport. Helm chart values
+  expose all of this.
+- **TAPPaaS module:** Caddy is provisioned by TAPPaaS Foundation;
+  `proxyDomain` maps the DPF VM's port 3000. Additional Caddy
+  directives in the module's `services/` for MCP NetworkPolicy
+  and Codex 1455.
+- **Marketplace image:** the marketplace listing baked-in
+  Caddy/nginx config; customer DNS points at the listed VM.
+
 ## Build Studio in cloud — the hard part
 
 Today's sandbox is a privileged sibling container that the portal
