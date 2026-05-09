@@ -116,3 +116,13 @@ APQC's cross-industry process taxonomy informed the process classification struc
 Several documents previously included under [docs/Reference/](docs/Reference/) have been removed from version control to respect the copyrights of their owners. They remain important conceptual sources. Please obtain them from the original publishers at the links above.
 
 All **original** content in this repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for the code license and [NOTICE](NOTICE) for required attributions of bundled open-source dependencies.
+
+---
+
+## Founder Kernel
+
+The platform ships with a "founder kernel" wiki at [docs/founder-kernel/](docs/founder-kernel/) &mdash; Mark Bodman's research, articles, and platform thinking, captured as a structured Karpathy-style wiki that every install gets as the platform's heart and that each customer organization extends with its own overlay.
+
+The licensing approach for every bundled raw source is enumerated in [docs/founder-kernel/RAW-SOURCES-LICENSE.md](docs/founder-kernel/RAW-SOURCES-LICENSE.md). In summary: Mark's own original work (LinkedIn articles, papers he authored, DPF specs) is bundled fully under Apache-2.0; third-party material is included as abstract + locator only (or pointer-only when redistribution is restricted) &mdash; never full text.
+
+Design spec: [docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md](docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md).
