@@ -27,7 +27,7 @@ of contracts rather than each restate them. Mac, Windows, Linux,
 cloud, and TAPPaaS are different coats on the same creature. This
 spec is the creature.
 
-## The eight canonical contracts
+## The canonical deployment contracts
 
 All DPF deployment targets must wrap these contracts. Wrappers may
 provision infrastructure, secrets, ingress, and backups around each
@@ -40,7 +40,8 @@ specs. Contract 10 added 2026-05-09 to capture client/API surface
 governance — browser admin, storefront, customer portal, mobile API,
 MCP, Edge Node ingestion, OAuth and Codex callbacks all converge on
 the same Authority Core but with distinct auth models and ingress
-needs.)
+needs. The numbered list is therefore current at 10 and may grow;
+the count is informational, not the contract.)
 
 ### 1. Release artifacts
 

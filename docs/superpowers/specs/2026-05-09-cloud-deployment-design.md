@@ -3,8 +3,8 @@
 > Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
 > this needs full "Research & Benchmarking" before finalization.
 >
-> **Doctrine reference:** this spec wraps the eight canonical
-> deployment contracts at
+> **Doctrine reference:** this spec wraps the canonical deployment
+> contracts at
 > `docs/superpowers/specs/2026-05-09-deployment-contracts.md`. Anything
 > below that's the same across deployments belongs in the doctrine,
 > not here. This spec captures only the cloud-substrate and

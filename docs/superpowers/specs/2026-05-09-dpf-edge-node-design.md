@@ -143,10 +143,19 @@ that's compatible with its environment.
 | Docker Desktop fallback | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. |
 | Remote managed host | Native service or container per host class | Same code, same API contract, same auth scope. |
 
-**Hard constraint preserved from the prior draft:** on macOS and
-Windows with Docker Desktop, no software trick exposes the host's
-physical NICs to a container running inside the Docker Desktop VM. The
-native deployment mode is the escape hatch, not a temporary workaround.
+**Hard constraint preserved from the prior draft (refined):** Docker
+Desktop runs Docker Engine inside a lightweight Linux VM and proxies
+container traffic through the Desktop backend process. Docker Desktop's
+host-networking mode (where supported) is **Layer 4 TCP/UDP only** —
+it can help with port reachability, but it does not provide physical
+NIC enumeration, Layer 2 frames, ARP tables, LLDP/CDP exchange, or
+true host-interface visibility. **Any capability that depends on
+real host/LAN topology truth — discovery sweep, L2 peer mapping,
+LLDP receive — must run as a native Edge Node binary on macOS /
+Windows or on a Linux host-network / `macvlan` path.** Port
+reachability is one beast; network truth is another, even though they
+share an aquarium. The native deployment mode is the escape hatch for
+the latter, not a temporary workaround.
 
 ## Deployment target neutrality
 

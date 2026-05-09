@@ -100,12 +100,12 @@ Phase-1 exploration confirmed the following are already cross-platform:
 
 ## Cross-cutting decisions
 
-> **Doctrine reference:** this roadmap wraps the nine canonical
-> deployment contracts at
+> **Doctrine reference:** this roadmap wraps the canonical deployment
+> contracts at
 > `docs/superpowers/specs/2026-05-09-deployment-contracts.md`
 > (release artifacts, runtime config, lifecycle, identity, edge,
-> build execution, observability, secrets, and LLM/agent-provider
-> routing).
+> build execution, observability, secrets, LLM/agent-provider
+> routing, and client/API surfaces).
 >
 > **Hierarchy on conflict:** this roadmap repeats selected doctrine
 > contracts only where a phase implements them. If the roadmap and
@@ -211,7 +211,7 @@ without building any installed-runtime services locally.
   add new build steps for any custom service classified as installed-runtime
   (see decision below).
 - `docker-compose.release.yml` **(new)** — overrides `build:` with
-  `image: ghcr.io/<owner>/dpf-<svc>:${DPF_IMAGE_TAG:-latest}` for every
+  `image: ghcr.io/${GHCR_OWNER}/dpf-${SERVICE}:${DPF_IMAGE_TAG:-latest}` for every
   installed-runtime service.
 - `.env.docker.example` — document `DPF_IMAGE_TAG`.
 **Required architectural decision before this phase ships:** classify each
@@ -232,7 +232,7 @@ custom-built service as **installed-runtime** (must publish multi-arch) or
 **Exit gate:**
   - `docker compose -f docker-compose.yml -f docker-compose.release.yml
     config` shows zero `build:` entries for installed-runtime services.
-  - `docker buildx imagetools inspect ghcr.io/<owner>/<image>:<tag>` lists
+  - `docker buildx imagetools inspect ghcr.io/${GHCR_OWNER}/${IMAGE}:${TAG}` lists
     both `linux/amd64` and `linux/arm64` for every installed-runtime image.
 **Risk:** medium. Forces an explicit ownership decision per service.
 
@@ -292,7 +292,7 @@ macOS Docker Desktop and on native Linux Docker Engine.
 - `scripts/installer/lib/compose.sh` **(new)** — single source of truth for
   the `-f` chain assembly. Used by installer, lifecycle scripts, and CI.
 **Verify:** `docker compose -f docker-compose.yml -f docker-compose.release.yml
--f docker-compose.<platform>.yml config` exits 0; `up portal postgres
+-f docker-compose.${DPF_PLATFORM}.yml config` exits 0; `up portal postgres
 ollama|model-runner` then `curl localhost:3000/api/health` returns 200 on
 both OSes.
 
