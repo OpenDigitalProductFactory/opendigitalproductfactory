@@ -214,27 +214,53 @@ without building any installed-runtime services locally.
   `image: ghcr.io/${GHCR_OWNER}/dpf-${SERVICE}:${DPF_IMAGE_TAG:-latest}` for every
   installed-runtime service.
 - `.env.docker.example` — document `DPF_IMAGE_TAG`.
-**Required architectural decision before this phase ships:** classify each
-custom-built service as **installed-runtime** (must publish multi-arch) or
-**developer/test-only** (stays `build:`-only):
-  - `portal` → installed-runtime (already published).
-  - `portal-init`, `sandbox-init` → share the portal image (same Dockerfile
-    target). Confirmed reusable.
-  - `sandbox` → installed-runtime (already published).
-  - `promoter` → **decision needed.** Currently only used in the `promote`
-    profile.
-  - `browser-use` → **decision needed.** UX verification path; almost
-    certainly installed-runtime.
-  - `adp` → **decision needed.** ADP MCP server; almost certainly
-    installed-runtime.
-  - `integration-test-harness` → developer/test-only (`integration-test`
-    profile).
-**Exit gate:**
+**Service classification (decided before Phase 1 starts, not inside the
+PR):** classify each custom-built service as **installed-runtime** (must
+publish multi-arch) or **developer/test-only** (stays `build:`-only):
+
+| Service | Classification | Notes |
+|---|---|---|
+| `portal` | installed-runtime | Already published; multi-arch added in this phase |
+| `portal-init` | installed-runtime via `portal` image | Shares the portal image (same Dockerfile target). Confirmed reusable. |
+| `sandbox` | installed-runtime | Already published; multi-arch added |
+| `sandbox-init` | installed-runtime via `portal` image | Same target as portal |
+| `promoter` | installed-runtime, profile-only | `promote` profile; ships in release manifest but not started by default |
+| `browser-use` | installed-runtime | UX verification path; user-facing |
+| `adp` | installed-runtime | ADP MCP server; part of product runtime |
+| `integration-test-harness` | developer/test-only | `integration-test` profile; not in release publish |
+
+This decision lands as part of this phase's planning so the PR
+that establishes artifact doctrine doesn't double as a service
+taxonomy debate.
+
+**Supply-chain attestation gates (in this phase, not deferred):**
+the publish workflow must produce signed image artifacts with
+SBOM and provenance attestations from day one. Per Docker's GHA
+attestation docs (`docker/build-push-action`):
+
+- `provenance: mode=max` on every build step.
+- `sbom: true` on every build step.
+- Image digests recorded in the release manifest for reproducibility.
+- No secrets leaked through build args (Docker explicitly warns
+  build args appear in provenance metadata).
+- `docker-compose.release.yml` references images by tag for
+  Preview / GA channels but supports digest-pinning
+  (`@sha256:...`) for tested release manifests.
+
+**Exit gates:**
   - `docker compose -f docker-compose.yml -f docker-compose.release.yml
     config` shows zero `build:` entries for installed-runtime services.
   - `docker buildx imagetools inspect ghcr.io/${GHCR_OWNER}/${IMAGE}:${TAG}` lists
     both `linux/amd64` and `linux/arm64` for every installed-runtime image.
-**Risk:** medium. Forces an explicit ownership decision per service.
+  - `docker buildx imagetools inspect --raw ghcr.io/${GHCR_OWNER}/${IMAGE}:${TAG}`
+    shows SBOM and provenance attestation manifests alongside each
+    platform manifest.
+  - Release notes for the publish workflow's first multi-arch tag
+    record the digest for every installed-runtime image.
+
+**Risk:** medium. Forces an explicit ownership decision per service
+plus the supply-chain gates from day one rather than retrofitting
+them under a security review later.
 
 ### Phase 2 — Platform preflight, AGENTS.md, contributor setup
 **Goal:** a Mac/Linux contributor can clone and run the dev loop. **Not**
@@ -343,30 +369,139 @@ boot.
 
 ### Phase 6 — Installer framework vertical slice
 **Goal:** `install-dpf.sh` skeleton ready for platform-specific phases —
-preflight, logging, state, dry-run, idempotency. **No** Docker Engine
-install or autostart yet.
+preflight, logging, state, dry-run, idempotency, **a minimal `dpf doctor`
+diagnostic surface**, and explicit unsupported-host detection. **No**
+Docker Engine install or autostart yet.
 **Files:**
 - `install-dpf.sh` **(new)** — phases 1, 5, 7, 8 from `install-dpf.ps1`
   (platform check, install mode selection, env generation, compose up).
   Mac/Linux platform branch via `case "$(uname -s)"`.
-- `scripts/installer/lib/{docker,model,paths,state}.sh` **(new)** — module
-  helpers. `state.sh` reads/writes `~/.dpf/install-state.json`.
+- `scripts/installer/lib/{docker,model,paths,state,doctor,preflight}.sh`
+  **(new)** — module helpers. `state.sh` reads/writes
+  `~/.dpf/install-state.json`. `doctor.sh` implements the minimum
+  `dpf doctor` (see below). `preflight.sh` implements the unsupported-host
+  detector (see below).
 - `scripts/installer/install-state.schema.json` **(new)** — JSON schema for
-  the install state file.
+  the install state file. Schema includes a versioning + migration
+  contract (see below).
 - `--dry-run` flag — prints the planned compose chain, env file, and state
   file diffs without touching the host.
 - `--headless` flag — non-interactive; required for CI.
+
+**Install-state schema (with versioning + migration):**
+
+```json
+{
+  "schemaVersion": 1,
+  "installerVersion": "2026.05.09",
+  "lastSuccessfulInstallVersion": null,
+  "lastSuccessfulComposeHash": null,
+  "composeProjectName": "dpf",
+  "platform": "darwin",
+  "arch": "arm64",
+  "dockerContext": "desktop-linux",
+  "dockerEndpoint": "unix:///Users/me/.docker/run/docker.sock",
+  "installPath": "/Users/me/dpf",
+  "stateDir": "/Users/me/.dpf",
+  "composeFiles": ["docker-compose.yml", "docker-compose.release.yml", "docker-compose.macos.yml"],
+  "imageTag": "v0.42.0",
+  "llmProvider": "model-runner",
+  "resourceLabels": { "dpf": "true" },
+  "autostart": { "enabled": true, "kind": "launchagent" },
+  "lastHealthCheck": "2026-05-09T12:00:00Z",
+  "lastBackupAt": null,
+  "lastDoctorBundlePath": null
+}
+```
+
+`schemaVersion` is required; lifecycle scripts (`dpf-{start,stop,reinstall,
+release}.sh`) must run a forward migration when they encounter an older
+schema version (or refuse to operate and direct the operator to
+re-run the installer). Reinstall scripts treat missing or corrupt
+state as a fresh install with explicit confirmation. **No spelunking
+through stale JSON in shell heuristics; the schema is the contract.**
+
+**Minimum `dpf doctor` (delivered in this phase, not deferred to
+Phase 10):**
+
+`bash install-dpf.sh doctor` (and the standalone `scripts/dpf-doctor.sh`)
+emits a diagnostic bundle covering:
+
+- Host OS and architecture (`uname -s -m`, `sw_vers -productVersion` /
+  `lsb_release -rs`)
+- Docker version (`docker version`), Docker context (`docker context inspect`)
+- Docker Desktop version on macOS (when applicable)
+- Compose file chain (the actual `-f` list assembled by `compose.sh`)
+- Rendered compose hash (`docker compose ... config | sha256sum`)
+- `~/.dpf/install-state.json` contents (redacted of secrets)
+- Per-container status (`docker compose ps`)
+- Last 200 lines of core service logs (portal, postgres, neo4j, qdrant)
+- Port-conflict scan for the platform's published ports
+- LLM provider reachability check (`curl ${LLM_BASE_URL}/v1/models`)
+- Redacted env / config summary
+
+Output: a tarball at `~/.dpf/doctor-<timestamp>.tar.gz` for support
+reports plus a human-readable summary printed to stdout. **Every
+failed install will need this; the long-tail Phase 10 hardening
+extends `dpf doctor`, but Phase 6 ships the minimum so early
+macOS / Linux installs don't write bug reports in fog.**
+
+**Unsupported-host preflight (delivered in this phase):**
+
+The installer must detect known-unsupported hosts during preflight
+and refuse to proceed with a crisp reason rather than failing
+opaquely later. Detected scenarios (each a clear exit code +
+message):
+
+- Intel Mac (`uname -m` reports `x86_64` on Darwin) — out of scope
+  per this roadmap; suggest the Windows installer or running inside
+  a Linux VM.
+- Windows on ARM — out of scope.
+- WSL2 without Docker Desktop — refuse; suggest installing Docker
+  Desktop.
+- Rootless Docker (`docker info` shows `rootless` security option) —
+  refuse; explain `host-gateway` and selected-profile host-network
+  semantics aren't supported in rootless mode.
+- Podman / containerd masquerading as Docker (`docker --version`
+  reports a non-Docker engine) — refuse; suggest standard Docker
+  Engine.
+- Linux distros older than the supported floor (Ubuntu 22.04 /
+  Fedora 39 / Debian 12) — warn and offer `--force-unsupported-host`
+  override for advanced users.
+- Air-gapped Linux (no outbound network during preflight) — warn,
+  suggest the upcoming air-gapped install path.
+
+Each refusal prints a `Reason:` and a `Next:` line so the operator
+knows what to do.
+
 **Verify:** `bash install-dpf.sh --dry-run` on Mac and Linux prints the
 expected plan. `bash install-dpf.sh --headless` on a host with Docker
 already installed brings the stack up using release images.
+`bash install-dpf.sh doctor` produces a bundle on a deliberately
+broken install (e.g., portal container down). `install-dpf.sh` on
+each unsupported scenario above exits non-zero with the expected
+message.
 
 ### Phase 7 — Full native installer and autostart
-**Goal:** `install-dpf.sh` from a fresh host (no Docker, no brew) to a
+**Goal:** `install-dpf.sh` from a fresh host (no Docker, no Homebrew
+required, no manual prerequisites beyond Xcode CLT on macOS) to a
 running portal.
 **Files:**
 - `install-dpf.sh` — add platform-specific phases:
-  - Phase 3 macOS: `mdfind 'kMDItemCFBundleIdentifier=="com.docker.docker"'`,
-    fallback to `brew install --cask docker`.
+  - Phase 3 macOS: detect existing Docker Desktop via
+    `mdfind 'kMDItemCFBundleIdentifier=="com.docker.docker"'`. **If
+    not installed, fetch the Docker Desktop `.dmg` directly from
+    Docker's official download URL (resolved via `curl -fsSL` against
+    `https://desktop.docker.com/...`), mount it via `hdiutil attach`,
+    copy `Docker.app` into `/Applications` via `cp -R`, eject via
+    `hdiutil detach`, then start the app via `open -a Docker`.** No
+    Homebrew dependency. **The installer does not bootstrap Homebrew
+    itself.** If the customer wants Homebrew, that's their package
+    manager choice; if a customer already has Homebrew, the installer
+    detects `brew --prefix Docker` as an additional path before
+    falling through to the .dmg flow. If permissions block the
+    `/Applications` copy (e.g. corporate MDM), the installer prints
+    a manual-install instruction and exits with a clear "Next:" line.
   - Phase 3 Linux: distro package manager
     (`apt-get install docker-ce docker-buildx-plugin docker-compose-plugin`,
     or dnf equivalent), `systemctl enable --now docker`, add `$USER` to
@@ -380,10 +515,14 @@ running portal.
 - `scripts/installer/linux-systemd.service.tmpl` **(new)**.
 - `uninstall-dpf.sh` **(new)** — must require `--purge` for destructive
   resource removal; only removes resources labeled `dpf=true`.
-**Verify:** **fresh-Mac-from-zero** (clean macOS 14 VM, no Docker, no
-brew → `bash install-dpf.sh` → `http://localhost:3000/api/health` returns
-200). **Fresh-Linux** (clean Ubuntu 22.04, cloud-init only → same flow →
-portal reachable). **Reboot** → portal back up via auto-start.
+**Verify:** **fresh-Mac-from-zero** (clean macOS 14 VM with Xcode
+CLT only — no Docker, no Homebrew → `bash install-dpf.sh` →
+`http://localhost:3000/api/health` returns 200). **Fresh-Linux**
+(clean Ubuntu 22.04, cloud-init only → same flow → portal
+reachable). **Reboot** → portal back up via auto-start. The
+"no Homebrew" branch of the macOS verification is mandatory — that's
+the contract the previous draft accidentally broke by listing brew
+as a fallback on a host that explicitly has no brew.
 
 ### Phase 8 — Lifecycle scripts
 **Goal:** start/stop/reinstall/release siblings, all reading
@@ -397,8 +536,8 @@ Windows drive-letter assumptions. Destructive resets require `--purge`.
 platforms; `dpf-reinstall.sh --purge` wipes only DPF-labeled resources.
 
 ### Phase 9 — Docs, CI, release gates
-**Goal:** documentation reflects the three contracts; CI proves the
-installed runtime works on Apple Silicon and Linux.
+**Goal:** documentation reflects the canonical contracts; CI proves
+the installed runtime works on Apple Silicon and Linux.
 **Files:**
 - `README.md` (line 208) — split into Developer Setup vs End-user Install
   sections; add Mac and Linux flows.
@@ -406,16 +545,41 @@ installed runtime works on Apple Silicon and Linux.
 - `CONTRIBUTING.md` — distinguish contributor bootstrap from end-user
   install.
 - `.github/workflows/ci.yml` — add jobs:
-  - `compose-render`: `docker compose -f ... config` on every overlay
-    combo.
-  - `linux-smoke-install`: `runs-on: ubuntu-22.04`, runs
+  - **`compose-render`**: for every supported `-f` chain combination,
+    run `docker compose ... config` and **upload the rendered output
+    as a CI artifact**. Enforce policy checks on the rendered output:
+    - installed-runtime services have `image:` and zero `build:`
+      entries (per Phase 1).
+    - macOS rendered config has no `/proc`, `/sys`,
+      `/var/lib/docker`, or rootfs bind mounts.
+    - Linux `linux-monitoring` profile rendered config includes
+      `node-exporter` with the expected host networking.
+    - Release config has no developer/test-only services unless an
+      explicit profile is enabled.
+    - All compose-managed resources carry the `dpf=true` label.
+    - Every published port is declared in the deployment support
+      matrix (Doctrine).
+    - **Core runtime services are not hidden behind a profile** —
+      Docker Compose's documented recommendation. Profiles are for
+      debug / test / monitoring surfaces only.
+    Policy violations fail the job; rendered artifacts are kept on
+    failed runs for diagnostic review.
+  - **`linux-smoke-install`**: `runs-on: ubuntu-22.04`, runs
     `install-dpf.sh --headless`, hits `/api/health`.
-  - `apple-silicon-release-gate`: `runs-on: macos-14`, runs the same.
-    **Real release gate**, not implied by generic macOS checks.
-  - `shellcheck`: every `.sh` file.
+  - **`apple-silicon-release-gate`**: `runs-on: macos-14`. Asserts
+    arm64 by failing the job early if the runner isn't:
+    `test "$(uname -m)" = "arm64"`. Then runs `docker version`,
+    `docker compose version`, and the same `install-dpf.sh
+    --headless` smoke. **Real release gate**, not implied by generic
+    macOS checks. The `uname` assertion turns the documentation
+    assumption ("macos-14 is arm64") into a failing CI check; if
+    GitHub renames or reclassifies the runner, this catches it.
+  - `shellcheck`: every `.sh` file (`shellcheck --shell=bash` per
+    the cross-cutting decision; bash 3.2 baseline).
   - `image-manifests`: `docker buildx imagetools inspect` on every
     installed-runtime image post-publish, asserts both architectures
-    present.
+    present **and** that SBOM and provenance attestations exist (per
+    Phase 1's supply-chain gates).
 
 ### Phase 10 — Hardening and long-tail discovery
 **Goal:** close gaps surfaced by Phases 7-9.
