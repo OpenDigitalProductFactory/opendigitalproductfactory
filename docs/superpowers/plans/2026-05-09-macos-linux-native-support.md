@@ -100,12 +100,23 @@ Phase-1 exploration confirmed the following are already cross-platform:
 
 ## Cross-cutting decisions
 
-> **Doctrine reference:** this roadmap wraps the eight canonical
+> **Doctrine reference:** this roadmap wraps the nine canonical
 > deployment contracts at
-> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`.
-> Decisions below are this roadmap's *deltas* — substrate- and
-> wrapper-specific implementations. Anything that's the same across
-> deployments belongs in the doctrine, not here.
+> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`
+> (release artifacts, runtime config, lifecycle, identity, edge,
+> build execution, observability, secrets, and LLM/agent-provider
+> routing).
+>
+> **Hierarchy on conflict:** this roadmap repeats selected doctrine
+> contracts only where a phase implements them. If the roadmap and
+> the doctrine ever appear to conflict, **the doctrine owns the
+> contract; this roadmap owns sequencing.** Doctrine changes
+> propagate to every wrapper, including this one; sequencing
+> decisions stay local to the implementation phase that needs
+> them. Anything universal across deployments belongs in the
+> doctrine, not here — if you find yourself wanting to introduce a
+> new universal rule via this roadmap, raise it as a doctrine
+> amendment first.
 
 ### Deployment wrapper compatibility
 
