@@ -167,6 +167,46 @@ on Proxmox**, not Helm-on-Kubernetes. DPF should integrate with that
 model rather than fight it, and rather than pretend it's a fourth
 cloud substrate.
 
+#### Verified TAPPaaS facts
+
+These are sourced conclusions from the TAPPaaS architecture pages
+and module-design source. Treat them as the ground truth this spec
+builds on, not open questions:
+
+- **Proxmox VE / VM-based foundation, not Kubernetes.** Verified at
+  [tappaas.org/installation/foundation/](https://tappaas.org/installation/foundation/);
+  references "Proxmox VE Cluster" and "Proxmox Node" alongside
+  OPNsense, VM template creation, and (per architect's source
+  review) ZFS storage pools.
+- **Module contract is shell-script-driven.** Each module is a
+  directory containing `<module>.json`, `install.sh`, `update.sh`,
+  optional `pre-update.sh`, optional `delete.sh`, plus service
+  dependency scripts under `services/`. Modules declare
+  `dependsOn` lists and VM provisioning fields (`vmid`, `vmname`,
+  `node`, `cores`, `memory`, `diskSize`, `storage`, `imageType`,
+  `bridge0`, `zone0`, `proxyDomain`, `proxyPort`).
+- **`install-module.sh` lifecycle:** validates module config,
+  checks dependencies, calls dependency `install-service.sh`
+  scripts, then runs the module's own `install.sh`.
+- **`update-module.sh` lifecycle:** snapshot → pre-update tests →
+  dependency updates → module update → post-update tests →
+  rollback on fatal failure. The platform owns operational
+  rollback at the VM level.
+- **Authentik is the preferred TAPPaaS SSO solution**, matching
+  the enterprise auth spec's choice for DPF's Identity Edge.
+  Identity-automation maturity is incomplete: TAPPaaS's identity
+  guide is documented as "TODO: Not tested" with central API key
+  management not yet implemented.
+- **TAPPaaS AI Stack ships OpenWebUI, LiteLLM, and Ollama/vLLM**
+  (verified at [tappaas.org/installation/ai-stack/](https://tappaas.org/installation/ai-stack/)).
+  Ollama exposes an OpenAI-compatible endpoint at
+  `http://ollama.mgmt.internal:11434/v1` — direct match for DPF's
+  `LLM_BASE_URL` provider contract.
+- **NixOS / Podman service pattern is a published precedent** —
+  the OpenWebUI module runs as a NixOS VM with a Podman container,
+  per architect's source review. DPF can reuse Debian + Docker
+  Compose initially without committing to that pattern.
+
 #### What a DPF TAPPaaS module is
 
 The first DPF TAPPaaS module is a **VM wrapper around the Single VM
