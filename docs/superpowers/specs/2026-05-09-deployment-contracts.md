@@ -374,6 +374,8 @@ ingress requirements. Wrappers must wire them all consistently.
 | Edge Node ingestion | `/api/v1/edge/**` | `dpfedge_*` machine token | public HTTPS or private mesh | per Edge Node spec |
 | OAuth callback | `/api/v1/auth/provider-oauth/callback` | OAuth state | publicly reachable | provider OAuth + Anthropic sub OAuth |
 | Codex CLI callback | `:1455` | Codex shared client | optional; off in regulated installs | port locked by upstream |
+| Apple universal links | `/.well-known/apple-app-site-association` | unauthenticated | publicly reachable | required for mobile app universal links per the Mobile spec; served by the Authority Core's domain |
+| Android app links | `/.well-known/assetlinks.json` | unauthenticated | publicly reachable | required for Android App Links per the Mobile spec; served by the Authority Core's domain |
 
 **Client identity convergence (binding direction).** Browser UI,
 mobile app, Edge Node, and external MCP clients are all clients
@@ -408,6 +410,55 @@ Surface-specific deltas live in the cloud-deployment spec
 (`docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`)
 and the per-surface specs (`Mobile`, `Storefront`, `External
 MCP Surface`); this contract is the universal frame they wrap.
+
+#### Required well-known routes
+
+The mobile spec calls for universal links and Android App Links;
+the server-side requirements live here so wrappers know to serve
+them on the correct domain (the Authority Core's, not the
+storefront's customer-branded domain — these vouch for *which app*
+is allowed to handle which URLs).
+
+| Path | Content type | Caching | Tested by |
+|---|---|---|---|
+| `/.well-known/apple-app-site-association` | `application/json` (Apple does not require `.json` extension) | reachable without auth, no redirects, served at the apex of `mobileUniversalLinkDomain` | universal-link integration test in the mobile spec |
+| `/.well-known/assetlinks.json` | `application/json` | same — unauthenticated, no redirects | Android App Links integration test |
+
+Wrappers must verify these routes survive proxy / CDN paths
+because Apple and Google fetch them from outside the customer's
+network. Edge caching is fine; redirects break verification.
+
+#### Required server-side tests for Contract 10
+
+Each of these is a route-level integration test the Authority
+Core's CI must pass before any Contract 10 surface is marked
+GA on a given substrate:
+
+- `/.well-known/apple-app-site-association` returns 200,
+  unauthenticated, JSON content type, no redirects.
+- `/.well-known/assetlinks.json` returns 200, unauthenticated,
+  JSON, no redirects.
+- OAuth callback URL generation correctly honors trusted proxy
+  headers when `TRUST_PROXY_HEADERS=true` (returns
+  `https://${PUBLIC_HOST}/...` rather than internal scheme/host).
+- CORS pre-flight responses per surface match the policy:
+  - `/api/storefront/**` allows the configured tenant origins
+    (anonymous), no credentials by default.
+  - `/api/portal/**` allows the customer portal domain with
+    credentials.
+  - `/api/v1/**` allows mobile (`null` origin) with Bearer auth,
+    workforce admin domain with credentials.
+  - `/api/mcp/v1` honors `MCP_ALLOWED_ORIGIN_HOSTS` strictly.
+  - `/api/v1/edge/**` rejects browser preflight (not browser-callable).
+- MCP origin validation honors `MCP_ALLOWED_ORIGIN_HOSTS` and
+  `x-forwarded-proto` / `x-forwarded-host` correctly.
+- Surface-cross-contamination: a `dpfmcp_*` token must not
+  authenticate against `/api/v1/edge/**` (different
+  surface-namespace), and vice versa.
+
+These tests are part of the Authority Core's per-PR CI; they don't
+gate substrate-specific deployment templates, but they gate the
+runtime that all wrappers serve.
 
 ## What deployment specs are required to do
 
