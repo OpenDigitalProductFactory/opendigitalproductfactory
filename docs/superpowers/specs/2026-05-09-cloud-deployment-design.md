@@ -70,11 +70,12 @@ networking — the Edge Nodes phone home through standard outbound
 HTTPS, the same pattern as Tailscale, Cloudflare Tunnel, and Datadog
 Agent. This is the architectural unlock.
 
-## Deployment shapes
+## Deployment substrates
 
-Three customer-cloud shapes are in scope. All three host the same
-DPF codebase and Authority Core; they differ in the infrastructure
-substrate.
+Three customer-cloud substrates are in scope. All three host the same
+DPF codebase and Authority Core; they differ in the *infrastructure*
+DPF runs on. Substrates are orthogonal to **packaging targets** (next
+section), which are *distribution channels* that wrap a substrate.
 
 ### Shape 1 — Single cloud VM (lift-and-shift)
 
@@ -120,99 +121,241 @@ and integration with existing customer GitOps / observability.
 artifact. Helm chart can be considered the "cloud-native installer"
 counterpart to `install-dpf.sh`.
 
-### Shape 4 — TAPPaaS module (customer's self-hosted private PaaS)
+## Private-platform packaging targets
+
+Distinct from substrates: a packaging target is a **distribution
+channel** that wraps one of the substrates above for a specific
+customer environment. The DPF artifacts (images, installer, Edge Node
+binary, Helm chart, Terraform modules) remain canonical; packaging
+targets reuse them rather than forking the runtime.
+
+### Shape 4 — TAPPaaS module (wraps Shape 1)
 
 [TAPPaaS](https://tappaas.org/) — "Trusted Automated Private Platform
-as a (self-hosted) Service" — is an MPL-2.0 self-hosted PaaS that
-targets small business / NGO / government / community deployments on
-the customer's own hardware. It is single-tenant by design (one
-cluster per organization), cluster-based, and organizes workloads
-into "Stacks" (Foundation, AI, Productivity, Home, DevOps) installed
-as "TAPPaaS Modules" via `install-module.sh` /
-`update-module.sh` / `delete-module.sh` shell scripts.
+as a (self-hosted) Service" — is **not** a fourth cloud substrate. It
+is a customer-owned **private-platform distribution target** built
+around Proxmox VE (verified at
+[tappaas.org/installation/foundation/](https://tappaas.org/installation/foundation/)),
+VM modules, lifecycle shell scripts, NixOS / Podman service patterns,
+OPNsense / Caddy networking, ZFS storage, and Authentik-based SSO.
 
-The premise alignment with DPF is strong:
+The module contract is concrete: each module is a directory containing
+`<module>.json`, `install.sh`, `update.sh`, optional `pre-update.sh`,
+optional `delete.sh`, and service scripts under `services/`. Module
+JSON declares VM provisioning fields (`vmid`, `vmname`, `node`,
+`cores`, `memory`, `diskSize`, `storage`, `imageType`, `bridge0`,
+`zone0`, `proxyDomain`, `proxyPort`) and a `dependsOn` list. The
+TAPPaaS updater wraps each update with snapshot, pre-update tests,
+dependency updates, module update, post-update tests, and rollback on
+fatal failure.
 
-- **Single-tenant by design** — matches DPF's binding non-goal
-  exactly.
-- **Customer-owned hardware or cloud** — matches DPF's premise
-  that "the project can run on the customer's own hardware,
-  including their own cloud resources if chosen."
-- **Open source under permissive license** — both projects.
-- **Multi-service stack support** — DPF's 8-service compose layout
-  fits the TAPPaaS stack model.
-- **AI Stack already ships compatible components:** Ollama, vLLM,
-  OpenWebUI, LiteLLM. DPF's `LLM_BASE_URL` provider contract
-  (Phase 4 of the installer-parity roadmap) can target the customer's
-  pre-existing TAPPaaS Ollama service directly without requiring
-  DPF to bring its own LLM runtime.
-- **Hardware tiering** — TAPPaaS publishes Minimal / Standard /
-  Performance tiers (8GB / 16GB / 32GB+ RAM); DPF sits firmly in
-  Performance given Postgres + Neo4j + Qdrant + Build Studio +
-  browser-use Chromium.
+**Premise alignment** is strong (single-tenant by design,
+customer-owned hardware, MPL-2.0, targets small business / NGO /
+government / community), but **the runtime model is VM-and-shell-script
+on Proxmox**, not Helm-on-Kubernetes. DPF should integrate with that
+model rather than fight it, and rather than pretend it's a fourth
+cloud substrate.
 
-**Trade-offs:** TAPPaaS imposes its own platform conventions (SSO,
-networking, firewall, storage layers are architectural sections of
-TAPPaaS itself, see [tappaas.org/architecture/](https://tappaas.org/architecture/)).
-DPF must decide where to integrate (use TAPPaaS-provided platform
-services) and where to keep ownership (DPF's authentik Identity
-Edge, DPF's own Postgres / Neo4j / Qdrant).
+#### What a DPF TAPPaaS module is
 
-**Reuses:** same images from the GHCR multi-arch publish (Phase 1 of
-the installer-parity roadmap). Packaging adds a `deploy/tappaas/`
-directory with `install-module.sh` / `update-module.sh` /
-`delete-module.sh` that internally drive whatever TAPPaaS uses —
-which is itself an open question (see below).
+The first DPF TAPPaaS module is a **VM wrapper around Shape 1**. It
+provisions a dedicated VM via TAPPaaS's `cluster:vm`, then runs DPF's
+Linux installer (`install-dpf.sh --headless`) inside that VM.
+Suggested module dependencies:
 
-**Strategic upside:** publishing DPF as a TAPPaaS module gives the
-project distribution into a community of organizations (small
-business, NGO, government, community of homes) that explicitly want
-self-hosted infrastructure. That is exactly the audience this
-roadmap and the single-tenant premise are designed for.
+```json
+{
+  "dependsOn": [
+    "cluster:vm",
+    "templates:debian",
+    "backup:vm",
+    "firewall:proxy",
+    "identity:identity"
+  ]
+}
+```
 
-**Open questions specific to TAPPaaS** (overlap with the global open
-questions further below):
+`templates:debian` is the lowest-risk choice; `templates:nixos` can
+come later if/when DPF supports a NixOS / Podman-native packaging,
+which is gated on a Build Studio provider abstraction (below).
 
-- **Packaging format:** what does TAPPaaS's `install-module.sh`
-  invoke under the covers — Helm, Kustomize, kubectl apply,
-  Docker Compose, or something custom? Verify by reading
-  [tappaas.org/installation/](https://tappaas.org/installation/)
-  and the linked module-design pages, or by reading the source on
-  the project's repository. The answer determines whether DPF's
-  Helm chart from Shape 3 is reusable directly or needs a
-  TAPPaaS-specific wrapper.
-- **Platform-provided services vs module-provided services:** does
-  TAPPaaS provide a shared cluster Postgres / object store /
-  ingress controller that modules consume, or does each module
-  install its own everything? The TAPPaaS Foundation Stack lists
-  Network / Firewall / Storage as platform layers, suggesting some
-  shared services exist; the exact contract is undocumented in the
-  pages reviewed.
-- **Image registries and multi-arch:** does TAPPaaS pull from
-  external registries like `ghcr.io/<owner>/dpf-portal:<tag>`?
-  Multi-arch (`linux/amd64` + `linux/arm64`) support? GHCR auth for
-  customers running early-access (private) images?
-- **SSO integration:** TAPPaaS has its own SSO architecture
-  section. The enterprise auth spec selects authentik as DPF's
-  Identity Edge. If TAPPaaS's SSO is also authentik (or
-  interoperable via OIDC), the integration is clean — one
-  authentik per cluster, shared by TAPPaaS and DPF. If TAPPaaS
-  ships a different IdP, the customer must pick: TAPPaaS SSO
-  upstream of DPF authentik via OIDC federation, or two parallel
-  IdPs. **This is the single most important integration question.**
-- **Build Studio:** TAPPaaS's cluster runtime constraints around
-  privileged pods determine whether Build Studio works as-is or
-  needs the cloud-shape Option A / B / C decision (see "Build
-  Studio in cloud").
-- **Module catalog:** is there an officially-published catalog of
-  TAPPaaS modules, and what's the vetting process for inclusion?
-  A DPF module published to that catalog would amplify the
-  project's reach into the TAPPaaS audience.
-- **Project maturity and governance:** TAPPaaS lists copyright as
-  "TAPPaaS Contributors (2026)" but the team size, release cadence,
-  and SLA expectations aren't documented in the overview pages
-  reviewed. Do the [tool-evaluation pipeline](../../specs/2026-03-25-tool-evaluation-pipeline-design.md)
-  per AGENTS.md §9 before committing DPF to a TAPPaaS dependency.
+#### Canonical artifacts stay canonical
+
+The TAPPaaS module **must not fork** DPF's runtime semantics. Canonical
+DPF artifacts remain:
+
+1. GHCR multi-arch images (installer-parity Phase 1)
+2. Linux installer (`install-dpf.sh`, installer-parity Phase 6/7)
+3. Helm chart (Shape 3)
+4. Terraform modules (Shapes 1/2)
+5. Edge Node binary (Edge Node spec, Mode B)
+
+The TAPPaaS module wraps these. It does not replace them.
+
+#### Identity integration — phased
+
+TAPPaaS also chooses Authentik as its preferred SSO solution, which
+matches DPF's enterprise auth direction
+(`docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`).
+However, TAPPaaS's identity automation is documented as work in
+progress, so DPF cannot assume a fully wired identity edge on day one.
+
+| Phase | Recommendation |
+|---|---|
+| Initial DPF TAPPaaS module | DPF ships its own identity surface, **or** connects to a TAPPaaS-managed Authentik as upstream OIDC if one is present and stable in that customer's install. |
+| Later integration | Add `identity:auth` (or whatever TAPPaaS settles on) as a hard module dependency once TAPPaaS identity automation is real and tested. |
+| Never | Let TAPPaaS Authentik own DPF authorization semantics. DPF remains the Authority Core; TAPPaaS Authentik is at most a **shared identity edge** or **upstream IdP**, never the policy decision point. |
+
+This preserves the authority/edge split inherited from the enterprise
+auth spec.
+
+#### Network / ingress integration
+
+TAPPaaS has a mature network stack: VLAN zones (mgmt / srv / dmz /
+client / iot), OPNsense firewall, Caddy reverse proxy with automatic
+provisioning. DPF should integrate via the standard module fields
+rather than ship its own ingress:
+
+```json
+{
+  "zone0": "srv",
+  "proxyDomain": "dpf.<customer-domain>",
+  "proxyPort": 3000
+}
+```
+
+Edge Nodes can still report into the DPF Authority Core over HTTPS in
+a TAPPaaS install. Some Edge Node functionality may be redundant in
+that environment because TAPPaaS already controls much of the private
+network, but **keep the Edge Node boundary consistent** — don't fork
+the trust contract for TAPPaaS deployments.
+
+#### Storage / backup integration
+
+TAPPaaS uses ZFS-based storage pools with cross-node snapshots and
+replication, with a stated caveat that synchronous replication is not
+provided (best replication may lag several minutes). The module update
+lifecycle natively supports snapshot + rollback.
+
+Recommendation: **TAPPaaS VM snapshots are the platform rollback
+mechanism. DPF logical backups remain the application recovery
+mechanism.** Don't trust VM snapshots as the only database recovery
+story. The DPF module's `pre-update.sh` should still take logical
+exports of Postgres / Neo4j / Qdrant before letting TAPPaaS take its
+VM snapshot.
+
+#### LLM provider integration
+
+TAPPaaS's AI Stack ships OpenWebUI, LiteLLM, Ollama, and vLLM. The
+Ollama module exposes an OpenAI-compatible endpoint at
+`http://ollama.mgmt.internal:11434/v1`. This is a perfect match for
+DPF's `LLM_BASE_URL` provider contract from installer-parity Phase 4.
+
+For TAPPaaS installs where the AI Stack is present:
+
+```
+DPF_LLM_PROVIDER=external
+LLM_BASE_URL=http://ollama.mgmt.internal:11434/v1
+```
+
+or, preferably (if the customer's LiteLLM gateway routes to the right
+upstreams):
+
+```
+DPF_LLM_PROVIDER=external
+LLM_BASE_URL=http://litellm.srv.internal:<port>/v1
+```
+
+**Do not install DPF's own Ollama service when the TAPPaaS AI Stack
+is present.** Use the customer's pre-existing AI Stack as the upstream
+provider; that's exactly what the LLM provider contract was designed
+to allow.
+
+#### Build Studio in TAPPaaS
+
+TAPPaaS is actually **more promising for Build Studio than serverless
+container platforms** because a DPF module can run inside a VM where
+Docker (or Podman) is available. The OpenWebUI module precedent shows
+a NixOS VM running a Podman container.
+
+However, DPF's current Build Studio uses Docker socket / sibling
+container semantics
+(`apps/web/lib/integrate/sandbox/sandbox.ts`). The TAPPaaS module
+therefore targets one of two modes:
+
+| Mode | Cost | Status |
+|---|---|---|
+| **First release** — DPF runs inside a VM via Docker Compose, preserving Build Studio parity. | Low; reuses Shape 1 verbatim. | Recommended for v1 of the TAPPaaS module. |
+| **Native TAPPaaS mode** — DPF re-implemented as a NixOS / Podman module pattern with sandbox lifecycle reworked accordingly. | High; requires a Build Studio provider abstraction in `apps/web/lib/integrate/sandbox/sandbox.ts`. | Defer until that abstraction exists. |
+
+**TAPPaaS is a full-parity DPF target only when DPF runs in its own
+VM with Docker available.** Don't promise NixOS/Podman-native parity
+until Build Studio supports a provider abstraction — that's a
+non-trivial refactor with its own design pass.
+
+#### Strategic upside
+
+Publishing a DPF module to a TAPPaaS catalog reaches an audience
+(small business / NGO / government / community of homes) that
+explicitly wants self-hosted infrastructure. That is exactly the
+audience this single-tenant premise is designed for. **TAPPaaS is a
+good docking bay, not the mothership.** Package DPF for it; integrate
+with its Authentik / LLM / networking where clean; keep DPF's
+canonical deployment contracts independent.
+
+#### Open questions specific to TAPPaaS
+
+- **Module catalog and publishing:** is there an officially-published
+  catalog and what's the vetting process for inclusion? A DPF module
+  in that catalog would amplify project reach.
+- **Project maturity:** TAPPaaS lists copyright as "TAPPaaS
+  Contributors (2026)"; team size and release cadence aren't
+  documented in pages reviewed. Run TAPPaaS through the AGENTS.md §9
+  Tool Evaluation Pipeline before committing DPF to a hard
+  dependency.
+- **Upstream IdP federation timing:** when does TAPPaaS's
+  `identity:identity` automation reach the maturity bar where DPF can
+  hard-depend on it (vs treating it as optional upstream OIDC)?
+- **Multi-arch VM templates:** do `templates:debian` and
+  `templates:nixos` ship arm64 variants for Apple Silicon Proxmox
+  hosts? (Likely amd64 only in practice; flag as an installer-parity
+  cross-check.)
+- **Edge Node deployment inside TAPPaaS:** when DPF Edge Nodes onboard
+  *other* hosts in a TAPPaaS-managed customer network, can they be
+  deployed as TAPPaaS modules in their own right (per managed host),
+  or do they remain the Edge Node binary outside TAPPaaS's module
+  system?
+
+### Shape 5 — Cloud marketplace image / package (wraps Shape 1)
+
+AWS Marketplace AMI, GCP Marketplace, Azure Marketplace listings.
+Same wrap as Shape 4: a marketplace listing bootstraps a Shape 1 VM
+with `install-dpf.sh --headless` baked in, plus marketplace-specific
+licensing / billing metadata.
+
+This shape is a **distribution channel decision**, not an
+architectural one — covered here so the spec accounts for the option,
+not because it changes anything technical. Decide per-marketplace
+based on customer demand.
+
+## Deployment priority
+
+Subject to the open questions, the recommended ordering is:
+
+1. **Shape 1 — Single VM.** First GA customer-cloud and
+   private-platform target. Lowest risk, reuses the installer-parity
+   roadmap directly.
+2. **Shape 4 — TAPPaaS module wrapping Shape 1.** High-value
+   self-hosted distribution channel. Build after installer parity
+   ships and GHCR images publish multi-arch (Phase 1 of the
+   installer-parity roadmap).
+3. **Shape 3 — Helm / Kubernetes.** Strategic enterprise target.
+   Requires the Build Studio provider abstraction.
+4. **Shape 2 — Managed container services.** Preview-only until the
+   Build Studio provider abstraction lands. Without it, Shape 2
+   ships a degraded DPF (no Build Studio).
+5. **Shape 5 — Cloud marketplace listings.** Distribution-channel
+   work; sequenced based on demand, not capability.
 
 ## Authority Core in cloud — service mapping
 
@@ -269,6 +412,14 @@ Architectural choices for this:
 Decision deferred to the cloud-deployment epic. **Build Studio
 cloud-compatibility is the bottleneck** for Shapes 2 and 3, not the
 Authority Core itself.
+
+**Shape 4 (TAPPaaS) inherits Shape 1's Build Studio compatibility**
+because the TAPPaaS module provisions a dedicated VM and runs
+`install-dpf.sh` inside it — Docker is available, sibling containers
+work, no socket-access restrictions. This is one of the strongest
+arguments for Shape 4: Build Studio works on day one without waiting
+for the sandbox lifecycle to be cloud-native-rewritten. Shape 5
+(marketplace image) inherits the same way.
 
 ## Edge Node connectivity from anywhere
 
@@ -393,14 +544,15 @@ self-managed, Authentik, Wazuh, Plausible Analytics. Read their
 cloud deployment templates and what they chose to manage vs require
 the customer to bring.
 
-**Open source — self-hosted PaaS as a deployment target:**
-[TAPPaaS](https://tappaas.org/) (MPL-2.0, single-tenant, k8s-shaped,
-module-driven). Already ships Ollama / vLLM / LiteLLM / OpenWebUI in
-its AI Stack — direct alignment with DPF's LLM provider contract.
-Open question for the epic: what `install-module.sh` actually invokes
-under the covers, and how DPF's authentik Identity Edge interacts
-with TAPPaaS's SSO architecture. See Shape 4 above for the full
-analysis.
+**Open source — self-hosted private platform as a packaging target:**
+[TAPPaaS](https://tappaas.org/) (MPL-2.0, single-tenant, **Proxmox /
+VM / shell-script-based — not Kubernetes**). Already ships Ollama /
+vLLM / LiteLLM / OpenWebUI in its AI Stack — direct alignment with
+DPF's LLM provider contract. Reclassified in this spec as a
+private-platform **packaging target** (Shape 4) rather than a fourth
+cloud substrate; it wraps Shape 1 (single VM) inside a TAPPaaS module
+contract. See Shape 4 above for the full analysis including
+identity / network / storage / Build Studio integration guidance.
 
 **Open source — fleet/observability with cloud control plane:**
 Datadog Agent (open-source agent, closed-source server — so only the
