@@ -17,6 +17,7 @@ import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
+import { seedWikiKernel } from "./seed-wiki-kernel.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { syncCapabilities } from "./sync-capabilities.js";
@@ -2040,6 +2041,16 @@ async function main(): Promise<void> {
   await seedWorkQueues();
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);
+  const wikiSeed = await seedWikiKernel(prisma);
+  if (wikiSeed.emptyKernel) {
+    console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
+  } else {
+    console.log(
+      `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
+        `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
+        `orphan-links=${wikiSeed.orphanLinks.length}`,
+    );
+  }
   await seedDeliberationPatterns(prisma);
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
