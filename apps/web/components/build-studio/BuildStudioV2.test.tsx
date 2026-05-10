@@ -7,7 +7,7 @@ import { BuildStudioV2 } from "./BuildStudioV2";
 describe("BuildStudioV2", () => {
   it("renders the header, step tracker, conversation pane, and artifact pane", () => {
     render(<BuildStudioV2 />);
-    expect(screen.getByText(/Tenant API key rotation/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Tenant API key rotation/).length).toBeGreaterThan(0);
     // "Understanding" appears in both the StepTracker and the StepRefCard echo;
     // assert at least one occurrence renders.
     expect(screen.getAllByText("Understanding").length).toBeGreaterThan(0);

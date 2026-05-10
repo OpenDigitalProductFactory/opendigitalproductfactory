@@ -102,4 +102,4 @@ export interface BuildSummary {
   buildId: string;
 }
 
-export type ArtifactView = "preview" | "verification" | "schema" | "diff";
+export type ArtifactView = "brief" | "preview" | "verification" | "schema" | "diff";
