@@ -27,8 +27,8 @@
     "expo-sqlite": "~15.2.14",
     "expo-status-bar": "~2.2.3",
     "nativewind": "^4.0.0",
-    "react": "19.0.0",
-    "react-native": "0.79.6",
+    "react": "19.0.6",
+    "react-native": "0.79.7",
     "react-native-mmkv": "^3.0.0",
     "react-native-safe-area-context": "~5.4.0",
     "react-native-screens": "~4.11.1",
@@ -39,10 +39,10 @@
     "@testing-library/react-native": "^12.0.0",
     "@types/jest": "^30.0.0",
     "@types/react": "^19",
-    "jest": "~30.3.0",
+    "jest": "~30.4.2",
     "jest-expo": "~55.0.17",
     "msw": "^2.14.5",
-    "react-test-renderer": "19.0.0",
+    "react-test-renderer": "19.0.6",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3"
   }
