@@ -187,6 +187,20 @@ describe("TOOL_TO_GRANTS — Tool marketplace entries", () => {
     expect(isToolAllowedByGrants("search_tool_marketplace", ["registry_read"])).toBe(true);
     expect(isToolAllowedByGrants("search_tool_marketplace", ["web_search"])).toBe(false);
   });
+
+  it("coworker self-assessment tools require registry_read", () => {
+    const tools = [
+      "get_my_coworker_profile",
+      "assess_my_capabilities",
+      "submit_coworker_capability_need",
+      "list_my_capability_needs",
+    ];
+
+    for (const tool of tools) {
+      expect(isToolAllowedByGrants(tool, ["registry_read"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["backlog_write"])).toBe(false);
+    }
+  });
 });
 
 describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
