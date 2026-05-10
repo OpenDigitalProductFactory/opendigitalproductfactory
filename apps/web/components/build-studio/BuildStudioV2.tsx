@@ -2,6 +2,7 @@
 import { useState } from "react";
 import {
   DEMO_BUILD,
+  DEMO_BUSINESS_BRIEF,
   DEMO_CONVERSATION,
   DEMO_PENDING_APPROVALS,
   DEMO_STEPS,
@@ -14,7 +15,7 @@ import { ArtifactPane } from "./ArtifactPane";
 
 export function BuildStudioV2() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [view, setView] = useState<ArtifactView>("preview");
+  const [view, setView] = useState<ArtifactView>("brief");
 
   const pendingForCurrent = DEMO_PENDING_APPROVALS.filter((a) => a.current).length;
   const otherBuildPending = DEMO_PENDING_APPROVALS.length - pendingForCurrent;
@@ -56,6 +57,7 @@ export function BuildStudioV2() {
           view={view}
           onViewChange={setView}
           sandboxUrl="sandbox.dpf.local/settings/api-keys"
+          businessBrief={DEMO_BUSINESS_BRIEF}
         />
       </div>
     </div>

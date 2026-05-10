@@ -8,6 +8,11 @@ import type {
   Step,
   StoryStep,
 } from "@/components/build-studio/types";
+import {
+  buildBusinessBuildBrief,
+  type BusinessBuildBrief,
+} from "@/lib/build/business-build-brief";
+import type { FeatureBrief } from "@/lib/feature-build-types";
 
 export const DEMO_BUILD: BuildSummary = {
   title: "Tenant API key rotation",
@@ -17,6 +22,28 @@ export const DEMO_BUILD: BuildSummary = {
   branch: "feat/api-key-rotation",
   buildId: "fb_8a3c91",
 };
+
+const DEMO_FEATURE_BRIEF: FeatureBrief = {
+  title: "Tenant API key rotation",
+  description:
+    "Tenant owners need to rotate API keys without losing access for live tenants.",
+  portfolioContext: "Platform governance",
+  targetRoles: ["Tenant owner", "Platform administrator"],
+  inputs: ["Existing Settings API Keys workflow", "Customer downtime incident notes"],
+  dataNeeds: "Key status, expiration window, owner, old key id, new key id, and audit event.",
+  acceptanceCriteria: [
+    "Tenant owners can rotate from Settings without downtime.",
+    "Old keys stop working after the agreed grace period.",
+    "Every rotation is visible in the audit log.",
+  ],
+};
+
+export const DEMO_BUSINESS_BRIEF: BusinessBuildBrief = buildBusinessBuildBrief({
+  source: "existing_example",
+  featureBrief: DEMO_FEATURE_BRIEF,
+  exampleToEmulate: "Existing Settings invite flow",
+  constraints: ["Do not break active tenant API traffic."],
+});
 
 export const DEMO_STEPS: Step[] = [
   {

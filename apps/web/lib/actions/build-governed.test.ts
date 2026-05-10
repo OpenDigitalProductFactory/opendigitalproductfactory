@@ -8,6 +8,12 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
       update: vi.fn(),
       create: vi.fn(),
     },
+    businessBuildBrief: {
+      upsert: vi.fn(),
+    },
+    organization: {
+      findFirst: vi.fn(),
+    },
     platformDevConfig: {
       findUnique: vi.fn(),
     },
@@ -59,7 +65,7 @@ vi.mock("@/lib/integrate/sandbox/sandbox", () => ({
   listReleasableSandboxFiles: mockListReleasableSandboxFiles,
 }));
 
-import { approveBuildStart, advanceBuildPhase, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification } from "./build";
+import { approveBuildStart, advanceBuildPhase, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateFeatureBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -72,6 +78,8 @@ describe("governed build start approvals", () => {
       },
     });
     mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockPrisma.businessBuildBrief.upsert.mockResolvedValue({});
+    mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
     mockQueueBuildReviewVerification.mockResolvedValue(undefined);
@@ -84,6 +92,54 @@ describe("governed build start approvals", () => {
       errors: [],
     });
     mockListReleasableSandboxFiles.mockResolvedValue(["apps/web/components/build/BuildStudio.tsx"]);
+  });
+
+  it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "feature-build-row-1",
+      buildId: "FB-123",
+      title: "Improve Build Studio intake",
+      createdById: "user-1",
+      phase: "ideate",
+    });
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+
+    const brief = {
+      title: "Improve Build Studio intake",
+      description: "Build Studio should turn business-language requests into a brief.",
+      portfolioContext: "Build Studio",
+      targetRoles: ["Operations lead"],
+      inputs: ["Reviewed plan"],
+      dataNeeds: "Business outcome, evidence, success signals",
+      acceptanceCriteria: ["A non-developer can review the generated brief."],
+    };
+
+    await updateFeatureBrief("FB-123", brief);
+
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
+      where: { buildId: "FB-123" },
+      data: { brief },
+    });
+    expect(mockPrisma.businessBuildBrief.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { featureBuildId: "feature-build-row-1" },
+        create: expect.objectContaining({
+          briefId: "BBB-FB-123",
+          orgId: "org-1",
+          featureBuildId: "feature-build-row-1",
+          capabilityPackId: "build_studio_self_development",
+          status: "accepted",
+          acceptedByUserId: "user-1",
+          acceptedAt: expect.any(Date),
+        }),
+        update: expect.objectContaining({
+          businessOutcome: brief.description,
+          confidence: "high",
+          acceptedByUserId: "user-1",
+          acceptedAt: expect.any(Date),
+        }),
+      }),
+    );
   });
 
   it("approveBuildStart stamps draftApprovedAt for governed backlog drafts", async () => {
