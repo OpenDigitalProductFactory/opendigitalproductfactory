@@ -1,5 +1,5 @@
 "use client";
-import { Play, Image as ImageIcon, Table, ChevronRight } from "lucide-react";
+import { ClipboardList, Play, Image as ImageIcon, Table, ChevronRight } from "lucide-react";
 import type { ComponentType } from "react";
 import type { ArtifactView } from "./types";
 
@@ -10,6 +10,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "brief", label: "Brief", Icon: ClipboardList },
   { id: "preview", label: "Preview", Icon: Play },
   { id: "verification", label: "Walkthrough", Icon: ImageIcon },
   { id: "schema", label: "What changed", Icon: Table },

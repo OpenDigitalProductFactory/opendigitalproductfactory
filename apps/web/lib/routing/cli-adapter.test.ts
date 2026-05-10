@@ -61,7 +61,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   }),
 }));
 
-import { cliAdapter } from "./cli-adapter";
+import { cliAdapter, CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE } from "./cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";
@@ -233,6 +233,43 @@ describe("cliAdapter", () => {
     mockSpawn.mockReturnValue(proc);
 
     await expect(cliAdapter.execute(makeRequest())).rejects.toThrow(/auth failed/i);
+  });
+
+  it("disables Claude Code's native tools via --disallowedTools (BI-931303FF regression)", async () => {
+    // Without this flag, Claude Code's built-in tools (Read, Write, Bash,
+    // Agent, etc.) shadow the platform's MCP-style tools that the agentic
+    // loop dispatches. The model preferentially emits native tool_use for
+    // its own tools and the platform tool descriptions in the system prompt
+    // are ignored — Build Studio coworkers hallucinated success without ever
+    // actually saving evidence. See BI-931303FF.
+    mockGetProviderBearerToken.mockResolvedValue({
+      token: "sk-ant-oat01-test-token",
+    });
+
+    const cliOutput = JSON.stringify({ result: "OK", usage: {} });
+    mockSpawn.mockReturnValue(createMockProcess(cliOutput));
+
+    await cliAdapter.execute(makeRequest());
+
+    // Find the runner-script write — it has cli-run-... in the filename and
+    // base64-encodes the script body. We decode and assert.
+    const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+    const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
+    expect(runnerWrite).toBeDefined();
+
+    // Extract the base64 payload between the single quotes after `echo '`.
+    const m = runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/);
+    expect(m).not.toBeNull();
+    const decodedScript = Buffer.from(m![1]!, "base64").toString("utf-8");
+
+    expect(decodedScript).toContain("--disallowedTools");
+    expect(decodedScript).toContain(CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE);
+    // Spot-check critical names so a future refactor that drops one of
+    // these (e.g. only blocks Bash) is caught — these are the highest-risk
+    // shadowing tools.
+    for (const critical of ["Read", "Write", "Edit", "Bash", "Agent", "Skill"]) {
+      expect(decodedScript).toContain(critical);
+    }
   });
 
   it("cleans up temp files after execution", async () => {
