@@ -76,7 +76,91 @@ dpf_docker_endpoint() {
     || echo ""
 }
 
-# Linux-only: install Docker Engine via the host's distro package
+# Apple Silicon Docker Desktop .dmg download URL. Hardcoded to the
+# canonical Docker Desktop endpoint; can be overridden via env var
+# for mirror / corporate-proxy setups.
+DPF_DOCKER_DESKTOP_DMG_URL="${DPF_DOCKER_DESKTOP_DMG_URL:-https://desktop.docker.com/mac/main/arm64/Docker.dmg}"
+
+# macOS-only: install Docker Desktop by downloading the .dmg directly
+# from Docker's official endpoint, mounting it via hdiutil, copying
+# Docker.app into /Applications, ejecting the volume, then launching
+# Docker.app and waiting for the daemon.
+#
+# Deliberately does NOT bootstrap Homebrew per the installer-parity
+# roadmap. Customers who want Homebrew install it themselves; this
+# function only needs Docker.app to land in /Applications.
+#
+# Args: none.
+dpf_docker_install_darwin() {
+  dpf_platform
+  if [ "$DPF_PLATFORM" != "darwin" ]; then
+    fail "dpf_docker_install_darwin: not on Darwin"
+  fi
+
+  # Apple Silicon-only per the installer-parity roadmap (preflight
+  # refuses Intel Mac). Belt-and-suspenders check.
+  if [ "$(uname -m)" != "arm64" ]; then
+    fail "dpf_docker_install_darwin: only Apple Silicon is supported; preflight should have refused Intel Mac."
+  fi
+
+  local dmg="${TMPDIR:-/tmp}/DPF-DockerDesktop-$(date +%s).dmg"
+  local mountpoint="/Volumes/Docker"
+
+  info "Downloading Docker Desktop for Apple Silicon..."
+  info "  Source: $DPF_DOCKER_DESKTOP_DMG_URL"
+  info "  Target: $dmg"
+  if ! curl -fsSL --max-time 600 -o "$dmg" "$DPF_DOCKER_DESKTOP_DMG_URL"; then
+    fail "Failed to download Docker Desktop .dmg from $DPF_DOCKER_DESKTOP_DMG_URL. Check network connectivity, or install Docker Desktop manually from https://www.docker.com/products/docker-desktop/ and re-run install-dpf.sh."
+  fi
+  ok "Downloaded Docker Desktop .dmg"
+
+  info "Mounting .dmg..."
+  if ! hdiutil attach -nobrowse -quiet "$dmg"; then
+    rm -f "$dmg"
+    fail "Failed to mount Docker Desktop .dmg. The downloaded file may be corrupt; delete $dmg and re-run."
+  fi
+
+  # Cleanup trap — eject the .dmg and remove the download even if the
+  # cp below fails.
+  _dpf_dmg_cleanup() {
+    hdiutil detach -quiet "$mountpoint" 2>/dev/null || true
+    rm -f "$dmg"
+  }
+  trap _dpf_dmg_cleanup EXIT
+
+  info "Copying Docker.app into /Applications..."
+  if ! sudo cp -R "$mountpoint/Docker.app" /Applications/; then
+    _dpf_dmg_cleanup
+    trap - EXIT
+    fail "Failed to copy Docker.app into /Applications. This often means MDM (corporate device management) restricts /Applications writes. Install Docker Desktop manually from https://www.docker.com/products/docker-desktop/ (drag Docker.app from the mounted .dmg yourself) and re-run install-dpf.sh."
+  fi
+  ok "Copied Docker.app into /Applications"
+
+  _dpf_dmg_cleanup
+  trap - EXIT
+
+  info "Launching Docker.app and waiting for daemon..."
+  open -a Docker
+
+  # Wait-for-daemon loop. Docker Desktop typically takes 30-120s to
+  # boot on a fresh install (first-run prompts not shown when --headless,
+  # but the VM still has to start).
+  local wait_seconds="${DPF_DOCKER_DESKTOP_START_TIMEOUT:-300}"
+  local elapsed=0
+  while [ "$elapsed" -lt "$wait_seconds" ]; do
+    if docker info >/dev/null 2>&1; then
+      ok "Docker daemon reachable after ${elapsed}s"
+      return 0
+    fi
+    sleep 5
+    elapsed=$((elapsed + 5))
+    if [ "$((elapsed % 30))" = "0" ]; then
+      info "  Still waiting for Docker Desktop daemon... (${elapsed}s / ${wait_seconds}s)"
+    fi
+  done
+
+  fail "Docker Desktop did not become reachable within ${wait_seconds}s. On first launch, Docker Desktop may show a Welcome / Privacy prompt that requires manual confirmation. Open Docker.app from /Applications, complete the first-run flow, then re-run install-dpf.sh."
+}
 # manager. Refuses gracefully on unsupported distros; the caller
 # (install-dpf.sh) preflight already weeded out older / unsupported
 # distros, so this function trusts that gate.
@@ -138,16 +222,14 @@ dpf_docker_install_linux() {
 }
 
 # Ensure Docker is present at acceptable version. Installs on Linux
-# if missing. macOS .dmg flow is Phase 7b; preflight catches Intel
-# Mac, so this function only encounters Apple Silicon Macs that
-# either already have Docker Desktop or need the user to install it
-# manually (until Phase 7b ships).
+# (apt/dnf) or macOS (Docker Desktop .dmg) if missing.
 #
 # Args: none.
 # Returns:
 #   0   Docker present and version acceptable
 #   75  Docker just installed; operator must log out / newgrp and re-run
-#   non-zero otherwise
+#       (Linux only — macOS does not require a re-login after install)
+#   non-zero otherwise (fail messages emitted)
 dpf_docker_ensure_installed() {
   dpf_platform
 
@@ -161,19 +243,55 @@ dpf_docker_ensure_installed() {
       return $?
     fi
     if [ "$DPF_PLATFORM" = "darwin" ]; then
-      fail "Docker Desktop not detected. Until installer-parity Phase 7b ships the automated .dmg install, please install Docker Desktop manually from https://www.docker.com/products/docker-desktop/ and re-run install-dpf.sh."
+      # Check /Applications/Docker.app as a sanity step before downloading
+      # the .dmg — if Docker.app is present but the CLI isn't on PATH,
+      # the operator has Docker Desktop installed but never launched it.
+      if [ -d "/Applications/Docker.app" ]; then
+        info "Docker.app found in /Applications but the daemon isn't running."
+        info "  Launching Docker.app and waiting..."
+        open -a Docker
+        local wait_seconds="${DPF_DOCKER_DESKTOP_START_TIMEOUT:-300}"
+        local elapsed=0
+        while [ "$elapsed" -lt "$wait_seconds" ]; do
+          if docker info >/dev/null 2>&1; then
+            ok "Docker daemon reachable after ${elapsed}s"
+            return 0
+          fi
+          sleep 5
+          elapsed=$((elapsed + 5))
+        done
+        fail "Docker Desktop did not become reachable within ${wait_seconds}s. Open Docker.app, complete any first-run prompts, and re-run install-dpf.sh."
+      fi
+      # No Docker.app — install via .dmg.
+      dpf_docker_install_darwin
+      return $?
     fi
     fail "Unsupported platform for Docker install: $DPF_PLATFORM"
   fi
 
   if ! dpf_docker_version_ge "$version" "$DPF_DOCKER_MIN_VERSION"; then
-    fail "Docker $version is below the supported floor ($DPF_DOCKER_MIN_VERSION+; host-gateway support required). Upgrade Docker Engine and re-run install-dpf.sh."
+    fail "Docker $version is below the supported floor ($DPF_DOCKER_MIN_VERSION+; host-gateway support required). Upgrade Docker Engine / Docker Desktop and re-run install-dpf.sh."
   fi
 
   ok "Docker $version present"
 
   # Verify the daemon is reachable.
   if ! docker info >/dev/null 2>&1; then
+    if [ "$DPF_PLATFORM" = "darwin" ] && [ -d "/Applications/Docker.app" ]; then
+      info "Docker CLI present but daemon not running. Launching Docker.app..."
+      open -a Docker
+      local wait_seconds="${DPF_DOCKER_DESKTOP_START_TIMEOUT:-300}"
+      local elapsed=0
+      while [ "$elapsed" -lt "$wait_seconds" ]; do
+        if docker info >/dev/null 2>&1; then
+          ok "Docker daemon reachable after ${elapsed}s"
+          return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+      done
+      fail "Docker Desktop did not become reachable within ${wait_seconds}s."
+    fi
     fail "Docker daemon is not reachable. On macOS: open Docker Desktop and wait for it to start. On Linux: sudo systemctl start docker."
   fi
   ok "Docker daemon reachable"
