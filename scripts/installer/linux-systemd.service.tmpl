@@ -1,0 +1,27 @@
+# DPF autostart systemd user unit template.
+# Rendered by scripts/installer/lib/autostart.sh with the following
+# @@PLACEHOLDERS@@ substituted at install time:
+#
+#   @@DPF_LAUNCH_SCRIPT@@   absolute path to the generated launch
+#                           script (typically ~/.dpf/dpf-autostart.sh)
+#   @@DPF_LOG_DIR@@         absolute path to the log directory
+#                           (typically ~/.dpf/logs)
+#
+# Installed to ~/.config/systemd/user/dpf.service. The installer runs
+# `loginctl enable-linger $USER` so the service persists across user
+# logout, and `systemctl --user enable --now dpf` to start it.
+
+[Unit]
+Description=DPF auto-start (Open Digital Product Factory)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash @@DPF_LAUNCH_SCRIPT@@
+RemainAfterExit=yes
+StandardOutput=append:@@DPF_LOG_DIR@@/dpf-autostart.log
+StandardError=append:@@DPF_LOG_DIR@@/dpf-autostart.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DPF autostart LaunchAgent template.
+  Rendered by scripts/installer/lib/autostart.sh with the following
+  @@PLACEHOLDERS@@ substituted at install time:
+
+    @@DPF_LAUNCH_SCRIPT@@   absolute path to the generated launch
+                            script (typically ~/.dpf/dpf-autostart.sh)
+    @@DPF_LOG_DIR@@         absolute path to the log directory
+                            (typically ~/.dpf/logs)
+
+  The Label MUST stay reverse-DNS-prefixed for launchctl semantics.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.dpf-autostart</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@@DPF_LAUNCH_SCRIPT@@</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>@@DPF_LOG_DIR@@/dpf-autostart.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@@DPF_LOG_DIR@@/dpf-autostart.err.log</string>
+</dict>
+</plist>
