@@ -138,7 +138,7 @@ echo "  =================================================================="
 dpf_platform
 dpf_arch
 echo "  Platform: $DPF_PLATFORM ($DPF_ARCH)"
-echo "  Mode: $DPF_MODE${DPF_DRY_RUN:+  [dry-run]}"
+echo "  Mode: $DPF_MODE$(if [ "$DPF_DRY_RUN" = "1" ]; then echo "  [dry-run]"; fi)"
 echo ""
 
 # 1. Preflight: unsupported-host detection.
