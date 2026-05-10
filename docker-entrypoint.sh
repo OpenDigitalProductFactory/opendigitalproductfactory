@@ -153,25 +153,103 @@ psql "$DATABASE_URL" -c "
 " 2>/dev/null || echo "  WARN post-init SQL had warnings (non-fatal)"
 echo "  OK Provider config set"
 
-# ─── Pull embedding model into Docker Model Runner if available ──────────
+# ─── Provider-aware embedding model setup ────────────────────────────────
+# Per the deployment doctrine (Contract 9: LLM and agent-provider routing),
+# the entrypoint must NOT call provider-specific endpoints for the wrong
+# provider. Three modes:
+#   model-runner — Docker Desktop's built-in runner; pull via
+#                   POST /models/create (Docker-Model-Runner-only endpoint)
+#   ollama       — in-cluster Ollama; pull via POST /api/pull (Ollama-only)
+#   external     — customer-managed endpoint; verify only, never pull
+#
+# DPF_LLM_PROVIDER selects the mode explicitly. If unset, we infer from
+# LLM_BASE_URL: defaults to model-runner for backwards compatibility with
+# the existing default URL; the Linux compose overlay sets
+# LLM_BASE_URL=http://ollama:11434/v1 which auto-infers ollama.
+#
+# DPF_MODEL_PULL_MODE controls behavior:
+#   auto        — verify the model exists; pull if missing (default)
+#   verify-only — verify only; never pull
+#   skip        — do nothing
 echo "[post-init] Checking embedding model..."
-# Docker Model Runner exposes an OpenAI-compatible API on the host.
-# The portal talks to it via LLM_BASE_URL. Try to pull the embedding model
-# so preflight check 10 passes on fresh install. This is best-effort —
-# Model Runner may not be available (e.g. CI or non-Docker hosts).
+
 EMB_BASE_URL="${LLM_BASE_URL:-http://model-runner.docker.internal/v1}"
-EMB_MODEL="ai/nomic-embed-text-v1.5"
-emb_already=$(wget -qO- --timeout=5 "${EMB_BASE_URL}/models" 2>/dev/null || true)
-if echo "$emb_already" | grep -q "nomic-embed-text"; then
-  echo "  OK Embedding model already available"
+PULL_MODE="${DPF_MODEL_PULL_MODE:-auto}"
+
+# Auto-detect provider from LLM_BASE_URL when DPF_LLM_PROVIDER is unset.
+PROVIDER="${DPF_LLM_PROVIDER:-}"
+if [ -z "$PROVIDER" ]; then
+  case "$EMB_BASE_URL" in
+    *model-runner*)  PROVIDER="model-runner" ;;
+    *:11434*)        PROVIDER="ollama" ;;
+    *)               PROVIDER="external" ;;
+  esac
+fi
+
+# Provider-aware default for the embedding model. Operators override
+# EMBEDDING_MODEL explicitly when they want a different model.
+EMB_MODEL="${EMBEDDING_MODEL:-}"
+if [ -z "$EMB_MODEL" ]; then
+  case "$PROVIDER" in
+    model-runner)  EMB_MODEL="ai/nomic-embed-text-v1.5" ;;
+    ollama)        EMB_MODEL="nomic-embed-text" ;;
+    *)             EMB_MODEL="ai/nomic-embed-text-v1.5" ;;
+  esac
+fi
+
+echo "  Provider: $PROVIDER  Pull mode: $PULL_MODE  Base URL: $EMB_BASE_URL"
+echo "  Embedding model: $EMB_MODEL"
+
+# Skip path: do nothing, log explicitly.
+if [ "$PULL_MODE" = "skip" ]; then
+  echo "  SKIP DPF_MODEL_PULL_MODE=skip; not verifying or pulling embedding model"
+elif [ "$PULL_MODE" = "verify-only" ] || [ "$PROVIDER" = "external" ]; then
+  # Verify path: GET /v1/models, log presence/absence, never pull.
+  emb_listing=$(wget -qO- --timeout=5 "${EMB_BASE_URL}/models" 2>/dev/null || true)
+  if [ -z "$emb_listing" ]; then
+    echo "  WARN Could not reach ${EMB_BASE_URL}/models — platform will retry on first inference."
+  elif echo "$emb_listing" | grep -q "nomic-embed"; then
+    echo "  OK Embedding model verified at $EMB_BASE_URL"
+  else
+    echo "  WARN '$EMB_MODEL' not listed at $EMB_BASE_URL — operator must pull it manually."
+  fi
 else
-  echo "  Pulling ${EMB_MODEL} via Model Runner (first run only)..."
-  # Model Runner accepts POST /models/create with {"model":"..."} to pull
-  wget -qO- --timeout=120 --post-data "{\"model\":\"${EMB_MODEL}\"}" \
-    --header="Content-Type: application/json" \
-    "${EMB_BASE_URL%/v1}/models/create" 2>/dev/null \
-    && echo "  OK Embedding model pulled" \
-    || echo "  WARN Could not auto-pull embedding model. Run: docker model pull ${EMB_MODEL}"
+  # auto + known provider: branch on provider type to use the right pull endpoint.
+  case "$PROVIDER" in
+    model-runner)
+      # Docker Model Runner: POST /models/create with {"model":"..."}
+      emb_listing=$(wget -qO- --timeout=5 "${EMB_BASE_URL}/models" 2>/dev/null || true)
+      if echo "$emb_listing" | grep -q "nomic-embed-text"; then
+        echo "  OK Embedding model already available (Docker Model Runner)"
+      else
+        echo "  Pulling ${EMB_MODEL} via Docker Model Runner (first run only)..."
+        wget -qO- --timeout=120 --post-data "{\"model\":\"${EMB_MODEL}\"}" \
+          --header="Content-Type: application/json" \
+          "${EMB_BASE_URL%/v1}/models/create" 2>/dev/null \
+          && echo "  OK Embedding model pulled" \
+          || echo "  WARN Could not auto-pull. Run: docker model pull ${EMB_MODEL}"
+      fi
+      ;;
+    ollama)
+      # Ollama: POST /api/pull with {"name":"..."}. Ollama exposes /api
+      # at the same host (not /v1), so strip the /v1 suffix.
+      OLLAMA_HOST="${EMB_BASE_URL%/v1}"
+      emb_listing=$(wget -qO- --timeout=5 "${OLLAMA_HOST}/api/tags" 2>/dev/null || true)
+      if echo "$emb_listing" | grep -q "$EMB_MODEL"; then
+        echo "  OK Embedding model '$EMB_MODEL' already available (Ollama)"
+      else
+        echo "  Pulling '${EMB_MODEL}' via Ollama (first run; can take several minutes)..."
+        wget -qO- --timeout=300 --post-data "{\"name\":\"${EMB_MODEL}\"}" \
+          --header="Content-Type: application/json" \
+          "${OLLAMA_HOST}/api/pull" 2>/dev/null \
+          && echo "  OK Embedding model pulled (Ollama)" \
+          || echo "  WARN Could not auto-pull. Run: ollama pull ${EMB_MODEL}"
+      fi
+      ;;
+    *)
+      echo "  WARN Unknown DPF_LLM_PROVIDER='$PROVIDER'; skipping embedding model setup"
+      ;;
+  esac
 fi
 
 echo "=== Init complete ==="

@@ -44,30 +44,61 @@ Each phase ends with all four passing:
 
 ## Phase 1 — Data model + migration
 
+**Implementation note (added 2026-05-10 after on-the-ground discovery).** The original plan called for renaming `KnowledgeArticle` → `WikiPage` in a single PR, citing the spec's "zero production rows" justification (spec §11). On-the-ground inspection showed that **substantial code already references `KnowledgeArticle`**:
+
+- UI components: `apps/web/components/knowledge/KnowledgeArticleList.tsx`, `KnowledgeArticleCard.tsx`, `KnowledgeArticleForm.tsx`, `KnowledgeArticleActions.tsx`
+- Routes: `/knowledge`, `/knowledge/new`, `/knowledge/[articleId]`, `/portfolio/product/[id]/knowledge`
+- Server actions: `apps/web/lib/actions/knowledge.ts` (263 lines)
+- MCP tools: entries in `apps/web/lib/mcp-tools.ts`, grants in `apps/web/lib/tak/agent-grants.ts`
+- Inference helpers: `apps/web/lib/inference/semantic-memory.ts`
+- Catalogs: `packages/db/data/grant_catalog.json`, `packages/db/src/platform-tools-snapshot.json`
+
+The user's "we never used the knowledge articles" feedback was about **production data**, not about whether code was written. Renaming the model in one PR would force rewrites of all the above in the same change — high blast radius, hard to review.
+
+Phase 1 is therefore split:
+
+### Phase 1a — Additive: new wiki schema alongside `KnowledgeArticle` (this PR)
+
 **Branch:** `feat/wiki-kernel-schema`
 
-Per [the spec §0.3 and §11](../specs/2026-05-09-platform-kernel-wiki-design.md), this phase **absorbs `KnowledgeArticle`** rather than running parallel to it. `KnowledgeArticle` was specced in EP-KM-001 but never populated in production; the migration is a rename + additive columns.
+Adds the new wiki models and Qdrant collection without touching `KnowledgeArticle` or any of its call sites. Pure additive change; safe to merge before kernel content lands.
 
 **Files modified:**
 - `packages/db/prisma/schema.prisma`:
-  - **Rename** `KnowledgeArticle` → `WikiPage` and `KnowledgeArticleRevision` → `WikiPageRevision`. Rename the IT4IT-flavored join tables `KnowledgeArticleProduct` → `WikiPageProduct` and `KnowledgeArticlePortfolio` → `WikiPagePortfolio`; both remain optional anchoring.
-  - Add wiki-shaped columns to `WikiPage`: `slug`, `pageKind`, `isKernel`, `kernelVersion`, `kernelPageId`, `derivedFromKernelVersion`, `abstract`.
-  - Add new models: `RawSource`, `WikiPageLink`, `WikiPageSource`, `WikiIngestEvent`, `WikiLintFinding`.
-  - Add `wikiPages` / `wikiRawSources` relations on `Organization`. (No relation on `KnowledgeArticle` — it is the one being renamed.)
-- `packages/db/src/qdrant.ts` — add `WIKI_PAGES` collection constant; ensure new payload indexes (`organizationId`, `slug`, `pageKind`, `kernelPageId`, `kernelVersion`, `isKernel`). Re-key any existing `entityType: "knowledge-article"` points to `entityType: "wiki-page"` in the new collection (zero rows in production today, so this is a no-op against live data — documented for first-install correctness).
-- `packages/db/src/index.ts` — re-export new types/utilities; remove the `KnowledgeArticle` re-exports.
+  - Add new models: `RawSource`, `WikiPage`, `WikiPageRevision`, `WikiPageLink`, `WikiPageSource`, `WikiIngestEvent`, `WikiLintFinding`.
+  - Add reverse relations: `Organization.wikiPages`, `Organization.wikiRawSources`, `Organization.wikiIngestEvents`, `Organization.wikiLintFindings`; `User.wikiRevisions @relation("WikiRevisionCreator")`; `Agent.wikiRevisions @relation("WikiRevisionAgentCreator")`.
+  - **No changes** to `KnowledgeArticle`, `KnowledgeArticleRevision`, `KnowledgeArticleProduct`, `KnowledgeArticlePortfolio`. They stay live for now.
+- `packages/db/src/qdrant.ts` — add `WIKI_PAGES` collection constant; create the new collection in `ensureCollections()`; add wiki-specific payload indexes (`pageKind`, `isKernel`, `organizationId`, `kernelVersion`, `kernelPageId`, `slug`).
 
 **Files created:**
-- `packages/db/prisma/migrations/<timestamp>_rename_knowledge_to_wiki/migration.sql` — `ALTER TABLE` rename plus additive columns.
-- `packages/db/src/wiki-store.ts` — typed CRUD helpers (`upsertWikiPage`, `appendRevision`, `linkPages`, `attachSource`).
+- `packages/db/prisma/migrations/<timestamp>_add_wiki_kernel_schema/migration.sql` — additive only (CREATE TABLE for the seven new models + new FKs; no ALTER on `KnowledgeArticle`).
+- `packages/db/src/wiki-store.ts` — typed CRUD helpers (`upsertWikiPage`, `appendRevision`, `linkPages`, `attachSource`, `getWikiPage`).
 - `packages/db/src/wiki-store.test.ts`
 
-**Run:** `pnpm --filter @dpf/db exec prisma migrate dev --name rename-knowledge-to-wiki`.
+**Run:** `pnpm --filter @dpf/db exec prisma migrate dev --name add-wiki-kernel-schema`.
 
-**Acceptance:**
-- Migration applies on a fresh DB and on a DB that has the (empty) `KnowledgeArticle` table without data loss; if a deployment is found that did populate the old table, backfill `slug = lowerKebab(title)`, `pageKind = "summary"`, `isKernel = false`.
+**Acceptance (Phase 1a):**
+- Migration applies on a fresh DB and on a DB with `KnowledgeArticle` data without touching `KnowledgeArticle`.
 - Qdrant collection `wiki-pages` exists with the documented payload indexes after `ensureCollections()` + `ensurePayloadIndexes()` run.
-- Helpers can round-trip a kernel page and an org override; uniqueness on `(organizationId, slug)` is enforced.
+- Helpers round-trip a kernel page and an org override; uniqueness on `(organizationId, slug)` is enforced.
+- `KnowledgeArticle` UI / routes / actions / MCP tools continue to function (touched by no changes).
+- Build gate green: `pnpm typecheck`, `cd apps/web && npx next build`, vitest on the new test file.
+
+### Phase 1b — Deprecate `KnowledgeArticle` once kernel content validates the new models (later PR)
+
+**Branch:** `feat/wiki-deprecate-knowledge-article`
+
+After Phase 5 (kernel seed content) lands and we've validated `WikiPage` in real use, deprecate `KnowledgeArticle`:
+
+1. Migrate any rows that exist (none expected) into `WikiPage` with sensible defaults (`pageKind = "summary"`, `isKernel = false`, `slug = lowerKebab(title)`).
+2. Update UI: `apps/web/components/knowledge/*` either delete or rename to `apps/web/components/wiki/*` reusing what makes sense.
+3. Update routes: `/knowledge` → redirect to `/wiki` (or remove); same for sub-routes.
+4. Update server actions: `apps/web/lib/actions/knowledge.ts` → `apps/web/lib/actions/wiki.ts`.
+5. Update MCP tools: `search_knowledge_base` retired in favor of `wiki_query` (already specced in EP-WIKI-001 §8).
+6. Update inference helpers: `searchKnowledgeArticles()` retired in favor of `searchWikiPages()`.
+7. Drop the `KnowledgeArticle*` Prisma models and their migrations consolidate.
+
+**Acceptance (Phase 1b):** all `KnowledgeArticle` references removed; build gate green; UI tests updated.
 
 ---
 
