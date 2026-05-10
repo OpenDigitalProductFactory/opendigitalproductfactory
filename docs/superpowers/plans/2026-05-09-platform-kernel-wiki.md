@@ -158,9 +158,38 @@ After Phase 5 (kernel seed content) lands and we've validated `WikiPage` in real
 
 **Branch:** `feat/wiki-lint`
 
+**Implementation note (added 2026-05-10).** Phase 4 is split into 4a (pure detectors only) and 4b (orchestrator + scheduled job + admin UI + MCP tool) so the detectors can land independently of Inngest + UI plumbing. The detectors are testable in isolation against synthetic fixtures, so they are usable from any caller (manual run, on-demand admin trigger, scheduled job) once 4b's orchestrator wires them up.
+
+### Phase 4a — Pure detectors
+
+**Branch:** `feat/wiki-lint-detectors`
+
 **Files created:**
-- `apps/web/lib/wiki/lint.ts` — `runWikiLint({ organizationId | null })`, individual checkers (`detectContradictions`, `detectStaleClaims`, `detectOrphans`, `detectMissingXrefs`, `detectDanglingXrefs`, `detectKernelDrift`, `detectStanceExtractionNeeded`).
-- `apps/web/lib/wiki/lint.test.ts`
+- `apps/web/lib/wiki/lint-detectors.ts` — five of the seven §6 detectors as pure functions (no DB, no LLM, no network):
+  - `detectOrphans` — published page with no inbound link or empty source list (warn). Index/runbook pages exempt.
+  - `detectDanglingXrefs` — `[[slug]]` token with no resolvable target in the page's visibility scope (error). Org overlays resolve against own-org slugs ∪ kernel slugs (kernel fallback).
+  - `detectStanceExtractionNeeded` — published `summary` page with no `[[stances/...]]` or `[[heuristics/...]]` link (info).
+  - `detectStaleClaims` — page whose oldest `RawSource.retrievedAt` exceeds `staleThresholdDays` (default 180) (info).
+  - `detectKernelDrift` — overlay's `derivedFromKernelVersion ≠ currentKernelVersion` (warn). Phase 4a ships the simple version-mismatch check; Phase 4b adds the paragraph-hash diff per spec §3.3.
+  - Plus a `runDetectors()` aggregator that returns the union.
+- `apps/web/lib/wiki/lint-detectors.test.ts` — vitest coverage for each detector (positive case, negative case, edge cases like draft/archived pages, kernel fallback, missing data).
+
+**Deferred to Phase 4b:**
+- `detectContradictions` — needs cosine search over `wiki-pages` Qdrant collection plus an LLM judge. Belongs alongside the orchestrator that has DB + Qdrant + LLM access.
+- `detectMissingXrefs` — needs entity recognition over the body. Belongs alongside the orchestrator (or shipped as its own follow-up if the NLP work is large).
+
+**Acceptance (Phase 4a):**
+- Each shipped detector produces findings on its fixture and emits no findings on its negative-case fixture.
+- `runDetectors()` returns the union without crosstalk.
+- `pnpm typecheck` and `pnpm --filter web test --run lint-detectors.test.ts` clean.
+
+### Phase 4b — Orchestrator + scheduled job + admin UI + MCP tool
+
+**Branch:** `feat/wiki-lint-runtime`
+
+**Files created:**
+- `apps/web/lib/wiki/lint.ts` — `runWikiLint({ organizationId | null })`: fetches wiki snapshot from Prisma, calls `runDetectors()`, plus implements `detectContradictions` (Qdrant cosine + LLM judge) and `detectMissingXrefs` (entity recognition). Persists findings as `WikiLintFinding` rows; idempotent against existing open findings (re-runs update, don't duplicate).
+- `apps/web/lib/wiki/lint.test.ts` — integration tests against a mocked Prisma client.
 - `apps/web/lib/queue/functions/wiki-lint.ts` — Inngest scheduled function (daily 03:30 local; mirror `infra-prune.ts`).
 - `apps/web/app/(shell)/admin/wiki/lint/page.tsx` — list of `WikiLintFinding` filtered by org/kernel + status.
 - `apps/web/components/wiki/LintFindingCard.tsx`
@@ -170,11 +199,11 @@ After Phase 5 (kernel seed content) lands and we've validated `WikiPage` in real
 - `apps/web/lib/mcp-tools.ts` — add `wiki_lint` (read-only on-demand trigger).
 - `apps/web/lib/tak/agent-grants.ts` — `wiki_lint: ["registry_read"]`.
 
-**Acceptance:**
-- Each detector produces a finding on its fixture: contradiction between two pages → finding; stale page → finding; orphan → finding; missing-xref → finding; dangling-xref → blocks publish; kernel-drift → finding; summary without stance → finding.
+**Acceptance (Phase 4b):**
+- Each detector (including the two added in 4b) produces a finding on its fixture.
 - Daily run completes within 5 minutes for a 1k-page wiki on a single org.
 - Findings carry `organizationId` correctly; kernel findings are visible only to platform admins.
-- Re-runs are idempotent (no duplicate findings).
+- Re-runs are idempotent (no duplicate findings — existing open findings are updated, not re-inserted).
 - `/admin/wiki/lint` renders findings with theme-aware tokens per AGENTS.md §12.
 
 ---
