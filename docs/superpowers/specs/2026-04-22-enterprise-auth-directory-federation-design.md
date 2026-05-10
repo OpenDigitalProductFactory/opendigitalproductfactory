@@ -1139,3 +1139,168 @@ The March unified identity spec remains the foundation. This document narrows it
 - external product federation
 - ADP-backed manager separation
 - coworker route/tool access
+
+---
+
+## Addendum (2026-05-09): Identity edge deployment modes
+
+Added in the doctrinal deployment refactor at
+`docs/superpowers/specs/2026-05-09-deployment-contracts.md`. The
+authority/edge split this spec already chose now needs a deployment-
+mode vocabulary so different DPF deployment targets can wire identity
+consistently.
+
+### Modes
+
+- **`dpf-managed`** — DPF deploys and owns its own authentik
+  instance. Default for the cloud-deployment shapes (Single VM,
+  Managed container service, Managed Kubernetes) and the Mac /
+  Linux installer-parity targets. The customer's upstream IdP
+  (Entra ID / Okta / Google Workspace / etc.) connects into this
+  authentik via OIDC or SAML.
+- **`customer-provided`** — the customer already runs an identity
+  edge (their own authentik, Keycloak, Auth0, Azure AD B2C, or
+  similar OIDC-compliant IdP). DPF treats it as the upstream and
+  consumes OIDC tokens from it; DPF does not deploy a parallel
+  authentik. Recommended when the customer has invested in their
+  own IdP and the operational overhead of a second one isn't
+  justified.
+- **`tappaas-upstream`** — only valid in the TAPPaaS packaging
+  target (per `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`).
+  TAPPaaS's own Authentik is used as upstream OIDC into DPF's
+  identity edge, or directly as the identity edge **only if
+  isolation and automation maturity are explicitly validated**. Per
+  the cloud-deployment spec's verified TAPPaaS facts: TAPPaaS
+  identity automation is currently documented as "TODO: Not
+  tested," so this mode is gated until that maturity bar is met.
+
+### Authority preservation (binding)
+
+Regardless of `identityEdgeMode`:
+
+> TAPPaaS Authentik (or any other identity edge) may authenticate
+> users into DPF. It does **not** own DPF authorization semantics.
+> DPF Authority Core remains authoritative for roles, route
+> capabilities, coworker grants, Edge Node trust, and downstream
+> app assignments.
+
+This preserves the principle this spec already establishes: "DPF
+owns identity meaning and authority. The identity edge owns protocol
+presentation." `identityEdgeMode` selects *which* edge presents
+protocols; it does not move authorization out of the Authority
+Core.
+
+### Deployment configuration
+
+`identityEdgeMode` is a runtime configuration value (contract 2 of
+the deployment doctrine: runtime configuration). Each deployment
+wrapper sets it appropriately:
+
+- Linux installer / Single VM substrate / Marketplace image:
+  defaults to `dpf-managed`. Customer can set `customer-provided`
+  via env var to skip the bundled authentik.
+- Managed container service / Managed Kubernetes: defaults to
+  `dpf-managed`; the Helm chart and Terraform modules expose it as
+  a values flag.
+- TAPPaaS module: defaults to `dpf-managed` for v1; supports
+  `tappaas-upstream` once TAPPaaS identity automation is
+  production-ready.
+
+### Open questions for this addendum
+
+- **Validation criteria for `tappaas-upstream` graduation:** what
+  tests / contracts must TAPPaaS identity automation pass before
+  `tappaas-upstream` is recommended over a parallel `dpf-managed`
+  authentik in TAPPaaS deployments?
+- **Mode migration:** how does a customer move from `dpf-managed`
+  to `customer-provided` (or vice versa) without re-issuing every
+  user? Probably an SCIM-based handoff per the main spec, but
+  needs concrete flow.
+
+---
+
+## Addendum (2026-05-09): Principal convergence
+
+Added in the deeper-review backlog pass. Today the platform has
+multiple distinct identity-bearing entities — `User`,
+`CustomerContact`, `Agent`, plus newer ones introduced in this
+branch's deployment-architecture work (`EdgeNode`, `MobileDevice`,
+`ServiceAccount`). Each has its own table, lifecycle, and auth
+surface. Without an explicit convergence direction, these will
+silently become parallel identity islands.
+
+This addendum states the binding direction.
+
+### The convergence rule
+
+`User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and
+`ServiceAccount` all eventually resolve to a single
+`Principal` / `PrincipalAlias` model. The convergence is gradual
+(existing tables remain; the `Principal` row + alias is added as a
+second-tier index), but the rule for new work is binding:
+
+> Any new identity-bearing entity introduced after 2026-05-09 must
+> be modeled as a `PrincipalAlias` linked to a `Principal`, not as
+> a parallel identity table.
+
+`Principal` is the universal identity row (id + status + creation
+metadata + canonical type). `PrincipalAlias` is the per-surface
+representation (kind = workforce-user / customer-contact /
+agent / edge-node / mobile-device / service-account / etc.; surface-
+specific identifiers; surface-specific auth handles).
+
+### What this means for each entity
+
+| Entity | Today's table | Principal alias kind | Notes |
+|---|---|---|---|
+| `User` (workforce) | `User` | `workforce-user` | existing surface; aliases retroactively created during convergence migration |
+| `CustomerContact` | `CustomerContact` | `customer-contact` | storefront/portal customer auth resolves to a Principal |
+| `Agent` (AI coworker) | `Agent` | `agent` | per AGENTS.md §8: agent identity for tool-grant enforcement |
+| `EdgeNode` | `EdgeNode` (per Edge Node spec) | `edge-node` | machine principal; `dpfedge_*` token tied to the alias |
+| `MobileDevice` | `MobileDevice` (per Mobile spec) | `mobile-device` | user-bound; many devices per `User` Principal alias of kind `workforce-user` |
+| `ServiceAccount` | not yet implemented | `service-account` | for non-human, non-Edge automation accounts; deferred to a follow-up spec |
+
+A user with a phone running the mobile app has **one** Principal of
+kind `workforce-user` (or `customer-contact`) and a `PrincipalAlias`
+of kind `mobile-device` linked to that same Principal — not two
+unrelated Principals. An Edge Node has **its own** Principal of
+kind `edge-node`; it does not share a Principal with the workforce
+user who installed it.
+
+### Authorization is on the Principal, not the alias
+
+Tool grants, route capabilities, manager-scope checks, and audit
+attribution all resolve to the `Principal`. The alias kind tells
+the platform *how* the principal authenticated for this request
+(browser session, mobile JWT, `dpfedge_*` token, etc.) but the
+authorization decision is on the principal's role/grant set.
+
+This preserves Doctrine Contract 4: "DPF Authority Core owns
+authorization semantics" — the alias is the protocol-presentation
+edge; the principal is the identity edge's anchor in DPF.
+
+### Storefront customer auth migration
+
+Today's storefront auth resolution
+(`apps/web/lib/storefront/...` — see Storefront spec) distinguishes
+`User` vs `CustomerContact` directly. Under the convergence model,
+storefront auth resolves the request to a `Principal` and reads
+the alias kind to know whether the request is from a workforce
+user or a customer contact. The application-level distinction
+(workforce-only routes vs customer routes) stays the same; the
+backing identity model is unified.
+
+### Open questions for this addendum
+
+- **Migration sequencing:** which entity converges first? `User`
+  first (largest install base); `CustomerContact` second; `Agent`
+  third; new entities (`EdgeNode`, `MobileDevice`,
+  `ServiceAccount`) born already converged.
+- **Cross-alias merge / split:** if a workforce user is later also
+  registered as a customer contact (shared email, etc.), does that
+  collapse to one Principal with two aliases, or stay as two
+  Principals? Needs a concrete rule.
+- **Audit attribution under convergence:** existing audit rows
+  reference `User.id` or `Agent.id`; under convergence they
+  reference `Principal.id`. Migration script preserves both for a
+  period; eventually the older columns retire.

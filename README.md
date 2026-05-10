@@ -168,6 +168,19 @@ The platform has two deployment models and one shared architectural core:
 
 For the full runtime picture — deployment diagrams, hardware tiers, the Docker Compose breakdown, and the monitoring stack — see [docs/architecture/platform-overview.md](docs/architecture/platform-overview.md).
 
+### Deployment architecture (in active design)
+
+The deployment architecture is being formalized so that Windows, macOS, native Linux, customer-cloud, and TAPPaaS all wrap the same canonical contracts. The architectural specs are in `docs/superpowers/specs/`:
+
+- [Deployment Contracts](docs/superpowers/specs/2026-05-09-deployment-contracts.md) — 10 canonical contracts every deployment target wraps (release artifacts, runtime config, lifecycle, identity, edge, build execution, observability, secrets, LLM/agent routing, client/API surfaces).
+- [Cloud Deployment Design](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md) — substrates (Single VM, Managed container service, Managed Kubernetes) and packaging targets (TAPPaaS module, marketplace image, Helm chart, Terraform modules).
+- [DPF Edge Node](docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md) — host-resident trust + connectivity component for discovery, MCP/A2A gateway, identity broker.
+- [Build Execution Provider](docs/superpowers/specs/2026-05-09-build-execution-provider-design.md) — sandbox lifecycle abstraction so Build Studio runs on substrates beyond local Docker.
+- [Mac/Linux Installer-Parity Roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) — 10-phase implementation plan for native macOS (Apple Silicon) + native Linux installs.
+- [Branch Plan: Architecture + Documentation Rollout](docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md) — umbrella plan tracking the implementation epics and public-doc updates that follow these specs.
+
+Each spec is a research stub awaiting Research & Benchmarking per AGENTS.md §10. The Windows installer remains the GA install surface today; multi-platform implementation is sequenced through the roadmap above.
+
 The platform's AI governance layer is now documented as a standards family:
 
 - [Trusted AI Kernel (TAK)](docs/architecture/trusted-ai-kernel.md) — runtime governance, authority mediation, HITL, delegation, audit, provider backpressure, queueing, and failover expectations
@@ -194,7 +207,7 @@ Publication outputs are generated from the Markdown sources of truth:
 | EA Modeling | ArchiMate 4 canvas, viewpoints, relationship rules, structured value streams |
 | AI Provider Registry | 17 providers, credential management, model discovery, profiling, cost tracking |
 | AI Coworker | Live LLM conversations, automatic failover, context-aware skills dropdown |
-| Docker Deployment | Zero-prerequisites Windows installer, hardware detection, Docker Model Runner auto-setup |
+| Docker Deployment | Zero-prerequisites Windows installer (GA); macOS + native Linux per the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) |
 
 ### What's coming
 
@@ -204,8 +217,9 @@ Publication outputs are generated from the Markdown sources of truth:
 | **Platform Self-Development** | Agents write new features in a sandboxed environment. Humans review diffs and approve. The platform extends itself. |
 | **AI-Guided Setup Wizard** | On first install, the AI coworker walks you through company setup conversationally — no forms, just a conversation. |
 | **In-App PR Workflow** | Submit customizations back to the community directly from the platform UI. |
-| **Web-Hosted SaaS** | Cloud deployment option for organizations that prefer managed hosting. |
-| **Mac & Linux Installers** | Extend the one-click install experience to all platforms. |
+| **Web-Hosted SaaS** | Customer-cloud deployment via Terraform on AWS / GCP / Azure — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). DPF stays single-tenant; "SaaS" here means "customer hosts on rented compute," not multi-tenant. |
+| **Mac & Linux Installers** | macOS Apple Silicon + native Linux installer parity — design in progress, see the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). |
+| **TAPPaaS Module** | Self-hosted private-platform packaging via [TAPPaaS](https://tappaas.org/) — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). |
 
 ---
 

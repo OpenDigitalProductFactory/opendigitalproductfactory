@@ -1,5 +1,7 @@
 # DPF Production Runtime
 
+> **Substrate scope:** the conventions below describe the **Single VM substrate** (local Windows install today; macOS / native Linux per the [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)). Cloud substrates (Managed container service, Managed Kubernetes) and packaging targets (TAPPaaS module, marketplace image, Helm chart) carry substrate-specific runtime conventions in [`docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`](../superpowers/specs/2026-05-09-cloud-deployment-design.md). The shared canonical contracts are in the [deployment doctrine](../superpowers/specs/2026-05-09-deployment-contracts.md).
+
 This install runs with three distinct local runtime roles:
 
 - `http://localhost:3000` = production-served portal

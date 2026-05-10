@@ -1,5 +1,7 @@
 # Platform Overview
 
+> **Scope:** this document describes the **current GA runtime** — the Single VM substrate served via Docker Desktop on Windows. Multi-platform (macOS Apple Silicon, native Linux), customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](../superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](../superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
+
 This document explains the main runtime pieces of Open Digital Product Factory, the two supported deployment models, the sandbox-based iterative workflow, and the practical hardware tiers for running the platform well.
 
 The intent is to separate the always-on platform runtime from the evolving self-improvement loop. Some sandbox capabilities already exist in the codebase today. The broader governed iterative workflow is the target direction and should be read as an architecture goal, not as a claim that every stage is already fully automated.
@@ -19,7 +21,7 @@ The current platform runtime is a containerized application stack centered on th
 | `qdrant` | Vector database for semantic indexing, retrieval, and memory-style AI support |
 | `inngest` | Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks |
 | `redis` | In-memory store backing Inngest's job queue and state |
-| Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed. Models managed via `docker model pull`. |
+| Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed. Models managed via `docker model pull`. On Linux installs without Docker Desktop, Ollama in compose substitutes; on TAPPaaS deployments, the customer's AI Stack Ollama / LiteLLM serves the same role. The runtime contract (`DPF_LLM_PROVIDER`, `LLM_BASE_URL`) is universal — see Doctrine Contract 9. |
 | External AI providers | Optional provider layer used when the tenant enables remote model access |
 
 ### Runtime Characteristics
