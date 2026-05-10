@@ -4,7 +4,8 @@
 |-------|-------|
 | **Epic** | EP-WIKI-001 |
 | **Spec** | [2026-05-09-platform-kernel-wiki-design.md](../specs/2026-05-09-platform-kernel-wiki-design.md) |
-| **Status** | Phase 0 in progress on `claude/review-rag-implementation-3qLkr` |
+| **Follow-up specs** | [EP-WIKI-002 — Bi-Temporal Revisions](../specs/2026-05-09-wiki-bi-temporal-revisions-design.md), [EP-WIKI-003 — Importance + Reflection](../specs/2026-05-09-wiki-importance-and-reflection-design.md), [EP-WIKI-004 — PPR Retrieval](../specs/2026-05-09-wiki-ppr-retrieval-design.md), [EP-WIKI-005 — Visual Navigation](../specs/2026-05-09-wiki-visual-navigation-design.md) |
+| **Status** | Phase 0 complete (PR #399 in review); Phases 1–7 not started |
 | **Created** | 2026-05-09 |
 
 ---
@@ -45,20 +46,26 @@ Each phase ends with all four passing:
 
 **Branch:** `feat/wiki-kernel-schema`
 
+Per [the spec §0.3 and §11](../specs/2026-05-09-platform-kernel-wiki-design.md), this phase **absorbs `KnowledgeArticle`** rather than running parallel to it. `KnowledgeArticle` was specced in EP-KM-001 but never populated in production; the migration is a rename + additive columns.
+
 **Files modified:**
-- `packages/db/prisma/schema.prisma` — add 7 new models (`RawSource`, `WikiPage`, `WikiPageRevision`, `WikiPageLink`, `WikiPageSource`, `WikiIngestEvent`, `WikiLintFinding`); add `wikiPages` / `wikiRawSources` relations on `Organization`; add `wikiPages` relation on `KnowledgeArticle`.
-- `packages/db/src/qdrant.ts` — add `WIKI_PAGES` collection constant; ensure new payload indexes (`organizationId`, `slug`, `pageKind`, `kernelPageId`, `kernelVersion`, `isKernel`).
-- `packages/db/src/index.ts` — re-export new types/utilities.
+- `packages/db/prisma/schema.prisma`:
+  - **Rename** `KnowledgeArticle` → `WikiPage` and `KnowledgeArticleRevision` → `WikiPageRevision`. Rename the IT4IT-flavored join tables `KnowledgeArticleProduct` → `WikiPageProduct` and `KnowledgeArticlePortfolio` → `WikiPagePortfolio`; both remain optional anchoring.
+  - Add wiki-shaped columns to `WikiPage`: `slug`, `pageKind`, `isKernel`, `kernelVersion`, `kernelPageId`, `derivedFromKernelVersion`, `abstract`.
+  - Add new models: `RawSource`, `WikiPageLink`, `WikiPageSource`, `WikiIngestEvent`, `WikiLintFinding`.
+  - Add `wikiPages` / `wikiRawSources` relations on `Organization`. (No relation on `KnowledgeArticle` — it is the one being renamed.)
+- `packages/db/src/qdrant.ts` — add `WIKI_PAGES` collection constant; ensure new payload indexes (`organizationId`, `slug`, `pageKind`, `kernelPageId`, `kernelVersion`, `isKernel`). Re-key any existing `entityType: "knowledge-article"` points to `entityType: "wiki-page"` in the new collection (zero rows in production today, so this is a no-op against live data — documented for first-install correctness).
+- `packages/db/src/index.ts` — re-export new types/utilities; remove the `KnowledgeArticle` re-exports.
 
 **Files created:**
-- `packages/db/prisma/migrations/<timestamp>_add_wiki_kernel/migration.sql`
+- `packages/db/prisma/migrations/<timestamp>_rename_knowledge_to_wiki/migration.sql` — `ALTER TABLE` rename plus additive columns.
 - `packages/db/src/wiki-store.ts` — typed CRUD helpers (`upsertWikiPage`, `appendRevision`, `linkPages`, `attachSource`).
 - `packages/db/src/wiki-store.test.ts`
 
-**Run:** `pnpm --filter @dpf/db exec prisma migrate dev --name add-wiki-kernel`.
+**Run:** `pnpm --filter @dpf/db exec prisma migrate dev --name rename-knowledge-to-wiki`.
 
 **Acceptance:**
-- Migration applies on a fresh DB and on a DB with prior `KnowledgeArticle` data without data loss.
+- Migration applies on a fresh DB and on a DB that has the (empty) `KnowledgeArticle` table without data loss; if a deployment is found that did populate the old table, backfill `slug = lowerKebab(title)`, `pageKind = "summary"`, `isKernel = false`.
 - Qdrant collection `wiki-pages` exists with the documented payload indexes after `ensureCollections()` + `ensurePayloadIndexes()` run.
 - Helpers can round-trip a kernel page and an org override; uniqueness on `(organizationId, slug)` is enforced.
 
@@ -189,7 +196,7 @@ Each phase ends with all four passing:
 
 **Files modified:**
 - Header navigation: add `Wiki` link.
-- `apps/web/components/product/ProductTabNav.tsx` — add a `Wiki` sub-tab on product pages showing pages with `linkedArticleId` matching the product's KAs or with product-scoped `WikiPageSource`.
+- `apps/web/components/product/ProductTabNav.tsx` — add a `Wiki` sub-tab on product pages showing pages anchored via `WikiPageProduct` (renamed from `KnowledgeArticleProduct`) or with product-scoped `WikiPageSource`.
 
 **Acceptance:**
 - Two different `Organization`s see distinct wiki content for the same slug after both have proposed edits.
@@ -199,7 +206,43 @@ Each phase ends with all four passing:
 
 ---
 
-## End-to-End Verification (after Phase 6)
+## Phase 7 — Visual navigation surfaces (per [EP-WIKI-005](../specs/2026-05-09-wiki-visual-navigation-design.md))
+
+**Branch:** `feat/wiki-visual-nav`
+
+Reuses the existing `@xyflow/react` v12 + `elkjs` v0.11.1 toolchain from Phase EA-2 ([2026-03-12-phase-ea2-canvas-design.md](../specs/2026-03-12-phase-ea2-canvas-design.md)). No new viz dependency.
+
+**Files created:**
+- `apps/web/components/wiki/WikiContextSidebar.tsx` — Tier 1 in-context sidebar (ranked list, no graph).
+- `apps/web/components/wiki/WikiLocalGraph.tsx` — Tier 2 page-local mini-graph (≤30 nodes).
+- `apps/web/components/wiki/WikiPageNode.tsx` — custom React Flow node, variant per `pageKind` (`stance ★`, `heuristic ⬤`, `entity ▢`, `decision ◆`, `summary ▭`, `runbook ▬`, `index ◇`).
+- `apps/web/components/wiki/WikiCitationBadge.tsx` — source-citation chip on the page-local graph.
+- `apps/web/components/wiki/WikiLinkEdge.tsx`, `WikiOverrideEdge.tsx`, `WikiReflectionEdge.tsx` — custom edges (solid / dashed / curly).
+- `apps/web/components/wiki/WikiAtlas.tsx` — Tier 3 kernel atlas at `/wiki`, three modes (cluster / table / time-travel).
+- `apps/web/components/wiki/WikiAtlasClusterView.tsx`, `WikiAtlasTableView.tsx`, `WikiAtlasTimeTravel.tsx`.
+- `apps/web/lib/wiki/subgraph.ts` — `getWikiSubgraph({ organizationId, asOf? })`, shared with the EP-WIKI-004 PPR cache.
+- `apps/web/components/wiki/WikiContextSidebar.test.tsx`, `WikiLocalGraph.test.tsx`, `WikiAtlas.test.tsx`.
+
+**Files modified:**
+- The right-hand sidebar shell on `/portfolio/product/[id]/*`, `/portfolio/[...slug]/*`, and the agent conversation thread — mount `<WikiContextSidebar />`.
+- `apps/web/app/(shell)/wiki/page.tsx` (created in Phase 6 as a wiki list) — replace with the atlas surface; the old list becomes Mode B (table) inside the atlas.
+- `apps/web/app/(shell)/wiki/[...slug]/page.tsx` — embed `<WikiLocalGraph />` above-the-fold.
+
+**Acceptance:**
+- Tier 1 returns top 5–7 PPR-weighted pages with stance/heuristic chips elevated; mounted on the three target route shells.
+- Tier 2 renders ≤30 nodes regardless of true neighbor count; "+N more" links into Tier 3 search.
+- Tier 3 cluster mode groups by `pageKind`; table mode is sortable; time-travel slider re-queries with the EP-WIKI-002 `asOf` parameter once that epic ships (until then, slider is hidden).
+- Search highlights matched nodes with the PPR halo; non-matched dim to 30%.
+- Tenant-size progressive disclosure: < 50 pages = full graph; 50–500 = collapsed clusters; 500–2000 = table default; > 2000 = `mrtree` layout.
+- Mobile: Tier 1 collapses to footer tab; Tier 2 collapses to in/out-link lists; Tier 3 desktop-only with notice.
+- Theme-aware tokens per AGENTS.md §12; color-blind-safe encoding (kernel/overlay never distinguished by color alone).
+- Build gate green per §Build Gate above; React Flow + elkjs added to no new package — confirm `pnpm install` no-op.
+
+**Depends on:** Phase 1 (data model), Phase 6 (basic wiki UI). Optional dependencies: EP-WIKI-002 (time-travel slider becomes useful), EP-WIKI-004 (PPR-weighted seeding for Tier 1 and search halo). Phase 7 ships behind feature flags `wiki.contextSidebar`, `wiki.localGraph`, `wiki.atlas` so each tier can roll out independently.
+
+---
+
+## End-to-End Verification (after Phase 7)
 
 1. **Migration apply**: `pnpm --filter @dpf/db exec prisma migrate dev` against fresh + existing DBs; both clean.
 2. **Seed**: `pnpm --filter @dpf/db exec tsx packages/db/src/seed.ts` produces kernel rows + Qdrant points; `manifest.json` counts match DB.

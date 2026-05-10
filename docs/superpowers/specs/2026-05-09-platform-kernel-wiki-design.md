@@ -7,6 +7,7 @@
 | **Depends On** | [EP-MEMORY-001 — Shared Memory Vector DB (2026-03-17, implemented)](2026-03-17-shared-memory-vector-db-design.md), [EP-TAK-3F9A21 — TAK/GAID Auth+Identity+Memory Refresh (2026-04-25, drafted; defines the five-class governed memory model and reviews open-brain/personal-wiki applicability)](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) |
 | **Absorbs** | [EP-KM-001 — Knowledge Management (2026-04-02, drafted but `KnowledgeArticle` was never populated; the wiki page model in §4 is the merged successor)](2026-04-02-knowledge-management-design.md) |
 | **Predecessor Specs** | [Shared Memory Vector DB (2026-03-17)](2026-03-17-shared-memory-vector-db-design.md), [Knowledge-Driven Agent Capabilities (2026-03-18)](2026-03-18-knowledge-driven-agent-capabilities-design.md), [Knowledge Management (2026-04-02)](2026-04-02-knowledge-management-design.md), [TAK/GAID Auth+Identity+Memory Refresh (2026-04-25)](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) |
+| **Follow-up Specs** | [EP-WIKI-002 — Bi-Temporal Revisions and Edge Invalidation](2026-05-09-wiki-bi-temporal-revisions-design.md), [EP-WIKI-003 — Importance Scoring and Reflection-Triggered Derivation](2026-05-09-wiki-importance-and-reflection-design.md), [EP-WIKI-004 — Personalized PageRank Retrieval](2026-05-09-wiki-ppr-retrieval-design.md), [EP-WIKI-005 — Visual Navigation of the Kernel Wiki](2026-05-09-wiki-visual-navigation-design.md) |
 | **Status** | Draft |
 | **Created** | 2026-05-09 |
 | **Author** | Mark Bodman (founder) + Claude (design partner) |
