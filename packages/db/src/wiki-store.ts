@@ -6,7 +6,12 @@
 // client so the helpers can run inside a Prisma $transaction or against
 // a mocked client in tests.
 
-type PrismaWriteAction<TResult = unknown> = (args: unknown) => Promise<TResult>;
+// Helper signature uses `any` on the parameter (not `unknown`) so the
+// real Prisma delegate methods — whose argument types are union-typed
+// SelectSubsets — remain assignable. This matches the runtime contract
+// (we forward whatever shape Prisma expects); tests pass narrow mocks.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PrismaWriteAction<TResult = unknown> = (args: any) => Promise<TResult>;
 
 export type WikiStoreClient = {
   wikiPage: {
