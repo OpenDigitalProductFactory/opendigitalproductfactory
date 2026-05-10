@@ -199,6 +199,8 @@ services:
       QDRANT_INTERNAL_URL: http://qdrant:6333
       NODE_ENV: development
       DPF_ENVIRONMENT: sandbox
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # required on native Linux Docker; harmless on Docker Desktop
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
@@ -214,14 +216,19 @@ services:
       dockerfile: Dockerfile.promoter
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./backups:/backups
-      - .:/host-source:ro  # Host project source for building new portal images
+      # Use absolute host path via DPF_HOST_INSTALL_PATH (declared in
+      # .env.docker.example) so bind mounts resolve regardless of the
+      # operator's current working directory when invoking docker compose.
+      - ${DPF_HOST_INSTALL_PATH:-.}/backups:/backups
+      - ${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro  # Host project source for building new portal images
     environment:
       DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1
       DPF_PORTAL_CONTAINER: dpf-portal-1
       DPF_COMPOSE_PROJECT: dpf
       POSTGRES_USER: ${POSTGRES_USER:-dpf}
       POSTGRES_DB: dpf
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -271,6 +278,8 @@ services:
       ADP_API_BASE_URL: ${ADP_API_BASE_URL:-}
       ADP_TOKEN_ENDPOINT_URL: ${ADP_TOKEN_ENDPOINT_URL:-}
       DPF_INTEGRATION_TEST_SESSION_ID: ${DPF_INTEGRATION_TEST_SESSION_ID:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -428,6 +437,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=15d"
       - "--web.enable-lifecycle"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # required to reach windows-host scrape target on native Linux Docker
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
       interval: 10s
@@ -458,9 +469,16 @@ services:
       retries: 5
       start_period: 15s
 
+  # cadvisor + node-exporter bind-mount Linux-only host paths (/proc, /sys,
+  # /var/lib/docker, /). They cannot run on macOS or Windows Docker Desktop
+  # (the VM has no equivalent). Gated behind the linux-monitoring profile
+  # per the deployment doctrine's Deployment Support Matrix; Linux installs
+  # opt in via `--profile linux-monitoring` (or by using
+  # docker-compose.linux.yml which enables the profile by default).
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     restart: unless-stopped
+    profiles: ["linux-monitoring"]
     ports:
       - "8080:8080"
     volumes:
@@ -472,6 +490,7 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     restart: unless-stopped
+    profiles: ["linux-monitoring"]
     ports:
       - "9100:9100"
     pid: host
