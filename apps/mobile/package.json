@@ -40,7 +40,7 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^19",
     "jest": "~30.3.0",
-    "jest-expo": "~53.0.0",
+    "jest-expo": "~55.0.17",
     "msw": "^2.14.5",
     "react-test-renderer": "19.0.0",
     "tailwindcss": "^4.3.0",
