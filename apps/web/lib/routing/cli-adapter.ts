@@ -26,6 +26,48 @@ import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-cal
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 180_000; // 3 minutes — matches chat adapter's AbortSignal.timeout
 
+/**
+ * Claude Code CLI's built-in tools shadow the platform's MCP-style tools when
+ * both are available — the model preferentially emits native `tool_use` for
+ * its own tools (Read, Write, Bash, Agent, etc.) instead of using the
+ * platform-tool descriptions injected into the system prompt. That looked
+ * like "Build Studio tools aren't being called" (BI-931303FF).
+ *
+ * Until the proper fix lands (mount platform tools as a real MCP server via
+ * `--mcp-config` per docs/superpowers/plans/2026-04-11-platform-mcp-tool-server-implementation.md),
+ * we suppress Claude Code's native tools when this adapter dispatches
+ * inference. The cli-adapter is only used as an inference backend (anthropic-sub
+ * subscription), not as a coding assistant — sub-agent code execution flows
+ * through claude-dispatch.ts on a different code path that intentionally
+ * keeps native tools enabled.
+ *
+ * List sourced from Claude Code 1.x's documented built-in tool inventory.
+ * If a future Claude Code release adds a new built-in, the platform tool
+ * shadowing returns until this list is updated; the [tool-trace] log lines
+ * in this file will surface the regression.
+ */
+const CLAUDE_CODE_NATIVE_TOOLS = [
+  "Agent",
+  "Bash",
+  "Edit",
+  "Glob",
+  "Grep",
+  "MultiEdit",
+  "NotebookEdit",
+  "NotebookRead",
+  "Read",
+  "Skill",
+  "Task",
+  "TodoWrite",
+  "ToolSearch",
+  "WebFetch",
+  "WebSearch",
+  "Write",
+];
+
+/** Comma-separated form of {@link CLAUDE_CODE_NATIVE_TOOLS} for the `--disallowedTools` flag. */
+export const CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE = CLAUDE_CODE_NATIVE_TOOLS.join(",");
+
 // ─── Auth Resolution ────────────────────────────────────────────────────────
 
 type CliAuth =
@@ -314,13 +356,17 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // Use --output-format json for reliable parsing (stream-json is for streaming UX)
       // Read prompt from stdin (< file) to avoid shell quoting issues with large prompts.
       // System prompt is read from file and passed via env var to avoid $(cat) in args.
+      //
+      // --disallowedTools: see CLAUDE_CODE_NATIVE_TOOLS above. Suppresses Claude
+      // Code's built-in tools so they don't shadow platform MCP-style tools that
+      // the agentic loop dispatches (BI-931303FF).
       const cliModel = modelId || "sonnet";
       const script = [
         "#!/bin/sh",
         "cd /workspace",
         authExportLine,
         `SYSPROMPT=$(cat ${systemFile})`,
-        `exec claude ${bareFlag}-p - --dangerously-skip-permissions --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile}`,
+        `exec claude ${bareFlag}-p - --dangerously-skip-permissions --disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile}`,
       ].join("\n");
 
       const scriptB64 = Buffer.from(script).toString("base64");

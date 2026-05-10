@@ -1,0 +1,77 @@
+# Linux deployment overlay (native Docker Engine; no Docker Desktop).
+#
+# Usage:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.release.yml \
+#                  -f docker-compose.linux.yml up -d
+#
+# (or use scripts/installer/lib/compose.sh which assembles the chain
+#  for you per the host platform.)
+#
+# Per the deployment doctrine:
+#
+#   - Docker Model Runner is built into Docker Desktop and is NOT
+#     available on native Linux Docker Engine. Per Doctrine Contract 9
+#     (LLM and agent-provider routing), the default LLM provider on
+#     Linux native Docker is Ollama running in compose. This overlay
+#     adds the `ollama` service and overrides LLM_BASE_URL on every
+#     LLM consumer (portal, sandbox, browser-use) to point at it.
+#
+#   - The `linux-monitoring` profile (cadvisor + node-exporter) is
+#     enabled here by default because their bind mounts (/proc, /sys,
+#     /var/lib/docker, /) work natively on Linux. Operators who don't
+#     want host metrics can override with `--profile ""` or by reading
+#     COMPOSE_PROFILES from the environment.
+
+services:
+  # Local LLM provider for non-Docker-Desktop substrates. Lightweight
+  # CPU-only by default; customers with GPU passthrough can add
+  # device reservations.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Override LLM_BASE_URL for every consumer so the in-cluster ollama
+  # service is the default. Customers with their own external LLM
+  # endpoint can override LLM_BASE_URL in .env to take precedence.
+  portal:
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  sandbox:
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+
+  browser-use:
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+
+# Default to enabling the linux-monitoring profile so cadvisor and
+# node-exporter start with `docker compose up`. Profiles enabled via
+# this top-level key apply to the merged config and persist across
+# subsequent `docker compose` invocations in the same project.
+# Operators who don't want host metrics can override with
+# `COMPOSE_PROFILES=""` or by removing this overlay.
+#
+# (Compose v2.20+ honors `profiles` at the top level via the
+# COMPOSE_PROFILES env var; this overlay sets it via the
+# `x-default-profiles` extension that is read by the
+# scripts/installer/lib/compose.sh helper. For direct `docker compose`
+# usage, pass `--profile linux-monitoring` explicitly or set
+# `COMPOSE_PROFILES=linux-monitoring` in the environment.)
+
+volumes:
+  ollama_data:
