@@ -12,6 +12,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # Multi-arch + supply-chain attestation defaults applied to every
+  # installed-runtime image per the deployment doctrine (Contract 1)
+  # and the installer-parity roadmap Phase 1.
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   build-and-push:
@@ -19,6 +23,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Required for SBOM and provenance attestations (id-token write
+      # so the OIDC-signed attestation can be uploaded with the image).
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@v6
@@ -39,6 +47,16 @@ jobs:
 
       - name: Typecheck (all packages)
         run: pnpm typecheck
+
+      - name: Set up QEMU
+        # Enables cross-architecture builds (linux/arm64 from an amd64 runner).
+        # Required before docker/setup-buildx-action for multi-arch builds.
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        # buildx is required for multi-arch manifest list publishing
+        # (a single tag that resolves to amd64 or arm64 per the puller).
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -61,12 +79,23 @@ jobs:
         id: owner
         run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
+      # ─── Installed-runtime images ──────────────────────────────────
+      # Each step publishes a multi-arch manifest list (linux/amd64 +
+      # linux/arm64) with SBOM + provenance attestations. The service
+      # classification (installed-runtime vs developer/test-only) is
+      # documented in docs/superpowers/plans/2026-05-09-macos-linux-native-support.md
+      # Phase 1. integration-test-harness is intentionally NOT published
+      # because it's developer/test-only.
+
       - name: Build and push portal image
         uses: docker/build-push-action@v7
         with:
           context: .
           target: runner
           push: true
+          platforms: ${{ env.PLATFORMS }}
+          provenance: mode=max
+          sbom: true
           tags: |
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-portal:${{ steps.tag.outputs.version }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-portal:latest
@@ -77,6 +106,73 @@ jobs:
           context: .
           file: Dockerfile.sandbox
           push: true
+          platforms: ${{ env.PLATFORMS }}
+          provenance: mode=max
+          sbom: true
           tags: |
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-sandbox:${{ steps.tag.outputs.version }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-sandbox:latest
+
+      - name: Build and push promoter image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.promoter
+          push: true
+          platforms: ${{ env.PLATFORMS }}
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-promoter:${{ steps.tag.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-promoter:latest
+
+      - name: Build and push browser-use image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./services/browser-use
+          file: ./services/browser-use/Dockerfile
+          push: true
+          platforms: ${{ env.PLATFORMS }}
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-browser-use:${{ steps.tag.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-browser-use:latest
+
+      - name: Build and push adp image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: services/adp/Dockerfile
+          push: true
+          platforms: ${{ env.PLATFORMS }}
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-adp:${{ steps.tag.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-adp:latest
+
+      # ─── Manifest verification ──────────────────────────────────
+      # Per the installer-parity roadmap Phase 1 exit gate: every
+      # installed-runtime image must publish both linux/amd64 and
+      # linux/arm64 manifests. Fail the workflow if any image is
+      # single-arch.
+
+      - name: Verify multi-arch manifests
+        run: |
+          set -euo pipefail
+          OWNER="${{ steps.owner.outputs.value }}"
+          TAG="${{ steps.tag.outputs.version }}"
+          IMAGES=(dpf-portal dpf-sandbox dpf-promoter dpf-browser-use dpf-adp)
+          for image in "${IMAGES[@]}"; do
+            echo "::group::${image}:${TAG}"
+            docker buildx imagetools inspect "${{ env.REGISTRY }}/${OWNER}/${image}:${TAG}"
+            # Assert both architectures are present in the manifest list.
+            docker buildx imagetools inspect "${{ env.REGISTRY }}/${OWNER}/${image}:${TAG}" --raw \
+              | grep -q '"architecture": "amd64"' \
+              || { echo "Missing linux/amd64 in ${image}:${TAG}"; exit 1; }
+            docker buildx imagetools inspect "${{ env.REGISTRY }}/${OWNER}/${image}:${TAG}" --raw \
+              | grep -q '"architecture": "arm64"' \
+              || { echo "Missing linux/arm64 in ${image}:${TAG}"; exit 1; }
+            echo "::endgroup::"
+          done
