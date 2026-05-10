@@ -340,6 +340,115 @@ D, E, F, G, H):
 - [ ] Doctrine maturity-gates checklist on the relevant spec is
       satisfied before the user-facing doc declares it.
 
+## Test environment strategy
+
+Operational doctrine for **how each implementation epic is tested
+given we don't own all 9 deployment targets**. Captured here, not
+in each epic's verification gate, so the strategy doesn't drift
+across PRs.
+
+### Three tiers
+
+**Tier 1 — CI runners (covers ~80% of testable surface):**
+
+| Target | Runner | Cost |
+|---|---|---|
+| Linux native Docker | `ubuntu-22.04` | Free for OSS; pennies for private |
+| macOS Apple Silicon | `macos-14` (arm64) | Free for OSS; ~$0.16/min for private |
+| Multi-arch GHCR publish | any runner + QEMU + buildx | Free |
+| Compose render + policy checks | any runner | Free |
+| `kind` / `k3d` for k8s smoke | any runner | Free |
+
+**Tier 2 — cheap cloud rentals (release gates only, not per-PR):**
+
+| Target | Approach | Cost per smoke run |
+|---|---|---|
+| Cloud Single VM (Epic D) | t3.medium / e2-small / B1s for 1 hr | ~$0.05 |
+| Cloud marketplace image | same VM, AMI-baked | ~$0.05 |
+| Container service (preview) | Cloud Run / Container Apps free tier | $0 within free quota |
+| Managed Kubernetes (preview) | EKS / GKE / AKS sandbox cluster, 1 hr | ~$0.10–0.30 |
+| GPU-attached LLM smoke | spot GPU instance, 30 min | ~$0.50 |
+
+A `release-gate-cloud` script that rents-tests-tears-down per
+release keeps this sustainable. **Do not run on every PR.**
+
+**Tier 3 — needs real hardware or community partners:**
+
+| Target | What's needed | Realistic path |
+|---|---|---|
+| TAPPaaS (Epic E) | Proxmox host | Homelab Proxmox box, OR rent a Hetzner / OVH dedicated server (~$50-100/mo), OR partner with TAPPaaS community |
+| Mobile iOS install (Epic G) | Physical device + Apple Developer Program ($99/yr) | Defer until Mobile epic actually starts; Expo simulator covers most of dev loop |
+| Mobile Android install (Epic G) | Physical device + Google Play Console ($25 one-time) | Same |
+| Edge Node native binary on macOS / Windows (Epic B Mode B) | Real hardware | Use the team's own laptops; sign builds; community beta testers later |
+| Fresh-Mac-from-zero installer flow (Epic A Phase 7) | Real Mac | See macOS-runner caveat below |
+
+### macOS runner caveat (binding constraint)
+
+GitHub's `macos-14` hosted runners **do not support nested
+virtualization**. Docker Desktop on macOS uses HyperKit /
+Virtualization.framework; installing it from a `.dmg` on a fresh
+runner doesn't work because the inner VM can't start. This means:
+
+- `install-dpf.sh --headless` **after** Docker is pre-installed
+  on the runner: testable in CI.
+- `install-dpf.sh` **fresh-Mac-from-zero with no Docker installed**
+  (Phase 7's flagship verification): **not** testable in CI. Needs
+  one of:
+  - A real Mac in the office for manual verification per release.
+  - A paid bare-metal Mac rental (MacStadium, MacinCloud, AWS
+    EC2 Mac instances at ~$1.08/hr).
+  - A community beta tester with an Apple Silicon Mac.
+
+The `apple-silicon-release-gate` job in Phase 9 must therefore
+**not** claim it covers the fresh-from-zero install — only the
+post-Docker-install path. Phase 7's verification text needs a small
+update to acknowledge this. (Tracked as a tiny follow-up cleanup,
+not a blocker for merging this branch.)
+
+### What we deliberately don't test
+
+Per the installer-parity roadmap's Out-of-Scope list and Phase 6's
+unsupported-host preflight: Intel Mac, Windows on ARM,
+WSL2-without-Docker-Desktop, rootless Docker, Podman/containerd,
+air-gapped Linux, Linux distros older than the supported floor.
+Preflight refuses these with documented `Reason:` and `Next:`
+lines; no test rig needed because we don't claim support.
+
+### Per-epic test plan
+
+| Epic | Tier | Runner / rig |
+|---|---|---|
+| A Phase 1 (multi-arch GHCR + SBOM/provenance) | 1 | `ubuntu-22.04` CI |
+| A Phase 2 (contributor setup) | 1 | `macos-14` + `ubuntu-22.04` CI |
+| A Phase 3 (compose portability) | 1 | rendered-config policy checks in CI |
+| A Phase 4 (LLM contract) | 1 (+ 2 for GPU) | CI for non-Ollama paths; Ollama-with-GPU at release gate via spot |
+| A Phase 5 (host hardware detection) | 1 | `macos-14` + `ubuntu-22.04` CI |
+| A Phase 6 (installer skeleton + minimum `dpf doctor`) | 1 | `macos-14` + `ubuntu-22.04` CI; `--dry-run` + `--headless` |
+| A Phase 7 (full installer + autostart) | 1 + manual | `--headless` in CI; fresh-Mac-from-zero needs human + real Mac (caveat above); fresh-Linux-from-zero in CI via `cloud-init` simulation |
+| A Phase 8 (lifecycle scripts) | 1 | CI |
+| A Phase 9 (CI release gates) | 1 | self-validating |
+| A Phase 10 (hardening + diagnostics) | 1 + 2 | CI plus occasional Tier-2 cloud smoke |
+| B (Edge Node) | 1 + manual | Linux container Mode A in CI; native Mode B on team hardware first |
+| C (Build Provider) | 1 | CI (no-op refactor first slice; then `kubernetes-job` provider on `kind`) |
+| D (Cloud Single VM Terraform) | 2 | release-gate cloud rental, one substrate at a time |
+| E (TAPPaaS) | 3 | homelab Proxmox or community partner |
+| F (Identity Edge `customer-provided`) | 1 | bundled authentik in compose, CI |
+| G (Mobile) | 1 + 3 | Expo simulator in CI; physical devices when graduating from preview |
+| H (Storefront principal convergence) | 1 | standard CI |
+
+### What this section is NOT
+
+Not a budget. Not a hiring plan. Not a commitment that any
+particular Tier-3 hardware will be acquired. It's a **realistic
+inventory** of what each epic's verification needs so future
+implementation PRs don't promise tests they can't actually run on
+the rigs DPF can afford.
+
+If a future epic finds itself blocked on a Tier-3 rig that hasn't
+been arranged, the right move is to ship the epic as **Preview** in
+the deployment support matrix until the rig exists or a community
+partner runs it — not to silently skip the verification.
+
 ## Maturity gates before this plan is binding
 
 Per the doctrine's uniform maturity-gates pattern:
