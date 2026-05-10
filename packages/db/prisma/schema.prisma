@@ -8,6 +8,32 @@ datasource db {
   provider = "postgresql"
 }
 
+enum IntakeSource {
+  user_conversation
+  artifact_reference
+  existing_example
+  coworker_proposal
+  innovation_radar
+}
+
+enum BriefConfidence {
+  high
+  medium
+  low
+}
+
+enum BriefStatus {
+  draft
+  gathering_evidence
+  redacting
+  interpreting
+  awaiting_clarification
+  accepted
+  converted_to_build
+  rejected
+  superseded
+}
+
 model User {
   id                           String                        @id @default(cuid())
   email                        String                        @unique
@@ -3252,6 +3278,41 @@ model FeatureBuild {
   @@index([digitalProductId])
   @@index([originatingBacklogItemId])
   @@index([releaseBundleId])
+}
+
+model BusinessBuildBrief {
+  id                      String           @id @default(cuid())
+  briefId                 String           @unique
+  orgId                   String
+  status                  BriefStatus
+  intakeSource            IntakeSource
+  capabilityPackId        String?
+  featureBuildId          String?          @unique
+  backlogItemId           String?
+  businessOutcome         String
+  affectedPeople          Json             @default("[]")
+  affectedWorkflow        String?
+  sourceEvidence          Json             @default("[]")
+  successSignals          String[]
+  constraints             String[]
+  businessInterpretation  String?
+  technicalInterpretation Json             @default("{}")
+  riskProfile             Json             @default("{}")
+  hiveReadiness           Json             @default("{}")
+  openQuestions           String[]
+  confidence              BriefConfidence?
+  confidenceRationale     String?
+  submittedByAgentId      String?
+  submittedByPseudonym    String?
+  submittedByUserId       String?
+  acceptedByUserId        String?
+  acceptedAt              DateTime?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@index([orgId, status])
+  @@index([orgId, capabilityPackId])
+  @@index([featureBuildId])
 }
 
 model BuildArtifactRevision {

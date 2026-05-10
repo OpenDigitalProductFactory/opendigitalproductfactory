@@ -17,7 +17,28 @@ export type CapabilityPack =
   | "Platform Governance"
   | "Build Studio / Self-Development";
 
+export type CapabilityPackId =
+  | "operations"
+  | "customer_support"
+  | "finance"
+  | "sales"
+  | "marketing"
+  | "design_ux"
+  | "platform_governance"
+  | "build_studio_self_development";
+
 export type BusinessBriefConfidence = "high" | "medium" | "low";
+
+export type BusinessBriefStatus =
+  | "draft"
+  | "gathering_evidence"
+  | "redacting"
+  | "interpreting"
+  | "awaiting_clarification"
+  | "accepted"
+  | "converted_to_build"
+  | "rejected"
+  | "superseded";
 
 export type BusinessBriefEvidenceKind =
   | "artifact"
@@ -43,6 +64,7 @@ export type BusinessBuildBrief = {
   successSignals: string[];
   constraints: string[];
   businessInterpretation: string;
+  capabilityPackId: CapabilityPackId;
   capabilityPack: CapabilityPack;
   riskProfile: {
     customerFacing: boolean;
@@ -68,14 +90,53 @@ export type BuildBusinessBuildBriefInput = {
   constraints?: string[];
 };
 
-const CAPABILITY_KEYWORDS: Array<[CapabilityPack, string[]]> = [
-  ["Customer Support", ["support", "ticket", "escalation", "customer success", "case"]],
-  ["Finance", ["finance", "invoice", "payment", "billing", "expense", "revenue"]],
-  ["Sales", ["sales", "pipeline", "opportunity", "crm", "prospect", "deal"]],
-  ["Marketing", ["marketing", "campaign", "lead", "content", "audience"]],
-  ["Design / UX", ["design", "prototype", "wireframe", "ux", "usability"]],
-  ["Platform Governance", ["governance", "permission", "audit", "compliance", "policy"]],
-  ["Operations", ["operations", "employee", "handoff", "task", "workflow", "site"]],
+export type BusinessBriefTransitionInput = {
+  from: BusinessBriefStatus;
+  to: BusinessBriefStatus;
+  confidence?: BusinessBriefConfidence | null;
+  openQuestions?: string[];
+};
+
+const CAPABILITY_PACKS: Array<{
+  id: CapabilityPackId;
+  label: CapabilityPack;
+  keywords: string[];
+}> = [
+  {
+    id: "customer_support",
+    label: "Customer Support",
+    keywords: ["support", "ticket", "escalation", "customer success", "case"],
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    keywords: ["finance", "invoice", "payment", "billing", "expense", "revenue"],
+  },
+  {
+    id: "sales",
+    label: "Sales",
+    keywords: ["sales", "pipeline", "opportunity", "crm", "prospect", "deal"],
+  },
+  {
+    id: "marketing",
+    label: "Marketing",
+    keywords: ["marketing", "campaign", "lead", "content", "audience"],
+  },
+  {
+    id: "design_ux",
+    label: "Design / UX",
+    keywords: ["design", "prototype", "wireframe", "ux", "usability"],
+  },
+  {
+    id: "platform_governance",
+    label: "Platform Governance",
+    keywords: ["governance", "permission", "audit", "compliance", "policy"],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    keywords: ["operations", "employee", "handoff", "task", "workflow", "site"],
+  },
 ];
 
 function cleanList(values: string[] | null | undefined): string[] {
@@ -87,11 +148,16 @@ function includesAny(text: string, keywords: string[]): boolean {
 }
 
 export function getCapabilityPackForBrief(text: string): CapabilityPack {
+  return CAPABILITY_PACKS.find((pack) => includesAny(text.toLowerCase(), pack.keywords))?.label
+    ?? "Build Studio / Self-Development";
+}
+
+export function getCapabilityPackIdForBrief(text: string): CapabilityPackId {
   const lower = text.toLowerCase();
-  for (const [pack, keywords] of CAPABILITY_KEYWORDS) {
-    if (includesAny(lower, keywords)) return pack;
+  for (const pack of CAPABILITY_PACKS) {
+    if (includesAny(lower, pack.keywords)) return pack.id;
   }
-  return "Build Studio / Self-Development";
+  return "build_studio_self_development";
 }
 
 function evidenceFromInputs(inputs: string[]): BusinessBriefEvidence[] {
@@ -150,6 +216,37 @@ function confidenceFor(openQuestions: string[]): BusinessBriefConfidence {
   return "low";
 }
 
+const TERMINAL_BRIEF_STATUSES = new Set<BusinessBriefStatus>([
+  "converted_to_build",
+  "rejected",
+  "superseded",
+]);
+
+const ALLOWED_BRIEF_TRANSITIONS: Record<BusinessBriefStatus, BusinessBriefStatus[]> = {
+  draft: ["gathering_evidence", "rejected"],
+  gathering_evidence: ["redacting", "interpreting", "rejected"],
+  redacting: ["interpreting", "rejected"],
+  interpreting: ["awaiting_clarification", "accepted", "rejected"],
+  awaiting_clarification: ["interpreting", "rejected"],
+  accepted: ["converted_to_build", "superseded"],
+  converted_to_build: [],
+  rejected: [],
+  superseded: [],
+};
+
+export function canTransitionBusinessBriefStatus(input: BusinessBriefTransitionInput): boolean {
+  if (input.from === input.to) return true;
+  if (TERMINAL_BRIEF_STATUSES.has(input.from)) return false;
+  if (!ALLOWED_BRIEF_TRANSITIONS[input.from].includes(input.to)) return false;
+
+  if (input.from === "interpreting" && input.to === "accepted") {
+    if (input.confidence === "low" || input.confidence == null) return false;
+    if ((input.openQuestions ?? []).length > 0) return false;
+  }
+
+  return true;
+}
+
 export function buildBusinessBuildBrief(input: BuildBusinessBuildBriefInput): BusinessBuildBrief {
   const { featureBrief } = input;
   const inputEvidence = evidenceFromInputs(cleanList(featureBrief.inputs));
@@ -168,11 +265,13 @@ export function buildBusinessBuildBrief(input: BuildBusinessBuildBriefInput): Bu
   const constraints = cleanList(input.constraints);
   const affectedPeople = cleanList(featureBrief.targetRoles);
   const successSignals = cleanList(featureBrief.acceptanceCriteria);
-  const capabilityPack = getCapabilityPackForBrief([
+  const capabilityText = [
     featureBrief.title,
     featureBrief.description,
     featureBrief.portfolioContext,
-  ].join(" "));
+  ].join(" ");
+  const capabilityPackId = getCapabilityPackIdForBrief(capabilityText);
+  const capabilityPack = getCapabilityPackForBrief(capabilityText);
   const openQuestions = openQuestionsFor(featureBrief, sourceEvidence);
 
   return {
@@ -185,6 +284,7 @@ export function buildBusinessBuildBrief(input: BuildBusinessBuildBriefInput): Bu
     successSignals,
     constraints,
     businessInterpretation: `${featureBrief.title}: ${featureBrief.description}`,
+    capabilityPackId,
     capabilityPack,
     riskProfile: riskLevel(featureBrief, constraints),
     technicalInterpretation: {

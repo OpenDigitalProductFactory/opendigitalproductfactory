@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBusinessBuildBrief,
+  canTransitionBusinessBriefStatus,
+  getCapabilityPackIdForBrief,
   getCapabilityPackForBrief,
 } from "./business-build-brief";
 import type { FeatureBrief } from "@/lib/feature-build-types";
@@ -41,6 +43,7 @@ describe("buildBusinessBuildBrief", () => {
       "Customer success lead",
     ]);
     expect(brief.capabilityPack).toBe("Customer Support");
+    expect(brief.capabilityPackId).toBe("customer_support");
     expect(brief.sourceEvidence).toHaveLength(3);
     expect(brief.sourceEvidence.map((e) => e.label)).toContain(
       "Finance approval dashboard",
@@ -83,5 +86,74 @@ describe("getCapabilityPackForBrief", () => {
     expect(getCapabilityPackForBrief("invoice payment approval")).toBe("Finance");
     expect(getCapabilityPackForBrief("sales pipeline opportunity follow-up")).toBe("Sales");
     expect(getCapabilityPackForBrief("employee operations task handoff")).toBe("Operations");
+  });
+
+  it("defaults Build Studio self-development work to the reviewed launch pack", () => {
+    expect(getCapabilityPackIdForBrief("Improve Build Studio intake for non-developers")).toBe(
+      "build_studio_self_development",
+    );
+  });
+});
+
+describe("canTransitionBusinessBriefStatus", () => {
+  it("allows the reviewed happy path into accepted and converted_to_build", () => {
+    expect(canTransitionBusinessBriefStatus({
+      from: "draft",
+      to: "gathering_evidence",
+    })).toBe(true);
+    expect(canTransitionBusinessBriefStatus({
+      from: "gathering_evidence",
+      to: "redacting",
+    })).toBe(true);
+    expect(canTransitionBusinessBriefStatus({
+      from: "redacting",
+      to: "interpreting",
+    })).toBe(true);
+    expect(canTransitionBusinessBriefStatus({
+      from: "interpreting",
+      to: "accepted",
+      confidence: "high",
+      openQuestions: [],
+    })).toBe(true);
+    expect(canTransitionBusinessBriefStatus({
+      from: "accepted",
+      to: "converted_to_build",
+    })).toBe(true);
+  });
+
+  it("routes low confidence or open questions to clarification before acceptance", () => {
+    expect(canTransitionBusinessBriefStatus({
+      from: "interpreting",
+      to: "accepted",
+      confidence: "low",
+      openQuestions: [],
+    })).toBe(false);
+    expect(canTransitionBusinessBriefStatus({
+      from: "interpreting",
+      to: "accepted",
+      confidence: "medium",
+      openQuestions: ["Which workflow is affected?"],
+    })).toBe(false);
+    expect(canTransitionBusinessBriefStatus({
+      from: "interpreting",
+      to: "awaiting_clarification",
+      confidence: "low",
+      openQuestions: ["Which workflow is affected?"],
+    })).toBe(true);
+  });
+
+  it("blocks terminal-state rewinds", () => {
+    expect(canTransitionBusinessBriefStatus({
+      from: "converted_to_build",
+      to: "draft",
+    })).toBe(false);
+    expect(canTransitionBusinessBriefStatus({
+      from: "rejected",
+      to: "interpreting",
+    })).toBe(false);
+    expect(canTransitionBusinessBriefStatus({
+      from: "superseded",
+      to: "accepted",
+    })).toBe(false);
   });
 });
