@@ -16,6 +16,23 @@ export {
   hashToNumber,
   QDRANT_COLLECTIONS,
 } from "./qdrant";
+
+// EP-WIKI-001 Phase 1a: wiki kernel + per-org overlay store helpers
+export {
+  upsertWikiPage,
+  appendRevision,
+  linkPages,
+  attachSource,
+  getWikiPage,
+  type WikiStoreClient,
+  type WikiPageKind,
+  type WikiPageStatus,
+  type WikiRevisionChangeKind,
+  type UpsertWikiPageInput,
+  type AppendRevisionInput,
+  type LinkPagesInput,
+  type AttachSourceInput,
+} from "./wiki-store";
 export { initNeo4jSchema, backfillOsiLayers, NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
 export {
   getDownstreamImpact,
