@@ -58,4 +58,12 @@ describe("PlatformTabNav", () => {
     expect(html).not.toContain('href="/platform/ai/providers"');
     expect(html).not.toContain('href="/platform/audit/ledger"');
   });
+
+  it("exposes coworker capability needs under AI Operations", () => {
+    pathname = "/platform/ai/capability-needs";
+    const html = renderToStaticMarkup(<PlatformTabNav />);
+
+    expect(html).toContain('href="/platform/ai/capability-needs"');
+    expect(html).toContain(">Capability Needs<");
+  });
 });
