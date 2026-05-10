@@ -12,12 +12,10 @@ export default function ShellError({
   const [submitted, setSubmitted] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
 
-  // Pre-populate with session context
   const route = typeof window !== "undefined" ? window.location.pathname : "";
-  const cleanError = error.message?.replace(/\n.*/s, "").slice(0, 150) ?? "Unknown error";
-  const [description, setDescription] = useState(
-    `Page: ${route}\nError: ${cleanError}\n\nI was: `,
-  );
+  const cleanError =
+    error.message?.replace(/\s+/g, " ").trim().slice(0, 240) || "Unknown error";
+  const [description, setDescription] = useState("");
 
   // Auto-report on mount (fire-and-forget)
   useEffect(() => {
@@ -50,6 +48,13 @@ export default function ShellError({
   }, [error]);
 
   async function handleSubmit() {
+    const reportDescription = [
+      `Page: ${route || "Unknown route"}`,
+      `Error: ${cleanError}`,
+      "",
+      description.trim() ? `User note: ${description.trim()}` : "User note: none provided",
+    ].join("\n");
+
     try {
       const res = await fetch("/api/quality/report", {
         method: "POST",
@@ -57,8 +62,8 @@ export default function ShellError({
         body: JSON.stringify({
           type: "user_report",
           severity: "high",
-          title: description.slice(0, 100) || "User report from error page",
-          description,
+          title: cleanError.slice(0, 100) || "User report from error page",
+          description: reportDescription,
           routeContext: typeof window !== "undefined" ? window.location.pathname : null,
           errorStack: error.stack?.slice(0, 20000),
           source: "crash_boundary",
@@ -73,102 +78,71 @@ export default function ShellError({
   }
 
   return (
-    <div style={{
-      minHeight: "60vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 40,
-    }}>
-      <div style={{
-        maxWidth: 480,
-        width: "100%",
-        background: "rgba(26, 26, 46, 0.9)",
-        border: "1px solid rgba(42, 42, 64, 0.6)",
-        borderRadius: 16,
-        padding: "32px 28px",
-        textAlign: "center",
-      }}>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>!</div>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 8 }}>
+    <div className="flex min-h-[60vh] items-center justify-center px-4 py-10">
+      <div className="w-full max-w-[34rem] rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-6 text-center shadow-sm sm:p-8">
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-2xl font-semibold text-[var(--dpf-accent)]"
+        >
+          !
+        </div>
+        <h2 className="mb-2 text-lg font-semibold text-[var(--dpf-text)]">
           Something went wrong
         </h2>
-        <p style={{ fontSize: 13, color: "var(--dpf-muted)", marginBottom: 20 }}>
-          The platform team has been automatically notified.
-          You can also describe what happened below.
+        <p className="mb-5 text-sm leading-6 text-[var(--dpf-muted)]">
+          The platform team has been automatically notified. You can add what you were doing below.
         </p>
 
+        <dl className="mb-4 grid gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-left text-xs">
+          <div className="grid gap-1 sm:grid-cols-[4.5rem_1fr] sm:items-start">
+            <dt className="font-medium text-[var(--dpf-muted)]">Page</dt>
+            <dd className="break-words font-mono text-[var(--dpf-text)]">{route || "Unknown route"}</dd>
+          </div>
+          <div className="grid gap-1 sm:grid-cols-[4.5rem_1fr] sm:items-start">
+            <dt className="font-medium text-[var(--dpf-muted)]">Error</dt>
+            <dd className="break-words font-mono text-[var(--dpf-text)]">{cleanError}</dd>
+          </div>
+        </dl>
+
         {!submitted ? (
-          <>
+          <div className="space-y-3 text-left">
+            <label htmlFor="crash-feedback" className="block text-sm font-medium text-[var(--dpf-text)]">
+              What were you doing when this happened?
+            </label>
             <textarea
+              id="crash-feedback"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What were you doing when this happened? (optional)"
-              rows={3}
-              style={{
-                width: "100%",
-                background: "rgba(15,15,26,0.8)",
-                border: "1px solid rgba(42,42,64,0.6)",
-                borderRadius: 8,
-                padding: "8px 10px",
-                color: "var(--dpf-text)",
-                fontSize: 12,
-                resize: "vertical",
-                marginBottom: 12,
-              }}
+              placeholder="Example: I clicked Save after changing the portal settings."
+              rows={4}
+              className="min-h-24 w-full resize-y rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none"
             />
-            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-center">
               <button
                 type="button"
                 onClick={handleSubmit}
-                style={{
-                  background: "var(--dpf-accent)",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "8px 20px",
-                  fontSize: 13,
-                  color: "var(--dpf-text)",
-                  cursor: "pointer",
-                }}
+                className="rounded-lg bg-[var(--dpf-accent)] px-5 py-2 text-sm font-medium text-white"
               >
                 Send feedback
               </button>
               <button
                 type="button"
                 onClick={reset}
-                style={{
-                  background: "none",
-                  border: "1px solid rgba(42,42,64,0.6)",
-                  borderRadius: 8,
-                  padding: "8px 20px",
-                  fontSize: 13,
-                  color: "var(--dpf-text)",
-                  cursor: "pointer",
-                }}
+                className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-2 text-sm font-medium text-[var(--dpf-text)]"
               >
                 Try again
               </button>
             </div>
-          </>
+          </div>
         ) : (
-          <div style={{ fontSize: 13, color: "var(--dpf-muted)" }}>
+          <div className="text-sm text-[var(--dpf-muted)]">
             {reportId
               ? `Thanks! Report ${reportId} filed.`
               : "Thanks for the feedback."}
             <button
               type="button"
               onClick={reset}
-              style={{
-                display: "block",
-                margin: "16px auto 0",
-                background: "var(--dpf-accent)",
-                border: "none",
-                borderRadius: 8,
-                padding: "8px 20px",
-                fontSize: 13,
-                color: "var(--dpf-text)",
-                cursor: "pointer",
-              }}
+              className="mx-auto mt-4 block rounded-lg bg-[var(--dpf-accent)] px-5 py-2 text-sm font-medium text-white"
             >
               Try again
             </button>

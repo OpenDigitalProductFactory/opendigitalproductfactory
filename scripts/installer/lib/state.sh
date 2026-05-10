@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+# Install-state file management for the DPF installer.
+# Source this file; do not execute directly.
+#
+# Reads, writes, and migrates ~/.dpf/install-state.json. Schema lives at
+# scripts/installer/install-state.schema.json. Per the deployment
+# doctrine (Contract 2: runtime configuration; Contract 3: lifecycle).
+#
+# Bash 3.2 baseline.
+
+if [ "${DPF_LIB_STATE_LOADED:-}" = "1" ]; then
+  return 0
+fi
+DPF_LIB_STATE_LOADED=1
+
+# Source platform.sh for dpf_platform / dpf_arch.
+if [ -z "${DPF_LIB_PLATFORM_LOADED:-}" ]; then
+  # shellcheck source=platform.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/platform.sh"
+fi
+
+# Current schema version this installer expects. Bump when adding
+# required fields or breaking-changing existing field semantics.
+DPF_STATE_SCHEMA_VERSION=1
+
+# Resolve state directory honoring XDG_STATE_HOME on Linux.
+dpf_state_dir() {
+  if [ -n "${XDG_STATE_HOME:-}" ]; then
+    echo "${XDG_STATE_HOME}/dpf"
+  else
+    echo "${HOME}/.dpf"
+  fi
+}
+
+dpf_state_path() {
+  echo "$(dpf_state_dir)/install-state.json"
+}
+
+# Initialize a fresh state file at the canonical path. Idempotent —
+# returns 0 silently if file already exists.
+# Args: $1 = installerVersion, $2 = installPath
+dpf_state_init() {
+  local installer_version="${1:-unknown}"
+  local install_path="${2:-$(pwd)}"
+  local state_dir; state_dir="$(dpf_state_dir)"
+  local path; path="$(dpf_state_path)"
+
+  if [ -f "$path" ]; then
+    return 0
+  fi
+
+  mkdir -p "$state_dir"
+  dpf_platform
+  dpf_arch
+
+  # Build the initial JSON. Keep it shell-only for bash 3.2 portability;
+  # don't reach for jq here so the install can bootstrap on hosts that
+  # haven't installed jq yet.
+  cat > "$path" <<EOF
+{
+  "schemaVersion": ${DPF_STATE_SCHEMA_VERSION},
+  "installerVersion": "${installer_version}",
+  "lastSuccessfulInstallVersion": null,
+  "lastSuccessfulComposeHash": null,
+  "composeProjectName": "dpf",
+  "platform": "${DPF_PLATFORM}",
+  "arch": "${DPF_ARCH}",
+  "dockerContext": null,
+  "dockerEndpoint": null,
+  "installPath": "${install_path}",
+  "stateDir": "${state_dir}",
+  "composeFiles": [],
+  "imageTag": null,
+  "llmProvider": null,
+  "resourceLabels": { "dpf": "true" },
+  "autostart": { "enabled": false, "kind": "none" },
+  "lastHealthCheck": null,
+  "lastBackupAt": null,
+  "lastDoctorBundlePath": null
+}
+EOF
+  chmod 600 "$path"
+}
+
+# Read a top-level key from the state file. Uses jq if available,
+# falling back to python3, falling back to a grep-based read for
+# top-level scalar keys only. Emits empty string for missing keys.
+# Args: $1 = key
+dpf_state_read() {
+  local key="$1"
+  local path; path="$(dpf_state_path)"
+  if [ ! -f "$path" ]; then
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    jq -r --arg k "$key" '.[$k] // ""' "$path"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c "import json,sys; d=json.load(open('$path')); v=d.get('$key',''); print('' if v is None else (v if isinstance(v,str) else json.dumps(v)))"
+  else
+    # Last-resort scalar grep (string and number top-level fields).
+    grep -E "\"${key}\"\s*:" "$path" | head -1 | sed -E 's/.*:\s*"?([^",}]*)"?.*/\1/'
+  fi
+}
+
+# Write a top-level scalar (string or number) to the state file.
+# Numbers (no quotes) require value matching ^-?[0-9.]+$; everything
+# else is treated as a string and quoted. For object/array fields,
+# use jq directly via dpf_state_jq_set.
+# Args: $1 = key, $2 = value
+dpf_state_write() {
+  local key="$1"
+  local value="$2"
+  local path; path="$(dpf_state_path)"
+  if [ ! -f "$path" ]; then
+    echo "dpf_state_write: state file missing; call dpf_state_init first" >&2
+    return 1
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    local tmp; tmp="$(mktemp)"
+    if [ "$value" = "true" ] || [ "$value" = "false" ] || [ "$value" = "null" ]; then
+      jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+    elif echo "$value" | grep -qE '^-?[0-9]+(\.[0-9]+)?$'; then
+      jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+    else
+      jq --arg k "$key" --arg v "$value" '.[$k] = $v' "$path" > "$tmp"
+    fi
+    mv "$tmp" "$path"
+    chmod 600 "$path"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" "$key" "$value" <<'PY'
+import json, sys
+path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f:
+    d = json.load(f)
+# Try to coerce numerics; fall back to string.
+if value in ("true", "false"):
+    d[key] = (value == "true")
+elif value == "null":
+    d[key] = None
+else:
+    try:
+        d[key] = int(value)
+    except ValueError:
+        try:
+            d[key] = float(value)
+        except ValueError:
+            d[key] = value
+with open(path, "w") as f:
+    json.dump(d, f, indent=2)
+PY
+    chmod 600 "$path"
+  else
+    echo "dpf_state_write: needs jq or python3 to update JSON" >&2
+    return 1
+  fi
+}
+
+# Validate the state file's schema version. Returns 0 if matches the
+# installer's expected version; non-zero with a clear message if the
+# file is from a future installer version (refuse) or older version
+# (caller should run migration).
+# Args: none
+dpf_state_validate() {
+  local path; path="$(dpf_state_path)"
+  if [ ! -f "$path" ]; then
+    return 2  # No state — fresh install
+  fi
+  local file_ver; file_ver="$(dpf_state_read schemaVersion)"
+  if [ -z "$file_ver" ]; then
+    echo "dpf_state_validate: state file at $path has no schemaVersion; treating as fresh." >&2
+    return 2
+  fi
+  if [ "$file_ver" -gt "$DPF_STATE_SCHEMA_VERSION" ] 2>/dev/null; then
+    echo "dpf_state_validate: state file is from a newer installer (schema $file_ver > $DPF_STATE_SCHEMA_VERSION). Update install-dpf.sh and re-run." >&2
+    return 1
+  fi
+  if [ "$file_ver" -lt "$DPF_STATE_SCHEMA_VERSION" ] 2>/dev/null; then
+    return 3  # Older — caller should run migration
+  fi
+  return 0
+}
+
+# Forward-migrate the state file. Currently a stub since
+# DPF_STATE_SCHEMA_VERSION=1; future versions add cases here.
+# Args: none
+dpf_state_migrate() {
+  local file_ver; file_ver="$(dpf_state_read schemaVersion)"
+  echo "dpf_state_migrate: migrating state from schema $file_ver to $DPF_STATE_SCHEMA_VERSION"
+  # Future: per-version migration cases.
+  # case "$file_ver" in
+  #   1) <migrate from 1 to 2> ;;
+  # esac
+  dpf_state_write schemaVersion "$DPF_STATE_SCHEMA_VERSION"
+}
