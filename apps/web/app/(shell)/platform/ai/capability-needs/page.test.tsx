@@ -19,6 +19,11 @@ vi.mock("@/lib/coworker-self-assessment/review-service", () => ({
   })),
 }));
 
+vi.mock("@/lib/actions/coworker-capability-needs", () => ({
+  linkCoworkerCapabilityNeedToBacklogAction: vi.fn(),
+  resolveCoworkerCapabilityNeedAction: vi.fn(),
+}));
+
 import { getCoworkerCapabilityNeedReview } from "@/lib/coworker-self-assessment/review-service";
 
 describe("CoworkerCapabilityNeedsPage", () => {
@@ -89,6 +94,11 @@ describe("CoworkerCapabilityNeedsPage", () => {
     expect(html).toContain("Cannot create campaign assets without tool access.");
     expect(html).toContain("route: /customer/marketing");
     expect(html).toContain("missing: marketing_write");
-    expect(html).toContain("Read-only review queue");
+    expect(html).toContain("Review queue");
+    expect(html).toContain("Accept");
+    expect(html).toContain("Defer");
+    expect(html).toContain("Discard");
+    expect(html).toContain("Mark duplicate");
+    expect(html).toContain("Link backlog item");
   });
 });

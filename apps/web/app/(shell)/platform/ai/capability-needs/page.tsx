@@ -1,5 +1,9 @@
 import Link from "next/link";
 import {
+  linkCoworkerCapabilityNeedToBacklogAction,
+  resolveCoworkerCapabilityNeedAction,
+} from "@/lib/actions/coworker-capability-needs";
+import {
   getCoworkerCapabilityNeedReview,
   parseCoworkerCapabilityNeedReviewFilters,
   type CoworkerCapabilityNeedReviewItem,
@@ -30,12 +34,12 @@ export default async function CoworkerCapabilityNeedsPage({ searchParams }: Page
           </p>
           <h1 className="mt-1 text-xl font-bold text-[var(--dpf-text)]">Capability Needs</h1>
           <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
-            Read-only review queue for AI coworker self-assessments, capability gaps, and
-            submitted investment needs.
+            Review queue for AI coworker self-assessments, capability gaps, and submitted
+            investment needs.
           </p>
         </div>
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs text-[var(--dpf-muted)]">
-          Read-only review queue
+          Review queue
         </div>
       </header>
 
@@ -182,7 +186,86 @@ function NeedRow({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
           </span>
         ) : null}
       </div>
+
+      <ReviewControls need={need} />
     </article>
+  );
+}
+
+function ReviewControls({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
+  return (
+    <div className="mt-4 border-t border-[var(--dpf-border)] pt-4">
+      <div className="mb-2 text-xs font-semibold uppercase text-[var(--dpf-muted)]">Review actions</div>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+        <div className="flex flex-wrap gap-2">
+          <DecisionForm needId={need.needId} status="accepted" label="Accept" />
+          <DecisionForm needId={need.needId} status="deferred" label="Defer" />
+          <DecisionForm needId={need.needId} status="discarded" label="Discard" />
+        </div>
+
+        <form action={linkCoworkerCapabilityNeedToBacklogAction} className="flex flex-col gap-2 sm:flex-row">
+          <input type="hidden" name="needId" value={need.needId} />
+          <input
+            name="backlogItemId"
+            placeholder="BI-F026ADD0"
+            defaultValue={need.linkedBacklogItemId ?? ""}
+            className="min-w-0 flex-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]"
+          />
+          <button
+            type="submit"
+            className="rounded-md border border-[var(--dpf-accent)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-accent)]/10"
+          >
+            Link backlog item
+          </button>
+        </form>
+      </div>
+
+      <form action={resolveCoworkerCapabilityNeedAction} className="mt-3 grid gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
+        <input type="hidden" name="needId" value={need.needId} />
+        <input type="hidden" name="status" value="duplicate" />
+        <input
+          name="duplicateOfId"
+          placeholder="Canonical need id"
+          defaultValue={need.duplicateOfId ?? ""}
+          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]"
+        />
+        <input
+          name="reviewerNote"
+          placeholder="Reviewer note"
+          defaultValue={need.reviewerNote ?? ""}
+          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]"
+        />
+        <button
+          type="submit"
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
+        >
+          Mark duplicate
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function DecisionForm({
+  needId,
+  status,
+  label,
+}: {
+  needId: string;
+  status: "accepted" | "deferred" | "discarded";
+  label: string;
+}) {
+  return (
+    <form action={resolveCoworkerCapabilityNeedAction}>
+      <input type="hidden" name="needId" value={needId} />
+      <input type="hidden" name="status" value={status} />
+      <button
+        type="submit"
+        className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] hover:bg-[var(--dpf-accent)]/10"
+      >
+        {label}
+      </button>
+    </form>
   );
 }
 
