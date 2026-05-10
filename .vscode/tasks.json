@@ -12,6 +12,14 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "pnpm --filter web dev"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "pnpm --filter web dev"]
+      },
       "problemMatcher": []
     },
     {
@@ -24,6 +32,14 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}"
+      },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "pnpm --filter @dpf/db exec prisma generate && pnpm --filter web build"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "pnpm --filter @dpf/db exec prisma generate && pnpm --filter web build"]
       },
       "group": {
         "kind": "build",
@@ -42,6 +58,14 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "pnpm --filter web exec tsc --noEmit"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "pnpm --filter web exec tsc --noEmit"]
+      },
       "problemMatcher": "$tsc"
     },
     {
@@ -50,6 +74,14 @@
       "command": "cmd",
       "args": ["/c", "pnpm test:e2e"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "pnpm test:e2e"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "pnpm test:e2e"]
+      },
       "problemMatcher": [],
       "detail": "Run Playwright against the running portal (requires docker compose up -d first)"
     },
@@ -59,6 +91,14 @@
       "command": "cmd",
       "args": ["/c", "pnpm test:e2e:demo"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "pnpm test:e2e:demo"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "pnpm test:e2e:demo"]
+      },
       "problemMatcher": [],
       "detail": "Run the sandbox-preview demo spec with the headed demo config"
     },
@@ -68,6 +108,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose up -d postgres neo4j qdrant portal-init sandbox"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose up -d postgres neo4j qdrant portal-init sandbox"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose up -d postgres neo4j qdrant portal-init sandbox"]
+      },
       "problemMatcher": [],
       "detail": "Start databases + validation services for shared-workspace development"
     },
@@ -77,6 +125,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose up -d"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose up -d"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose up -d"]
+      },
       "problemMatcher": [],
       "detail": "Start full Docker stack including portal"
     },
@@ -86,6 +142,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose down"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose down"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose down"]
+      },
       "problemMatcher": []
     },
     {
@@ -94,6 +158,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose down && docker compose up -d"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose down && docker compose up -d"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose down && docker compose up -d"]
+      },
       "problemMatcher": []
     },
     {
@@ -102,6 +174,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose logs -f --tail 50"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose logs -f --tail 50"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose logs -f --tail 50"]
+      },
       "problemMatcher": []
     },
     {
@@ -110,6 +190,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose build --no-cache portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose build --no-cache portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose build --no-cache portal portal-init sandbox && docker compose up -d portal-init sandbox && docker compose up -d portal"]
+      },
       "group": "build",
       "problemMatcher": [],
       "detail": "Rebuild portal + sandbox images from source and restart (includes migrations)"
@@ -120,6 +208,14 @@
       "command": "cmd",
       "args": ["/c", "docker compose build && docker compose up -d"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "docker compose build && docker compose up -d"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "docker compose build && docker compose up -d"]
+      },
       "group": "build",
       "problemMatcher": [],
       "detail": "Rebuild all images and restart full stack"
@@ -130,8 +226,16 @@
       "command": "powershell",
       "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-release.ps1", "minor"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap (docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap (docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
+      },
       "problemMatcher": [],
-      "detail": "Pull latest main, bump minor version (v0.85.0 -> v0.86.0), tag and push"
+      "detail": "Pull latest main, bump minor version (v0.85.0 -> v0.86.0), tag and push (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Release Patch",
@@ -139,8 +243,16 @@
       "command": "powershell",
       "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-release.ps1", "patch"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap. Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap. Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
+      },
       "problemMatcher": [],
-      "detail": "Pull latest main, bump patch version (v0.85.0 -> v0.85.1), tag and push"
+      "detail": "Pull latest main, bump patch version (v0.85.0 -> v0.85.1), tag and push (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Release Major",
@@ -148,8 +260,16 @@
       "command": "powershell",
       "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-release.ps1", "major"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap. Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap. Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
+      },
       "problemMatcher": [],
-      "detail": "Pull latest main, bump major version (v0.85.0 -> v1.0.0), tag and push"
+      "detail": "Pull latest main, bump major version (v0.85.0 -> v1.0.0), tag and push (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Clean Reinstall from Git (WIPES ALL DATA)",
@@ -157,8 +277,16 @@
       "command": "powershell",
       "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/dpf-reinstall.ps1", "-InstallDir", "${workspaceFolder}"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF reinstall script is Windows-only today. The macOS/Linux dpf-reinstall.sh is sequenced for Phase 8 of the installer-parity roadmap (docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). Until then, manually: docker compose down -v --remove-orphans && rm -rf node_modules apps/web/.next .env apps/web/.env.local && bash scripts/setup.sh' && exit 1"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "echo 'DPF reinstall script is Windows-only today. The macOS/Linux dpf-reinstall.sh is sequenced for Phase 8 of the installer-parity roadmap (docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). Until then, manually: docker compose down -v --remove-orphans && rm -rf node_modules apps/web/.next .env apps/web/.env.local && bash scripts/setup.sh' && exit 1"]
+      },
       "problemMatcher": [],
-      "detail": "DESTRUCTIVE: Checks for uncommitted changes, closes VS Code, wipes ALL Docker volumes/images/data, and deletes the project directory. Follow the README to reinstall fresh."
+      "detail": "DESTRUCTIVE: Checks for uncommitted changes, closes VS Code, wipes ALL Docker volumes/images/data, and deletes the project directory. Follow the README to reinstall fresh. (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Factory Reset (WIPES ALL DATA)",
@@ -166,6 +294,14 @@
       "command": "cmd",
       "args": ["/c", "echo WARNING: This will destroy ALL data including the database, users, OAuth tokens, sandbox workspace, and all configuration. Press Ctrl+C to cancel, or && pause && docker compose down -v --remove-orphans && docker compose build && docker compose up -d"],
       "options": { "cwd": "${workspaceFolder}" },
+      "osx": {
+        "command": "bash",
+        "args": ["-lc", "echo 'WARNING: This will destroy ALL data including the database, users, OAuth tokens, sandbox workspace, and all configuration.' && read -r -p 'Press Enter to continue or Ctrl+C to cancel: ' && docker compose down -v --remove-orphans && docker compose build && docker compose up -d"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-lc", "echo 'WARNING: This will destroy ALL data including the database, users, OAuth tokens, sandbox workspace, and all configuration.' && read -r -p 'Press Enter to continue or Ctrl+C to cancel: ' && docker compose down -v --remove-orphans && docker compose build && docker compose up -d"]
+      },
       "problemMatcher": [],
       "detail": "DESTRUCTIVE: Stops all containers, deletes ALL volumes (database, sandbox, neo4j, qdrant, redis), rebuilds all images from source, and starts fresh. You will need to reconfigure everything: admin user, OAuth providers, branding, etc."
     }
