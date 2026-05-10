@@ -1,0 +1,9 @@
+{
+  "kernelVersion": "0.1.0",
+  "schemaVersion": "0.1.0",
+  "pageCount": 0,
+  "sourceCount": 0,
+  "embeddingModel": null,
+  "builtAt": null,
+  "description": "DPF Founder Kernel — Mark Bodman's research, articles, and platform thinking, captured as a Karpathy-style wiki. See ../superpowers/specs/2026-05-09-platform-kernel-wiki-design.md for the design and ./SCHEMA.md for the wiki contract."
+}

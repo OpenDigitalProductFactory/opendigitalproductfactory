@@ -127,6 +127,56 @@ async function seedRegions(
   return { regionKeyToDbId, regionCount };
 }
 
+/**
+ * Outcome of attempting to seed a single city. Exported so seed runners and
+ * tests can reason about counts without re-deriving them.
+ */
+export type SeedCityOutcome = "created" | "existing" | "skipped_duplicate";
+
+/**
+ * Idempotently seed one city, tolerating both findFirst-doesn't-see-it
+ * (cold path, normal create) and P2002 (the row exists but our lookup index
+ * disagreed with the unique constraint).
+ *
+ * The City model has two unique constraints that can disagree:
+ *   (1) UNIQUE (LOWER("name"), regionId)                          — case-insensitive raw name
+ *   (2) UNIQUE (regionId, nameNormalized) WHERE disambiguator IS NULL — accent-folded
+ * The findFirst checks (2). Source data with near-duplicates (e.g. accented
+ * vs. unaccented variants of the same city) can pass (2) but collide on (1).
+ *
+ * Without P2002 tolerance, seedCities crashes mid-run and
+ * seedPromptTemplates never executes — which is what produced
+ * BI-E4E21A7F (fresh installs ship with stale coworker prompts).
+ */
+export async function seedCityOnce(
+  prisma: PrismaClient,
+  regionDbId: string,
+  city: CityRecord,
+): Promise<SeedCityOutcome> {
+  const found = await prisma.city.findFirst({
+    where: { regionId: regionDbId, nameNormalized: normalizeLocalityName(city.name) },
+    select: { id: true },
+  });
+
+  if (found) return "existing";
+
+  try {
+    await prisma.city.create({
+      data: {
+        name: city.name,
+        nameNormalized: normalizeLocalityName(city.name),
+        regionId: regionDbId,
+      },
+    });
+    return "created";
+  } catch (err: unknown) {
+    // Prisma P2002 = unique constraint violation. Anything else re-throws.
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "P2002") return "skipped_duplicate";
+    throw err;
+  }
+}
+
 async function seedCities(
   prisma: PrismaClient,
   regionKeyToDbId: Map<string, string>,
@@ -137,6 +187,7 @@ async function seedCities(
 
   let created = 0;
   let existing = 0;
+  let skippedDuplicate = 0;
   const BATCH_LOG_INTERVAL = 1000;
 
   for (let i = 0; i < cities.length; i++) {
@@ -144,31 +195,25 @@ async function seedCities(
     const regionDbId = regionKeyToDbId.get(`${c.countryCode}::${c.regionCode}`);
     if (!regionDbId) continue;
 
-    const found = await prisma.city.findFirst({
-      where: { regionId: regionDbId, nameNormalized: normalizeLocalityName(c.name) },
-      select: { id: true },
-    });
-
-    if (found) {
-      existing++;
-    } else {
-      await prisma.city.create({
-        data: {
-          name: c.name,
-          nameNormalized: normalizeLocalityName(c.name),
-          regionId: regionDbId,
-        },
-      });
-      created++;
-    }
+    const outcome = await seedCityOnce(prisma, regionDbId, c);
+    if (outcome === "created") created++;
+    else if (outcome === "existing") existing++;
+    else skippedDuplicate++;
 
     if ((i + 1) % BATCH_LOG_INTERVAL === 0) {
       log(`  Progress: ${i + 1}/${cities.length} cities processed...`);
     }
   }
 
-  log(`  Cities: ${created} created, ${existing} already existed. Total: ${created + existing}`);
-  return created + existing;
+  if (skippedDuplicate > 0) {
+    log(
+      `  Cities: ${created} created, ${existing} already existed, ${skippedDuplicate} skipped (P2002 duplicate). ` +
+        `Total: ${created + existing + skippedDuplicate}`,
+    );
+  } else {
+    log(`  Cities: ${created} created, ${existing} already existed. Total: ${created + existing}`);
+  }
+  return created + existing + skippedDuplicate;
 }
 
 // ---------------------------------------------------------------------------
