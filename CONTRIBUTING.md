@@ -39,12 +39,25 @@ git config core.hooksPath .githooks
 
 ### Setup on macOS / Linux
 
-> **Status:** the canonical macOS / Linux contributor flow is being landed via Phase 2 of the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) (rewriting `scripts/setup.sh` and adding `osx` / `linux` overrides to `.vscode/tasks.json`). Until that ships, two paths work:
->
-> - Run `bash scripts/setup.sh` directly. The current script is stale (uses Ollama, has BSD-`sed -i` portability bugs) but boots a contributor environment well enough to start work; it will be cleanly replaced when Phase 2 lands.
-> - Use the dev container at [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) — fully cross-platform, runs the workspace inside a Linux container regardless of host OS.
->
-> The full macOS / Linux contributor experience (native installer, native VS Code task overrides, Apple-Silicon-aware hardware detection, LaunchAgent / systemd auto-start) is sequenced through the installer-parity roadmap.
+`bash scripts/setup.sh` is the canonical contributor bootstrap on macOS and Linux. It:
+
+1. Verifies prerequisites (Docker, Node 20+, pnpm) and the host platform
+2. Configures in-repo git hooks
+3. Installs pnpm workspace dependencies
+4. Generates `apps/web/.env.local` and root `.env` from examples (with portable in-place `sed` that works on both GNU and BSD `sed`, and `openssl` / `python3` secret generation)
+5. Brings up the contributor compose stack (Postgres + Neo4j + Qdrant)
+6. Waits for Postgres readiness and runs Prisma migrations + seed
+7. Verifies the agent rulebook (AGENTS.md + pointer files) is intact
+
+VS Code tasks under `.vscode/tasks.json` carry `osx` and `linux` overrides for every task that has a Windows form, so `Cmd+Shift+P → Tasks: Run Task → DPF: <X>` works on macOS and Linux out of the box. The release-script tasks (PowerShell-only today) print a clear "lands with Phase 8 of the installer-parity roadmap" message instead of failing with a missing-command error.
+
+What's intentionally NOT in `scripts/setup.sh`:
+
+- **Docker / Node / pnpm installation.** Manual prereqs per the contributor contract. Fully-automated host bootstrap is `install-dpf.sh`'s job when installer-parity Phase 6/7 lands (see the [roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md)).
+- **LLM provider configuration.** The provider contract (Doctrine [Contract 9](docs/superpowers/specs/2026-05-09-deployment-contracts.md)) is provider-aware: Docker Model Runner on macOS Docker Desktop, Ollama-in-compose on Linux native Docker (lands in Phase 3 via `docker-compose.linux.yml`), or any external endpoint via `LLM_BASE_URL`.
+- **Auto-start, hardware detection, `install-state.json`, `dpf doctor`.** Those are `install-dpf.sh` territory.
+
+If you'd rather develop entirely inside a container regardless of host OS, the [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) is fully cross-platform — open the repo in VS Code with the Dev Containers extension and choose "Reopen in Container".
 
 ## Before you start
 
