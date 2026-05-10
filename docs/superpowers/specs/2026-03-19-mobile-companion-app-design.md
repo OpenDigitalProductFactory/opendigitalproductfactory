@@ -613,7 +613,170 @@ This is particularly important for the regulated industry audience where accessi
 
 - Apple Developer Program ($99/year) and Google Play Developer ($25 one-time) accounts exist or will be created before Epic 2
 - EAS free tier is sufficient for initial builds; paid tier adopted if build volume exceeds limits
-- The existing auth model (email + password) is sufficient for mobile — SSO/SAML is a future enhancement
+- The existing auth model (email + password) is sufficient for mobile — SSO/SAML is a future enhancement (**superseded — see addendum below**)
 - Push notification infrastructure (FCM project, APNs certificate) configured during Epic 2
 - AI agents are the primary developers — human review validates AI output at each backlog item
 - The web portal form/view builder is a separate epic that proceeds independently
+
+---
+
+## Addendum (2026-05-09): Deployment doctrine alignment
+
+Added in the deeper-review backlog pass. The mobile companion app
+is now classified as a **client packaging target** under the
+deployment doctrine
+(`docs/superpowers/specs/2026-05-09-deployment-contracts.md`,
+Contract 10), alongside browser admin, MCP transport, and Edge
+Node ingestion. This addendum captures the deltas the deployment
+architecture imposes on the original spec.
+
+### Auth model — supersedes the "SSO/SAML is a future enhancement" assumption
+
+The Enterprise Auth spec
+(`docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`)
+moves workforce login toward OIDC through the Identity Edge.
+"SSO/SAML is a future enhancement" understates the trajectory: it
+is an architecture commitment, not deferred work. The mobile app
+must support two auth modes, selected per deployment:
+
+```
+mobileAuthMode = "local-password" | "identity-edge-oidc-pkce"
+```
+
+- **`local-password`** — email/password JWT with refresh tokens
+  (the v1 model in this spec). Acceptable for initial release on
+  installs that don't yet have an Identity Edge.
+- **`identity-edge-oidc-pkce`** — OIDC Authorization Code + PKCE
+  against the customer's Identity Edge (typically authentik per
+  the enterprise auth spec). Required for installs that have
+  Identity Edge mode `dpf-managed` or `customer-provided`.
+
+The app architecture must not bake `local-password` in. The router,
+secure-token store, and refresh logic must accommodate OIDC PKCE
+from day one, even if v1 ships with only `local-password`
+implemented.
+
+### Customer-hosted Authority Core URL
+
+The mobile app must connect to the customer's chosen Authority
+Core, not a single hardcoded URL. Configuration:
+
+```
+EXPO_PUBLIC_DPF_BASE_URL = <customer Authority Core URL>
+mobileAuthorityCoreUrl    = same value, persisted at runtime in
+                            secure-store after first-launch setup
+```
+
+This URL can be:
+
+- a Single VM cloud install (`https://dpf.acme.example.com`),
+- a TAPPaaS-hosted Authority Core
+  (`https://dpf.acme.tappaas.local` via Caddy),
+- a Managed Kubernetes Ingress URL,
+- a private/VPN-routed URL for installs not exposed publicly.
+
+The mobile app must support a **first-launch setup flow** that
+asks for the Authority Core URL (or scans a QR code containing it)
+and stores it in `expo-secure-store`. No default URL.
+
+### Deep link contract
+
+Three deep-link / universal-link concerns coexist on the device:
+
+| Purpose | URI scheme / domain | Handles |
+|---|---|---|
+| In-app navigation | `dpf-mobile://...` (custom scheme; already defined in `app.json`) | route changes from notifications |
+| OIDC callback | `https://<universalLinkDomain>/auth/callback` AND `dpf-mobile://auth/callback` | OIDC PKCE redirect after Identity Edge login |
+| Push notification deep links | `dpf-mobile://...` for in-app, `https://<universalLinkDomain>/...` for first-launch device | foreground/background notification taps |
+
+```
+mobileDeepLinkScheme        = "dpf-mobile"          # iOS scheme + Android intent
+mobileUniversalLinkDomain   = <customer-domain>     # Apple Associated Domains, Android App Links
+```
+
+Universal links require the Authority Core to serve
+`apple-app-site-association` and `assetlinks.json` at the standard
+paths under the customer's domain. **This is a deployment-time
+configuration, not a code-time one.** The cloud-deployment spec's
+ingress matrix must include these well-known paths.
+
+### Push notification environment
+
+```
+mobilePushEnvironment = "fcm" | "apns" | "both"
+```
+
+Customer's FCM project / APNs certificate is configured per
+deployment; the mobile app reads the project ID at build time via
+EAS environment-aware builds.
+
+### Offline policy
+
+```
+mobileOfflinePolicy = "queue-and-sync" | "online-only" | "read-only-cache"
+```
+
+Already implied by the spec's offline-first behavior; surfaced
+here as an explicit per-deployment knob for installs that mandate
+"no offline cache" for compliance reasons.
+
+### Multipart upload header bug — backlog item
+
+`packages/api-client/src/client.ts:9-12` defaults
+`Content-Type: "application/json"` and then spreads
+`options.headers`. The `upload()` method at lines 69-73 passes
+`headers: {}` intending to let the runtime set the multipart
+boundary, but the empty headers object does not override the
+default JSON content-type. This breaks dynamic forms with
+camera/PDF uploads — exactly the regulated-industry features the
+mobile app is built for.
+
+Fix:
+
+```ts
+const headers: Record<string, string> = {
+  ...((options.headers as Record<string, string>) || {}),
+};
+if (!(options.body instanceof FormData)) {
+  headers["Content-Type"] = "application/json";
+}
+if (token) headers["Authorization"] = `Bearer ${token}`;
+```
+
+Tracked as a follow-up backlog item; needs unit-test coverage for
+the FormData branch before merge.
+
+### Identity convergence — links to Enterprise Auth addendum
+
+Per the principal-convergence addendum on the enterprise auth spec
+(2026-05-09), the mobile app's `MobileDevice` registrations
+resolve to `PrincipalAlias` rows of kind `mobile-device` linked
+to a `Principal` of kind `workforce-user` or `customer-contact`.
+
+A user with multiple devices (phone + tablet, or work phone +
+personal phone with the app installed) has **one Principal** and
+**multiple aliases**. The Authority Core's tool grants and route
+capabilities resolve on the Principal, not on the alias.
+
+`MobileDevice` is **distinct** from `EdgeNode` — see the Edge Node
+spec's "Edge Node vs Mobile Device" section. Wrappers and
+packaging targets must keep them separate.
+
+### Open questions for this addendum
+
+- **First-launch QR-code provisioning:** does the Authority Core
+  generate a QR containing URL + bootstrap token + auth mode? UX
+  flow needs design. Probably an admin-only "Issue mobile install
+  link" action in the portal.
+- **OIDC discovery vs. static config:** does the mobile app use
+  OIDC discovery (`/.well-known/openid-configuration` against the
+  Identity Edge) or static authentik client config baked at build
+  time? Discovery is more flexible; static is faster on first
+  launch.
+- **Refresh-token rotation strategy:** absolute expiry,
+  inactivity-based, or per-launch? Mobile devices have very
+  different reachability patterns from web sessions.
+- **Per-device revocation:** the `MobileDevice` row in the
+  Authority Core must support revocation independent of the
+  `User`/`CustomerContact` Principal. Admin > Platform Development
+  surfaces a per-device revoke action.
