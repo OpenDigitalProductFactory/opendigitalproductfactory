@@ -1,0 +1,74 @@
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    agent: {
+      findMany: vi.fn(),
+    },
+    toolExecution: {
+      findMany: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("next/link", () => ({
+  default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
+}));
+
+import { prisma } from "@dpf/db";
+
+describe("AI operations map page", () => {
+  it("renders the software platform map with coworkers, tool pulses, and drill-down links", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        id: "agent-db-1",
+        agentId: "build-specialist",
+        slugId: "build-specialist",
+        name: "Build Specialist",
+        tier: 2,
+        type: "specialist",
+        description: "Implements scoped platform changes.",
+        status: "active",
+        valueStream: null,
+        it4itSections: [],
+        sensitivity: "internal",
+        lifecycleStage: "production",
+        _count: { skills: 3, toolGrants: 5 },
+      },
+    ] as never);
+
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([
+      {
+        id: "tool-1",
+        threadId: "thread-1",
+        agentId: "build-specialist",
+        userId: "user-1",
+        toolName: "write_sandbox_file",
+        success: false,
+        executionMode: "immediate",
+        routeContext: "build",
+        durationMs: 120,
+        createdAt: new Date("2026-05-10T12:00:00.000Z"),
+        auditClass: "ledger",
+        capabilityId: "platform:write_sandbox_file",
+        summary: "Write blocked by policy",
+      },
+    ] as never);
+
+    const { default: OperationsMapPage } = await import("./page");
+    const element = await OperationsMapPage();
+    const props = element.props;
+
+    expect(props.template.label).toBe("Software Platform Operations");
+    expect(props.template.stations.map((station: { label: string }) => station.label)).toContain("Discover");
+    expect(props.agents.map((agent: { name: string }) => agent.name)).toContain("Build Specialist");
+    expect(props.projections.map((projection: { label: string }) => projection.label)).toContain("write_sandbox_file");
+    expect(props.projections.map((projection: { summary: string }) => projection.summary)).toContain("Write blocked by policy");
+    expect(props.projections[0].links.authorityHref).toBe("/platform/audit/ledger?toolExecutionId=tool-1");
+    expect(props.projections[0].links.coworkerHref).toBe("/platform/ai/agent/build-specialist");
+  });
+});
