@@ -61,6 +61,8 @@ model User {
   agentModelConfigs            AgentModelConfig[]            @relation("AgentModelConfiguredBy")
   knowledgeArticles            KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
   knowledgeRevisions           KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
+  wikiRevisions                WikiPageRevision[]            @relation("WikiRevisionCreator")
+  wikiIngestEvents             WikiIngestEvent[]             @relation("WikiIngestEventUser")
   workItemAssignments          WorkItem[]                    @relation("WorkItemAssignee")
   workSchedule                 WorkSchedule?
   adminActivities              AdminActivity[]
@@ -1472,6 +1474,8 @@ model Agent {
   degradationMappings  FeatureDegradationMapping[]
   promptContext        AgentPromptContext?
   knowledgeArticles    KnowledgeArticle[]          @relation("KnowledgeArticleAgentAuthor")
+  wikiRevisions        WikiPageRevision[]          @relation("WikiRevisionAgentCreator")
+  wikiIngestEvents     WikiIngestEvent[]           @relation("WikiIngestEventAgent")
   valueStreamTeamRoles ValueStreamTeamRole[]
   workItemAssignments  WorkItem[]                  @relation("WorkItemAgent")
   workSchedule         WorkSchedule?               @relation("WorkScheduleAgent")
@@ -2175,6 +2179,10 @@ model Organization {
   marketingAutomationCandidates MarketingAutomationCandidate[]
   taxProfile                    OrganizationTaxProfile?
   platformSetupProgress         PlatformSetupProgress?         @relation("OrgSetupProgress")
+  wikiPages                     WikiPage[]
+  wikiRawSources                RawSource[]
+  wikiIngestEvents              WikiIngestEvent[]
+  wikiLintFindings              WikiLintFinding[]
 }
 
 model BusinessContext {
@@ -6339,6 +6347,146 @@ model KnowledgeArticlePortfolio {
   portfolio   Portfolio        @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@id([articleId, portfolioId])
+}
+
+// ─── EP-WIKI-001: Platform Kernel Wiki + Per-Org Overlay ─────────────────────
+// Spec: docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md
+// Plan: docs/superpowers/plans/2026-05-09-platform-kernel-wiki.md (Phase 1a)
+//
+// Phase 1a is purely additive — `KnowledgeArticle` stays live alongside these
+// new models. Phase 1b (later PR) deprecates `KnowledgeArticle` once kernel
+// content has validated `WikiPage` in real use.
+
+model RawSource {
+  id             String           @id @default(cuid())
+  sourceKey      String           @unique
+  sourceType     String // paper | article | spec | doc | framework | external-url
+  title          String
+  authors        String[]         @default([])
+  publishedAt    DateTime?
+  url            String?
+  doi            String?
+  locator        Json?
+  abstract       String?          @db.Text
+  excerpt        String?          @db.Text
+  fullTextPath   String?
+  license        String?
+  retrievedAt    DateTime?
+  isKernel       Boolean          @default(false)
+  organizationId String?
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  pageSources    WikiPageSource[]
+
+  @@index([sourceType])
+  @@index([isKernel])
+  @@index([organizationId])
+}
+
+model WikiPage {
+  id                       String             @id @default(cuid())
+  slug                     String
+  title                    String
+  body                     String             @db.Text
+  pageKind                 String // entity | summary | decision | runbook | index | stance | heuristic
+  status                   String             @default("draft") // draft | published | review-needed | archived
+  isKernel                 Boolean            @default(false)
+  kernelVersion            String?
+  organizationId           String?
+  organization             Organization?      @relation(fields: [organizationId], references: [id])
+  kernelPageId             String?
+  kernelPage               WikiPage?          @relation("WikiPageOverride", fields: [kernelPageId], references: [id])
+  overrides                WikiPage[]         @relation("WikiPageOverride")
+  derivedFromKernelVersion String?
+  abstract                 String?            @db.Text
+  lastReviewedAt           DateTime?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  revisions                WikiPageRevision[]
+  outLinks                 WikiPageLink[]     @relation("WikiOutLinks")
+  inLinks                  WikiPageLink[]     @relation("WikiInLinks")
+  sources                  WikiPageSource[]
+
+  @@unique([organizationId, slug])
+  @@index([slug])
+  @@index([pageKind])
+  @@index([status])
+  @@index([kernelPageId])
+  @@index([organizationId])
+  @@index([isKernel])
+}
+
+model WikiPageRevision {
+  id               String   @id @default(cuid())
+  pageId           String
+  version          Int
+  title            String
+  body             String   @db.Text
+  changeSummary    String?
+  changeKind       String // ingest | manual | lint-fix | kernel-merge
+  createdAt        DateTime @default(now())
+  createdById      String?
+  createdByAgentId String?
+  page             WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy        User?    @relation("WikiRevisionCreator", fields: [createdById], references: [id])
+  createdByAgent   Agent?   @relation("WikiRevisionAgentCreator", fields: [createdByAgentId], references: [id])
+
+  @@unique([pageId, version])
+  @@index([pageId])
+}
+
+model WikiPageLink {
+  fromPageId String
+  toPageId   String
+  fromPage   WikiPage @relation("WikiOutLinks", fields: [fromPageId], references: [id], onDelete: Cascade)
+  toPage     WikiPage @relation("WikiInLinks", fields: [toPageId], references: [id], onDelete: Cascade)
+
+  @@id([fromPageId, toPageId])
+  @@index([toPageId])
+}
+
+model WikiPageSource {
+  pageId   String
+  sourceId String
+  page     WikiPage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  source   RawSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, sourceId])
+}
+
+model WikiIngestEvent {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  sourceId       String
+  touchedPageIds String[]
+  agentId        String?
+  agent          Agent?        @relation("WikiIngestEventAgent", fields: [agentId], references: [id])
+  userId         String?
+  user           User?         @relation("WikiIngestEventUser", fields: [userId], references: [id])
+  kernelVersion  String?
+  createdAt      DateTime      @default(now())
+
+  @@index([sourceId])
+  @@index([organizationId])
+}
+
+model WikiLintFinding {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  pageId         String
+  findingKind    String // contradiction | stale | orphan | missing-xref | dangling-xref | kernel-drift | stance-extraction-needed
+  detail         Json
+  severity       String        @default("info") // info | warn | error
+  status         String        @default("open") // open | resolved | ignored
+  resolvedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([findingKind])
 }
 
 // ─── Value Stream Team Architecture (EP-VST-001) ─────────────────────────────

@@ -4,6 +4,7 @@
 const COLLECTIONS = {
   AGENT_MEMORY: "agent-memory",
   PLATFORM_KNOWLEDGE: "platform-knowledge",
+  WIKI_PAGES: "wiki-pages",
 } as const;
 
 export { COLLECTIONS as QDRANT_COLLECTIONS };
@@ -75,6 +76,32 @@ export async function ensureCollections(): Promise<void> {
     for (const field of ["entityType", "entityId"]) {
       await qdrantFetch(
         `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
+        { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
+      ).catch(() => {});
+    }
+  }
+
+  if (!names.has(COLLECTIONS.WIKI_PAGES)) {
+    await qdrantFetch(`/collections/${COLLECTIONS.WIKI_PAGES}`, {
+      method: "PUT",
+      body: {
+        vectors: { size: 768, distance: "Cosine" },
+      },
+    });
+    // EP-WIKI-001 §5: payload indexes that retrieval helpers filter on.
+    // The organizationId index is load-bearing for per-tenant isolation.
+    for (const field of [
+      "entityType",
+      "slug",
+      "pageKind",
+      "status",
+      "isKernel",
+      "organizationId",
+      "kernelVersion",
+      "kernelPageId",
+    ]) {
+      await qdrantFetch(
+        `/collections/${COLLECTIONS.WIKI_PAGES}/index`,
         { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
       ).catch(() => {});
     }
@@ -186,32 +213,52 @@ export async function scrollPoints(
 // ─── Payload Indexes ───────────────────────────────────────────────────────
 
 /**
- * Idempotently ensures all required payload indexes exist on platform-knowledge.
- * Qdrant PUT index ignores duplicates, so this is safe to call on every startup.
- * Separate from ensureCollections() because indexes need to be added to
- * existing collections, not just new ones.
+ * Idempotently ensures all required payload indexes exist on
+ * platform-knowledge and wiki-pages. Qdrant PUT index ignores duplicates,
+ * so this is safe to call on every startup. Separate from
+ * ensureCollections() because indexes need to be added to existing
+ * collections, not just new ones.
  */
 export async function ensurePayloadIndexes(): Promise<void> {
-  const keywordFields = [
+  const platformKnowledgeKeywordFields = [
     // Capability discovery indexes
     "route", "lifecycle_status", "action_name", "spec_ref",
     // EP-KM-001: Knowledge article indexes
     "category", "status", "product_ids", "portfolio_ids", "value_streams", "tags",
   ];
-  const boolFields = ["side_effect"];
+  const platformKnowledgeBoolFields = ["side_effect"];
 
-  for (const field of keywordFields) {
+  // EP-WIKI-001 §5: wiki-pages indexes mirror what searchWikiPages() filters on.
+  const wikiPagesKeywordFields = [
+    "entityType",
+    "slug",
+    "pageKind",
+    "status",
+    "isKernel",
+    "organizationId",
+    "kernelVersion",
+    "kernelPageId",
+  ];
+
+  for (const field of platformKnowledgeKeywordFields) {
     await qdrantFetch(
       `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
       { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
     ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for", field, err); });
   }
 
-  for (const field of boolFields) {
+  for (const field of platformKnowledgeBoolFields) {
     await qdrantFetch(
       `/collections/${COLLECTIONS.PLATFORM_KNOWLEDGE}/index`,
       { method: "PUT", body: { field_name: field, field_schema: "bool" } },
     ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for", field, err); });
+  }
+
+  for (const field of wikiPagesKeywordFields) {
+    await qdrantFetch(
+      `/collections/${COLLECTIONS.WIKI_PAGES}/index`,
+      { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
+    ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for wiki-pages.", field, err); });
   }
 }
 
