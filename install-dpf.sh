@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR"
 LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 
-# Source shared helpers from Phase 2 + Phase 3 + Phase 6 + Phase 7a.
+# Source shared helpers from Phase 2 + Phase 3 + Phase 6 + Phase 7a + Phase 7c.
 # shellcheck source=scripts/installer/lib/logging.sh
 . "$LIB_DIR/logging.sh"
 # shellcheck source=scripts/installer/lib/platform.sh
@@ -47,9 +47,11 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/doctor.sh"
 # shellcheck source=scripts/installer/lib/docker.sh
 . "$LIB_DIR/docker.sh"
+# shellcheck source=scripts/installer/lib/autostart.sh
+. "$LIB_DIR/autostart.sh"
 
 # Installer version (semver-ish; bump per release).
-DPF_INSTALLER_VERSION="2026.05.10-phase7b"
+DPF_INSTALLER_VERSION="2026.05.10-phase7c"
 
 # ── CLI handling ────────────────────────────────────────────────────────────
 
@@ -76,6 +78,10 @@ Flags:
   --force-unsupported-host
                 Override unsupported-host preflight refusal (advanced).
                 Equivalent to DPF_FORCE_UNSUPPORTED_HOST=1.
+  --no-autostart
+                Skip the LaunchAgent / systemd-user autostart install
+                step. The platform comes up but won't auto-start at
+                login / boot.
   -h, --help    Show this help.
 
 Status: Phase 6 (framework vertical slice). Full end-user install (Docker
@@ -91,6 +97,7 @@ EOF
 
 DPF_DRY_RUN=0
 DPF_MODE="dev"   # dev | release
+DPF_AUTOSTART=1
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
@@ -99,6 +106,7 @@ while [ $# -gt 0 ]; do
     --headless)             DPF_HEADLESS=1; export DPF_HEADLESS ;;
     --release)              DPF_MODE="release" ;;
     --dev)                  DPF_MODE="dev" ;;
+    --no-autostart)         DPF_AUTOSTART=0 ;;
     --force-unsupported-host)
                             DPF_FORCE_UNSUPPORTED_HOST=1
                             export DPF_FORCE_UNSUPPORTED_HOST ;;
@@ -281,6 +289,15 @@ fi
 dpf_state_write lastSuccessfulInstallVersion "$DPF_INSTALLER_VERSION" 2>/dev/null || true
 dpf_state_write lastHealthCheck "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
 
+# 13. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
+#     Gated by --no-autostart for operators who manage their own.
+if [ "$DPF_AUTOSTART" = "1" ]; then
+  step "Autostart"
+  dpf_autostart_install "$REPO_ROOT" "${DPF_COMPOSE_FILES[*]}" "$REPO_ROOT/scripts/installer"
+else
+  info "Skipping autostart install (--no-autostart)."
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 printf '%b  Install complete!%b\n' "${DPF_GREEN:-}" "${DPF_NC:-}"
@@ -294,8 +311,7 @@ echo "    bash install-dpf.sh doctor         Generate a diagnostic bundle"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} logs -f"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} down"
 echo ""
-echo "  Autostart (LaunchAgent on macOS / systemd user unit on Linux)"
-echo "    lands with installer-parity Phase 7c."
+echo "  Autostart: $(if [ "$DPF_AUTOSTART" = "1" ]; then echo "enabled (will start at login / boot)"; else echo "DISABLED (run install-dpf.sh again without --no-autostart to enable)"; fi)"
 echo "  dpf-{start,stop,reinstall,release}.sh lifecycle scripts"
 echo "    land with installer-parity Phase 8."
 echo ""
