@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://dpf.local/schemas/install-state.json",
+  "title": "DPF Install State",
+  "description": "Persisted state at ~/.dpf/install-state.json. Read by every lifecycle script (install-dpf.sh, dpf-{start,stop,reinstall,release}.sh) so they don't redetect platform reality independently. Per the deployment doctrine (Contract 2: runtime configuration; Contract 3: lifecycle).",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "installerVersion",
+    "platform",
+    "arch"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Schema version for forward-migration. Lifecycle scripts must run dpf_state_migrate() if the file's schemaVersion is lower than the installer's expected version, or refuse to operate and direct the operator to re-run install-dpf.sh."
+    },
+    "installerVersion": {
+      "type": "string",
+      "description": "Installer version that wrote this file (semver-ish; e.g. '2026.05.10')."
+    },
+    "lastSuccessfulInstallVersion": {
+      "type": ["string", "null"],
+      "description": "Most recent installer version that completed successfully end-to-end."
+    },
+    "lastSuccessfulComposeHash": {
+      "type": ["string", "null"],
+      "description": "sha256 of the rendered docker compose config from the last successful install. Used to detect compose drift on restart."
+    },
+    "composeProjectName": {
+      "type": "string",
+      "default": "dpf",
+      "description": "Docker Compose project name. Defaults to 'dpf'."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["darwin", "linux", "win32"],
+      "description": "Host OS. win32 is informational only — the canonical Windows installer is install-dpf.ps1, which writes its own state."
+    },
+    "arch": {
+      "type": "string",
+      "enum": ["arm64", "amd64", "x86_64"],
+      "description": "Host architecture. arm64 covers Apple Silicon and Linux ARM."
+    },
+    "dockerContext": {
+      "type": ["string", "null"],
+      "description": "Active Docker context name (`docker context show`). null when DOCKER_HOST takes precedence or no context is configured."
+    },
+    "dockerEndpoint": {
+      "type": ["string", "null"],
+      "description": "Resolved Docker daemon endpoint (unix socket path or DOCKER_HOST URL)."
+    },
+    "installPath": {
+      "type": "string",
+      "description": "Absolute path to the repo root on the host. Mirrors DPF_HOST_INSTALL_PATH."
+    },
+    "stateDir": {
+      "type": "string",
+      "description": "Absolute path to the state directory (~/.dpf by default; XDG-aware on Linux when XDG_STATE_HOME is set)."
+    },
+    "composeFiles": {
+      "type": "array",
+      "description": "Ordered list of compose -f files used at install time. The compose.sh helper assembles this dynamically; persisting it enables lifecycle scripts to use the same chain.",
+      "items": { "type": "string" }
+    },
+    "imageTag": {
+      "type": ["string", "null"],
+      "description": "DPF_IMAGE_TAG used at install time. null when running in dev mode (services build locally)."
+    },
+    "llmProvider": {
+      "type": ["string", "null"],
+      "enum": ["model-runner", "ollama", "external", null],
+      "description": "Resolved DPF_LLM_PROVIDER at install time."
+    },
+    "resourceLabels": {
+      "type": "object",
+      "description": "Labels applied to all DPF-owned Docker resources for clean teardown. Default: { 'dpf': 'true' }.",
+      "additionalProperties": { "type": "string" }
+    },
+    "autostart": {
+      "type": "object",
+      "description": "Autostart configuration recorded at install time.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "kind": {
+          "type": "string",
+          "enum": ["launchagent", "systemd-user", "scheduled-task", "none"],
+          "description": "Mechanism used: launchagent (macOS), systemd-user (Linux), scheduled-task (Windows; informational), none."
+        }
+      },
+      "required": ["enabled", "kind"],
+      "additionalProperties": false
+    },
+    "lastHealthCheck": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO timestamp of the last successful /api/health check."
+    },
+    "lastBackupAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lastDoctorBundlePath": {
+      "type": ["string", "null"],
+      "description": "Absolute path to the most recent doctor bundle, for support reports."
+    }
+  },
+  "additionalProperties": false
+}
