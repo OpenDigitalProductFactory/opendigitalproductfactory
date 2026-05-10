@@ -1,13 +1,16 @@
 "use client";
 import { MoreHorizontal } from "lucide-react";
 import { ArtifactTabs } from "./ArtifactTabs";
+import { BusinessBriefPanel } from "./BusinessBriefPanel";
 import { PreviewFrame } from "./PreviewFrame";
 import type { ArtifactView } from "./types";
+import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
 
 interface Props {
   view: ArtifactView;
   onViewChange: (v: ArtifactView) => void;
   sandboxUrl: string | null;
+  businessBrief: BusinessBuildBrief;
 }
 
 function StubView({ slice, name }: { slice: number; name: string }) {
@@ -21,7 +24,7 @@ function StubView({ slice, name }: { slice: number; name: string }) {
   );
 }
 
-export function ArtifactPane({ view, onViewChange, sandboxUrl }: Props) {
+export function ArtifactPane({ view, onViewChange, sandboxUrl, businessBrief }: Props) {
   return (
     <div className="flex flex-col h-full bg-[var(--dpf-surface-2)] border-l border-[var(--dpf-border)]">
       <div className="px-[22px] py-3 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] flex items-center gap-2.5">
@@ -36,6 +39,7 @@ export function ArtifactPane({ view, onViewChange, sandboxUrl }: Props) {
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
+        {view === "brief" && <BusinessBriefPanel brief={businessBrief} />}
         {view === "preview" && <PreviewFrame sandboxUrl={sandboxUrl} />}
         {view === "verification" && <StubView slice={3} name="Walkthrough" />}
         {view === "schema" && <StubView slice={3} name="What changed" />}
