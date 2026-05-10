@@ -149,7 +149,7 @@ importers:
         version: link:../../packages/validators
       '@floating-ui/react':
         specifier: ^0.27.19
-        version: 0.27.19(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
+        version: 0.27.19(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@fullcalendar/core':
         specifier: ^6.1.20
         version: 6.1.20
@@ -161,19 +161,19 @@ importers:
         version: 6.1.20(@fullcalendar/core@6.1.20)
       '@fullcalendar/react':
         specifier: ^6.1.20
-        version: 6.1.20(@fullcalendar/core@6.1.20)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
+        version: 6.1.20(@fullcalendar/core@6.1.20)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@fullcalendar/timegrid':
         specifier: ^6.1.20
         version: 6.1.20(@fullcalendar/core@6.1.20)
       '@react-pdf/renderer':
         specifier: ^4.5.1
-        version: 4.5.1(react@19.0.6)
+        version: 4.5.1(react@19.2.6)
       '@types/dagre':
         specifier: ^0.7.54
         version: 0.7.54
       '@xyflow/react':
         specifier: ^12.10.2
-        version: 12.10.2(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
+        version: 12.10.2(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -194,13 +194,13 @@ importers:
         version: 4.0.3
       inngest:
         specifier: ^4.3.0
-        version: 4.3.0(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.14)(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6))(react@19.0.6)(typescript@6.0.3)(zod@4.4.3)
+        version: 4.3.0(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.14)(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3)
       jose:
         specifier: ^6.2.3
         version: 6.2.3
       lucide-react:
         specifier: ^1.14.0
-        version: 1.14.0(react@19.0.6)
+        version: 1.14.0(react@19.2.6)
       mammoth:
         specifier: ^1.12.0
         version: 1.12.0
@@ -209,10 +209,10 @@ importers:
         version: 5.1.11
       next:
         specifier: ^16.2.6
-        version: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
+        version: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       next-auth:
         specifier: 5.0.0-beta.31
-        version: 5.0.0-beta.31(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6))(nodemailer@8.0.7)(react@19.0.6)
+        version: 5.0.0-beta.31(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(nodemailer@8.0.7)(react@19.2.6)
       nodemailer:
         specifier: ^8.0.7
         version: 8.0.7
@@ -229,20 +229,20 @@ importers:
         specifier: ^15.1.3
         version: 15.1.3
       react:
-        specifier: ^19.0.6
-        version: 19.0.6
+        specifier: ^19.2.6
+        version: 19.2.6
       react-day-picker:
         specifier: ^10.0.0
-        version: 10.0.0(react@19.0.6)
+        version: 10.0.0(react@19.2.6)
       react-dom:
         specifier: ^19.2.6
-        version: 19.2.6(react@19.0.6)
+        version: 19.2.6(react@19.2.6)
       react-force-graph-2d:
         specifier: ^1.29.1
-        version: 1.29.1(react@19.0.6)
+        version: 1.29.1(react@19.2.6)
       react-markdown:
         specifier: ^10.1.0
-        version: 10.1.0(@types/react@19.2.14)(react@19.0.6)
+        version: 10.1.0(@types/react@19.2.14)(react@19.2.6)
       read-excel-file:
         specifier: 9.0.9
         version: 9.0.9
@@ -264,7 +264,7 @@ importers:
         version: 6.9.1
       '@testing-library/react':
         specifier: ^16.3.2
-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@types/node':
         specifier: ^25
         version: 25.6.2
@@ -10737,12 +10737,6 @@ snapshots:
       '@floating-ui/core': 1.7.5
       '@floating-ui/utils': 0.2.11
 
-  '@floating-ui/react-dom@2.1.8(react-dom@19.2.6(react@19.0.6))(react@19.0.6)':
-    dependencies:
-      '@floating-ui/dom': 1.7.6
-      react: 19.0.6
-      react-dom: 19.2.6(react@19.0.6)
-
   '@floating-ui/react-dom@2.1.8(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@floating-ui/dom': 1.7.6
@@ -10755,14 +10749,6 @@ snapshots:
       '@floating-ui/utils': 0.2.11
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
-      tabbable: 6.4.0
-
-  '@floating-ui/react@0.27.19(react-dom@19.2.6(react@19.0.6))(react@19.0.6)':
-    dependencies:
-      '@floating-ui/react-dom': 2.1.8(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
-      '@floating-ui/utils': 0.2.11
-      react: 19.0.6
-      react-dom: 19.2.6(react@19.0.6)
       tabbable: 6.4.0
 
   '@floating-ui/react@0.27.19(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
@@ -10787,11 +10773,11 @@ snapshots:
     dependencies:
       '@fullcalendar/core': 6.1.20
 
-  '@fullcalendar/react@6.1.20(@fullcalendar/core@6.1.20)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)':
+  '@fullcalendar/react@6.1.20(@fullcalendar/core@6.1.20)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@fullcalendar/core': 6.1.20
-      react: 19.0.6
-      react-dom: 19.2.6(react@19.0.6)
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
 
   '@fullcalendar/timegrid@6.1.20(@fullcalendar/core@6.1.20)':
     dependencies:
@@ -12697,10 +12683,10 @@ snapshots:
 
   '@react-pdf/primitives@4.3.0': {}
 
-  '@react-pdf/reconciler@2.0.0(react@19.0.6)':
+  '@react-pdf/reconciler@2.0.0(react@19.2.6)':
     dependencies:
       object-assign: 4.1.1
-      react: 19.0.6
+      react: 19.2.6
       scheduler: 0.25.0-rc-603e6108-20241029
 
   '@react-pdf/render@4.5.1':
@@ -12716,7 +12702,7 @@ snapshots:
       parse-svg-path: 0.1.2
       svg-arc-to-cubic-bezier: 3.2.0
 
-  '@react-pdf/renderer@4.5.1(react@19.0.6)':
+  '@react-pdf/renderer@4.5.1(react@19.2.6)':
     dependencies:
       '@babel/runtime': 7.29.2
       '@react-pdf/fns': 3.1.3
@@ -12724,14 +12710,14 @@ snapshots:
       '@react-pdf/layout': 4.6.1
       '@react-pdf/pdfkit': 5.1.1
       '@react-pdf/primitives': 4.3.0
-      '@react-pdf/reconciler': 2.0.0(react@19.0.6)
+      '@react-pdf/reconciler': 2.0.0(react@19.2.6)
       '@react-pdf/render': 4.5.1
       '@react-pdf/types': 2.11.1
       events: 3.3.0
       object-assign: 4.1.1
       prop-types: 15.8.1
       queue: 6.0.2
-      react: 19.0.6
+      react: 19.2.6
 
   '@react-pdf/stylesheet@6.2.1':
     dependencies:
@@ -13119,12 +13105,12 @@ snapshots:
     optionalDependencies:
       jest: 30.4.2(@types/node@25.6.2)
 
-  '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)':
+  '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@babel/runtime': 7.29.2
       '@testing-library/dom': 10.4.1
-      react: 19.0.6
-      react-dom: 19.2.6(react@19.0.6)
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -13597,13 +13583,13 @@ snapshots:
 
   '@xmldom/xmldom@0.8.13': {}
 
-  '@xyflow/react@12.10.2(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)':
+  '@xyflow/react@12.10.2(@types/react@19.2.14)(immer@10.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@xyflow/system': 0.0.76
       classcat: 5.0.5
-      react: 19.0.6
-      react-dom: 19.2.6(react@19.0.6)
-      zustand: 4.5.7(@types/react@19.2.14)(immer@10.2.0)(react@19.0.6)
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
+      zustand: 4.5.7(@types/react@19.2.14)(immer@10.2.0)(react@19.2.6)
     transitivePeerDependencies:
       - '@types/react'
       - immer
@@ -15862,7 +15848,7 @@ snapshots:
 
   inline-style-parser@0.2.7: {}
 
-  inngest@4.3.0(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.14)(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6))(react@19.0.6)(typescript@6.0.3)(zod@4.4.3):
+  inngest@4.3.0(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.14)(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)(typescript@6.0.3)(zod@4.4.3):
     dependencies:
       '@bufbuild/protobuf': 2.12.0
       '@inngest/ai': 0.1.7
@@ -15891,8 +15877,8 @@ snapshots:
     optionalDependencies:
       express: 5.2.1
       hono: 4.12.14
-      next: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
-      react: 19.0.6
+      next: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react: 19.2.6
       typescript: 6.0.3
     transitivePeerDependencies:
       - '@opentelemetry/core'
@@ -16967,9 +16953,9 @@ snapshots:
 
   lru.min@1.1.4: {}
 
-  lucide-react@1.14.0(react@19.0.6):
+  lucide-react@1.14.0(react@19.2.6):
     dependencies:
-      react: 19.0.6
+      react: 19.2.6
 
   lz-string@1.5.0: {}
 
@@ -17640,24 +17626,24 @@ snapshots:
 
   netmask@2.1.1: {}
 
-  next-auth@5.0.0-beta.31(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6))(nodemailer@8.0.7)(react@19.0.6):
+  next-auth@5.0.0-beta.31(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(nodemailer@8.0.7)(react@19.2.6):
     dependencies:
       '@auth/core': 0.41.2(nodemailer@8.0.7)
-      next: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6)
-      react: 19.0.6
+      next: 16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react: 19.2.6
     optionalDependencies:
       nodemailer: 8.0.7
 
-  next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.0.6))(react@19.0.6):
+  next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
     dependencies:
       '@next/env': 16.2.6
       '@swc/helpers': 0.5.15
       baseline-browser-mapping: 2.10.28
       caniuse-lite: 1.0.30001792
       postcss: 8.5.14
-      react: 19.0.6
-      react-dom: 19.2.6(react@19.0.6)
-      styled-jsx: 5.1.6(@babel/core@7.29.0)(react@19.0.6)
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
+      styled-jsx: 5.1.6(@babel/core@7.29.0)(react@19.2.6)
     optionalDependencies:
       '@next/swc-darwin-arm64': 16.2.6
       '@next/swc-darwin-x64': 16.2.6
@@ -18429,11 +18415,11 @@ snapshots:
       react-stately: 3.46.0(react@19.2.6)
       use-sync-external-store: 1.6.0(react@19.2.6)
 
-  react-day-picker@10.0.0(react@19.0.6):
+  react-day-picker@10.0.0(react@19.2.6):
     dependencies:
       '@date-fns/tz': 1.4.1
       date-fns: 4.1.0
-      react: 19.0.6
+      react: 19.2.6
 
   react-devtools-core@6.1.5:
     dependencies:
@@ -18443,11 +18429,6 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  react-dom@19.2.6(react@19.0.6):
-    dependencies:
-      react: 19.0.6
-      scheduler: 0.27.0
-
   react-dom@19.2.6(react@19.2.6):
     dependencies:
       react: 19.2.6
@@ -18455,12 +18436,12 @@ snapshots:
 
   react-fast-compare@3.2.2: {}
 
-  react-force-graph-2d@1.29.1(react@19.0.6):
+  react-force-graph-2d@1.29.1(react@19.2.6):
     dependencies:
       force-graph: 1.51.2
       prop-types: 15.8.1
-      react: 19.0.6
-      react-kapsule: 2.5.7(react@19.0.6)
+      react: 19.2.6
+      react-kapsule: 2.5.7(react@19.2.6)
 
   react-freeze@1.0.4(react@19.0.6):
     dependencies:
@@ -18474,12 +18455,12 @@ snapshots:
 
   react-is@19.2.6: {}
 
-  react-kapsule@2.5.7(react@19.0.6):
+  react-kapsule@2.5.7(react@19.2.6):
     dependencies:
       jerrypick: 1.1.2
-      react: 19.0.6
+      react: 19.2.6
 
-  react-markdown@10.1.0(@types/react@19.2.14)(react@19.0.6):
+  react-markdown@10.1.0(@types/react@19.2.14)(react@19.2.6):
     dependencies:
       '@types/hast': 3.0.4
       '@types/mdast': 4.0.4
@@ -18488,7 +18469,7 @@ snapshots:
       hast-util-to-jsx-runtime: 2.3.6
       html-url-attributes: 3.0.1
       mdast-util-to-hast: 13.2.1
-      react: 19.0.6
+      react: 19.2.6
       remark-parse: 11.0.0
       remark-rehype: 11.1.2
       unified: 11.0.5
@@ -19266,10 +19247,10 @@ snapshots:
     dependencies:
       inline-style-parser: 0.2.7
 
-  styled-jsx@5.1.6(@babel/core@7.29.0)(react@19.0.6):
+  styled-jsx@5.1.6(@babel/core@7.29.0)(react@19.2.6):
     dependencies:
       client-only: 0.0.1
-      react: 19.0.6
+      react: 19.2.6
     optionalDependencies:
       '@babel/core': 7.29.0
 
@@ -20064,13 +20045,13 @@ snapshots:
 
   zod@4.4.3: {}
 
-  zustand@4.5.7(@types/react@19.2.14)(immer@10.2.0)(react@19.0.6):
+  zustand@4.5.7(@types/react@19.2.14)(immer@10.2.0)(react@19.2.6):
     dependencies:
-      use-sync-external-store: 1.6.0(react@19.0.6)
+      use-sync-external-store: 1.6.0(react@19.2.6)
     optionalDependencies:
       '@types/react': 19.2.14
       immer: 10.2.0
-      react: 19.0.6
+      react: 19.2.6
 
   zustand@5.0.13(@types/react@19.2.14)(immer@10.2.0)(react@19.0.6)(use-sync-external-store@1.6.0(react@19.0.6)):
     optionalDependencies:
