@@ -49,7 +49,7 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/docker.sh"
 
 # Installer version (semver-ish; bump per release).
-DPF_INSTALLER_VERSION="2026.05.10-phase7a"
+DPF_INSTALLER_VERSION="2026.05.10-phase7b"
 
 # ── CLI handling ────────────────────────────────────────────────────────────
 
