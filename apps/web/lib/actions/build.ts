@@ -20,6 +20,7 @@ import {
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
+import { legacyFeatureBuildBriefToBusinessBuildBriefInput } from "@/lib/build/business-build-brief";
 import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
 import { listReleasableSandboxFiles } from "@/lib/integrate/sandbox/sandbox";
@@ -137,9 +138,58 @@ export async function updateFeatureBrief(
   const validation = validateFeatureBrief(brief);
   if (!validation.valid) throw new Error(validation.errors.join(", "));
 
+  const organization = await prisma.organization.findFirst({ select: { id: true } });
+  if (!organization) throw new Error("Organization is required before saving a business build brief");
+
+  const businessBrief = legacyFeatureBuildBriefToBusinessBuildBriefInput({
+    orgId: organization.id,
+    buildId: build.buildId,
+    featureBuildId: build.id,
+    title: build.title,
+    brief,
+    submittedByUserId: userId,
+  });
+  const acceptedFields = businessBrief.status === "accepted"
+    ? { acceptedByUserId: userId, acceptedAt: new Date() }
+    : { acceptedByUserId: null, acceptedAt: null };
+
   await prisma.featureBuild.update({
     where: { buildId },
     data: { brief: brief as unknown as Prisma.InputJsonValue },
+  });
+
+  await prisma.businessBuildBrief.upsert({
+    where: { featureBuildId: build.id },
+    create: {
+      ...businessBrief,
+      affectedPeople: businessBrief.affectedPeople as unknown as Prisma.InputJsonValue,
+      sourceEvidence: businessBrief.sourceEvidence as unknown as Prisma.InputJsonValue,
+      technicalInterpretation: businessBrief.technicalInterpretation as unknown as Prisma.InputJsonValue,
+      riskProfile: businessBrief.riskProfile as unknown as Prisma.InputJsonValue,
+      hiveReadiness: businessBrief.hiveReadiness as unknown as Prisma.InputJsonValue,
+      ...acceptedFields,
+    },
+    update: {
+      status: businessBrief.status,
+      intakeSource: businessBrief.intakeSource,
+      capabilityPackId: businessBrief.capabilityPackId,
+      backlogItemId: businessBrief.backlogItemId,
+      businessOutcome: businessBrief.businessOutcome,
+      affectedPeople: businessBrief.affectedPeople as unknown as Prisma.InputJsonValue,
+      affectedWorkflow: businessBrief.affectedWorkflow,
+      sourceEvidence: businessBrief.sourceEvidence as unknown as Prisma.InputJsonValue,
+      successSignals: businessBrief.successSignals,
+      constraints: businessBrief.constraints,
+      businessInterpretation: businessBrief.businessInterpretation,
+      technicalInterpretation: businessBrief.technicalInterpretation as unknown as Prisma.InputJsonValue,
+      riskProfile: businessBrief.riskProfile as unknown as Prisma.InputJsonValue,
+      hiveReadiness: businessBrief.hiveReadiness as unknown as Prisma.InputJsonValue,
+      openQuestions: businessBrief.openQuestions,
+      confidence: businessBrief.confidence,
+      confidenceRationale: businessBrief.confidenceRationale,
+      submittedByUserId: businessBrief.submittedByUserId,
+      ...acceptedFields,
+    },
   });
 }
 

@@ -97,6 +97,42 @@ export type BusinessBriefTransitionInput = {
   openQuestions?: string[];
 };
 
+export type LegacyFeatureBuildBriefBackfillInput = {
+  orgId: string;
+  buildId: string;
+  featureBuildId?: string | null;
+  title: string;
+  brief: unknown;
+  submittedByUserId?: string | null;
+};
+
+export type BusinessBuildBriefPersistenceInput = {
+  briefId: string;
+  orgId: string;
+  status: BusinessBriefStatus;
+  intakeSource: BusinessBuildBriefSource;
+  capabilityPackId: CapabilityPackId;
+  featureBuildId: string | null;
+  backlogItemId: string | null;
+  businessOutcome: string;
+  affectedPeople: Array<{ kind: "persona"; label: string }>;
+  affectedWorkflow: string | null;
+  sourceEvidence: BusinessBriefEvidence[];
+  successSignals: string[];
+  constraints: string[];
+  businessInterpretation: string;
+  technicalInterpretation: BusinessBuildBrief["technicalInterpretation"];
+  riskProfile: BusinessBuildBrief["riskProfile"];
+  hiveReadiness: {
+    disposition: "local_only" | "candidate" | "approved_for_hive" | "contributed";
+    generalizationNotes?: string;
+  };
+  openQuestions: string[];
+  confidence: BusinessBriefConfidence;
+  confidenceRationale: string;
+  submittedByUserId: string | null;
+};
+
 const CAPABILITY_PACKS: Array<{
   id: CapabilityPackId;
   label: CapabilityPack;
@@ -216,6 +252,43 @@ function confidenceFor(openQuestions: string[]): BusinessBriefConfidence {
   return "low";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function stringArrayField(record: Record<string, unknown>, key: string): string[] {
+  const value = record[key];
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => typeof entry === "string" ? entry.trim() : "").filter(Boolean);
+}
+
+function coerceLegacyFeatureBrief(value: unknown, fallbackTitle: string): FeatureBrief {
+  if (!isRecord(value)) {
+    throw new Error("Legacy feature brief must be an object before it can be backfilled.");
+  }
+
+  const title = stringField(value, "title") || fallbackTitle.trim();
+  const description = stringField(value, "description");
+  if (!description) {
+    throw new Error("Legacy feature brief is missing a business description.");
+  }
+
+  return {
+    title,
+    description,
+    portfolioContext: stringField(value, "portfolioContext"),
+    targetRoles: stringArrayField(value, "targetRoles"),
+    inputs: stringArrayField(value, "inputs"),
+    dataNeeds: stringField(value, "dataNeeds"),
+    acceptanceCriteria: stringArrayField(value, "acceptanceCriteria"),
+  };
+}
+
 const TERMINAL_BRIEF_STATUSES = new Set<BusinessBriefStatus>([
   "converted_to_build",
   "rejected",
@@ -297,5 +370,52 @@ export function buildBusinessBuildBrief(input: BuildBusinessBuildBriefInput): Bu
     },
     openQuestions,
     confidence: confidenceFor(openQuestions),
+  };
+}
+
+export function legacyFeatureBuildBriefToBusinessBuildBriefInput(
+  input: LegacyFeatureBuildBriefBackfillInput,
+): BusinessBuildBriefPersistenceInput {
+  const featureBrief = coerceLegacyFeatureBrief(input.brief, input.title);
+  const brief = buildBusinessBuildBrief({
+    source: "user_conversation",
+    featureBrief,
+  });
+  const status: BusinessBriefStatus = canTransitionBusinessBriefStatus({
+    from: "interpreting",
+    to: "accepted",
+    confidence: brief.confidence,
+    openQuestions: brief.openQuestions,
+  })
+    ? "accepted"
+    : "awaiting_clarification";
+
+  return {
+    briefId: `BBB-${input.buildId}`,
+    orgId: input.orgId,
+    status,
+    intakeSource: "user_conversation",
+    capabilityPackId: brief.capabilityPackId,
+    featureBuildId: input.featureBuildId ?? null,
+    backlogItemId: null,
+    businessOutcome: brief.businessOutcome,
+    affectedPeople: brief.affectedPeople.map((label) => ({ kind: "persona", label })),
+    affectedWorkflow: brief.affectedWorkflow,
+    sourceEvidence: brief.sourceEvidence,
+    successSignals: brief.successSignals,
+    constraints: brief.constraints,
+    businessInterpretation: brief.businessInterpretation,
+    technicalInterpretation: brief.technicalInterpretation,
+    riskProfile: brief.riskProfile,
+    hiveReadiness: {
+      disposition: "local_only",
+      generalizationNotes: "Backfilled from legacy FeatureBuild.brief JSON.",
+    },
+    openQuestions: brief.openQuestions,
+    confidence: brief.confidence,
+    confidenceRationale: brief.openQuestions.length === 0
+      ? "Legacy FeatureBuild brief contained enough business outcome, affected people, evidence, and success signals."
+      : `Backfill needs clarification: ${brief.openQuestions.join(" ")}`,
+    submittedByUserId: input.submittedByUserId ?? null,
   };
 }

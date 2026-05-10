@@ -4,6 +4,7 @@ import {
   canTransitionBusinessBriefStatus,
   getCapabilityPackIdForBrief,
   getCapabilityPackForBrief,
+  legacyFeatureBuildBriefToBusinessBuildBriefInput,
 } from "./business-build-brief";
 import type { FeatureBrief } from "@/lib/feature-build-types";
 
@@ -155,5 +156,75 @@ describe("canTransitionBusinessBriefStatus", () => {
       from: "superseded",
       to: "accepted",
     })).toBe(false);
+  });
+});
+
+describe("legacyFeatureBuildBriefToBusinessBuildBriefInput", () => {
+  it("converts a complete FeatureBuild.brief JSON payload into a persistence-ready business brief", () => {
+    const converted = legacyFeatureBuildBriefToBusinessBuildBriefInput({
+      orgId: "org-1",
+      buildId: "FB-ABC12345",
+      featureBuildId: "feature-build-row-1",
+      title: "Customer support escalation dashboard",
+      brief: baseBrief,
+      submittedByUserId: "user-1",
+    });
+
+    expect(converted).toEqual(
+      expect.objectContaining({
+        briefId: "BBB-FB-ABC12345",
+        orgId: "org-1",
+        featureBuildId: "feature-build-row-1",
+        status: "accepted",
+        intakeSource: "user_conversation",
+        businessOutcome: baseBrief.description,
+        capabilityPackId: "customer_support",
+        confidence: "high",
+        submittedByUserId: "user-1",
+      }),
+    );
+    expect(converted.affectedPeople).toEqual([
+      { kind: "persona", label: "Support manager" },
+      { kind: "persona", label: "Customer success lead" },
+    ]);
+    expect(converted.sourceEvidence).toHaveLength(1);
+    expect(converted.successSignals).toEqual(baseBrief.acceptanceCriteria);
+  });
+
+  it("keeps incomplete legacy briefs out of accepted status", () => {
+    const converted = legacyFeatureBuildBriefToBusinessBuildBriefInput({
+      orgId: "org-1",
+      buildId: "FB-FUZZY",
+      title: "Fuzzy request",
+      brief: {
+        title: "Fuzzy request",
+        description: "Make the work easier.",
+        portfolioContext: "",
+        targetRoles: [],
+        inputs: [],
+        dataNeeds: "",
+        acceptanceCriteria: [],
+      },
+    });
+
+    expect(converted.status).toBe("awaiting_clarification");
+    expect(converted.confidence).toBe("medium");
+    expect(converted.openQuestions).toContain("Who is affected by this business change?");
+  });
+
+  it("rejects non-object or missing-description legacy briefs", () => {
+    expect(() => legacyFeatureBuildBriefToBusinessBuildBriefInput({
+      orgId: "org-1",
+      buildId: "FB-BAD",
+      title: "Bad request",
+      brief: null,
+    })).toThrow(/legacy feature brief/i);
+
+    expect(() => legacyFeatureBuildBriefToBusinessBuildBriefInput({
+      orgId: "org-1",
+      buildId: "FB-BAD2",
+      title: "Bad request",
+      brief: { title: "Missing description" },
+    })).toThrow(/description/i);
   });
 });
