@@ -908,6 +908,7 @@ model BacklogItem {
   submittedBy           User?                 @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   taxonomyNode          TaxonomyNode?         @relation(fields: [taxonomyNodeId], references: [id])
   activities            BacklogItemActivity[]
+  coworkerNeeds         CoworkerCapabilityNeed[] @relation("BacklogItemCoworkerCapabilityNeeds")
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
@@ -1465,6 +1466,8 @@ model Agent {
   executionConfig      AgentExecutionConfig?
   skills               AgentSkillAssignment[]
   toolGrants           AgentToolGrant[]
+  coworkerAssessments  CoworkerSelfAssessment[]    @relation("CoworkerSelfAssessmentAgent")
+  coworkerNeeds        CoworkerCapabilityNeed[]    @relation("CoworkerCapabilityNeedAgent")
   performanceProfiles  AgentPerformance[]
   degradationMappings  FeatureDegradationMapping[]
   promptContext        AgentPromptContext?
@@ -1602,6 +1605,57 @@ model AgentToolGrant {
 
   @@unique([agentId, grantKey])
   @@index([grantKey])
+}
+
+model CoworkerSelfAssessment {
+  id                String                   @id @default(cuid())
+  assessmentId      String                   @unique
+  agentId           String
+  trigger           String
+  routeContext      String?
+  verdict           String
+  confidence        String
+  missionSummary    String?
+  capabilitySummary String?
+  rawPayload        Json                     @default("{}")
+  createdAt         DateTime                 @default(now())
+  supersededAt      DateTime?
+  agent             Agent                    @relation("CoworkerSelfAssessmentAgent", fields: [agentId], references: [agentId], onDelete: Cascade)
+  needs             CoworkerCapabilityNeed[]
+
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([verdict, createdAt(sort: Desc)])
+  @@index([trigger, createdAt(sort: Desc)])
+}
+
+model CoworkerCapabilityNeed {
+  id                  String                   @id @default(cuid())
+  needId              String                   @unique
+  assessmentId        String
+  agentId             String
+  kind                String
+  severity            String
+  status              String                   @default("submitted")
+  need                String
+  blocks              String
+  evidenceJson        Json                     @default("{}")
+  readinessJson       Json                     @default("{}")
+  linkedBacklogItemId String?
+  duplicateOfId       String?
+  reviewerNote        String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  assessment          CoworkerSelfAssessment   @relation(fields: [assessmentId], references: [assessmentId], onDelete: Cascade)
+  agent               Agent                    @relation("CoworkerCapabilityNeedAgent", fields: [agentId], references: [agentId], onDelete: Cascade)
+  linkedBacklogItem   BacklogItem?             @relation("BacklogItemCoworkerCapabilityNeeds", fields: [linkedBacklogItemId], references: [itemId])
+  duplicateOf         CoworkerCapabilityNeed?  @relation("CoworkerCapabilityNeedDuplicates", fields: [duplicateOfId], references: [needId])
+  duplicates          CoworkerCapabilityNeed[] @relation("CoworkerCapabilityNeedDuplicates")
+
+  @@index([agentId, status])
+  @@index([status, severity])
+  @@index([kind, status])
+  @@index([linkedBacklogItemId])
+  @@index([assessmentId])
 }
 
 model AuthorityBinding {
