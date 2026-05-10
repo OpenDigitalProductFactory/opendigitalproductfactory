@@ -704,9 +704,12 @@
       "category": "registry",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "assess_my_capabilities",
         "create_digital_product",
         "explain_blast_radius",
         "flag_stale_knowledge",
+        "get_my_coworker_profile",
+        "list_my_capability_needs",
         "list_departments",
         "list_positions",
         "query_employees",
@@ -716,6 +719,7 @@
         "search_knowledge",
         "search_knowledge_base",
         "search_portfolio_context",
+        "submit_coworker_capability_need",
         "suggest_taxonomy_placement",
         "summarize_estate_posture",
         "validate_version_confidence"
