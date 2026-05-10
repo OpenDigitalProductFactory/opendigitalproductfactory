@@ -16,6 +16,8 @@
   --dpf-success: #16a34a;
   --dpf-warning: #d97706;
   --dpf-error: #dc2626;
+  --dpf-state-warning: var(--dpf-warning);
+  --dpf-state-error: var(--dpf-error);
   --dpf-info: #0284c7;
   --dpf-font-body: Inter, system-ui, sans-serif;
   --dpf-font-heading: Inter, system-ui, sans-serif;
@@ -38,6 +40,8 @@
     --dpf-success: #4ade80;
     --dpf-warning: #fbbf24;
     --dpf-error: #f87171;
+    --dpf-state-warning: var(--dpf-warning);
+    --dpf-state-error: var(--dpf-error);
     --dpf-info: #38bdf8;
   }
 }

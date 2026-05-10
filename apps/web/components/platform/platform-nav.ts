@@ -51,6 +51,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     matchPrefixes: ["/platform/ai"],
     subItems: [
       { label: "Overview", href: "/platform/ai" },
+      { label: "Operations Map", href: "/platform/ai/operations-map" },
       { label: "Assignments", href: "/platform/ai/assignments" },
       { label: "Prompts", href: "/platform/ai/prompts" },
       { label: "Skills", href: "/platform/ai/skills" },
