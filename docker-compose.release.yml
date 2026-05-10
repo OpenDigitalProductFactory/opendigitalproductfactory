@@ -1,0 +1,52 @@
+# Release runtime overlay — consumes pre-built multi-arch GHCR images
+# instead of building locally.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+#
+# Per the deployment doctrine (Contract 1: release artifacts) and the
+# installer-parity roadmap Phase 1: every installed-runtime service
+# resolves to a versioned multi-arch GHCR image. The base
+# docker-compose.yml's `build:` entries are reset to null so the runtime
+# never silently builds when a release tag is meant to be pulled.
+#
+# Set GHCR_OWNER and DPF_IMAGE_TAG in .env (see .env.docker.example).
+# Default GHCR_OWNER is the canonical OSS publishing namespace; customers
+# running forks or mirrors override it.
+#
+# integration-test-harness is intentionally absent from this overlay
+# because it is classified as developer/test-only per the roadmap's
+# service classification (Phase 1) and is not published to GHCR.
+
+services:
+  portal-init:
+    # portal-init shares the portal image (Dockerfile target: runner).
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-portal:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
+  portal:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-portal:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
+  sandbox-init:
+    # sandbox-init also shares the portal image (same Dockerfile, same
+    # target: runner) so initialization runs against the pinned portal
+    # release without duplicating images.
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-portal:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
+  sandbox:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-sandbox:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
+  promoter:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-promoter:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
+  browser-use:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-browser-use:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
+
+  adp:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-adp:${DPF_IMAGE_TAG:-latest}
+    build: !reset null
