@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import "./test-setup";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BuildStudioV2 } from "./BuildStudioV2";
 import { DEMO_BUSINESS_BRIEF } from "@/lib/build-studio-demo";
+
+vi.mock("@/lib/actions/build", () => ({
+  updateBusinessBuildBrief: vi.fn(),
+}));
 
 describe("BuildStudioV2", () => {
   it("renders the header, step tracker, conversation pane, and artifact pane", () => {
