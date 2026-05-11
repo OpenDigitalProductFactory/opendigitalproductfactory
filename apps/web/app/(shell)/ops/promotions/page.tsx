@@ -1,4 +1,4 @@
-import { getGitPromotionCandidates, getPromotions } from "@/lib/actions/promotions";
+import { createPromotionReviewFromGitCandidateForm, getGitPromotionCandidates, getPromotions } from "@/lib/actions/promotions";
 import PromotionsClient from "@/components/ops/PromotionsClient";
 import { GitPromotionCandidatesPanel } from "@/components/ops/GitPromotionCandidatesPanel";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
@@ -17,7 +17,10 @@ export default async function PromotionsPage() {
         </p>
       </div>
       <OpsTabNav />
-      <GitPromotionCandidatesPanel candidates={JSON.parse(JSON.stringify(gitCandidates))} />
+      <GitPromotionCandidatesPanel
+        candidates={JSON.parse(JSON.stringify(gitCandidates))}
+        createReviewAction={createPromotionReviewFromGitCandidateForm}
+      />
       <PromotionsClient promotions={JSON.parse(JSON.stringify(promotions))} />
     </div>
   );
