@@ -3,6 +3,7 @@
 // and Qdrant containers for isolated sandbox environments.
 
 import { lazyExec } from "@/lib/shared/lazy-node";
+import { Prisma, prisma } from "@dpf/db";
 
 const exec = lazyExec();
 
@@ -42,6 +43,37 @@ export function buildSandboxDbEnvVars(buildId: string): Record<string, string> {
 
 const POLL_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
+
+export async function recordSandboxStarted(input: {
+  buildId: string;
+  providerId: string;
+  agentId?: string | null;
+  portalInstanceId: string;
+  previewUrl?: string | null;
+  capabilitiesSnapshot: Prisma.InputJsonValue;
+}) {
+  return prisma.sandbox.create({
+    data: {
+      buildId: input.buildId,
+      providerId: input.providerId,
+      agentId: input.agentId ?? null,
+      portalInstanceId: input.portalInstanceId,
+      state: "running",
+      previewUrl: input.previewUrl ?? null,
+      capabilitiesSnapshot: input.capabilitiesSnapshot,
+    },
+  });
+}
+
+export async function recordSandboxDestroyed(id: string) {
+  return prisma.sandbox.update({
+    where: { id },
+    data: {
+      state: "destroyed",
+      destroyedAt: new Date(),
+    },
+  });
+}
 
 export function buildDockerHealthInspectCommand(containerId: string): string {
   return `docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" ${containerId} | grep -q '^healthy$'`;
