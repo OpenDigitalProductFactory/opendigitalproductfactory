@@ -6,6 +6,7 @@ import type {
   OperationsMapBacklogEvidence,
   OperationsMapExternalEvidence,
   OperationsMapProjection,
+  OperationsMapProjectionFilters,
   OperationsMapSeverity,
   OperationsMapTemplate,
   OperationsMapToolExecution,
@@ -267,6 +268,18 @@ export function summarizeProjectionCounts(projections: OperationsMapProjection[]
     }),
     { normal: 0, attention: 0, warning: 0, critical: 0 } satisfies Record<OperationsMapSeverity, number>,
   );
+}
+
+export function filterOperationsMapProjections(
+  projections: OperationsMapProjection[],
+  filters: OperationsMapProjectionFilters,
+): OperationsMapProjection[] {
+  if (filters.sources.length === 0 || filters.severities.length === 0) return [];
+
+  const sources = new Set(filters.sources);
+  const severities = new Set(filters.severities);
+
+  return projections.filter((projection) => sources.has(projection.source) && severities.has(projection.severity));
 }
 
 function resolveAgentStationId(agent: OperationsMapAgent, template: OperationsMapTemplate): string {
