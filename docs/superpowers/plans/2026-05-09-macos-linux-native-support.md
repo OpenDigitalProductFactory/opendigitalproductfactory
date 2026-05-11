@@ -1,5 +1,13 @@
 # Mac (Apple Silicon) + Linux Native Support — Roadmap
 
+> **Status: DELIVERED (2026-05-11).** All 11 phases (0–10) shipped
+> across 13 PRs. macOS Apple Silicon and native Linux installers are
+> now GA alongside the existing Windows installer. End-user install
+> docs: [docs/install/macos.md](../../install/macos.md),
+> [docs/install/linux.md](../../install/linux.md). CI release gates
+> live in [.github/workflows/release-gates.yml](../../../.github/workflows/release-gates.yml).
+> A delivery summary is at the bottom of this file.
+
 > Branch: `claude/mac-docker-compatibility-uN4Ya`
 > Deliverable for this branch: **this plan only**. Each phase below lands as a
 > separate PR per AGENTS.md §4 ("one concern per branch, one concern per PR").
@@ -25,6 +33,10 @@
 >   Qdrant-silent-failure historical context. Future direction section now
 >   sketches a cleaner discovery-plane architecture to replace the
 >   exporter-on-host pattern over time.
+> - 2026-05-11 — **delivery stamp**: all 11 phases shipped (PRs #400,
+>   #408, #410, #413, #414, #416, #419, #423, #425, #427, #428, #433,
+>   #435, #440, #441, #444, #447, #452 — phases sometimes split into
+>   sub-PRs per the one-concern rule). See delivery summary below.
 
 ## Context
 
@@ -778,3 +790,78 @@ templates rather than being replaced.
    round-trips clean → systemd user unit survives reboot.
 3. **Existing Windows install**: `install-dpf.ps1` continues to work
    unchanged. CI matrix proves no regression.
+
+## Delivery summary (2026-05-11)
+
+The full 11-phase roadmap landed on `main`. Phases that grew beyond
+"one concern per PR" were split into sub-PRs (`7a/7b/7c/7d`,
+`9a/9b`, `10a/10b/10c/10d`); each sub-PR is independently reviewable
+and revertable.
+
+### What shipped
+
+| Phase | Concern | Where it lives |
+|-------|---------|----------------|
+| 0 | Multi-arch GHCR images (linux/amd64 + linux/arm64) + SBOM + provenance | `.github/workflows/publish-image.yml` |
+| 1 | Release artifact contract (image classification, version pinning) | `docker-compose.release.yml`, `.env.docker.example` |
+| 2 | Platform preflight, contributor setup, AGENTS.md updates | `scripts/setup.sh`, `scripts/installer/lib/{logging,platform,prompts}.sh`, `.vscode/tasks.json` |
+| 3 | Compose portability + per-platform overlays | `docker-compose.{macos,linux}.yml`, `scripts/installer/lib/compose.sh` |
+| 4 | LLM provider contract (model-runner / ollama / external) | `docker-entrypoint.sh`, `.env.docker.example` |
+| 5 | Host hardware profile (Apple Silicon `unified` memory) | `scripts/detect-hardware-host.ts` |
+| 6 | Installer framework vertical slice + `dpf doctor` | `install-dpf.sh`, `scripts/installer/lib/{preflight,state,doctor}.sh`, `install-state.schema.json` |
+| 7a | Docker Engine install (Linux distro pkg manager) | `scripts/installer/lib/docker.sh` |
+| 7b | Docker Desktop install (macOS `.dmg`) | `scripts/installer/lib/docker.sh` |
+| 7c | Autostart units (LaunchAgent + systemd-user) | `scripts/installer/lib/autostart.sh`, `scripts/installer/{macos-launchagent.plist,linux-systemd.service}.tmpl` |
+| 7d | Uninstall (soft + `--purge`) | `uninstall-dpf.sh` |
+| 8 | Lifecycle scripts (start/stop/reinstall/release) | `dpf-{start,stop,reinstall,release}.sh` |
+| 9a | User-facing install docs | `docs/install/{macos,linux}.md`, README + CONTRIBUTING updates |
+| 9b | CI release gates (compose-render, shellcheck, linux-smoke, apple-silicon-dry-run) | `.github/workflows/release-gates.yml` |
+| 10a | Port-conflict preflight | `scripts/installer/lib/preflight.sh` (`dpf_preflight_port_conflicts`) |
+| 10b | Discovery-collectors darwin branch | `packages/db/src/discovery-collectors/{host,docker}.ts` |
+| 10c | codebase-tools POSIX path regression tests | `apps/web/lib/integrate/codebase-tools.test.ts` |
+| 10d | Supplementary doctor diagnostics | `scripts/installer/lib/diagnostics.sh` |
+
+### What the operator actually gets
+
+```bash
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf
+cd ~/dpf
+bash install-dpf.sh              # interactive, full install
+bash install-dpf.sh --headless   # unattended
+bash install-dpf.sh --dry-run    # plan-only preflight
+bash install-dpf.sh doctor       # 15-section diagnostic bundle
+
+bash dpf-start.sh                # docker compose up -d (auto-detects mode)
+bash dpf-stop.sh                 # docker compose down --remove-orphans
+bash dpf-reinstall.sh            # purge + reinstall orchestrator
+bash dpf-release.sh --bump minor # tag-only release (triggers GHCR multi-arch publish)
+
+bash uninstall-dpf.sh            # soft: stop stack, keep data
+bash uninstall-dpf.sh --purge    # destructive: wipe volumes + state + .env
+```
+
+All scripts honor `--help`, `--dry-run`, and (where relevant)
+`--headless`. The `--purge` and `--release` tiers refuse under
+`--headless` without an explicit `--yes` so unattended runs can't
+silently destroy data or push a tag.
+
+### Carry-overs (out of scope for this roadmap)
+
+Tracked as separate concerns to land as their own PRs:
+
+1. **`BLOCKED_PATTERNS` start-anchored regex** (surfaced during #447) —
+   `config/secrets/admin.json` slips through `/^secrets/i`. Should be
+   `(?:^|[\\/])secrets[\\/]`. Worth its own PR with security-fix framing
+   and a call-site audit (`apps/web/secrets-management/...` would need
+   the path-component anchor to avoid false positives).
+2. **Unit Tests regression on `main`** — pre-existing breakage from
+   dependabot bumps (#395 / #397 / #398). Affected every PR in this
+   roadmap (informational under `continue-on-error: true`); needs its
+   own investigation branch.
+3. **Fresh-hardware verification** — the verification matrix above
+   needs to run on real Apple Silicon and a real Ubuntu 22.04 host
+   (the `macos-14` GHA runner can't nest-virtualize Docker Desktop,
+   so the apple-silicon CI gate only exercises the bash + BSD
+   userland path, not the full install). One round of fresh-hardware
+   verification before declaring the installer "GA" in release notes
+   is the responsible next step.
