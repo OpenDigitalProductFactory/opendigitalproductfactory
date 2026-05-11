@@ -42,6 +42,7 @@ const SEVERITY_CLASS: Record<OperationsMapProjection["severity"], string> = {
 };
 
 const SOURCE_LABEL: Record<OperationsMapProjection["source"], string> = {
+  "task-run": "Task run",
   "tool-execution": "Tool execution",
   "tool-receipt": "Receipt",
   "evidence-backlog": "Backlog evidence",
@@ -49,6 +50,7 @@ const SOURCE_LABEL: Record<OperationsMapProjection["source"], string> = {
 };
 
 const SOURCE_OPTIONS: OperationsMapProjectionSource[] = [
+  "task-run",
   "tool-execution",
   "tool-receipt",
   "evidence-backlog",
