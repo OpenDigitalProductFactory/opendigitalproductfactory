@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBusinessBuildBrief,
+  businessBuildBriefEditToPersistence,
   businessBuildBriefFromRecord,
   canTransitionBusinessBriefStatus,
   getCapabilityPackIdForBrief,
@@ -296,5 +297,41 @@ describe("businessBuildBriefFromRecord", () => {
     expect(brief.capabilityPackId).toBe("build_studio_self_development");
     expect(brief.capabilityPack).toBe("Build Studio / Self-Development");
     expect(brief.confidence).toBe("low");
+  });
+});
+
+describe("businessBuildBriefEditToPersistence", () => {
+  it("normalizes business editor text into persistence fields and legacy gate JSON", () => {
+    const persistence = businessBuildBriefEditToPersistence({
+      briefId: "BBB-FB-123",
+      businessOutcome: "Reduce missed support escalations before standup.",
+      affectedPeopleText: "Support manager\nCustomer success lead",
+      affectedWorkflow: "Customer escalation review",
+      sourceEvidenceText: "Zendesk escalation report\nMorning standup SOP",
+      successSignalsText: "Managers see unresolved escalations by site",
+      constraintsText: "Do not expose customer data across accounts",
+      openQuestionsText: "",
+      accept: true,
+    });
+
+    expect(persistence.status).toBe("accepted");
+    expect(persistence.accepted).toBe(true);
+    expect(persistence.affectedPeople).toEqual([
+      { kind: "persona", label: "Support manager" },
+      { kind: "persona", label: "Customer success lead" },
+    ]);
+    expect(persistence.sourceEvidence).toEqual([
+      expect.objectContaining({ kind: "artifact", summary: "Zendesk escalation report" }),
+      expect.objectContaining({ kind: "artifact", summary: "Morning standup SOP" }),
+    ]);
+    expect(persistence.legacyFeatureBrief).toEqual(
+      expect.objectContaining({
+        title: "BBB-FB-123",
+        description: "Reduce missed support escalations before standup.",
+        portfolioContext: "Customer escalation review",
+        targetRoles: ["Support manager", "Customer success lead"],
+        acceptanceCriteria: ["Managers see unresolved escalations by site"],
+      }),
+    );
   });
 });

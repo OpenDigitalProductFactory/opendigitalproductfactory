@@ -1,11 +1,20 @@
 import { prisma } from "@dpf/db";
 import { getMapTemplate } from "./templates";
-import { projectAgentsToStations, projectToolExecution } from "./project-events";
+import {
+  projectAgentsToStations,
+  projectBacklogEvidence,
+  projectExternalEvidence,
+  projectToolExecution,
+  projectToolExecutionReceipt,
+} from "./project-events";
 import type {
   OperationsMapAgent,
+  OperationsMapBacklogEvidence,
+  OperationsMapExternalEvidence,
   OperationsMapProjection,
   OperationsMapTemplate,
   OperationsMapToolExecution,
+  OperationsMapToolExecutionReceipt,
   StationedOperationsMapAgent,
 } from "./types";
 
@@ -19,7 +28,7 @@ export type OperationsMapData = {
 };
 
 export async function loadOperationsMapData(): Promise<OperationsMapData> {
-  const [storefrontConfig, agents, toolExecutions] = await Promise.all([
+  const [storefrontConfig, agents, toolExecutions, toolReceipts, backlogEvidence, externalEvidence] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
         archetype: {
@@ -73,6 +82,67 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         summary: true,
       },
     }),
+    prisma.toolExecutionReceipt.findMany({
+      orderBy: { createdAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        toolExecutionId: true,
+        buildId: true,
+        receiptKind: true,
+        receiptStatus: true,
+        executionStatus: true,
+        expiresAt: true,
+        createdAt: true,
+        toolExecution: {
+          select: {
+            id: true,
+            threadId: true,
+            agentId: true,
+            userId: true,
+            toolName: true,
+            success: true,
+            executionMode: true,
+            routeContext: true,
+            durationMs: true,
+            createdAt: true,
+            auditClass: true,
+            capabilityId: true,
+            summary: true,
+          },
+        },
+      },
+    }),
+    prisma.backlogItemActivity.findMany({
+      where: { kind: "evidence" },
+      orderBy: { recordedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        backlogItemId: true,
+        kind: true,
+        summary: true,
+        payload: true,
+        recordedAt: true,
+        recordedById: true,
+        recordedByAgentId: true,
+        toolExecutionId: true,
+      },
+    }),
+    prisma.externalEvidenceRecord.findMany({
+      orderBy: { createdAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        actorUserId: true,
+        routeContext: true,
+        operationType: true,
+        target: true,
+        provider: true,
+        resultSummary: true,
+        createdAt: true,
+      },
+    }),
   ]);
 
   const template = getMapTemplate({
@@ -99,11 +169,18 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     },
   }));
 
+  const projections = [
+    ...toolExecutions.map((row) => projectToolExecution(row as OperationsMapToolExecution, template)),
+    ...toolReceipts.map((row) => projectToolExecutionReceipt(row as OperationsMapToolExecutionReceipt, template)),
+    ...backlogEvidence.map((row) => projectBacklogEvidence(row as OperationsMapBacklogEvidence, template)),
+    ...externalEvidence.map((row) => projectExternalEvidence(row as OperationsMapExternalEvidence, template)),
+  ].sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
+
   return {
     template,
     agents: projectAgentsToStations(mapAgents, template),
-    projections: toolExecutions.map((row) => projectToolExecution(row as OperationsMapToolExecution, template)),
-    recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} tool executions`,
+    projections,
+    recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
   };
 }
 

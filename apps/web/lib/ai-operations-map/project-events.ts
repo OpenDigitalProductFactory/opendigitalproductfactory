@@ -3,10 +3,13 @@ import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import type {
   OperationsMapAgent,
+  OperationsMapBacklogEvidence,
+  OperationsMapExternalEvidence,
   OperationsMapProjection,
   OperationsMapSeverity,
   OperationsMapTemplate,
   OperationsMapToolExecution,
+  OperationsMapToolExecutionReceipt,
   StationedOperationsMapAgent,
 } from "./types";
 
@@ -38,7 +41,7 @@ const AGENT_ID_TO_STATION_HINTS: Array<{ pattern: RegExp; stationId: string }> =
   { pattern: /backlog|portfolio|triage|evaluate/i, stationId: "evaluate" },
   { pattern: /architect|design|ux|plan|integrate/i, stationId: "integrate" },
   { pattern: /build|code|developer|specialist/i, stationId: "build" },
-  { pattern: /review|verify|qa|test/i, stationId: "verify" },
+  { pattern: /review|verify|verification|qa|test/i, stationId: "verify" },
   { pattern: /deploy|environment/i, stationId: "deploy" },
   { pattern: /release|deploy|ship/i, stationId: "release" },
   { pattern: /consume|customer|experience/i, stationId: "consume" },
@@ -56,7 +59,7 @@ const ROUTE_CONTEXT_TO_STATION: Array<{ pattern: RegExp; stationId: string }> = 
   { pattern: /backlog|portfolio|triage|evaluate/i, stationId: "evaluate" },
   { pattern: /design|plan|architect|integrate/i, stationId: "integrate" },
   { pattern: /build|sandbox|code/i, stationId: "build" },
-  { pattern: /verify|review|test|qa/i, stationId: "verify" },
+  { pattern: /verify|verification|review|test|qa/i, stationId: "verify" },
   { pattern: /deploy|environment/i, stationId: "deploy" },
   { pattern: /release|deploy|ship/i, stationId: "release" },
   { pattern: /consume|customer|experience/i, stationId: "consume" },
@@ -95,6 +98,14 @@ export function deriveProjectionSeverityFromToolExecution(
 ): OperationsMapSeverity {
   if (row.success) return "normal";
   return row.auditClass === "ledger" ? "critical" : "warning";
+}
+
+export function deriveProjectionSeverityFromToolReceipt(
+  row: Pick<OperationsMapToolExecutionReceipt, "receiptStatus" | "executionStatus">,
+): OperationsMapSeverity {
+  if (row.receiptStatus !== "valid") return "warning";
+  if (/fail|error|denied|rejected/i.test(row.executionStatus)) return "warning";
+  return "normal";
 }
 
 export function projectAgentsToStations(
@@ -145,6 +156,109 @@ export function projectToolExecution(
   };
 }
 
+export function projectToolExecutionReceipt(
+  row: OperationsMapToolExecutionReceipt,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = row.toolExecution
+    ? resolveToolExecutionStationId(row.toolExecution, template)
+    : resolveFallbackStationId(template);
+  const label = `${row.receiptKind} receipt`;
+  const toolExecutionId = row.toolExecution?.id ?? row.toolExecutionId;
+
+  return {
+    id: `receipt:${row.id}`,
+    occurredAt: row.createdAt.toISOString(),
+    actorAgentId: row.toolExecution?.agentId ?? null,
+    source: "tool-receipt",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: deriveProjectionSeverityFromToolReceipt(row),
+    label,
+    summary: `${label} ${row.receiptStatus} for ${row.toolExecution?.toolName ?? row.toolExecutionId}`,
+    refs: {
+      threadId: row.toolExecution?.threadId ?? null,
+      toolExecutionId,
+      toolReceiptId: row.id,
+      buildId: row.buildId,
+      capabilityId: row.toolExecution?.capabilityId ?? null,
+    },
+    links: {
+      authorityHref: row.toolExecution
+        ? `/platform/audit/ledger?toolExecutionId=${encodeURIComponent(toolExecutionId)}`
+        : undefined,
+      coworkerHref: row.toolExecution
+        ? `/platform/ai/agent/${encodeURIComponent(row.toolExecution.agentId)}`
+        : undefined,
+      historyHref: `/platform/ai/history?toolReceiptId=${encodeURIComponent(row.id)}`,
+    },
+  };
+}
+
+export function projectBacklogEvidence(
+  row: OperationsMapBacklogEvidence,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = resolveEvidenceStationId(row.summary, template);
+
+  return {
+    id: `backlog-evidence:${row.id}`,
+    occurredAt: row.recordedAt.toISOString(),
+    actorAgentId: row.recordedByAgentId,
+    source: "evidence-backlog",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: "normal",
+    label: "Backlog evidence",
+    summary: row.summary,
+    refs: {
+      backlogItemActivityId: row.id,
+      backlogItemId: row.backlogItemId,
+      toolExecutionId: row.toolExecutionId,
+    },
+    links: {
+      backlogHref: `/platform/backlog?itemId=${encodeURIComponent(row.backlogItemId)}`,
+      authorityHref: row.toolExecutionId
+        ? `/platform/audit/ledger?toolExecutionId=${encodeURIComponent(row.toolExecutionId)}`
+        : undefined,
+      coworkerHref: row.recordedByAgentId
+        ? `/platform/ai/agent/${encodeURIComponent(row.recordedByAgentId)}`
+        : undefined,
+    },
+  };
+}
+
+export function projectExternalEvidence(
+  row: OperationsMapExternalEvidence,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = resolveRouteStationId(row.routeContext, template) ?? resolveEvidenceStationId(row.resultSummary, template);
+
+  return {
+    id: `external-evidence:${row.id}`,
+    occurredAt: row.createdAt.toISOString(),
+    actorAgentId: null,
+    source: "evidence-external",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: "normal",
+    label: `${row.provider} ${row.operationType}`,
+    summary: row.resultSummary,
+    refs: {
+      externalEvidenceRecordId: row.id,
+    },
+    links: {
+      historyHref: `/platform/ai/history?externalEvidenceRecordId=${encodeURIComponent(row.id)}`,
+    },
+  };
+}
+
 export function summarizeProjectionCounts(projections: OperationsMapProjection[]) {
   return projections.reduce(
     (counts, projection) => ({
@@ -172,14 +286,8 @@ function resolveAgentStationId(agent: OperationsMapAgent, template: OperationsMa
 }
 
 function resolveToolExecutionStationId(row: OperationsMapToolExecution, template: OperationsMapTemplate): string {
-  const routeContext = row.routeContext;
-  const routeDirect = routeContext ? resolveDirectTemplateStationId(routeContext, template) : null;
-  if (routeDirect) return routeDirect;
-
-  const routeHint = routeContext
-    ? ROUTE_CONTEXT_TO_STATION.find((hint) => hint.pattern.test(routeContext))?.stationId
-    : null;
-  if (routeHint && template.stations.some((station) => station.id === routeHint)) return routeHint;
+  const routeStationId = row.routeContext ? resolveRouteStationId(row.routeContext, template) : null;
+  if (routeStationId) return routeStationId;
 
   const agentDirect = resolveDirectTemplateStationId(row.agentId, template);
   if (agentDirect) return agentDirect;
@@ -188,6 +296,20 @@ function resolveToolExecutionStationId(row: OperationsMapToolExecution, template
   if (agentHint && template.stations.some((station) => station.id === agentHint)) return agentHint;
 
   return resolveFallbackStationId(template);
+}
+
+function resolveEvidenceStationId(value: string, template: OperationsMapTemplate): string {
+  return resolveRouteStationId(value, template) ?? resolveFallbackStationId(template);
+}
+
+function resolveRouteStationId(value: string, template: OperationsMapTemplate): string | null {
+  const routeDirect = resolveDirectTemplateStationId(value, template);
+  if (routeDirect) return routeDirect;
+
+  const routeHint = ROUTE_CONTEXT_TO_STATION.find((hint) => hint.pattern.test(value))?.stationId;
+  if (routeHint && template.stations.some((station) => station.id === routeHint)) return routeHint;
+
+  return null;
 }
 
 function resolveValueStreamStationId(valueStream: string, template: OperationsMapTemplate): string | null {
