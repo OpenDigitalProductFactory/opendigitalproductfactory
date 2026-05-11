@@ -7,6 +7,9 @@ import type {
   OperationsMapExternalEvidence,
   OperationsMapProjection,
   OperationsMapProjectionFilters,
+  OperationsMapProjectionSource,
+  OperationsMapQuickView,
+  OperationsMapQuickViewId,
   OperationsMapSeverity,
   OperationsMapTemplate,
   OperationsMapToolExecution,
@@ -72,6 +75,63 @@ const ROUTE_CONTEXT_TO_STATION: Array<{ pattern: RegExp; stationId: string }> = 
   { pattern: /billing|charge|invoice/i, stationId: "billing-readiness" },
   { pattern: /lifecycle|renewal|review/i, stationId: "lifecycle-review" },
 ];
+
+const ALL_PROJECTION_SOURCES: OperationsMapProjectionSource[] = [
+  "tool-execution",
+  "tool-receipt",
+  "evidence-backlog",
+  "evidence-external",
+];
+
+const ALL_PROJECTION_SEVERITIES: OperationsMapSeverity[] = ["normal", "attention", "warning", "critical"];
+
+export const OPERATIONS_MAP_QUICK_VIEWS = [
+  {
+    id: "all",
+    label: "All activity",
+    description: "Show every projected activity source and severity.",
+    filters: {
+      sources: ALL_PROJECTION_SOURCES,
+      severities: ALL_PROJECTION_SEVERITIES,
+    },
+  },
+  {
+    id: "exceptions",
+    label: "Exceptions",
+    description: "Show activity that needs attention, warning, or critical review.",
+    filters: {
+      sources: ALL_PROJECTION_SOURCES,
+      severities: ["attention", "warning", "critical"],
+    },
+  },
+  {
+    id: "evidence",
+    label: "Evidence only",
+    description: "Show receipts, backlog evidence, and external evidence records.",
+    filters: {
+      sources: ["tool-receipt", "evidence-backlog", "evidence-external"],
+      severities: ALL_PROJECTION_SEVERITIES,
+    },
+  },
+  {
+    id: "tool-runs",
+    label: "Tool runs",
+    description: "Show raw tool execution events only.",
+    filters: {
+      sources: ["tool-execution"],
+      severities: ALL_PROJECTION_SEVERITIES,
+    },
+  },
+] satisfies OperationsMapQuickView[];
+
+export function getOperationsMapQuickViewFilters(viewId: OperationsMapQuickViewId): OperationsMapProjectionFilters {
+  const view = OPERATIONS_MAP_QUICK_VIEWS.find((candidate) => candidate.id === viewId) ?? OPERATIONS_MAP_QUICK_VIEWS[0];
+
+  return {
+    sources: [...view.filters.sources],
+    severities: [...view.filters.severities],
+  };
+}
 
 export function deriveProjectionSeverityFromTaskState(state: TaskState): OperationsMapSeverity {
   switch (state) {
