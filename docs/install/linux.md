@@ -200,8 +200,12 @@ Run `bash install-dpf.sh doctor` to capture a diagnostic bundle at
 `docker compose -f docker-compose.yml -f docker-compose.linux.yml logs portal --tail 100`.
 
 **Port 3000 already in use.**
-Stop whatever is binding it (`sudo lsof -i :3000`) before re-running.
-Phase 10 of the installer roadmap adds upfront port-conflict detection.
+The installer's port preflight refuses to proceed if port 3000 is
+bound by a non-DPF process, naming the holder and exit code 64.
+Stop the conflicting process (`sudo lsof -nP -iTCP:3000 -sTCP:LISTEN`)
+or set `DPF_PORTAL_PORT` to an unused port before re-running. Force
+through with `DPF_PORT_CONFLICTS_IGNORE=1` if you know the holder
+won't actually conflict at compose-up time.
 
 **Ollama model pull stalls.**
 Watch the pull progress:
