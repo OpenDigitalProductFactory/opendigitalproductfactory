@@ -69,11 +69,13 @@ Both modes include the full platform with AI coworkers, Build Studio sandbox, an
 
 ### Quick Start
 
-| Platform | Install command | Full guide |
-|----------|-----------------|------------|
-| **Windows 10/11** | `powershell -ExecutionPolicy Bypass -File install-dpf.ps1` | (see below) |
-| **macOS Apple Silicon** | `bash install-dpf.sh` | [docs/install/macos.md](docs/install/macos.md) |
-| **Linux (native Docker)** | `bash install-dpf.sh` | [docs/install/linux.md](docs/install/linux.md) |
+| Platform | Install command | Full guide | Status |
+|----------|-----------------|------------|--------|
+| **Windows 10/11** | `powershell -ExecutionPolicy Bypass -File install-dpf.ps1` | (see below) | **GA** — production usage by real users |
+| **macOS Apple Silicon** | `bash install-dpf.sh` | [docs/install/macos.md](docs/install/macos.md) | **preview** — code shipped, runtime verification pending |
+| **Linux (native Docker)** | `bash install-dpf.sh` | [docs/install/linux.md](docs/install/linux.md) | **preview** — code shipped, runtime verification pending |
+
+The macOS and Linux installers have all their code on `main` and pass static CI gates (`shellcheck`, `docker compose config`, `install-dpf.sh --dry-run`), but the end-to-end runtime path has not yet been verified on real hardware. An ubuntu-latest end-to-end CI gate runs the full install on demand (`.github/workflows/install-verification.yml`); Apple Silicon, distro coverage beyond Ubuntu, and autostart-after-reboot still need fresh-hardware verification per [docs/install/verification-runbook.md](docs/install/verification-runbook.md) before either tier is promoted to GA.
 
 Choose your mode when prompted. The installer handles Docker (Desktop on Windows / Mac, distro pkg manager on Linux), hardware detection, AI model selection, credential generation, and auto-start. Expect 5–10 minutes for the platform itself, plus additional time for the initial AI model download.
 
@@ -237,7 +239,7 @@ Publication outputs are generated from the Markdown sources of truth:
 | EA Modeling | ArchiMate 4 canvas, viewpoints, relationship rules, structured value streams |
 | AI Provider Registry | 17 providers, credential management, model discovery, profiling, cost tracking |
 | AI Coworker | Live LLM conversations, automatic failover, context-aware skills dropdown |
-| Docker Deployment | Zero-prerequisites installers for Windows (GA), macOS Apple Silicon ([guide](docs/install/macos.md)), and native Linux ([guide](docs/install/linux.md)). Multi-arch GHCR images. Lifecycle scripts (start/stop/reinstall/release) on all three. CI release gates per the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). |
+| Docker Deployment | Zero-prerequisites Windows installer (GA — production usage). Code-complete macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)) installers in **preview** — static CI gates green, runtime verification matrix in flight per [docs/install/verification-runbook.md](docs/install/verification-runbook.md). Multi-arch GHCR images. Lifecycle scripts on all three platforms. |
 
 ### What's coming
 
@@ -248,7 +250,7 @@ Publication outputs are generated from the Markdown sources of truth:
 | **AI-Guided Setup Wizard** | On first install, the AI coworker walks you through company setup conversationally — no forms, just a conversation. |
 | **In-App PR Workflow** | Submit customizations back to the community directly from the platform UI. |
 | **Web-Hosted SaaS** | Customer-cloud deployment via Terraform on AWS / GCP / Azure — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). DPF stays single-tenant; "SaaS" here means "customer hosts on rented compute," not multi-tenant. |
-| **Mac & Linux Installers** | Native macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)) installers have landed alongside the Windows GA installer. The [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) tracks remaining hardening (CI release gates, long-tail discovery). |
+| **Mac & Linux Installers** | Code is complete for native macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)) and merged on `main`. Currently **preview** — runtime verification on real hardware is the remaining gate before GA promotion. The [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) ships code; the [verification runbook](docs/install/verification-runbook.md) tracks the end-to-end gates that need to land before either tier is promoted. |
 | **TAPPaaS Module** | Self-hosted private-platform packaging via [TAPPaaS](https://tappaas.org/) — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). |
 
 ---

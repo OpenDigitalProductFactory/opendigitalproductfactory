@@ -3,6 +3,16 @@
 This is the end-user install guide for the Open Digital Product Factory
 on **native Linux Docker Engine** (no Docker Desktop).
 
+> **Status: preview.** The Linux installer code is complete and passes
+> static CI gates. An on-demand end-to-end install gate runs the full
+> compose stack on `ubuntu-latest`
+> ([`.github/workflows/install-verification.yml`](../../.github/workflows/install-verification.yml));
+> distro coverage beyond Ubuntu (Debian 12, Fedora 39) and the
+> autostart-after-reboot path still need fresh-hardware verification
+> per [verification-runbook.md](verification-runbook.md) before
+> promotion to GA. The Windows installer remains the only GA install
+> surface today.
+
 For the architectural background, see the
 [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
 and the [deployment doctrine](../superpowers/specs/2026-05-09-deployment-contracts.md).
