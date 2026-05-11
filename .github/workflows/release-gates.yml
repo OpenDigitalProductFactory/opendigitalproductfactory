@@ -1,0 +1,217 @@
+name: Installer Release Gates
+
+# Per the installer-parity roadmap Phase 9b (CI release gates). Three
+# fast gates plus one paid macos-14 gate, all path-filtered so they
+# only run when installer-touching files change. Image-manifests
+# verification lives in publish-image.yml (Phase 1) and runs on tag
+# push, not here.
+#
+# Gates:
+#   - compose-render   Asserts docker-compose.{yml,macos.yml,linux.yml,release.yml}
+#                      render cleanly for every (mode × platform) combo.
+#                      Catches overlay merge regressions before they
+#                      reach an end-user's host.
+#   - shellcheck       Static lint on the bash installer surface.
+#                      Bash 3.2 target so macOS's stock /bin/bash works.
+#   - linux-smoke      Runs `bash install-dpf.sh --dry-run --headless`
+#                      on ubuntu-22.04 to validate preflight, state
+#                      init, and compose chain on the lowest supported
+#                      Linux LTS.
+#   - apple-silicon    Same dry-run on a macos-14 runner so the bash
+#                      installer's path on arm64 + BSD userland stays
+#                      green. macos-14 minutes are ~10x ubuntu-latest,
+#                      so this is path-filtered.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "install-dpf.sh"
+      - "uninstall-dpf.sh"
+      - "dpf-*.sh"
+      - "scripts/installer/**"
+      - "scripts/setup.sh"
+      - "scripts/detect-hardware-host.ts"
+      - "docker-compose*.yml"
+      - ".env.docker.example"
+      - "docker-entrypoint.sh"
+      - ".github/workflows/release-gates.yml"
+  push:
+    branches: [main]
+    paths:
+      - "install-dpf.sh"
+      - "uninstall-dpf.sh"
+      - "dpf-*.sh"
+      - "scripts/installer/**"
+      - "scripts/setup.sh"
+      - "scripts/detect-hardware-host.ts"
+      - "docker-compose*.yml"
+      - ".env.docker.example"
+      - "docker-entrypoint.sh"
+      - ".github/workflows/release-gates.yml"
+
+concurrency:
+  group: release-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-render:
+    name: Compose Render Policy (${{ matrix.mode }} / ${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [dev, release]
+        platform: [linux, macos]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Render compose chain
+        env:
+          # Placeholder values so variable substitution succeeds.
+          # docker compose config doesn't connect to a daemon — it
+          # just parses + merges YAML — so the values themselves are
+          # irrelevant for the render check.
+          DPF_HOST_INSTALL_PATH: /tmp/dpf
+          AUTH_SECRET: ci-placeholder
+          CREDENTIAL_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+          ADMIN_PASSWORD: ci-placeholder
+          POSTGRES_PASSWORD: ci-placeholder
+          NEO4J_AUTH: neo4j/ci-placeholder
+          DATABASE_URL: postgresql://dpf:ci-placeholder@postgres:5432/dpf
+        run: |
+          set -euo pipefail
+          chain=("-f" "docker-compose.yml")
+          if [ "${{ matrix.mode }}" = "release" ]; then
+            chain+=("-f" "docker-compose.release.yml")
+          fi
+          chain+=("-f" "docker-compose.${{ matrix.platform }}.yml")
+          echo "Rendering: docker compose ${chain[*]} config"
+          docker compose "${chain[@]}" config > /tmp/rendered.yml
+          echo "::group::Rendered compose (first 80 lines)"
+          head -80 /tmp/rendered.yml
+          echo "::endgroup::"
+          # Sanity: rendered output must include the portal service.
+          grep -q "^  portal:" /tmp/rendered.yml || {
+            echo "::error::Rendered compose is missing the portal service."
+            exit 1
+          }
+
+  shellcheck:
+    name: Shellcheck (installer surface)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: shellcheck --version
+        run: shellcheck --version
+
+      - name: Lint installer scripts (bash 3.2 target)
+        # Bash 3.2 is the baseline for the macOS stock /bin/bash. We
+        # surface warnings but only fail on errors so style nits don't
+        # block the release gates — those should be cleaned up
+        # incrementally, not by gating PRs on them.
+        run: |
+          set -euo pipefail
+          targets=(
+            install-dpf.sh
+            uninstall-dpf.sh
+            dpf-start.sh
+            dpf-stop.sh
+            dpf-reinstall.sh
+            dpf-release.sh
+            scripts/setup.sh
+          )
+          targets+=( $(ls scripts/installer/lib/*.sh) )
+          echo "::group::Targets"
+          printf '  %s\n' "${targets[@]}"
+          echo "::endgroup::"
+          shellcheck --shell=bash --severity=error "${targets[@]}"
+
+  linux-smoke:
+    name: Linux Smoke (ubuntu-22.04 dry-run)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Run install-dpf.sh --dry-run --headless --dev
+        # Validates: preflight passes on Ubuntu 22.04 LTS; install-state
+        # initialization works; compose chain resolves to base + linux
+        # overlay; the dry-run gate exits cleanly without touching
+        # docker, the autostart unit, or the .env file.
+        run: bash install-dpf.sh --dry-run --headless --dev
+
+      - name: Run install-dpf.sh --dry-run --headless --release
+        # Same gate but with the release overlay engaged, so a regression
+        # in docker-compose.release.yml doesn't slip through.
+        run: bash install-dpf.sh --dry-run --headless --release
+
+      - name: Smoke-test all lifecycle scripts (--help / --dry-run)
+        run: |
+          set -euo pipefail
+          bash dpf-start.sh --help     > /dev/null
+          bash dpf-stop.sh --help      > /dev/null
+          bash dpf-reinstall.sh --help > /dev/null
+          bash dpf-release.sh --help   > /dev/null
+          bash dpf-start.sh --dry-run > /dev/null
+          bash dpf-stop.sh --dry-run  > /dev/null
+          # uninstall: soft + purge variants
+          bash uninstall-dpf.sh --dry-run --headless                 > /dev/null
+          bash uninstall-dpf.sh --dry-run --headless --purge --yes   > /dev/null
+          # Refusal contract: --headless --purge without --yes must exit 1
+          if bash uninstall-dpf.sh --headless --purge > /dev/null 2>&1; then
+            echo "::error::uninstall-dpf.sh --headless --purge accepted without --yes (must refuse)"
+            exit 1
+          fi
+          echo "All lifecycle scripts pass --help / --dry-run smoke."
+
+  apple-silicon-dry-run:
+    name: Apple Silicon Dry-Run (macos-14)
+    runs-on: macos-14
+    timeout-minutes: 10
+    # macos-14 minutes are paid at ~10x ubuntu-latest. The workflow-level
+    # path filter already restricts triggering to installer-touching
+    # changes, so this only runs when there's a genuine reason to
+    # verify the bash installer on arm64 + BSD userland.
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Run install-dpf.sh --dry-run --headless --dev
+        # Catches BSD-vs-GNU userland regressions (sed -i, mktemp,
+        # date formats, bash 3.2 syntax). The macos-14 runner has
+        # /bin/bash at 3.2.57, matching what end users get on a stock
+        # macOS host.
+        run: bash install-dpf.sh --dry-run --headless --dev
+
+      - name: Run install-dpf.sh --dry-run --headless --release
+        run: bash install-dpf.sh --dry-run --headless --release
+
+      # Compose-render coverage for docker-compose.macos.yml lives in the
+      # `compose-render (* / macos)` matrix on ubuntu-latest. macos-14
+      # runners don't ship Docker, so asserting render here would
+      # either require a paid `brew install` step or fail at exit 127.
+      # `docker compose config` is platform-agnostic YAML parsing — it
+      # doesn't depend on the host userland — so the ubuntu coverage
+      # is sufficient.
