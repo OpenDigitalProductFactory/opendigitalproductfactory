@@ -24,8 +24,8 @@ type Props = {
 const SEVERITY_CLASS: Record<OperationsMapProjection["severity"], string> = {
   normal: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]",
   attention: "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]",
-  warning: "border-[var(--dpf-state-warning)] bg-[color-mix(in_srgb,var(--dpf-state-warning)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
-  critical: "border-[var(--dpf-state-error)] bg-[color-mix(in_srgb,var(--dpf-state-error)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
+  warning: "border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
+  critical: "border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
 };
 
 export function AiOperationsMap({ template, agents, projections, recentWindowLabel }: Props) {

@@ -2,12 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    agent: {
-      findMany: vi.fn(),
-    },
-    toolExecution: {
-      findMany: vi.fn(),
-    },
+    storefrontConfig: { findFirst: vi.fn() },
+    agent: { findMany: vi.fn() },
+    toolExecution: { findMany: vi.fn() },
   },
 }));
 
@@ -22,7 +19,7 @@ vi.mock("next/link", () => ({
 import { prisma } from "@dpf/db";
 
 describe("AI operations map page", () => {
-  it("renders the software platform map with coworkers, tool pulses, and drill-down links", async () => {
+  it("renders the selected map with coworkers, tool pulses, and drill-down links", async () => {
     vi.mocked(prisma.agent.findMany).mockResolvedValue([
       {
         id: "agent-db-1",
@@ -63,8 +60,8 @@ describe("AI operations map page", () => {
     const element = await OperationsMapPage();
     const props = element.props;
 
-    expect(props.template.label).toBe("Software Platform Operations");
-    expect(props.template.stations.map((station: { label: string }) => station.label)).toContain("Discover");
+    expect(props.template.label).toBe("Generic Value Chain");
+    expect(props.template.stations.map((station: { label: string }) => station.label)).toContain("Demand");
     expect(props.agents.map((agent: { name: string }) => agent.name)).toContain("Build Specialist");
     expect(props.projections.map((projection: { label: string }) => projection.label)).toContain("write_sandbox_file");
     expect(props.projections.map((projection: { summary: string }) => projection.summary)).toContain("Write blocked by policy");
