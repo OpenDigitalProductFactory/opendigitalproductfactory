@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getOperationsMapQuickViewFilters } from "@/lib/ai-operations-map/project-events";
 import {
+  clearOperationsMapViewPreference,
   loadOperationsMapViewPreference,
   OPERATIONS_MAP_VIEW_PREFERENCE_KEY,
   saveOperationsMapViewPreference,
@@ -12,6 +13,9 @@ const localStorageMock = {
   getItem: (key: string) => store.get(key) ?? null,
   setItem: (key: string, value: string) => {
     store.set(key, value);
+  },
+  removeItem: (key: string) => {
+    store.delete(key);
   },
   clear: () => {
     store.clear();
@@ -70,6 +74,24 @@ describe("AI operations map preferences", () => {
       },
     }));
 
+    expect(loadOperationsMapViewPreference()).toEqual({
+      quickViewId: "all",
+      filters: getOperationsMapQuickViewFilters("all"),
+    });
+  });
+
+  it("clears stored preferences back to the default view", () => {
+    saveOperationsMapViewPreference({
+      quickViewId: "custom",
+      filters: {
+        sources: ["tool-execution"],
+        severities: ["warning"],
+      },
+    });
+
+    clearOperationsMapViewPreference();
+
+    expect(store.has(OPERATIONS_MAP_VIEW_PREFERENCE_KEY)).toBe(false);
     expect(loadOperationsMapViewPreference()).toEqual({
       quickViewId: "all",
       filters: getOperationsMapQuickViewFilters("all"),
