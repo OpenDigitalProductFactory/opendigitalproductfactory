@@ -20,7 +20,7 @@
 - Tasks 4-5 implemented as reusable Playwright fixtures plus three route-family smoke projects for `/build`, `/platform/tools/discovery`, and `/ops`.
 - Task 6 implemented by linking the manual QA plan to `apps/web/lib/testing/route-contracts.ts`.
 - Task 7 verification completed for focused Vitest, web typecheck, targeted Playwright route smokes, and `pnpm --filter web build`.
-- Task 8 remains a follow-up slice for governed backlog integration of functional failure evidence.
+- Task 8 implemented in stacked branch `chore/ai-routing-evidence-backlog-loop`: functional failure evidence now has a governed MCP tool path that dedupes repeated failures by fingerprint, creates or updates a backlog item, and appends evidence activity without Playwright using direct DB access.
 
 ---
 
