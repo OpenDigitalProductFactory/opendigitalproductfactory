@@ -1,6 +1,8 @@
 "use client";
-import { AlertCircle, CheckCircle2, FileText, Target, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileText, Pencil, Save, Target, Users } from "lucide-react";
 import type { ReactNode } from "react";
+import { useState, useTransition } from "react";
+import { updateBusinessBuildBrief } from "@/lib/actions/build";
 import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
 
 interface Props {
@@ -36,8 +38,74 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="m-0 text-[13px] text-[var(--dpf-muted)]">{children}</p>;
 }
 
+function textFromList(values: string[]): string {
+  return values.join("\n");
+}
+
+function textFromEvidence(brief: BusinessBuildBrief): string {
+  return brief.sourceEvidence.map((evidence) => evidence.summary).join("\n");
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  rows = 3,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows?: number;
+}) {
+  return (
+    <label className="grid gap-1.5 text-[13px] font-semibold text-[var(--dpf-text)]">
+      {label}
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={rows}
+        className="min-h-20 resize-y rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-[13px] font-normal leading-5 text-[var(--dpf-text)] outline-none transition-colors focus:border-[var(--dpf-accent)]"
+      />
+    </label>
+  );
+}
+
 export function BusinessBriefPanel({ brief }: Props) {
   const needsClarification = brief.openQuestions.length > 0;
+  const [isEditing, setIsEditing] = useState(Boolean(brief.briefId));
+  const [isPending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [businessOutcome, setBusinessOutcome] = useState(brief.businessOutcome);
+  const [affectedPeopleText, setAffectedPeopleText] = useState(textFromList(brief.affectedPeople));
+  const [affectedWorkflow, setAffectedWorkflow] = useState(brief.affectedWorkflow ?? "");
+  const [sourceEvidenceText, setSourceEvidenceText] = useState(textFromEvidence(brief));
+  const [successSignalsText, setSuccessSignalsText] = useState(textFromList(brief.successSignals));
+  const [constraintsText, setConstraintsText] = useState(textFromList(brief.constraints));
+  const [openQuestionsText, setOpenQuestionsText] = useState(textFromList(brief.openQuestions));
+
+  function saveBrief(accept: boolean) {
+    const briefId = brief.briefId;
+    if (!briefId) return;
+    setMessage(null);
+    startTransition(async () => {
+      try {
+        await updateBusinessBuildBrief({
+          briefId,
+          businessOutcome,
+          affectedPeopleText,
+          affectedWorkflow,
+          sourceEvidenceText,
+          successSignalsText,
+          constraintsText,
+          openQuestionsText,
+          accept,
+        });
+        setMessage(accept ? "Brief accepted." : "Brief saved.");
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "The brief could not be saved.");
+      }
+    });
+  }
 
   return (
     <div className="h-full overflow-auto bg-[var(--dpf-bg)] text-[var(--dpf-text)]">
@@ -63,7 +131,58 @@ export function BusinessBriefPanel({ brief }: Props) {
         <h2 className="m-0 text-[17px] font-bold tracking-normal text-[var(--dpf-text)]">
           {brief.title}
         </h2>
+        {brief.briefId && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditing((value) => !value)}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-[12px] font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)]"
+            >
+              <Pencil size={13} />
+              Edit brief
+            </button>
+            {message && (
+              <span className="text-[12px] font-medium text-[var(--dpf-muted)]">
+                {message}
+              </span>
+            )}
+          </div>
+        )}
       </header>
+
+      {brief.briefId && isEditing && (
+        <Section title="Edit business brief">
+          <div className="grid gap-3">
+            <Field label="Business outcome" value={businessOutcome} onChange={setBusinessOutcome} rows={4} />
+            <Field label="Affected people" value={affectedPeopleText} onChange={setAffectedPeopleText} />
+            <Field label="Affected workflow" value={affectedWorkflow} onChange={setAffectedWorkflow} rows={2} />
+            <Field label="Source evidence" value={sourceEvidenceText} onChange={setSourceEvidenceText} />
+            <Field label="Success signals" value={successSignalsText} onChange={setSuccessSignalsText} />
+            <Field label="Constraints" value={constraintsText} onChange={setConstraintsText} />
+            <Field label="Open questions" value={openQuestionsText} onChange={setOpenQuestionsText} />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => saveBrief(false)}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-[13px] font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={14} />
+                Save brief
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => saveBrief(true)}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--dpf-accent)] px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CheckCircle2 size={14} />
+                Accept brief
+              </button>
+            </div>
+          </div>
+        </Section>
+      )}
 
       <Section title="Business outcome">
         <p className="m-0 max-w-3xl text-[14px] leading-6 text-[var(--dpf-text)]">
