@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AUDIT_CLASSES } from "@/lib/audit-classes";
 import { TASK_STATES } from "@/lib/tak/task-states";
 import {
+  MANAGED_SERVICE_PROVIDER_MAP_TEMPLATE,
   SOFTWARE_PLATFORM_MAP_TEMPLATE,
   getMapTemplate,
   validateMapTemplate,
@@ -17,19 +18,42 @@ describe("AI operations map projection", () => {
   it("ships a valid software-platform template with stable stations", () => {
     expect(SOFTWARE_PLATFORM_MAP_TEMPLATE.id).toBe("software-platform");
     expect(SOFTWARE_PLATFORM_MAP_TEMPLATE.stations.map((station) => station.id)).toEqual([
-      "discover",
-      "backlog",
-      "design",
+      "cross-cutting",
+      "explore",
+      "evaluate",
+      "integrate",
       "build",
       "verify",
+      "deploy",
       "release",
-      "support",
-      "improve",
+      "consume",
+      "operate",
+      "governance",
+      "unplaced",
     ]);
 
     expect(validateMapTemplate(SOFTWARE_PLATFORM_MAP_TEMPLATE)).toEqual([]);
     expect(getMapTemplate("software-platform").id).toBe("software-platform");
     expect(getMapTemplate("unknown-archetype").id).toBe("generic-value-chain");
+  });
+
+  it("selects a managed service provider template from archetype or activation profile", () => {
+    expect(MANAGED_SERVICE_PROVIDER_MAP_TEMPLATE.stations.map((station) => station.id)).toEqual([
+      "customer-intake",
+      "triage",
+      "agreements",
+      "service-operations",
+      "customer-estate",
+      "billing-readiness",
+      "lifecycle-review",
+      "improvement",
+    ]);
+
+    expect(validateMapTemplate(MANAGED_SERVICE_PROVIDER_MAP_TEMPLATE)).toEqual([]);
+    expect(getMapTemplate("it-managed-services").id).toBe("managed-service-provider");
+    expect(getMapTemplate({ archetypeId: "custom-msp", activationProfileType: "managed-service-provider" }).id).toBe(
+      "managed-service-provider",
+    );
   });
 
   it("maps every canonical task state to a projection severity", () => {
@@ -53,14 +77,16 @@ describe("AI operations map projection", () => {
       makeAgent({ agentId: "hive-scout", name: "Hive Scout", valueStream: "explore" }),
       makeAgent({ agentId: "build-specialist", name: "Build Specialist", valueStream: null }),
       makeAgent({ agentId: "release-manager", name: "Release Manager", valueStream: "release" }),
+      makeAgent({ agentId: "unknown-agent", name: "Unknown Agent", valueStream: "mystery" }),
     ];
 
     const projected = projectAgentsToStations(agents, SOFTWARE_PLATFORM_MAP_TEMPLATE);
 
     expect(projected.map((agent) => [agent.agentId, agent.stationId])).toEqual([
-      ["hive-scout", "discover"],
+      ["hive-scout", "explore"],
       ["build-specialist", "build"],
       ["release-manager", "release"],
+      ["unknown-agent", "unplaced"],
     ]);
   });
 

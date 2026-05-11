@@ -19,9 +19,9 @@
 **Create:**
 
 - `apps/web/lib/ai-operations-map/types.ts` — view-layer types: `MapTemplate`, `MapLine`, `MapStation`, `MapProjection`, view DTOs (`ToolExecutionView`, `ToolExecutionReceiptView`, `BacklogItemActivityView`, `ExternalEvidenceRecordView`), `ActorRef`.
-- `apps/web/lib/ai-operations-map/templates.ts` — the software-platform template (`software-platform`) with stable line/station ids: `discover`, `backlog`, `design`, `build`, `verify`, `release`, `support`, `improve`.
-- `apps/web/lib/ai-operations-map/project-events.ts` — pure functions: `projectToolExecution`, `projectToolReceipt`, `projectBacklogActivity`, `projectExternalEvidence`, `projectAgentEvent`, `synthesizeHandoff`, `deriveSeverity`, `dedupeByToolExecution`.
-- `apps/web/lib/ai-operations-map/load-projection.ts` — server-side fetcher that takes `{ organizationId, since, viewerCapabilities }` and returns `MapProjection[]` from Prisma.
+- `apps/web/lib/ai-operations-map/templates.ts` — the software-platform template (`software-platform`) with stable IT4IT-aligned station ids: `explore`, `evaluate`, `integrate`, `build`, `verify`, `deploy`, `release`, `consume`, `operate`. Plus `governance` (support band) and `cross-cutting` (top band). These match the `value_stream` field on `packages/db/data/agent_registry.json`, so auto-placement is `agent.value_stream → station`.
+- `apps/web/lib/ai-operations-map/project-events.ts` — pure functions: `projectToolExecution`, `projectToolReceipt`, `projectBacklogActivity`, `projectExternalEvidence`, `projectAgentEvent`, `synthesizeHandoff`, `deriveSeverity`, `dedupeByToolExecution`, `placeOnStation` (uses `Agent.value_stream` + `agent_name` prefix for `build-*` placement; unknown `value_stream` lands in the "unplaced" lane).
+- `apps/web/lib/ai-operations-map/load-projection.ts` — server-side fetcher that takes `{ organizationId, since, viewerCapabilities, limit }` and returns `MapProjection[]` from Prisma. Five parallel queries (see spec §Performance Budget); enforces `since ≤ 1h` by default, `≤ 24h` for operator override, `≤ 7d` requires Auditor tier; `limit = 250` per source; adds dev-mode assertion that no cross-org rows leak.
 - `apps/web/lib/ai-operations-map/access.ts` — derives view tier (`operator | reviewer | auditor | admin`) from `EffectiveAuthContext` and applies redaction.
 - `apps/web/lib/ai-operations-map/project-events.test.ts`
 - `apps/web/lib/ai-operations-map/load-projection.test.ts`
@@ -72,18 +72,23 @@
 Per superpowers:test-driven-development — write the tests first, watch them fail for the right reason, then implement.
 
 - [ ] **`project-events.test.ts`:** assert
-  - software-platform template has the 8 stations and lines with stable ids; every line references existing stations
+  - software-platform template has stations `explore`, `evaluate`, `integrate`, `build`, `verify`, `deploy`, `release`, `consume`, `operate` plus `governance` (support band) and `cross-cutting` (top band); every line references existing stations; ids are stable
+  - `placeOnStation` maps each value in `Agent.value_stream` to the expected station id; `build-*` agents land on `build` or `verify` per agent_name prefix; unknown `value_stream` lands in the "unplaced" lane and **does not throw**
   - `deriveSeverity` is exhaustive over `TaskState` (build fails if a new state is added without a mapping)
-  - `deriveSeverity` is exhaustive over the `auditClass` values used by `mcp-governed-execute.ts` (read the union from there, don't duplicate it)
+  - `deriveSeverity` is exhaustive over the `auditClass` values used by `mcp-governed-execute.ts` (read the union from there, don't duplicate it); unknown `auditClass` produces `severity: "warning"` (fail safe)
   - `projectToolExecution` produces `severity = "critical"` for `success=false` + `auditClass ∈ {destructive, sensitive}`, `"warning"` otherwise for `success=false`, `"normal"` for `success=true`
   - `projectAgentEvent` covers `task:status`, `tool:start`, `tool:complete`, `verification:complete`, `queue:escalation`, `orchestrator:task_dispatched`, `async:failed`, `error`, `deliberation:degraded_diversity`
+  - `projectAgentEvent` **default branch**: an unknown discriminant produces a `severity: "normal"` projection with the raw event in `kind.event`, **never throws**, and logs the discriminant once per session (forward-compat invariant from spec §Forward Compatibility)
   - `dedupeByToolExecution` collapses a `tool:start` + matching `ToolExecution` row within ±2s into a single projection where `source === "tool-execution"`
   - `synthesizeHandoff` correlates `queue:escalation` + `orchestrator:task_dispatched` events by `threadId|buildId` into a single `source === "handoff"` projection
   - every projection produces working refs that resolve to a real source id (trace-integrity invariant)
 - [ ] **`load-projection.test.ts`:** with Prisma mocked, assert
-  - cross-organization rows are filtered (seed two orgs in fixtures; only the viewer's org appears)
+  - cross-organization rows are filtered (seed two orgs in fixtures; only the viewer's org appears); in dev mode (`NODE_ENV !== "production"`), a stray cross-org row **throws** so seeding bugs surface immediately
   - identity resolution: every `actor.principalId` resolves through a `PrincipalAlias` row; no `Agent.id` leaks
-  - source set matches the spec's §Sources table
+  - source set matches the spec's §Sources table (five parallel queries, no more, no fewer)
+  - `since` clamping: default 1h; viewer with only `view_platform` cannot exceed 24h; 7d requires `view_compliance`
+  - per-source `limit = 250`; the "more in this window" affordance is emitted when any source hits the limit
+  - all five source queries fire in parallel (`Promise.all`); the test asserts call ordering via mocked timers
 - [ ] **`access.test.ts`:** assert
   - viewer with only `view_platform` sees `summary`-only projections (`ToolExecution.parameters` and `result` are not in the payload)
   - viewer with `view_platform` + `view_compliance` (Auditor) sees full payload
@@ -103,13 +108,18 @@ Per superpowers:test-driven-development — write the tests first, watch them fa
 
 - [ ] **`page.test.tsx`:** with `@dpf/db` mocked and `getEffectiveAuthContext` stubbed to a `view_platform`-only user, assert the page heading renders, the software-platform stations render, the inspector is keyboard-reachable from the first station, and no `parameters` payload appears in the DOM. Then re-stub with `view_compliance` and assert the payload does appear.
 - [ ] **`AiOperationsMap.test.tsx`:** assert
-  - renders with empty projection (no events) — no errors, all stations show "Idle"
+  - renders with empty projection (no events) — no errors, all stations show "Idle", banner "No activity in the last hour"
   - renders an active tool pulse from a `source: "tool-execution"` projection
   - renders a "BLOCKED" / "DEGRADED" badge with label + shape (not color alone)
   - opens inspector on station / coworker / gate / pulse selection
   - inspector exposes the deep link to `/platform/ai/history?toolExecutionId=...` (or equivalent for receipt / evidence)
-  - keyboard: Tab moves between focusable elements in DOM order; Enter / Space activates; Esc closes inspector
+  - keyboard: Tab moves between focusable elements in DOM order; Enter / Space activates; Esc closes inspector and restores focus to the trigger
   - reduced-motion: with `matchMedia('(prefers-reduced-motion: reduce)')` true, no animation-driving classes are applied; `aria-live="polite"` region still updates with state labels
+  - **failure modes** (from spec §Failure Modes):
+    - when `loadProjection` returns `{ projections: [], sourceErrors: ["tool-receipt"] }`, the receipt-source banner renders per affected station and the rest of the map continues to render
+    - when `loadProjection` throws, the full-page error renders with the actual error message (not a generic placeholder) and a retry button
+  - **forward-compat**: a projection with an unknown `kind.event.type` renders as a quiet generic badge with the discriminant in the inspector — does **not** crash
+  - **responsive**: at 1024px viewport (jsdom override), support/cross-cutting bands collapse; at 480px the schematic is replaced by a stacked-list view
 - [ ] **`platform-nav.test.ts`:** assert the new Operations Map subnav entry exists under the AI Operations section and has `href: "/platform/ai/operations-map"`.
 - [ ] Run all three test files; confirm they fail.
 - [ ] Add the Operations Map subnav entry to `platform-nav.ts` and the tab to `AiTabNav.tsx`.
@@ -126,16 +136,20 @@ Per superpowers:test-driven-development — write the tests first, watch them fa
 - [ ] `pnpm --filter web exec vitest run lib/ai-operations-map app/(shell)/platform/ai/operations-map components/platform/AiOperationsMap` (all new tests pass).
 - [ ] `pnpm --filter web typecheck` (clean).
 - [ ] `cd apps/web && npx next build` (clean — no TS errors that only surface here).
-- [ ] **UX exercise on the running portal** (mandatory for UI work):
-  - rebuild + restart the portal containers (per Mark's "no direct sandbox writes" / docker-explicit-approval rules, **list the exact commands and wait for go-ahead** before running them)
+- [ ] **UX exercise on the running portal** (mandatory for UI work — `2026-04-25-dpf-on-dpf-production-instance-design.md` dogfooding):
+  - rebuild + restart the portal containers (per Mark's "no direct sandbox writes" / docker-explicit-approval rules, **list the exact commands and wait for go-ahead** before running them — typically `docker compose build portal portal-init && docker compose up -d` per AGENTS.md §13)
   - log in at `/login` with `admin@dpf.local`
   - navigate to `/platform/ai/operations-map`
   - verify orientation test from spec acceptance #1 (which coworkers ran in the last hour and where)
   - verify drill-down test from acceptance #2 (every pulse opens an inspector with working links)
-  - tab through the map keyboard-only; activate stations and the inspector with Enter; close with Esc
-  - toggle reduced motion in the OS and confirm pulses become static
+  - **performance:** open DevTools → Network. The route response should arrive in < 250ms P95 on the DPF-on-DPF instance with the default 1h window. Capture the trace as evidence.
+  - tab through the map keyboard-only; activate stations and the inspector with Enter; close with Esc; focus returns to trigger
+  - toggle reduced motion in the OS and confirm pulses become static and `aria-live` announcements still occur on state change
   - check both light + dark theme (existing branding pipeline)
+  - resize to ~1024px and ~480px viewports; confirm responsive collapses are clean (no horizontal scroll, no overlap)
   - confirm `parameters` payload is absent for a `view_platform`-only seed user
+  - confirm a `view_compliance` seed user (or a superuser with the role applied) sees the full payload in the inspector
+  - intentionally break one source (temporarily rename `ToolExecutionReceipt` in a local fixture or mock the loader to throw on that source) and confirm the per-station banner renders rather than the whole map blanking
 - [ ] **Lint:** run repo lint and the no-hex-colors check; zero violations.
 - [ ] **Pre-existing failures:** if vitest / typecheck / next-build reports failures **not introduced by this slice**, file them as separate backlog items with repro steps — do not paper over them, and do not block the merge on them per AGENTS.md §5 unless they are in the affected files.
 
@@ -175,7 +189,9 @@ Per superpowers:test-driven-development — write the tests first, watch them fa
 
 ## Risk Watch (cross-reference to spec §Risks)
 
-- **Parallel event grammar** — guarded by Task 2's exhaustiveness tests. If a reviewer spots a new envelope, fail review.
+- **Parallel event grammar** — guarded by Task 2's exhaustiveness tests + the forward-compat default-branch test. If a reviewer spots a new envelope, fail review.
 - **Parallel identity model** — guarded by `load-projection.test.ts` identity assertion.
 - **Token / capability drift** — guarded by the "Do NOT modify" list above and the §Non-Goals section. Any PR that touches `globals.css` or `lib/govern/permissions.ts` is out of scope for this slice.
+- **Performance regression** — guarded by the < 250ms P95 budget. If the DPF-on-DPF measurement exceeds the budget, the response is to lower `limit` or `since` defaults, NOT to add caching in V1.
+- **Failure-mode silent break** — guarded by the failure-mode component tests + the explicit dogfooding step that breaks a source on purpose.
 - **Scope creep** — if a reviewer asks for live SSE, simulation, or write actions, defer to V2 rather than expand this PR.

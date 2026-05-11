@@ -19,6 +19,7 @@ export type OperationsMapTemplate = {
   id: string;
   label: string;
   archetypeCategoryIds: string[];
+  activationProfileTypes?: string[];
   stations: OperationsMapStation[];
   lines: OperationsMapLine[];
 };
@@ -84,4 +85,9 @@ export type OperationsMapProjection = {
     authorityHref: string;
     coworkerHref: string;
   };
+};
+
+export type OperationsMapTemplateSelector = {
+  archetypeId?: string | null;
+  activationProfileType?: string | null;
 };
