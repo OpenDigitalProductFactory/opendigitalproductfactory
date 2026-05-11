@@ -208,13 +208,13 @@ if [ "$DPF_PURGE" = "1" ]; then
 
   if [ "$DPF_KEEP_ENV" != "1" ] && [ -f "$REPO_ROOT/.env" ]; then
     _run rm -f "$REPO_ROOT/.env"
-    info "Removed $REPO_ROOT/.env"
+    [ "$DPF_DRY_RUN" = "1" ] || info "Removed $REPO_ROOT/.env"
   fi
 
   state_dir="$(dpf_state_dir)"
   if [ "$DPF_KEEP_STATE" != "1" ] && [ -d "$state_dir" ]; then
     _run rm -rf "$state_dir"
-    info "Removed $state_dir"
+    [ "$DPF_DRY_RUN" = "1" ] || info "Removed $state_dir"
   fi
 fi
 
