@@ -99,7 +99,20 @@ export type OperationsMapExternalEvidence = {
   createdAt: Date;
 };
 
+export type OperationsMapTaskRun = {
+  id: string;
+  taskRunId: string;
+  status: string;
+  source: string;
+  currentAgentId: string | null;
+  routeContext: string | null;
+  title: string;
+  startedAt: Date;
+  completedAt: Date | null;
+};
+
 export type OperationsMapProjectionSource =
+  | "task-run"
   | "tool-execution"
   | "tool-receipt"
   | "evidence-backlog"
@@ -124,6 +137,7 @@ export type OperationsMapProjection = {
     backlogItemActivityId?: string | null;
     backlogItemId?: string | null;
     externalEvidenceRecordId?: string | null;
+    taskRunId?: string | null;
     buildId?: string | null;
     capabilityId?: string | null;
   };

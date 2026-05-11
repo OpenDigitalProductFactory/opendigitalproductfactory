@@ -4,6 +4,7 @@ import {
   projectAgentsToStations,
   projectBacklogEvidence,
   projectExternalEvidence,
+  projectTaskRun,
   projectToolExecution,
   projectToolExecutionReceipt,
 } from "./project-events";
@@ -12,6 +13,7 @@ import type {
   OperationsMapBacklogEvidence,
   OperationsMapExternalEvidence,
   OperationsMapProjection,
+  OperationsMapTaskRun,
   OperationsMapTemplate,
   OperationsMapToolExecution,
   OperationsMapToolExecutionReceipt,
@@ -28,7 +30,7 @@ export type OperationsMapData = {
 };
 
 export async function loadOperationsMapData(): Promise<OperationsMapData> {
-  const [storefrontConfig, agents, toolExecutions, toolReceipts, backlogEvidence, externalEvidence] = await Promise.all([
+  const [storefrontConfig, agents, taskRuns, toolExecutions, toolReceipts, backlogEvidence, externalEvidence] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
         archetype: {
@@ -61,6 +63,25 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
             toolGrants: true,
           },
         },
+      },
+    }),
+    prisma.taskRun.findMany({
+      where: {
+        archivedAt: null,
+        source: "proactive",
+      },
+      orderBy: { startedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        taskRunId: true,
+        status: true,
+        source: true,
+        currentAgentId: true,
+        routeContext: true,
+        title: true,
+        startedAt: true,
+        completedAt: true,
       },
     }),
     prisma.toolExecution.findMany({
@@ -170,6 +191,7 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
   }));
 
   const projections = [
+    ...taskRuns.map((row) => projectTaskRun(row as OperationsMapTaskRun, template)),
     ...toolExecutions.map((row) => projectToolExecution(row as OperationsMapToolExecution, template)),
     ...toolReceipts.map((row) => projectToolExecutionReceipt(row as OperationsMapToolExecutionReceipt, template)),
     ...backlogEvidence.map((row) => projectBacklogEvidence(row as OperationsMapBacklogEvidence, template)),

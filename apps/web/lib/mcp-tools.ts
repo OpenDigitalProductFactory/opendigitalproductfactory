@@ -1987,6 +1987,24 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  // ─── EP-WIKI-001 Phase 4b2b: Wiki Lint trigger ─────────────────────────────
+  {
+    name: "wiki_lint",
+    description: "Run wiki lint detectors on-demand for the kernel and/or current organisation's overlay. Same orchestrator as the daily scheduled job. Use when the user asks to refresh findings or wants a quick health check. Returns scanned-page counts and finding deltas (opened / kept / resolved).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        scope: {
+          type: "string",
+          enum: ["kernel", "org", "all"],
+          description: "Which scope to lint. 'kernel' lints kernel rows only; 'org' lints the current org's overlay; 'all' (default) lints both.",
+        },
+      },
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   // ─── Knowledge Search ──────────────────────────────────────────────────────
   {
     name: "search_knowledge",
@@ -8432,6 +8450,67 @@ export async function executeTool(
         )
         .join("\n");
       return { success: true, message: summary, data: { results } };
+    }
+
+    case "wiki_lint": {
+      const { runWikiLint } = await import("@/lib/wiki/lint");
+      const { prisma } = await import("@dpf/db");
+      const scopeArg = typeof params["scope"] === "string" ? params["scope"] : "all";
+
+      // Mirrors queue/functions/wiki-lint.ts: read manifest.json directly
+      // rather than pulling in the seed module.
+      const kernelVersion = await (async () => {
+        try {
+          const fs = await import("fs/promises");
+          const path = await import("path");
+          const manifestPath = path.join(process.cwd(), "docs", "founder-kernel", "manifest.json");
+          const raw = await fs.readFile(manifestPath, "utf8");
+          return (JSON.parse(raw) as { kernelVersion?: string }).kernelVersion ?? "0.0.0";
+        } catch {
+          return "0.0.0";
+        }
+      })();
+
+      const org = await prisma.organization
+        .findFirst({ select: { id: true } })
+        .catch(() => null);
+
+      const runs: Array<Awaited<ReturnType<typeof runWikiLint>>> = [];
+      if (scopeArg === "kernel" || scopeArg === "all") {
+        runs.push(
+          await runWikiLint({
+            organizationId: null,
+            prisma: prisma as never,
+            currentKernelVersion: kernelVersion,
+          }),
+        );
+      }
+      if ((scopeArg === "org" || scopeArg === "all") && org) {
+        runs.push(
+          await runWikiLint({
+            organizationId: org.id,
+            prisma: prisma as never,
+            currentKernelVersion: kernelVersion,
+          }),
+        );
+      }
+
+      if (runs.length === 0) {
+        return {
+          success: true,
+          message: "No scope linted (no organisation found and scope was 'org').",
+          data: { runs: [] },
+        };
+      }
+
+      const summary = runs
+        .map((r) => {
+          const tag = r.organizationId === null ? "kernel" : `org ${r.organizationId}`;
+          return `${tag}: scanned=${r.scannedPageCount} opened=${r.findingsOpened} kept=${r.findingsKept} resolved=${r.findingsResolved}`;
+        })
+        .join("\n");
+
+      return { success: true, message: summary, data: { runs } };
     }
 
     case "search_knowledge": {

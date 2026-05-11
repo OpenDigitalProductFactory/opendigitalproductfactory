@@ -1,12 +1,26 @@
 # Mac (Apple Silicon) + Linux Native Support — Roadmap
 
-> **Status: DELIVERED (2026-05-11).** All 11 phases (0–10) shipped
-> across 13 PRs. macOS Apple Silicon and native Linux installers are
-> now GA alongside the existing Windows installer. End-user install
-> docs: [docs/install/macos.md](../../install/macos.md),
-> [docs/install/linux.md](../../install/linux.md). CI release gates
-> live in [.github/workflows/release-gates.yml](../../../.github/workflows/release-gates.yml).
-> A delivery summary is at the bottom of this file.
+> **Status: CODE SHIPPED — RUNTIME VERIFICATION PENDING (2026-05-11).**
+> All 11 phases (0–10) of the *code* roadmap shipped across 13 PRs.
+> The bash installer, lifecycle scripts, CI release gates, and docs
+> are on `main`. **However**, the gates that ran in CI are
+> dry-run / static checks (`shellcheck`, `docker compose config`,
+> `install-dpf.sh --dry-run`) — they do **not** prove the installer
+> works end-to-end on a real host.
+>
+> What's verified vs. unverified is tracked in
+> [docs/install/verification-runbook.md](../../install/verification-runbook.md).
+> Until the matrix in that file is checked off for macOS and Linux,
+> the installers are **preview**, not GA. The Windows installer
+> remains GA (real production usage).
+>
+> An ubuntu-latest end-to-end install gate landed alongside this
+> stamp ([`.github/workflows/install-verification.yml`](../../../.github/workflows/install-verification.yml))
+> — on-demand + tag-triggered — that converts the Linux runtime row
+> from "believed correct" to "observed to reach `/api/health=200` as
+> of commit X". Apple Silicon, distro coverage beyond Ubuntu, TAPPaaS,
+> Edge Node, and cloud substrates still need real-hardware /
+> real-substrate verification (see the runbook).
 
 > Branch: `claude/mac-docker-compatibility-uN4Ya`
 > Deliverable for this branch: **this plan only**. Each phase below lands as a
