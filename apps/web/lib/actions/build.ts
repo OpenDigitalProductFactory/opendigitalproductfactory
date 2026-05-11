@@ -22,6 +22,8 @@ import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } f
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
 import {
+  type BusinessBriefEvidenceKind,
+  type BusinessBuildBriefSource,
   businessBuildBriefEditToPersistence,
   legacyFeatureBuildBriefToBusinessBuildBriefInput,
 } from "@/lib/build/business-build-brief";
@@ -210,10 +212,13 @@ export async function updateFeatureBrief(
 
 export async function updateBusinessBuildBrief(input: {
   briefId: string;
+  intakeSource?: BusinessBuildBriefSource;
+  evidenceKind?: BusinessBriefEvidenceKind;
   businessOutcome: string;
   affectedPeopleText: string;
   affectedWorkflow?: string | null;
   sourceEvidenceText: string;
+  copyAdaptAvoidText?: string;
   successSignalsText: string;
   constraintsText: string;
   openQuestionsText: string;
@@ -247,6 +252,7 @@ export async function updateBusinessBuildBrief(input: {
       where: { briefId },
       data: {
         status: persistence.status,
+        intakeSource: persistence.intakeSource,
         businessOutcome: persistence.businessOutcome,
         affectedPeople: persistence.affectedPeople as unknown as Prisma.InputJsonValue,
         affectedWorkflow: persistence.affectedWorkflow,
