@@ -165,10 +165,13 @@ describe("governed build start approvals", () => {
 
     await updateBusinessBuildBrief({
       briefId: "BBB-FB-123",
+      intakeSource: "artifact_reference",
+      evidenceKind: "document",
       businessOutcome: "Reduce missed support escalations before the morning standup.",
       affectedPeopleText: "Support manager\nCustomer success lead",
       affectedWorkflow: "Customer escalation review",
       sourceEvidenceText: "Existing Zendesk escalation report\nMorning standup SOP",
+      copyAdaptAvoidText: "",
       successSignalsText: "Managers see unresolved escalations by site\nEvery escalation has an owner",
       constraintsText: "Do not expose customer data across accounts",
       openQuestionsText: "",
@@ -189,12 +192,12 @@ describe("governed build start approvals", () => {
         ],
         sourceEvidence: [
           expect.objectContaining({
-            kind: "artifact",
+            kind: "document",
             label: "Existing Zendesk escalation report",
             summary: "Existing Zendesk escalation report",
           }),
           expect.objectContaining({
-            kind: "artifact",
+            kind: "document",
             label: "Morning standup SOP",
             summary: "Morning standup SOP",
           }),
