@@ -114,7 +114,47 @@ describe("isPathAllowed — POSIX portability", () => {
     // separator the caller used.
     expect(isPathAllowed("apps\\web\\.env.local")).toBe(false); // .env. pattern
     expect(isPathAllowed("certs\\server.key")).toBe(false);     // .key$ pattern
-    expect(isPathAllowed("secrets\\admin.json")).toBe(false);   // ^secrets pattern
+    expect(isPathAllowed("secrets\\admin.json")).toBe(false);   // secrets pattern
     expect(isPathAllowed(".git\\config")).toBe(false);          // ^.git/ pattern
+  });
+});
+
+// Originally, the secrets / credentials BLOCKED_PATTERNS were anchored
+// at start-of-path only (/^secrets/i). That defeated their intent —
+// nested `config/secrets/admin.json` slipped through. The patterns
+// now match `secrets` / `credentials` as any path component (start
+// or after a slash, followed by /, ., or end-of-string), so:
+//
+//   - top-level cases still block (regression coverage)
+//   - nested cases now block (the fix)
+//   - directories that merely share a prefix still allow
+//     (`secrets-management/...` — no false positive)
+describe("isPathAllowed — secrets / credentials path-component matching", () => {
+  it("blocks 'secrets' at any path depth", () => {
+    expect(isPathAllowed("secrets")).toBe(false);
+    expect(isPathAllowed("secrets/admin.json")).toBe(false);
+    expect(isPathAllowed("secrets.json")).toBe(false);
+    // The bug surfaced during Phase 10c — nested case below previously
+    // slipped through the start-anchored regex.
+    expect(isPathAllowed("config/secrets/admin.json")).toBe(false);
+    expect(isPathAllowed("apps/web/lib/secrets/index.ts")).toBe(false);
+    expect(isPathAllowed("config/secrets.json")).toBe(false);
+  });
+
+  it("blocks 'credentials' at any path depth", () => {
+    expect(isPathAllowed("credentials")).toBe(false);
+    expect(isPathAllowed("credentials.json")).toBe(false);
+    expect(isPathAllowed("config/credentials/admin.json")).toBe(false);
+    expect(isPathAllowed("apps/web/credentials.json")).toBe(false);
+  });
+
+  it("does not false-positive on directories with shared prefix", () => {
+    // The trailing `(?:[\\/.]|$)` in the pattern keeps it from
+    // matching legitimate directory or filename starts that happen to
+    // share the literal prefix `secrets` / `credentials`.
+    expect(isPathAllowed("apps/web/secrets-management/api.ts")).toBe(true);
+    expect(isPathAllowed("apps/web/lib/secretsForKids.md")).toBe(true);
+    expect(isPathAllowed("docs/credentials-rotation-runbook.md")).toBe(true);
+    expect(isPathAllowed("config/credentialsRotation.ts")).toBe(true);
   });
 });
