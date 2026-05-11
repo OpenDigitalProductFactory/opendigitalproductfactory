@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   OperationsMapProjection,
@@ -16,6 +16,11 @@ import {
   OPERATIONS_MAP_QUICK_VIEWS,
   summarizeProjectionCounts,
 } from "@/lib/ai-operations-map/project-events";
+import {
+  loadOperationsMapViewPreference,
+  saveOperationsMapViewPreference,
+  type OperationsMapStoredQuickViewId,
+} from "./ai-operations-map-prefs";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -37,6 +42,7 @@ const SEVERITY_CLASS: Record<OperationsMapProjection["severity"], string> = {
 };
 
 const SOURCE_LABEL: Record<OperationsMapProjection["source"], string> = {
+  "task-run": "Task run",
   "tool-execution": "Tool execution",
   "tool-receipt": "Receipt",
   "evidence-backlog": "Backlog evidence",
@@ -44,6 +50,7 @@ const SOURCE_LABEL: Record<OperationsMapProjection["source"], string> = {
 };
 
 const SOURCE_OPTIONS: OperationsMapProjectionSource[] = [
+  "task-run",
   "tool-execution",
   "tool-receipt",
   "evidence-backlog",
@@ -56,7 +63,7 @@ const DEFAULT_QUICK_VIEW_FILTERS = getOperationsMapQuickViewFilters(DEFAULT_QUIC
 
 export function AiOperationsMap({ template, agents, projections, recentWindowLabel }: Props) {
   const [selected, setSelected] = useState<SelectedItem>({ kind: "station", id: template.stations[0]?.id ?? "" });
-  const [activeQuickViewId, setActiveQuickViewId] = useState<OperationsMapQuickViewId | "custom">(
+  const [activeQuickViewId, setActiveQuickViewId] = useState<OperationsMapStoredQuickViewId>(
     DEFAULT_QUICK_VIEW_ID,
   );
   const [sourceFilters, setSourceFilters] = useState<OperationsMapProjectionSource[]>(
@@ -65,11 +72,31 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
   const [severityFilters, setSeverityFilters] = useState<OperationsMapSeverity[]>(
     DEFAULT_QUICK_VIEW_FILTERS.severities,
   );
+  const preferenceHydrated = useRef(false);
   const filteredProjections = useMemo(
     () => filterOperationsMapProjections(projections, { sources: sourceFilters, severities: severityFilters }),
     [projections, sourceFilters, severityFilters],
   );
   const counts = useMemo(() => summarizeProjectionCounts(filteredProjections), [filteredProjections]);
+
+  useEffect(() => {
+    const preference = loadOperationsMapViewPreference();
+    setActiveQuickViewId(preference.quickViewId);
+    setSourceFilters(preference.filters.sources);
+    setSeverityFilters(preference.filters.severities);
+    preferenceHydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!preferenceHydrated.current) return;
+    saveOperationsMapViewPreference({
+      quickViewId: activeQuickViewId,
+      filters: {
+        sources: sourceFilters,
+        severities: severityFilters,
+      },
+    });
+  }, [activeQuickViewId, sourceFilters, severityFilters]);
 
   const selectedStation = selected.kind === "station"
     ? template.stations.find((station) => station.id === selected.id) ?? null
