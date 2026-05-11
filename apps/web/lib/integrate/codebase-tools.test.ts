@@ -61,3 +61,60 @@ describe("resolveSafePath", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+// Per the installer-parity roadmap Phase 10c: the path-security
+// guards above were originally written for the Windows installer
+// (D:\DPF\...). When the macOS + Linux installers shipped, we needed
+// to confirm POSIX paths flow through the same guards correctly:
+//
+//   - Relative POSIX paths (apps/web/...) stay allowed.
+//   - POSIX absolute paths (/var/run/..., /Users/..., /Applications/...)
+//     stay blocked — they are not browseable through this API surface.
+//   - The Windows-drive regex (^[A-Za-z]:) does not false-positive on
+//     POSIX paths that happen to contain a colon mid-path.
+describe("isPathAllowed — POSIX portability", () => {
+  it("allows typical relative POSIX paths used on macOS / Linux installs", () => {
+    expect(isPathAllowed("apps/web/lib/mcp-tools.ts")).toBe(true);
+    expect(isPathAllowed("packages/db/src/discovery-collectors/host.ts")).toBe(true);
+    expect(isPathAllowed("scripts/installer/lib/preflight.sh")).toBe(true);
+    expect(isPathAllowed("docs/install/macos.md")).toBe(true);
+    expect(isPathAllowed("docs/install/linux.md")).toBe(true);
+  });
+
+  it("blocks all POSIX absolute path variants", () => {
+    // Generic Unix
+    expect(isPathAllowed("/etc/passwd")).toBe(false);
+    expect(isPathAllowed("/var/run/docker.sock")).toBe(false);
+    expect(isPathAllowed("/tmp/anything")).toBe(false);
+
+    // macOS-specific
+    expect(isPathAllowed("/Applications/Docker.app/Contents/Info.plist")).toBe(false);
+    expect(isPathAllowed("/Users/foo/dpf/install-dpf.sh")).toBe(false);
+    expect(isPathAllowed("/Library/LaunchAgents/local.dpf-autostart.plist")).toBe(false);
+
+    // Linux-specific
+    expect(isPathAllowed("/home/user/dpf/install-dpf.sh")).toBe(false);
+    expect(isPathAllowed("/opt/dpf/docker-compose.yml")).toBe(false);
+    expect(isPathAllowed("/root/.dpf/install-state.json")).toBe(false);
+  });
+
+  it("Windows-drive regex does not false-positive on POSIX paths with a colon", () => {
+    // The ^[A-Za-z]: regex must anchor at start. Paths with a colon
+    // mid-string are unusual on POSIX but legal, and must not be
+    // mistaken for D:\ Windows paths.
+    expect(isPathAllowed("apps/web/some:thing.ts")).toBe(true);
+    expect(isPathAllowed("docs/architecture/note: a draft.md")).toBe(true);
+  });
+
+  it("normalizes backslash separators before pattern matching", () => {
+    // Operators on POSIX hosts occasionally paste Windows-formatted
+    // input (\) into the portal. Path security must catch the same
+    // sensitive-file patterns after the unified-slash normalization
+    // step (line 53 in codebase-tools.ts), regardless of which
+    // separator the caller used.
+    expect(isPathAllowed("apps\\web\\.env.local")).toBe(false); // .env. pattern
+    expect(isPathAllowed("certs\\server.key")).toBe(false);     // .key$ pattern
+    expect(isPathAllowed("secrets\\admin.json")).toBe(false);   // ^secrets pattern
+    expect(isPathAllowed(".git\\config")).toBe(false);          // ^.git/ pattern
+  });
+});
