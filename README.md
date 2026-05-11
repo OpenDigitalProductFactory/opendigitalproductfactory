@@ -67,7 +67,19 @@ The installer asks one question: **Ready to go** or **Customizable**.
 
 Both modes include the full platform with AI coworkers, Build Studio sandbox, and all features. The difference is whether direct VS Code access is part of the supported workflow.
 
-### Quick Start (Windows)
+### Quick Start
+
+| Platform | Install command | Full guide |
+|----------|-----------------|------------|
+| **Windows 10/11** | `powershell -ExecutionPolicy Bypass -File install-dpf.ps1` | (see below) |
+| **macOS Apple Silicon** | `bash install-dpf.sh` | [docs/install/macos.md](docs/install/macos.md) |
+| **Linux (native Docker)** | `bash install-dpf.sh` | [docs/install/linux.md](docs/install/linux.md) |
+
+Choose your mode when prompted. The installer handles Docker (Desktop on Windows / Mac, distro pkg manager on Linux), hardware detection, AI model selection, credential generation, and auto-start. Expect 5–10 minutes for the platform itself, plus additional time for the initial AI model download.
+
+**Login credentials** are shown at the end of installation and saved to `.env` (or `.admin-credentials` on Windows) in your install directory. The email is always `admin@dpf.local`; the password is randomly generated and unique to your install. Change it after first login.
+
+#### Windows
 
 Open PowerShell and paste:
 
@@ -76,15 +88,33 @@ gh api repos/OpenDigitalProductFactory/opendigitalproductfactory/contents/instal
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 
-Choose your mode when prompted. The installer handles Docker Desktop, WSL2, hardware detection, AI model selection, credential generation, and auto-start. Expect 5–10 minutes for the platform itself, plus additional time for the initial AI model download (varies by model size and connection speed).
+The Windows installer auto-installs Docker Desktop and WSL2.
 
-**Login credentials** are shown at the end of installation and saved to `.admin-credentials` in your install directory. The email is always `admin@dpf.local`; the password is randomly generated and unique to your install. Change it after first login.
-
-**After installation:**
+After installation:
 
 - **Start:** `dpf-start`
 - **Stop:** `dpf-stop`
 - **Uninstall:** `powershell -ExecutionPolicy Bypass -File uninstall-dpf.ps1` from your install directory
+
+#### macOS / Linux
+
+```bash
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf
+cd ~/dpf
+bash install-dpf.sh
+```
+
+The bash installer auto-installs Docker (Docker Desktop `.dmg` on macOS, Docker Engine via `apt`/`dnf` on Linux), runs preflight against the supported-host matrix, and registers a LaunchAgent (macOS) or systemd-user unit (Linux) for autostart. Pass `--no-autostart` to skip the autostart unit.
+
+After installation:
+
+- **Start:** `bash dpf-start.sh`
+- **Stop:** `bash dpf-stop.sh`
+- **Diagnostic bundle:** `bash install-dpf.sh doctor`
+- **Soft uninstall (keep data):** `bash uninstall-dpf.sh`
+- **Full uninstall (wipe data):** `bash uninstall-dpf.sh --purge`
+
+See [docs/install/macos.md](docs/install/macos.md) and [docs/install/linux.md](docs/install/linux.md) for prerequisites, troubleshooting, and provider configuration (Docker Model Runner on macOS, Ollama on Linux, or any external `LLM_BASE_URL`).
 
 ### What each mode installs
 
@@ -207,7 +237,7 @@ Publication outputs are generated from the Markdown sources of truth:
 | EA Modeling | ArchiMate 4 canvas, viewpoints, relationship rules, structured value streams |
 | AI Provider Registry | 17 providers, credential management, model discovery, profiling, cost tracking |
 | AI Coworker | Live LLM conversations, automatic failover, context-aware skills dropdown |
-| Docker Deployment | Zero-prerequisites Windows installer (GA); macOS + native Linux per the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) |
+| Docker Deployment | Zero-prerequisites installers for Windows (GA), macOS Apple Silicon ([guide](docs/install/macos.md)), and native Linux ([guide](docs/install/linux.md)). Multi-arch GHCR images. Lifecycle scripts (start/stop/reinstall/release) on all three. CI release gates per the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). |
 
 ### What's coming
 
@@ -218,7 +248,7 @@ Publication outputs are generated from the Markdown sources of truth:
 | **AI-Guided Setup Wizard** | On first install, the AI coworker walks you through company setup conversationally — no forms, just a conversation. |
 | **In-App PR Workflow** | Submit customizations back to the community directly from the platform UI. |
 | **Web-Hosted SaaS** | Customer-cloud deployment via Terraform on AWS / GCP / Azure — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). DPF stays single-tenant; "SaaS" here means "customer hosts on rented compute," not multi-tenant. |
-| **Mac & Linux Installers** | macOS Apple Silicon + native Linux installer parity — design in progress, see the [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). |
+| **Mac & Linux Installers** | Native macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)) installers have landed alongside the Windows GA installer. The [installer-parity roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) tracks remaining hardening (CI release gates, long-tail discovery). |
 | **TAPPaaS Module** | Self-hosted private-platform packaging via [TAPPaaS](https://tappaas.org/) — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). |
 
 ---
