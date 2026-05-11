@@ -15,7 +15,8 @@ type PrismaWriteAction<TResult = unknown> = (args: any) => Promise<TResult>;
 
 export type WikiStoreClient = {
   wikiPage: {
-    upsert: PrismaWriteAction;
+    create: PrismaWriteAction;
+    update: PrismaWriteAction;
     findUnique: PrismaWriteAction;
     findFirst: PrismaWriteAction;
   };
@@ -99,6 +100,17 @@ export type AttachSourceInput = {
  * Per EP-WIKI-001 §3.3, kernel and org rows are physically separate — an
  * org override of a kernel page is a new WikiPage row with kernelPageId
  * pointing at the kernel row, not a flag on the kernel row itself.
+ *
+ * Implementation note: this is a findFirst-then-update-or-create rather
+ * than a single `upsert` call because `@@unique([organizationId, slug])`
+ * with a nullable `organizationId` doesn't work cleanly through Prisma's
+ * compound-key upsert API — Prisma narrows the `organizationId` field
+ * in the compound-key shape to non-nullable, so kernel rows (where
+ * `organizationId IS NULL`) can't be addressed that way. PostgreSQL also
+ * treats NULLs as distinct under the default constraint, so two kernel
+ * rows with the same slug would be inserted by a naive `create`. The
+ * findFirst-then-update-or-create pattern works for both kernel and
+ * overlay rows uniformly.
  */
 export async function upsertWikiPage(
   db: WikiPageUpsertClient,
@@ -118,26 +130,29 @@ export async function upsertWikiPage(
     abstract: input.abstract ?? null,
   };
 
-  return db.wikiPage.upsert({
-    where: {
-      organizationId_slug: {
-        organizationId: input.organizationId ?? null,
-        slug: input.slug,
+  const existing = (await db.wikiPage.findFirst({
+    where: { organizationId: data.organizationId, slug: data.slug },
+    select: { id: true },
+  })) as { id: string } | null;
+
+  if (existing) {
+    return db.wikiPage.update({
+      where: { id: existing.id },
+      data: {
+        title: data.title,
+        body: data.body,
+        pageKind: data.pageKind,
+        status: data.status,
+        isKernel: data.isKernel,
+        kernelVersion: data.kernelVersion,
+        kernelPageId: data.kernelPageId,
+        derivedFromKernelVersion: data.derivedFromKernelVersion,
+        abstract: data.abstract,
       },
-    },
-    create: data,
-    update: {
-      title: data.title,
-      body: data.body,
-      pageKind: data.pageKind,
-      status: data.status,
-      isKernel: data.isKernel,
-      kernelVersion: data.kernelVersion,
-      kernelPageId: data.kernelPageId,
-      derivedFromKernelVersion: data.derivedFromKernelVersion,
-      abstract: data.abstract,
-    },
-  });
+    });
+  }
+
+  return db.wikiPage.create({ data });
 }
 
 /**
@@ -220,17 +235,19 @@ export async function attachSource(
 /**
  * Lookup a wiki page by (organizationId, slug). Pass organizationId = null
  * to read kernel rows. Returns null when no row exists.
+ *
+ * Uses findFirst rather than findUnique for the same reason `upsertWikiPage`
+ * does: Prisma's compound-key shape narrows organizationId to non-null, so
+ * kernel rows can't be addressed via the compound key.
  */
 export async function getWikiPage(
   db: WikiPageUpsertClient,
   args: { organizationId: string | null; slug: string },
 ): Promise<unknown> {
-  return db.wikiPage.findUnique({
+  return db.wikiPage.findFirst({
     where: {
-      organizationId_slug: {
-        organizationId: args.organizationId,
-        slug: args.slug,
-      },
+      organizationId: args.organizationId,
+      slug: args.slug,
     },
   });
 }
