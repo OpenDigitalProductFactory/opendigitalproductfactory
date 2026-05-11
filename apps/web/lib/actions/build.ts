@@ -42,6 +42,18 @@ async function requireBuildAccess(): Promise<string> {
   return user.id!;
 }
 
+function businessBriefJsonPayload(
+  businessBrief: ReturnType<typeof legacyFeatureBuildBriefToBusinessBuildBriefInput>,
+) {
+  return {
+    affectedPeople: businessBrief.affectedPeople as unknown as Prisma.InputJsonValue,
+    sourceEvidence: businessBrief.sourceEvidence as unknown as Prisma.InputJsonValue,
+    technicalInterpretation: businessBrief.technicalInterpretation as unknown as Prisma.InputJsonValue,
+    riskProfile: businessBrief.riskProfile as unknown as Prisma.InputJsonValue,
+    hiveReadiness: businessBrief.hiveReadiness as unknown as Prisma.InputJsonValue,
+  };
+}
+
 // ─── Create Feature Build ────────────────────────────────────────────────────
 
 export async function createFeatureBuild(input: {
@@ -152,44 +164,43 @@ export async function updateFeatureBrief(
   const acceptedFields = businessBrief.status === "accepted"
     ? { acceptedByUserId: userId, acceptedAt: new Date() }
     : { acceptedByUserId: null, acceptedAt: null };
+  const jsonPayload = businessBriefJsonPayload(businessBrief);
 
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { brief: brief as unknown as Prisma.InputJsonValue },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.featureBuild.update({
+      where: { buildId },
+      data: { brief: brief as unknown as Prisma.InputJsonValue },
+    });
 
-  await prisma.businessBuildBrief.upsert({
-    where: { featureBuildId: build.id },
-    create: {
-      ...businessBrief,
-      affectedPeople: businessBrief.affectedPeople as unknown as Prisma.InputJsonValue,
-      sourceEvidence: businessBrief.sourceEvidence as unknown as Prisma.InputJsonValue,
-      technicalInterpretation: businessBrief.technicalInterpretation as unknown as Prisma.InputJsonValue,
-      riskProfile: businessBrief.riskProfile as unknown as Prisma.InputJsonValue,
-      hiveReadiness: businessBrief.hiveReadiness as unknown as Prisma.InputJsonValue,
-      ...acceptedFields,
-    },
-    update: {
-      status: businessBrief.status,
-      intakeSource: businessBrief.intakeSource,
-      capabilityPackId: businessBrief.capabilityPackId,
-      backlogItemId: businessBrief.backlogItemId,
-      businessOutcome: businessBrief.businessOutcome,
-      affectedPeople: businessBrief.affectedPeople as unknown as Prisma.InputJsonValue,
-      affectedWorkflow: businessBrief.affectedWorkflow,
-      sourceEvidence: businessBrief.sourceEvidence as unknown as Prisma.InputJsonValue,
-      successSignals: businessBrief.successSignals,
-      constraints: businessBrief.constraints,
-      businessInterpretation: businessBrief.businessInterpretation,
-      technicalInterpretation: businessBrief.technicalInterpretation as unknown as Prisma.InputJsonValue,
-      riskProfile: businessBrief.riskProfile as unknown as Prisma.InputJsonValue,
-      hiveReadiness: businessBrief.hiveReadiness as unknown as Prisma.InputJsonValue,
-      openQuestions: businessBrief.openQuestions,
-      confidence: businessBrief.confidence,
-      confidenceRationale: businessBrief.confidenceRationale,
-      submittedByUserId: businessBrief.submittedByUserId,
-      ...acceptedFields,
-    },
+    await tx.businessBuildBrief.upsert({
+      where: { featureBuildId: build.id },
+      create: {
+        ...businessBrief,
+        ...jsonPayload,
+        ...acceptedFields,
+      },
+      update: {
+        status: businessBrief.status,
+        intakeSource: businessBrief.intakeSource,
+        capabilityPackId: businessBrief.capabilityPackId,
+        backlogItemId: businessBrief.backlogItemId,
+        businessOutcome: businessBrief.businessOutcome,
+        affectedPeople: jsonPayload.affectedPeople,
+        affectedWorkflow: businessBrief.affectedWorkflow,
+        sourceEvidence: jsonPayload.sourceEvidence,
+        successSignals: businessBrief.successSignals,
+        constraints: businessBrief.constraints,
+        businessInterpretation: businessBrief.businessInterpretation,
+        technicalInterpretation: jsonPayload.technicalInterpretation,
+        riskProfile: jsonPayload.riskProfile,
+        hiveReadiness: jsonPayload.hiveReadiness,
+        openQuestions: businessBrief.openQuestions,
+        confidence: businessBrief.confidence,
+        confidenceRationale: businessBrief.confidenceRationale,
+        submittedByUserId: businessBrief.submittedByUserId,
+        ...acceptedFields,
+      },
+    });
   });
 }
 
@@ -251,6 +262,16 @@ export async function advanceBuildPhase(
 
   if (!canTransitionPhase(currentPhase, targetPhase)) {
     throw new Error(`Cannot transition from ${currentPhase} to ${targetPhase}`);
+  }
+
+  if (currentPhase === "ideate" && targetPhase === "plan") {
+    const businessBrief = await prisma.businessBuildBrief.findUnique({
+      where: { featureBuildId: build.id },
+      select: { status: true },
+    });
+    if (businessBrief?.status !== "accepted") {
+      throw new Error("Accept the business build brief before moving into planning.");
+    }
   }
 
   const brief = build.brief as { acceptanceCriteria?: string[] } | null;
