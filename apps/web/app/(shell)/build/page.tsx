@@ -38,6 +38,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
       orderBy: { updatedAt: "desc" },
       select: {
         briefId: true,
+        status: true,
         intakeSource: true,
         capabilityPackId: true,
         featureBuildId: true,

@@ -11,6 +11,7 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     businessBuildBrief: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn(),
     },
     organization: {
       findFirst: vi.fn(),
@@ -67,7 +68,12 @@ vi.mock("@/lib/integrate/sandbox/sandbox", () => ({
   listReleasableSandboxFiles: mockListReleasableSandboxFiles,
 }));
 
-import { approveBuildStart, advanceBuildPhase, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateFeatureBrief } from "./build";
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+import { revalidatePath } from "next/cache";
+import { approveBuildStart, advanceBuildPhase, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -83,6 +89,7 @@ describe("governed build start approvals", () => {
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
     mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({ status: "accepted" });
     mockPrisma.businessBuildBrief.upsert.mockResolvedValue({});
+    mockPrisma.businessBuildBrief.update.mockResolvedValue({});
     mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
@@ -145,6 +152,63 @@ describe("governed build start approvals", () => {
         }),
       }),
     );
+  });
+
+  it("updateBusinessBuildBrief persists business edits and accepts a complete brief", async () => {
+    mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({
+      id: "business-brief-row-1",
+      briefId: "BBB-FB-123",
+      featureBuildId: "feature-build-row-1",
+      submittedByUserId: "user-1",
+      status: "awaiting_clarification",
+    });
+
+    await updateBusinessBuildBrief({
+      briefId: "BBB-FB-123",
+      businessOutcome: "Reduce missed support escalations before the morning standup.",
+      affectedPeopleText: "Support manager\nCustomer success lead",
+      affectedWorkflow: "Customer escalation review",
+      sourceEvidenceText: "Existing Zendesk escalation report\nMorning standup SOP",
+      successSignalsText: "Managers see unresolved escalations by site\nEvery escalation has an owner",
+      constraintsText: "Do not expose customer data across accounts",
+      openQuestionsText: "",
+      accept: true,
+    });
+
+    expect(mockPrisma.businessBuildBrief.update).toHaveBeenCalledWith({
+      where: { briefId: "BBB-FB-123" },
+      data: expect.objectContaining({
+        status: "accepted",
+        acceptedByUserId: "user-1",
+        acceptedAt: expect.any(Date),
+        businessOutcome: "Reduce missed support escalations before the morning standup.",
+        affectedWorkflow: "Customer escalation review",
+        affectedPeople: [
+          { kind: "persona", label: "Support manager" },
+          { kind: "persona", label: "Customer success lead" },
+        ],
+        sourceEvidence: [
+          expect.objectContaining({
+            kind: "artifact",
+            label: "Existing Zendesk escalation report",
+            summary: "Existing Zendesk escalation report",
+          }),
+          expect.objectContaining({
+            kind: "artifact",
+            label: "Morning standup SOP",
+            summary: "Morning standup SOP",
+          }),
+        ],
+        successSignals: [
+          "Managers see unresolved escalations by site",
+          "Every escalation has an owner",
+        ],
+        constraints: ["Do not expose customer data across accounts"],
+        openQuestions: [],
+        confidence: "high",
+      }),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/build");
   });
 
   it("advanceBuildPhase blocks ideate to plan until the business brief is accepted", async () => {
