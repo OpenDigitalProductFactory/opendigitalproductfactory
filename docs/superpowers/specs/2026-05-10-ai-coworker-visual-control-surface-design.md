@@ -223,28 +223,47 @@ Reference:
 
 ### AI agent observability and workflow tools
 
-Modern AI agent tooling is converging on traces, spans, tool calls, handoffs, guardrails, and workflow graphs.
+Per AGENTS.md §10, this section compares **data models**, not just feature lists, across 3 open-source leaders and 3 commercial products.
 
-OpenAI Agents tracing includes spans for agent runs, model generations, function/tool calls, guardrails, and handoffs. LangSmith observability emphasizes seeing which tools are called, what prompts are generated, and how agents make decisions. AutoGen Studio provides a low-code interface for prototyping agents, composing teams, and interacting with workflows.
+**Open-source leaders:**
 
-Pattern to adopt:
+- **OpenAI Agents SDK tracing.** Data model: `Trace` contains `Spans`; span kinds include `AgentSpan`, `GenerationSpan`, `FunctionSpan`, `HandoffSpan`, `GuardrailSpan`, `CustomSpan`. Each span has parent linkage, timestamps, input/output. Pattern adopted: **handoffs are first-class spans** — DPF's map projects handoffs from `queue:escalation` + `orchestrator:task_dispatched`, mapping to the same conceptual primitive. Pattern rejected: OpenAI's `GenerationSpan` carries the raw prompt; DPF's `ToolExecution.parameters` is redacted to `summary` for non-Auditor tiers (privacy-first projection).
+- **LangSmith (LangChain).** Data model: `Run` is the unit; runs nest in a tree; each run records `inputs`, `outputs`, `error`, `tags`, `metadata`, `parent_run_id`. Adopted: **flat audit row keyed by parent** — DPF's `ToolExecution.threadId` plays this role; the map deduplicates by `(toolExecutionId, occurredAt±2s)` rather than rebuilding a tree client-side. Rejected: storing prompt/response as the canonical audit (instead, DPF stores `ToolExecution` rows + an SSE liveness stream; `parameters` redaction is enforced at projection, not at storage).
+- **AutoGen Studio (Microsoft).** Data model: `Team` of `Agents` with shared `Workflow`; tasks have explicit `terminationCondition`. Adopted: **multi-agent teams render as a composite badge** — DPF's Build Studio `FeatureBuild` is the team, individual specialists appear in the inspector. Rejected: AutoGen's free-form "conversation" view as the primary surface; DPF emphasizes state + flow over chat transcripts.
 
-- every visible animation should be backed by a real event, trace span, tool call, policy gate, or evidence receipt
-- users should be able to drill from a map pulse into the actual execution trace
-- handoffs and approvals should be first-class visual events
-- visual management should be useful for debugging and governance, not just presentation
+**Commercial products:**
 
-Pattern to reject:
+- **Langfuse (open core + cloud).** Data model: `Trace` → `Observation` (where `Observation` is `Span | Generation | Event`); generations capture `model`, `usage`, `cost`. Adopted: **per-observation cost + latency surfaced in the inspector** — DPF can project these from `AgentEvent.done.providerInfo` + `ToolExecution.durationMs`. Anti-pattern observed: Langfuse's filters require knowledge of the schema; DPF avoids this by mapping observations onto a business-flow schematic, not a raw observation list.
+- **Helicone.** Data model: `Request` row (HTTP-level) joined to `Properties` for arbitrary metadata. Adopted: **defensive `organizationId` scoping on every read** (Helicone's multi-tenant model is instructive even for single-org DPF installs because misordered joins are the most common silent leak). Rejected: Helicone's "everything is an HTTP request" framing — DPF's `ToolExecution` already abstracts above HTTP.
+- **AgentOps (cloud).** Data model: `Session` → `Event` where `Event` discriminates `LLM | Action | Tool | Error`. Adopted: **error events are first-class on the bus** — DPF already has `AgentEvent.type === "error"` and `async:failed`; the map promotes those to `severity: "critical"`. Rejected: AgentOps' opt-in instrumentation per agent — DPF requires the governed executor to emit; instrumentation is structural, not optional.
 
-- showing hidden chain-of-thought as the management primitive
-- implying certainty or intent that the runtime did not record
-- using agent "thought bubbles" as a substitute for traceable events and evidence
+**Composite pattern adoption:**
+
+- Every visible animation is backed by a real event, trace span, tool call, policy gate, or evidence receipt.
+- Users drill from a map pulse into the actual execution trace (Langfuse-style nesting, but business-flow-anchored).
+- Handoffs and approvals are first-class visual events (OpenAI Agents pattern).
+- Visual management is useful for debugging and governance, not just presentation.
+
+**Composite pattern rejection:**
+
+- Showing hidden chain-of-thought as the management primitive (AutoGen anti-pattern).
+- Implying certainty or intent that the runtime did not record.
+- Using agent "thought bubbles" as a substitute for traceable events and evidence.
+- Raw observation lists as the primary view (Langfuse / Helicone anti-pattern for non-engineer operators).
+
+**Gaps DPF's design fills:**
+
+- None of the surveyed tools render observations onto a **business-flow schematic** keyed by archetype. They all default to time-series / list / tree views. The Operations Map's primary contribution is anchoring AI activity to the operator's mental model of the business.
+- None project from a **multi-source heterogeneous evidence ledger** (`ToolExecutionReceipt` + `BacklogItemActivity` + `ExternalEvidenceRecord`). DPF unifies these at the projection layer rather than forcing one substrate.
 
 References:
 
 - OpenAI Agents SDK tracing: https://openai.github.io/openai-agents-python/tracing/
 - LangSmith observability: https://docs.langchain.com/oss/python/langchain/observability
 - AutoGen Studio: https://microsoft.github.io/autogen/stable/user-guide/autogenstudio-user-guide/index.html
+- Langfuse data model: https://langfuse.com/docs/tracing-data-model
+- Helicone architecture: https://docs.helicone.ai/getting-started/quick-start
+- AgentOps SDK: https://docs.agentops.ai/v1/concepts/sessions
 
 ## Design Principles
 
@@ -388,28 +407,35 @@ Support bands:
 
 ### Software platform map
 
-Use for `software-platform`.
+Use for `software-platform`. Stations align to **IT4IT v3 value streams**, which is also how `packages/db/data/agent_registry.json` tags every coworker (`value_stream` field on each agent row). This makes auto-placement deterministic and avoids inventing a parallel taxonomy.
 
-Primary flow:
+Primary flow (station id → IT4IT value stream → station label):
 
-1. Discover
-2. Backlog
-3. Design
-4. Build
-5. Verify
-6. Release
-7. Support
-8. Improve
+| Station id | IT4IT value stream | Display label |
+| --- | --- | --- |
+| `explore` | `explore` | Discover |
+| `evaluate` | `evaluate` | Backlog & Evaluation |
+| `integrate` | `integrate` | Design & Integrate |
+| `build` | (DPF-internal) | Build |
+| `verify` | (DPF-internal) | Verify |
+| `deploy` | `deploy` | Deploy |
+| `release` | `release` | Release |
+| `consume` | `consume` | Customer Experience |
+| `operate` | `operate` | Operate & Improve |
 
-Expected coworker positions:
+Support band: `governance` value stream renders as a band beneath the primary flow (policy, constitutional governance, evidence chain).
 
-- Scout/research coworkers at Discover and Backlog
-- Architect/design coworkers at Design
-- Build Studio coworkers at Build and Verify
-- Release/governance coworkers at Release
-- Support/operations coworkers at Support and Improve
+Cross-cutting band: `cross-cutting` value stream renders as a band above (orchestrators, COO).
 
-This should be the first implementation target because DPF can use it on itself.
+**Auto-placement rule (resolves Open Question #3):**
+
+1. Read each `Agent.value_stream` from the registry (`packages/db/data/agent_registry.json` is the seed; live state lives in the `Agent` table — query live state per AGENTS.md §1).
+2. Map value stream → station id using the table above.
+3. Agents with `agent_name` matching `build-*` (e.g. `build-data-architect`, `build-software-engineer`, `build-frontend-engineer`, `build-qa-engineer`) land on `build` or `verify` per `2026-04-30-build-specialist-operator-contract.md`. The QA specialist defaults to `verify`; the rest default to `build`.
+4. Agents with `value_stream === "cross-cutting"` land in the cross-cutting band, not on the flow.
+5. Agents with no `value_stream` or an unrecognized value land in an "unplaced" lane below the support band with a quiet badge — the map fails open, not silently.
+
+This map should be the first implementation target because DPF can use it on itself (`2026-04-25-dpf-on-dpf-production-instance-design.md`) and the agent registry already carries the placement data.
 
 ### Managed service provider map
 
@@ -695,6 +721,77 @@ Mapping:
 
 The canonical `AgentEvent` union already covers task lifecycle, tool calls, orchestrator phases, queue escalations, verification, deliberation, brand extract, and async inference. **The map MUST NOT add a parallel discriminant in V1.** If a genuine gap appears during implementation, it lands on the canonical bus first, with a companion change in the substrate spec (`2026-04-29-coworker-execution-adapter-substrate-design.md`) — never as a parallel envelope owned by the map. Specifically, handoffs are projected from `queue:escalation` and `orchestrator:task_dispatched` / `task_complete` correlated by `threadId|buildId`; approvals are projected from `task:status === "input-required" | "auth-required"`; verification is projected from `verification:complete`.
 
+## Performance Budget
+
+A map that costs 200ms to render and 12 queries to assemble is a map nobody opens. V1 commits to the following budget; the load-projection layer enforces it.
+
+### Query plan
+
+`loadProjection({ organizationId, since, viewerCapabilities, limit })` issues exactly **five parallel queries**, one per source:
+
+1. `ToolExecution.findMany` — index `(agentId, createdAt)` already exists (`schema.prisma:3003`); add `where: { createdAt: { gte: since } }` plus `organizationId` scoping via the user/agent join. **Reuse the existing index.**
+2. `ToolExecutionReceipt.findMany` — index `(receiptKind, createdAt(sort:Desc))` exists (`schema.prisma:3028`); filter by `createdAt >= since` and `receiptStatus = "valid"`. **Reuse.**
+3. `BacklogItemActivity.findMany` where `kind = "evidence"` and `recordedAt >= since`. Existing index on `(backlogItemId, recordedAt)` covers this when scoped per item; for the global view, add `@@index([kind, recordedAt(sort:Desc)])` **only if** the query plan shows a sequential scan in `EXPLAIN ANALYZE` on a 1M-row table (verify on the DPF-on-DPF instance before adding the index — don't add speculatively).
+4. `ExternalEvidenceRecord.findMany` — index `(operationType, createdAt)` exists (`schema.prisma:3188`). **Reuse.**
+5. `Agent.findMany` — small table, scan is fine; used for `actor` resolution.
+
+The SSE `AgentEvent` stream is **not** part of this query (it's a transport, not a query); when the feature flag for live mode is on, the client opens a single SSE connection to `/api/agent/stream` and merges events into the in-memory projection.
+
+### Budget
+
+| Metric | V1 budget |
+| --- | --- |
+| Default `since` | 1 hour |
+| Max `since` | 24 hours (operator override); 7 days requires Auditor tier |
+| `limit` per source | 250 rows |
+| Total projection size | ≤ 1,250 rows pre-dedupe |
+| Server render time | < 250 ms P95 on the DPF-on-DPF instance |
+| Initial DOM nodes | < 800 |
+| First inspector open | < 50 ms (data already in memory; no follow-up fetch) |
+
+If a viewer needs more, the inspector deep-links to `/platform/ai/history` with the relevant filter pre-applied. The map is for orientation; the history page is for excavation.
+
+### Pagination behavior
+
+V1 does not paginate the map itself. Above the `limit`, the projection adds a "more in this window" affordance per station that links into `/platform/ai/history`. The map never silently truncates.
+
+## Failure Modes
+
+What the map shows when something is wrong matters as much as what it shows when everything is normal.
+
+| Condition | Render | Inspector | Telemetry |
+| --- | --- | --- | --- |
+| Zero events in window | Quiet empty state: stations rendered idle, banner "No activity in the last hour. Try widening the window." | hidden | event-bus heartbeat shown in footer |
+| One source fails (e.g. `ToolExecutionReceipt` query rejects) | Map renders from remaining sources; affected source shows a per-station banner "Receipts unavailable — try again or check `/platform/audit/journal`" | shown for other sources | error logged with `tool-trace`-style structured log |
+| All sources fail | Full-page error with the actual error from the projection layer (no generic "Something went wrong"); link to `/platform/audit/journal`; retry button | hidden | error logged + alert |
+| Viewer lacks `view_platform` | Redirect to `/welcome` (existing route guard); no map renders | n/a | n/a |
+| Cross-org row in result set | Filter at the projection layer; **also** assert in dev mode (`process.env.NODE_ENV !== "production"`) and throw if found, so seeding bugs surface immediately | n/a | error in dev; silent filter in prod |
+| Unknown `AgentEvent` discriminant | Projected with `severity: "normal"` and `summary: <discriminant>`; rendered as a quiet generic badge; **never crashes** | shown with raw event | discriminant logged once per session for follow-up |
+| Unknown `auditClass` value | Projected with `severity: "warning"` (fail safe — unknown = treat with caution); inspector flags it | shown | logged |
+
+The "fail open with a quiet banner" pattern is intentional. The map is an operator surface; a missing source should degrade visibility, not blank the screen.
+
+## Forward Compatibility
+
+`AgentEvent` is an evolving union. The map MUST handle discriminants it doesn't recognize without breaking. This is enforced two ways:
+
+1. **TypeScript exhaustiveness with default branch.** The projection function uses an exhaustiveness check (`assertNever`) but the **default case projects** rather than throws — it produces a `severity: "normal"` projection with the raw event in the inspector. The exhaustiveness check fires as a build-time test (Vitest), not as a runtime guard.
+2. **Source kind set is closed; event discriminants are open.** New `MapProjection.kind.source` values require a spec PR (they imply a new data source). New `AgentEvent` discriminants do not — they project under the default branch until the team explicitly decides how to render them.
+
+This keeps the map honest about what it knows while letting the canonical event bus evolve without coordinated PRs.
+
+## Responsive Behavior
+
+The map is a desktop-first surface; mobile is a fallback, not a primary mode.
+
+| Breakpoint | Behavior |
+| --- | --- |
+| ≥ 1280 px | Full schematic with lines, support bands, cross-cutting band; inspector docked right |
+| 768–1279 px | Schematic compresses to single primary flow; support/cross-cutting bands collapse to a togglable strip; inspector docked right or bottom |
+| < 768 px | Stacked list per station with the pulse count; selecting a station opens a full-screen inspector; the schematic is not drawn |
+
+The transition between breakpoints is CSS-driven (`@media`), not JS-driven. Reduced motion still applies at every breakpoint.
+
 ## Data Model Recommendation
 
 Do not begin with a large schema migration.
@@ -927,7 +1024,7 @@ Per repo rulebook:
 
 1. **Launch shape.** New tab at `/platform/ai/operations-map` first (recommended). Replacement of the AI overview waits until the new IA is exercised on a real install. The legacy `/platform/ai/operations` redirect is an available alias slot; V2 IA refresh may point it at the map.
 2. **Template ownership.** Code-owned through V2. Admin customization is deferred — the platform must first prove the model has settled before opening it for edit.
-3. **Auto-placement.** Which coworker roles are canonical enough today to place automatically on the software-platform map? Resolve in the V1 PR by querying the `Agent` registry on a fresh install + DPF's own production instance and listing the roles actually seeded. Anything not in that intersection lives in an "unplaced" lane until manually positioned in V2.
+3. ~~**Auto-placement.**~~ **Resolved.** `packages/db/data/agent_registry.json` already carries `value_stream` per agent (IT4IT v3 values). The software-platform map's stations align to those values; placement is `Agent.value_stream → station`. Unknown / missing values land in the "unplaced" lane. See §"Software platform map".
 4. **Projection precedence.** When the same logical event appears on both the `AgentEvent` bus and as a `ToolExecution` row (common for tool starts), which is authoritative for the pulse? **Decision:** `ToolExecution` is the audit truth; `AgentEvent` is the liveness signal. Inspector shows both; map deduplicates by `(toolExecutionId, occurredAt±2s)`. Pulses that exist only on the bus (e.g. `verification:step`) remain liveness-only and inspector-linked.
 5. **Build Studio rendering.** Single coworker badge anchored to Build, with per-task children in the inspector? Or per-phase badges across Design / Build / Verify? **Resolved for V1:** one badge per active `FeatureBuild` anchored to Build with phase shown inside the badge (`phase:change` event drives the position from Design → Build → Verify → Release). Per-task specialists appear in the inspector, not on the map, per `2026-04-30-build-specialist-operator-contract.md`.
 6. **Handoff event.** The current `AgentEvent` union has no `task:handoff`, but it has `queue:escalation`, `orchestrator:task_dispatched`, `orchestrator:task_complete`, and queue transitions. **Decision:** V1 projects handoffs from those existing discriminants correlated by `(threadId|buildId, workItemId)`. Do **not** add a `task:handoff` discriminant in V1; revisit only if correlation proves unreliable on a real install.
