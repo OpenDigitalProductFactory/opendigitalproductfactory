@@ -35,8 +35,14 @@ const BLOCKED_PATTERNS = [
   /\.key$/i,
   /\.pem$/i,
   /\.p12$/i,
-  /^credentials/i,
-  /^secrets/i,
+  // Block `credentials` and `secrets` whether they appear at the start
+  // of the path or as any path component — start-anchored `/^secrets/i`
+  // silently allowed nested `config/secrets/admin.json` through, which
+  // defeated the intent. The trailing class `(?:[\\/.]|$)` keeps the
+  // pattern from false-matching legitimate directory names that merely
+  // share a prefix (`secrets-management`, `credentials-rotation`).
+  /(?:^|[\\/])credentials(?:[\\/.]|$)/i,
+  /(?:^|[\\/])secrets(?:[\\/.]|$)/i,
   /[\\/]\.git[\\/]/,
   /^\.git[\\/]/,
   /^\.git$/,
