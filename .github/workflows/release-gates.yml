@@ -208,20 +208,10 @@ jobs:
       - name: Run install-dpf.sh --dry-run --headless --release
         run: bash install-dpf.sh --dry-run --headless --release
 
-      - name: Render macos compose chain
-        # docker compose config works without a running daemon; it
-        # only parses + merges YAML. Validates docker-compose.macos.yml
-        # against the BSD userland (jq / yaml parsing differences).
-        env:
-          DPF_HOST_INSTALL_PATH: /tmp/dpf
-          AUTH_SECRET: ci-placeholder
-          CREDENTIAL_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
-          ADMIN_PASSWORD: ci-placeholder
-          POSTGRES_PASSWORD: ci-placeholder
-          NEO4J_AUTH: neo4j/ci-placeholder
-          DATABASE_URL: postgresql://dpf:ci-placeholder@postgres:5432/dpf
-        run: |
-          set -euo pipefail
-          # Docker is preinstalled on macos-14 runners.
-          docker compose -f docker-compose.yml -f docker-compose.macos.yml config -q
-          docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.macos.yml config -q
+      # Compose-render coverage for docker-compose.macos.yml lives in the
+      # `compose-render (* / macos)` matrix on ubuntu-latest. macos-14
+      # runners don't ship Docker, so asserting render here would
+      # either require a paid `brew install` step or fail at exit 127.
+      # `docker compose config` is platform-agnostic YAML parsing — it
+      # doesn't depend on the host userland — so the ubuntu coverage
+      # is sufficient.
