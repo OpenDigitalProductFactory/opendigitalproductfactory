@@ -59,6 +59,14 @@ export function saveOperationsMapViewPreference(preference: OperationsMapViewPre
   }
 }
 
+export function clearOperationsMapViewPreference(): void {
+  try {
+    localStorage.removeItem(OPERATIONS_MAP_VIEW_PREFERENCE_KEY);
+  } catch {
+    // localStorage can be unavailable; resetting in-memory state still keeps the map usable.
+  }
+}
+
 function isStoredQuickViewId(value: unknown): value is OperationsMapStoredQuickViewId {
   return value === "custom" || (typeof value === "string" && ALL_QUICK_VIEW_IDS.has(value as OperationsMapQuickViewId));
 }

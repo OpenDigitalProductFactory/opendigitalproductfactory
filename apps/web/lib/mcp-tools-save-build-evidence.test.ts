@@ -158,4 +158,71 @@ describe("saveBuildEvidence", () => {
       }),
     );
   });
+
+  // Regression: a writer once stored a backlog claim summary under taskResults,
+  // causing the Build Studio process graph to crash with "Cannot read
+  // properties of undefined (reading 'split')". Reject that shape at the
+  // boundary so it can't reach the column.
+  it("rejects taskResults entries that lack title/specialist", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "taskResults",
+        value: {
+          tasks: [{ status: "claimed_by_ai_coworker", item_id: "BI-B6423E18" }],
+        },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/missing title\/specialist/);
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts taskResults with the canonical orchestrator shape", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "taskResults",
+        value: {
+          completedTasks: 1,
+          totalTasks: 1,
+          tasks: [
+            { title: "Add schema", specialist: "data-architect", outcome: "DONE", durationMs: 1200 },
+          ],
+        },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts taskResults summary writes that omit the tasks array", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "taskResults",
+        value: {
+          agenticResult: "Build complete",
+          toolsExecuted: ["generate_code"],
+          filesChanged: 3,
+          ranTests: true,
+        },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(true);
+  });
 });
