@@ -3,6 +3,15 @@
 This is the end-user install guide for the Open Digital Product Factory
 on **Apple Silicon Macs** (M1 / M2 / M3 / M4).
 
+> **Status: preview.** The macOS installer code is complete and passes
+> static CI gates, but end-to-end runtime verification on real Apple
+> Silicon hardware has not yet been completed (the `macos-14` GHA
+> runner can't nest-virtualize Docker Desktop, so CI only exercises
+> the `--dry-run` path). See
+> [verification-runbook.md](verification-runbook.md) for the matrix
+> that needs to land before promoting to GA. The Windows installer
+> remains the only GA install surface today.
+
 For the architectural background, see the
 [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
 and the [deployment doctrine](../superpowers/specs/2026-05-09-deployment-contracts.md).
