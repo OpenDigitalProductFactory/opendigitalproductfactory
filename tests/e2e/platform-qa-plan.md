@@ -23,6 +23,14 @@ When a test fails, create a backlog item under the active QA epic referencing th
 
 ---
 
+## Automated Coverage Mapping
+
+High-risk AI routing and UX checks are mapped in `apps/web/lib/testing/route-contracts.ts`.
+
+When adding or changing a QA ID for Build Studio, Ops/backlog, Discovery, Storefront, Platform AI, or Finance tax, update the route contract matrix in the same PR. Route contracts are not a replacement for this plan; they are the automated assertion layer that prevents route-agent-tool-prompt drift from silently invalidating these manual cases.
+
+---
+
 ## Phase 1: Authentication & Onboarding
 
 | ID | Steps | Expected |
