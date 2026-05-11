@@ -31,6 +31,7 @@ import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { recallWikiContext } from "@/lib/wiki/recall";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
@@ -489,6 +490,21 @@ export async function sendMessage(input: {
     if (selectedKnowledge) finalDomainContext += "\n\n" + selectedKnowledge;
     if (selectedMemory) finalDomainContext += "\n\n" + selectedMemory;
 
+    // EP-WIKI-001 Phase 3b1: passive wiki context injection.
+    // Pulls the top-K kernel + overlay pages relevant to the user's
+    // message and renders them in Block 5 below domainContext.
+    // recallWikiContext has a silent-degradation contract (returns
+    // null on any failure) so wiki retrieval can never break the
+    // prompt pipeline.
+    const wikiOrg = await prisma.organization
+      .findFirst({ select: { id: true } })
+      .catch(() => null);
+    const wikiContext = await recallWikiContext({
+      query: input.content,
+      organizationId: wikiOrg?.id ?? null,
+      limit: 4,
+    });
+
     populatedPrompt = await assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
@@ -499,6 +515,7 @@ export async function sendMessage(input: {
       domainTools: [], // Already included in domain block
       routeData: selectedPageData,
       attachmentContext: selectedAttachments,
+      wikiContext,
     });
   } else {
     // ── Legacy persona-based prompt assembly ──

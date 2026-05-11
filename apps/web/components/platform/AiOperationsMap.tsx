@@ -24,8 +24,15 @@ type Props = {
 const SEVERITY_CLASS: Record<OperationsMapProjection["severity"], string> = {
   normal: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]",
   attention: "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]",
-  warning: "border-[var(--dpf-state-warning)] bg-[color-mix(in_srgb,var(--dpf-state-warning)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
-  critical: "border-[var(--dpf-state-error)] bg-[color-mix(in_srgb,var(--dpf-state-error)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
+  warning: "border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
+  critical: "border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_10%,var(--dpf-surface-1))] text-[var(--dpf-text)]",
+};
+
+const SOURCE_LABEL: Record<OperationsMapProjection["source"], string> = {
+  "tool-execution": "Tool execution",
+  "tool-receipt": "Receipt",
+  "evidence-backlog": "Backlog evidence",
+  "evidence-external": "External evidence",
 };
 
 export function AiOperationsMap({ template, agents, projections, recentWindowLabel }: Props) {
@@ -51,7 +58,7 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
           </p>
           <h1 className="mt-1 text-2xl font-bold text-[var(--dpf-text)]">AI Operations Map</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">
-            {template.label} projects coworker work onto the business flow using existing tool execution and coworker records.
+            {template.label} projects coworker work onto the business flow using existing execution, receipt, and evidence records.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -74,7 +81,7 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
                 <p className="text-xs text-[var(--dpf-muted)]">{recentWindowLabel}</p>
               </div>
               <span className="rounded border border-[var(--dpf-border)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-                Read-only V1
+                Read-only V2
               </span>
             </div>
           </div>
@@ -234,7 +241,7 @@ function StationInspector({
             {projection.summary}
           </button>
         )) : (
-          <p className="text-xs text-[var(--dpf-muted)]">No recent tool execution projected here.</p>
+          <p className="text-xs text-[var(--dpf-muted)]">No recent activity projected here.</p>
         )}
       </InspectorList>
     </div>
@@ -265,24 +272,34 @@ function AgentInspector({ agent }: { agent: StationedOperationsMapAgent }) {
 }
 
 function ProjectionInspector({ projection }: { projection: OperationsMapProjection }) {
+  const linkItems = [
+    projection.links.authorityHref ? { href: projection.links.authorityHref, label: "Open audit row" } : null,
+    projection.links.historyHref ? { href: projection.links.historyHref, label: "Open history" } : null,
+    projection.links.backlogHref ? { href: projection.links.backlogHref, label: "Open backlog item" } : null,
+    projection.links.coworkerHref ? { href: projection.links.coworkerHref, label: "Open coworker" } : null,
+  ].filter((item): item is { href: string; label: string } => item !== null);
+
   return (
     <div className="mt-4 space-y-4">
       <div>
-        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">Tool execution</p>
+        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+          {SOURCE_LABEL[projection.source]}
+        </p>
         <h3 className="mt-1 text-base font-semibold text-[var(--dpf-text)]">{projection.label}</h3>
         <p className="mt-2 text-sm leading-6 text-[var(--dpf-muted)]">{projection.summary}</p>
       </div>
       <dl className="grid grid-cols-2 gap-2 text-xs">
+        <InspectorFact label="Source" value={SOURCE_LABEL[projection.source]} />
         <InspectorFact label="Severity" value={projection.severity} />
-        <InspectorFact label="Thread" value={projection.refs.threadId} />
+        {projection.refs.threadId ? <InspectorFact label="Thread" value={projection.refs.threadId} /> : null}
+        {projection.refs.backlogItemId ? <InspectorFact label="Backlog item" value={projection.refs.backlogItemId} /> : null}
       </dl>
       <div className="flex flex-wrap gap-2">
-        <Link href={projection.links.authorityHref} className="text-sm text-[var(--dpf-accent)] hover:underline">
-          Open audit row
-        </Link>
-        <Link href={projection.links.coworkerHref} className="text-sm text-[var(--dpf-accent)] hover:underline">
-          Open coworker
-        </Link>
+        {linkItems.map((item) => (
+          <Link key={item.href} href={item.href} className="text-sm text-[var(--dpf-accent)] hover:underline">
+            {item.label}
+          </Link>
+        ))}
       </div>
     </div>
   );

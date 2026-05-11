@@ -51,7 +51,7 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/autostart.sh"
 
 # Installer version (semver-ish; bump per release).
-DPF_INSTALLER_VERSION="2026.05.10-phase7c"
+DPF_INSTALLER_VERSION="2026.05.11-phase10a"
 
 # ── CLI handling ────────────────────────────────────────────────────────────
 
@@ -141,10 +141,17 @@ echo "  Platform: $DPF_PLATFORM ($DPF_ARCH)"
 echo "  Mode: $DPF_MODE$(if [ "$DPF_DRY_RUN" = "1" ]; then echo "  [dry-run]"; fi)"
 echo ""
 
-# 1. Preflight: unsupported-host detection.
+# 1. Preflight: unsupported-host detection + port conflicts.
 step "Preflight: host compatibility"
 dpf_preflight_unsupported_host
 ok "Host compatibility check passed"
+
+rc=0
+dpf_preflight_port_conflicts || rc=$?
+if [ "$rc" -ne 0 ]; then
+  exit "$rc"
+fi
+ok "Port preflight passed (portal: ${DPF_PORTAL_PORT:-3000})"
 
 # 2. Bring install-state.json into existence (or validate existing).
 step "Install state"

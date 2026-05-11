@@ -55,7 +55,9 @@ export type BusinessBriefEvidence = {
 };
 
 export type BusinessBuildBrief = {
+  briefId?: string;
   title: string;
+  status?: BusinessBriefStatus;
   intakeSource: BusinessBuildBriefSource;
   businessOutcome: string;
   affectedPeople: string[];
@@ -133,6 +135,54 @@ export type BusinessBuildBriefPersistenceInput = {
   submittedByUserId: string | null;
 };
 
+export type BusinessBuildBriefRecordInput = {
+  briefId?: string;
+  status?: BusinessBriefStatus;
+  intakeSource: BusinessBuildBriefSource;
+  capabilityPackId: string | null;
+  businessOutcome: string;
+  affectedPeople: unknown;
+  affectedWorkflow: string | null;
+  sourceEvidence: unknown;
+  successSignals: string[];
+  constraints: string[];
+  businessInterpretation: string | null;
+  technicalInterpretation: unknown;
+  riskProfile: unknown;
+  openQuestions: string[];
+  confidence: BusinessBriefConfidence | null;
+};
+
+export type BusinessBuildBriefEditInput = {
+  briefId: string;
+  businessOutcome: string;
+  affectedPeopleText: string;
+  affectedWorkflow?: string | null;
+  sourceEvidenceText: string;
+  successSignalsText: string;
+  constraintsText: string;
+  openQuestionsText: string;
+  accept?: boolean;
+};
+
+export type BusinessBuildBriefEditPersistence = {
+  status: BusinessBriefStatus;
+  accepted: boolean;
+  businessOutcome: string;
+  affectedPeople: Array<{ kind: "persona"; label: string }>;
+  affectedWorkflow: string | null;
+  sourceEvidence: BusinessBriefEvidence[];
+  successSignals: string[];
+  constraints: string[];
+  businessInterpretation: string;
+  technicalInterpretation: BusinessBuildBrief["technicalInterpretation"];
+  riskProfile: BusinessBuildBrief["riskProfile"];
+  openQuestions: string[];
+  confidence: BusinessBriefConfidence;
+  confidenceRationale: string;
+  legacyFeatureBrief: FeatureBrief;
+};
+
 const CAPABILITY_PACKS: Array<{
   id: CapabilityPackId;
   label: CapabilityPack;
@@ -179,6 +229,13 @@ function cleanList(values: string[] | null | undefined): string[] {
   return (values ?? []).map((value) => value.trim()).filter(Boolean);
 }
 
+function textLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function includesAny(text: string, keywords: string[]): boolean {
   return keywords.some((keyword) => text.includes(keyword));
 }
@@ -203,6 +260,14 @@ function evidenceFromInputs(inputs: string[]): BusinessBriefEvidence[] {
     label: "Provided references",
     summary: inputs.join("; "),
   }];
+}
+
+function evidenceFromText(value: string): BusinessBriefEvidence[] {
+  return textLines(value).map((line) => ({
+    kind: "artifact",
+    label: line.length > 80 ? `${line.slice(0, 77)}...` : line,
+    summary: line,
+  }));
 }
 
 function riskLevel(featureBrief: FeatureBrief, constraints: string[]): BusinessBuildBrief["riskProfile"] {
@@ -252,6 +317,12 @@ function confidenceFor(openQuestions: string[]): BusinessBriefConfidence {
   return "low";
 }
 
+function confidenceForBusinessEdit(openQuestions: string[]): BusinessBriefConfidence {
+  if (openQuestions.length === 0) return "high";
+  if (openQuestions.length <= 3) return "medium";
+  return "low";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -265,6 +336,86 @@ function stringArrayField(record: Record<string, unknown>, key: string): string[
   const value = record[key];
   if (!Array.isArray(value)) return [];
   return value.map((entry) => typeof entry === "string" ? entry.trim() : "").filter(Boolean);
+}
+
+function capabilityPackLabel(id: string | null | undefined): CapabilityPack {
+  const normalizedId = capabilityPackIdFromRecord(id);
+  return CAPABILITY_PACKS.find((pack) => pack.id === normalizedId)?.label
+    ?? "Build Studio / Self-Development";
+}
+
+function capabilityPackIdFromRecord(id: string | null | undefined): CapabilityPackId {
+  return CAPABILITY_PACKS.some((pack) => pack.id === id)
+    ? id as CapabilityPackId
+    : "build_studio_self_development";
+}
+
+function affectedPeopleFromRecord(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") return entry.trim();
+      if (!isRecord(entry)) return "";
+      const label = stringField(entry, "label");
+      if (label) return label;
+      return stringField(entry, "principalId");
+    })
+    .filter(Boolean);
+}
+
+function evidenceFromRecord(value: unknown): BusinessBriefEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const label = stringField(entry, "label") || stringField(entry, "kind") || "Evidence";
+    const summary = stringField(entry, "summary") || stringField(entry, "note") || label;
+    const kind = stringField(entry, "kind");
+    const href = stringField(entry, "href") || stringField(entry, "url");
+    return [{
+      kind: (
+        kind === "existing_example" ||
+        kind === "conversation" ||
+        kind === "coworker" ||
+        kind === "market_signal"
+      ) ? kind : "artifact",
+      label,
+      summary,
+      ...(href ? { url: href } : {}),
+    } satisfies BusinessBriefEvidence];
+  });
+}
+
+function technicalInterpretationFromRecord(
+  value: unknown,
+): BusinessBuildBrief["technicalInterpretation"] {
+  if (!isRecord(value)) {
+    return { dataNeeds: null, likelyWorkflowImpact: [], verificationFocus: [] };
+  }
+  return {
+    dataNeeds: stringField(value, "dataNeeds") || null,
+    likelyWorkflowImpact: stringArrayField(value, "likelyWorkflowImpact"),
+    verificationFocus: stringArrayField(value, "verificationFocus"),
+  };
+}
+
+function riskProfileFromRecord(value: unknown): BusinessBuildBrief["riskProfile"] {
+  if (!isRecord(value)) {
+    return {
+      customerFacing: false,
+      complianceSensitive: false,
+      revenueImpacting: false,
+      operationalRisk: false,
+      level: "low",
+    };
+  }
+  const level = stringField(value, "level");
+  return {
+    customerFacing: value.customerFacing === true,
+    complianceSensitive: value.complianceSensitive === true,
+    revenueImpacting: value.revenueImpacting === true,
+    operationalRisk: value.operationalRisk === true,
+    level: level === "high" || level === "medium" ? level : "low",
+  };
 }
 
 function coerceLegacyFeatureBrief(value: unknown, fallbackTitle: string): FeatureBrief {
@@ -370,6 +521,103 @@ export function buildBusinessBuildBrief(input: BuildBusinessBuildBriefInput): Bu
     },
     openQuestions,
     confidence: confidenceFor(openQuestions),
+  };
+}
+
+export function businessBuildBriefFromRecord(input: {
+  title: string;
+  row: BusinessBuildBriefRecordInput;
+}): BusinessBuildBrief {
+  const capabilityPackId = capabilityPackIdFromRecord(input.row.capabilityPackId);
+  const capabilityPack = capabilityPackLabel(input.row.capabilityPackId);
+  return {
+    ...(input.row.briefId ? { briefId: input.row.briefId } : {}),
+    title: input.title,
+    ...(input.row.status ? { status: input.row.status } : {}),
+    intakeSource: input.row.intakeSource,
+    businessOutcome: input.row.businessOutcome,
+    affectedPeople: affectedPeopleFromRecord(input.row.affectedPeople),
+    affectedWorkflow: input.row.affectedWorkflow,
+    sourceEvidence: evidenceFromRecord(input.row.sourceEvidence),
+    successSignals: input.row.successSignals,
+    constraints: input.row.constraints,
+    businessInterpretation: input.row.businessInterpretation ?? input.row.businessOutcome,
+    capabilityPackId,
+    capabilityPack,
+    riskProfile: riskProfileFromRecord(input.row.riskProfile),
+    technicalInterpretation: technicalInterpretationFromRecord(input.row.technicalInterpretation),
+    openQuestions: input.row.openQuestions,
+    confidence: input.row.confidence ?? "low",
+  };
+}
+
+export function businessBuildBriefEditToPersistence(
+  input: BusinessBuildBriefEditInput,
+): BusinessBuildBriefEditPersistence {
+  const briefId = input.briefId.trim();
+  if (!briefId) throw new Error("Brief id is required");
+
+  const businessOutcome = input.businessOutcome.trim();
+  if (!businessOutcome) throw new Error("Business outcome is required");
+
+  const affectedPeople = textLines(input.affectedPeopleText);
+  const sourceEvidence = evidenceFromText(input.sourceEvidenceText);
+  const successSignals = textLines(input.successSignalsText);
+  const constraints = textLines(input.constraintsText);
+  const openQuestions = textLines(input.openQuestionsText);
+
+  if (affectedPeople.length === 0) openQuestions.push("Who is affected by this business change?");
+  if (sourceEvidence.length === 0) {
+    openQuestions.push("What evidence, example, or artifact should DPF use as the reference?");
+  }
+  if (successSignals.length === 0) openQuestions.push("What business signal proves this worked?");
+
+  const confidence = confidenceForBusinessEdit(openQuestions);
+  const accepted = input.accept === true && confidence !== "low" && openQuestions.length === 0;
+  const affectedWorkflow = input.affectedWorkflow?.trim() || null;
+  const likelyWorkflowImpact = [
+    affectedWorkflow,
+    ...affectedPeople,
+  ].filter((value): value is string => Boolean(value));
+  const technicalInterpretation = {
+    dataNeeds: null,
+    likelyWorkflowImpact,
+    verificationFocus: successSignals,
+  };
+  const riskProfile: BusinessBuildBrief["riskProfile"] = {
+    customerFacing: false,
+    complianceSensitive: constraints.some((constraint) => /audit|compliance|privacy|regulated/i.test(constraint)),
+    revenueImpacting: constraints.some((constraint) => /revenue|billing|payment|invoice/i.test(constraint)),
+    operationalRisk: true,
+    level: constraints.length > 0 ? "medium" : "low",
+  };
+
+  return {
+    status: accepted ? "accepted" : "awaiting_clarification",
+    accepted,
+    businessOutcome,
+    affectedPeople: affectedPeople.map((label) => ({ kind: "persona", label })),
+    affectedWorkflow,
+    sourceEvidence,
+    successSignals,
+    constraints,
+    businessInterpretation: businessOutcome,
+    technicalInterpretation,
+    riskProfile,
+    openQuestions,
+    confidence,
+    confidenceRationale: openQuestions.length === 0
+      ? "The brief has a business outcome, affected people, evidence, and success signals."
+      : `The brief still needs clarification: ${openQuestions.join(" ")}`,
+    legacyFeatureBrief: {
+      title: briefId,
+      description: businessOutcome,
+      portfolioContext: affectedWorkflow ?? "",
+      targetRoles: affectedPeople,
+      inputs: sourceEvidence.map((evidence) => evidence.summary),
+      dataNeeds: technicalInterpretation.dataNeeds ?? "",
+      acceptanceCriteria: successSignals,
+    },
   };
 }
 

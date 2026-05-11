@@ -19,6 +19,7 @@ export type OperationsMapTemplate = {
   id: string;
   label: string;
   archetypeCategoryIds: string[];
+  activationProfileTypes?: string[];
   stations: OperationsMapStation[];
   lines: OperationsMapLine[];
 };
@@ -63,11 +64,52 @@ export type OperationsMapToolExecution = {
   summary: string | null;
 };
 
+export type OperationsMapToolExecutionReceipt = {
+  id: string;
+  toolExecutionId: string;
+  buildId: string | null;
+  receiptKind: string;
+  receiptStatus: string;
+  executionStatus: string;
+  expiresAt: Date;
+  createdAt: Date;
+  toolExecution: OperationsMapToolExecution | null;
+};
+
+export type OperationsMapBacklogEvidence = {
+  id: string;
+  backlogItemId: string;
+  kind: string;
+  summary: string;
+  payload: unknown;
+  recordedAt: Date;
+  recordedById: string | null;
+  recordedByAgentId: string | null;
+  toolExecutionId: string | null;
+};
+
+export type OperationsMapExternalEvidence = {
+  id: string;
+  actorUserId: string;
+  routeContext: string;
+  operationType: string;
+  target: string;
+  provider: string;
+  resultSummary: string;
+  createdAt: Date;
+};
+
+export type OperationsMapProjectionSource =
+  | "tool-execution"
+  | "tool-receipt"
+  | "evidence-backlog"
+  | "evidence-external";
+
 export type OperationsMapProjection = {
   id: string;
   occurredAt: string;
-  actorAgentId: string;
-  source: "tool-execution";
+  actorAgentId: string | null;
+  source: OperationsMapProjectionSource;
   location: {
     lineId: string;
     stationId: string;
@@ -76,12 +118,24 @@ export type OperationsMapProjection = {
   summary: string;
   label: string;
   refs: {
-    threadId: string;
-    toolExecutionId: string;
-    capabilityId: string | null;
+    threadId?: string | null;
+    toolExecutionId?: string | null;
+    toolReceiptId?: string | null;
+    backlogItemActivityId?: string | null;
+    backlogItemId?: string | null;
+    externalEvidenceRecordId?: string | null;
+    buildId?: string | null;
+    capabilityId?: string | null;
   };
   links: {
-    authorityHref: string;
-    coworkerHref: string;
+    authorityHref?: string;
+    coworkerHref?: string;
+    historyHref?: string;
+    backlogHref?: string;
   };
+};
+
+export type OperationsMapTemplateSelector = {
+  archetypeId?: string | null;
+  activationProfileType?: string | null;
 };

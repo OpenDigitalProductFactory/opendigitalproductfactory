@@ -27,9 +27,13 @@ import type {
   BuildDeliberationSummaryEntry,
 } from "@/lib/explore/feature-build-types";
 import { mergeHappyPathStateIntoPlan } from "@/lib/explore/feature-build-types";
-import { dispatchCodexTask, type CodexResult } from "./codex-dispatch";
-import { dispatchClaudeTask, type ClaudeResult } from "./claude-dispatch";
+import type { CodexResult } from "./codex-dispatch";
+import type { ClaudeResult } from "./claude-dispatch";
 import { getBuildStudioConfig } from "./build-studio-config";
+import { assertAgentProviderCompatibility, type BuildAgentId } from "./sandbox/agent-runner-types";
+import { getBuildAgentRunner } from "./sandbox/agents";
+import { getBuildExecutionProvider } from "./sandbox/providers";
+import type { BuildExecutionProviderId } from "./sandbox/provider-types";
 import type { ReviewResult } from "@/lib/feature-build-types";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import {
@@ -44,6 +48,16 @@ import {
 
 const MAX_DURATION_ORCHESTRATOR_MS = 2_400_000; // 40 minutes — tasks average 2 min, 14-task builds need ~30 min
 const MAX_SPECIALIST_RETRIES = 2;
+
+export function resolveBuildProviderRunner(input: {
+  agentId?: BuildAgentId;
+  providerId?: BuildExecutionProviderId;
+}) {
+  const provider = getBuildExecutionProvider(input.providerId ?? "local-docker");
+  const runner = getBuildAgentRunner(input.agentId ?? "codex");
+  assertAgentProviderCompatibility(runner.capabilities(), provider.capabilities());
+  return { provider, runner };
+}
 
 // ─── Communication Templates ────────────────────────────────────────────────
 
@@ -577,9 +591,33 @@ async function dispatchSpecialist(params: {
         message,
       });
     };
-    const cliResult = config.provider === "claude"
-      ? await dispatchClaudeTask({ task, buildId, buildContext, priorResults, providerId: config.claudeProviderId, model: config.claudeModel, sessionId, onProgress })
-      : await dispatchCodexTask({ task, buildId, buildContext, priorResults, providerId: config.codexProviderId, model: config.codexModel, onProgress });
+    const { provider, runner } = resolveBuildProviderRunner({ agentId: config.provider });
+    const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+    const runResult = await runner.run(
+      provider,
+      {
+        id: containerId,
+        buildId,
+        providerId: provider.id,
+        containerId,
+      },
+      {
+        task,
+        buildId,
+        buildContext,
+        priorResults,
+        providerId: config.provider === "claude" ? config.claudeProviderId : config.codexProviderId,
+        model: config.provider === "claude" ? config.claudeModel : config.codexModel,
+        sessionId,
+        onProgress,
+      },
+    );
+    const cliResult: CodexResult | ClaudeResult = {
+      content: runResult.stdout || runResult.stderr,
+      success: runResult.exitCode === 0,
+      executedTools: [],
+      durationMs: runResult.durationMs,
+    };
 
     const outcome = classifyOutcome(cliResult, role);
 

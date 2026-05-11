@@ -1,43 +1,75 @@
 import type { AuditClass } from "@/lib/audit-classes";
 import type { TaskState } from "@/lib/tak/task-states";
+import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import type {
   OperationsMapAgent,
+  OperationsMapBacklogEvidence,
+  OperationsMapExternalEvidence,
   OperationsMapProjection,
   OperationsMapSeverity,
   OperationsMapTemplate,
   OperationsMapToolExecution,
+  OperationsMapToolExecutionReceipt,
   StationedOperationsMapAgent,
 } from "./types";
 
 const VALUE_STREAM_TO_STATION: Record<string, string> = {
-  evaluate: "discover",
-  explore: "discover",
-  integrate: "build",
-  deploy: "release",
+  evaluate: "evaluate",
+  explore: "explore",
+  integrate: "integrate",
+  deploy: "deploy",
   release: "release",
-  consume: "support",
-  operate: "support",
-  "cross-cutting": "improve",
+  consume: "consume",
+  operate: "operate",
+  governance: "governance",
+  "cross-cutting": "cross-cutting",
+};
+
+const MSP_VALUE_STREAM_TO_STATION: Record<string, string> = {
+  evaluate: "customer-intake",
+  explore: "customer-intake",
+  integrate: "service-operations",
+  deploy: "service-operations",
+  release: "lifecycle-review",
+  consume: "customer-estate",
+  operate: "service-operations",
+  "cross-cutting": "improvement",
 };
 
 const AGENT_ID_TO_STATION_HINTS: Array<{ pattern: RegExp; stationId: string }> = [
-  { pattern: /scout|research|discover/i, stationId: "discover" },
-  { pattern: /backlog|portfolio|triage/i, stationId: "backlog" },
-  { pattern: /architect|design|ux|plan/i, stationId: "design" },
+  { pattern: /scout|research|discover/i, stationId: "explore" },
+  { pattern: /backlog|portfolio|triage|evaluate/i, stationId: "evaluate" },
+  { pattern: /architect|design|ux|plan|integrate/i, stationId: "integrate" },
   { pattern: /build|code|developer|specialist/i, stationId: "build" },
-  { pattern: /review|verify|qa|test/i, stationId: "verify" },
+  { pattern: /review|verify|verification|qa|test/i, stationId: "verify" },
+  { pattern: /deploy|environment/i, stationId: "deploy" },
   { pattern: /release|deploy|ship/i, stationId: "release" },
-  { pattern: /support|admin|ops|diagnostic/i, stationId: "support" },
+  { pattern: /consume|customer|experience/i, stationId: "consume" },
+  { pattern: /support|admin|ops|operate|diagnostic/i, stationId: "operate" },
+  { pattern: /govern|compliance|policy|authority/i, stationId: "governance" },
+  { pattern: /service|incident|help.?desk|diagnostic/i, stationId: "service-operations" },
+  { pattern: /estate|site|configuration|asset/i, stationId: "customer-estate" },
+  { pattern: /agreement|sla|entitlement/i, stationId: "agreements" },
+  { pattern: /billing|charge|invoice/i, stationId: "billing-readiness" },
+  { pattern: /lifecycle|renewal|review/i, stationId: "lifecycle-review" },
 ];
 
 const ROUTE_CONTEXT_TO_STATION: Array<{ pattern: RegExp; stationId: string }> = [
-  { pattern: /discover|research|scout/i, stationId: "discover" },
-  { pattern: /backlog|portfolio|triage/i, stationId: "backlog" },
-  { pattern: /design|plan|architect/i, stationId: "design" },
+  { pattern: /discover|research|scout|explore/i, stationId: "explore" },
+  { pattern: /backlog|portfolio|triage|evaluate/i, stationId: "evaluate" },
+  { pattern: /design|plan|architect|integrate/i, stationId: "integrate" },
   { pattern: /build|sandbox|code/i, stationId: "build" },
-  { pattern: /verify|review|test|qa/i, stationId: "verify" },
+  { pattern: /verify|verification|review|test|qa/i, stationId: "verify" },
+  { pattern: /deploy|environment/i, stationId: "deploy" },
   { pattern: /release|deploy|ship/i, stationId: "release" },
-  { pattern: /support|admin|ops|diagnostic/i, stationId: "support" },
+  { pattern: /consume|customer|experience/i, stationId: "consume" },
+  { pattern: /support|admin|ops|operate|diagnostic/i, stationId: "operate" },
+  { pattern: /govern|compliance|policy|authority/i, stationId: "governance" },
+  { pattern: /service-operations|incident|help.?desk|diagnostic/i, stationId: "service-operations" },
+  { pattern: /customer-estate|site|configuration|asset/i, stationId: "customer-estate" },
+  { pattern: /agreement|sla|entitlement/i, stationId: "agreements" },
+  { pattern: /billing|charge|invoice/i, stationId: "billing-readiness" },
+  { pattern: /lifecycle|renewal|review/i, stationId: "lifecycle-review" },
 ];
 
 export function deriveProjectionSeverityFromTaskState(state: TaskState): OperationsMapSeverity {
@@ -68,6 +100,14 @@ export function deriveProjectionSeverityFromToolExecution(
   return row.auditClass === "ledger" ? "critical" : "warning";
 }
 
+export function deriveProjectionSeverityFromToolReceipt(
+  row: Pick<OperationsMapToolExecutionReceipt, "receiptStatus" | "executionStatus">,
+): OperationsMapSeverity {
+  if (row.receiptStatus !== "valid") return "warning";
+  if (/fail|error|denied|rejected/i.test(row.executionStatus)) return "warning";
+  return "normal";
+}
+
 export function projectAgentsToStations(
   agents: OperationsMapAgent[],
   template: OperationsMapTemplate,
@@ -84,8 +124,11 @@ export function projectAgentsToStations(
   });
 }
 
-export function projectToolExecution(row: OperationsMapToolExecution): OperationsMapProjection {
-  const stationId = resolveToolExecutionStationId(row);
+export function projectToolExecution(
+  row: OperationsMapToolExecution,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = resolveToolExecutionStationId(row, template);
   const severity = deriveProjectionSeverityFromToolExecution(row);
   const outcome = row.success ? "completed" : "failed";
 
@@ -95,7 +138,7 @@ export function projectToolExecution(row: OperationsMapToolExecution): Operation
     actorAgentId: row.agentId,
     source: "tool-execution",
     location: {
-      lineId: "product-flow",
+      lineId: resolveLineId(stationId, template),
       stationId,
     },
     severity,
@@ -113,6 +156,109 @@ export function projectToolExecution(row: OperationsMapToolExecution): Operation
   };
 }
 
+export function projectToolExecutionReceipt(
+  row: OperationsMapToolExecutionReceipt,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = row.toolExecution
+    ? resolveToolExecutionStationId(row.toolExecution, template)
+    : resolveFallbackStationId(template);
+  const label = `${row.receiptKind} receipt`;
+  const toolExecutionId = row.toolExecution?.id ?? row.toolExecutionId;
+
+  return {
+    id: `receipt:${row.id}`,
+    occurredAt: row.createdAt.toISOString(),
+    actorAgentId: row.toolExecution?.agentId ?? null,
+    source: "tool-receipt",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: deriveProjectionSeverityFromToolReceipt(row),
+    label,
+    summary: `${label} ${row.receiptStatus} for ${row.toolExecution?.toolName ?? row.toolExecutionId}`,
+    refs: {
+      threadId: row.toolExecution?.threadId ?? null,
+      toolExecutionId,
+      toolReceiptId: row.id,
+      buildId: row.buildId,
+      capabilityId: row.toolExecution?.capabilityId ?? null,
+    },
+    links: {
+      authorityHref: row.toolExecution
+        ? `/platform/audit/ledger?toolExecutionId=${encodeURIComponent(toolExecutionId)}`
+        : undefined,
+      coworkerHref: row.toolExecution
+        ? `/platform/ai/agent/${encodeURIComponent(row.toolExecution.agentId)}`
+        : undefined,
+      historyHref: `/platform/ai/history?toolReceiptId=${encodeURIComponent(row.id)}`,
+    },
+  };
+}
+
+export function projectBacklogEvidence(
+  row: OperationsMapBacklogEvidence,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = resolveEvidenceStationId(row.summary, template);
+
+  return {
+    id: `backlog-evidence:${row.id}`,
+    occurredAt: row.recordedAt.toISOString(),
+    actorAgentId: row.recordedByAgentId,
+    source: "evidence-backlog",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: "normal",
+    label: "Backlog evidence",
+    summary: row.summary,
+    refs: {
+      backlogItemActivityId: row.id,
+      backlogItemId: row.backlogItemId,
+      toolExecutionId: row.toolExecutionId,
+    },
+    links: {
+      backlogHref: `/platform/backlog?itemId=${encodeURIComponent(row.backlogItemId)}`,
+      authorityHref: row.toolExecutionId
+        ? `/platform/audit/ledger?toolExecutionId=${encodeURIComponent(row.toolExecutionId)}`
+        : undefined,
+      coworkerHref: row.recordedByAgentId
+        ? `/platform/ai/agent/${encodeURIComponent(row.recordedByAgentId)}`
+        : undefined,
+    },
+  };
+}
+
+export function projectExternalEvidence(
+  row: OperationsMapExternalEvidence,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = resolveRouteStationId(row.routeContext, template) ?? resolveEvidenceStationId(row.resultSummary, template);
+
+  return {
+    id: `external-evidence:${row.id}`,
+    occurredAt: row.createdAt.toISOString(),
+    actorAgentId: null,
+    source: "evidence-external",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: "normal",
+    label: `${row.provider} ${row.operationType}`,
+    summary: row.resultSummary,
+    refs: {
+      externalEvidenceRecordId: row.id,
+    },
+    links: {
+      historyHref: `/platform/ai/history?externalEvidenceRecordId=${encodeURIComponent(row.id)}`,
+    },
+  };
+}
+
 export function summarizeProjectionCounts(projections: OperationsMapProjection[]) {
   return projections.reduce(
     (counts, projection) => ({
@@ -125,23 +271,73 @@ export function summarizeProjectionCounts(projections: OperationsMapProjection[]
 
 function resolveAgentStationId(agent: OperationsMapAgent, template: OperationsMapTemplate): string {
   const stationIds = new Set(template.stations.map((station) => station.id));
-  const byValueStream = agent.valueStream ? VALUE_STREAM_TO_STATION[agent.valueStream] : null;
+  const byValueStream = agent.valueStream ? resolveValueStreamStationId(agent.valueStream, template) : null;
   if (byValueStream && stationIds.has(byValueStream)) return byValueStream;
+  if (agent.valueStream) return resolveFallbackStationId(template);
 
   const searchable = `${agent.agentId} ${agent.slugId ?? ""} ${agent.name} ${agent.type}`;
+  const direct = resolveDirectTemplateStationId(searchable, template);
+  if (direct) return direct;
+
   const hinted = AGENT_ID_TO_STATION_HINTS.find((hint) => hint.pattern.test(searchable))?.stationId;
   if (hinted && stationIds.has(hinted)) return hinted;
 
-  return stationIds.has("improve") ? "improve" : template.stations[0].id;
+  return resolveFallbackStationId(template);
 }
 
-function resolveToolExecutionStationId(row: OperationsMapToolExecution): string {
-  const routeContext = row.routeContext;
-  const routeHint = routeContext
-    ? ROUTE_CONTEXT_TO_STATION.find((hint) => hint.pattern.test(routeContext))?.stationId
-    : null;
-  if (routeHint) return routeHint;
+function resolveToolExecutionStationId(row: OperationsMapToolExecution, template: OperationsMapTemplate): string {
+  const routeStationId = row.routeContext ? resolveRouteStationId(row.routeContext, template) : null;
+  if (routeStationId) return routeStationId;
+
+  const agentDirect = resolveDirectTemplateStationId(row.agentId, template);
+  if (agentDirect) return agentDirect;
 
   const agentHint = AGENT_ID_TO_STATION_HINTS.find((hint) => hint.pattern.test(row.agentId))?.stationId;
-  return agentHint ?? "improve";
+  if (agentHint && template.stations.some((station) => station.id === agentHint)) return agentHint;
+
+  return resolveFallbackStationId(template);
+}
+
+function resolveEvidenceStationId(value: string, template: OperationsMapTemplate): string {
+  return resolveRouteStationId(value, template) ?? resolveFallbackStationId(template);
+}
+
+function resolveRouteStationId(value: string, template: OperationsMapTemplate): string | null {
+  const routeDirect = resolveDirectTemplateStationId(value, template);
+  if (routeDirect) return routeDirect;
+
+  const routeHint = ROUTE_CONTEXT_TO_STATION.find((hint) => hint.pattern.test(value))?.stationId;
+  if (routeHint && template.stations.some((station) => station.id === routeHint)) return routeHint;
+
+  return null;
+}
+
+function resolveValueStreamStationId(valueStream: string, template: OperationsMapTemplate): string | null {
+  const map = template.id === "managed-service-provider" ? MSP_VALUE_STREAM_TO_STATION : VALUE_STREAM_TO_STATION;
+  return map[valueStream] ?? null;
+}
+
+function resolveDirectTemplateStationId(value: string, template: OperationsMapTemplate): string | null {
+  const normalized = normalizeStationText(value);
+  return (
+    template.stations.find((station) =>
+      [station.id, station.label, station.shortLabel].map(normalizeStationText).includes(normalized),
+    )?.id ?? null
+  );
+}
+
+function resolveLineId(stationId: string, template: OperationsMapTemplate): string {
+  return template.lines.find((line) => line.stationIds.includes(stationId))?.id ?? template.lines[0]?.id ?? "flow";
+}
+
+function resolveFallbackStationId(template: OperationsMapTemplate): string {
+  const stationIds = new Set(template.stations.map((station) => station.id));
+  for (const stationId of ["unplaced", "improve", "improvement", "operate"]) {
+    if (stationIds.has(stationId)) return stationId;
+  }
+  return template.stations[0].id;
+}
+
+function normalizeStationText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }

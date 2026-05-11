@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    agent: {
-      findMany: vi.fn(),
-    },
-    toolExecution: {
-      findMany: vi.fn(),
-    },
+    storefrontConfig: { findFirst: vi.fn() },
+    agent: { findMany: vi.fn() },
+    toolExecution: { findMany: vi.fn() },
+    toolExecutionReceipt: { findMany: vi.fn() },
+    backlogItemActivity: { findMany: vi.fn() },
+    externalEvidenceRecord: { findMany: vi.fn() },
   },
 }));
 
@@ -22,7 +22,7 @@ vi.mock("next/link", () => ({
 import { prisma } from "@dpf/db";
 
 describe("AI operations map page", () => {
-  it("renders the software platform map with coworkers, tool pulses, and drill-down links", async () => {
+  it("renders the selected map with coworkers, tool pulses, and drill-down links", async () => {
     vi.mocked(prisma.agent.findMany).mockResolvedValue([
       {
         id: "agent-db-1",
@@ -58,17 +58,21 @@ describe("AI operations map page", () => {
         summary: "Write blocked by policy",
       },
     ] as never);
+    vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
 
     const { default: OperationsMapPage } = await import("./page");
     const element = await OperationsMapPage();
     const props = element.props;
 
-    expect(props.template.label).toBe("Software Platform Operations");
-    expect(props.template.stations.map((station: { label: string }) => station.label)).toContain("Discover");
+    expect(props.template.label).toBe("Generic Value Chain");
+    expect(props.template.stations.map((station: { label: string }) => station.label)).toContain("Demand");
     expect(props.agents.map((agent: { name: string }) => agent.name)).toContain("Build Specialist");
     expect(props.projections.map((projection: { label: string }) => projection.label)).toContain("write_sandbox_file");
     expect(props.projections.map((projection: { summary: string }) => projection.summary)).toContain("Write blocked by policy");
     expect(props.projections[0].links.authorityHref).toBe("/platform/audit/ledger?toolExecutionId=tool-1");
     expect(props.projections[0].links.coworkerHref).toBe("/platform/ai/agent/build-specialist");
+    expect(props.recentWindowLabel).toBe("Last 40 records per evidence source");
   });
 });

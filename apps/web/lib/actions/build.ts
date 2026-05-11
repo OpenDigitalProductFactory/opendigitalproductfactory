@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma, type Prisma } from "@dpf/db";
+import { revalidatePath } from "next/cache";
 import {
   validateFeatureBrief,
   canTransitionPhase,
@@ -20,7 +21,10 @@ import {
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
-import { legacyFeatureBuildBriefToBusinessBuildBriefInput } from "@/lib/build/business-build-brief";
+import {
+  businessBuildBriefEditToPersistence,
+  legacyFeatureBuildBriefToBusinessBuildBriefInput,
+} from "@/lib/build/business-build-brief";
 import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
 import { listReleasableSandboxFiles } from "@/lib/integrate/sandbox/sandbox";
@@ -202,6 +206,75 @@ export async function updateFeatureBrief(
       },
     });
   });
+}
+
+export async function updateBusinessBuildBrief(input: {
+  briefId: string;
+  businessOutcome: string;
+  affectedPeopleText: string;
+  affectedWorkflow?: string | null;
+  sourceEvidenceText: string;
+  successSignalsText: string;
+  constraintsText: string;
+  openQuestionsText: string;
+  accept?: boolean;
+}): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const persistence = businessBuildBriefEditToPersistence(input);
+  const briefId = input.briefId.trim();
+
+  const existing = await prisma.businessBuildBrief.findUnique({
+    where: { briefId },
+    select: {
+      briefId: true,
+      featureBuildId: true,
+      submittedByUserId: true,
+      status: true,
+    },
+  });
+  if (!existing) throw new Error("Business build brief not found");
+  if (existing.submittedByUserId && existing.submittedByUserId !== userId) {
+    throw new Error("Forbidden");
+  }
+
+  const acceptedFields = persistence.accepted
+    ? { acceptedByUserId: userId, acceptedAt: new Date() }
+    : { acceptedByUserId: null, acceptedAt: null };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.businessBuildBrief.update({
+      where: { briefId },
+      data: {
+        status: persistence.status,
+        businessOutcome: persistence.businessOutcome,
+        affectedPeople: persistence.affectedPeople as unknown as Prisma.InputJsonValue,
+        affectedWorkflow: persistence.affectedWorkflow,
+        sourceEvidence: persistence.sourceEvidence as unknown as Prisma.InputJsonValue,
+        successSignals: persistence.successSignals,
+        constraints: persistence.constraints,
+        businessInterpretation: persistence.businessInterpretation,
+        technicalInterpretation: persistence.technicalInterpretation as unknown as Prisma.InputJsonValue,
+        riskProfile: persistence.riskProfile as unknown as Prisma.InputJsonValue,
+        openQuestions: persistence.openQuestions,
+        confidence: persistence.confidence,
+        confidenceRationale: persistence.confidenceRationale,
+        submittedByUserId: userId,
+        ...acceptedFields,
+      },
+    });
+
+    if (existing.featureBuildId) {
+      await tx.featureBuild.update({
+        where: { id: existing.featureBuildId },
+        data: {
+          brief: persistence.legacyFeatureBrief as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/build");
 }
 
 // ─── Advance Phase ───────────────────────────────────────────────────────────

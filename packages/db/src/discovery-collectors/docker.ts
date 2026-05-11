@@ -1,10 +1,37 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import type { CollectorContext, CollectorOutput } from "../discovery-types";
 
+// Candidate Docker daemon socket paths, in detection order. The host's
+// platform dictates which one is real:
+//
+//   Linux                 /var/run/docker.sock
+//   macOS Docker Desktop  /var/run/docker.sock (symlink) OR ~/.docker/run/docker.sock
+//                         OR ~/Library/Containers/com.docker.docker/Data/docker.raw.sock
+//                         (depending on Docker Desktop version)
+//   Windows               \\.\pipe\docker_engine
+//
+// We list the Unix path first so a Linux + Docker Engine install picks
+// up the canonical path immediately; macOS / Windows variants follow.
+// Per the installer-parity roadmap Phase 10b.
+const HOME = os.homedir();
 const DOCKER_SOCKET_PATHS = [
   "/var/run/docker.sock",
+  // Docker Desktop 4.13+ (macOS): per-user socket under ~/.docker/run
+  path.join(HOME, ".docker", "run", "docker.sock"),
+  // Docker Desktop older builds (macOS): sandboxed container path
+  path.join(
+    HOME,
+    "Library",
+    "Containers",
+    "com.docker.docker",
+    "Data",
+    "docker.raw.sock",
+  ),
+  // Windows named pipe
   "\\\\.\\pipe\\docker_engine",
 ];
 

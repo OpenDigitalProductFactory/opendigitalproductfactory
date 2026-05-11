@@ -1,15 +1,28 @@
-# Build Execution Provider Architecture (DRAFT / RESEARCH)
+# Build Execution Provider + Agent Runner Architecture (DRAFT / RESEARCH)
 
 > Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
 > this needs full "Research & Benchmarking" before finalization.
 >
 > **Doctrine reference:** this spec is the canonical implementation
 > of contract 6 (build execution) from
-> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`.
+> `docs/superpowers/specs/2026-05-09-deployment-contracts.md`. Where
+> doctrine owns shared rules (Contract 9 envvars, per-deployment
+> defaults), this spec **references** rather than restates.
 >
 > Purpose: stop scattering Build Studio caveats across every
-> deployment spec by isolating the hardest shared concern — sandbox
-> lifecycle — behind a provider abstraction.
+> deployment spec by isolating the two hardest shared concerns —
+> sandbox lifecycle and agent execution — behind two orthogonal
+> abstractions.
+>
+> **2026-05-10 revision (chief-architect review):** the prior draft
+> conflated substrate (where the sandbox runs) with agent (what runs
+> inside the sandbox) into one `BuildExecutionProviderImpl`. This
+> revision splits them into `BuildExecutionProvider` (substrate) and
+> `BuildAgentRunner` (agent), and introduces a first-class
+> `dpf-native` agent so Build Studio can ship on every substrate
+> without depending on bundled vendor CLIs (Codex, Claude Code) or
+> their port 1455 OAuth callbacks. See "What changed in 2026-05-10
+> revision" below for the rationale and migration sketch.
 
 ## Why this exists
 
@@ -37,291 +50,498 @@ TAPPaaS native (NixOS/Podman) packaging. Continuing to special-case
 Build Studio per substrate would scatter the same logic across five+
 deployment specs and guarantee drift.
 
-The fix: make Build Studio consume a `BuildExecutionProvider`
-interface. Each substrate / packaging target wires in the
-appropriate provider implementation. The sandbox image stays the
-same; the lifecycle layer becomes substrate-aware behind an
-interface.
+In parallel, today's agent dispatchers
+(`apps/web/lib/integrate/codex-dispatch.ts`,
+`apps/web/lib/integrate/claude-dispatch.ts`) shell out to `docker
+exec ${SANDBOX_CONTAINER}` to invoke vendor CLIs (`@openai/codex`,
+`@anthropic-ai/claude-code`) bundled in `Dockerfile.sandbox:6,9`.
+These calls **bypass DPF's `LLM_BASE_URL` audit envelope** (Contract
+9 mode 4) and rely on port 1455 for Codex's OAuth callback —
+constraints that scatter further per substrate.
 
-## Current implementation as the `local-docker` provider
+The fix is two orthogonal abstractions:
+
+1. **`BuildExecutionProvider`** — substrate primitive. Each
+   substrate (local Docker, k8s, ECS, Cloud Run Service, Azure
+   Container Apps, TAPPaaS VM) implements one provider. The
+   provider owns sandbox lifecycle and a generic `exec` primitive.
+2. **`BuildAgentRunner`** — agent above the substrate. Each agent
+   (Codex CLI, Claude Code CLI, dpf-native) implements one runner.
+   The runner orchestrates a build task using the provider's `exec`
+   primitive plus its own credential / loop / IO discipline.
+
+The substrate × agent matrix becomes orthogonal: ship one new
+provider for a new substrate; ship one new agent for a new build
+strategy. No N×M reimplementation. This is the GitHub Actions /
+GitLab Runner / Buildkite separation: executor (substrate) vs
+work definition (orchestrator).
+
+## What changed in 2026-05-10 revision
+
+The prior draft fused substrate and agent into one interface, with
+the rationale that "without this in the provider interface, every
+non-`local-docker` provider would have to reimplement the dispatch
+logic." That argument is backwards: the agent dispatch logic varies
+by **agent** (Codex's `~/.codex/auth.json` shape, Claude Code's
+OAuth mount, dpf-native's in-process loop), not by **substrate**.
+Every substrate already needs a generic `exec(handle, command[]) →
+ExecResult` primitive — that's all Codex and Claude need. Agent
+runners live one layer above.
+
+Splitting matters because of the install-mode unlock. The prior
+draft marked Build Studio **Unsupported** on Managed Container
+Service substrates (ECS Fargate, Cloud Run, Azure Container Apps)
+because port 1455 (Codex OAuth callback) can't be exposed there.
+Add a `dpf-native` agent that uses Contract 9 mode 1 (`LLM_BASE_URL`
+inference) instead of bundled vendor CLIs, and every substrate
+becomes Build-Studio-capable with no port 1455 lock-in, no in-
+sandbox refresh tokens, no mode-4 audit gap. That's the largest
+strategic payoff of doing this abstraction right.
+
+The `dpf-native` agent is also the path to closing Contract 9's
+mode-4 compliance gap (line 245–259 of the doctrine spec): air-
+gapped, regulated, and FedRAMP customers can run Build Studio
+without bundled vendor CLIs and without vendor egress.
+
+## Current implementation as the `local-docker` provider × CLI runners
 
 The existing code in
-`apps/web/lib/integrate/sandbox/sandbox.ts` and
-`apps/web/lib/mcp-tools.ts:1025-1162` is the reference behavior. In
-this taxonomy it becomes the `local-docker` provider implementation.
-The refactor extracts the existing logic behind a stable interface
-without behavior change for current Windows / macOS / Linux installs.
+`apps/web/lib/integrate/sandbox/sandbox.ts` (444 LOC),
+`apps/web/lib/mcp-tools.ts:1025-1162`,
+`apps/web/lib/integrate/codex-dispatch.ts` (316 LOC), and
+`apps/web/lib/integrate/claude-dispatch.ts` (368 LOC) is the
+reference behavior. In this taxonomy:
 
-## The provider interface (proposed)
+- `sandbox.ts` + the sandbox MCP tools become the `local-docker`
+  provider implementation.
+- `codex-dispatch.ts` becomes the `codex` agent runner.
+- `claude-dispatch.ts` becomes the `claude` agent runner.
 
-The provider abstraction owns **two responsibilities**, not one:
+The refactor extracts the existing logic behind two stable
+interfaces without behavior change for current Windows / macOS /
+Linux installs. Today's behavior == `local-docker` × {`codex`,
+`claude`}.
 
-1. **Sandbox lifecycle** — create, start, copy files in/out,
-   launch the dev server, exec arbitrary commands, destroy. This
-   is what `apps/web/lib/integrate/sandbox/sandbox.ts` does today.
-2. **Agent command execution** — dispatch CLI agents (Codex,
-   Claude Code) into the sandbox with credentials injected. This
-   is what `apps/web/lib/integrate/codex-dispatch.ts` and
-   `apps/web/lib/integrate/claude-dispatch.ts` do today; both
-   shell out to `docker exec ${SANDBOX_CONTAINER}`. Without this
-   in the provider interface, every non-`local-docker` provider
-   would have to reimplement the dispatch logic — exactly the
-   per-substrate scatter the abstraction exists to prevent.
+## The two interfaces (proposed)
+
+### `BuildExecutionProvider` — substrate primitive
 
 ```typescript
-type BuildExecutionProvider =
+type BuildExecutionProviderId =
   | "local-docker"
   | "tappaas-vm"
   | "kubernetes-job"
-  | "ecs-task"
-  | "cloud-run-job"
+  | "ecs-task"          // batch; no preview URL
+  | "ecs-service"       // long-running; preview URL via ALB
+  | "cloud-run-job"     // batch; no preview URL
+  | "cloud-run-service" // long-running; preview URL via Cloud Run frontend
   | "azure-containerapp-job"
+  | "edge-node-local-docker"   // see Open Questions
   | "disabled";
 
-type SandboxAgent = "codex" | "claude";
+interface BuildExecutionProvider {
+  readonly id: BuildExecutionProviderId;
 
-interface AgentCommandSpec {
+  // Sandbox lifecycle
+  createSandbox(spec: SandboxSpec): Promise<SandboxHandle>;
+  startSandbox(handle: SandboxHandle): Promise<void>;
+  destroySandbox(handle: SandboxHandle): Promise<void>;
+
+  // The substrate primitive every agent runner uses
+  exec(handle: SandboxHandle, command: string[], opts?: ExecOpts): Promise<ExecResult>;
+
+  // File IO — required for build artifact transport
+  readFile(handle: SandboxHandle, path: string): Promise<string>;
+  writeFile(handle: SandboxHandle, path: string, content: string): Promise<void>;
+  copyAppsWebInto(handle: SandboxHandle, source: string): Promise<void>;
+
+  // Optional preview surface — null when substrate can't host a
+  // long-running HTTP server (cloud-run-job, ecs-task, etc.)
+  getPreviewUrl(handle: SandboxHandle): Promise<string | null>;
+  launchNextDev(handle: SandboxHandle): Promise<void>;
+
+  capabilities(): BuildExecutionProviderCapabilities;
+}
+
+type BuildExecutionProviderCapabilities = {
+  // Isolation class — host boundary protecting against untrusted code.
+  isolation: "none" | "container" | "pod" | "vm" | "managed-job";
+
+  // Trust level — what code the Authority Core may route here.
+  trustLevel: "trusted-code-only" | "customer-trusted" | "untrusted-ok";
+
+  // Workspace persistence between exec calls.
+  workspacePersistence: "ephemeral" | "ttl" | "durable";
+
+  // Log destination contract.
+  logSink: "authority-core" | "external-required" | "provider-native";
+
+  // Network model.
+  networkPolicy: "host" | "namespaced" | "isolated";
+
+  // Cleanup model. See "Cleanup mechanism" below.
+  cleanupModel: "explicit" | "ttl" | "label-sweep";
+
+  // Surface support.
+  supportsPreviewUrl: boolean;          // false ⇒ getPreviewUrl returns null
+  supportsPortCallbacks: boolean;       // arbitrary host-reachable port mappings (e.g. 1455)
+  supportsFileCopy: boolean;            // copyAppsWebInto + readFile + writeFile
+  supportsSnapshot: boolean;            // capture sandbox snapshot for resume / replay
+  dockerInsideSandbox: boolean;         // can the sandbox run docker (most can't)
+
+  // Concurrency advertisement.
+  maxConcurrentSandboxes?: number;
+};
+```
+
+### `BuildAgentRunner` — agent above the substrate
+
+```typescript
+type BuildAgentId = "codex" | "claude" | "dpf-native";
+
+interface BuildAgentRunner {
+  readonly id: BuildAgentId;
+
+  // Idempotent setup — inject auth.json, mount OAuth state, no-op
+  // for dpf-native (which uses portal-side credentials).
+  prepare(
+    provider: BuildExecutionProvider,
+    handle: SandboxHandle,
+    credential: AgentCredential | null,
+  ): Promise<void>;
+
+  // Run a single build task to completion.
+  run(
+    provider: BuildExecutionProvider,
+    handle: SandboxHandle,
+    spec: AgentRunSpec,
+  ): Promise<AgentRunResult>;
+
+  capabilities(): BuildAgentRunnerCapabilities;
+}
+
+type BuildAgentRunnerCapabilities = {
+  // Tier of work this agent reliably handles. Build Studio's
+  // task router picks an agent whose tier matches the task class.
+  // Promotion between tiers is gated by eval pass rate vs the
+  // current default — see "dpf-native cutover gates" below.
+  tier: "single-file-edit" | "multi-file-refactor" | "full-spec-implement";
+
+  // True if the agent is an interactive REPL that requires the
+  // sandbox to persist between exec calls. Codex CLI and Claude
+  // Code CLI today are true. dpf-native is false (portal-side loop;
+  // sandbox calls are stateless).
+  requiresPersistentSession: boolean;
+
+  // If the agent needs a callback port (Codex needs 1455 for OAuth),
+  // declare it here so the orchestrator can reject incompatible
+  // substrates at install time, not at first use.
+  requiresCallbackPort?: number;
+
+  // Whether this agent consumes credentials at all (dpf-native does
+  // not — it routes through the portal's existing inference layer
+  // and the credentials live in DPF's encrypted credentials store).
+  requiresCredential: boolean;
+
+  // Honors LLM_BASE_URL contract (Contract 9 mode 1). True for
+  // dpf-native; false for codex/claude (mode 4). Authority Core
+  // uses this to enforce air-gapped / regulated install policy.
+  honorsLlmBaseUrl: boolean;
+};
+
+type AgentRunSpec = {
   prompt?: string;
   workspaceSubdir?: string;
   timeoutMs?: number;
   approvalPolicy?: "never" | "ask";   // default "never" for autonomous
-  sandboxMode?: "danger-full-access" | "restricted";
+  toolGrants?: string[];               // for dpf-native: which MCP tools the loop may call
   envOverrides?: Record<string, string>;
-}
+};
 
-interface AgentRunResult {
+type AgentRunResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
   durationMs: number;
-  toolExecutionId: string;            // linkage to ToolExecution audit row
-}
+  toolExecutionId: string;             // linkage to ToolExecution audit row
+  agentId: BuildAgentId;               // for routeContext attribution
+  providerId: BuildExecutionProviderId;
+};
 
-interface AgentCredential {
-  agent: SandboxAgent;
-  type: "oauth" | "api-key";
-  payload: Record<string, string>;    // never logged; written via injectAgentCredential
-}
-
-interface BuildExecutionProviderImpl {
-  // Sandbox lifecycle — what the existing docker-cli layer abstracts today
-  createSandbox(spec: SandboxSpec): Promise<SandboxHandle>;
-  startSandbox(handle: SandboxHandle): Promise<void>;
-  copyAppsWebInto(handle: SandboxHandle, source: string): Promise<void>;
-  launchNextDev(handle: SandboxHandle): Promise<void>;
-  exec(handle: SandboxHandle, command: string[]): Promise<ExecResult>;
-  readFile(handle: SandboxHandle, path: string): Promise<string>;
-  writeFile(handle: SandboxHandle, path: string, content: string): Promise<void>;
-  destroySandbox(handle: SandboxHandle): Promise<void>;
-
-  // Agent command execution — owns Codex / Claude dispatch so
-  // non-local-docker providers don't reimplement docker exec.
-  injectAgentCredential(handle: SandboxHandle, credential: AgentCredential): Promise<void>;
-  runAgentCommand(handle: SandboxHandle, agent: SandboxAgent, spec: AgentCommandSpec): Promise<AgentRunResult>;
-  getPreviewUrl(handle: SandboxHandle): Promise<string>;
-
-  // Capability advertisement — Authority Core uses this to decide
-  // which Build Studio features to enable for this deployment.
-  capabilities(): BuildExecutionProviderCapabilities;
-}
-
-// Capability metadata Authority Core uses for routing, policy
-// enforcement, and UI gating. Pattern borrowed from CI runner
-// frameworks (GitHub Actions Runner Controller, GitLab Runner,
-// Drone, Buildkite) — explicit trust levels, isolation classes,
-// log-sink contracts, and concurrency bounds, advertised by the
-// provider rather than implicit per substrate.
-type BuildExecutionProviderCapabilities = {
-  // Isolation class — what kind of boundary protects the host
-  // from untrusted sandbox code.
-  //   none         — direct on-host execution; never use for
-  //                  untrusted code.
-  //   container    — namespaced container (today's local-docker).
-  //   pod          — Kubernetes pod (kubernetes-job provider).
-  //   vm           — full VM (e.g. tappaas-vm; firecracker / kata).
-  //   managed-job  — substrate-managed ephemeral job
-  //                  (ecs-task / cloud-run-job /
-  //                  azure-containerapp-job).
-  isolation: "none" | "container" | "pod" | "vm" | "managed-job";
-
-  // Trust level — policy gate for what kinds of work the
-  // Authority Core may route to this provider. Per GitLab's
-  // Shell-executor warning and Drone's Exec-runner warning.
-  //   trusted-code-only — Build Studio can run vetted DPF agent
-  //                       code only; never customer-supplied code.
-  //                       Today's local-docker on the DPF host
-  //                       falls here unless the host is hardened.
-  //   customer-trusted  — provider runs in customer's own
-  //                       environment with isolation; OK for
-  //                       customer-supplied code from the
-  //                       customer's own users.
-  //   untrusted-ok      — strong isolation (vm or managed-job)
-  //                       suitable for arbitrary external code.
-  trustLevel: "trusted-code-only" | "customer-trusted" | "untrusted-ok";
-
-  // Workspace persistence between sandbox exec calls.
-  //   ephemeral — destroyed at end of run; used for short-lived
-  //               "run a command and exit" providers
-  //               (cloud-run-job, ecs-task).
-  //   ttl       — survives until TTL expiry; used by
-  //               kubernetes-job with pod TTL.
-  //   durable   — long-lived between many exec calls; today's
-  //               local-docker.
-  workspacePersistence: "ephemeral" | "ttl" | "durable";
-
-  // Log destination contract. GitHub recommends ephemeral runners
-  // forward logs externally because the runner is destroyed.
-  //   authority-core    — provider streams logs to Authority Core
-  //                       via existing audit envelope.
-  //   external-required — provider can't retain logs after job;
-  //                       Authority Core MUST attach an external
-  //                       sink (CloudWatch, Stackdriver, GELF) or
-  //                       refuse to mark this provider production-
-  //                       capable.
-  //   provider-native   — substrate-native logs (e.g. Cloud Run
-  //                       logs); Authority Core links rather than
-  //                       streams.
-  logSink: "authority-core" | "external-required" | "provider-native";
-
-  // Existing flags retained for backward compatibility with the
-  // earlier capabilities() shape.
-  persistentSandbox: boolean;          // shorthand for workspacePersistence === "durable"
-  dockerInsideSandbox: boolean;        // can run docker from within (most don't)
-  networkPolicy: "host" | "namespaced" | "isolated";
-  cleanupModel: "explicit" | "ttl";
-
-  // Sandbox feature support. Authority Core's Build Studio UI
-  // disables features the active provider can't deliver.
-  supportsCliAgents: {                  // which CLI agents this provider supports
-    codex: boolean;
-    claudeCode: boolean;
-    codexCallbackPort1455: boolean;     // can the substrate expose port 1455?
-  };
-  supportsPortCallbacks: boolean;       // arbitrary host-reachable port mappings
-  supportsPreviewUrl: boolean;          // getPreviewUrl returns a usable URL
-  supportsFileCopy: boolean;            // copyAppsWebInto + readFile + writeFile
-  supportsSnapshot: boolean;            // can capture a sandbox snapshot for
-                                        // resume / replay (TAPPaaS VM mode, e.g.)
-
-  // Concurrency advertisement. Authority Core enforces per-policy.
-  maxConcurrentSandboxes?: number;      // omitted == unbounded subject to host
+type AgentCredential = {
+  agent: BuildAgentId;
+  type: "oauth" | "api-key" | "none";
+  payload: Record<string, string>;     // never logged; written via prepare()
 };
 ```
 
-The contract test (`apps/web/__tests__/sandbox-provider-contract.test.ts`,
-introduced when this provider abstraction lands) asserts these
-**semantics**, not just that the methods are callable. Specifically:
+### Orchestrator
 
-- a provider claiming `trustLevel: "untrusted-ok"` must also claim
-  `isolation: "vm"` or `"managed-job"` — the test fails on
-  `"container"` because container isolation is not strong enough
-  for arbitrary external code.
-- a provider claiming `logSink: "authority-core"` must actually
-  emit log events to `ToolExecution`; the test asserts a known
-  log line appears.
-- a provider claiming `workspacePersistence: "ephemeral"` must NOT
-  claim `persistentSandbox: true`.
-- a provider claiming `supportsCliAgents.codex: true` but
-  `supportsCliAgents.codexCallbackPort1455: false` must reject Codex
-  CLI calls that require OAuth (only the API-key flow is supportable).
+```typescript
+// Top-level entrypoint. Lives at apps/web/lib/integrate/build-orchestrator.ts
+// (see "Authority Core enforcement point" below).
+async function runAgentCommand(
+  provider: BuildExecutionProvider,
+  agent: BuildAgentRunner,
+  handle: SandboxHandle,
+  spec: AgentRunSpec,
+): Promise<AgentRunResult>;
+```
 
-These are the runner-playbook lessons made enforceable so a future
-provider can't quietly weaken trust or log guarantees by setting
-booleans.
+The orchestrator:
 
-`SandboxSpec`, `SandboxHandle`, `ExecResult` shapes inherit from the
-current implementation. `AgentCommandSpec` / `AgentRunResult` /
-`AgentCredential` are new shapes the agent-execution refactor
-introduces. Selection is configured at install time (contract 2 of
-the deployment doctrine: runtime configuration) via an env var like
-`DPF_BUILD_PROVIDER=<provider>` plus provider-specific config
-(cluster name, namespace, IAM role, etc.).
+1. Validates **cross-axis invariants** (substrate × agent) before
+   creating the sandbox; rejects incompatible combinations at
+   install time.
+2. Calls `agent.prepare(provider, handle, credential)`.
+3. Calls `agent.run(provider, handle, spec)`.
+4. Emits the unified audit envelope (`ToolExecution` row with
+   `routeContext.providerId` and `routeContext.agentId`).
+
+`SandboxSpec`, `SandboxHandle`, `ExecResult`, `ExecOpts` shapes
+inherit from the current implementation. Selection is configured at
+install time (Contract 2: runtime configuration) via
+`DPF_BUILD_PROVIDER=<provider>` and `DPF_BUILD_AGENT_DEFAULT=<agent>`
+plus provider/agent-specific config.
 
 `getPreviewUrl(handle)` returns the URL where the sandbox's Next.js
-dev server is reachable. `local-docker` returns `http://localhost:3035`;
-`kubernetes-job` returns the Service / Ingress URL the cluster
-allocated; `ecs-task` returns the ALB target group URL; etc. This
-lets the portal's Build Studio UI link to a preview without knowing
-which provider is in use.
+dev server is reachable, **or `null`** for substrates that can't
+host one (`cloud-run-job`, `ecs-task`, `azure-containerapp-job`).
+The portal's Build Studio UI hides the preview button when null.
 
-## Sandbox image variants and CLI agent runtime flags
+## The `dpf-native` agent
 
-The current `Dockerfile.sandbox` bundles both Codex CLI and Claude
-Code CLI unconditionally (`Dockerfile.sandbox:6,9`). For regulated
-or local-only deployments the bundle either needs runtime
-disablement or compile-time exclusion:
+`dpf-native` is the strategic default once parity gates clear. It is
+DPF's own coding agent driving the existing inference layer
+(`apps/web/lib/ai-inference.ts`) instead of a bundled vendor CLI.
 
-### Runtime flags (read by the dispatchers and by every provider)
+Architecture:
 
-```
-DPF_SANDBOX_ENABLE_CODEX=true|false              # default true
-DPF_SANDBOX_ENABLE_CLAUDE=true|false             # default true
-DPF_SANDBOX_OPENAI_BASE_URL                      # optional; redirects Codex to local OpenAI-compat endpoint
-DPF_SANDBOX_ANTHROPIC_BASE_URL                   # optional; redirects Claude Code similarly
-```
+- The agent loop runs **in the portal process** (Authority Core
+  domain), not inside the sandbox.
+- The sandbox is a **thin tool target**: `provider.exec`,
+  `provider.readFile`, `provider.writeFile` are the tools the agent
+  calls. Plus the portal's existing MCP tool surface gated by
+  `toolGrants` (per the `mcp-tools.ts` grant model).
+- All inference flows through `LLM_BASE_URL` (Contract 9 mode 1).
+  No vendor CLI binaries in the sandbox image; no in-sandbox refresh
+  token; no port 1455 callback; no mode-4 audit gap.
+- The infrastructure is already in place: `contribution-dispatch.ts`
+  runs a portal-side agentic loop and the sandbox already exposes
+  file IO. `dpf-native` is the contribution-dispatch loop pointed
+  at the sandbox as its tool target.
 
-Provider implementations that don't support a CLI agent (e.g. an
-`ecs-task` provider that can't expose port 1455 for Codex's OAuth
-callback) advertise this via `capabilities().cliAgents` and refuse
-`runAgentCommand` calls for the unsupported agent with a clear
-error rather than silently failing.
+Strategic payoffs:
 
-### Image variants (compile-time exclusion)
+- **Substrate unlock.** Every substrate becomes Build-Studio-capable
+  because the inference path is the same `LLM_BASE_URL` contract
+  that already works on every substrate. ECS Fargate, Cloud Run,
+  Azure Container Apps move from **Unsupported** to **GA** for
+  Build Studio.
+- **Compliance.** Air-gapped / FedRAMP / regulated installs can run
+  Build Studio with the local-LLM variant of Contract 9 mode 1
+  (Ollama / Docker Model Runner), with no vendor egress and no
+  bundled vendor CLI binaries.
+- **Audit envelope.** All inference calls flow through the existing
+  `LLM_BASE_URL` audit envelope. `ToolExecution` records the full
+  prompt + response per call, not just the dispatch invocation.
+- **Smaller image.** `dpf-sandbox:dpf-native` ships without
+  `@openai/codex` (~50 MB) and `@anthropic-ai/claude-code` (~40 MB)
+  — relevant for cold-start latency on cloud-native job substrates.
 
-For deployments that require the CLI binaries to be physically
-absent — air-gapped customers, supply-chain-restricted environments,
-or compliance regimes that forbid bundled vendor tooling — ship
-multiple sandbox image tags:
+Risks (offsets, not blockers):
 
-| Tag | Codex CLI | Claude Code CLI | Use case |
-|---|---|---|---|
-| `dpf-sandbox:full` (default) | yes | yes | unrestricted installs |
-| `dpf-sandbox:local-only` | yes (with `OPENAI_BASE_URL` override required) | yes (with override) | air-gapped with local-routed CLIs |
-| `dpf-sandbox:no-cli-agents` | no | no | maximum compliance posture |
+- **Portal blast radius.** A `dpf-native` bug runs in-process with
+  the portal, so could leak portal credentials. Counterbalanced by
+  no long-lived OpenAI refresh token in sandbox memory and no port
+  1455 OAuth surface. Both go on the security-review checklist.
+- **Capability tier gap.** dpf-native must reach Codex/Claude
+  parity per task class before becoming default. Cutover is
+  gated, not flipped (see below).
 
-The Dockerfile.sandbox refactor that supports this lands as part of
-this provider epic; the image-publish workflow
-(`.github/workflows/publish-image.yml`, currently the focus of
-installer-parity Phase 1) adds matrix tags accordingly.
+## dpf-native cutover gates
 
-## Per-deployment-target defaults
+The "works well enough" decision must not be vibes-based. Each tier
+is gated by an objective eval pass rate vs the current default
+(Codex on tier 1–2; Claude Code on tier 3 where applicable):
 
-| Deployment | Default provider | Build Studio parity at v1 |
+| Tier | Definition | Promotion gate |
 |---|---|---|
-| Windows local install | `local-docker` | **full** |
-| macOS local install | `local-docker` | **full** if Docker Desktop is running |
-| Linux local install | `local-docker` | **full** |
-| Single VM substrate (cloud) | `local-docker` | **full** |
-| Cloud marketplace image | `local-docker` (inherits Single VM) | **full** |
-| TAPPaaS module — VM mode | `local-docker` (inside the provisioned VM) | **full** |
-| TAPPaaS module — native NixOS/Podman | `tappaas-vm` (provider stub; future) | preview until provider ships |
-| Managed Kubernetes substrate | `kubernetes-job` | preview until provider ships |
-| Managed container service — AWS | `ecs-task` | preview until provider ships |
-| Managed container service — GCP | `cloud-run-job` | preview until provider ships |
-| Managed container service — Azure | `azure-containerapp-job` | preview until provider ships |
-| Air-gapped / regulated | `disabled` | Build Studio off by operator policy |
+| 1 — single-file edit | bounded edits inside one file | dpf-native pass rate ≥ Codex on `apps/web/__tests__/build-eval/single-file/*` AND p95 cost ≤ Codex |
+| 2 — multi-file refactor | cross-file refactors with import graph awareness | dpf-native pass rate ≥ Codex on `multi-file/*` AND p95 cost ≤ Codex |
+| 3 — full-spec implement | full ideate→design→build→ship cycles | dpf-native pass rate ≥ best-of-{Codex,Claude} on `full-spec/*` AND p95 cost ≤ best-of-{Codex,Claude} |
 
-`disabled` is a first-class option: customers in regulated
-environments can opt out of Build Studio entirely without DPF
-shipping a degraded version.
+Build Studio's task router (`apps/web/lib/integrate/build-orchestrator.ts`)
+picks the agent per-task by tier match, with explicit fallback. When
+dpf-native ≥ default on a tier's gate, dpf-native becomes the new
+default for that tier; the other agents stay shippable for customers
+who prefer them. Same machinery as the platform's existing AI routing
+applied to agents instead of models — per the "Dynamic model
+discovery" principle and Contract 9.
 
-## Provider responsibilities
+The eval suites are the gating artifact. Their structure and
+seeding are specified in the implementation plan that wraps this
+spec; the spec only fixes the **shape of the gate**, not the eval
+catalog.
 
-Each provider is responsible for:
+## Cleanup mechanism (every provider)
 
-- **Sandbox image acquisition.** Pull `dpf-sandbox` from GHCR
-  (multi-arch, per Phase 1 of the installer-parity roadmap).
-- **Resource isolation.** Memory / CPU caps consistent with the
-  current `--cpus=2 --memory=4096m` defaults.
-- **Network model.** Outbound HTTPS for CLI agents (mode 4 in the
-  cloud spec's LLM routing); ingress for the Next.js dev server's
-  port mapping; respect the substrate's network policy.
-- **Lifecycle attribution.** Sandbox creation / destruction must
-  emit audit events into `ToolExecution` so Authority Core can
-  reconstruct what was built and when.
-- **Cleanup.** Either explicit `destroySandbox()` or substrate-
-  native TTL (k8s pod TTL, ECS task auto-stop) — provider declares
-  which model it implements via `capabilities().cleanupModel`.
+Sandboxes orphaned by portal crash, network partition, or a `kill -9`
+during shutdown must be reaped. Mechanism:
+
+- **Labels.** Every sandbox is labeled at creation:
+  `dpf.build.id=<buildId>`, `dpf.build.startedAt=<iso>`,
+  `dpf.build.providerId=<providerId>`, `dpf.build.portalInstance=<instanceId>`.
+- **Startup sweep.** On portal startup, the orchestrator queries the
+  provider for sandboxes with this portal's `dpf.build.portalInstance`
+  label and reconciles against the `Sandbox` table; any sandbox not
+  in the active set is destroyed.
+- **Periodic reconciler.** A scheduled task sweeps for sandboxes
+  older than `SANDBOX_TIMEOUT_MS` regardless of `Sandbox` table
+  state, in case both portal and DB agreed something was alive but
+  the substrate disagrees.
+- **Provider responsibility.** `cleanupModel` capability advertises
+  which mechanism the substrate enforces: `explicit` (caller
+  guaranteed to call `destroySandbox`), `ttl` (substrate destroys
+  on its own clock, e.g. k8s pod TTL), or `label-sweep` (orchestrator
+  reconciles by label, mandatory fallback for `local-docker`).
+
+This is the same invariant-guard pattern as the seed-fix work; pre-
+empts the chaos-test gate in the maturity-gates checklist.
+
+## Image variants (compile-time exclusion)
+
+For deployments that require CLI binaries to be physically absent —
+air-gapped customers, supply-chain-restricted environments, or
+compliance regimes that forbid bundled vendor tooling — ship
+multiple sandbox image tags built around the **agent axis**:
+
+| Tag | Bundled agents | Use case |
+|---|---|---|
+| `dpf-sandbox:base` | none | substrate runtime + workspace only; smallest image; minimal supply chain surface |
+| `dpf-sandbox:dpf-native` | dpf-native runtime helpers | default for cloud / regulated / air-gapped installs once dpf-native is GA |
+| `dpf-sandbox:cli-bundled` | Codex CLI + Claude Code CLI | today's default; transitional |
+
+Endpoint-redirected variants (Codex with `OPENAI_BASE_URL` pointed
+at a local OpenAI-compatible endpoint; Claude Code analogously) are
+**runtime envvars** on `cli-bundled`, not separate image tags. See
+Contract 9 sub-contract for the envvar names — restated nowhere else.
+
+The `Dockerfile.sandbox` refactor that supports this lands as part
+of this provider epic; the image-publish workflow
+(`.github/workflows/publish-image.yml`) adds matrix tags accordingly.
+
+## Runtime envvars (Contract 9 reference)
+
+CLI agent enable/disable, endpoint redirection, and OAuth callback
+port pinning are owned by Contract 9 in the doctrine spec
+(`docs/superpowers/specs/2026-05-09-deployment-contracts.md:340-353`).
+This spec **does not restate them**. Provider implementations read
+those envvars; agent runners read them; both reject configurations
+that violate cross-axis invariants (see contract test below).
+
+New envvars introduced by this spec:
+
+```
+DPF_BUILD_PROVIDER=local-docker|tappaas-vm|kubernetes-job|...|disabled
+DPF_BUILD_AGENT_DEFAULT=codex|claude|dpf-native
+DPF_BUILD_AGENT_FALLBACK=codex|claude|dpf-native    # optional; orchestrator falls back when default fails
+```
+
+Per-provider config (cluster name, namespace, IAM role, etc.) is
+provider-specific and lives in the provider's own envvar namespace
+(`DPF_PROVIDER_K8S_*`, `DPF_PROVIDER_ECS_*`, etc.).
+
+## Contract tests
+
+Two contract tests, one per interface, plus the cross-axis
+invariant set.
+
+### Substrate contract — `apps/web/__tests__/sandbox-provider-contract.test.ts`
+
+Asserts substrate **semantics**, not just method-callable:
+
+- `trustLevel: "untrusted-ok"` ⇒ `isolation` ∈ {`vm`, `managed-job`}.
+  Container isolation is not strong enough for arbitrary external code.
+- `logSink: "authority-core"` ⇒ provider must emit log events to
+  `ToolExecution`; the test asserts a known log line appears.
+- `workspacePersistence: "ephemeral"` ⇒ `cleanupModel` ∈ {`ttl`,
+  `label-sweep`} (orchestrator can't rely on explicit destroy when
+  the substrate may evict mid-run).
+- `supportsPreviewUrl: false` ⇒ `getPreviewUrl()` returns null and
+  the Build Studio UI hides the preview button.
+
+### Agent runner contract — `apps/web/__tests__/build-agent-runner-contract.test.ts`
+
+- `requiresCredential: true` ⇒ `prepare()` errors when called with
+  `credential: null`.
+- `requiresCredential: false` ⇒ `prepare()` succeeds with
+  `credential: null` (dpf-native).
+- `honorsLlmBaseUrl: true` ⇒ all outbound LLM calls observed during
+  `run()` resolve to `LLM_BASE_URL`'s host (test mocks the inference
+  layer and asserts no direct vendor egress).
+- `requiresPersistentSession: true` ⇒ provider must declare
+  `workspacePersistence !== "ephemeral"` before the runner accepts
+  the call.
+
+### Cross-axis invariants (orchestrator-enforced)
+
+These run inside `runAgentCommand` and are also asserted by an
+integration test that pairs every provider with every agent:
+
+- `agent.requiresPersistentSession && provider.workspacePersistence === "ephemeral"` ⇒ reject at install time, not at first use.
+- `agent.requiresCallbackPort && !provider.supportsPortCallbacks` ⇒ reject at install time. (Codex × `cloud-run-job` is the canonical example.)
+- `agent.requiresCredential && credential == null` ⇒ reject before sandbox creation (no wasted resource provisioning).
+- `provider.id === "disabled"` ⇒ all calls return 503 from the Build Studio UI; the orchestrator never reaches `prepare()`.
+
+These are the runner-playbook lessons made enforceable so a future
+provider or agent can't quietly weaken trust, log, or isolation
+guarantees by setting booleans.
+
+## Per-deployment-target defaults (two-axis matrix)
+
+The matrix has two axes: **substrate** (rows) × **agent** (columns).
+A cell value tells you the Build Studio status for that combination
+on that deployment target.
+
+| Deployment | Default substrate | × `codex` | × `claude` | × `dpf-native` |
+|---|---|---|---|---|
+| Windows local | `local-docker` | GA | GA | preview → GA per cutover gates |
+| macOS local | `local-docker` | GA (Docker Desktop) | GA | preview → GA |
+| Linux local | `local-docker` | GA | GA | preview → GA |
+| Single VM (cloud) | `local-docker` | GA | GA | preview → GA |
+| Marketplace image | `local-docker` | inherits Single VM | inherits | inherits |
+| TAPPaaS — VM mode | `local-docker` (in VM) | GA | GA | preview → GA |
+| TAPPaaS — native NixOS/Podman | `tappaas-vm` (planned) | preview when port 1455 reachable via Caddy | preview | preview → GA |
+| Managed Kubernetes | `kubernetes-job` | preview, requires 1455 Ingress + privileged node pool | preview | **preview → GA, no privileged pod required** |
+| Managed container — AWS (long-running) | `ecs-service` | unsupported (port 1455 lock-in on Fargate) | preview | **preview → GA** |
+| Managed container — AWS (batch) | `ecs-task` | unsupported | unsupported (no preview surface) | **preview → GA, batch only** |
+| Managed container — GCP (long-running) | `cloud-run-service` | unsupported | preview | **preview → GA** |
+| Managed container — GCP (batch) | `cloud-run-job` | unsupported | unsupported | **preview → GA, batch only** |
+| Managed container — Azure | `azure-containerapp-job` | unsupported | preview | **preview → GA** |
+| Air-gapped / regulated | `local-docker` or `kubernetes-job` | unsupported (vendor egress) | unsupported | **preview → GA with local LLM (Contract 9 mode 1 local)** |
+| Operator-disabled | `disabled` | n/a | n/a | n/a |
+
+Reading the matrix:
+
+- **GA** means the cell passes its maturity gates and is the
+  documented default.
+- **preview → GA** means the combination is architecturally
+  supported and ships behind a feature flag; promotion to GA is
+  gated on the dpf-native cutover gates above (for dpf-native cells)
+  or the per-substrate provider's own readiness gates (for
+  Codex/Claude cells on new substrates).
+- **unsupported** means the combination has a structural blocker
+  the spec is not committing to solve (port 1455 lock-in on Fargate-
+  class substrates; no preview HTTP on batch substrates).
+- **`disabled`** is a first-class option: customers in regulated
+  environments can opt out of Build Studio entirely without DPF
+  shipping a degraded version.
+
+The bold cells are the **dpf-native unlock**: combinations that
+move from unsupported / not-shippable to GA-capable purely by
+introducing the dpf-native agent — no new substrate engineering
+required beyond the provider extraction.
 
 ## Deployment guidance per substrate
 
@@ -331,20 +551,66 @@ Each provider is responsible for:
 - **Managed Kubernetes substrate:** ship `kubernetes-job` provider.
   Sandbox runs as an ephemeral pod with TTL; Helm chart values
   expose namespace, service account, image pull secrets, optional
-  taint/toleration for a privileged sandbox node pool.
-- **Managed container service substrate:** ship one provider per
-  cloud (`ecs-task`, `cloud-run-job`, `azure-containerapp-job`).
-  Sandbox runs as an ephemeral cloud-native job. Each provider
-  module wraps the cloud's run-task / job-execute API.
+  taint/toleration for a privileged sandbox node pool. **With
+  dpf-native default, the privileged node pool is no longer
+  required** — pods can run unprivileged because no vendor CLI
+  needs port 1455.
+- **Managed container service substrate:** ship per cloud, with
+  the long-running vs batch distinction explicit. Long-running
+  variants (`ecs-service`, `cloud-run-service`) host the dev
+  server preview; batch variants (`ecs-task`, `cloud-run-job`,
+  `azure-containerapp-job`) run a build to completion and exit,
+  no preview. Cells that pair batch substrates with persistent-
+  session agents (Codex CLI's REPL) are rejected by the cross-axis
+  invariant.
 - **TAPPaaS native mode:** ship `tappaas-vm` provider only after
   TAPPaaS NixOS/Podman precedent is validated and the Edge Node
   spec's deployment-target neutrality is preserved. Until then,
   TAPPaaS module ships with `local-docker` inside the provisioned
   VM.
 - **`disabled`:** any deployment where Build Studio is policy-
-  forbidden (air-gapped customer with no CLI-agent local routing,
-  regulated industries with no BAA coverage on the bundled CLI
-  agents per cloud spec's compliance section).
+  forbidden. With dpf-native available, the air-gapped /
+  regulated case for `disabled` shrinks substantially — most
+  regulated customers can run dpf-native against a local LLM
+  instead.
+
+## Provider responsibilities
+
+Each provider is responsible for:
+
+- **Sandbox image acquisition.** Pull `dpf-sandbox:<variant>` from
+  GHCR (multi-arch, per Phase 1 of the installer-parity roadmap).
+  Default variant is `dpf-native` once GA; transitional default
+  is `cli-bundled`.
+- **Resource isolation.** Memory / CPU caps consistent with the
+  current `--cpus=2 --memory=4096m` defaults
+  (`apps/web/lib/integrate/sandbox/sandbox.ts:13-17`).
+- **Network model.** Outbound HTTPS for inference and (when
+  `cli-bundled`) for vendor CLI egress; ingress for the Next.js
+  dev server's port mapping (when `supportsPreviewUrl`); respect
+  the substrate's network policy.
+- **Lifecycle attribution.** Sandbox creation / destruction emits
+  audit events into `ToolExecution` so Authority Core can
+  reconstruct what was built and when, with `routeContext.providerId`
+  populated.
+- **Cleanup.** Per the cleanup mechanism above; declare which model
+  via `capabilities().cleanupModel`. Label-based reconciliation is
+  the mandatory fallback.
+
+## Authority Core enforcement point
+
+The orchestrator that picks substrate × agent and enforces cross-
+axis invariants lives at `apps/web/lib/integrate/build-orchestrator.ts`.
+Build Studio's per-task agent selection (tier matching, fallback,
+eval-gate routing) is implemented there. The Build Studio MCP
+tools (`apps/web/lib/mcp-tools.ts:1025-1162, 9420-9499`) call into
+the orchestrator, not directly into providers or runners.
+
+UI gating: the storefront/admin Build Studio surface reads
+`provider.capabilities()` and `agent.capabilities()` to disable
+features the active combination can't deliver (preview button when
+`supportsPreviewUrl: false`; agent picker entries when an agent is
+unavailable on the active substrate).
 
 ## Refactoring scope (when this lands)
 
@@ -352,75 +618,225 @@ The refactor touches:
 
 - `apps/web/lib/integrate/sandbox/sandbox.ts` — extract current
   Docker-cli logic into the `LocalDockerProvider`.
+- `apps/web/lib/integrate/codex-dispatch.ts` — repackage as the
+  `CodexAgentRunner`.
+- `apps/web/lib/integrate/claude-dispatch.ts` — repackage as the
+  `ClaudeCodeAgentRunner`.
+- `apps/web/lib/integrate/build-orchestrator.ts` — host the new
+  orchestrator, cross-axis invariant checks, agent tier routing.
 - `apps/web/lib/mcp-tools.ts:1025-1162, 9420-9499` — sandbox MCP
-  tools call through the provider interface, not directly through
+  tools call through the orchestrator, not directly through
   Docker CLI.
 - A new `apps/web/lib/integrate/sandbox/providers/` directory with
-  one file per provider implementation.
+  one file per `BuildExecutionProvider` implementation.
+- A new `apps/web/lib/integrate/sandbox/agents/` directory with
+  one file per `BuildAgentRunner` implementation, including
+  `dpf-native-agent-runner.ts` (initial Tier-1 implementation).
 - `Dockerfile` (portal) — drop the Docker socket mount in
   deployments that don't need `local-docker`.
 - `docker-compose.yml` — make the `/var/run/docker.sock` mount
   conditional on `DPF_BUILD_PROVIDER=local-docker`.
-- `apps/web/__tests__/sandbox-provider-contract.test.ts` (new) — a
-  contract test every provider must pass, so the interface stays
-  semantically consistent.
+- `Dockerfile.sandbox` — split into the three image variants
+  (`base`, `dpf-native`, `cli-bundled`).
+- `apps/web/__tests__/sandbox-provider-contract.test.ts` (new) —
+  substrate contract.
+- `apps/web/__tests__/build-agent-runner-contract.test.ts` (new) —
+  agent contract.
+- `apps/web/__tests__/build-substrate-agent-matrix.test.ts` (new) —
+  cross-axis invariant integration test.
+
+## Schema impact
+
+Resolved (was open in prior draft):
+
+- **`Sandbox` model** — does not exist as a Prisma model today;
+  sandbox state lives in `apps/web/lib/integrate/sandbox/sandbox-db.ts`
+  as a derived view over `ToolExecution` and process state. The
+  refactor introduces a first-class `Sandbox` model so labeling,
+  cleanup reconciliation, and per-sandbox audit join become
+  tractable. Fields:
+
+  ```prisma
+  model Sandbox {
+    id                String    @id @default(cuid())
+    buildId           String
+    providerId        String    // BuildExecutionProviderId
+    agentId           String?   // BuildAgentId, null until first run
+    portalInstanceId  String    // for label-sweep reconciliation
+    state             String    // creating | running | destroyed | orphaned
+    startedAt         DateTime  @default(now())
+    destroyedAt       DateTime?
+    previewUrl        String?
+    capabilitiesSnapshot Json   // provider.capabilities() at creation
+    @@index([buildId])
+    @@index([state, startedAt])
+  }
+  ```
+
+- **`ToolExecution.routeContext`** — adds `providerId` and `agentId`
+  fields under a `build` object: `routeContext.build.providerId`,
+  `routeContext.build.agentId`. Existing fields untouched.
+
+- **`EdgeNode.capabilities`** — unchanged unless the
+  `edge-node-local-docker` provider lands; see Open Questions.
+
+Migration: additive only. The `Sandbox` table replaces ad-hoc state
+in `sandbox-db.ts` over a transition where both write paths run; the
+old path is removed once reconciliation is verified.
 
 ## Open questions
 
 These need answers before this stub becomes a finalized spec:
 
-### Interface design
-- **Long-lived vs ephemeral sandbox:** the current `local-docker`
-  model creates a sandbox that lives across many `exec` calls.
-  Cloud-native job providers (Cloud Run Jobs, ECS Run Task) run a
-  command and exit. Does the interface impose long-lived semantics
-  on every provider (forcing cloud providers to keep an idle
-  container alive) or accept short-lived semantics (forcing the
-  caller to be aware of provider lifetime)? Hybrid: each provider
-  declares via `capabilities().persistentSandbox`.
-- **File system access:** `local-docker` uses `docker exec tar |
-  docker exec tar` for file copy. Cloud-native providers may need
-  a sidecar volume / shared FS / S3 staging step. Define the
-  abstraction at the right level so substrate choice doesn't leak
-  into caller code.
-- **Networking:** sandbox preview port (current default 3035 →
-  3000 inside container) needs an equivalent on every provider.
-  k8s: `Service` + Ingress; ECS: Application Load Balancer;
-  Cloud Run: built-in HTTPS endpoint. Decide whether the
-  abstraction returns a URL or a tunnel handle.
+### Resolved in 2026-05-10 revision (moved out of Open Questions)
 
-### Operational
-- **Cost model for cloud-native providers:** k8s Jobs and ECS
+- ~~**Long-lived vs ephemeral sandbox.**~~ Each provider declares
+  `workspacePersistence`; cross-axis invariant rejects incompatible
+  pairs.
+- ~~**File system access.**~~ `readFile` / `writeFile` /
+  `copyAppsWebInto` are required `BuildExecutionProvider` methods.
+  Substrate-specific transport (sidecar volume / S3 staging) is
+  the provider's internal concern.
+- ~~**Networking — preview URL or tunnel.**~~ `getPreviewUrl`
+  returns `string | null`. Null is a first-class answer.
+- ~~**Refactor without behavior change first.**~~ Promoted to a
+  binding sequencing rule in the Sequencing section.
+
+### Still open
+
+- **`edge-node-local-docker` provider.** With customer Edge Nodes
+  running on customer hardware, an `edge-node-local-docker`
+  provider is plausible: build runs on the customer's own infra
+  via the Edge Node, no portal-side sandbox cost, no port 1455
+  lock-in on the cloud Authority Core, customer code never leaves
+  the customer's network. Worth exploring after the local-docker
+  extraction lands and the dpf-native agent reaches Tier 2.
+  Requires Edge Node policy to grant the `BuildExecutionProvider`
+  capability tier — not free.
+
+- **Cost model for cloud-native providers.** k8s Jobs and ECS
   tasks bill by execution time; long-running interactive sessions
   could surprise customers. Configurable max-lifetime per provider?
-- **Concurrency limits:** `local-docker` has effectively no limit
-  (subject to host resources); cloud providers usually have
-  account-level quotas. `capabilities().maxConcurrent` advertises
-  it; Authority Core enforces per-policy.
-- **Audit trail consistency:** `ToolExecution` records sandbox
-  events today. Confirm every provider can emit the same shape.
+  Likely answer: `SANDBOX_TIMEOUT_MS` already enforces a cap;
+  cloud providers should advertise a `recommendedMaxLifetimeMs`
+  capability and the orchestrator warns if exceeded.
 
-### Sequencing
-- **Which provider second?** After `local-docker` is extracted as
-  v1, which is the highest-value second provider? Likely
-  `kubernetes-job` (largest enterprise audience) or `tappaas-vm`
-  (highest strategic alignment with the doctrinal refactor).
-- **Refactor without behavior change first.** The interface
-  extraction should land as a no-op refactor, with the existing
-  Docker-cli logic moved verbatim into `LocalDockerProvider`.
-  Other providers come in subsequent epics.
+- **Agent eval catalog ownership.** The cutover gates depend on
+  three eval suites (`single-file/*`, `multi-file/*`, `full-spec/*`).
+  Where do these live, who owns them, what's the seeding policy,
+  do they version with the agent or with the platform? Probably
+  belongs to a sibling spec on Build Studio evaluation. Named
+  open question, deferred to that spec.
 
-## Schema impact
+- **Sequencing — k8s vs TAPPaaS first.** Spec proposes k8s as the
+  highest-value second provider (largest enterprise audience). If
+  TAPPaaS native NixOS/Podman validates faster (smaller surface,
+  internal team), it could leapfrog. Decided per the cloud-
+  deployment-design spec's substrate priority.
 
-Likely additions to existing schemas:
+## Maturity gates before implementation
 
-- `Sandbox` model (if it exists, otherwise a new field on the
-  current sandbox tracking) gains a `provider` field of type
-  `BuildExecutionProvider`.
-- `ToolExecution.routeContext` records the provider for audit.
-- `EdgeNode.capabilities` (per the Edge Node spec) is unchanged —
-  Build Studio runs in the Authority Core's domain, not the Edge
-  Node's.
+This spec moves from research to binding when all of these are
+complete. **Security review is weighted heavier than other specs
+because the Build Execution Provider + Agent Runner combination
+owns sandbox execution and inherits all of Build Studio's
+privileged-runtime concerns — arbitrary code execution, credentials,
+network egress, file system access, and (for dpf-native) in-process
+agent loops in the portal.**
+
+- [ ] Research & Benchmarking section complete (per AGENTS.md §10)
+      — patterns from GitHub Actions self-hosted runners, GitLab
+      Runner, Buildkite Agent, Drone CI agent, plus the Firecracker
+      / gVisor / Kata Containers isolation primitives. Specifically
+      compare their **executor vs orchestrator** split (how they
+      separate substrate from work definition).
+- [ ] Open questions resolved or explicitly deferred (edge-node-
+      local-docker provider; cost model for cloud-native providers;
+      agent eval catalog ownership; k8s-vs-TAPPaaS sequencing).
+- [ ] Schema impact reviewed — `Sandbox` table introduction;
+      `ToolExecution.routeContext.build.{providerId,agentId}`.
+      Migration story confirmed additive.
+- [ ] Canonical contracts updated if this spec changes shared
+      behavior (Contract 6 of the doctrine references this spec;
+      Contract 9 mode-4 envvars stay in the doctrine).
+- [ ] **Security review complete (heavy):**
+      - Sandbox image acquisition path per provider (registry auth,
+        signed image verification)
+      - Resource isolation enforcement (memory / CPU caps; preventing
+        sandbox-to-host escape)
+      - Network policy per provider (sandbox can reach what; Codex
+        / Claude CLI agents in mode 4 still bypass `LLM_BASE_URL`
+        audit envelope — documented and accepted, not silently
+        allowed; dpf-native closes this gap when used)
+      - Credentials propagation into sandbox (no host secrets leak;
+        per-task credentials; dpf-native stores credentials in the
+        portal, not the sandbox)
+      - **dpf-native portal-process blast radius** — the agent loop
+        runs in the portal so a dpf-native bug could leak portal
+        credentials. Counterbalance: no long-lived OpenAI refresh
+        token in sandbox memory, no port 1455 OAuth surface. Net
+        risk profile must be reviewed and signed off explicitly.
+      - Cleanup guarantees (`destroySandbox` actually runs; TTL
+        enforcement on provider that uses it; label-sweep reconciler
+        runs on every portal startup and on schedule)
+      - Audit envelope (`ToolExecution` records emitted by every
+        provider AND every agent runner; provider + agent attribution
+        in `routeContext.build` is accurate; dpf-native records the
+        full prompt + response per inference call)
+- [ ] Release / rollback story defined — interface extraction is a
+      no-op refactor first; subsequent provider implementations and
+      `dpf-native` agent runner ship behind feature flags so a bad
+      provider or agent can be disabled per deployment without
+      touching the others.
+- [ ] Test / verification gates defined — substrate contract test;
+      agent runner contract test; cross-axis invariant integration
+      test; smoke test per provider on a representative substrate;
+      chaos test for cleanup failure modes (orphaned sandboxes
+      after portal crash, validated by label-sweep reconciler).
+
+## Sequencing (binding)
+
+Promoted from prior draft's Open Questions; this is the implementation
+order, not a question.
+
+1. **Interface extraction as no-op refactor.** Extract current
+   `local-docker` logic behind `BuildExecutionProvider`; extract
+   Codex and Claude dispatchers behind `BuildAgentRunner`; introduce
+   `build-orchestrator.ts` as the single entrypoint; introduce the
+   `Sandbox` Prisma model. **No behavior change** for any current
+   install. Lands as one PR (or a tightly-sequenced PR series with
+   feature flags).
+
+2. **Contract tests.** Substrate, agent, and cross-axis invariant
+   tests land alongside the extraction. Every existing combination
+   (`local-docker × {codex, claude}`) passes.
+
+3. **`dpf-native` agent runner — Tier 1.** Single-file edits only.
+   Behind a feature flag; opt-in for Build Studio operators. Eval
+   suite seeded; cutover gate measured but not enforced (Tier 1
+   default stays Codex until gate clears).
+
+4. **Highest-value second provider.** Either `kubernetes-job` (per
+   cloud-deployment spec's enterprise priority) or `tappaas-vm`
+   (per TAPPaaS rollout schedule). Decided by the substrate-priority
+   open question.
+
+5. **`dpf-native` Tier 2 + Tier 3.** Eval coverage extended;
+   cutover gates enforce promotion. Once dpf-native ≥ default on
+   each tier's gate, dpf-native becomes the default for that tier.
+   Codex and Claude remain shippable for customers who prefer them.
+
+6. **Remaining cloud-native providers.** `ecs-task` /
+   `ecs-service`, `cloud-run-job` / `cloud-run-service`,
+   `azure-containerapp-job` — sequenced by customer demand and the
+   cloud spec's substrate priority. Each ships paired with
+   `dpf-native` as the supported agent (Codex/Claude marked
+   unsupported per the matrix).
+
+7. **Image variant default flip.** When dpf-native is GA across
+   tiers, `dpf-sandbox:dpf-native` becomes the production default
+   image. `dpf-sandbox:cli-bundled` remains shippable for customers
+   who explicitly opt in to bundled vendor CLIs.
 
 ## Research and Benchmarking (TBD per AGENTS.md §10)
 
@@ -430,7 +846,10 @@ of:
 **Open source build / CI runners:** GitHub Actions self-hosted
 runner, GitLab Runner, Buildkite Agent, Drone CI agent. Each has
 a runtime-abstraction layer that supports Docker, Kubernetes, and
-shell modes. Read their interface design.
+shell modes. **Specifically compare their executor (substrate) vs
+orchestrator (work definition) split** — that's the structural
+analog of this spec's provider × runner split. Read their interface
+design and capability advertisement patterns.
 
 **Open source ephemeral container orchestration:** k3s, Firecracker
 (used by Fly.io), gVisor, Kata Containers. Understand the
@@ -440,84 +859,43 @@ isolation primitives.
 Build, Azure Pipelines hosted agents. They solve the same
 abstraction problem at scale.
 
+**Coding-agent SDKs and harnesses:** OpenAI Codex CLI internals,
+Anthropic Claude Code CLI internals, Aider, Continue, Cursor's
+agent loop, SWE-Agent. The dpf-native runner draws on the loop
+patterns these establish; document which patterns adopted, which
+rejected.
+
 Document patterns adopted, patterns rejected, anti-patterns
 identified, gaps the design fills.
-
-## Sequencing
-
-This spec sits **after** the deployment contracts doctrine spec is
-established and the cloud-deployment spec captures the substrate
-taxonomy. Implementation order:
-
-1. **Interface extraction** — refactor existing logic into
-   `LocalDockerProvider` with no behavior change.
-2. **Contract test** — `sandbox-provider-contract.test.ts` ensures
-   semantic consistency for any future provider.
-3. **Highest-value second provider** — `kubernetes-job` or
-   `tappaas-vm` per the open question above.
-4. **Remaining cloud-native providers** — sequenced by customer
-   demand and substrate priority.
-
-## Maturity gates before implementation
-
-This spec moves from research to binding when all of these are
-complete. **Security review is weighted heavier than other specs
-because the Build Execution Provider owns sandbox execution and
-inherits all of Build Studio's privileged-runtime concerns —
-arbitrary code execution, credentials, network egress, file system
-access.**
-
-- [ ] Research & Benchmarking section complete (per AGENTS.md §10)
-      — patterns from GitHub Actions self-hosted runners, GitLab
-      Runner, Buildkite Agent, Drone CI agent, plus the Firecracker
-      / gVisor / Kata Containers isolation primitives.
-- [ ] Open questions resolved or explicitly deferred (interface
-      design for long-lived vs ephemeral, file-system abstraction,
-      networking abstraction; cost / capacity / concurrency limits;
-      audit-trail consistency; refactor sequencing).
-- [ ] Schema impact reviewed — `Sandbox.provider` field,
-      `ToolExecution.routeContext` provider attribution.
-- [ ] Canonical contracts updated if this spec changes shared
-      behavior (Contract 6 of the doctrine references this spec).
-- [ ] **Security review complete (heavy):**
-      - Sandbox image acquisition path per provider (registry auth,
-        signed image verification)
-      - Resource isolation enforcement (memory / CPU caps; preventing
-        sandbox-to-host escape)
-      - Network policy per provider (sandbox can reach what; LLM CLI
-        agents in mode 4 still bypass `LLM_BASE_URL` audit envelope —
-        documented and accepted, not silently allowed)
-      - Credentials propagation into sandbox (no host secrets leak;
-        per-task credentials)
-      - Cleanup guarantees (`destroySandbox` actually runs; TTL
-        enforcement on provider that uses it)
-      - Audit envelope (`ToolExecution` records emitted by every
-        provider; provider attribution is accurate)
-- [ ] Release / rollback story defined — interface extraction is a
-      no-op refactor first; subsequent provider implementations ship
-      behind feature flags so a bad provider can be disabled per
-      deployment without touching the others.
-- [ ] Test / verification gates defined — `sandbox-provider-contract.test.ts`
-      that every provider must pass; smoke test per provider on a
-      representative substrate; chaos test for cleanup failure
-      modes (orphaned sandboxes after portal crash).
 
 ## Source documents
 
 - `docs/superpowers/specs/2026-05-09-deployment-contracts.md` —
   the doctrine; this spec is contract 6's canonical
-  implementation.
+  implementation. Contract 9 mode 4 (CLI agents) is the gap
+  `dpf-native` closes.
 - `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md` —
   cloud substrate / packaging target taxonomy and per-target Build
   Studio compatibility notes.
 - `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` —
   Edge Node spec; Build Studio is Authority-Core-domain, not
   Edge-Node-domain (clarified here so future contributors don't
-  conflate them).
-- `apps/web/lib/integrate/sandbox/sandbox.ts`,
+  conflate them). The `edge-node-local-docker` provider open
+  question is the one place the two could touch.
+- `apps/web/lib/integrate/sandbox/sandbox.ts` (444 LOC),
   `apps/web/lib/mcp-tools.ts:1025-1162` — current `local-docker`
   reference implementation.
-- `Dockerfile.sandbox` — sandbox image artifact every provider
-  consumes.
+- `apps/web/lib/integrate/codex-dispatch.ts` (316 LOC) — current
+  Codex CLI dispatcher; becomes the `CodexAgentRunner`.
+- `apps/web/lib/integrate/claude-dispatch.ts` (368 LOC) — current
+  Claude Code CLI dispatcher; becomes the `ClaudeCodeAgentRunner`.
+- `apps/web/lib/integrate/contribution-dispatch.ts` — existing
+  portal-side agentic loop; the structural template for
+  `dpf-native-agent-runner.ts`.
+- `apps/web/lib/ai-inference.ts` — existing `LLM_BASE_URL` /
+  Contract 9 mode 1 inference layer; the dpf-native runner consumes
+  this directly.
+- `Dockerfile.sandbox` — sandbox image artifact; refactor splits
+  into `:base`, `:dpf-native`, `:cli-bundled` variants.
 - `docker-compose.yml:81` — current Docker socket mount the
-  refactor makes conditional.
+  refactor makes conditional on `DPF_BUILD_PROVIDER=local-docker`.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBusinessBuildBrief,
+  businessBuildBriefEditToPersistence,
+  businessBuildBriefFromRecord,
   canTransitionBusinessBriefStatus,
   getCapabilityPackIdForBrief,
   getCapabilityPackForBrief,
@@ -226,5 +228,110 @@ describe("legacyFeatureBuildBriefToBusinessBuildBriefInput", () => {
       title: "Bad request",
       brief: { title: "Missing description" },
     })).toThrow(/description/i);
+  });
+});
+
+describe("businessBuildBriefFromRecord", () => {
+  it("maps a persisted BusinessBuildBrief row into the Build Studio brief panel shape", () => {
+    const brief = businessBuildBriefFromRecord({
+      title: "Improve Build Studio intake",
+      row: {
+        intakeSource: "user_conversation",
+        capabilityPackId: "build_studio_self_development",
+        businessOutcome: "Help non-developers describe business outcomes.",
+        affectedPeople: [
+          { kind: "persona", label: "Operations lead" },
+          { kind: "principal", principalId: "principal-1", label: "Platform owner" },
+        ],
+        affectedWorkflow: "Build Studio",
+        sourceEvidence: [
+          { kind: "artifact", label: "Reviewed plan", summary: "Plan called for a business-readable brief." },
+        ],
+        successSignals: ["A non-developer can approve the brief."],
+        constraints: ["Do not expose schema details first."],
+        businessInterpretation: "Build Studio should explain the business change first.",
+        technicalInterpretation: {
+          dataNeeds: "Brief status and evidence",
+          likelyWorkflowImpact: ["Build Studio"],
+          verificationFocus: ["Brief approval gate"],
+        },
+        riskProfile: {
+          customerFacing: false,
+          complianceSensitive: false,
+          revenueImpacting: false,
+          operationalRisk: true,
+          level: "medium",
+        },
+        openQuestions: [],
+        confidence: "high",
+      },
+    });
+
+    expect(brief.title).toBe("Improve Build Studio intake");
+    expect(brief.capabilityPack).toBe("Build Studio / Self-Development");
+    expect(brief.affectedPeople).toEqual(["Operations lead", "Platform owner"]);
+    expect(brief.sourceEvidence).toHaveLength(1);
+    expect(brief.technicalInterpretation.verificationFocus).toEqual(["Brief approval gate"]);
+  });
+
+  it("falls back to the self-development capability pack for unknown stored values", () => {
+    const brief = businessBuildBriefFromRecord({
+      title: "Unknown capability",
+      row: {
+        intakeSource: "user_conversation",
+        capabilityPackId: "custom_pack_that_does_not_exist",
+        businessOutcome: "Keep persisted brief rendering even if a stale pack id is present.",
+        affectedPeople: [],
+        affectedWorkflow: null,
+        sourceEvidence: [],
+        successSignals: [],
+        constraints: [],
+        businessInterpretation: null,
+        technicalInterpretation: {},
+        riskProfile: {},
+        openQuestions: [],
+        confidence: null,
+      },
+    });
+
+    expect(brief.capabilityPackId).toBe("build_studio_self_development");
+    expect(brief.capabilityPack).toBe("Build Studio / Self-Development");
+    expect(brief.confidence).toBe("low");
+  });
+});
+
+describe("businessBuildBriefEditToPersistence", () => {
+  it("normalizes business editor text into persistence fields and legacy gate JSON", () => {
+    const persistence = businessBuildBriefEditToPersistence({
+      briefId: "BBB-FB-123",
+      businessOutcome: "Reduce missed support escalations before standup.",
+      affectedPeopleText: "Support manager\nCustomer success lead",
+      affectedWorkflow: "Customer escalation review",
+      sourceEvidenceText: "Zendesk escalation report\nMorning standup SOP",
+      successSignalsText: "Managers see unresolved escalations by site",
+      constraintsText: "Do not expose customer data across accounts",
+      openQuestionsText: "",
+      accept: true,
+    });
+
+    expect(persistence.status).toBe("accepted");
+    expect(persistence.accepted).toBe(true);
+    expect(persistence.affectedPeople).toEqual([
+      { kind: "persona", label: "Support manager" },
+      { kind: "persona", label: "Customer success lead" },
+    ]);
+    expect(persistence.sourceEvidence).toEqual([
+      expect.objectContaining({ kind: "artifact", summary: "Zendesk escalation report" }),
+      expect.objectContaining({ kind: "artifact", summary: "Morning standup SOP" }),
+    ]);
+    expect(persistence.legacyFeatureBrief).toEqual(
+      expect.objectContaining({
+        title: "BBB-FB-123",
+        description: "Reduce missed support escalations before standup.",
+        portfolioContext: "Customer escalation review",
+        targetRoles: ["Support manager", "Customer success lead"],
+        acceptanceCriteria: ["Managers see unresolved escalations by site"],
+      }),
+    );
   });
 });
