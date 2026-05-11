@@ -58,6 +58,83 @@ async function collectInstalledSoftware(): Promise<DiscoveredSoftwareInput[]> {
     }));
   }
 
+  if (process.platform === "darwin") {
+    const software: DiscoveredSoftwareInput[] = [];
+
+    // System package receipts (.pkg installers). pkgutil ships with macOS,
+    // no third-party tooling required. Each package id is a reverse-DNS
+    // string like com.apple.pkg.MobileDeviceDevelopment.
+    const pkgutil = spawnSync("pkgutil", ["--pkgs"], { encoding: "utf8" });
+    if (pkgutil.status === 0 && pkgutil.stdout.trim()) {
+      for (const pkgId of pkgutil.stdout.split(/\r?\n/).filter(Boolean)) {
+        const info = spawnSync(
+          "pkgutil",
+          ["--pkg-info", pkgId],
+          { encoding: "utf8" },
+        );
+        let version: string | undefined;
+        let installLocation: string | undefined;
+        if (info.status === 0) {
+          for (const line of info.stdout.split(/\r?\n/)) {
+            if (line.startsWith("version: ")) version = line.slice(9).trim();
+            else if (line.startsWith("location: ")) installLocation = line.slice(10).trim();
+          }
+        }
+        software.push({
+          evidenceSource: "installed_software",
+          packageManager: "pkgutil",
+          rawPackageName: pkgId,
+          rawProductName: pkgId,
+          ...(version ? { rawVersion: version } : {}),
+          ...(installLocation ? { installLocation } : {}),
+        });
+      }
+    }
+
+    // Homebrew formulas + casks. Optional — many DPF hosts have brew, but
+    // a fresh macOS install may not. We probe with `command -v` style
+    // checks via spawnSync's exit code.
+    const brewFormula = spawnSync(
+      "brew",
+      ["list", "--formula", "--versions"],
+      { encoding: "utf8" },
+    );
+    if (brewFormula.status === 0 && brewFormula.stdout.trim()) {
+      for (const line of brewFormula.stdout.split(/\r?\n/).filter(Boolean)) {
+        const [name, ...versionParts] = line.split(/\s+/);
+        if (!name) continue;
+        software.push({
+          evidenceSource: "host_packages",
+          packageManager: "brew",
+          rawPackageName: name,
+          rawProductName: name,
+          ...(versionParts.length > 0 ? { rawVersion: versionParts.join(" ") } : {}),
+        });
+      }
+    }
+
+    const brewCask = spawnSync(
+      "brew",
+      ["list", "--cask", "--versions"],
+      { encoding: "utf8" },
+    );
+    if (brewCask.status === 0 && brewCask.stdout.trim()) {
+      for (const line of brewCask.stdout.split(/\r?\n/).filter(Boolean)) {
+        const [name, ...versionParts] = line.split(/\s+/);
+        if (!name) continue;
+        software.push({
+          evidenceSource: "installed_software",
+          packageManager: "brew-cask",
+          rawPackageName: name,
+          rawProductName: name,
+          ...(versionParts.length > 0 ? { rawVersion: versionParts.join(" ") } : {}),
+        });
+      }
+    }
+
+    return software;
+  }
+
   const dpkg = spawnSync(
     "dpkg-query",
     ["-W", "-f=${Package}\\t${Version}\\n"],
