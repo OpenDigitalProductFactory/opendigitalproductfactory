@@ -12,6 +12,8 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("Quick views");
     expect(source).toContain("OPERATIONS_MAP_QUICK_VIEWS");
     expect(source).toContain("applyQuickView");
+    expect(source).toContain("loadOperationsMapViewPreference");
+    expect(source).toContain("saveOperationsMapViewPreference");
     expect(source).toContain("toggleSourceFilter");
     expect(source).toContain("toggleSeverityFilter");
   });
