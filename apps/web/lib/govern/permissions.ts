@@ -294,6 +294,14 @@ const SHELL_ITEMS: ShellNavItem[] = [
     capabilityKey: null,
   },
   {
+    key: "wiki",
+    label: "Wiki",
+    href: "/wiki",
+    description: "Founder kernel and per-org overlay — stances, heuristics, decisions.",
+    sectionKey: "knowledge",
+    capabilityKey: null,
+  },
+  {
     key: "docs",
     label: "Docs",
     href: "/docs",
