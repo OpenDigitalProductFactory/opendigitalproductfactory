@@ -101,3 +101,10 @@ export interface BuildBacklogTeeUpRequestedEvent {
     requestedByAgentId?: string | null;
   };
 }
+
+export interface BuildGitUpdateReceivedEvent {
+  name: "build/git-update.received";
+  data: {
+    candidateId: string;
+  };
+}
