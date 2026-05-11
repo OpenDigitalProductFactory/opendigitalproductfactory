@@ -3366,6 +3366,33 @@ model Sandbox {
   @@index([state, startedAt])
 }
 
+model GitPromotionCandidate {
+  id                      String    @id @default(cuid())
+  candidateId             String    @unique
+  provider                String    @default("github")
+  deliveryKey             String    @unique
+  eventName               String
+  repositoryFullName      String
+  repositoryCloneUrl      String?
+  ref                     String?
+  branch                  String?
+  beforeSha               String?
+  afterSha                String?
+  status                  String    @default("queued")
+  statusReason            String?
+  sandboxProviderId       String?
+  sandboxId               String?
+  verificationStartedAt   DateTime?
+  verificationCompletedAt DateTime?
+  verificationResult      Json?
+  payload                 Json?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([repositoryFullName, afterSha])
+}
+
 model SandboxSlot {
   id          String    @id @default(cuid())
   slotIndex   Int       @unique
