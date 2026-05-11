@@ -9,6 +9,7 @@ import {
 } from "./templates";
 import {
   deriveProjectionSeverityFromTaskState,
+  filterOperationsMapProjections,
   projectBacklogEvidence,
   projectExternalEvidence,
   projectAgentsToStations,
@@ -180,6 +181,41 @@ describe("AI operations map projection", () => {
     expect(projection.label).toBe("github ci-check");
     expect(projection.refs.externalEvidenceRecordId).toBe("external-1");
     expect(projection.links.historyHref).toBe("/platform/ai/history?externalEvidenceRecordId=external-1");
+  });
+
+  it("filters projections by selected source and severity without mutating the event stream", () => {
+    const projections = [
+      projectToolExecution(makeToolExecution({ id: "tool-1", success: true })),
+      projectToolExecutionReceipt(
+        makeToolExecutionReceipt({
+          id: "receipt-1",
+          receiptStatus: "expired",
+          toolExecution: makeToolExecution({ id: "tool-2", routeContext: "build" }),
+        }),
+      ),
+      projectBacklogEvidence(makeBacklogEvidence({ id: "activity-1", summary: "UX verification completed" })),
+      projectExternalEvidence(makeExternalEvidence({ id: "external-1", routeContext: "release" })),
+    ];
+
+    const filtered = filterOperationsMapProjections(projections, {
+      sources: ["tool-receipt", "evidence-backlog"],
+      severities: ["warning", "normal"],
+    });
+
+    expect(filtered.map((projection) => projection.id)).toEqual(["receipt:receipt-1", "backlog-evidence:activity-1"]);
+    expect(projections.map((projection) => projection.id)).toEqual([
+      "tool:tool-1",
+      "receipt:receipt-1",
+      "backlog-evidence:activity-1",
+      "external-evidence:external-1",
+    ]);
+  });
+
+  it("returns no projections when a filter group has no enabled options", () => {
+    const projections = [projectToolExecution(makeToolExecution({ id: "tool-1" }))];
+
+    expect(filterOperationsMapProjections(projections, { sources: [], severities: ["normal"] })).toEqual([]);
+    expect(filterOperationsMapProjections(projections, { sources: ["tool-execution"], severities: [] })).toEqual([]);
   });
 });
 

@@ -135,6 +135,11 @@ export type OperationsMapProjection = {
   };
 };
 
+export type OperationsMapProjectionFilters = {
+  sources: OperationsMapProjectionSource[];
+  severities: OperationsMapSeverity[];
+};
+
 export type OperationsMapTemplateSelector = {
   archetypeId?: string | null;
   activationProfileType?: string | null;
