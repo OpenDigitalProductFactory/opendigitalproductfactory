@@ -502,6 +502,11 @@ export async function runAgenticLoop(params: {
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
   featureBuildId?: string | null;
+  /**
+   * Parent TaskRun for this agentic loop. When set, each governed tool call
+   * records the same TaskRun id in ToolExecution audit rows.
+   */
+  taskRunId?: string | null;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -518,6 +523,7 @@ export async function runAgenticLoop(params: {
     onProgress,
     requireTools,
     agentDisplayName,
+    taskRunId,
   } = params;
 
   const userContext = await resolveUserContext(userId);
@@ -1198,7 +1204,7 @@ export async function runAgenticLoop(params: {
           rawParams: tc.arguments,
           userId,
           userContext,
-          context: { routeContext, agentId, threadId },
+          context: { routeContext, agentId, threadId, taskRunId: taskRunId ?? undefined },
           source: "agentic-loop",
         });
       } catch (err) {
