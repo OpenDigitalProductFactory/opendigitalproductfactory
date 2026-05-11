@@ -3,7 +3,12 @@ import { AlertCircle, CheckCircle2, FileText, Pencil, Save, Target, Users } from
 import type { ReactNode } from "react";
 import { useState, useTransition } from "react";
 import { updateBusinessBuildBrief } from "@/lib/actions/build";
-import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
+import type {
+  BusinessBriefEvidence,
+  BusinessBriefEvidenceKind,
+  BusinessBuildBrief,
+  BusinessBuildBriefSource,
+} from "@/lib/build/business-build-brief";
 
 interface Props {
   brief: BusinessBuildBrief;
@@ -46,6 +51,54 @@ function textFromEvidence(brief: BusinessBuildBrief): string {
   return brief.sourceEvidence.map((evidence) => evidence.summary).join("\n");
 }
 
+function evidenceKindFromBrief(brief: BusinessBuildBrief): BusinessBriefEvidenceKind {
+  const firstKind = brief.sourceEvidence[0]?.kind;
+  if (
+    firstKind === "document" ||
+    firstKind === "screenshot" ||
+    firstKind === "spreadsheet" ||
+    firstKind === "url" ||
+    firstKind === "existing_route" ||
+    firstKind === "backlog_item" ||
+    firstKind === "feature_build" ||
+    firstKind === "email" ||
+    firstKind === "existing_example"
+  ) {
+    return firstKind;
+  }
+  if (brief.intakeSource === "existing_example") return "existing_example";
+  if (brief.intakeSource === "artifact_reference") return "document";
+  return "artifact";
+}
+
+function intakeSourceFromEvidenceKind(kind: BusinessBriefEvidenceKind): BusinessBuildBriefSource {
+  if (kind === "existing_example" || kind === "existing_route" || kind === "feature_build") {
+    return "existing_example";
+  }
+  return "artifact_reference";
+}
+
+function copyAdaptAvoidText(evidence: BusinessBriefEvidence[]): string {
+  const first = evidence.find((item) => item.kind === "existing_example");
+  if (!first) return "";
+  return [
+    ...(first.copy ?? []).map((entry) => `Copy: ${entry}`),
+    ...(first.adapt ?? []).map((entry) => `Adapt: ${entry}`),
+    ...(first.avoid ?? []).map((entry) => `Avoid: ${entry}`),
+  ].join("\n");
+}
+
+const EVIDENCE_KIND_OPTIONS: Array<{
+  value: BusinessBriefEvidenceKind;
+  label: string;
+}> = [
+  { value: "document", label: "Document or artifact" },
+  { value: "screenshot", label: "Screenshot or visual example" },
+  { value: "spreadsheet", label: "Spreadsheet or working tracker" },
+  { value: "url", label: "Public URL or vendor guide" },
+  { value: "existing_example", label: "Something that already works" },
+];
+
 function Field({
   label,
   value,
@@ -70,6 +123,37 @@ function Field({
   );
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: BusinessBriefEvidenceKind;
+  onChange: (value: BusinessBriefEvidenceKind) => void;
+}) {
+  return (
+    <label className="grid gap-1.5 text-[13px] font-semibold text-[var(--dpf-text)]">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as BusinessBriefEvidenceKind)}
+        className="min-h-10 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-[13px] font-normal text-[var(--dpf-text)] outline-none transition-colors focus:border-[var(--dpf-accent)]"
+      >
+        {EVIDENCE_KIND_OPTIONS.map((option) => (
+          <option
+            key={option.value}
+            className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+            value={option.value}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function BusinessBriefPanel({ brief }: Props) {
   const needsClarification = brief.openQuestions.length > 0;
   const [isEditing, setIsEditing] = useState(Boolean(brief.briefId));
@@ -79,6 +163,8 @@ export function BusinessBriefPanel({ brief }: Props) {
   const [affectedPeopleText, setAffectedPeopleText] = useState(textFromList(brief.affectedPeople));
   const [affectedWorkflow, setAffectedWorkflow] = useState(brief.affectedWorkflow ?? "");
   const [sourceEvidenceText, setSourceEvidenceText] = useState(textFromEvidence(brief));
+  const [evidenceKind, setEvidenceKind] = useState<BusinessBriefEvidenceKind>(evidenceKindFromBrief(brief));
+  const [copyAdaptAvoid, setCopyAdaptAvoid] = useState(copyAdaptAvoidText(brief.sourceEvidence));
   const [successSignalsText, setSuccessSignalsText] = useState(textFromList(brief.successSignals));
   const [constraintsText, setConstraintsText] = useState(textFromList(brief.constraints));
   const [openQuestionsText, setOpenQuestionsText] = useState(textFromList(brief.openQuestions));
@@ -91,10 +177,13 @@ export function BusinessBriefPanel({ brief }: Props) {
       try {
         await updateBusinessBuildBrief({
           briefId,
+          intakeSource: intakeSourceFromEvidenceKind(evidenceKind),
+          evidenceKind,
           businessOutcome,
           affectedPeopleText,
           affectedWorkflow,
           sourceEvidenceText,
+          copyAdaptAvoidText: copyAdaptAvoid,
           successSignalsText,
           constraintsText,
           openQuestionsText,
@@ -156,7 +245,16 @@ export function BusinessBriefPanel({ brief }: Props) {
             <Field label="Business outcome" value={businessOutcome} onChange={setBusinessOutcome} rows={4} />
             <Field label="Affected people" value={affectedPeopleText} onChange={setAffectedPeopleText} />
             <Field label="Affected workflow" value={affectedWorkflow} onChange={setAffectedWorkflow} rows={2} />
+            <SelectField label="Reference type" value={evidenceKind} onChange={setEvidenceKind} />
             <Field label="Source evidence" value={sourceEvidenceText} onChange={setSourceEvidenceText} />
+            {evidenceKind === "existing_example" && (
+              <Field
+                label="Copy, adapt, avoid"
+                value={copyAdaptAvoid}
+                onChange={setCopyAdaptAvoid}
+                rows={4}
+              />
+            )}
             <Field label="Success signals" value={successSignalsText} onChange={setSuccessSignalsText} />
             <Field label="Constraints" value={constraintsText} onChange={setConstraintsText} />
             <Field label="Open questions" value={openQuestionsText} onChange={setOpenQuestionsText} />
