@@ -148,6 +148,11 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         recordedById: true,
         recordedByAgentId: true,
         toolExecutionId: true,
+        backlogItem: {
+          select: {
+            itemId: true,
+          },
+        },
       },
     }),
     prisma.externalEvidenceRecord.findMany({

@@ -296,6 +296,7 @@ export function projectBacklogEvidence(
   template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
 ): OperationsMapProjection {
   const stationId = resolveEvidenceStationId(row.summary, template);
+  const backlogItemRef = row.backlogItem?.itemId ?? row.backlogItemId;
 
   return {
     id: `backlog-evidence:${row.id}`,
@@ -311,11 +312,11 @@ export function projectBacklogEvidence(
     summary: row.summary,
     refs: {
       backlogItemActivityId: row.id,
-      backlogItemId: row.backlogItemId,
+      backlogItemId: backlogItemRef,
       toolExecutionId: row.toolExecutionId,
     },
     links: {
-      backlogHref: `/platform/backlog?itemId=${encodeURIComponent(row.backlogItemId)}`,
+      backlogHref: `/ops?itemId=${encodeURIComponent(backlogItemRef)}`,
       authorityHref: row.toolExecutionId
         ? `/platform/audit/ledger?toolExecutionId=${encodeURIComponent(row.toolExecutionId)}`
         : undefined,
