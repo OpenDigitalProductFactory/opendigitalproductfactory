@@ -15,6 +15,13 @@ export type PromptInput = {
   domainTools: string[];
   routeData: string | null;
   attachmentContext: string | null;
+  /**
+   * EP-WIKI-001 §7: passive wiki context injected into Block 5
+   * below `domainContext` and above `Available domain tools`.
+   * Caller produces this via `recallWikiContext()` (apps/web/lib/wiki/recall.ts).
+   * Pass `null` to omit the wiki block entirely.
+   */
+  wikiContext?: string | null;
 };
 
 // ─── Block 1: Identity (static) ─────────────────────────────────────────────
@@ -117,8 +124,11 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     `This page is classified ${level}. Only endpoints cleared for ${level} are handling requests. Do not include classified data in sub-tasks routed to lower-clearance endpoints.`
   );
 
-  // Block 5: Domain context
+  // Block 5: Domain context (+ wiki context per EP-WIKI-001 §7)
   let domainBlock = input.domainContext;
+  if (input.wikiContext) {
+    domainBlock += `\n\n${input.wikiContext}`;
+  }
   if (input.domainTools.length > 0) {
     domainBlock += `\nAvailable domain tools: ${input.domainTools.join(", ")}`;
   }

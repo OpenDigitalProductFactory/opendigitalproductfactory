@@ -225,4 +225,36 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("unconfigured");
     expect(prompt).toContain("ungranted");
   });
+
+  // ─── EP-WIKI-001 §7: wikiContext injection in Block 5 ─────────────────────
+
+  it("omits the wiki block when wikiContext is null or undefined", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+    expect(prompt).not.toContain("RELEVANT WIKI CONTEXT");
+  });
+
+  it("renders wikiContext inside Block 5, after domainContext and before domain tools", async () => {
+    const wikiBlock =
+      "RELEVANT WIKI CONTEXT:\n- entities/digital-product (entity, kernel) — A digital product is...";
+    const prompt = await assembleSystemPrompt({ ...fullInput, wikiContext: wikiBlock });
+
+    const domainIdx = indexOf(prompt, "portfolio tree");
+    const wikiIdx = indexOf(prompt, "RELEVANT WIKI CONTEXT");
+    const toolsIdx = indexOf(prompt, "Available domain tools");
+
+    expect(domainIdx).toBeGreaterThanOrEqual(0);
+    expect(wikiIdx).toBeGreaterThanOrEqual(0);
+    expect(toolsIdx).toBeGreaterThanOrEqual(0);
+    expect(domainIdx).toBeLessThan(wikiIdx);
+    expect(wikiIdx).toBeLessThan(toolsIdx);
+  });
+
+  it("places wikiContext on the dynamic side of the cache boundary", async () => {
+    const wikiBlock = "RELEVANT WIKI CONTEXT:\n- stances/x (stance, kernel) — body";
+    const prompt = await assembleSystemPrompt({ ...minimalInput, wikiContext: wikiBlock });
+    const boundaryIdx = indexOf(prompt, "DYNAMIC_BOUNDARY");
+    const wikiIdx = indexOf(prompt, "RELEVANT WIKI CONTEXT");
+    expect(boundaryIdx).toBeGreaterThanOrEqual(0);
+    expect(boundaryIdx).toBeLessThan(wikiIdx);
+  });
 });
