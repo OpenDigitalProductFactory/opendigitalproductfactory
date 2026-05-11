@@ -1,7 +1,22 @@
 // apps/web/lib/sandbox-db.test.ts
 // Pure-function tests only — do NOT test Docker commands (those are integration tests)
 
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+const { mockSandboxCreate, mockSandboxUpdate } = vi.hoisted(() => ({
+  mockSandboxCreate: vi.fn(),
+  mockSandboxUpdate: vi.fn(),
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    sandbox: {
+      create: mockSandboxCreate,
+      update: mockSandboxUpdate,
+    },
+  },
+}));
+
 import {
   buildDockerHealthInspectCommand,
   buildDbContainerName,
@@ -11,7 +26,14 @@ import {
   DB_RESOURCE_LIMITS,
   NEO4J_RESOURCE_LIMITS,
   QDRANT_RESOURCE_LIMITS,
+  recordSandboxDestroyed,
+  recordSandboxStarted,
 } from "./sandbox-db";
+
+beforeEach(() => {
+  mockSandboxCreate.mockReset();
+  mockSandboxUpdate.mockReset();
+});
 
 // ─── Resource Limit Constants ─────────────────────────────────────────────────
 
@@ -151,5 +173,46 @@ describe("buildSandboxDbEnvVars", () => {
     expect(vars1.DATABASE_URL).not.toBe(vars2.DATABASE_URL);
     expect(vars1.NEO4J_URI).not.toBe(vars2.NEO4J_URI);
     expect(vars1.QDRANT_INTERNAL_URL).not.toBe(vars2.QDRANT_INTERNAL_URL);
+  });
+});
+
+describe("sandbox execution records", () => {
+  it("records a running sandbox with provider capabilities", async () => {
+    mockSandboxCreate.mockResolvedValue({ id: "sbx-1" });
+
+    await recordSandboxStarted({
+      buildId: "FB-TEST001",
+      providerId: "local-docker",
+      agentId: "codex",
+      portalInstanceId: "portal-local",
+      previewUrl: "http://localhost:3035",
+      capabilitiesSnapshot: { workspacePersistence: "durable" },
+    });
+
+    expect(mockSandboxCreate).toHaveBeenCalledWith({
+      data: {
+        buildId: "FB-TEST001",
+        providerId: "local-docker",
+        agentId: "codex",
+        portalInstanceId: "portal-local",
+        state: "running",
+        previewUrl: "http://localhost:3035",
+        capabilitiesSnapshot: { workspacePersistence: "durable" },
+      },
+    });
+  });
+
+  it("marks a sandbox as destroyed", async () => {
+    mockSandboxUpdate.mockResolvedValue({ id: "sbx-1", state: "destroyed" });
+
+    await recordSandboxDestroyed("sbx-1");
+
+    expect(mockSandboxUpdate).toHaveBeenCalledWith({
+      where: { id: "sbx-1" },
+      data: {
+        state: "destroyed",
+        destroyedAt: expect.any(Date),
+      },
+    });
   });
 });

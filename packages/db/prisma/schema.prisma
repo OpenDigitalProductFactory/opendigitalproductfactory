@@ -3272,6 +3272,7 @@ model FeatureBuild {
   productVersions          ProductVersion[]
   promotionBackups         PromotionBackup[]
   issueReports             PlatformIssueReport[]
+  sandboxes                Sandbox[]
 
   @@index([phase])
   @@index([createdById])
@@ -3346,6 +3347,23 @@ model ArtifactReceiptUsage {
 
   @@unique([artifactRevisionId, receiptId])
   @@index([receiptId])
+}
+
+model Sandbox {
+  id                   String       @id @default(cuid())
+  buildId              String
+  providerId           String
+  agentId              String?
+  portalInstanceId     String
+  state                String
+  startedAt            DateTime     @default(now())
+  destroyedAt          DateTime?
+  previewUrl           String?
+  capabilitiesSnapshot Json
+  featureBuild         FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@index([buildId])
+  @@index([state, startedAt])
 }
 
 model SandboxSlot {
