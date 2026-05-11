@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
+import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
 import Link from "next/link";
@@ -29,7 +30,46 @@ function getProjectBranch(): string | null {
 export default async function BuildPage({ searchParams }: PageProps) {
   const { v } = await searchParams;
   if (v === "2") {
-    return <BuildStudioV2 />;
+    const session = await auth();
+    if (!session?.user?.id) return <BuildStudioV2 />;
+
+    const businessBriefRow = await prisma.businessBuildBrief.findFirst({
+      where: { submittedByUserId: session.user.id },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        briefId: true,
+        intakeSource: true,
+        capabilityPackId: true,
+        featureBuildId: true,
+        businessOutcome: true,
+        affectedPeople: true,
+        affectedWorkflow: true,
+        sourceEvidence: true,
+        successSignals: true,
+        constraints: true,
+        businessInterpretation: true,
+        technicalInterpretation: true,
+        riskProfile: true,
+        openQuestions: true,
+        confidence: true,
+      },
+    });
+
+    const featureBuild = businessBriefRow?.featureBuildId
+      ? await prisma.featureBuild.findUnique({
+        where: { id: businessBriefRow.featureBuildId },
+        select: { title: true },
+      })
+      : null;
+
+    const businessBrief = businessBriefRow
+      ? businessBuildBriefFromRecord({
+        title: featureBuild?.title ?? businessBriefRow.briefId,
+        row: businessBriefRow,
+      })
+      : undefined;
+
+    return <BuildStudioV2 businessBrief={businessBrief} />;
   }
 
   const session = await auth();
