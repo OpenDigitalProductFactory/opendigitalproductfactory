@@ -4800,6 +4800,40 @@ export async function executeTool(
         console.log(`[saveBuildEvidence] buildPlan validated: ${fileStructure.length} files, ${tasks.length} tasks`);
       }
 
+      // ── taskResults shape validation ─────────────────────────────────────
+      // The orchestrator's canonical shape carries tasks as
+      //   Array<{ title: string, specialist: string, outcome?: string, durationMs?: number }>.
+      // Other legitimate writers (post-build summaries, contributionAssessment)
+      // omit `tasks` entirely. Reject any write where `tasks` is present but
+      // its entries lack the required string fields — that's the failure mode
+      // that crashes the Build Studio process graph downstream.
+      if (field === "taskResults") {
+        const value = normalizedValue;
+        if (value != null && typeof value === "object" && "tasks" in value) {
+          const tasksField = (value as { tasks?: unknown }).tasks;
+          if (!Array.isArray(tasksField)) {
+            return {
+              success: false,
+              error: "taskResults.tasks must be an array.",
+              message: `REJECTED: taskResults contained a "tasks" key that wasn't an array. Either omit "tasks" (for summary-only writes) or provide an array of { title, specialist, outcome, durationMs? } entries.`,
+            };
+          }
+          for (let i = 0; i < tasksField.length; i++) {
+            const entry = tasksField[i];
+            const title = (entry as { title?: unknown } | null)?.title;
+            const specialist = (entry as { specialist?: unknown } | null)?.specialist;
+            if (typeof title !== "string" || typeof specialist !== "string") {
+              const got = entry == null ? "null" : `keys: ${Object.keys(entry as object).join(", ")}`;
+              return {
+                success: false,
+                error: "taskResults.tasks entry missing title/specialist.",
+                message: `REJECTED: taskResults.tasks[${i}] must have string "title" and "specialist" fields. Got ${got}. This shape is consumed by the Build Studio process graph; do not use taskResults to store backlog claim or triage summaries.`,
+              };
+            }
+          }
+        }
+      }
+
       // When the AI saves verificationOut, ensure typecheckPassed is explicitly set.
       // The AI often omits it, causing the gate to treat null as false.
       let fieldValue = normalizedValue as Record<string, unknown>;
