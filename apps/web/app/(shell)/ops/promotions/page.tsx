@@ -1,8 +1,13 @@
-import { getPromotions } from "@/lib/actions/promotions";
+import { getGitPromotionCandidates, getPromotions } from "@/lib/actions/promotions";
 import PromotionsClient from "@/components/ops/PromotionsClient";
+import { GitPromotionCandidatesPanel } from "@/components/ops/GitPromotionCandidatesPanel";
+import { OpsTabNav } from "@/components/ops/OpsTabNav";
 
 export default async function PromotionsPage() {
-  const promotions = await getPromotions();
+  const [promotions, gitCandidates] = await Promise.all([
+    getPromotions(),
+    getGitPromotionCandidates(),
+  ]);
   return (
     <div className="space-y-6">
       <div>
@@ -11,6 +16,8 @@ export default async function PromotionsPage() {
           Review and approve version deployments to production.
         </p>
       </div>
+      <OpsTabNav />
+      <GitPromotionCandidatesPanel candidates={JSON.parse(JSON.stringify(gitCandidates))} />
       <PromotionsClient promotions={JSON.parse(JSON.stringify(promotions))} />
     </div>
   );
