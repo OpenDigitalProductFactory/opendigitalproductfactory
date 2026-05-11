@@ -9,6 +9,7 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
       create: vi.fn(),
     },
     businessBuildBrief: {
+      findUnique: vi.fn(),
       upsert: vi.fn(),
     },
     organization: {
@@ -20,6 +21,7 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     buildActivity: {
       create: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -78,6 +80,8 @@ describe("governed build start approvals", () => {
       },
     });
     mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
+    mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({ status: "accepted" });
     mockPrisma.businessBuildBrief.upsert.mockResolvedValue({});
     mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
     mockIsSandboxAvailable.mockResolvedValue(false);
@@ -116,6 +120,7 @@ describe("governed build start approvals", () => {
 
     await updateFeatureBrief("FB-123", brief);
 
+    expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
       where: { buildId: "FB-123" },
       data: { brief },
@@ -140,6 +145,40 @@ describe("governed build start approvals", () => {
         }),
       }),
     );
+  });
+
+  it("advanceBuildPhase blocks ideate to plan until the business brief is accepted", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "build-row-1",
+      phase: "ideate",
+      createdById: "user-1",
+      originatingBacklogItemId: null,
+      draftApprovedAt: null,
+      designDoc: null,
+      designReview: null,
+      plan: null,
+      brief: {
+        acceptanceCriteria: ["A non-developer can approve the business brief."],
+      },
+      buildPlan: null,
+      planReview: null,
+      taskResults: null,
+      verificationOut: null,
+      acceptanceMet: null,
+      uxTestResults: null,
+      uxVerificationStatus: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      governedBacklogEnabled: true,
+    });
+    mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({
+      status: "awaiting_clarification",
+    });
+
+    await expect(advanceBuildPhase("FB-123", "plan")).rejects.toThrow(
+      "Accept the business build brief before moving into planning.",
+    );
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
   });
 
   it("approveBuildStart stamps draftApprovedAt for governed backlog drafts", async () => {
