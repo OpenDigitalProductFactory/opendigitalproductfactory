@@ -15,6 +15,12 @@ export type GitPromotionCandidateRow = {
   verificationCompletedAt: string | null;
   verificationResult: unknown;
   createdAt: string;
+  promotionReview: {
+    promotionId: string;
+    promotionStatus: string;
+    rfcId: string;
+    rfcStatus: string;
+  } | null;
 };
 
 type VerificationResult = {
@@ -77,10 +83,13 @@ function evidencePreview(candidate: GitPromotionCandidateRow): string | null {
 
 export function GitPromotionCandidatesPanel({
   candidates,
+  createReviewAction,
 }: {
   candidates: GitPromotionCandidateRow[];
+  createReviewAction?: (formData: FormData) => void | Promise<void>;
 }) {
   const verifiedCount = candidates.filter((candidate) => candidate.status === "sandbox-verification-complete").length;
+  const readyForReviewCount = candidates.filter((candidate) => candidate.status === "sandbox-verification-complete" && !candidate.promotionReview).length;
   const runningCount = candidates.filter((candidate) => candidate.status === "sandbox-verification-running" || candidate.status === "queued").length;
   const failedCount = candidates.filter((candidate) => candidate.status === "failed").length;
 
@@ -95,7 +104,7 @@ export function GitPromotionCandidatesPanel({
             Default-branch Git updates that have entered sandbox verification before production promotion review.
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="grid grid-cols-4 gap-2 text-center text-xs">
           <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
             <div className="font-semibold text-[var(--dpf-text)]">{runningCount}</div>
             <div className="text-[var(--dpf-muted)]">Active</div>
@@ -103,6 +112,10 @@ export function GitPromotionCandidatesPanel({
           <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
             <div className="font-semibold text-[var(--dpf-text)]">{verifiedCount}</div>
             <div className="text-[var(--dpf-muted)]">Verified</div>
+          </div>
+          <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
+            <div className="font-semibold text-[var(--dpf-text)]">{readyForReviewCount}</div>
+            <div className="text-[var(--dpf-muted)]">Ready</div>
           </div>
           <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
             <div className="font-semibold text-[var(--dpf-text)]">{failedCount}</div>
@@ -152,9 +165,25 @@ export function GitPromotionCandidatesPanel({
                       </div>
                     </div>
                   </div>
-                  <div className="text-right text-xs text-[var(--dpf-muted)]">
+                  <div className="space-y-2 text-right text-xs text-[var(--dpf-muted)]">
                     <div>{new Date(candidate.createdAt).toLocaleString()}</div>
                     {candidate.sandboxId && <div className="mt-1 font-mono">{candidate.sandboxId}</div>}
+                    {candidate.promotionReview ? (
+                      <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-left">
+                        <div className="font-mono text-[var(--dpf-text)]">{candidate.promotionReview.promotionId}</div>
+                        <div>{candidate.promotionReview.rfcId} - {candidate.promotionReview.promotionStatus}</div>
+                      </div>
+                    ) : candidate.status === "sandbox-verification-complete" && createReviewAction ? (
+                      <form action={createReviewAction}>
+                        <input type="hidden" name="candidateId" value={candidate.candidateId} />
+                        <button
+                          type="submit"
+                          className="rounded border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                        >
+                          Create review
+                        </button>
+                      </form>
+                    ) : null}
                   </div>
                 </div>
 

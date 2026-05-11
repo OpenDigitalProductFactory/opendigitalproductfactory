@@ -24,11 +24,12 @@ const baseCandidate = {
     stderr: "",
   },
   createdAt: "2026-05-11T17:59:00.000Z",
+  promotionReview: null,
 };
 
 describe("GitPromotionCandidatesPanel", () => {
   it("renders sandbox-verified Git candidates with source and evidence", () => {
-    render(<GitPromotionCandidatesPanel candidates={[baseCandidate]} />);
+    render(<GitPromotionCandidatesPanel candidates={[baseCandidate]} createReviewAction={() => undefined} />);
 
     expect(screen.getByText("Git update candidates")).toBeInTheDocument();
     expect(screen.getByText("OpenDigitalProductFactory/opendigitalproductfactory")).toBeInTheDocument();
@@ -36,7 +37,30 @@ describe("GitPromotionCandidatesPanel", () => {
     expect(screen.getByText("abcdef123456")).toBeInTheDocument();
     expect(screen.getByText("Sandbox verified")).toBeInTheDocument();
     expect(screen.getByText("local-docker")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create review" })).toBeInTheDocument();
     expect(screen.getByText(/typecheck ok/)).toBeInTheDocument();
+  });
+
+  it("shows linked promotion review details instead of a duplicate handoff action", () => {
+    render(
+      <GitPromotionCandidatesPanel
+        candidates={[
+          {
+            ...baseCandidate,
+            promotionReview: {
+              promotionId: "CP-12345678",
+              promotionStatus: "pending",
+              rfcId: "RFC-2026-12345678",
+              rfcStatus: "draft",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("CP-12345678")).toBeInTheDocument();
+    expect(screen.getByText("RFC-2026-12345678 - pending")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create review" })).not.toBeInTheDocument();
   });
 
   it("renders a quiet empty state", () => {

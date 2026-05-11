@@ -2,8 +2,11 @@
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { revalidatePath } from "next/cache";
+import { generateRfcId } from "./change-management";
+import { generatePromotionId } from "@/lib/version-tracking";
 
 async function requireOpsAccess(): Promise<string> {
   const session = await auth();
@@ -45,7 +48,7 @@ export async function getPromotions(status?: string) {
 
 export async function getGitPromotionCandidates() {
   await requireOpsAccess();
-  return prisma.gitPromotionCandidate.findMany({
+  const candidates = await prisma.gitPromotionCandidate.findMany({
     orderBy: { createdAt: "desc" },
     take: 25,
     select: {
@@ -65,11 +68,244 @@ export async function getGitPromotionCandidates() {
       createdAt: true,
     },
   });
+
+  const refs = candidates.map((candidate) => candidateReviewRef(candidate.candidateId));
+  const reviewItems = refs.length > 0
+    ? await prisma.changeItem.findMany({
+        where: { externalSystemRef: { in: refs } },
+        select: {
+          externalSystemRef: true,
+          changePromotion: { select: { promotionId: true, status: true } },
+          changeRequest: { select: { rfcId: true, status: true } },
+        },
+      })
+    : [];
+  const reviewsByRef = new Map(reviewItems.map((item) => [item.externalSystemRef, item]));
+
+  return candidates.map((candidate) => {
+    const review = reviewsByRef.get(candidateReviewRef(candidate.candidateId));
+    return {
+      ...candidate,
+      promotionReview: review?.changePromotion && review.changeRequest
+        ? {
+            promotionId: review.changePromotion.promotionId,
+            promotionStatus: review.changePromotion.status,
+            rfcId: review.changeRequest.rfcId,
+            rfcStatus: review.changeRequest.status,
+          }
+        : null,
+    };
+  });
 }
 
 // Re-export Promotion type shape for the UI component
 export type PromotionRow = Awaited<ReturnType<typeof getPromotions>>[number];
 export type GitPromotionCandidateRow = Awaited<ReturnType<typeof getGitPromotionCandidates>>[number];
+
+function candidateReviewRef(candidateId: string): string {
+  return `git-promotion-candidate:${candidateId}`;
+}
+
+function shortSha(value: string | null): string {
+  return value?.slice(0, 12) ?? "unknown";
+}
+
+function slugPart(value: string | null): string {
+  const slug = (value ?? "unknown")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "unknown";
+}
+
+function buildCandidateImpactReport(candidate: {
+  candidateId: string;
+  provider: string;
+  repositoryFullName: string;
+  repositoryCloneUrl: string | null;
+  branch: string | null;
+  beforeSha: string | null;
+  afterSha: string | null;
+  sandboxProviderId: string | null;
+  sandboxId: string | null;
+  verificationStartedAt: Date | null;
+  verificationCompletedAt: Date | null;
+  verificationResult: Prisma.JsonValue | null;
+  payload: Prisma.JsonValue | null;
+}): Prisma.InputJsonObject {
+  return {
+    source: "git-promotion-candidate",
+    candidateId: candidate.candidateId,
+    provider: candidate.provider,
+    repository: {
+      fullName: candidate.repositoryFullName,
+      cloneUrl: candidate.repositoryCloneUrl,
+      branch: candidate.branch,
+      beforeSha: candidate.beforeSha,
+      afterSha: candidate.afterSha,
+    },
+    sandbox: {
+      providerId: candidate.sandboxProviderId,
+      id: candidate.sandboxId,
+      verificationStartedAt: candidate.verificationStartedAt?.toISOString() ?? null,
+      verificationCompletedAt: candidate.verificationCompletedAt?.toISOString() ?? null,
+    },
+    verificationResult: candidate.verificationResult ?? null,
+    webhookPayload: candidate.payload ?? null,
+  };
+}
+
+function buildCandidateDeploymentLog(candidate: {
+  candidateId: string;
+  repositoryFullName: string;
+  branch: string | null;
+  afterSha: string | null;
+  sandboxProviderId: string | null;
+  sandboxId: string | null;
+  verificationCompletedAt: Date | null;
+}): string {
+  return [
+    `Git promotion candidate: ${candidate.candidateId}`,
+    `Repository: ${candidate.repositoryFullName}`,
+    `Branch: ${candidate.branch ?? "unknown"}`,
+    `Commit: ${candidate.afterSha ?? "unknown"}`,
+    `Sandbox provider: ${candidate.sandboxProviderId ?? "unknown"}`,
+    `Sandbox ID: ${candidate.sandboxId ?? "unknown"}`,
+    `Sandbox verification completed: ${candidate.verificationCompletedAt?.toISOString() ?? "unknown"}`,
+    "Production deployment has not been executed. This record is waiting for operator review in /ops/promotions.",
+  ].join("\n");
+}
+
+export async function createPromotionReviewFromGitCandidate(candidateId: string): Promise<{
+  created: boolean;
+  promotionId: string;
+  rfcId: string;
+}> {
+  const userId = await requireOpsAccess();
+  const candidate = await prisma.gitPromotionCandidate.findUnique({
+    where: { candidateId },
+    select: {
+      candidateId: true,
+      provider: true,
+      repositoryFullName: true,
+      repositoryCloneUrl: true,
+      branch: true,
+      beforeSha: true,
+      afterSha: true,
+      status: true,
+      sandboxProviderId: true,
+      sandboxId: true,
+      verificationStartedAt: true,
+      verificationCompletedAt: true,
+      verificationResult: true,
+      payload: true,
+    },
+  });
+
+  if (!candidate) throw new Error(`Git promotion candidate not found: ${candidateId}`);
+  if (candidate.status !== "sandbox-verification-complete") {
+    throw new Error("Only sandbox-verified Git candidates can enter promotion review.");
+  }
+  if (!candidate.afterSha) {
+    throw new Error("Git promotion candidate is missing the verified commit SHA.");
+  }
+
+  const externalSystemRef = candidateReviewRef(candidate.candidateId);
+  const existingReview = await prisma.changeItem.findFirst({
+    where: { externalSystemRef, itemType: "promotion" },
+    select: {
+      changePromotion: { select: { promotionId: true } },
+      changeRequest: { select: { rfcId: true } },
+    },
+  });
+  if (existingReview?.changePromotion && existingReview.changeRequest) {
+    return {
+      created: false,
+      promotionId: existingReview.changePromotion.promotionId,
+      rfcId: existingReview.changeRequest.rfcId,
+    };
+  }
+
+  const platformProduct = await prisma.digitalProduct.findUnique({
+    where: { productId: "DP-ODPF" },
+    select: { id: true },
+  });
+  if (!platformProduct) {
+    throw new Error("Platform product DP-ODPF is not seeded; cannot create a governed promotion review.");
+  }
+
+  const afterSha = candidate.afterSha;
+  const promotionId = generatePromotionId();
+  const rfcId = await generateRfcId();
+  const sha = shortSha(afterSha);
+  const branch = slugPart(candidate.branch);
+  const summary = `Sandbox-verified Git update ${candidate.repositoryFullName}@${sha}`;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const productVersion = await tx.productVersion.create({
+      data: {
+        digitalProductId: platformProduct.id,
+        version: `git-${candidate.candidateId.toLowerCase()}`,
+        gitTag: `git-${branch}-${sha}`,
+        gitCommitHash: afterSha,
+        shippedBy: userId,
+        changeCount: 1,
+        changeSummary: summary,
+      },
+      select: { id: true },
+    });
+
+    const promotion = await tx.changePromotion.create({
+      data: {
+        promotionId,
+        productVersionId: productVersion.id,
+        status: "pending",
+        requestedBy: userId,
+        deploymentLog: buildCandidateDeploymentLog(candidate),
+      },
+      select: { id: true },
+    });
+
+    const rfc = await tx.changeRequest.create({
+      data: {
+        rfcId,
+        title: `Review Git update ${sha}`,
+        description: summary,
+        type: "normal",
+        scope: "platform",
+        riskLevel: "medium",
+        status: "draft",
+        impactReport: buildCandidateImpactReport(candidate),
+      },
+      select: { id: true },
+    });
+
+    await tx.changeItem.create({
+      data: {
+        changeRequestId: rfc.id,
+        changePromotionId: promotion.id,
+        itemType: "promotion",
+        title: `Promote Git update ${sha}`,
+        description: summary,
+        impactDescription: "Sandbox verification completed successfully; operator approval is required before production deployment.",
+        digitalProductId: platformProduct.id,
+        externalSystemRef,
+        status: "pending",
+      },
+    });
+
+    return { promotionId, rfcId };
+  });
+
+  revalidatePath("/ops/promotions");
+  return { created: true, ...result };
+}
+
+export async function createPromotionReviewFromGitCandidateForm(formData: FormData) {
+  const candidateId = String(formData.get("candidateId") ?? "");
+  if (!candidateId) throw new Error("candidateId is required");
+  await createPromotionReviewFromGitCandidate(candidateId);
+}
 
 export async function approvePromotion(promotionId: string, rationale: string) {
   const userId = await requireOpsAccess();
