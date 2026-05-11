@@ -9,6 +9,9 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("Showing {filteredProjections.length} of {projections.length} activities");
     expect(source).toContain("SOURCE_OPTIONS");
     expect(source).toContain("SEVERITY_OPTIONS");
+    expect(source).toContain("Quick views");
+    expect(source).toContain("OPERATIONS_MAP_QUICK_VIEWS");
+    expect(source).toContain("applyQuickView");
     expect(source).toContain("toggleSourceFilter");
     expect(source).toContain("toggleSeverityFilter");
   });
