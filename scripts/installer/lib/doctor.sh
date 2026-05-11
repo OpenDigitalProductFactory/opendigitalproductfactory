@@ -39,6 +39,16 @@ if [ -z "${DPF_LIB_COMPOSE_LOADED:-}" ]; then
   # shellcheck source=compose.sh
   . "$(dirname "${BASH_SOURCE[0]}")/compose.sh"
 fi
+# Supplementary diagnostics module (Phase 10d) adds autostart unit
+# state, full rendered compose YAML, disk space, DNS reachability, and
+# state-dir perms snapshot. Optional — older installs missing the file
+# silently fall back to the Phase-6 core bundle.
+if [ -z "${DPF_LIB_DIAGNOSTICS_LOADED:-}" ]; then
+  if [ -f "$(dirname "${BASH_SOURCE[0]}")/diagnostics.sh" ]; then
+    # shellcheck source=diagnostics.sh
+    . "$(dirname "${BASH_SOURCE[0]}")/diagnostics.sh"
+  fi
+fi
 
 # Redact common secret patterns from env / state output. Replaces values
 # of any line matching SECRET|PASSWORD|TOKEN|KEY|AUTH (case-insensitive)
@@ -165,6 +175,13 @@ dpf_doctor_collect() {
     env | grep -iE '^(DPF_|LLM_|EMBEDDING_|BROWSER_USE_|GHCR_|POSTGRES_|NEO4J_|AUTH_|ADMIN_|MCP_|DOCKER_)' \
       | _dpf_doctor_redact | sort
   } > "$bundle_dir/env.txt"
+
+  # 10. Phase 10d supplementary diagnostics — autostart unit, full
+  #     rendered compose YAML, disk usage, outbound reachability, perms.
+  #     Best-effort; module is optional so older installs still work.
+  if command -v dpf_diagnostics_collect >/dev/null 2>&1; then
+    dpf_diagnostics_collect "$bundle_dir" "${1:-dev}" 2>/dev/null || true
+  fi
 
   # Bundle and stamp the install-state with the bundle path.
   tar -czf "$tarball" -C "$bundle_dir" . 2>/dev/null
