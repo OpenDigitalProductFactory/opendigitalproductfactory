@@ -19,7 +19,23 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /.*ai-routing-.*\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "build-studio",
+      testMatch: /.*ai-routing-build-studio\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/state.json" },
+    },
+    {
+      name: "discovery",
+      testMatch: /.*ai-routing-discovery\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/state.json" },
+    },
+    {
+      name: "ops-backlog",
+      testMatch: /.*ai-routing-ops-backlog\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/state.json" },
     },
   ],
 });

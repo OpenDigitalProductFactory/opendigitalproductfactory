@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { resolveAgentForRoute, generateCannedResponse } from "./agent-routing";
 
+// High-risk route/agent/tool/QA-ID summary coverage lives in
+// apps/web/lib/testing/route-contracts.test.ts. Keep the role-conditional
+// access assertions here so the matrix does not flatten route permission
+// behavior into a single superuser-only view.
 describe("resolveAgentForRoute", () => {
   const superuser = { platformRole: "HR-000", isSuperuser: true };
   const opsUser = { platformRole: "HR-500", isSuperuser: false };
