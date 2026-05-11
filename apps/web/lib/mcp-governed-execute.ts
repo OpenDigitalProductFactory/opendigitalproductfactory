@@ -44,7 +44,8 @@ export type GovernedExecuteArgs = {
 export type GovernedExecuteRejection =
   | "unknown_tool"
   | "forbidden_capability"
-  | "forbidden_grant";
+  | "forbidden_grant"
+  | "hook_denied";
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
@@ -53,6 +54,37 @@ export type GovernedExecuteResult = ToolResult & {
   };
 };
 
+type ToolLifecycleEvent = {
+  toolName: string;
+  rawParams: Record<string, unknown>;
+  userId: string;
+  userContext: UserContext;
+  context?: GovernedExecuteContext;
+  source: GovernedExecuteSource;
+};
+
+type ToolLifecyclePostEvent = ToolLifecycleEvent & {
+  result: ToolResult;
+  durationMs: number;
+};
+
+type ToolLifecycleDecision =
+  | { decision: "allow"; reason?: string }
+  | { decision: "deny"; reason: string };
+
+export type ToolLifecycleHook = {
+  id: string;
+  onPreToolUse?: (event: ToolLifecycleEvent) => Promise<ToolLifecycleDecision | void> | ToolLifecycleDecision | void;
+  onPostToolUse?: (event: ToolLifecyclePostEvent) => Promise<void> | void;
+};
+
+export function registerToolLifecycleHook(hook: ToolLifecycleHook): () => void {
+  _lifecycleHooks = [..._lifecycleHooks.filter((existing) => existing.id !== hook.id), hook];
+  return () => {
+    _lifecycleHooks = _lifecycleHooks.filter((existing) => existing.id !== hook.id);
+  };
+}
+
 // Test seam — production uses the imported real grant resolver. Tests can
 // override these without mocking the import system.
 export type GrantResolver = (agentId: string) => Promise<string[]>;
@@ -60,6 +92,7 @@ export type GrantPredicate = (toolName: string, grants: string[]) => boolean;
 
 let _resolveAgentGrants: GrantResolver | null = null;
 let _isAllowedByGrants: GrantPredicate | null = null;
+let _lifecycleHooks: ToolLifecycleHook[] = [];
 
 export function _setGovernanceForTests(overrides: {
   resolveAgentGrants?: GrantResolver | null;
@@ -72,12 +105,14 @@ export function _setGovernanceForTests(overrides: {
   ) => Promise<ToolResult>) | null;
   toolExecutionCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
   toolExecutionReceiptCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
+  lifecycleHooks?: ToolLifecycleHook[] | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
   _isAllowedByGrants = overrides.isAllowedByGrants ?? null;
   _executeToolOverride = overrides.executeTool ?? null;
   _toolExecutionCreateOverride = overrides.toolExecutionCreate ?? null;
   _toolExecutionReceiptCreateOverride = overrides.toolExecutionReceiptCreate ?? null;
+  _lifecycleHooks = overrides.lifecycleHooks ?? [];
 }
 
 let _executeToolOverride:
@@ -269,6 +304,29 @@ function rejectionResult(
   };
 }
 
+async function runPreToolHooks(event: ToolLifecycleEvent): Promise<GovernedExecuteResult | null> {
+  for (const hook of _lifecycleHooks) {
+    const decision = await hook.onPreToolUse?.(event);
+    if (decision?.decision === "deny") {
+      return rejectionResult(event.toolName, "hook_denied", decision.reason);
+    }
+  }
+  return null;
+}
+
+async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
+  for (const hook of _lifecycleHooks) {
+    try {
+      await hook.onPostToolUse?.(event);
+    } catch (err) {
+      console.error(
+        `[governed-execute] post-tool hook failed hook=${hook.id} tool=${event.toolName}:`,
+        err,
+      );
+    }
+  }
+}
+
 export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
@@ -328,6 +386,27 @@ export async function governedExecuteTool(
     }
   }
 
+  const hookRejection = await runPreToolHooks({
+    toolName: args.toolName,
+    rawParams: args.rawParams,
+    userId: args.userId,
+    userContext: args.userContext,
+    context: args.context,
+    source: args.source,
+  });
+  if (hookRejection) {
+    await writeAudit({
+      toolName: args.toolName,
+      rawParams: args.rawParams,
+      result: hookRejection,
+      userId: args.userId,
+      source: args.source,
+      context: args.context,
+      durationMs: 0,
+    });
+    return hookRejection;
+  }
+
   const t0 = Date.now();
   let result: ToolResult;
   try {
@@ -346,6 +425,17 @@ export async function governedExecuteTool(
     };
   }
   const durationMs = Date.now() - t0;
+
+  await runPostToolHooks({
+    toolName: args.toolName,
+    rawParams: args.rawParams,
+    userId: args.userId,
+    userContext: args.userContext,
+    context: args.context,
+    source: args.source,
+    result,
+    durationMs,
+  });
 
   const auditRow = await writeAudit({
     toolName: args.toolName,
