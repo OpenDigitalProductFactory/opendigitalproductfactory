@@ -17,6 +17,7 @@ import {
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import { wikiLint } from "./wiki-lint";
 
 export const allFunctions = [
   prometheusPoll,
@@ -39,4 +40,5 @@ export const allFunctions = [
   governedBacklogTeeUpScheduled,
   governedBacklogTeeUpRequested,
   tokenExpiryMonitor,
+  wikiLint,
 ];
