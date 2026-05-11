@@ -334,4 +334,41 @@ describe("businessBuildBriefEditToPersistence", () => {
       }),
     );
   });
+
+  it("preserves artifact and existing-example intake context from business evidence controls", () => {
+    const persistence = businessBuildBriefEditToPersistence({
+      briefId: "BBB-FB-EXAMPLE",
+      intakeSource: "existing_example",
+      evidenceKind: "existing_example",
+      businessOutcome: "Make customer onboarding follow the employee setup flow.",
+      affectedPeopleText: "Customer success manager",
+      affectedWorkflow: "Customer onboarding",
+      sourceEvidenceText: "Employee setup flow",
+      copyAdaptAvoidText: "Copy: guided checklist and progress visibility\nAdapt: approvals for customer-facing handoff\nAvoid: employee-only HR language",
+      successSignalsText: "Managers can see onboarding progress without asking engineering",
+      constraintsText: "Keep customer data scoped to the right account",
+      openQuestionsText: "",
+      accept: true,
+    });
+
+    expect(persistence.status).toBe("accepted");
+    expect(persistence.intakeSource).toBe("existing_example");
+    expect(persistence.sourceEvidence).toEqual([
+      expect.objectContaining({
+        kind: "existing_example",
+        label: "Employee setup flow",
+        summary: "Employee setup flow",
+        copy: ["guided checklist and progress visibility"],
+        adapt: ["approvals for customer-facing handoff"],
+        avoid: ["employee-only HR language"],
+      }),
+    ]);
+    expect(persistence.businessInterpretation).toContain("Copy: guided checklist and progress visibility");
+    expect(persistence.legacyFeatureBrief.inputs).toEqual([
+      "Employee setup flow",
+      "Copy: guided checklist and progress visibility",
+      "Adapt: approvals for customer-facing handoff",
+      "Avoid: employee-only HR language",
+    ]);
+  });
 });

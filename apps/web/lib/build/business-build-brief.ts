@@ -42,6 +42,14 @@ export type BusinessBriefStatus =
 
 export type BusinessBriefEvidenceKind =
   | "artifact"
+  | "document"
+  | "screenshot"
+  | "spreadsheet"
+  | "url"
+  | "existing_route"
+  | "backlog_item"
+  | "feature_build"
+  | "email"
   | "existing_example"
   | "conversation"
   | "coworker"
@@ -52,6 +60,9 @@ export type BusinessBriefEvidence = {
   label: string;
   summary: string;
   url?: string;
+  copy?: string[];
+  adapt?: string[];
+  avoid?: string[];
 };
 
 export type BusinessBuildBrief = {
@@ -155,10 +166,13 @@ export type BusinessBuildBriefRecordInput = {
 
 export type BusinessBuildBriefEditInput = {
   briefId: string;
+  intakeSource?: BusinessBuildBriefSource;
+  evidenceKind?: BusinessBriefEvidenceKind;
   businessOutcome: string;
   affectedPeopleText: string;
   affectedWorkflow?: string | null;
   sourceEvidenceText: string;
+  copyAdaptAvoidText?: string;
   successSignalsText: string;
   constraintsText: string;
   openQuestionsText: string;
@@ -166,6 +180,7 @@ export type BusinessBuildBriefEditInput = {
 };
 
 export type BusinessBuildBriefEditPersistence = {
+  intakeSource: BusinessBuildBriefSource;
   status: BusinessBriefStatus;
   accepted: boolean;
   businessOutcome: string;
@@ -262,11 +277,88 @@ function evidenceFromInputs(inputs: string[]): BusinessBriefEvidence[] {
   }];
 }
 
-function evidenceFromText(value: string): BusinessBriefEvidence[] {
+function copyAdaptAvoidFromText(value: string | null | undefined): {
+  copy: string[];
+  adapt: string[];
+  avoid: string[];
+} {
+  const buckets = { copy: [] as string[], adapt: [] as string[], avoid: [] as string[] };
+  for (const line of textLines(value ?? "")) {
+    const match = /^(copy|adapt|avoid)\s*:\s*(.+)$/i.exec(line);
+    if (!match) continue;
+    const bucket = match[1]!.toLowerCase() as "copy" | "adapt" | "avoid";
+    buckets[bucket].push(match[2]!.trim());
+  }
+  return buckets;
+}
+
+function copyAdaptAvoidLines(value: {
+  copy: string[];
+  adapt: string[];
+  avoid: string[];
+}): string[] {
+  return [
+    ...value.copy.map((entry) => `Copy: ${entry}`),
+    ...value.adapt.map((entry) => `Adapt: ${entry}`),
+    ...value.avoid.map((entry) => `Avoid: ${entry}`),
+  ];
+}
+
+function evidenceKindForEdit(kind: BusinessBriefEvidenceKind | undefined): BusinessBriefEvidenceKind {
+  if (
+    kind === "document" ||
+    kind === "screenshot" ||
+    kind === "spreadsheet" ||
+    kind === "url" ||
+    kind === "existing_route" ||
+    kind === "backlog_item" ||
+    kind === "feature_build" ||
+    kind === "email" ||
+    kind === "existing_example" ||
+    kind === "market_signal"
+  ) {
+    return kind;
+  }
+  return "artifact";
+}
+
+function intakeSourceForEdit(
+  intakeSource: BusinessBuildBriefSource | undefined,
+  evidenceKind: BusinessBriefEvidenceKind,
+): BusinessBuildBriefSource {
+  if (
+    intakeSource === "user_conversation" ||
+    intakeSource === "artifact_reference" ||
+    intakeSource === "existing_example" ||
+    intakeSource === "coworker_proposal" ||
+    intakeSource === "innovation_radar"
+  ) {
+    return intakeSource;
+  }
+  if (evidenceKind === "existing_example" || evidenceKind === "existing_route" || evidenceKind === "feature_build") {
+    return "existing_example";
+  }
+  if (evidenceKind === "coworker") return "coworker_proposal";
+  if (evidenceKind === "market_signal") return "innovation_radar";
+  return "artifact_reference";
+}
+
+function evidenceFromText(
+  value: string,
+  kind: BusinessBriefEvidenceKind = "artifact",
+  copyAdaptAvoid?: { copy: string[]; adapt: string[]; avoid: string[] },
+): BusinessBriefEvidence[] {
   return textLines(value).map((line) => ({
-    kind: "artifact",
+    kind,
     label: line.length > 80 ? `${line.slice(0, 77)}...` : line,
     summary: line,
+    ...(kind === "existing_example" && copyAdaptAvoid
+      ? {
+        copy: copyAdaptAvoid.copy,
+        adapt: copyAdaptAvoid.adapt,
+        avoid: copyAdaptAvoid.avoid,
+      }
+      : {}),
   }));
 }
 
@@ -371,8 +463,19 @@ function evidenceFromRecord(value: unknown): BusinessBriefEvidence[] {
     const summary = stringField(entry, "summary") || stringField(entry, "note") || label;
     const kind = stringField(entry, "kind");
     const href = stringField(entry, "href") || stringField(entry, "url");
+    const copy = stringArrayField(entry, "copy");
+    const adapt = stringArrayField(entry, "adapt");
+    const avoid = stringArrayField(entry, "avoid");
     return [{
       kind: (
+        kind === "document" ||
+        kind === "screenshot" ||
+        kind === "spreadsheet" ||
+        kind === "url" ||
+        kind === "existing_route" ||
+        kind === "backlog_item" ||
+        kind === "feature_build" ||
+        kind === "email" ||
         kind === "existing_example" ||
         kind === "conversation" ||
         kind === "coworker" ||
@@ -381,6 +484,9 @@ function evidenceFromRecord(value: unknown): BusinessBriefEvidence[] {
       label,
       summary,
       ...(href ? { url: href } : {}),
+      ...(copy.length > 0 ? { copy } : {}),
+      ...(adapt.length > 0 ? { adapt } : {}),
+      ...(avoid.length > 0 ? { avoid } : {}),
     } satisfies BusinessBriefEvidence];
   });
 }
@@ -560,8 +666,12 @@ export function businessBuildBriefEditToPersistence(
   const businessOutcome = input.businessOutcome.trim();
   if (!businessOutcome) throw new Error("Business outcome is required");
 
+  const evidenceKind = evidenceKindForEdit(input.evidenceKind);
+  const intakeSource = intakeSourceForEdit(input.intakeSource, evidenceKind);
+  const copyAdaptAvoid = copyAdaptAvoidFromText(input.copyAdaptAvoidText);
+  const copyAdaptAvoidEvidence = copyAdaptAvoidLines(copyAdaptAvoid);
   const affectedPeople = textLines(input.affectedPeopleText);
-  const sourceEvidence = evidenceFromText(input.sourceEvidenceText);
+  const sourceEvidence = evidenceFromText(input.sourceEvidenceText, evidenceKind, copyAdaptAvoid);
   const successSignals = textLines(input.successSignalsText);
   const constraints = textLines(input.constraintsText);
   const openQuestions = textLines(input.openQuestionsText);
@@ -593,6 +703,7 @@ export function businessBuildBriefEditToPersistence(
   };
 
   return {
+    intakeSource,
     status: accepted ? "accepted" : "awaiting_clarification",
     accepted,
     businessOutcome,
@@ -601,7 +712,9 @@ export function businessBuildBriefEditToPersistence(
     sourceEvidence,
     successSignals,
     constraints,
-    businessInterpretation: businessOutcome,
+    businessInterpretation: copyAdaptAvoidEvidence.length > 0
+      ? `${businessOutcome}\n\n${copyAdaptAvoidEvidence.join("\n")}`
+      : businessOutcome,
     technicalInterpretation,
     riskProfile,
     openQuestions,
@@ -614,7 +727,10 @@ export function businessBuildBriefEditToPersistence(
       description: businessOutcome,
       portfolioContext: affectedWorkflow ?? "",
       targetRoles: affectedPeople,
-      inputs: sourceEvidence.map((evidence) => evidence.summary),
+      inputs: [
+        ...sourceEvidence.map((evidence) => evidence.summary),
+        ...copyAdaptAvoidEvidence,
+      ],
       dataNeeds: technicalInterpretation.dataNeeds ?? "",
       acceptanceCriteria: successSignals,
     },

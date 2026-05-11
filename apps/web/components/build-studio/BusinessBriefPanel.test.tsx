@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import "./test-setup";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BusinessBriefPanel } from "./BusinessBriefPanel";
 import { DEMO_BUSINESS_BRIEF } from "@/lib/build-studio-demo";
 
+const updateBusinessBuildBrief = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/actions/build", () => ({
-  updateBusinessBuildBrief: vi.fn(),
+  updateBusinessBuildBrief,
 }));
 
 describe("BusinessBriefPanel", () => {
@@ -57,5 +59,47 @@ describe("BusinessBriefPanel", () => {
     );
     expect(screen.getByRole("button", { name: /save brief/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /accept brief/i })).toBeInTheDocument();
+  });
+
+  it("lets a non-developer mark evidence as an existing working example", async () => {
+    updateBusinessBuildBrief.mockResolvedValue(undefined);
+
+    render(
+      <BusinessBriefPanel
+        brief={{
+          ...DEMO_BUSINESS_BRIEF,
+          briefId: "BBB-FB-123",
+          intakeSource: "artifact_reference",
+          sourceEvidence: [
+            {
+              kind: "existing_example",
+              label: "Employee setup flow",
+              summary: "Employee setup flow",
+              copy: ["guided checklist"],
+              adapt: ["approval rules"],
+              avoid: ["HR-only labels"],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText(/reference type/i)).toHaveValue("existing_example");
+    expect(screen.getByLabelText(/copy, adapt, avoid/i)).toHaveValue(
+      "Copy: guided checklist\nAdapt: approval rules\nAvoid: HR-only labels",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /save brief/i }));
+
+    await waitFor(() => {
+      expect(updateBusinessBuildBrief).toHaveBeenCalledWith(
+        expect.objectContaining({
+          briefId: "BBB-FB-123",
+          intakeSource: "existing_example",
+          evidenceKind: "existing_example",
+          copyAdaptAvoidText: "Copy: guided checklist\nAdapt: approval rules\nAvoid: HR-only labels",
+        }),
+      );
+    });
   });
 });
