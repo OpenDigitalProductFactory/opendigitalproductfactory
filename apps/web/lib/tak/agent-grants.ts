@@ -24,6 +24,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
   record_execution_evidence: ["backlog_write"],
+  record_functional_failure_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],
 
   // Backlog triage and Build Studio promotion (spec 2026-04-21)

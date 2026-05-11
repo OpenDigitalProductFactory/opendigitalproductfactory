@@ -503,6 +503,44 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "record_functional_failure_evidence",
+    description: "Create or update a deduped backlog item from Playwright FunctionalFailureEvidence. Uses a deterministic testId+route+actual fingerprint and records an evidence activity; the cross-cutting audit lives in ToolExecution. Side-effecting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        testId: { type: "string", description: "Stable automated test id" },
+        suite: { type: "string", description: "Playwright suite or project" },
+        route: { type: "string", description: "Application route under test" },
+        expected: { type: "string", description: "Expected behavior" },
+        actual: { type: "string", description: "Observed failure" },
+        screenshotPath: { type: "string", description: "Local screenshot path when available" },
+        tracePath: { type: "string", description: "Local trace path when available" },
+        userRole: { type: "string", description: "User role used by the test" },
+        agentId: { type: "string", description: "Expected or active coworker id" },
+        routeContext: { type: "string", description: "Route context used by the test" },
+        reproCommand: { type: "string", description: "Command to reproduce the failure" },
+        createdAt: { type: "string", description: "Evidence timestamp" },
+        likelyOwnerArea: { type: "string", description: "Likely owning product area" },
+        buildId: { type: "string", description: "Optional Build Studio id" },
+        backlogItemId: { type: "string", description: "Optional explicit backlog item to attach to" },
+      },
+      required: [
+        "testId",
+        "suite",
+        "route",
+        "expected",
+        "actual",
+        "userRole",
+        "routeContext",
+        "reproCommand",
+        "createdAt",
+        "likelyOwnerArea",
+      ],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "get_next_recommended_work",
     description: "Return a short ranked list of backlog items the caller could pick up next. Ranks by spec/plan presence, triage outcome, effort size, priority, and active-build state. Read-only.",
     inputSchema: {
@@ -2844,6 +2882,12 @@ function parseCapabilityNeeds(rawNeeds: unknown): CoworkerCapabilityNeedInput[] 
     .filter((need) => need.need.length > 0 && need.blocks.length > 0);
 }
 
+function redactFunctionalFailureText(text: string): string {
+  return text
+    .replace(/\bdpfmcp_[A-Za-z0-9_-]+/g, "[redacted-token]")
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]");
+}
+
 export async function executeTool(
   toolName: string,
   rawParams: Record<string, unknown>,
@@ -3769,6 +3813,158 @@ export async function executeTool(
         entityId: activity.id,
         message: `Recorded ${kindRaw} evidence for ${itemIdRaw}`,
         data: { activityId: activity.id, recordedAt: activity.recordedAt.toISOString() },
+      };
+    }
+
+    case "record_functional_failure_evidence": {
+      const required = [
+        "testId",
+        "suite",
+        "route",
+        "expected",
+        "actual",
+        "userRole",
+        "routeContext",
+        "reproCommand",
+        "createdAt",
+        "likelyOwnerArea",
+      ];
+      const missing = required.filter((key) => typeof params[key] !== "string" || !String(params[key]).trim());
+      if (missing.length > 0) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: `Missing required functional failure evidence field(s): ${missing.join(", ")}`,
+        };
+      }
+
+      const testId = String(params["testId"]).trim();
+      const suite = String(params["suite"]).trim();
+      const route = String(params["route"]).trim();
+      const expected = redactFunctionalFailureText(String(params["expected"]));
+      const actual = redactFunctionalFailureText(String(params["actual"]));
+      const userRole = String(params["userRole"]).trim();
+      const routeContext = String(params["routeContext"]).trim();
+      const reproCommand = String(params["reproCommand"]).trim();
+      const createdAt = String(params["createdAt"]).trim();
+      const likelyOwnerArea = String(params["likelyOwnerArea"]).trim();
+      const agentId = typeof params["agentId"] === "string" ? params["agentId"].trim() || null : null;
+      const screenshotPath =
+        typeof params["screenshotPath"] === "string" ? params["screenshotPath"].trim() || null : null;
+      const tracePath = typeof params["tracePath"] === "string" ? params["tracePath"].trim() || null : null;
+      const buildId = typeof params["buildId"] === "string" ? params["buildId"].trim() || null : null;
+      const explicitItemId =
+        typeof params["backlogItemId"] === "string" ? params["backlogItemId"].trim() || null : null;
+
+      const normalizedActual = actual.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 1200);
+      const failureFingerprint = crypto
+        .createHash("sha256")
+        .update(`${testId}|${route}|${normalizedActual}`)
+        .digest("hex")
+        .slice(0, 16);
+
+      const evidencePayload = {
+        evidenceKind: "test_fail",
+        source: "functional-test-failure",
+        failureFingerprint,
+        testId,
+        suite,
+        route,
+        expected,
+        actual,
+        screenshotPath,
+        tracePath,
+        userRole,
+        agentId,
+        routeContext,
+        reproCommand,
+        createdAt,
+        likelyOwnerArea,
+        buildId,
+      };
+      const summary = `${testId} failed${route ? ` on ${route}` : ""}: ${actual.slice(0, 120)}`;
+
+      let item = explicitItemId
+        ? await prisma.backlogItem.findUnique({
+            where: { itemId: explicitItemId },
+            select: { id: true, itemId: true, occurrenceCount: true },
+          })
+        : null;
+
+      if (!item) {
+        item = await prisma.backlogItem.findFirst({
+          where: {
+            source: "functional-test-failure",
+            status: { notIn: ["done", "deferred"] },
+            body: { contains: `failureFingerprint: ${failureFingerprint}` },
+          },
+          select: { id: true, itemId: true, occurrenceCount: true },
+        });
+      }
+
+      let action: "created" | "updated";
+      if (!item) {
+        item = await prisma.backlogItem.create({
+          data: {
+            itemId: `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+            title: `[${testId}] ${route} functional smoke failure`,
+            type: "product",
+            status: "triaging",
+            source: "functional-test-failure",
+            submittedById: userId,
+            agentId: context?.agentId ?? agentId ?? null,
+            lastSeenAt: new Date(createdAt),
+            body: [
+              `failureFingerprint: ${failureFingerprint}`,
+              `ownerArea: ${likelyOwnerArea}`,
+              `route: ${route}`,
+              `suite: ${suite}`,
+              `expected: ${expected}`,
+              `actual: ${actual}`,
+              `repro: ${reproCommand}`,
+            ].join("\n"),
+          },
+          select: { id: true, itemId: true, occurrenceCount: true },
+        });
+        action = "created";
+      } else {
+        item = await prisma.backlogItem.update({
+          where: { id: item.id },
+          data: {
+            occurrenceCount: { increment: 1 },
+            lastSeenAt: new Date(createdAt),
+          },
+          select: { id: true, itemId: true, occurrenceCount: true },
+        });
+        action = "updated";
+      }
+
+      const activity = await prisma.backlogItemActivity.create({
+        data: {
+          backlogItemId: item.id,
+          kind: "evidence",
+          summary: action === "created" ? summary.slice(0, 240) : `${testId} failed again on ${route}`.slice(0, 240),
+          payload: evidencePayload,
+          recordedById: userId,
+          recordedByAgentId: context?.agentId ?? agentId ?? null,
+        },
+      });
+
+      return {
+        success: true,
+        entityId: item.itemId,
+        message:
+          action === "created"
+            ? `Created ${item.itemId} for ${testId} functional failure`
+            : `Updated ${item.itemId} with repeated ${testId} functional failure`,
+        data: {
+          action,
+          itemId: item.itemId,
+          activityId: activity.id,
+          failureFingerprint,
+          occurrenceCount: item.occurrenceCount,
+          recordedAt: activity.recordedAt.toISOString(),
+        },
       };
     }
 
