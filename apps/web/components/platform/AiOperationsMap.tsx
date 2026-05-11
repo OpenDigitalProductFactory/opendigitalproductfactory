@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type {
   OperationsMapProjection,
+  OperationsMapProjectionSource,
+  OperationsMapSeverity,
   OperationsMapTemplate,
   StationedOperationsMapAgent,
 } from "@/lib/ai-operations-map/types";
-import { summarizeProjectionCounts } from "@/lib/ai-operations-map/project-events";
+import { filterOperationsMapProjections, summarizeProjectionCounts } from "@/lib/ai-operations-map/project-events";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -35,9 +37,24 @@ const SOURCE_LABEL: Record<OperationsMapProjection["source"], string> = {
   "evidence-external": "External evidence",
 };
 
+const SOURCE_OPTIONS: OperationsMapProjectionSource[] = [
+  "tool-execution",
+  "tool-receipt",
+  "evidence-backlog",
+  "evidence-external",
+];
+
+const SEVERITY_OPTIONS: OperationsMapSeverity[] = ["normal", "attention", "warning", "critical"];
+
 export function AiOperationsMap({ template, agents, projections, recentWindowLabel }: Props) {
   const [selected, setSelected] = useState<SelectedItem>({ kind: "station", id: template.stations[0]?.id ?? "" });
-  const counts = useMemo(() => summarizeProjectionCounts(projections), [projections]);
+  const [sourceFilters, setSourceFilters] = useState<OperationsMapProjectionSource[]>(SOURCE_OPTIONS);
+  const [severityFilters, setSeverityFilters] = useState<OperationsMapSeverity[]>(SEVERITY_OPTIONS);
+  const filteredProjections = useMemo(
+    () => filterOperationsMapProjections(projections, { sources: sourceFilters, severities: severityFilters }),
+    [projections, sourceFilters, severityFilters],
+  );
+  const counts = useMemo(() => summarizeProjectionCounts(filteredProjections), [filteredProjections]);
 
   const selectedStation = selected.kind === "station"
     ? template.stations.find((station) => station.id === selected.id) ?? null
@@ -46,8 +63,14 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
     ? agents.find((agent) => agent.agentId === selected.id) ?? null
     : null;
   const selectedProjection = selected.kind === "projection"
-    ? projections.find((projection) => projection.id === selected.id) ?? null
+    ? filteredProjections.find((projection) => projection.id === selected.id) ?? null
     : null;
+  const toggleSourceFilter = (source: OperationsMapProjectionSource) => {
+    setSourceFilters((current) => toggleFilterOption(current, source, SOURCE_OPTIONS));
+  };
+  const toggleSeverityFilter = (severity: OperationsMapSeverity) => {
+    setSeverityFilters((current) => toggleFilterOption(current, severity, SEVERITY_OPTIONS));
+  };
 
   return (
     <div className="space-y-6">
@@ -68,6 +91,42 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
           <Metric label="Critical" value={counts.critical} />
         </div>
       </header>
+
+      <section
+        aria-label="Map view controls"
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3"
+      >
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">View controls</h2>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              Showing {filteredProjections.length} of {projections.length} activities
+            </p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <FilterGroup label="Sources">
+              {SOURCE_OPTIONS.map((source) => (
+                <FilterButton
+                  key={source}
+                  active={sourceFilters.includes(source)}
+                  label={SOURCE_LABEL[source]}
+                  onClick={() => toggleSourceFilter(source)}
+                />
+              ))}
+            </FilterGroup>
+            <FilterGroup label="Severity">
+              {SEVERITY_OPTIONS.map((severity) => (
+                <FilterButton
+                  key={severity}
+                  active={severityFilters.includes(severity)}
+                  label={capitalizeSeverity(severity)}
+                  onClick={() => toggleSeverityFilter(severity)}
+                />
+              ))}
+            </FilterGroup>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section
@@ -102,7 +161,7 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
                     const station = template.stations.find((candidate) => candidate.id === stationId);
                     if (!station) return null;
                     const stationAgents = agents.filter((agent) => agent.stationId === station.id);
-                    const stationProjections = projections.filter((projection) => projection.location.stationId === station.id);
+                    const stationProjections = filteredProjections.filter((projection) => projection.location.stationId === station.id);
                     const isSelected = selected.kind === "station" && selected.id === station.id;
 
                     return (
@@ -171,13 +230,48 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
         <aside className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4" aria-label="Map inspector">
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Inspector</h2>
           {selectedStation ? (
-            <StationInspector station={selectedStation} agents={agents} projections={projections} onSelect={setSelected} />
+            <StationInspector station={selectedStation} agents={agents} projections={filteredProjections} onSelect={setSelected} />
           ) : null}
           {selectedAgent ? <AgentInspector agent={selectedAgent} /> : null}
           {selectedProjection ? <ProjectionInspector projection={selectedProjection} /> : null}
         </aside>
       </div>
     </div>
+  );
+}
+
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">{label}</p>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+function FilterButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={[
+        "min-h-8 rounded border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]",
+        active
+          ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]"
+          : "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]",
+      ].join(" ")}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -321,4 +415,13 @@ function InspectorFact({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 break-words font-medium text-[var(--dpf-text)]">{value}</dd>
     </div>
   );
+}
+
+function toggleFilterOption<T extends string>(current: T[], option: T, allOptions: T[]): T[] {
+  if (current.includes(option)) return current.filter((candidate) => candidate !== option);
+  return allOptions.filter((candidate) => candidate === option || current.includes(candidate));
+}
+
+function capitalizeSeverity(severity: OperationsMapSeverity): string {
+  return severity.charAt(0).toUpperCase() + severity.slice(1);
 }
