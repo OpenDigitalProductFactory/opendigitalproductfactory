@@ -14,6 +14,9 @@ vi.mock("@dpf/db", () => ({
     toolExecutionReceipt: {
       findMany: vi.fn(),
     },
+    taskRun: {
+      findMany: vi.fn(),
+    },
     backlogItemActivity: {
       findMany: vi.fn(),
     },
@@ -38,6 +41,7 @@ describe("loadOperationsMapData", () => {
       },
     } as never);
     vi.mocked(prisma.agent.findMany).mockResolvedValue([makeAgentRow()] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([makeToolExecutionRow()] as never);
     vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
@@ -64,6 +68,7 @@ describe("loadOperationsMapData", () => {
   it("falls back to the generic value-chain map when no storefront archetype is configured", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
@@ -79,6 +84,7 @@ describe("loadOperationsMapData", () => {
   it("loads and chronologically merges receipts, backlog evidence, and external evidence", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.agent.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([makeTaskRunRow()] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([makeToolExecutionRow()] as never);
     vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([makeReceiptRow()] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([makeBacklogEvidenceRow()] as never);
@@ -90,8 +96,28 @@ describe("loadOperationsMapData", () => {
       "evidence-external",
       "evidence-backlog",
       "tool-receipt",
+      "task-run",
       "tool-execution",
     ]);
+    expect(prisma.taskRun.findMany).toHaveBeenCalledWith({
+      where: {
+        archivedAt: null,
+        source: "proactive",
+      },
+      orderBy: { startedAt: "desc" },
+      take: 40,
+      select: {
+        id: true,
+        taskRunId: true,
+        status: true,
+        source: true,
+        currentAgentId: true,
+        routeContext: true,
+        title: true,
+        startedAt: true,
+        completedAt: true,
+      },
+    });
     expect(prisma.toolExecutionReceipt.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: "desc" },
       take: 40,
@@ -189,6 +215,20 @@ function makeToolExecutionRow() {
     auditClass: "journal",
     capabilityId: "platform:diagnose_customer_estate",
     summary: "Checked service health",
+  };
+}
+
+function makeTaskRunRow() {
+  return {
+    id: "tr-1",
+    taskRunId: "TR-SCHED-ABCDE",
+    status: "working",
+    source: "proactive",
+    currentAgentId: "support-specialist",
+    routeContext: "service-operations",
+    title: "Discovery Taxonomy Gap Triage",
+    startedAt: new Date("2026-05-10T12:00:30.000Z"),
+    completedAt: null,
   };
 }
 

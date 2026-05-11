@@ -319,6 +319,44 @@ describe("runAgenticLoop", () => {
     );
   });
 
+  it("forwards taskRunId into governedExecuteTool context on every tool call", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Searching.",
+        toolCalls: [{ id: "toolu_01A", name: "search_project_files", arguments: { query: "agent" } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "I found the relevant files and summarized the implementation path with enough detail for the next step to continue cleanly.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "The search output lists the relevant files and the likely implementation path. It gives enough context for a follow-up step and keeps the answer limited to investigation notes.",
+      }));
+
+    mockExecuteTool.mockResolvedValueOnce({
+      success: true,
+      message: "Found files",
+    });
+
+    await runAgenticLoop({
+      ...baseParams,
+      taskRunId: "TR-SCHED-TESTRUN",
+    });
+
+    expect(governedExecuteTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          taskRunId: "TR-SCHED-TESTRUN",
+          agentId: "software-engineer",
+          threadId: "thread-1",
+          routeContext: "/build",
+        }),
+      }),
+    );
+  });
+
   it("creates structured messages with tool call IDs after tool execution", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
