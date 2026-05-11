@@ -49,19 +49,19 @@ git config core.hooksPath .githooks
 6. Waits for Postgres readiness and runs Prisma migrations + seed
 7. Verifies the agent rulebook (AGENTS.md + pointer files) is intact
 
-VS Code tasks under `.vscode/tasks.json` carry `osx` and `linux` overrides for every task that has a Windows form, so `Cmd+Shift+P → Tasks: Run Task → DPF: <X>` works on macOS and Linux out of the box. The release-script tasks (PowerShell-only today) print a clear "lands with Phase 8 of the installer-parity roadmap" message instead of failing with a missing-command error.
+VS Code tasks under `.vscode/tasks.json` carry `osx` and `linux` overrides for every task that has a Windows form, so `Cmd+Shift+P → Tasks: Run Task → DPF: <X>` works on macOS and Linux out of the box. The release-script tasks now have bash equivalents (`dpf-release.sh`, `dpf-start.sh`, `dpf-stop.sh`, `dpf-reinstall.sh`) so every Windows-side dpf-* task has a macOS / Linux sibling.
 
 What's intentionally NOT in `scripts/setup.sh`:
 
-- **Docker / Node / pnpm installation.** Manual prereqs per the contributor contract. Fully-automated host bootstrap is `install-dpf.sh`'s job when installer-parity Phase 6/7 lands (see the [roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md)).
-- **LLM provider configuration.** The provider contract (Doctrine [Contract 9](docs/superpowers/specs/2026-05-09-deployment-contracts.md)) is provider-aware: Docker Model Runner on macOS Docker Desktop, Ollama-in-compose on Linux native Docker (lands in Phase 3 via `docker-compose.linux.yml`), or any external endpoint via `LLM_BASE_URL`.
+- **Docker / Node / pnpm installation.** Manual prereqs per the contributor contract. Fully-automated host bootstrap is `install-dpf.sh`'s job — the end-user installer that auto-installs Docker Desktop (macOS) or Docker Engine (Linux), runs preflight, brings up the platform-aware compose stack, and registers the autostart unit. See [docs/install/macos.md](docs/install/macos.md) and [docs/install/linux.md](docs/install/linux.md).
+- **LLM provider configuration.** The provider contract (Doctrine [Contract 9](docs/superpowers/specs/2026-05-09-deployment-contracts.md)) is provider-aware: Docker Model Runner on macOS Docker Desktop, Ollama-in-compose on Linux native Docker (`docker-compose.linux.yml`), or any external endpoint via `LLM_BASE_URL`.
 - **Auto-start, hardware detection, `install-state.json`, `dpf doctor`.** Those are `install-dpf.sh` territory.
 
 If you'd rather develop entirely inside a container regardless of host OS, the [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) is fully cross-platform — open the repo in VS Code with the Dev Containers extension and choose "Reopen in Container".
 
 ## Before you start
 
-- Have an install running. See the repo [README](README.md) Quick Start for the Windows installer, or [docs/user-guide/getting-started/developer-setup.md](docs/user-guide/getting-started/developer-setup.md) for the native pnpm + Docker sidecar setup.
+- Have an install running. See the repo [README](README.md) Quick Start (Windows / macOS / Linux installers all covered there) or [docs/user-guide/getting-started/developer-setup.md](docs/user-guide/getting-started/developer-setup.md) for the native pnpm + Docker sidecar setup.
 - Read the [architecture overview](docs/architecture/platform-overview.md) and the [Trusted AI Kernel architecture](docs/architecture/trusted-ai-kernel.md) before proposing AI-facing changes.
 - Check the issue tracker for open discussions before starting non-trivial work.
 
