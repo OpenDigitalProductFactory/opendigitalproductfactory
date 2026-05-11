@@ -1928,6 +1928,27 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
   },
+  // ─── EP-WIKI-001 Phase 3b2: Wiki Query ──────────────────────────────────────
+  {
+    name: "wiki_query",
+    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, and a content preview. Prefer this over web speculation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for. Natural language; the wiki is embedded for semantic similarity." },
+        pageKind: {
+          type: "string",
+          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic"],
+          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'entity' for definitions; 'decision' for DEC-* records.",
+        },
+        limit: { type: "number", description: "Max results (default 5)." },
+      },
+      required: ["query"],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+  },
   // ─── Knowledge Search ──────────────────────────────────────────────────────
   {
     name: "search_knowledge",
@@ -8157,6 +8178,30 @@ export async function executeTool(
         entityId: feedbackId,
         message: "Feedback submitted.",
       };
+    }
+
+    case "wiki_query": {
+      const { searchWikiPages } = await import("@/lib/wiki/embeddings");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization
+        .findFirst({ select: { id: true } })
+        .catch(() => null);
+      const results = await searchWikiPages({
+        query: String(params["query"] ?? ""),
+        organizationId: org?.id ?? null,
+        pageKind: typeof params["pageKind"] === "string" ? params["pageKind"] : undefined,
+        limit: typeof params["limit"] === "number" ? params["limit"] : 5,
+      });
+      if (results.length === 0) {
+        return { success: true, message: "No matching wiki pages found.", data: { results: [] } };
+      }
+      const summary = results
+        .map(
+          (r) =>
+            `${r.slug} (${r.pageKind}, ${r.source}) — ${r.title} (${Math.round(r.score * 100)}% match)`,
+        )
+        .join("\n");
+      return { success: true, message: summary, data: { results } };
     }
 
     case "search_knowledge": {

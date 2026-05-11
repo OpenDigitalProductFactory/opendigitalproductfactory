@@ -63,6 +63,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_knowledge_article: ["registry_write"],
   flag_stale_knowledge: ["registry_read"],
 
+  // EP-WIKI-001 Phase 3b2: Founder kernel + per-org overlay wiki
+  wiki_query: ["registry_read"],
+
   // Build / Sandbox
   launch_sandbox: ["sandbox_execute"],
   generate_code: ["sandbox_execute"],
