@@ -1,9 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary, parseQAVerification } from "./build-orchestrator";
+import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary, parseQAVerification, resolveBuildProviderRunner } from "./build-orchestrator";
 import type { StoredTaskResult } from "./build-orchestrator";
 import type { AgenticResult } from "@/lib/agentic-loop";
 import type { ClaudeResult } from "./claude-dispatch";
 import type { CodexResult } from "./codex-dispatch";
+
+describe("resolveBuildProviderRunner", () => {
+  it("defaults to local-docker x codex", () => {
+    const { provider, runner } = resolveBuildProviderRunner({});
+    expect(provider.id).toBe("local-docker");
+    expect(runner.id).toBe("codex");
+  });
+
+  it("resolves local-docker x claude", () => {
+    const { provider, runner } = resolveBuildProviderRunner({ agentId: "claude", providerId: "local-docker" });
+    expect(provider.id).toBe("local-docker");
+    expect(runner.id).toBe("claude");
+  });
+
+  it("rejects unimplemented providers before dispatch", () => {
+    expect(() => resolveBuildProviderRunner({ providerId: "cloud-run-job" })).toThrow(/not implemented/i);
+  });
+});
 
 function mockResult(overrides: Partial<AgenticResult> = {}): AgenticResult {
   return {
