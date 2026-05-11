@@ -140,6 +140,15 @@ export type OperationsMapProjectionFilters = {
   severities: OperationsMapSeverity[];
 };
 
+export type OperationsMapQuickViewId = "all" | "exceptions" | "evidence" | "tool-runs";
+
+export type OperationsMapQuickView = {
+  id: OperationsMapQuickViewId;
+  label: string;
+  description: string;
+  filters: OperationsMapProjectionFilters;
+};
+
 export type OperationsMapTemplateSelector = {
   archetypeId?: string | null;
   activationProfileType?: string | null;
