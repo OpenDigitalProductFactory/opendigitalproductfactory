@@ -43,8 +43,33 @@ export async function getPromotions(status?: string) {
   });
 }
 
+export async function getGitPromotionCandidates() {
+  await requireOpsAccess();
+  return prisma.gitPromotionCandidate.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    select: {
+      id: true,
+      candidateId: true,
+      provider: true,
+      repositoryFullName: true,
+      branch: true,
+      afterSha: true,
+      status: true,
+      statusReason: true,
+      sandboxProviderId: true,
+      sandboxId: true,
+      verificationStartedAt: true,
+      verificationCompletedAt: true,
+      verificationResult: true,
+      createdAt: true,
+    },
+  });
+}
+
 // Re-export Promotion type shape for the UI component
 export type PromotionRow = Awaited<ReturnType<typeof getPromotions>>[number];
+export type GitPromotionCandidateRow = Awaited<ReturnType<typeof getGitPromotionCandidates>>[number];
 
 export async function approvePromotion(promotionId: string, rationale: string) {
   const userId = await requireOpsAccess();

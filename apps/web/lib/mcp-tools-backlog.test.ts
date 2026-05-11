@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = {
   backlogItem: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
     count: vi.fn(),
@@ -329,5 +331,128 @@ describe("backlog MCP tool execution", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe("missing_duplicateOfId");
     expect(mockPrisma.backlogItem.update).not.toHaveBeenCalled();
+  });
+
+  it("record_functional_failure_evidence creates a governed backlog item for the first fingerprint", async () => {
+    mockPrisma.backlogItem.findFirst.mockResolvedValue(null);
+    mockPrisma.backlogItem.create.mockResolvedValue({
+      id: "functional-failure-row-1",
+      itemId: "BI-FUNC1",
+    });
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({
+      id: "activity-1",
+      recordedAt: new Date("2026-05-11T12:00:00.000Z"),
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "record_functional_failure_evidence",
+      {
+        testId: "BUILD-AI-ROUTING-01",
+        suite: "build-studio",
+        route: "/build",
+        expected: "build-specialist coworker visible",
+        actual: "Software Engineer panel missing",
+        screenshotPath: "test-results/build/screenshot.png",
+        tracePath: null,
+        userRole: "admin",
+        agentId: "build-specialist",
+        routeContext: "/build",
+        reproCommand: "pnpm exec playwright test --project=build-studio",
+        createdAt: "2026-05-11T12:00:00.000Z",
+        likelyOwnerArea: "build-studio",
+      },
+      "user-1",
+      { agentId: "platform-engineer" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(expect.objectContaining({ itemId: "BI-FUNC1", action: "created" }));
+    expect(mockPrisma.backlogItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: "[BUILD-AI-ROUTING-01] /build functional smoke failure",
+          source: "functional-test-failure",
+          status: "triaging",
+          agentId: "platform-engineer",
+          body: expect.stringContaining("failureFingerprint:"),
+        }),
+      }),
+    );
+    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          backlogItemId: "functional-failure-row-1",
+          kind: "evidence",
+          recordedById: "user-1",
+          recordedByAgentId: "platform-engineer",
+          payload: expect.objectContaining({
+            evidenceKind: "test_fail",
+            testId: "BUILD-AI-ROUTING-01",
+            route: "/build",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("record_functional_failure_evidence dedupes repeated failures into the existing item", async () => {
+    mockPrisma.backlogItem.findFirst.mockResolvedValue({
+      id: "existing-row-1",
+      itemId: "BI-EXISTING",
+      occurrenceCount: 2,
+    });
+    mockPrisma.backlogItem.update.mockResolvedValue({
+      id: "existing-row-1",
+      itemId: "BI-EXISTING",
+      occurrenceCount: 3,
+    });
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({
+      id: "activity-2",
+      recordedAt: new Date("2026-05-11T12:05:00.000Z"),
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "record_functional_failure_evidence",
+      {
+        testId: "OPS-AI-ROUTING-01",
+        suite: "ops-backlog",
+        route: "/ops",
+        expected: "ops-coordinator coworker visible",
+        actual: "Scrum Master panel missing",
+        screenshotPath: null,
+        tracePath: null,
+        userRole: "admin",
+        agentId: "ops-coordinator",
+        routeContext: "/ops",
+        reproCommand: "pnpm exec playwright test --project=ops-backlog",
+        createdAt: "2026-05-11T12:05:00.000Z",
+        likelyOwnerArea: "ops-backlog",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(expect.objectContaining({ itemId: "BI-EXISTING", action: "updated" }));
+    expect(mockPrisma.backlogItem.create).not.toHaveBeenCalled();
+    expect(mockPrisma.backlogItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "existing-row-1" },
+        data: expect.objectContaining({
+          occurrenceCount: { increment: 1 },
+          lastSeenAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          backlogItemId: "existing-row-1",
+          kind: "evidence",
+          summary: expect.stringContaining("OPS-AI-ROUTING-01 failed again"),
+        }),
+      }),
+    );
   });
 });
