@@ -7,13 +7,20 @@ import {
   DEMO_PENDING_APPROVALS,
   DEMO_STEPS,
 } from "@/lib/build-studio-demo";
+import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
 import type { ArtifactView } from "./types";
 import { HeaderBar } from "./HeaderBar";
 import { StepTracker } from "./StepTracker";
 import { ConversationPane } from "./ConversationPane";
 import { ArtifactPane } from "./ArtifactPane";
 
-export function BuildStudioV2() {
+type BuildStudioV2Props = {
+  businessBrief?: BusinessBuildBrief;
+};
+
+export function BuildStudioV2({
+  businessBrief = DEMO_BUSINESS_BRIEF,
+}: BuildStudioV2Props = {}) {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [view, setView] = useState<ArtifactView>("brief");
 
@@ -57,7 +64,7 @@ export function BuildStudioV2() {
           view={view}
           onViewChange={setView}
           sandboxUrl="sandbox.dpf.local/settings/api-keys"
-          businessBrief={DEMO_BUSINESS_BRIEF}
+          businessBrief={businessBrief}
         />
       </div>
     </div>

@@ -133,6 +133,22 @@ export type BusinessBuildBriefPersistenceInput = {
   submittedByUserId: string | null;
 };
 
+export type BusinessBuildBriefRecordInput = {
+  intakeSource: BusinessBuildBriefSource;
+  capabilityPackId: string | null;
+  businessOutcome: string;
+  affectedPeople: unknown;
+  affectedWorkflow: string | null;
+  sourceEvidence: unknown;
+  successSignals: string[];
+  constraints: string[];
+  businessInterpretation: string | null;
+  technicalInterpretation: unknown;
+  riskProfile: unknown;
+  openQuestions: string[];
+  confidence: BusinessBriefConfidence | null;
+};
+
 const CAPABILITY_PACKS: Array<{
   id: CapabilityPackId;
   label: CapabilityPack;
@@ -267,6 +283,86 @@ function stringArrayField(record: Record<string, unknown>, key: string): string[
   return value.map((entry) => typeof entry === "string" ? entry.trim() : "").filter(Boolean);
 }
 
+function capabilityPackLabel(id: string | null | undefined): CapabilityPack {
+  const normalizedId = capabilityPackIdFromRecord(id);
+  return CAPABILITY_PACKS.find((pack) => pack.id === normalizedId)?.label
+    ?? "Build Studio / Self-Development";
+}
+
+function capabilityPackIdFromRecord(id: string | null | undefined): CapabilityPackId {
+  return CAPABILITY_PACKS.some((pack) => pack.id === id)
+    ? id as CapabilityPackId
+    : "build_studio_self_development";
+}
+
+function affectedPeopleFromRecord(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") return entry.trim();
+      if (!isRecord(entry)) return "";
+      const label = stringField(entry, "label");
+      if (label) return label;
+      return stringField(entry, "principalId");
+    })
+    .filter(Boolean);
+}
+
+function evidenceFromRecord(value: unknown): BusinessBriefEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const label = stringField(entry, "label") || stringField(entry, "kind") || "Evidence";
+    const summary = stringField(entry, "summary") || stringField(entry, "note") || label;
+    const kind = stringField(entry, "kind");
+    const href = stringField(entry, "href") || stringField(entry, "url");
+    return [{
+      kind: (
+        kind === "existing_example" ||
+        kind === "conversation" ||
+        kind === "coworker" ||
+        kind === "market_signal"
+      ) ? kind : "artifact",
+      label,
+      summary,
+      ...(href ? { url: href } : {}),
+    } satisfies BusinessBriefEvidence];
+  });
+}
+
+function technicalInterpretationFromRecord(
+  value: unknown,
+): BusinessBuildBrief["technicalInterpretation"] {
+  if (!isRecord(value)) {
+    return { dataNeeds: null, likelyWorkflowImpact: [], verificationFocus: [] };
+  }
+  return {
+    dataNeeds: stringField(value, "dataNeeds") || null,
+    likelyWorkflowImpact: stringArrayField(value, "likelyWorkflowImpact"),
+    verificationFocus: stringArrayField(value, "verificationFocus"),
+  };
+}
+
+function riskProfileFromRecord(value: unknown): BusinessBuildBrief["riskProfile"] {
+  if (!isRecord(value)) {
+    return {
+      customerFacing: false,
+      complianceSensitive: false,
+      revenueImpacting: false,
+      operationalRisk: false,
+      level: "low",
+    };
+  }
+  const level = stringField(value, "level");
+  return {
+    customerFacing: value.customerFacing === true,
+    complianceSensitive: value.complianceSensitive === true,
+    revenueImpacting: value.revenueImpacting === true,
+    operationalRisk: value.operationalRisk === true,
+    level: level === "high" || level === "medium" ? level : "low",
+  };
+}
+
 function coerceLegacyFeatureBrief(value: unknown, fallbackTitle: string): FeatureBrief {
   if (!isRecord(value)) {
     throw new Error("Legacy feature brief must be an object before it can be backfilled.");
@@ -370,6 +466,31 @@ export function buildBusinessBuildBrief(input: BuildBusinessBuildBriefInput): Bu
     },
     openQuestions,
     confidence: confidenceFor(openQuestions),
+  };
+}
+
+export function businessBuildBriefFromRecord(input: {
+  title: string;
+  row: BusinessBuildBriefRecordInput;
+}): BusinessBuildBrief {
+  const capabilityPackId = capabilityPackIdFromRecord(input.row.capabilityPackId);
+  const capabilityPack = capabilityPackLabel(input.row.capabilityPackId);
+  return {
+    title: input.title,
+    intakeSource: input.row.intakeSource,
+    businessOutcome: input.row.businessOutcome,
+    affectedPeople: affectedPeopleFromRecord(input.row.affectedPeople),
+    affectedWorkflow: input.row.affectedWorkflow,
+    sourceEvidence: evidenceFromRecord(input.row.sourceEvidence),
+    successSignals: input.row.successSignals,
+    constraints: input.row.constraints,
+    businessInterpretation: input.row.businessInterpretation ?? input.row.businessOutcome,
+    capabilityPackId,
+    capabilityPack,
+    riskProfile: riskProfileFromRecord(input.row.riskProfile),
+    technicalInterpretation: technicalInterpretationFromRecord(input.row.technicalInterpretation),
+    openQuestions: input.row.openQuestions,
+    confidence: input.row.confidence ?? "low",
   };
 }
 
