@@ -19,6 +19,9 @@ vi.mock("@dpf/db", () => ({
     toolExecution: {
       create: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 vi.mock("@/lib/routed-inference", () => ({
@@ -28,10 +31,14 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: vi.fn(),
   PLATFORM_TOOLS: [],
 }));
+vi.mock("@/lib/mcp-governed-execute", () => ({
+  governedExecuteTool: vi.fn(),
+}));
 
 import { runAgenticLoop } from "./agentic-loop";
 import { routeAndCall } from "@/lib/routed-inference";
 import { executeTool } from "@/lib/mcp-tools";
+import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { prisma } from "@dpf/db";
 
 // Helper to build a mock RoutedInferenceResult
@@ -254,6 +261,13 @@ describe("runAgenticLoop", () => {
     vi.resetAllMocks();
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
     vi.mocked(prisma.toolExecution.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      isSuperuser: true,
+      groups: [{ platformRole: { roleId: "ceo" } }],
+    } as never);
+    vi.mocked(governedExecuteTool).mockImplementation(async (args: any) =>
+      executeTool(args.toolName, args.rawParams, args.userId, args.context as any) as any,
+    );
   });
   const baseParams = {
     chatHistory: [{ role: "user" as const, content: "search for agent code" }],
@@ -266,6 +280,44 @@ describe("runAgenticLoop", () => {
     agentId: "software-engineer",
     threadId: "thread-1",
   };
+
+  it("executes tools through the governed lifecycle path", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Searching.",
+        toolCalls: [{ id: "toolu_01A", name: "search_project_files", arguments: { query: "agent" } }],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "I found the relevant files and summarized the implementation path with enough detail for the next step to continue cleanly.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "The search output lists the relevant files and the likely implementation path. It gives enough context for a follow-up step and keeps the answer limited to investigation notes.",
+      }));
+
+    mockExecuteTool.mockResolvedValueOnce({
+      success: true,
+      message: "Found files",
+    });
+
+    await runAgenticLoop(baseParams);
+
+    expect(governedExecuteTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "search_project_files",
+        rawParams: { query: "agent" },
+        userId: "user-1",
+        source: "agentic-loop",
+        context: expect.objectContaining({
+          agentId: "software-engineer",
+          threadId: "thread-1",
+          routeContext: "/build",
+        }),
+      }),
+    );
+  });
 
   it("creates structured messages with tool call IDs after tool execution", async () => {
     const mockRoute = vi.mocked(routeAndCall);

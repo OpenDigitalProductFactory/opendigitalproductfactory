@@ -42,6 +42,10 @@ vi.mock("@/lib/mcp-tools", () => ({
   PLATFORM_TOOLS: [],
 }));
 
+vi.mock("@/lib/mcp-governed-execute", () => ({
+  governedExecuteTool: vi.fn(),
+}));
+
 vi.mock("@/lib/feature-flags", () => ({
   isUnifiedCoworkerEnabled: vi.fn().mockResolvedValue(false),
 }));
@@ -145,6 +149,7 @@ import { auth } from "@/lib/auth";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { routeAndCall } from "@/lib/routed-inference";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 
@@ -154,6 +159,7 @@ const mockRouteAndCall = routeAndCall as ReturnType<typeof vi.fn>;
 const mockGetAvailableTools = getAvailableTools as ReturnType<typeof vi.fn>;
 const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
+const mockGovernedExecuteTool = governedExecuteTool as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
 
 describe("agent coworker external access", () => {
@@ -191,6 +197,17 @@ describe("agent coworker external access", () => {
     });
     mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
     mockPrisma.toolExecution.create.mockResolvedValue({});
+    mockGovernedExecuteTool.mockImplementation(async () => {
+      return {
+        success: true,
+        message: "Derived branding suggestions for Jack Jack's Pack.",
+        data: {
+          companyName: "Jack Jack's Pack",
+          logoUrl: "https://jackjackspack.org/logo.svg",
+          paletteAccent: "#4f46e5",
+        },
+      };
+    });
     mockPrisma.agentMessage.create
       .mockResolvedValueOnce({
         id: "user-msg-1",
@@ -321,11 +338,14 @@ describe("agent coworker external access", () => {
       },
     });
 
-    expect(mockExecuteTool).toHaveBeenCalledWith(
-      "analyze_public_website_branding",
-      { url: "https://jackjackspack.org" },
-      "user-1",
-      expect.objectContaining({ routeContext: "/admin" }),
+    expect(mockGovernedExecuteTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "analyze_public_website_branding",
+        rawParams: { url: "https://jackjackspack.org" },
+        userId: "user-1",
+        source: "agentic-loop",
+        context: expect.objectContaining({ routeContext: "/admin" }),
+      }),
     );
     expect(result).not.toHaveProperty("error");
     if (!("error" in result)) {

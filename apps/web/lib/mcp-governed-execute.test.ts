@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   _setGovernanceForTests,
   governedExecuteTool,
+  registerToolLifecycleHook,
 } from "./mcp-governed-execute";
 import type { ToolResult } from "./mcp-tools";
 
@@ -64,6 +65,107 @@ afterEach(() => {
 });
 
 describe("governedExecuteTool — happy path", () => {
+  it("supports registering and unregistering lifecycle hooks", async () => {
+    const calls: string[] = [];
+    const unregister = registerToolLifecycleHook({
+      id: "registered-test-hook",
+      onPreToolUse: async (event) => {
+        calls.push(event.toolName);
+      },
+    });
+
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "rest",
+    });
+
+    unregister();
+
+    await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: {},
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      source: "rest",
+    });
+
+    expect(calls).toEqual(["query_backlog"]);
+  });
+
+  it("runs lifecycle hooks around successful tool execution", async () => {
+    const calls: string[] = [];
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ["backlog_read"],
+      isAllowedByGrants: () => true,
+      executeTool: executeMock,
+      toolExecutionCreate: captureAudit(auditRows),
+      lifecycleHooks: [
+        {
+          id: "test-hook",
+          onPreToolUse: async (event) => {
+            calls.push(`pre:${event.toolName}:${event.source}`);
+          },
+          onPostToolUse: async (event) => {
+            calls.push(`post:${event.toolName}:${event.result.success}`);
+          },
+        },
+      ],
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "query_backlog",
+      rawParams: { status: "open" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { agentId: "AGT-100", threadId: "thread-1" },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(true);
+    expect(calls).toEqual([
+      "pre:query_backlog:agentic-loop",
+      "post:query_backlog:true",
+    ]);
+  });
+
+  it("lets a pre-tool hook deny execution before executeTool is invoked", async () => {
+    _setGovernanceForTests({
+      resolveAgentGrants: async () => ["sandbox_execute"],
+      isAllowedByGrants: () => true,
+      executeTool: executeMock,
+      toolExecutionCreate: captureAudit(auditRows),
+      lifecycleHooks: [
+        {
+          id: "block-dangerous-command",
+          onPreToolUse: async () => ({
+            decision: "deny",
+            reason: "Sandbox command requires review",
+          }),
+        },
+      ],
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "run_sandbox_command",
+      rawParams: { command: "pnpm build" },
+      userId: "user-1",
+      userContext: NORMAL_USER,
+      context: { agentId: "AGT-300", threadId: "thread-1" },
+      source: "agentic-loop",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("hook_denied");
+    expect(result.message).toContain("Sandbox command requires review");
+    expect(executeMock).not.toHaveBeenCalled();
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]?.success).toBe(false);
+    expect(auditRows[0]?.toolName).toBe("run_sandbox_command");
+  });
+
   it("invokes executeTool, audits with the correct executionMode, and returns the result", async () => {
     const result = await governedExecuteTool({
       toolName: "query_backlog",
