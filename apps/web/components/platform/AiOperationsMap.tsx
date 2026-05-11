@@ -5,11 +5,17 @@ import Link from "next/link";
 import type {
   OperationsMapProjection,
   OperationsMapProjectionSource,
+  OperationsMapQuickViewId,
   OperationsMapSeverity,
   OperationsMapTemplate,
   StationedOperationsMapAgent,
 } from "@/lib/ai-operations-map/types";
-import { filterOperationsMapProjections, summarizeProjectionCounts } from "@/lib/ai-operations-map/project-events";
+import {
+  filterOperationsMapProjections,
+  getOperationsMapQuickViewFilters,
+  OPERATIONS_MAP_QUICK_VIEWS,
+  summarizeProjectionCounts,
+} from "@/lib/ai-operations-map/project-events";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -45,11 +51,20 @@ const SOURCE_OPTIONS: OperationsMapProjectionSource[] = [
 ];
 
 const SEVERITY_OPTIONS: OperationsMapSeverity[] = ["normal", "attention", "warning", "critical"];
+const DEFAULT_QUICK_VIEW_ID: OperationsMapQuickViewId = "all";
+const DEFAULT_QUICK_VIEW_FILTERS = getOperationsMapQuickViewFilters(DEFAULT_QUICK_VIEW_ID);
 
 export function AiOperationsMap({ template, agents, projections, recentWindowLabel }: Props) {
   const [selected, setSelected] = useState<SelectedItem>({ kind: "station", id: template.stations[0]?.id ?? "" });
-  const [sourceFilters, setSourceFilters] = useState<OperationsMapProjectionSource[]>(SOURCE_OPTIONS);
-  const [severityFilters, setSeverityFilters] = useState<OperationsMapSeverity[]>(SEVERITY_OPTIONS);
+  const [activeQuickViewId, setActiveQuickViewId] = useState<OperationsMapQuickViewId | "custom">(
+    DEFAULT_QUICK_VIEW_ID,
+  );
+  const [sourceFilters, setSourceFilters] = useState<OperationsMapProjectionSource[]>(
+    DEFAULT_QUICK_VIEW_FILTERS.sources,
+  );
+  const [severityFilters, setSeverityFilters] = useState<OperationsMapSeverity[]>(
+    DEFAULT_QUICK_VIEW_FILTERS.severities,
+  );
   const filteredProjections = useMemo(
     () => filterOperationsMapProjections(projections, { sources: sourceFilters, severities: severityFilters }),
     [projections, sourceFilters, severityFilters],
@@ -65,10 +80,18 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
   const selectedProjection = selected.kind === "projection"
     ? filteredProjections.find((projection) => projection.id === selected.id) ?? null
     : null;
+  const applyQuickView = (viewId: OperationsMapQuickViewId) => {
+    const filters = getOperationsMapQuickViewFilters(viewId);
+    setActiveQuickViewId(viewId);
+    setSourceFilters(filters.sources);
+    setSeverityFilters(filters.severities);
+  };
   const toggleSourceFilter = (source: OperationsMapProjectionSource) => {
+    setActiveQuickViewId("custom");
     setSourceFilters((current) => toggleFilterOption(current, source, SOURCE_OPTIONS));
   };
   const toggleSeverityFilter = (severity: OperationsMapSeverity) => {
+    setActiveQuickViewId("custom");
     setSeverityFilters((current) => toggleFilterOption(current, severity, SEVERITY_OPTIONS));
   };
 
@@ -103,7 +126,23 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
               Showing {filteredProjections.length} of {projections.length} activities
             </p>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-3">
+            <FilterGroup label="Quick views">
+              {OPERATIONS_MAP_QUICK_VIEWS.map((view) => (
+                <FilterButton
+                  key={view.id}
+                  active={activeQuickViewId === view.id}
+                  label={view.label}
+                  title={view.description}
+                  onClick={() => applyQuickView(view.id)}
+                />
+              ))}
+              {activeQuickViewId === "custom" ? (
+                <span className="inline-flex min-h-8 items-center rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-xs text-[var(--dpf-muted)]">
+                  Custom
+                </span>
+              ) : null}
+            </FilterGroup>
             <FilterGroup label="Sources">
               {SOURCE_OPTIONS.map((source) => (
                 <FilterButton
@@ -252,16 +291,19 @@ function FilterGroup({ label, children }: { label: string; children: React.React
 function FilterButton({
   active,
   label,
+  title,
   onClick,
 }: {
   active: boolean;
   label: string;
+  title?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       aria-pressed={active}
+      title={title}
       onClick={onClick}
       className={[
         "min-h-8 rounded border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]",

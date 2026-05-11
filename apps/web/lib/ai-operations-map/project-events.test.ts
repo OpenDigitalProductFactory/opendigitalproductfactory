@@ -10,6 +10,8 @@ import {
 import {
   deriveProjectionSeverityFromTaskState,
   filterOperationsMapProjections,
+  getOperationsMapQuickViewFilters,
+  OPERATIONS_MAP_QUICK_VIEWS,
   projectBacklogEvidence,
   projectExternalEvidence,
   projectAgentsToStations,
@@ -216,6 +218,32 @@ describe("AI operations map projection", () => {
 
     expect(filterOperationsMapProjections(projections, { sources: [], severities: ["normal"] })).toEqual([]);
     expect(filterOperationsMapProjections(projections, { sources: ["tool-execution"], severities: [] })).toEqual([]);
+  });
+
+  it("defines quick views for common operations-map management modes", () => {
+    expect(OPERATIONS_MAP_QUICK_VIEWS.map((view) => [view.id, view.label])).toEqual([
+      ["all", "All activity"],
+      ["exceptions", "Exceptions"],
+      ["evidence", "Evidence only"],
+      ["tool-runs", "Tool runs"],
+    ]);
+
+    expect(getOperationsMapQuickViewFilters("all")).toEqual({
+      sources: ["tool-execution", "tool-receipt", "evidence-backlog", "evidence-external"],
+      severities: ["normal", "attention", "warning", "critical"],
+    });
+    expect(getOperationsMapQuickViewFilters("exceptions")).toEqual({
+      sources: ["tool-execution", "tool-receipt", "evidence-backlog", "evidence-external"],
+      severities: ["attention", "warning", "critical"],
+    });
+    expect(getOperationsMapQuickViewFilters("evidence")).toEqual({
+      sources: ["tool-receipt", "evidence-backlog", "evidence-external"],
+      severities: ["normal", "attention", "warning", "critical"],
+    });
+    expect(getOperationsMapQuickViewFilters("tool-runs")).toEqual({
+      sources: ["tool-execution"],
+      severities: ["normal", "attention", "warning", "critical"],
+    });
   });
 });
 
