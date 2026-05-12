@@ -2750,7 +2750,12 @@ model RuntimeAdvisory {
 
 model DiscoveryRun {
   id                      String                            @id @default(cuid())
-  runKey                  String                            @unique
+  // runKey is unique PER (edgeNodeId, runKey) — each Edge Node owns
+  // its own runKey namespace per the Edge Node spec's REST ingestion
+  // controls section. Bootstrap-discovery runs (edgeNodeId IS NULL)
+  // retain global runKey uniqueness via a partial unique index,
+  // defined in the migration alongside the composite constraint.
+  runKey                  String
   sourceSlug              String
   trigger                 String                            @default("bootstrap")
   status                  String                            @default("running")
@@ -2773,6 +2778,7 @@ model DiscoveryRun {
   confirmedRelations      InventoryRelationship[]           @relation("InventoryRelationshipConfirmedRun")
   edgeNode                EdgeNode?                         @relation("EdgeNodeDiscoveryRuns", fields: [edgeNodeId], references: [id])
 
+  @@unique([edgeNodeId, runKey])
   @@index([edgeNodeId])
 }
 
