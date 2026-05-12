@@ -21,6 +21,7 @@ import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
+import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import * as crypto from "crypto";
@@ -928,6 +929,7 @@ async function seedCoworkerAgents(): Promise<void> {
   // EP-AI-WORKFORCE-001: Coworker agents with canonical AGT-UI-xxx IDs and slugId aliases
   const coworkers = [
     { agentId: "portfolio-advisor", slugId: "portfolio-advisor", name: "Portfolio Analyst", tier: 1, type: "coworker", description: "Investment, risk, and portfolio health analysis", valueStream: "evaluate", sensitivity: "internal" },
+    { agentId: "external-catalog-scout", slugId: "external-catalog-scout", name: "External Catalog Scout", tier: 2, type: "coworker", description: "External coworker archetype reconnaissance and governed backlog suggestion generation from approved outside catalogs", valueStream: "explore", sensitivity: "internal" },
     { agentId: "inventory-specialist", slugId: "inventory-specialist", name: "Digital Product Estate Specialist", tier: 2, type: "coworker", description: "Lifecycle, maturity, and attribution analysis across the discovered digital product estate", valueStream: "explore", sensitivity: "internal" },
     { agentId: "ea-architect", slugId: "ea-architect", name: "Enterprise Architect", tier: 2, type: "coworker", description: "Structural analysis, dependency tracing, and architecture governance", valueStream: "cross-cutting", sensitivity: "internal" },
     { agentId: "hr-specialist", slugId: "hr-specialist", name: "HR Director", tier: 2, type: "coworker", description: "People, roles, accountability chains, and governance compliance", valueStream: "cross-cutting", sensitivity: "confidential" },
@@ -952,6 +954,7 @@ async function seedCoworkerAgents(): Promise<void> {
   // from agent_registry.json; these hardcoded ones need them here.
   const HARDCODED_COWORKER_GRANTS: Record<string, string[]> = {
     "portfolio-advisor":    ["portfolio_read", "registry_read", "backlog_read"],
+    "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
     "inventory-specialist": ["portfolio_read", "registry_read", "registry_write", "backlog_read", "backlog_write", "agent_control_read"],
     "ea-architect":         ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
     "hr-specialist":        ["registry_read", "consumer_read", "consumer_write"],
@@ -1040,6 +1043,11 @@ async function seedCoworkerSkills(): Promise<void> {
       { label: "Find a product", description: "Search for a digital product", prompt: "Help me find a product in the portfolio.", sortOrder: 2 },
       { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 3 },
     ],
+    "external-catalog-scout": [
+      { label: "Run scout pass", description: "Scan the approved external catalog and file governed backlog suggestions", prompt: "Run the external catalog scout pass. Use the governed ingest tool once, then summarize what was created, duplicated, or deferred.", sortOrder: 0 },
+      { label: "Review latest gaps", description: "Summarize the latest archetype gaps worth platform attention", prompt: "Review the latest Hive Scout suggestions and summarize the highest-value gaps for DPF to absorb into the platform.", sortOrder: 1 },
+      { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 2 },
+    ],
     "build-specialist": [
       { label: "Start a build", description: "Begin a new feature build", capability: "build_studio", prompt: "Help me start a new feature build.", sortOrder: 0 },
       { label: "Review code", description: "Review pending code changes", prompt: "Review the current code changes and suggest improvements.", sortOrder: 1 },
@@ -1084,6 +1092,12 @@ async function seedAgentPromptContexts(): Promise<void> {
       heuristics: "Start with portfolio-level health metrics, then drill into product-level concerns. Flag concentration risk, budget overruns, and misaligned investments.",
       interpretiveModel: "Optimize for risk-adjusted return on IT investment. A healthy portfolio balances innovation (new products) with stability (mature products).",
       domainTools: ["list_products", "get_product", "list_backlog_items", "search_products"],
+    },
+    "external-catalog-scout": {
+      perspective: "You scan the external ecosystem for proven coworker patterns, then translate them into DPF-native backlog suggestions without importing code or multiplying tools.",
+      heuristics: "Run the governed scout pass first, summarize concrete counts, name genuine novelty, and keep backlog noise low by calling out duplicates and deferred items clearly.",
+      interpretiveModel: "Optimize for absorption over integration. External projects are evidence and inspiration, not product dependencies.",
+      domainTools: ["run_hive_scout_ingest", "list_backlog_items", "search_products"],
     },
     "build-specialist": {
       perspective: "You see the platform as code to be written, tested, and shipped. Every request maps to files, functions, and tests. You encode the world as implementation tasks.",
@@ -1904,6 +1918,7 @@ async function seedAgentModelDefaults(): Promise<void> {
     { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
     { agentId: "ops-coordinator",     minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
     { agentId: "portfolio-advisor",   minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "external-catalog-scout", minimumTier: "adequate", budgetClass: "balanced",   minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
     { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced",     minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
     { agentId: "ea-architect",        minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
     { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
@@ -2025,6 +2040,7 @@ async function main(): Promise<void> {
   await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
   await ensureDiscoveryTriageScheduledTask(prisma);
+  await ensureHiveScoutScheduledTask(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedAnthropicSubScope();

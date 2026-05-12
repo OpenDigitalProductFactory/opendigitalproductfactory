@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
     },
   },
   resolveAgentForRouteWithPrompts: vi.fn(),
+  resolveAgentByIdWithPrompts: vi.fn(),
   runAgenticLoop: vi.fn(),
   getAvailableTools: vi.fn(),
   toolsToOpenAIFormat: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/tak/agent-routing-server", () => ({
   resolveAgentForRouteWithPrompts: mocks.resolveAgentForRouteWithPrompts,
+  resolveAgentByIdWithPrompts: mocks.resolveAgentByIdWithPrompts,
 }));
 vi.mock("@/lib/tak/agentic-loop", () => ({
   runAgenticLoop: mocks.runAgenticLoop,
@@ -169,6 +171,15 @@ function arrangeScheduledTask() {
     systemPrompt: "You are Inventory Specialist.",
     sensitivity: "internal",
   });
+  mocks.resolveAgentByIdWithPrompts.mockResolvedValue({
+    agentId: "inventory-specialist",
+    agentName: "Inventory Specialist",
+    agentDescription: "Inventory",
+    canAssist: true,
+    systemPrompt: "You are Inventory Specialist.",
+    sensitivity: "internal",
+    skills: [],
+  });
   mocks.prisma.agentMessage.findMany.mockResolvedValue([
     { role: "user", content: "Triage taxonomy gaps." },
   ]);
@@ -186,6 +197,57 @@ function arrangeScheduledTask() {
   mocks.prisma.taskRun.create.mockResolvedValue({
     id: "task-run-row-1",
     taskRunId: "TR-SCHED-ABCDE",
+    contextId: "thread-1",
+  });
+  mocks.prisma.taskMessage.create.mockResolvedValue({});
+  mocks.prisma.taskRun.update.mockResolvedValue({});
+  mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+  mocks.prisma.scheduledJob.update.mockResolvedValue({});
+}
+
+function arrangeHiveScoutTask() {
+  mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+    taskId: "external-catalog-scout-weekly",
+    agentId: "external-catalog-scout",
+    title: "External Catalog Scout",
+    prompt: "Run the daily external catalog scout pass.",
+    routeContext: "/platform/ai/operations",
+    schedule: "17 8 * * *",
+    timezone: "UTC",
+    isActive: true,
+    ownerUserId: "user-1",
+  });
+  mocks.prisma.agentThread.upsert.mockResolvedValue({ id: "thread-1" });
+  mocks.prisma.agentMessage.create.mockResolvedValue({});
+  mocks.prisma.user.findUnique.mockResolvedValue({ id: "user-1", isSuperuser: true });
+  mocks.resolveAgentForRouteWithPrompts.mockResolvedValue({
+    agentId: "platform-engineer",
+    systemPrompt: "You are Platform Engineer.",
+    sensitivity: "internal",
+  });
+  mocks.resolveAgentByIdWithPrompts.mockResolvedValue({
+    agentId: "external-catalog-scout",
+    agentName: "External Catalog Scout",
+    agentDescription: "Catalog scout",
+    canAssist: true,
+    systemPrompt: "You are External Catalog Scout.",
+    sensitivity: "internal",
+    skills: [],
+  });
+  mocks.getAvailableTools.mockResolvedValue([
+    {
+      name: "run_hive_scout_ingest",
+      description: "Run Hive Scout",
+      inputSchema: {},
+      requiredCapability: null,
+      executionMode: "immediate",
+      sideEffect: true,
+    },
+  ]);
+  mocks.toolsToOpenAIFormat.mockReturnValue([]);
+  mocks.prisma.taskRun.create.mockResolvedValue({
+    id: "task-run-row-1",
+    taskRunId: "TR-SCHED-HIVE1",
     contextId: "thread-1",
   });
   mocks.prisma.taskMessage.create.mockResolvedValue({});
@@ -283,6 +345,45 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
     expect(agentTaskMessage?.data.parts[0].text).not.toContain("I stopped because");
   });
 
+  it("uses a structured Hive Scout summary for task-facing agent messages when the scout tool ran", async () => {
+    arrangeHiveScoutTask();
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "I stopped because I was still describing work without using the required tools.",
+      executedTools: [
+        {
+          name: "run_hive_scout_ingest",
+          args: {},
+          result: {
+            success: true,
+            message: "ok",
+            data: {
+              catalogEntries: 27,
+              gaps: 5,
+              created: 3,
+              duplicates: 2,
+              deferred: 1,
+              createdItemIds: ["HS-1", "HS-2", "HS-3"],
+            },
+          },
+        },
+      ],
+    });
+
+    await executeScheduledAgentTask("external-catalog-scout-weekly");
+
+    const agentTaskMessage = mocks.prisma.taskMessage.create.mock.calls.find(
+      ([args]) => args.data.role === "agent",
+    )?.[0];
+
+    expect(agentTaskMessage?.data.parts).toEqual([
+      {
+        type: "message",
+        text: expect.stringContaining("Hive Scout parsed=27 gaps=5 created=3"),
+      },
+    ]);
+    expect(agentTaskMessage?.data.parts[0].text).not.toContain("I stopped because");
+  });
+
   it("marks the TaskRun failed and preserves the next schedule when the loop throws", async () => {
     arrangeScheduledTask();
     mocks.runAgenticLoop.mockRejectedValue(new Error("LLM unavailable"));
@@ -334,6 +435,34 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
             content: "[Scheduled task: Discovery Taxonomy Gap Triage]\n\nTriage taxonomy gaps.",
           },
         ],
+      }),
+    );
+  });
+
+  it("resolves the scheduled coworker by task.agentId when the route persona differs", async () => {
+    arrangeScheduledTask();
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: "external-catalog-scout-weekly",
+      agentId: "external-catalog-scout",
+      title: "External Catalog Scout",
+      prompt: "Run the catalog scout.",
+      routeContext: "/platform/ai/operations",
+      schedule: "17 8 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+    });
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Done.",
+      executedTools: [],
+    });
+
+    await executeScheduledAgentTask("external-catalog-scout-weekly");
+
+    expect(mocks.resolveAgentByIdWithPrompts).toHaveBeenCalledWith(
+      "external-catalog-scout",
+      expect.objectContaining({
+        userId: "user-1",
       }),
     );
   });

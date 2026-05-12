@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { parseFrontmatter } from "./seed-skills";
+import { describe, it, expect, vi } from "vitest";
+import { parseFrontmatter, reconcileSkillAssignments } from "./seed-skills";
 
 describe("seed-skills parseFrontmatter", () => {
   it("parses inline arrays", () => {
@@ -73,5 +73,37 @@ Body.`;
     // items due to no "-" lines) should at least not become anything Prisma
     // chokes on. Keeping this as a regression guard.
     expect(Array.isArray(frontmatter.allowedTools) || frontmatter.allowedTools === "").toBe(true);
+  });
+});
+
+describe("reconcileSkillAssignments", () => {
+  it("removes obsolete system-seeded assignments when assignTo changes", async () => {
+    const skillAssignment = {
+      findMany: vi.fn().mockResolvedValue([
+        { agentId: "portfolio-advisor", assignedBy: "system-seed" },
+        { agentId: "external-catalog-scout", assignedBy: "system-seed" },
+        { agentId: "coo", assignedBy: "human-admin" },
+      ]),
+      create: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    const result = await reconcileSkillAssignments(
+      { skillAssignment } as never,
+      "scout-external-catalogs",
+      ["external-catalog-scout"],
+    );
+
+    expect(skillAssignment.delete).toHaveBeenCalledWith({
+      where: {
+        skillId_agentId: {
+          skillId: "scout-external-catalogs",
+          agentId: "portfolio-advisor",
+        },
+      },
+    });
+    expect(skillAssignment.delete).toHaveBeenCalledTimes(1);
+    expect(skillAssignment.create).not.toHaveBeenCalled();
+    expect(result).toEqual({ created: 0, removed: 1 });
   });
 });

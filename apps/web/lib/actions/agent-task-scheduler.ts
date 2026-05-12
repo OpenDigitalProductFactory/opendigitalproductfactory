@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
-import { extractDiscoveryTriageSummary } from "./agent-task-scheduler-summary";
+import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
   type ScheduledTaskRunRef,
@@ -234,13 +234,17 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     };
 
     // Resolve agent prompts
-    const { resolveAgentForRouteWithPrompts } = await import(
+    const { resolveAgentByIdWithPrompts, resolveAgentForRouteWithPrompts } = await import(
       "@/lib/tak/agent-routing-server"
     );
-    const agentInfo = await resolveAgentForRouteWithPrompts(
+    const routedAgentInfo = await resolveAgentForRouteWithPrompts(
       task.routeContext,
       userContext,
     );
+    const agentInfo =
+      routedAgentInfo.agentId === task.agentId
+        ? routedAgentInfo
+        : await resolveAgentByIdWithPrompts(task.agentId, userContext);
 
     const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${task.prompt}`;
     const chatHistory = [
@@ -271,7 +275,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunId: taskRunRef.taskRunId,
     });
 
-    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
+    const scheduledSummary = extractScheduledTaskSummary(result.executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
 
     // Persist agent response

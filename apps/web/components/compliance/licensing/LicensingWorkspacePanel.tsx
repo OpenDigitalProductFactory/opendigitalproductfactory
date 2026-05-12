@@ -9,14 +9,13 @@ import {
 } from "@/lib/actions/licensing-compliance";
 import { CreateOrganizationLicenseRecordForm } from "@/components/compliance/licensing/CreateOrganizationLicenseRecordForm";
 import { CreatePersonLicenseRecordForm } from "@/components/compliance/licensing/CreatePersonLicenseRecordForm";
+import type { LicensingWorkspace } from "@/lib/licensing-workspace-types";
 
 const inputClasses =
   "rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none";
 
-type Workspace = Awaited<ReturnType<typeof import("@/lib/actions/licensing-compliance").getLicensingWorkspace>>;
-
 type Props = {
-  workspace: Workspace;
+  workspace: LicensingWorkspace;
 };
 
 function formatDate(value: string | Date | null | undefined) {
