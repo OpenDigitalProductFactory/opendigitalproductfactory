@@ -1,9 +1,9 @@
 {
-  "kernelVersion": "0.1.0",
+  "kernelVersion": "0.2.0-draft",
   "schemaVersion": "0.1.0",
-  "pageCount": 0,
-  "sourceCount": 0,
+  "pageCount": 19,
+  "sourceCount": 10,
   "embeddingModel": null,
   "builtAt": null,
-  "description": "DPF Founder Kernel — Mark Bodman's research, articles, and platform thinking, captured as a Karpathy-style wiki. See ../superpowers/specs/2026-05-09-platform-kernel-wiki-design.md for the design and ./SCHEMA.md for the wiki contract."
+  "description": "DPF Founder Kernel — Mark Bodman's research, articles, and platform thinking, captured as a Karpathy-style wiki. The 0.2.0-draft cut was synthesised from Mark's public corpus (LinkedIn long-form, Open Group W205 + IT4IT v3 + DPROM, BriefingsDirect, Architecture & Governance Magazine, ServiceNow community blogs, CSDM v5). Every page ships status:draft pending Mark's review. See ../superpowers/specs/2026-05-09-platform-kernel-wiki-design.md for the design and ./SCHEMA.md for the wiki contract."
 }
