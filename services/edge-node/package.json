@@ -1,0 +1,24 @@
+{
+  "name": "dpf-edge-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DPF Edge Node — host-resident agent that enrolls against an Authority Core and submits discovery observations. See docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "undici": "^8.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.5"
+  }
+}
