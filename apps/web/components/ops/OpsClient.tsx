@@ -33,6 +33,7 @@ type Props = {
   taxonomyNodes: TaxonomyNodeSelect[];
   epics: EpicWithRelations[];
   portfolios: PortfolioForSelect[];
+  focusedItemId?: string;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -92,7 +93,7 @@ function SortButton({ label, field, sort, onSort }: {
   );
 }
 
-export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios }: Props) {
+export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfolios, focusedItemId }: Props) {
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
@@ -196,7 +197,14 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                   </div>
                 ) : (
                   sortEpics(filteredEpics, epicSort).map((epic) => (
-                    <EpicCard key={epic.id} epic={epic} sort={epicSort} onEdit={openEditEpic} onItemEdit={openEdit} />
+                    <EpicCard
+                      key={epic.id}
+                      epic={epic}
+                      sort={epicSort}
+                      onEdit={openEditEpic}
+                      onItemEdit={openEdit}
+                      focusedItemId={focusedItemId}
+                    />
                   ))
                 )}
               </div>
@@ -246,7 +254,12 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
               ) : (
                 <div className="flex flex-col gap-2">
                   {filteredItems.map((item) => (
-                    <BacklogItemRow key={item.id} item={item} onEdit={openEdit} />
+                    <BacklogItemRow
+                      key={item.id}
+                      item={item}
+                      onEdit={openEdit}
+                      focused={isFocusedBacklogItem(item, focusedItemId)}
+                    />
                   ))}
                 </div>
               )}
@@ -280,4 +293,8 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
       />
     </>
   );
+}
+
+function isFocusedBacklogItem(item: BacklogItemWithRelations, focusedItemId?: string): boolean {
+  return Boolean(focusedItemId && (item.itemId === focusedItemId || item.id === focusedItemId));
 }

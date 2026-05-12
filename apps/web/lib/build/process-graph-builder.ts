@@ -312,12 +312,29 @@ export function normalizeBuildSnapshot(
       };
 
       if (Array.isArray(runtimeResult.tasks)) {
-        for (const t of runtimeResult.tasks) {
+        for (const raw of runtimeResult.tasks) {
+          // Defensive: the Json column is untyped at runtime. Skip entries
+          // that don't match the orchestrator's StoredTaskResult shape — e.g.
+          // a misbehaving writer that stuffed claim/triage summaries here.
+          if (
+            raw == null ||
+            typeof raw !== "object" ||
+            typeof (raw as { title?: unknown }).title !== "string" ||
+            typeof (raw as { specialist?: unknown }).specialist !== "string"
+          ) {
+            continue;
+          }
+          const t = raw as {
+            title: string;
+            specialist: string;
+            outcome?: unknown;
+            durationMs?: unknown;
+          };
           storedTaskResults.set(t.title, {
             title: t.title,
             specialist: t.specialist,
-            outcome: t.outcome,
-            durationMs: t.durationMs,
+            outcome: typeof t.outcome === "string" ? t.outcome : "",
+            durationMs: typeof t.durationMs === "number" ? t.durationMs : 0,
           });
           taskActors.set(t.title, {
             kind: "ai_coworker",
@@ -364,7 +381,10 @@ export function normalizeBuildSnapshot(
   return { storedTaskResults, activeTaskTitles, taskActors, phaseActors };
 }
 
-function formatSpecialistLabel(specialist: string): string {
+function formatSpecialistLabel(specialist: string | null | undefined): string {
+  if (typeof specialist !== "string" || specialist.length === 0) {
+    return "AI Coworker";
+  }
   return specialist
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))

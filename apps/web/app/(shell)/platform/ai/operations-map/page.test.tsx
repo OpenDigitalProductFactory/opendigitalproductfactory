@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     storefrontConfig: { findFirst: vi.fn() },
     agent: { findMany: vi.fn() },
+    taskRun: { findMany: vi.fn() },
     toolExecution: { findMany: vi.fn() },
     toolExecutionReceipt: { findMany: vi.fn() },
     backlogItemActivity: { findMany: vi.fn() },
@@ -41,6 +42,7 @@ describe("AI operations map page", () => {
       },
     ] as never);
 
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([
       {
         id: "tool-1",
@@ -58,6 +60,7 @@ describe("AI operations map page", () => {
         summary: "Write blocked by policy",
       },
     ] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
