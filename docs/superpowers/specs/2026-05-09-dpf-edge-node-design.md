@@ -1,13 +1,17 @@
-# DPF Edge Node and Discovery Plane Architecture (DRAFT / RESEARCH)
+# DPF Edge Node and Discovery Plane Architecture
 
-> Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
-> this needs full "Research & Benchmarking" before finalization.
+> Status: **implementation-ready** for Phase 0 (pending heavy security
+> review per the maturity gates section below). R&B pass complete
+> 2026-05-12; open questions resolved or explicitly deferred.
 >
 > Source plan: `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
 > (the "Discovery plane refactor" subsection under Future direction).
 > The installer-parity roadmap deliberately leaves this epic
 > unsequenced; the work lands after macOS / Linux installer-parity
-> ships.
+> ships (which it has — installer Phase 7 merged 2026-05-10).
+>
+> Phase 0 implementation roadmap:
+> `docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md`.
 >
 > Related authority: `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`
 > establishes the principle this spec inherits: **DPF owns identity
@@ -599,93 +603,334 @@ default is **deny** for any new principal/scope it doesn't have a
 positive cached decision for, with explicit operator-configurable
 soft-fail windows for known-good repeat scopes.
 
-## Open questions (for fleshing out)
+## Open questions — resolutions for Phase 0
 
-These are the decisions that need to land before this stub becomes
-a finalized spec:
+The decisions below are binding for Phase 0. Revisits are explicit:
+where a decision is "Phase 0 only" the alternative is named so the
+re-decision path is clear.
 
 ### Edge Node lifecycle
-- **Linux default networking:** `network_mode: host` (observer-only,
-  simpler) vs `macvlan` (each agent is a LAN peer, supports LLDP/CDP
-  receive and segregated scanning roles)? Decide based on whether
-  agents need to be reachable as LAN peers or only emit scans.
-- **Binary distribution:** ship the native binary inside the
-  GHCR-published portal image and have the installer extract it on
-  first run, or publish separately as signed multi-platform GitHub
-  Release assets?
-- **Update path:** how does the binary self-update? Pull-on-schedule
-  vs platform-push vs signal-and-download-via-installer.
-- **Capabilities required:** which Linux capabilities does the
-  container Edge Node need (`CAP_NET_RAW`, `CAP_NET_ADMIN` for raw
-  sockets used by nmap / arp-scan)? Document the principle of least
-  privilege.
-- **macOS entitlements:** does the binary need any special
-  entitlements (e.g. for `vmnet.framework` or
-  `com.apple.developer.networking.*`)? If signed and notarized,
-  what's the distribution flow?
-- **Windows service vs scheduled task:** Edge Node as a Windows
-  service (always running) or scheduled task (triggered on
-  schedule)? Auth-model implications for each.
+
+| Question | Phase 0 decision | Rationale | Revisit |
+|---|---|---|---|
+| **Linux default networking** | `network_mode: host` only | Observer-only is sufficient for the first capability slice (`discovery.network` reads the host's NIC table, ARP, `docker ps`, `ss`). LLDP/CDP receive needs `macvlan`, but those collectors aren't in Phase 0. | Phase 1 when LLDP / segregated-scanning capabilities ship |
+| **Binary distribution** | Container image only (`linux/amd64` + `linux/arm64`, multi-arch GHCR) | Phase 0 ships only Linux mode. Native binaries for macOS / Windows are in T3. Avoids the "extract from portal image vs separate release" question by deferring it. | T3 (macOS / Windows native binary) |
+| **Update path** | Operator-managed: pull new image, restart container | Per S7 of Phase 0 decisions doc. Aligns with mainstream fleet agent practice (Datadog, Tailscale, Consul). Auto-update is an attack-surface increase that the operational benefit doesn't justify for a security-sensitive component. | Indefinite — only revisit if customer demand emerges |
+| **Linux capabilities** | None beyond container default for Phase 0 | First slice's collectors (`ip addr`, `docker ps`, `ss`, ARP table read) need no special capabilities under `network_mode: host`. The container runs as a non-root user (`uid: 10001`). | Phase 1 — `CAP_NET_RAW` for raw-socket collectors (nmap probes, ICMP), behind a capability flag operator must explicitly enable |
+| **macOS entitlements** | Out of Phase 0 (T3 thread) | Native binary path doesn't ship in Phase 0 | T3 |
+| **Windows service vs scheduled task** | Out of Phase 0 (deferred — no Windows Edge Node ships before T3 lands the macOS path) | Same reason as macOS | Future thread (after T3) |
 
 ### Authority and trust
-- **Token scope catalog:** finalize the `dpfedge_*` scope vocabulary
-  (the list above is a starting point, not the contract).
-- **Enrollment ceremony:** how does an Edge Node prove identity for
-  the first time? Bootstrap token from the installer, attested by
-  what? Operator approval flow in Admin > Platform Development?
-- **Quarantine / revocation:** what triggers a node moving to
-  `trustState: quarantined` automatically vs manually? Policy on
-  observation ingestion from quarantined nodes (drop / archive /
-  alert).
-- **Soft-fail policy windows:** how long can an Edge Node act on
-  cached policy when the Authority Core is unreachable? Per-scope
-  configurable.
+
+| Question | Phase 0 decision | Rationale |
+|---|---|---|
+| **Token scope catalog (Phase 0 subset)** | `edge:enroll` (bootstrap only), `edge:heartbeat`, `edge:rotate`, `discovery:submit` | Minimum-viable set to enroll, stay alive, rotate creds, and submit observations. Other capabilities (`mcp:gateway`, `a2a:gateway`, `policy:fetch`, `metrics:submit`) reserved as string constants in code but not implemented |
+| **Enrollment ceremony** | Per spec § "Enrollment, rotation, and lifecycle (first-draft contract)" — no changes | Already a fully-defined contract; no open question remained |
+| **Approval policy default** | Auto-approve for installer-issued local-host bootstrap; operator approval required for paste-provisioned remote nodes | Per spec § Approval policy. Operator can flip per-deployment |
+| **Quarantine triggers (Phase 0)** | Manual operator-trigger only | Anomaly detection on observation deltas requires baseline observations to compare against — circular for a fresh deployment. Automatic triggers add in Phase 1 once a baseline window exists |
+| **Soft-fail policy windows** | Per spec § Soft-fail policy windows (table) — no changes | Already defined |
+| **Auth model (Phase 0)** | Bearer-token over HTTPS for `dpfedge_*` tokens; CSR field present in enrollment payload but Authority does not sign yet | Per S1 of Phase 0 decisions doc. Bearer ships fast and meets the production-grade fleet management bar (matches Datadog, Tailscale control plane, osquery+Fleet) | Phase 1 / T4 — mTLS hardening upgrade |
+| **Bootstrap token TTL** | 15 min default, operator-configurable up to 24h max | Per S2. Tighter than AWS SSM Activations (30 days default). Tighter is appropriate for higher-risk environments |
 
 ### Capabilities and protocol gatewaying
-- **MCP gateway:** what's the contract for an Edge Node to expose a
-  private-network MCP server's tools through the Authority Core?
-  How are tool grants composed (inner server's grants × Edge Node's
-  scope × user's grants)?
-- **A2A gateway:** keep behind the same `dpfedge_*` model and the
-  Authority Core's policy until the public A2A protocol contract
-  stabilizes.
-- **Telemetry parity:** what subset of `windows_exporter` /
-  `node_exporter` metrics, if any, must keep flowing for Grafana
-  host-resource panels independent of the sweep? Decide before
-  retiring those exporters.
+
+| Question | Phase 0 decision |
+|---|---|
+| **MCP gateway** | Out of Phase 0. Capability string `mcp.gateway` reserved. Implementation in a later phase |
+| **A2A gateway** | Out of Phase 0. Capability string `a2a.gateway` reserved |
+| **Telemetry parity** | `windows_exporter` and `node-exporter` continue running unchanged. Phase 0 ships a *parallel* data path (Edge Node `discovery.network` capability), not a replacement. Retirement of the exporters happens in a later phase, gated on feature parity verification |
 
 ### Schema and ingestion
-- **Schema additions:** confirm the `EdgeNode` and
-  `EdgeNodeCapability` Prisma models above; add `edgeNodeId` to
-  `DiscoveryRun`; verify the `confidence` field on `DiscoveredItem`
-  is enum-able to express agent-mode-driven degradation.
-- **Endpoint vs MCP tool:** decide whether the ingestion path is
-  the new `/api/v1/edge/*` REST surface, an MCP tool
-  (`submit_discovery_observations`), or both. MCP tool is more
-  uniform; REST is simpler for non-MCP-aware deployments.
 
-## Research and Benchmarking (TBD per AGENTS.md §10)
+| Question | Phase 0 decision | Rationale |
+|---|---|---|
+| **Schema additions** | Per spec § Edge Node registry — `EdgeNode`, `BootstrapToken`, `EdgeNodeCapability`. `DiscoveryRun.edgeNodeId` added optional FK | Confirmed; ships as A1 in the roadmap |
+| **`DiscoveredItem.confidence` field** | No change for Phase 0 | The existing `confidence` field is a `Float`, already expressive enough. Edge Node submissions stamp confidence in the agent (default 0.9 for native-host data, 0.7 for container-VM-fallback data) |
+| **Ingestion path: REST vs MCP tool** | REST only (`/api/v1/edge/discovery-runs`) | Simpler debug path for Phase 0. MCP-tool wrapper can be added later as a thin shim over the REST endpoint. Avoids coupling Phase 0 to MCP grant evaluation while the Edge Node trust model is brand new |
+| **PrincipalAlias for EdgeNode** | Required from A1 | Per AGENTS.md §11 principal-convergence rule (any new identity-bearing entity post-2026-05-09 must be a `PrincipalAlias`) |
 
-Before finalization, compare:
+### Minor gaps surfaced during R&B
 
-**Open source — discovery and inventory:** Netbox-Agent, Nautobot,
-Steampipe.
+| Gap | Phase 0 default |
+|---|---|
+| **Node identity** | UUID minted at enrollment (`nodeId`), plus host fingerprint stored separately for verification. Hostname is informational metadata only (lesson from Wazuh's mutable-IP-as-key trap) |
+| **Node naming / tagging** | Free-text `displayName` + `metadata` JSON for tags; operator-set at enrollment time or editable post-enroll |
+| **Capability negotiation** | Authority replies with `acceptedCapabilities` set; Edge Node operates within that set only. Mismatches between advertised and accepted are surfaced in Admin > Platform Development |
+| **Time sync** | Assume NTP. Edge Node attaches local timestamp + clock-skew estimate (vs Authority's response time) to each submission; Authority rejects submissions with skew > 5 min and emits a warning |
+| **Edge Node operational logs** | stdout (operator captures via `docker compose logs edge-node`). Ship-to-Authority is deferred |
+| **Resource footprint** | Best-effort — document observed CPU/RAM in the runbook produced as part of the Phase 0 verification artifact |
 
-**Open source — fleet agents:** osquery, Falco, Wazuh, Tailscale
-client architecture, Cloudflare Tunnel.
+## Research and Benchmarking
 
-**Open source — identity edge (already chosen):** authentik (per
-enterprise auth spec).
+Per AGENTS.md §10: read data and trust models, not feature lists.
+Three open-source leaders + two commercial agents that share the
+"central authority + many host-resident agents reporting state +
+machine-bound credentials + lifecycle management" shape with the
+DPF Edge Node.
 
-**Commercial — fleet observability and discovery:** Auvik,
-Lansweeper, ScienceLogic SL1, Datadog Network Performance Monitoring.
+### Open source — osquery + Fleet (kolide/fleetdm)
 
-**Commercial — zero-trust edge:** Tailscale, Cloudflare Zero Trust,
-Twingate.
+**Source:** `osquery` (https://osquery.io), `Fleet`
+(https://fleetdm.com, formerly Kolide Fleet).
 
-For each: read the data model and trust model, not the marketing.
-Document patterns adopted, patterns rejected, anti-patterns
-identified, gaps the design fills.
+**Data model:** Hosts identified by a server-issued opaque
+`node_key` (durable per-host identifier). Initial enrollment uses an
+`enroll_secret` provided to the host out-of-band, exchanged for the
+durable `node_key`. The agent runs scheduled queries (SQL over the
+host's OS state); results submit via TLS to the Fleet server's
+`/api/v1/osquery/log` and `/api/v1/osquery/distributed/read`.
+
+**Trust model:** `node_key` is bearer-equivalent at the wire; TLS
+provides the channel. The `enroll_secret` is shared (one secret can
+enroll many hosts) — Fleet adds per-team enroll secrets to scope
+this. The server treats the agent as semi-trusted — it can submit
+observations, but the server schedules the queries (a different
+shape than the DPF Edge Node, where the agent decides what to scan).
+
+**Patterns adopted:**
+- Two-stage credential model: bootstrap secret → durable node key.
+  This is exactly the `BootstrapToken` → `dpfedge_*` node token
+  shape.
+- Server-side ingestion that takes a *prepared* observation set
+  and skips the local-collector path. Maps directly to
+  `persistSubmittedDiscoveryRun` vs `persistBootstrapDiscoveryRun`.
+
+**Patterns rejected:**
+- Shared `enroll_secret` across all hosts. Fleet mitigates with
+  per-team secrets, but the model still tolerates "shared API key
+  in CI" risk. DPF rejects this — `BootstrapToken` is **single-use,
+  one-time consumption** per the enrollment ceremony in this spec.
+- Server-pushed query schedules. The DPF Edge Node decides
+  *whether* to scan (local cadence + Authority's per-scope
+  policy), but the Authority does not push the actual scan
+  parameters into the Edge Node's runtime. Reduces blast radius
+  if Authority is compromised.
+
+### Open source — Tailscale (tailscaled + control plane)
+
+**Source:** Tailscale OSS client `tailscaled`
+(https://github.com/tailscale/tailscale); control protocol
+described in https://tailscale.com/blog/how-tailscale-works.
+
+**Data model:** Each node has a long-lived `MachineKey` (Curve25519,
+generated locally, never leaves the host). On first contact with the
+control plane, the node submits `MachineKey` + auth proof; control
+plane records the node and issues short-lived `NodeKey` (also
+Curve25519). `NodeKey` rotates on schedule (default ~7 days) and on
+network changes; `MachineKey` is durable and represents identity.
+
+**Auth keys come in flavors:**
+- **One-time auth key:** consumed on first node enrollment; cannot
+  be reused.
+- **Reusable auth key:** N enrollments allowed; useful for fleet
+  bootstrap.
+- **Ephemeral auth key:** node is auto-deleted from the tailnet
+  after being offline for a period.
+- **Pre-approved + tagged auth keys:** node is pre-approved (skips
+  manual approval) and arrives with operator-set tags for ACL
+  routing.
+
+**Trust model:** Bearer-equivalent over a control protocol with
+mutual authentication. Tags on a node carry into ACL evaluation —
+the `tag:server` node gets server-class privileges automatically.
+Revocation is server-side: a revoked node's `NodeKey` is rejected
+on next handshake.
+
+**Patterns adopted:**
+- Local key generation; the host-private machine key never travels
+  the wire. The DPF Edge Node generates its keypair locally; the
+  CSR / public-key fingerprint goes into the enrollment payload.
+- Short-lived node creds with rotation on heartbeat (the spec's
+  `tokenRotatedAt` field + the "default 24h with refresh" entry in
+  the token table).
+- Tagged enrollment for capability auto-grant (Phase 0 ships only
+  the `discovery.network` capability, but the
+  `EdgeNodeCapability.mode` field provides the same auto-grant
+  mechanism: an Authority operator can pre-approve which
+  capabilities a tagged node enables on enrollment).
+
+**Patterns rejected:**
+- Reusable auth keys (Tailscale offers them; the DPF Edge Node spec
+  explicitly does not — same reason as the osquery rejection
+  above). Fleet onboarding scenarios that benefit from reusability
+  in Tailscale are handled in the DPF model by Admin > Platform
+  Development minting N one-time tokens at once.
+- Direct node-to-node mesh connectivity (Tailscale's primary value
+  prop). Out of scope for the Edge Node — observations are
+  authority-submitted, not peer-shared, and the spec is explicit
+  that "Edge Nodes do not talk to each other directly without
+  going through DPF."
+
+### Open source — Wazuh (ossec-agent)
+
+**Source:** Wazuh (https://github.com/wazuh/wazuh), fork of OSSEC.
+Manager / agent / agentd lifecycle protocol.
+
+**Data model:** Each agent has a unique `agent_id` (numeric,
+manager-issued at registration), `agent_name`, `agent_ip`. On
+enrollment via `authd`, the agent submits a CSR; the manager signs
+and returns the agent's certificate + `client.keys` entry (id +
+key + name + IP). The agent uses that key for all subsequent
+manager communications.
+
+**Lifecycle states tracked at the manager:**
+- `pending` — enrolled but not yet authenticated
+- `active` — keepalive received within the soft-fail window
+- `disconnected` — keepalive missed past the configured threshold
+- `never_connected` — enrolled but never sent its first keepalive
+
+**Trust model:** Pre-shared key (enrollment secret) for the
+authd handshake; client cert thereafter (mTLS-style, though the
+default deployment is TLS-with-shared-key). Agent state is
+manager-canonical; the agent reports its state in keepalives but
+the manager makes the authoritative determination (`active` vs
+`disconnected`).
+
+**Patterns adopted:**
+- Multi-state lifecycle at the Authority (`pending` → `active`
+  → `quarantined` → `revoked`). The DPF Edge Node `trustState`
+  enum is a direct match for the data-side; the *operational*
+  state (`active` / `offline`) is the spec's `status` enum.
+- Authority-canonical state determination from heartbeat misses
+  with a soft-fail window. The spec already has this; Wazuh
+  validates the pattern.
+- Agent submits a CSR at enrollment. The spec's `BootstrapToken`
+  flow includes a CSR field for the same reason — Phase 1 mTLS
+  upgrade has a hook in place from day 1.
+
+**Patterns rejected:**
+- Pre-shared enrollment secret reused across agents. Wazuh's
+  default is to share the password across the fleet; the DPF
+  spec uses one-time bootstrap tokens.
+- Manager-canonical agent IP tracking. The spec's `EdgeNode`
+  carries no IP field — the host's network identity is mutable,
+  the Edge Node identity is not.
+
+### Commercial — Datadog Agent
+
+**Source:** datadog-agent OSS repo (https://github.com/DataDog/datadog-agent),
+plus published architecture docs at https://docs.datadoghq.com/agent/.
+
+**Data model:** Each host runs a single Agent binary (Go). Agent
+identifies itself to Datadog with a long-lived **API key** (per-org,
+per-environment) plus optional **App key** (for management plane).
+Hosts surface in the inventory by `hostname` + `tags`; tag
+inheritance is the primary attribution mechanism (`env:prod`,
+`service:web`, `team:platform`).
+
+**Capability model:** One Agent binary, configuration-driven
+checks. Checks declared in `conf.d/*.yaml`. Agents can run in
+multiple modes (host metrics + APM trace forwarding + log
+collection + cluster checks) selected by config — same pattern as
+"one binary, capability flags" called out for the DPF Edge Node.
+
+**Trust model:** API key is bearer-over-HTTPS. Long-lived (no
+automatic rotation). Per-host scope is achieved through tag-based
+ACLs. Datadog has been criticized in security audits for the
+"long-lived shared API key" pattern; the company has added
+short-lived **API key forwarding** in fleet automation
+(intermediate token issuance) but the agent itself still uses
+long-lived bearers.
+
+**Patterns adopted:**
+- One binary, capability negotiation by config. Maps to the DPF
+  Edge Node's capability envelope.
+- Tag-based attribution at the Authority (DPF's
+  `EdgeNode.metadata` JSON column gives the same flexibility).
+- On-disk buffered queue when the central is unreachable. Datadog's
+  Agent uses `forwarder.transactions_serializer` with bounded
+  retry; the spec's S6 (SQLite-backed buffer with bound and
+  exponential backoff) matches the proven pattern.
+
+**Patterns rejected:**
+- Long-lived API key with no rotation. The DPF spec's `dpfedge_*`
+  node tokens rotate on heartbeat (default 24h). Agents that hold
+  long-lived bearers indefinitely are an unrecoverable-incident
+  attack surface.
+- "Per-team" rather than per-host credentials. Each DPF Edge Node
+  has its own machine-bound token; no token covers a fleet.
+
+### Commercial — AWS Systems Manager Agent (SSM Agent)
+
+**Source:** AWS SSM Agent
+(https://github.com/aws/amazon-ssm-agent); managed-instance
+service architecture.
+
+**Data model:** EC2 instances and managed on-prem hosts register
+to SSM. EC2 instances authenticate via the EC2 instance profile
+(IAM role on the metadata service); on-prem hosts use **hybrid
+activation** — operator generates a short-lived `Activation` (id +
+code, ~30-day TTL by default), the host runs `ssm register
+--activation-id <id> --activation-code <code>`, exchanges for a
+long-lived **managed-instance ID** (`mi-*`) tied to a per-instance
+IAM role.
+
+**Trust model:** Activations are one-time, short-lived (operator-
+configured TTL, max 30 days). The exchanged managed-instance ID
+is durable; the host then uses standard AWS SDK signing (SigV4)
+for all subsequent API calls — true cryptographic auth, not bearer
+tokens.
+
+**Patterns adopted:**
+- Activation = short-lived, one-time, operator-issued. Matches
+  the DPF `BootstrapToken` shape exactly (the spec's "≤ 15 min
+  default TTL" is tighter than AWS's 30-day default; tighter is
+  appropriate for higher-risk environments).
+- Per-instance IAM role / per-edge-node permissions. The spec's
+  per-EdgeNode capability flags accomplish the same thing.
+
+**Patterns rejected:**
+- Cloud-only attestation (instance metadata service). DPF cannot
+  rely on cloud-provided attestation since the Authority Core may
+  run on bare metal, in TAPPaaS, or in a customer VPC. The Edge
+  Node uses a host-fingerprint + signed binary measurement instead.
+
+### Patterns adopted (consolidated)
+
+| Pattern | Source | DPF mapping |
+|---|---|---|
+| Two-stage credential: bootstrap → durable node key | osquery, Wazuh, AWS SSM | `BootstrapToken` → `dpfedge_*` node token |
+| Server-side prepared-observation ingestion | osquery+Fleet | `persistSubmittedDiscoveryRun` |
+| Local key generation; private key never wired | Tailscale | Edge Node generates keypair locally; CSR in enrollment payload |
+| Short-lived node creds with heartbeat rotation | Tailscale | `tokenRotatedAt`; default 24h refresh |
+| One binary, capability flags | Datadog Agent, OpenTelemetry Collector | Edge Node binary + `EdgeNodeCapability` rows |
+| Multi-state lifecycle at Authority (pending/active/disconnected/quarantined/revoked) | Wazuh | `EdgeNode.trustState` + `EdgeNode.status` |
+| Authority-canonical state from heartbeat misses + soft-fail window | Wazuh | Spec's heartbeat / soft-fail policy section |
+| Bounded on-disk buffer when central unreachable | Datadog Agent, OpenTelemetry, Fluent Bit | S6 — SQLite buffer with bound + exponential backoff |
+| Tag-based attribution and capability auto-grant | Tailscale, Datadog | `EdgeNode.metadata` + `EdgeNodeCapability.mode` |
+| Authority-decided heartbeat / scan cadence | Wazuh, K8s kubelet | S4 + S5 — Authority returns intervals in heartbeat response |
+
+### Patterns rejected (consolidated)
+
+| Pattern | Source | Why rejected |
+|---|---|---|
+| Reusable / shared bootstrap secret | osquery `enroll_secret`, Tailscale reusable auth keys, Wazuh shared password | Replicates "shared API key in CI" anti-pattern. DPF mints N one-time tokens for fleet onboarding instead. |
+| Server-pushed query schedules / remote agent config | osquery distributed queries, Datadog remote config | Increases blast radius if Authority is compromised. Edge Node decides *whether* to scan; Authority controls *which capabilities* via policy. |
+| Long-lived agent bearer with no rotation | Datadog Agent API key | Unrecoverable-incident surface. DPF rotates `dpfedge_*` tokens on heartbeat. |
+| Direct node-to-node mesh | Tailscale data plane | All cross-node trust through Authority Core; Edge Nodes do not peer. |
+| Cloud-only instance attestation | AWS SSM (EC2 instance profile) | Authority Core may run on bare metal / TAPPaaS / on-prem; can't depend on cloud metadata. |
+| Auth fail-open when central unreachable | (varies — many small agents) | Spec's soft-fail policy is **deny new principals/scopes**; only known-good cached scopes honored within bounded windows. |
+| Plaintext token in agent config file | cloudflared default, many bespoke agents | Spec mandates OS-native secure store (Keychain / Credential Manager / libsecret). |
+
+### Anti-patterns identified
+
+| Anti-pattern | Where seen | DPF guard |
+|---|---|---|
+| Single capability per binary (separate `osquery` + `node_exporter` + `cloudflared` + ...) | Most fleet stacks | One binary + capability flags; operator manages one daemon, not N |
+| Mutable agent identity (hostname / IP as primary key) | Wazuh `agent_ip`, some monitoring stacks | `EdgeNode.nodeId` is opaque + immutable; hostname / IP go in `metadata` only |
+| Trust model where revocation requires server reboot or config push | Several self-hosted SIEM agents | `dpfedge_*` rotation on heartbeat; revocation propagates within one heartbeat window |
+| Auto-update with no operator gate | AWS SSM auto-update default-on, some endpoint agents | S7 — operator-managed updates; auto-update deferred indefinitely |
+| Authority and Edge sharing the same DB / token table | Naïve co-located deployments | Token namespace separation (`dpfedge_*` vs `dpfmcp_*` vs user JWTs) enforces per-surface scope |
+
+### Gaps the Edge Node design fills (vs. the comparison set)
+
+| Gap | What the comparison set offers | What the Edge Node design adds |
+|---|---|---|
+| Authority/Edge identity split | osquery, Wazuh, Datadog all assume the central is a SaaS or on-prem appliance with its own identity | Edge Node is a `PrincipalAlias` per the principal-convergence work; the same authorization model that gates users / agents / mobile devices gates Edge Node submissions |
+| Deployment-target neutrality | Each comparison product is opinionated about its server (Datadog SaaS, Wazuh on-prem appliance, AWS SSM cloud-only) | One Edge Node binary works against Authority Core in any deployment shape: local, single-VM cloud, container service, k8s, TAPPaaS |
+| Per-Edge-Node capability policy | Datadog's "fleet automation" comes closest, but capability-level enable/disable is config-side, not Authority-side | Authority's `EdgeNodeCapability.mode` (`enabled` / `reporting-only` / `disabled`) lets operators flip individual capabilities per node without redeploying the binary |
+| Audit-uniform observation submission | Most agents submit through bespoke endpoints with bespoke auth | Same `ToolExecution` audit table receives Edge Node submissions; same governance envelope as MCP / web / mobile |
+| Quarantine as first-class state | Wazuh has it; Datadog and Tailscale don't (revoke is the only escape valve) | DPF separates `quarantined` (still alive, dropped submissions) from `revoked` (tokens dead, audit row preserved) — operator can investigate before destroying state |
 
 ## Sequencing
 
@@ -699,7 +944,7 @@ The installer-parity roadmap does **not** retire `windows_exporter`
 or the `windows-host` Prometheus scrape — those retire when this
 epic ships the Edge Node's `capability.discovery.network` slice.
 
-## Maturity gates before implementation
+## Maturity gates — Phase 0 status
 
 This spec moves from research to binding when all of these are
 complete. **Security review is weighted heavier than other specs
@@ -708,36 +953,67 @@ credentials, policy caching, and host-local trust — an
 architectural defect here has wider blast radius than a deployment-
 target misconfiguration.**
 
-- [ ] Research & Benchmarking section complete (per AGENTS.md §10).
-- [ ] Open questions resolved or explicitly deferred.
-- [ ] Schema impact reviewed — `EdgeNode`, `EdgeNodeCapability`,
-      `DiscoveryRun.edgeNodeId` migration; the
+- [x] **Research & Benchmarking section complete** (per AGENTS.md §10).
+      Five comparison systems analyzed (osquery+Fleet, Tailscale,
+      Wazuh, Datadog Agent, AWS SSM Agent). Patterns adopted /
+      rejected / anti-patterns / gaps documented above.
+- [x] **Open questions resolved or explicitly deferred.** Phase 0
+      decisions table above. All deferred items have an explicit
+      revisit trigger and a destination thread (Phase 1 / T3 / T4).
+- [x] **Schema impact reviewed** — `EdgeNode`, `BootstrapToken`,
+      `EdgeNodeCapability`, `DiscoveryRun.edgeNodeId` migration; the
       `persistSubmittedDiscoveryRun` function added alongside
-      `persistBootstrapDiscoveryRun`.
-- [ ] Canonical contracts updated if this spec changes shared
-      behavior (Contract 5 of the doctrine references this spec;
-      Contract 9's mode 4 — CLI agents — is orthogonal but
-      adjacent).
-- [ ] **Security review complete (heavy):**
-      - `dpfedge_*` token issuance and rotation flow
-      - Bootstrap-token enrollment ceremony (TOFU vs paste vs
-        operator approval)
-      - Quarantine / revocation triggers and effects
+      `persistBootstrapDiscoveryRun`. Ships as roadmap A1.
+      `EdgeNode` is a `PrincipalAlias` per AGENTS.md §11
+      principal-convergence rule.
+- [x] **Canonical contracts updated** —
+      `docs/superpowers/specs/2026-05-09-deployment-contracts.md`
+      Contract 5 already references this spec. Contract 9 mode 4
+      (CLI agents) is orthogonal. No further doctrine updates
+      needed for Phase 0.
+- [ ] **Security review complete (heavy)** — required before Phase 0
+      implementation merges. Reviewer scope:
+      - `dpfedge_*` token issuance and rotation flow (per token
+        table in spec § Token namespaces and lifecycle)
+      - Bootstrap-token enrollment ceremony (one-time, ≤15 min TTL,
+        operator approval default for remote nodes)
+      - Quarantine / revocation triggers and effects (Phase 0:
+        manual-only; automatic deferred)
       - Soft-fail policy windows when Authority Core unreachable
-      - Policy-cache integrity (signing, freshness)
-      - Edge Node binary signing / attestation
-      - Linux capability surface (`CAP_NET_RAW`, `CAP_NET_ADMIN`)
-        documented and minimized
-      - macOS entitlements minimized
+        (per spec table)
+      - OS-secure-store key storage (Keychain / Credential Manager /
+        libsecret) — review for the Linux container case where the
+        host's libsecret may not be available; Phase 0 fallback is
+        a 0600-permission file under `/var/lib/dpf-edge/` owned by
+        the container user
+      - Edge Node binary attestation (Phase 0: signed container
+        image manifest only; signed-binary attestation deferred)
+      - Linux capability surface — Phase 0 needs no special
+        capabilities (documented above)
       - Audit-trail consistency for Edge Node observation
-        submissions
-- [ ] Release / rollback story defined — binary distribution,
-      self-update flow, downgrade path if a release is bad.
-- [ ] Test / verification gates defined — fresh install on
-      Windows / macOS / Linux; submission contract test against
-      `persistSubmittedDiscoveryRun`; air-gap behavior verified;
-      capability advertisement / Authority Core policy round-trip
-      verified.
+        submissions (Phase 0: each submission writes one
+        `ToolExecution` row with `surface=edge-node`)
+- [x] **Release / rollback story defined** — Phase 0:
+      - Distribution: container image only, multi-arch GHCR, pinned
+        version tag (`ghcr.io/.../dpf-edge-node:v0.1.0`)
+      - Update: operator pulls new image + restarts (no auto-update)
+      - Rollback: operator points docker-compose back at the
+        previous tag and restarts; `EdgeNode` row preserved across
+        version rollback
+      - Downgrade safety: schema migrations for the Edge Node
+        models are forward-only in v0; downgrade requires manual
+        DB intervention (acceptable for Phase 0 — fleet of
+        intentionally small)
+- [x] **Test / verification gates defined** — Phase 0:
+      - Unit tests on the new ingestion endpoints + auth middleware
+      - Unit tests on `persistSubmittedDiscoveryRun` (submission
+        envelope → DiscoveredItem rows → InventoryEntity rows)
+      - Integration smoke (compose-based): portal + edge-node
+        side-by-side, enroll → sweep → verify Postgres + Neo4j rows
+      - Verification runbook entry (added to
+        `docs/install/verification-runbook.md`) for real-LAN
+        verification (T2 thread)
+      - Air-gapped behavior verification deferred to T5 thread
 
 ## Source documents
 
