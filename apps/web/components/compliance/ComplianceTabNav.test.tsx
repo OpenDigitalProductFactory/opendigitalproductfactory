@@ -23,6 +23,7 @@ describe("ComplianceTabNav", () => {
     const html = renderToStaticMarkup(<ComplianceTabNav />);
 
     expect(html).toContain(">Overview<");
+    expect(html).toContain(">Licensing<");
     expect(html).toContain(">Library<");
     expect(html).toContain(">Controls<");
     expect(html).toContain(">Assurance<");
@@ -42,5 +43,14 @@ describe("ComplianceTabNav", () => {
     expect(html).toContain('href="/compliance/gaps"');
     expect(html).not.toContain(">Policies<");
     expect(html).not.toContain(">Regulations<");
+  });
+
+  it("shows the licensing family when the licensing workspace is active", () => {
+    pathname = "/compliance/licensing";
+    const html = renderToStaticMarkup(<ComplianceTabNav />);
+
+    expect(html).toContain('href="/compliance/licensing"');
+    expect(html).toContain("Operate licensing, permit, credential, fee, and display-readiness workflows");
+    expect(html).not.toContain(">Onboard<");
   });
 });
