@@ -9,6 +9,12 @@ import {
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
+import {
+  executeAutonomousAgenticLoop,
+  executeAutonomousWorkTool,
+  resolveAutonomousWorkAgent,
+  resolveAutonomousWorkTools,
+} from "@/lib/tak/autonomous-work-run";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -47,6 +53,20 @@ function computeNextCronRun(cronExpr: string, from: Date): Date {
   }
 
   return next;
+}
+
+function getRequiredProceduralToolForScheduledTask(taskId: string): {
+  name: string;
+  args: Record<string, unknown>;
+} | null {
+  if (taskId === "discovery-taxonomy-gap-triage-daily") {
+    return {
+      name: "run_discovery_triage",
+      args: { trigger: "cadence" },
+    };
+  }
+
+  return null;
 }
 
 // ─── Public actions ─────────────────────────────────────────────────────────
@@ -233,18 +253,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       isSuperuser: owner?.isSuperuser ?? false,
     };
 
-    // Resolve agent prompts
-    const { resolveAgentByIdWithPrompts, resolveAgentForRouteWithPrompts } = await import(
-      "@/lib/tak/agent-routing-server"
-    );
-    const routedAgentInfo = await resolveAgentForRouteWithPrompts(
-      task.routeContext,
+    const agentInfo = await resolveAutonomousWorkAgent({
+      agentId: task.agentId,
+      routeContext: task.routeContext,
       userContext,
-    );
-    const agentInfo =
-      routedAgentInfo.agentId === task.agentId
-        ? routedAgentInfo
-        : await resolveAgentByIdWithPrompts(task.agentId, userContext);
+    });
 
     const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${task.prompt}`;
     const chatHistory = [
@@ -254,15 +267,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     ];
 
-    const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
-    const { getAvailableTools, toolsToOpenAIFormat, executeTool } = await import(
-      "@/lib/mcp-tools"
-    );
+    const { tools, toolsForProvider } = await resolveAutonomousWorkTools({
+      userContext,
+      mode: "act",
+      agentId: task.agentId,
+    });
 
-    const tools = await getAvailableTools(userContext, { mode: "act", agentId: task.agentId });
-    const toolsForProvider = toolsToOpenAIFormat(tools);
-
-    const result = await runAgenticLoop({
+    const result = await executeAutonomousAgenticLoop({
       systemPrompt: agentInfo.systemPrompt,
       chatHistory,
       sensitivity: agentInfo.sensitivity ?? "internal",
@@ -274,8 +285,44 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       threadId: thread.id,
       taskRunId: taskRunRef.taskRunId,
     });
+    const executedTools = [...(result.executedTools ?? [])];
 
-    const scheduledSummary = extractScheduledTaskSummary(result.executedTools);
+    const requiredTool = getRequiredProceduralToolForScheduledTask(task.taskId);
+    if (requiredTool) {
+      const hasPersistedRequiredTool = await prisma.toolExecution.findFirst({
+        where: {
+          taskRunId: taskRunRef.taskRunId,
+          toolName: requiredTool.name,
+          success: true,
+        },
+        select: { id: true },
+      });
+
+      if (!hasPersistedRequiredTool) {
+        const alreadyCountedRequiredTool = executedTools.some(
+          (tool) => tool.name === requiredTool.name,
+        );
+        const toolResult = await executeAutonomousWorkTool({
+          toolName: requiredTool.name,
+          args: requiredTool.args,
+          userId: task.ownerUserId,
+          userContext,
+          routeContext: task.routeContext,
+          agentId: task.agentId,
+          threadId: thread.id,
+          taskRunId: taskRunRef.taskRunId,
+        });
+        if (!alreadyCountedRequiredTool) {
+          executedTools.push({
+            name: requiredTool.name,
+            args: requiredTool.args,
+            result: toolResult,
+          });
+        }
+      }
+    }
+
+    const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
 
     // Persist agent response
@@ -322,7 +369,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       data: {
         lastRunAt: now,
         lastStatus: "ok",
-        lastError: scheduledSummary?.compactStatus ?? null,
+        lastError: null,
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
         nextRunAt,
@@ -336,7 +383,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         completedAt: new Date(),
         progressPayload: {
           scheduledSummary: scheduledSummary?.compactStatus ?? null,
-          executedToolCount: result.executedTools?.length ?? 0,
+          executedToolCount: executedTools.length,
         },
       },
     });
@@ -346,7 +393,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       data: {
         lastRunAt: now,
         lastStatus: "ok",
-        lastError: scheduledSummary?.compactStatus ?? null,
+        lastError: null,
         nextRunAt,
       },
     }).catch(() => {});

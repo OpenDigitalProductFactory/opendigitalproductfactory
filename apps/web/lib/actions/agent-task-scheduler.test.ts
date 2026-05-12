@@ -31,6 +31,9 @@ const mocks = vi.hoisted(() => ({
     taskMessage: {
       create: vi.fn(),
     },
+    toolExecution: {
+      findFirst: vi.fn(),
+    },
   },
   resolveAgentForRouteWithPrompts: vi.fn(),
   resolveAgentByIdWithPrompts: vi.fn(),
@@ -38,6 +41,7 @@ const mocks = vi.hoisted(() => ({
   getAvailableTools: vi.fn(),
   toolsToOpenAIFormat: vi.fn(),
   executeTool: vi.fn(),
+  governedExecuteTool: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
@@ -53,6 +57,9 @@ vi.mock("@/lib/mcp-tools", () => ({
   getAvailableTools: mocks.getAvailableTools,
   toolsToOpenAIFormat: mocks.toolsToOpenAIFormat,
   executeTool: mocks.executeTool,
+}));
+vi.mock("@/lib/mcp-governed-execute", () => ({
+  governedExecuteTool: mocks.governedExecuteTool,
 }));
 
 import {
@@ -194,6 +201,7 @@ function arrangeScheduledTask() {
     },
   ]);
   mocks.toolsToOpenAIFormat.mockReturnValue([]);
+  mocks.governedExecuteTool.mockResolvedValue({ success: true, message: "ok" });
   mocks.prisma.taskRun.create.mockResolvedValue({
     id: "task-run-row-1",
     taskRunId: "TR-SCHED-ABCDE",
@@ -201,6 +209,7 @@ function arrangeScheduledTask() {
   });
   mocks.prisma.taskMessage.create.mockResolvedValue({});
   mocks.prisma.taskRun.update.mockResolvedValue({});
+  mocks.prisma.toolExecution.findFirst.mockResolvedValue({ id: "tool-execution-1" });
   mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
   mocks.prisma.scheduledJob.update.mockResolvedValue({});
 }
@@ -245,6 +254,7 @@ function arrangeHiveScoutTask() {
     },
   ]);
   mocks.toolsToOpenAIFormat.mockReturnValue([]);
+  mocks.governedExecuteTool.mockResolvedValue({ success: true, message: "ok" });
   mocks.prisma.taskRun.create.mockResolvedValue({
     id: "task-run-row-1",
     taskRunId: "TR-SCHED-HIVE1",
@@ -252,6 +262,7 @@ function arrangeHiveScoutTask() {
   });
   mocks.prisma.taskMessage.create.mockResolvedValue({});
   mocks.prisma.taskRun.update.mockResolvedValue({});
+  mocks.prisma.toolExecution.findFirst.mockResolvedValue({ id: "tool-execution-1" });
   mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
   mocks.prisma.scheduledJob.update.mockResolvedValue({});
 }
@@ -282,6 +293,7 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
         where: { taskId: "discovery-taxonomy-gap-triage-daily" },
         data: expect.objectContaining({
           lastStatus: "ok",
+          lastError: null,
           taskRunId: "TR-SCHED-ABCDE",
         }),
       }),
@@ -292,6 +304,15 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
         data: expect.objectContaining({
           status: "completed",
           completedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: "discovery-taxonomy-gap-triage-daily" },
+        data: expect.objectContaining({
+          lastStatus: "ok",
+          lastError: null,
         }),
       }),
     );
@@ -343,6 +364,146 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
       },
     ]);
     expect(agentTaskMessage?.data.parts[0].text).not.toContain("I stopped because");
+  });
+
+  it("procedurally executes required discovery triage when the model narrates instead of calling the tool", async () => {
+    arrangeScheduledTask();
+    mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "The tool subsystem is not available.",
+      executedTools: [],
+    });
+    mocks.governedExecuteTool.mockResolvedValue({
+      success: true,
+      message: "Duplicate cadence triage run already recorded today.",
+      data: {
+        trigger: "cadence",
+        processedAt: "2026-05-12T05:50:17.968Z",
+        runIdempotencyKey: "2026-05-12:inventory-specialist:cadence",
+        skipped: true,
+        skipReason: "Duplicate cadence triage run already recorded today.",
+        metrics: {
+          processed: 0,
+          decisionsCreated: 0,
+          autoAttributed: 0,
+          humanReview: 0,
+          taxonomyGap: 0,
+          needsMoreEvidence: 0,
+          dismissed: 0,
+          escalationQueueDepth: 0,
+          repeatUnresolved: 0,
+          autoApplyRate: 0,
+        },
+      },
+    });
+
+    await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
+
+    expect(mocks.governedExecuteTool).toHaveBeenCalledWith({
+      toolName: "run_discovery_triage",
+      rawParams: { trigger: "cadence" },
+      userId: "user-1",
+      userContext: { userId: "user-1", platformRole: null, isSuperuser: true },
+      source: "agentic-loop",
+      context: {
+        routeContext: "/platform/tools/discovery",
+        agentId: "inventory-specialist",
+        threadId: "thread-1",
+        taskRunId: "TR-SCHED-ABCDE",
+      },
+    });
+    const agentTaskMessage = mocks.prisma.taskMessage.create.mock.calls.find(
+      ([args]) => args.data.role === "agent",
+    )?.[0];
+
+    expect(agentTaskMessage?.data.parts[0].text).toContain("Discovery triage skipped");
+    expect(agentTaskMessage?.data.parts[0].text).not.toContain("tool subsystem");
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "task-run-row-1" },
+        data: expect.objectContaining({
+          progressPayload: expect.objectContaining({
+            executedToolCount: 1,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("persists a required discovery triage receipt when the loop reports an unrecorded tool call", async () => {
+    arrangeScheduledTask();
+    mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Done.",
+      executedTools: [
+        {
+          name: "run_discovery_triage",
+          args: { trigger: "cadence" },
+          result: {
+            success: true,
+            message: "Duplicate cadence triage run already recorded today.",
+            data: {
+              trigger: "cadence",
+              processedAt: "2026-05-12T06:35:12.297Z",
+              runIdempotencyKey: "2026-05-12:inventory-specialist:cadence",
+              skipped: true,
+              skipReason: "Duplicate cadence triage run already recorded today.",
+              metrics: {
+                processed: 0,
+                decisionsCreated: 0,
+                autoAttributed: 0,
+                humanReview: 0,
+                taxonomyGap: 0,
+                needsMoreEvidence: 0,
+                dismissed: 0,
+                escalationQueueDepth: 0,
+                repeatUnresolved: 0,
+                autoApplyRate: 0,
+              },
+            },
+          },
+        },
+      ],
+    });
+    mocks.governedExecuteTool.mockResolvedValue({
+      success: true,
+      message: "Duplicate cadence triage run already recorded today.",
+      data: { skipped: true, trigger: "cadence" },
+    });
+
+    await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
+
+    expect(mocks.prisma.toolExecution.findFirst).toHaveBeenCalledWith({
+      where: {
+        taskRunId: "TR-SCHED-ABCDE",
+        toolName: "run_discovery_triage",
+        success: true,
+      },
+      select: { id: true },
+    });
+    expect(mocks.governedExecuteTool).toHaveBeenCalledWith({
+      toolName: "run_discovery_triage",
+      rawParams: { trigger: "cadence" },
+      userId: "user-1",
+      userContext: { userId: "user-1", platformRole: null, isSuperuser: true },
+      source: "agentic-loop",
+      context: {
+        routeContext: "/platform/tools/discovery",
+        agentId: "inventory-specialist",
+        threadId: "thread-1",
+        taskRunId: "TR-SCHED-ABCDE",
+      },
+    });
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "task-run-row-1" },
+        data: expect.objectContaining({
+          progressPayload: expect.objectContaining({
+            executedToolCount: 1,
+          }),
+        }),
+      }),
+    );
   });
 
   it("uses a structured Hive Scout summary for task-facing agent messages when the scout tool ran", async () => {
