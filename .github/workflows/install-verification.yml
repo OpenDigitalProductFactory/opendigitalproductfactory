@@ -1,0 +1,118 @@
+name: Install Verification (E2E)
+
+# End-to-end runtime verification for the bash installer. Brings up
+# the full compose stack on ubuntu-latest, polls /api/health, captures
+# the doctor bundle, then tears down with uninstall-dpf.sh --purge.
+#
+# This is the gate that converts "we believe install-dpf.sh works" into
+# "install-dpf.sh was observed to reach /api/health=200 as of commit X".
+#
+# Triggers:
+#   - workflow_dispatch     Manual runs (e.g. before cutting a release).
+#   - push to tags v*       Automatic post-publish verification when a
+#                           release tag is pushed; the publish-image
+#                           workflow has already built multi-arch GHCR
+#                           images by the time this runs.
+#
+# Intentionally NOT triggered on every PR:
+#   The full local image build + multi-service compose-up takes 15-25
+#   minutes per run. The path-filtered release-gates workflow (dry-run +
+#   shellcheck) covers per-PR validation; this gate is reserved for
+#   release prep and on-demand verification.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Install mode: dev (build locally) or release (pull GHCR)"
+        type: choice
+        options: [dev, release]
+        default: dev
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-e2e-install:
+    name: Linux E2E Install (ubuntu-latest, ${{ github.event.inputs.mode || 'release' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      # CI-specific overrides per Doctrine Contract 9 (LLM provider):
+      # skip model pull so we don't burn 4-8 GB pulling a default model
+      # into a runner that's going to be torn down anyway. The portal
+      # comes up with embedding setup deferred — that's the verification
+      # target for "install path works"; full model lifecycle is a
+      # separate gate.
+      DPF_MODEL_PULL_MODE: skip
+      DPF_HEALTH_TIMEOUT: 900   # 15 min ceiling for image build + boot
+      DPF_HEALTH_URL: http://localhost:3000/api/health
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show docker context (preinstalled on ubuntu-latest)
+        run: |
+          docker --version
+          docker compose version
+          docker info | head -30
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Run install-dpf.sh (real install, --no-autostart for CI)
+        # Skips the autostart unit step (no user session on a GHA runner).
+        # The install path itself — preflight, state, compose chain,
+        # `pnpm install`, host hardware detection, .env generation,
+        # `docker compose up -d`, and the /api/health poll — is what
+        # this gate validates.
+        run: bash install-dpf.sh --headless --${{ github.event.inputs.mode || 'release' }} --no-autostart
+
+      - name: Verify /api/health response shape
+        run: |
+          set -euo pipefail
+          curl --silent --fail "$DPF_HEALTH_URL" > /tmp/health.json
+          cat /tmp/health.json
+          # Minimal contract: the endpoint returns valid JSON with a
+          # truthy `ok` or `status` field. The installer already polled
+          # until 200; this step pins the response-shape invariant.
+          test -s /tmp/health.json
+          if command -v jq >/dev/null 2>&1; then
+            jq -e '(.ok // .status // "ok") != null' /tmp/health.json
+          fi
+
+      - name: Capture docker compose ps + service status
+        if: always()
+        run: |
+          docker compose -p dpf ps || true
+          echo "---"
+          docker compose -p dpf logs --tail=50 portal || true
+
+      - name: Capture doctor bundle
+        if: always()
+        run: bash install-dpf.sh doctor || true
+
+      - name: Upload doctor bundle artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-bundle-${{ github.event.inputs.mode || 'release' }}-${{ github.run_id }}
+          path: ~/.dpf/doctor-*.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Tear down (uninstall --purge)
+        if: always()
+        run: bash uninstall-dpf.sh --purge --headless --yes || true

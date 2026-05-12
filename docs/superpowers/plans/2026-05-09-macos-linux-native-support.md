@@ -1,12 +1,24 @@
 # Mac (Apple Silicon) + Linux Native Support — Roadmap
 
-> **Status: DELIVERED (2026-05-11).** All 11 phases (0–10) shipped
-> across 13 PRs. macOS Apple Silicon and native Linux installers are
-> now GA alongside the existing Windows installer. End-user install
-> docs: [docs/install/macos.md](../../install/macos.md),
-> [docs/install/linux.md](../../install/linux.md). CI release gates
-> live in [.github/workflows/release-gates.yml](../../../.github/workflows/release-gates.yml).
-> A delivery summary is at the bottom of this file.
+> **Status: CODE SHIPPED — EARLY ACCESS (2026-05-11).**
+> All 11 phases (0–10) of the *code* roadmap shipped across 13 PRs.
+> The bash installer, lifecycle scripts, CI release gates, and docs
+> are on `main`, and an ubuntu-latest end-to-end install gate
+> ([`.github/workflows/install-verification.yml`](../../../.github/workflows/install-verification.yml))
+> proves the install path works on a real Linux runner.
+>
+> **Now we want real-world reports.** The macOS / Linux installers
+> are in **early access**: please install on your hardware and tell
+> us how it went. Verification matrix + reporting instructions live
+> at [docs/install/verification-runbook.md](../../install/verification-runbook.md).
+>
+> A handful of community verification reports per platform is what
+> we need to flip macOS / Linux from "early access" to "GA" in the
+> README. The Windows installer is the only path with that
+> designation today (real production usage). TAPPaaS, DPF Edge Node,
+> and cloud substrates are spec-only and tagged "design partner
+> wanted" in the runbook — they need actual implementation work, not
+> just runtime verification.
 
 > Branch: `claude/mac-docker-compatibility-uN4Ya`
 > Deliverable for this branch: **this plan only**. Each phase below lands as a

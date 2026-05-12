@@ -11,6 +11,7 @@ import type {
   OperationsMapQuickView,
   OperationsMapQuickViewId,
   OperationsMapSeverity,
+  OperationsMapTaskRun,
   OperationsMapTemplate,
   OperationsMapToolExecution,
   OperationsMapToolExecutionReceipt,
@@ -77,6 +78,7 @@ const ROUTE_CONTEXT_TO_STATION: Array<{ pattern: RegExp; stationId: string }> = 
 ];
 
 const ALL_PROJECTION_SOURCES: OperationsMapProjectionSource[] = [
+  "task-run",
   "tool-execution",
   "tool-receipt",
   "evidence-backlog",
@@ -217,6 +219,37 @@ export function projectToolExecution(
   };
 }
 
+export function projectTaskRun(
+  row: OperationsMapTaskRun,
+  template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
+): OperationsMapProjection {
+  const stationId = resolveTaskRunStationId(row, template);
+  const label = row.source === "proactive" ? "Scheduled task run" : "Task run";
+
+  return {
+    id: `task-run:${row.id}`,
+    occurredAt: row.startedAt.toISOString(),
+    actorAgentId: row.currentAgentId,
+    source: "task-run",
+    location: {
+      lineId: resolveLineId(stationId, template),
+      stationId,
+    },
+    severity: severityForTaskRunStatus(row.status),
+    label,
+    summary: `${row.title} (${row.status})`,
+    refs: {
+      taskRunId: row.taskRunId,
+    },
+    links: {
+      historyHref: `/api/internal/tasks/${encodeURIComponent(row.taskRunId)}`,
+      coworkerHref: row.currentAgentId
+        ? `/platform/ai/agent/${encodeURIComponent(row.currentAgentId)}`
+        : undefined,
+    },
+  };
+}
+
 export function projectToolExecutionReceipt(
   row: OperationsMapToolExecutionReceipt,
   template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
@@ -263,6 +296,7 @@ export function projectBacklogEvidence(
   template: OperationsMapTemplate = SOFTWARE_PLATFORM_MAP_TEMPLATE,
 ): OperationsMapProjection {
   const stationId = resolveEvidenceStationId(row.summary, template);
+  const backlogItemRef = row.backlogItem?.itemId ?? row.backlogItemId;
 
   return {
     id: `backlog-evidence:${row.id}`,
@@ -278,11 +312,11 @@ export function projectBacklogEvidence(
     summary: row.summary,
     refs: {
       backlogItemActivityId: row.id,
-      backlogItemId: row.backlogItemId,
+      backlogItemId: backlogItemRef,
       toolExecutionId: row.toolExecutionId,
     },
     links: {
-      backlogHref: `/platform/backlog?itemId=${encodeURIComponent(row.backlogItemId)}`,
+      backlogHref: `/ops?itemId=${encodeURIComponent(backlogItemRef)}`,
       authorityHref: row.toolExecutionId
         ? `/platform/audit/ledger?toolExecutionId=${encodeURIComponent(row.toolExecutionId)}`
         : undefined,
@@ -369,6 +403,26 @@ function resolveToolExecutionStationId(row: OperationsMapToolExecution, template
   if (agentHint && template.stations.some((station) => station.id === agentHint)) return agentHint;
 
   return resolveFallbackStationId(template);
+}
+
+function resolveTaskRunStationId(row: OperationsMapTaskRun, template: OperationsMapTemplate): string {
+  const routeStationId = row.routeContext ? resolveRouteStationId(row.routeContext, template) : null;
+  if (routeStationId) return routeStationId;
+
+  const agentId = row.currentAgentId ?? "";
+  const agentDirect = agentId ? resolveDirectTemplateStationId(agentId, template) : null;
+  if (agentDirect) return agentDirect;
+
+  const agentHint = AGENT_ID_TO_STATION_HINTS.find((hint) => hint.pattern.test(agentId))?.stationId;
+  if (agentHint && template.stations.some((station) => station.id === agentHint)) return agentHint;
+
+  return resolveFallbackStationId(template);
+}
+
+function severityForTaskRunStatus(status: string): OperationsMapSeverity {
+  if (status === "failed" || status === "rejected") return "critical";
+  if (status === "input-required" || status === "auth-required") return "attention";
+  return "normal";
 }
 
 function resolveEvidenceStationId(value: string, template: OperationsMapTemplate): string {

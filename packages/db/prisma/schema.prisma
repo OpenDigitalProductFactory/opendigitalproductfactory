@@ -3024,6 +3024,9 @@ model ToolExecution {
   // External MCP transport (spec §13) — set when the tool call originated from
   // a Bearer-token authenticated request through /api/mcp/v1.
   apiTokenId    String?
+  // Autonomous coworker runtime Slice 1: nullable parent TaskRun link.
+  // Persisted by mcp-governed-execute.ts when context.taskRunId is provided.
+  taskRunId     String?
   receipt       ToolExecutionReceipt?
 
   @@index([agentId, createdAt])
@@ -3033,6 +3036,7 @@ model ToolExecution {
   @@index([auditClass, createdAt(sort: Desc)])
   @@index([capabilityId, createdAt(sort: Desc)])
   @@index([apiTokenId, createdAt(sort: Desc)])
+  @@index([taskRunId, createdAt(sort: Desc)])
 }
 
 model ToolExecutionReceipt {
@@ -4321,6 +4325,8 @@ model ScheduledAgentTask {
   lastStatus   String? // ok | error
   lastError    String?
   lastThreadId String?
+  // Autonomous coworker runtime Slice 1: latest TaskRun spawned by this schedule.
+  taskRunId    String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -4329,6 +4335,7 @@ model ScheduledAgentTask {
   @@index([agentId])
   @@index([ownerUserId])
   @@index([isActive, nextRunAt])
+  @@index([taskRunId])
 }
 
 model CalendarSync {

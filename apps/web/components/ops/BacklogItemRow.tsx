@@ -10,9 +10,10 @@ import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 type Props = {
   item: BacklogItemWithRelations;
   onEdit: (item: BacklogItemWithRelations) => void;
+  focused?: boolean;
 };
 
-export function BacklogItemRow({ item, onEdit }: Props) {
+export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -43,7 +44,16 @@ export function BacklogItemRow({ item, onEdit }: Props) {
   const statusColour = BACKLOG_STATUS_COLOURS[item.status] ?? "#8888a0";
 
   return (
-    <div className="flex items-start gap-3 p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
+    <div
+      id={`backlog-item-${item.itemId}`}
+      aria-current={focused ? "true" : undefined}
+      className={[
+        "flex scroll-mt-24 items-start gap-3 rounded-lg border p-3",
+        focused
+          ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)]"
+          : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]",
+      ].join(" ")}
+    >
       {/* Priority badge */}
       <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-[10px] font-mono bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
         {item.priority ?? "—"}

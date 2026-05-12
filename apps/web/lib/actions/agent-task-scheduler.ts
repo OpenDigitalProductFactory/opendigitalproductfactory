@@ -4,6 +4,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 import { extractDiscoveryTriageSummary } from "./agent-task-scheduler-summary";
+import {
+  createTaskRunForScheduledTask,
+  type ScheduledTaskRunRef,
+} from "@/lib/tak/scheduled-task-runs";
+import { createTaskMessage } from "@/lib/tak/task-records";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -60,6 +65,13 @@ export async function scheduleAgentTask(
 ): Promise<{ success: true; taskId: string } | { success: false; error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+
+  if (input.timezone && input.timezone !== "UTC") {
+    return {
+      success: false,
+      error: "Non-UTC timezones are not yet supported. All schedules run in UTC.",
+    };
+  }
 
   const taskId = `agent-task-${randomUUID().slice(0, 8)}`;
   const now = new Date();
@@ -165,6 +177,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   if (!task || !task.isActive) return;
 
   const now = new Date();
+  let taskRunRef: ScheduledTaskRunRef | null = null;
 
   try {
     // Get or create a dedicated thread for this scheduled task
@@ -182,6 +195,29 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         role: "user",
         content: `[Scheduled task: ${task.title}]\n\n${task.prompt}`,
         agentId: task.agentId,
+        routeContext: task.routeContext,
+      },
+    });
+
+    taskRunRef = await createTaskRunForScheduledTask({
+      taskId: task.taskId,
+      ownerUserId: task.ownerUserId,
+      agentId: task.agentId,
+      threadId: thread.id,
+      routeContext: task.routeContext,
+      title: task.title,
+      prompt: task.prompt,
+    });
+
+    await createTaskMessage({
+      taskRunId: taskRunRef.taskRunId,
+      taskRunRecordId: taskRunRef.id,
+      contextId: taskRunRef.contextId,
+      role: "user",
+      content: `[Scheduled task: ${task.title}]\n\n${task.prompt}`,
+      metadata: {
+        source: "scheduled",
+        taskId: task.taskId,
         routeContext: task.routeContext,
       },
     });
@@ -206,17 +242,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       userContext,
     );
 
-    // Build message history
-    const rawMessages = await prisma.agentMessage.findMany({
-      where: { threadId: thread.id },
-      orderBy: { createdAt: "asc" },
-      take: 20,
-      select: { role: true, content: true },
-    });
-    const chatHistory = rawMessages.map((m) => ({
-      role: m.role as "user" | "assistant" | "system",
-      content: m.content,
-    }));
+    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${task.prompt}`;
+    const chatHistory = [
+      {
+        role: "user" as const,
+        content: scheduledPrompt,
+      },
+    ];
 
     const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
     const { getAvailableTools, toolsToOpenAIFormat, executeTool } = await import(
@@ -236,7 +268,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       routeContext: task.routeContext,
       agentId: task.agentId,
       threadId: thread.id,
+      taskRunId: taskRunRef.taskRunId,
     });
+
+    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
+    const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
 
     // Persist agent response
     await prisma.agentMessage.create({
@@ -249,7 +285,19 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
+    await createTaskMessage({
+      taskRunId: taskRunRef.taskRunId,
+      taskRunRecordId: taskRunRef.id,
+      contextId: taskRunRef.contextId,
+      role: "agent",
+      content: taskMessageContent,
+      metadata: {
+        source: "scheduled",
+        taskId: task.taskId,
+        agentId: task.agentId,
+      },
+    });
+
     if (scheduledSummary) {
       await prisma.agentMessage.create({
         data: {
@@ -272,7 +320,20 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         lastStatus: "ok",
         lastError: scheduledSummary?.compactStatus ?? null,
         lastThreadId: thread.id,
+        taskRunId: taskRunRef.taskRunId,
         nextRunAt,
+      },
+    });
+
+    await prisma.taskRun.update({
+      where: { id: taskRunRef.id },
+      data: {
+        status: "completed",
+        completedAt: new Date(),
+        progressPayload: {
+          scheduledSummary: scheduledSummary?.compactStatus ?? null,
+          executedToolCount: result.executedTools?.length ?? 0,
+        },
       },
     });
 
@@ -290,10 +351,35 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     const errMsg = err instanceof Error ? err.message : "unknown error";
     console.error(`[agent-task-scheduler] Task ${taskId} failed:`, errMsg);
 
+    const ref = taskRunRef;
+    if (ref) {
+      await prisma.taskRun.update({
+        where: { id: ref.id },
+        data: {
+          status: "failed",
+          completedAt: new Date(),
+          progressPayload: {
+            error: errMsg,
+          },
+        },
+      }).catch((updateErr) => {
+        console.error(
+          `[agent-task-scheduler] Failed to mark TaskRun ${ref.taskRunId} failed:`,
+          updateErr,
+        );
+      });
+    }
+
     const nextRunAt = computeNextCronRun(task.schedule, now);
     await prisma.scheduledAgentTask.update({
       where: { taskId },
-      data: { lastRunAt: now, lastStatus: "error", lastError: errMsg, nextRunAt },
+      data: {
+        lastRunAt: now,
+        lastStatus: "error",
+        lastError: errMsg,
+        taskRunId: taskRunRef?.taskRunId ?? null,
+        nextRunAt,
+      },
     });
 
     await prisma.scheduledJob.update({

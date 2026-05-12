@@ -15,6 +15,7 @@ import {
   projectBacklogEvidence,
   projectExternalEvidence,
   projectAgentsToStations,
+  projectTaskRun,
   projectToolExecutionReceipt,
   projectToolExecution,
 } from "./project-events";
@@ -22,6 +23,7 @@ import type {
   OperationsMapAgent,
   OperationsMapBacklogEvidence,
   OperationsMapExternalEvidence,
+  OperationsMapTaskRun,
   OperationsMapToolExecution,
   OperationsMapToolExecutionReceipt,
 } from "./types";
@@ -122,6 +124,35 @@ describe("AI operations map projection", () => {
     expect(projection.links.coworkerHref).toBe("/platform/ai/agent/build-specialist");
   });
 
+  it("projects a scheduled TaskRun onto the map with status severity", () => {
+    const projection = projectTaskRun(makeTaskRun({
+      id: "tr-1",
+      taskRunId: "TR-SCHED-ABCDE",
+      title: "Discovery Taxonomy Gap Triage",
+      status: "working",
+      source: "proactive",
+      currentAgentId: "inventory-specialist",
+      routeContext: "/platform/tools/discovery",
+    }));
+
+    expect(projection.id).toBe("task-run:tr-1");
+    expect(projection.source).toBe("task-run");
+    expect(projection.severity).toBe("normal");
+    expect(projection.summary).toContain("Discovery Taxonomy Gap Triage");
+    expect(projection.actorAgentId).toBe("inventory-specialist");
+    expect(projection.refs.taskRunId).toBe("TR-SCHED-ABCDE");
+  });
+
+  it("projects a failed TaskRun as critical", () => {
+    const projection = projectTaskRun(makeTaskRun({
+      id: "tr-2",
+      taskRunId: "TR-SCHED-FFFFF",
+      status: "failed",
+    }));
+
+    expect(projection.severity).toBe("critical");
+  });
+
   it("projects invalid tool receipts as warning evidence linked to the originating execution", () => {
     const projection = projectToolExecutionReceipt(
       makeToolExecutionReceipt({
@@ -163,7 +194,21 @@ describe("AI operations map projection", () => {
     expect(projection.severity).toBe("normal");
     expect(projection.refs.backlogItemId).toBe("BI-123");
     expect(projection.refs.toolExecutionId).toBe("tool-3");
-    expect(projection.links.backlogHref).toBe("/platform/backlog?itemId=BI-123");
+    expect(projection.links.backlogHref).toBe("/ops?itemId=BI-123");
+  });
+
+  it("projects backlog evidence links with the human-readable item id when loaded", () => {
+    const projection = projectBacklogEvidence(
+      makeBacklogEvidence({
+        id: "activity-1",
+        backlogItemId: "internal-row-id",
+        backlogItem: { itemId: "BI-123" },
+        summary: "UX verification completed",
+      }),
+    );
+
+    expect(projection.refs.backlogItemId).toBe("BI-123");
+    expect(projection.links.backlogHref).toBe("/ops?itemId=BI-123");
   });
 
   it("projects external evidence through route context and history links", () => {
@@ -229,11 +274,11 @@ describe("AI operations map projection", () => {
     ]);
 
     expect(getOperationsMapQuickViewFilters("all")).toEqual({
-      sources: ["tool-execution", "tool-receipt", "evidence-backlog", "evidence-external"],
+      sources: ["task-run", "tool-execution", "tool-receipt", "evidence-backlog", "evidence-external"],
       severities: ["normal", "attention", "warning", "critical"],
     });
     expect(getOperationsMapQuickViewFilters("exceptions")).toEqual({
-      sources: ["tool-execution", "tool-receipt", "evidence-backlog", "evidence-external"],
+      sources: ["task-run", "tool-execution", "tool-receipt", "evidence-backlog", "evidence-external"],
       severities: ["attention", "warning", "critical"],
     });
     expect(getOperationsMapQuickViewFilters("evidence")).toEqual({
@@ -329,6 +374,21 @@ function makeExternalEvidence(overrides: Partial<OperationsMapExternalEvidence> 
     provider: "external",
     resultSummary: "Evidence synced",
     createdAt: new Date("2026-05-10T12:03:00.000Z"),
+    ...overrides,
+  };
+}
+
+function makeTaskRun(overrides: Partial<OperationsMapTaskRun> = {}): OperationsMapTaskRun {
+  return {
+    id: "tr-1",
+    taskRunId: "TR-SCHED-ABCDE",
+    status: "working",
+    source: "proactive",
+    currentAgentId: "inventory-specialist",
+    routeContext: "/platform/tools/discovery",
+    title: "Discovery Taxonomy Gap Triage",
+    startedAt: new Date("2026-05-11T08:00:00.000Z"),
+    completedAt: null,
     ...overrides,
   };
 }
