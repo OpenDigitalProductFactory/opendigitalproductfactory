@@ -15,7 +15,7 @@
 Each phase ends with all four passing:
 
 1. Unit tests — `pnpm --filter <pkg> exec vitest run` for affected files.
-2. Production build — `cd apps/web && npx next build` with zero errors.
+2. Production build — `pnpm --filter web exec next build` with zero errors.
 3. UX verification — exercise the affected path against the running app.
 4. Migration applies cleanly — if a migration was added.
 
@@ -82,7 +82,7 @@ Adds the new wiki models and Qdrant collection without touching `KnowledgeArticl
 - Qdrant collection `wiki-pages` exists with the documented payload indexes after `ensureCollections()` + `ensurePayloadIndexes()` run.
 - Helpers round-trip a kernel page and an org override; uniqueness on `(organizationId, slug)` is enforced.
 - `KnowledgeArticle` UI / routes / actions / MCP tools continue to function (touched by no changes).
-- Build gate green: `pnpm typecheck`, `cd apps/web && npx next build`, vitest on the new test file.
+- Build gate green: `pnpm --filter web typecheck`, `pnpm --filter web exec next build`, vitest on the new test file.
 
 ### Phase 1b — Deprecate `KnowledgeArticle` once kernel content validates the new models (later PR)
 
@@ -306,7 +306,7 @@ Reuses the existing `@xyflow/react` v12 + `elkjs` v0.11.1 toolchain from Phase E
 
 1. **Migration apply**: `pnpm --filter @dpf/db exec prisma migrate dev` against fresh + existing DBs; both clean.
 2. **Seed**: `pnpm --filter @dpf/db exec tsx packages/db/src/seed.ts` produces kernel rows + Qdrant points; `manifest.json` counts match DB.
-3. **Build gate**: `pnpm --filter web typecheck` and `cd apps/web && npx next build` clean.
+3. **Build gate**: `pnpm --filter web typecheck` and `pnpm --filter web exec next build` clean.
 4. **Tests**: per-phase test suites green.
 5. **MCP tool exercise**: from a coworker chat, call `wiki_query` for a kernel concept and verify a kernel page returns; call `wiki_propose_edit` against the same slug, approve the override, re-query and verify the override masks the kernel; call `wiki_ingest` on a sample source and verify the draft revision + `WikiIngestEvent`.
 6. **Lint**: trigger the scheduled job manually; verify each detector produces its expected finding on the seeded fixture; verify findings page renders with theme tokens.
