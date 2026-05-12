@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth } = vi.hoisted(() => ({
+const { mockResolveAuth, mockDiscoveryRunFindUnique } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
+  mockDiscoveryRunFindUnique: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/edge-node-token", () => ({
   resolveEdgeNodeAuth: mockResolveAuth,
+}));
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    discoveryRun: {
+      findUnique: mockDiscoveryRunFindUnique,
+    },
+  },
 }));
 
 import { POST } from "./route";
@@ -18,22 +26,34 @@ const AUTHED = {
   trustState: "trusted" as const,
 };
 
-const VALID_BODY = {
-  runKey: "run_a1b2c3",
-  agentMode: "container-host",
-  agentVersion: "0.1.0",
-  observedAt: "2026-05-12T12:00:00Z",
-  capabilities: ["discovery.network"],
-  items: [
-    {
-      observedKey: "host:linux:abcdef",
-      itemType: "host",
-      name: "edge-test",
-      rawData: { kernel: "6.5.0" },
-    },
-  ],
-  relationships: [],
-};
+// observedAt must be within the route's freshness window (+/- 24h
+// from server time). Compute relative to test-run wall time so the
+// fixture doesn't go stale six months from now.
+function freshObservedAt(): string {
+  return new Date().toISOString();
+}
+
+function makeValidBody(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    runKey: "run_a1b2c3",
+    agentMode: "container-host",
+    agentVersion: "0.1.0",
+    observedAt: freshObservedAt(),
+    capabilities: ["discovery.network"],
+    items: [
+      {
+        observedKey: "host:linux:abcdef",
+        itemType: "host",
+        name: "edge-test",
+        rawData: { kernel: "6.5.0" },
+      },
+    ],
+    relationships: [],
+    ...overrides,
+  };
+}
+
+const VALID_BODY = makeValidBody();
 
 function makeReq(
   body: unknown,
@@ -49,6 +69,10 @@ function makeReq(
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // Default: no prior run exists, so the idempotency lookup returns null
+  // and the route falls through to the 202 stub branch. Tests that need
+  // the idempotent-replay path override this per-test.
+  mockDiscoveryRunFindUnique.mockResolvedValue(null);
 });
 
 describe("POST /api/v1/edge/discovery-runs — auth gate", () => {
@@ -160,12 +184,13 @@ describe("POST /api/v1/edge/discovery-runs — happy path (A4 not yet wired)", (
   });
 
   it("counts items + relationships from the parsed envelope", async () => {
+    const existingItems = VALID_BODY.items as Array<Record<string, unknown>>;
     const res = await POST(
       makeReq(
         {
           ...VALID_BODY,
           items: [
-            ...VALID_BODY.items,
+            ...existingItems,
             {
               observedKey: "host:linux:xyz",
               itemType: "host",
@@ -188,5 +213,120 @@ describe("POST /api/v1/edge/discovery-runs — happy path (A4 not yet wired)", (
     const body = await res.json();
     expect(body.itemCount).toBe(2);
     expect(body.relationshipCount).toBe(1);
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("returns 400 stale_observation when observedAt is > 24h in the past", async () => {
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: stale }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("stale_observation");
+    // Freshness gate must fire BEFORE the idempotency lookup so stale
+    // submissions never hit the DB.
+    expect(mockDiscoveryRunFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 stale_observation when observedAt is > 24h in the future (clock skew)", async () => {
+    const future = new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: future }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("stale_observation");
+  });
+
+  it("accepts observedAt at the recent edge of the window", async () => {
+    // 23h ago — comfortably inside the 24h window.
+    const recent = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: recent }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    expect(res.status).toBe(202);
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — (edgeNodeId, runKey) idempotency", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("returns 200 idempotentReplay when the same (edgeNodeId, runKey) was already persisted", async () => {
+    const priorStartedAt = new Date(Date.now() - 60_000);
+    const priorCompletedAt = new Date(Date.now() - 30_000);
+    mockDiscoveryRunFindUnique.mockResolvedValue({
+      id: "run_db_1",
+      status: "completed",
+      itemCount: 5,
+      relationshipCount: 2,
+      startedAt: priorStartedAt,
+      completedAt: priorCompletedAt,
+    });
+
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.accepted).toBe(true);
+    expect(body.idempotentReplay).toBe(true);
+    expect(body.runId).toBe("run_db_1");
+    expect(body.runKey).toBe("run_a1b2c3");
+    expect(body.status).toBe("completed");
+    expect(body.itemCount).toBe(5);
+    expect(body.relationshipCount).toBe(2);
+    expect(body.startedAt).toBe(priorStartedAt.toISOString());
+    expect(body.completedAt).toBe(priorCompletedAt.toISOString());
+  });
+
+  it("looks up by the composite (edgeNodeId, runKey) key — each node owns its runKey namespace", async () => {
+    mockDiscoveryRunFindUnique.mockResolvedValue(null);
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(mockDiscoveryRunFindUnique).toHaveBeenCalledOnce();
+    const args = mockDiscoveryRunFindUnique.mock.calls[0]![0];
+    expect(args.where).toEqual({
+      edgeNodeId_runKey: {
+        edgeNodeId: "edgenode_cuid_1",
+        runKey: "run_a1b2c3",
+      },
+    });
+  });
+
+  it("falls through to 202 stub when no prior run exists for (edgeNodeId, runKey)", async () => {
+    mockDiscoveryRunFindUnique.mockResolvedValue(null);
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.idempotentReplay).toBeUndefined();
+    expect(body.persistencePending).toBe(true);
+  });
+
+  it("preserves null completedAt for an in-flight prior run", async () => {
+    mockDiscoveryRunFindUnique.mockResolvedValue({
+      id: "run_db_2",
+      status: "running",
+      itemCount: 0,
+      relationshipCount: 0,
+      startedAt: new Date(),
+      completedAt: null,
+    });
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.idempotentReplay).toBe(true);
+    expect(body.completedAt).toBeNull();
+    expect(body.status).toBe("running");
   });
 });
