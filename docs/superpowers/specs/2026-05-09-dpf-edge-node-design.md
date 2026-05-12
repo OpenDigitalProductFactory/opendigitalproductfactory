@@ -4,8 +4,12 @@
 > 2026-05-09 research stub closed in PR <#tbd> alongside this
 > revision. Implementation sequencing lives in
 > `docs/superpowers/plans/2026-05-12-edge-node-roadmap.md` (six
-> phases, beginning with the Authority Core foundation; no Edge Node
-> binary ships before Phase 1).
+> phases, beginning with the Authority Core foundation). **Phase 0
+> shipped a Node.js / TypeScript Edge Node service for Mode 1
+> (Linux container) in PR #501** — the *native* binary path
+> (Mode 2 macOS / Mode 4 Windows) is what waits for Phase 1+, not
+> the existence of any Edge Node code. See "Language for the
+> binary" under Open question resolutions for the runtime status.
 >
 > Revision history:
 > - 2026-05-09 — initial research stub (PR #400).
@@ -53,6 +57,37 @@
 >   The drift is acknowledged with two acceptable paths forward
 >   (standardize on TypeScript or hold the Go decision and rewrite
 >   Mode 1) — decision must land before Mode 2 macOS native ships.
+> - 2026-05-12 — **security review pass 3 (alignment cleanup).**
+>   Five additional findings from the post-#509 review:
+>   (1) Runtime/phase language internally inconsistent — header
+>   said "no Edge Node binary ships before Phase 1" while Phase 0
+>   shipped the Node.js Mode 1 service. Header revised to say the
+>   *native* binary path (Mode 2 / 4) is what waits for Phase 1+,
+>   not the existence of any Edge Node code. Maturity-gate row
+>   updated: "Mode 1 runtime locked (TypeScript, shipped); Mode 2 /
+>   4 native binary runtime open."
+>   (2) REST controls section was framed as "binding" without
+>   distinguishing "the gate the implementation must satisfy" from
+>   "the current runtime truth." Added an "Implementation status"
+>   subsection mapping each REST control to its current state
+>   (auth + body validation + freshness + idempotency: implemented;
+>   per-node rate limits + 64 KB rawData cap + total-body cap +
+>   failure audit + persistence wiring: pending).
+>   (3) Linux networking was simultaneously "open" (in the
+>   deployment-modes table) and "locked for first slice" (in Open
+>   question resolutions). Table now references the scoped
+>   decision instead of restating it as open.
+>   (4) Stale "custom Go HTTP client" wording in the
+>   Endpoint-vs-MCP-tool resolution corrected to "custom HTTP
+>   client (currently TypeScript / undici per services/edge-node)"
+>   with a forward reference to the runtime drift note.
+>   (5) Storage controls aligned with implementation: the read-time
+>   "mode 0600" + "owner UID match" checks are now implemented in
+>   `services/edge-node/src/state.ts:verifyStatePerms` with unit
+>   tests. The cross-container fingerprint check (a stronger
+>   promise the original spec made) is explicitly downgraded to
+>   Phase 1+ — Phase 0 relies on the mode + owner + volume-isolation
+>   controls listed above.
 >
 > Source plan: `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
 > (the "Discovery plane refactor" subsection under Future direction).
@@ -185,7 +220,7 @@ that's compatible with its environment.
 
 | Platform | Runtime | Notes |
 |---|---|---|
-| Linux native Docker (Mode 1) | Container with `network_mode: host` (or `macvlan`) | Default for Linux server installs. Phase 0 ships Node.js / TypeScript per [`services/edge-node`](../../../services/edge-node) (PR #501); the open-question resolution below documents the runtime-language drift between this spec and the shipped service. Decision between `network_mode: host` (observer) and `macvlan` (LAN peer) is an open question — see below. |
+| Linux native Docker (Mode 1) | Container with `network_mode: host` (scoped first-slice default; see Open question resolutions) | Default for Linux server installs. Phase 0 ships Node.js / TypeScript per [`services/edge-node`](../../../services/edge-node) (PR #501). The first-slice networking choice (`network_mode: host`, observer-only) is resolved in "Open question resolutions" below; `macvlan` is a follow-on slice for LLDP/CDP receive, not Phase 0. |
 | macOS native (Mode 2) | Native LaunchDaemon (or LaunchAgent) | Self-contained binary. The original spec assumed Go or Rust for the native-binary path; Phase 0's Mode 1 actually shipped Node.js / TypeScript (#501). The runtime for Mode 2 is **open**: either re-pack the Node service as a self-contained binary (`bun build --compile`, `pkg`, `nexe`) or revisit the Go choice for the native-binary path. See "Runtime drift — Mode 1 Node.js, Mode 2 TBD" in Open question resolutions. |
 | Windows native (Mode 4) | Native Windows Service | Same runtime decision as Mode 2 — open pending the drift resolution. |
 | Docker Desktop fallback (Mode 3) | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. Same Node.js / TypeScript image as Mode 1. |
@@ -460,8 +495,19 @@ controls are present:
   Dockerfile (e.g. `dpf:dpf`). Never `root`. The state dir is
   `chown`ed to that UID at image build time.
 - **File mode**: `0600`. Enforced at write time (`fs.writeFile` /
-  `fs.chmod` after `rename` to absorb umask drift); verified at
-  read time before trusting the contents.
+  `fs.chmod` after `rename` to absorb umask drift); **verified at
+  read time** via `verifyStatePerms` in
+  [`services/edge-node/src/state.ts`](../../../services/edge-node/src/state.ts)
+  (`loadState` refuses to read a state file whose mode is anything
+  other than `0600`). The mode check is POSIX-only — skipped on
+  Windows-host development machines where the perm semantics
+  don't apply; the Linux-container production deployment is
+  fully covered.
+- **File owner UID**: the state file's owner UID must match the
+  current process UID at read time. Enforced by the same
+  `verifyStatePerms` function. Catches the host-bind-mount-leak
+  threat (a different account's state dropped into the container's
+  state directory) without relying on filesystem labels.
 - **Volume isolation**: the state directory is a docker-managed
   volume, not a bind-mount from the host. Mounting host paths into
   the Edge Node container is forbidden (and would defeat the
@@ -485,11 +531,24 @@ controls are present:
   Admin > Platform Development. The next request from any
   holder of the copied token returns 401 and forces
   re-enrollment.
-- **No re-use across nodes**: each Edge Node has its own state
-  directory. If two Edge Node containers share a volume by
-  configuration mistake, both observe the other's nodeId on
-  startup and refuse to launch; the binary's `loadState` does a
-  fingerprint check before trusting cached state.
+- **No re-use across nodes** *(partial — see Phase 1+ note)*: each
+  Edge Node has its own state directory. The mode + owner read-time
+  checks above bound the cross-account leak case. **Cross-container
+  fingerprint detection** (the spec's stronger promise — "two
+  Edge Node containers sharing a volume both refuse to launch") is
+  **Phase 1+**, not Phase 0. The Phase 0 controls in scope today are:
+  - **docker-managed volume isolation** (no host bind-mount): two
+    containers can only share state by explicit operator
+    misconfiguration of compose; the default Mode 1 layout uses
+    a dedicated volume per Edge Node container.
+  - **dedicated non-root UID** (`dpf:dpf` in the Dockerfile): two
+    containers running under the same UID can co-mount but a host
+    bind-mount from a different UID is refused by the owner check.
+  Phase 1+ will add a process-instance fingerprint stored in
+  `state.json` so a second container reading state written by a
+  different instance refuses to launch even if mode + owner match.
+  That work is tracked as a Phase 1+ enhancement, not a Phase 0
+  gate.
 
 Mode 2 (native macOS / Windows) and Mode 4 (TPM-attested, Phase
 1+) bypass this downgrade entirely — they use Keychain /
@@ -906,6 +965,32 @@ ships as an MCP tool, the controls above migrate into the MCP
 governance plane and the REST path can be deprecated. Until
 then, every control listed above is a Phase 0 gate.
 
+#### Implementation status (Phase 0 gates, not current runtime truth)
+
+The controls above are **Phase 0 gates the ingestion path must
+satisfy before it is considered complete** — they are NOT a
+description of what the route handler currently does. The
+distinction matters: a reader who treats the controls as the
+current runtime contract will be surprised by what the merged
+route actually delivers. Current state:
+
+| Control | Status (post #513) | Where |
+|---|---|---|
+| Auth gate (resolveEdgeNodeAuth) | **Implemented** | `app/api/v1/edge/discovery-runs/route.ts` |
+| Body schema validation (Zod) | **Implemented** | same; note `.passthrough()` on item / relationship schemas is intentional for forward-compat but allows unknown fields through |
+| Freshness window (±24h on `observedAt`) | **Implemented** (#513) | same; fires before DB lookup |
+| `(edgeNodeId, runKey)` idempotency lookup | **Implemented** (#513) | same; backed by `@@unique([edgeNodeId, runKey])` + partial unique on bootstrap path |
+| Persist via `persistSubmittedDiscoveryRun` | **Stub (202 persistencePending:true)** | the route does NOT yet call the persistence sibling that #499 added; the normalize → infer → persist chain wiring is a separate follow-up |
+| Per-node rate limits (12/min heartbeat, 4/min discovery) | **Not implemented** | needs a token-bucket gate keyed on `EdgeNodeToken.id`; route returns 429 with `Retry-After` and audit-logs |
+| Payload size caps (10k items / 20k relationships / 64 KB rawData / 5 MB total → 413) | **Partial** | Zod enforces `.max(10000)` on `items` and `.max(20000)` on `relationships`; the 64 KB rawData and 5 MB total body caps are not yet wired |
+| Failure audit to `ToolExecution` (401 / 403 / 429 / 5xx) | **Not implemented** | route returns the error JSON but doesn't write a `ToolExecution` row |
+| Replay protection on bearer credential | **Phase 0 risk accepted** | bearer tokens aren't nonce-protected; the heartbeat-rotation cadence + grace window bound exposure to ~1h. Phase 1+ DPoP / mTLS closes this structurally. |
+
+Anything in the "Not implemented" or "Stub" rows is a Phase 0
+follow-up PR. Each follow-up is independently tractable; they
+do NOT block the convergence + idempotency contracts already
+landed.
+
 ## Authentication-provider implications
 
 DPF can become an authentication provider for downstream products,
@@ -1100,10 +1185,15 @@ revisit without re-opening the doctrine.
 - **Endpoint vs MCP tool** *(durable)*: **REST first
   (`/api/v1/edge/*`), MCP tool follow-up**. Reasoning: the first
   Edge Node populations are non-MCP-aware (the binary itself is a
-  custom Go HTTP client, not an MCP server) and REST is the
-  straightforward surface. An MCP tool (`submit_discovery_observations`)
-  can wrap the same `persistSubmittedDiscoveryRun` function later
-  without changing the contract on the wire.
+  custom HTTP client — currently TypeScript / `undici` per
+  [`services/edge-node`](../../../services/edge-node), not an MCP
+  server) and REST is the straightforward surface. An MCP tool
+  (`submit_discovery_observations`) can wrap the same
+  `persistSubmittedDiscoveryRun` function later without changing
+  the contract on the wire. Note: this paragraph previously said
+  "custom Go HTTP client" — that was the pre-#501 expected shape;
+  the runtime drift is documented in "Language for the binary"
+  above and the Mode 1 truth is now TypeScript.
 
 ## Research and Benchmarking
 
@@ -1579,16 +1669,19 @@ target misconfiguration.**
       rejected / anti-patterns listed; gaps this design fills
       enumerated.
 - [x] Open questions resolved or explicitly deferred — see
-      "Open question resolutions" above. Language locked (Go),
-      Linux networking locked for first slice (`network_mode:
-      host`), binary distribution locked (GitHub Release assets),
-      update path locked (installer-driven, no in-binary
-      self-updater), macOS scope locked (LaunchDaemon default),
-      Windows scope locked (Service, not scheduled task),
-      entitlements and capabilities documented and minimized.
-      MCP / A2A gateway capabilities explicitly deferred to
-      later capability slices with forward-compat hooks
-      preserved.
+      "Open question resolutions" above. **Mode 1 runtime: TypeScript
+      / Node.js (shipped in #501, currently authoritative). Mode 2 /
+      Mode 4 native binary runtime: open** — either repack the
+      TypeScript service via `bun build --compile` / `pkg` / `nexe`,
+      or rewrite for the native path; decision must land before
+      Mode 2 ships. Linux networking locked for first slice
+      (`network_mode: host`); binary distribution locked (GitHub
+      Release assets); update path locked (installer-driven, no
+      in-binary self-updater); macOS scope locked (LaunchDaemon
+      default); Windows scope locked (Service, not scheduled task);
+      entitlements and capabilities documented and minimized. MCP /
+      A2A gateway capabilities explicitly deferred to later
+      capability slices with forward-compat hooks preserved.
 - [x] Schema impact reviewed — `EdgeNode`, `BootstrapToken`,
       `EdgeNodeCapability` Prisma models defined above, revised
       to honor AGENTS.md §11 Principal convergence (EdgeNode

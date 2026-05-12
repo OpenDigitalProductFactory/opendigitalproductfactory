@@ -124,6 +124,12 @@ services:
       # retries forever against itself when dispatching queued steps —
       # symptom: events publish + initialize but never execute, UI hangs.
       INNGEST_SERVE_HOST: http://portal:3000
+      # Allow plain-HTTP MCP traffic from in-bridge clients (sandbox→portal,
+      # promoter→portal). The MCP route otherwise refuses non-localhost HTTP.
+      # Operator-overridable via MCP_INSECURE_INTERNAL_HOSTS in .env. Bearer
+      # tokens, origin checks, and grant scopes are still enforced — this
+      # only relaxes the transport-layer TLS gate for known internal hosts.
+      MCP_INSECURE_INTERNAL_HOSTS: ${MCP_INSECURE_INTERNAL_HOSTS:-portal,host.docker.internal,sandbox}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
     depends_on:

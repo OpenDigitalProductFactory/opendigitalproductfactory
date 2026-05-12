@@ -152,6 +152,62 @@ describe("POST — transport guards", () => {
     expect(res.status).toBe(403);
   });
 
+  // Sandbox→portal MCP traffic on the internal Docker bridge cannot use TLS.
+  // MCP_INSECURE_INTERNAL_HOSTS lets the operator opt the internal hostname
+  // (`portal`, `host.docker.internal`, …) into the HTTP-allowed set without
+  // dropping the gate for the public surface.
+  describe("MCP_INSECURE_INTERNAL_HOSTS env opt-in", () => {
+    const originalValue = process.env.MCP_INSECURE_INTERNAL_HOSTS;
+    afterEach(() => {
+      if (originalValue === undefined) {
+        delete process.env.MCP_INSECURE_INTERNAL_HOSTS;
+      } else {
+        process.env.MCP_INSECURE_INTERNAL_HOSTS = originalValue;
+      }
+    });
+
+    it("allows http on a hostname listed in MCP_INSECURE_INTERNAL_HOSTS", async () => {
+      process.env.MCP_INSECURE_INTERNAL_HOSTS = "portal,host.docker.internal";
+      resolveMock.mockResolvedValue(null);
+      const res = await POST(
+        makeRequest({
+          url: "http://portal:3000/api/mcp/v1",
+          bearer: "dpfmcp_X",
+          forwardedHost: "portal:3000",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(401); // past transport guard, failed at auth
+    });
+
+    it("does not allow hostnames absent from MCP_INSECURE_INTERNAL_HOSTS", async () => {
+      process.env.MCP_INSECURE_INTERNAL_HOSTS = "portal";
+      const res = await POST(
+        makeRequest({
+          url: "http://other-internal:3000/api/mcp/v1",
+          bearer: "dpfmcp_X",
+          forwardedHost: "other-internal:3000",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it("ignores empty/whitespace entries in the allowlist", async () => {
+      process.env.MCP_INSECURE_INTERNAL_HOSTS = " , portal , ";
+      resolveMock.mockResolvedValue(null);
+      const res = await POST(
+        makeRequest({
+          url: "http://portal:3000/api/mcp/v1",
+          bearer: "dpfmcp_X",
+          forwardedHost: "portal:3000",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(401);
+    });
+  });
+
   it("rejects requests with disallowed Origin", async () => {
     const res = await POST(
       makeRequest({

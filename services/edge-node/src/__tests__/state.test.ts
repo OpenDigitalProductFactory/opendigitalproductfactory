@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
+import * as os from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,6 +13,15 @@ import {
   statePath,
   type EdgeNodeState,
 } from "../state";
+
+/**
+ * Read-time permission checks (mode 0600 + owner UID) only fire on
+ * POSIX hosts. CI runs on Linux so these tests are meaningful in CI;
+ * skip the perm-check assertions on Windows-host dev machines so
+ * local `pnpm test` still works during development.
+ */
+const isPosix = os.platform() !== "win32";
+const posixIt = isPosix ? it : it.skip;
 
 let dir: string;
 
@@ -63,10 +73,12 @@ describe("loadState", () => {
 });
 
 describe("saveState", () => {
-  it("writes the file with 0600 perms", async () => {
+  posixIt("writes the file with 0600 perms (POSIX only)", async () => {
+    // Windows doesn't honor `mode: 0o600` the way POSIX does; the
+    // stat will report 0666 there. The check is only meaningful on
+    // Linux (CI) and macOS (Mode 2 host). Skip elsewhere.
     await saveState(dir, sampleState);
     const stat = await fs.stat(statePath(dir));
-    // Check the lower 9 bits (rwxrwxrwx) match 0600 (rw-------).
     expect(stat.mode & 0o777).toBe(0o600);
   });
 
@@ -108,4 +120,50 @@ describe("clearState", () => {
   it("is a no-op when no state exists", async () => {
     await expect(clearState(dir)).resolves.toBeUndefined();
   });
+});
+
+describe("loadState — read-time permission enforcement (POSIX only)", () => {
+  posixIt("refuses to load a state file with mode 0644 (world-readable)", async () => {
+    await saveState(dir, sampleState);
+    // Loosen the perms to simulate an operator misconfiguration
+    // (e.g. backup tool snapshot, manual chmod, host bind-mount drift).
+    await fs.chmod(statePath(dir), 0o644);
+    await expect(loadState(dir)).rejects.toThrow(
+      /unsafe permissions.*expected mode 0600.*got 0644/,
+    );
+  });
+
+  posixIt("refuses to load a state file with mode 0666", async () => {
+    await saveState(dir, sampleState);
+    await fs.chmod(statePath(dir), 0o666);
+    await expect(loadState(dir)).rejects.toThrow(/unsafe permissions/);
+  });
+
+  posixIt("refuses to load a state file with mode 0400 (read-only but still wrong)", async () => {
+    // Read-only is the OTHER direction of mode mismatch — saveState
+    // requires write-then-chmod, but if an operator dropped a 0400
+    // file by hand (or restored from a backup with that mode), we
+    // refuse rather than guess at intent.
+    await saveState(dir, sampleState);
+    await fs.chmod(statePath(dir), 0o400);
+    await expect(loadState(dir)).rejects.toThrow(/unsafe permissions/);
+  });
+
+  posixIt("accepts the 0600 perms saveState writes", async () => {
+    // Round-trip through saveState then loadState — saveState already
+    // sets 0600, so this is the happy path. The earlier round-trip
+    // test covered behavior; this one specifically asserts the perms
+    // check passes for the canonical write path.
+    await saveState(dir, sampleState);
+    const stat = await fs.stat(statePath(dir));
+    expect(stat.mode & 0o777).toBe(0o600);
+    const loaded = await loadState(dir);
+    expect(loaded).toEqual(sampleState);
+  });
+
+  // Owner-mismatch test: we can't easily switch process UIDs inside
+  // a Vitest test (would need root + setuid), so the owner check is
+  // covered by code review + the integration-test runbook entry
+  // rather than a runtime test here. The mode check above is the
+  // most common real-world drift case and is fully covered.
 });
