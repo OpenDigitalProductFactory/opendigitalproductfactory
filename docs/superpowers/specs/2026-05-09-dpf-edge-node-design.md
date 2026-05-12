@@ -21,6 +21,38 @@
 >   table, not a parallel identity). Security review summary,
 >   release / rollback story, and verification gate matrix
 >   added. Spec promoted from "research stub" to "binding".
+> - 2026-05-12 — **security review pass (corrective).** Six findings
+>   from the post-implementation security review addressed:
+>   (1) "machine-bound" token language downgraded to "per-node
+>   bearer (Phase 0)" with a documented Phase 1+ upgrade path
+>   (mTLS / DPoP / platform-attested keys);
+>   (2) ingestion-attribution rule made explicit — `edgeNodeId`,
+>   `nodeId`, `principalId`, `sourceSlug` derive from
+>   `resolveEdgeNodeAuth` only, never from the request body;
+>   (3) REST ingestion controls section added (per-node rate
+>   limits, payload size caps, `runKey` idempotency / replay
+>   protection, failure-audit requirements, freshness window) —
+>   binding for Phase 0;
+>   (4) Phase 0 storage downgrade documented as such, with the
+>   required compensating controls (non-root UID, 0600 perms,
+>   no Docker socket mount, backup exclusion, log redaction,
+>   rotation on suspected copy);
+>   (5) Quarantine triggers split into Phase 0 (manual operator
+>   action only) vs Phase 1+ (anomaly detection, re-attestation
+>   drift, missed-heartbeat timer);
+>   (6) Critical / Important / Acceptable security findings list
+>   updated to match the corrections, with explicit notes on what
+>   is Phase 0 risk vs Phase 1+ closure.
+>   (7) Orphan scope name `edge:register` from the original draft
+>   removed; canonical scope vocabulary `edge:enroll`,
+>   `edge:heartbeat`, `edge:rotate`, `discovery:submit`,
+>   `metrics:submit`, `mcp:gateway`, `a2a:gateway`, `policy:fetch`
+>   documented as the authoritative list.
+>   (8) Runtime-language drift documented: Phase 0 Mode 1 shipped
+>   Node.js / TypeScript (PR #501) against a spec that named Go.
+>   The drift is acknowledged with two acceptable paths forward
+>   (standardize on TypeScript or hold the Go decision and rewrite
+>   Mode 1) — decision must land before Mode 2 macOS native ships.
 >
 > Source plan: `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
 > (the "Discovery plane refactor" subsection under Future direction).
@@ -153,11 +185,11 @@ that's compatible with its environment.
 
 | Platform | Runtime | Notes |
 |---|---|---|
-| Linux native Docker | Container with `network_mode: host` (or `macvlan`) | Default for Linux server installs. Decision between `network_mode: host` (observer) and `macvlan` (LAN peer) is an open question — see below. |
-| macOS | Native LaunchAgent | Statically-linked binary (~5 MB, Go or Rust). Same auto-start mechanism as the platform itself. |
-| Windows | Native service | Same binary, Windows service registration. |
-| Docker Desktop fallback | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. |
-| Remote managed host | Native service or container per host class | Same code, same API contract, same auth scope. |
+| Linux native Docker (Mode 1) | Container with `network_mode: host` (or `macvlan`) | Default for Linux server installs. Phase 0 ships Node.js / TypeScript per [`services/edge-node`](../../../services/edge-node) (PR #501); the open-question resolution below documents the runtime-language drift between this spec and the shipped service. Decision between `network_mode: host` (observer) and `macvlan` (LAN peer) is an open question — see below. |
+| macOS native (Mode 2) | Native LaunchDaemon (or LaunchAgent) | Self-contained binary. The original spec assumed Go or Rust for the native-binary path; Phase 0's Mode 1 actually shipped Node.js / TypeScript (#501). The runtime for Mode 2 is **open**: either re-pack the Node service as a self-contained binary (`bun build --compile`, `pkg`, `nexe`) or revisit the Go choice for the native-binary path. See "Runtime drift — Mode 1 Node.js, Mode 2 TBD" in Open question resolutions. |
+| Windows native (Mode 4) | Native Windows Service | Same runtime decision as Mode 2 — open pending the drift resolution. |
+| Docker Desktop fallback (Mode 3) | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. Same Node.js / TypeScript image as Mode 1. |
+| Remote managed host | Native service or container per host class | Same API contract, same auth scope; runtime per the host's mode. |
 
 **Hard constraint preserved from the prior draft (refined):** Docker
 Desktop runs Docker Engine inside a lightweight Linux VM and proxies
@@ -225,7 +257,7 @@ and lifecycle are distinct:
 | Role | managed host / network participant — discovers and reports about its environment | user client endpoint — receives notifications, runs the mobile app, holds offline cache |
 | Trust posture | machine principal under Authority Core policy; runs unattended; long-lived credentials with rotation | user-bound principal (one or more user sessions per device); attended; credentials tied to user auth |
 | Capability envelope | discovery, host metrics, identity broker, MCP/A2A gateway, policy enforcement, tunnel — i.e. *infrastructure* roles | notifications, offline queueing, deep-link routing, biometric local-auth, geofence-aware actions — i.e. *user-experience* roles |
-| Token namespace | `dpfedge_*` (machine, machine-bound, short-lived, rotated via heartbeat) | mobile JWT today; OIDC + PKCE refresh tokens per the Mobile spec evolution (see Doctrine Contract 10) |
+| Token namespace | `dpfedge_*` (per-node bearer over HTTPS; short-lived, rotated via heartbeat; Phase 0 lacks cryptographic token binding — see "Token model" below) | mobile JWT today; OIDC + PKCE refresh tokens per the Mobile spec evolution (see Doctrine Contract 10) |
 | Owns physical-host visibility? | yes (the entire reason the Edge Node exists) | no |
 | Stored in `EdgeNode` table? | yes | no — has its own `MobileDevice` table per the Mobile spec |
 | Per-Principal model? | one EdgeNode → one machine principal | many MobileDevices → one user principal (multi-device) |
@@ -281,24 +313,73 @@ dpfedge_<token>      # or dpfagent_<token>
 With narrow scope grants:
 
 ```
-edge:register
-edge:heartbeat
-edge:rotate
-discovery:submit
-metrics:submit
-mcp:gateway
-a2a:gateway
-policy:fetch
+edge:enroll       # bootstrap-token scope only; consumed at enroll
+edge:heartbeat    # keepalive + rotation; allowed for pending and quarantined nodes
+edge:rotate       # token rotation (server-side stamps rotatedAt, mints new token)
+discovery:submit  # POST /api/v1/edge/discovery-runs; trusted-only
+metrics:submit    # reserved for future host-metrics capability slice
+mcp:gateway       # reserved for future MCP-gateway capability slice
+a2a:gateway       # reserved for future A2A-gateway capability slice
+policy:fetch      # reserved for future policy-cache capability slice
 ```
 
-Tokens are machine-bound (issued by the Authority Core to a specific
-`EdgeNode.nodeId`), short-lived, and rotate via a heartbeat / refresh
-flow. They are *not* user-issued through Admin > Platform Development
-the way MCP tokens are. The MCP token model
+The scope vocabulary is closed; new scopes require an AGENTS.md
+update + this list. The first-draft `edge:register` name was renamed
+to `edge:enroll` during the implementation in PR #498 — the
+bootstrap-token scope is `edge:enroll`, the enrollment ceremony
+endpoint is `POST /api/v1/edge/enroll`, and the in-code constant
+`EDGE_NODE_ALIAS_KIND`-adjacent surfaces all use the `enroll`
+spelling. This list is authoritative; if you see `edge:register`
+in an older draft or commit message, it's the orphan name and
+should be treated as `edge:enroll`.
+
+Tokens are **per-node bearers**: issued by the Authority Core to a
+specific `EdgeNode.nodeId`, short-lived, rotated via heartbeat /
+refresh. They are *not* user-issued through Admin > Platform
+Development the way MCP tokens are. The MCP token model
 (`packages/db/prisma/schema.prisma:2974` — `tokenHash` unique, scopes
 array, capability gate, optional agent narrowing) is the right
 template; the data model differs only in ownership (machine, not user)
 and rotation cadence.
+
+**Phase 0 token-binding posture (downgrade documented).**
+
+A reviewer scoping this surface as "machine-bound" should read it
+carefully: Phase 0 transports the node token as a bearer credential
+in `Authorization: Bearer dpfedge_<secret>` over HTTPS. There is no
+cryptographic proof-of-possession (no DPoP / OAuth2 mTLS / RFC 8705
+token binding), no CSR-signed key, no enclave-attested key. **A
+copied token impersonates the node** until the server-side rotation
+or revocation invalidates it. The compensating controls are:
+
+- **Short TTL.** Default 24h; configurable downward per deployment.
+- **Heartbeat rotation.** Every successful heartbeat returns a new
+  `dpfedge_*` token and rotates the previous one out of grace; the
+  exposure window for a copied token narrows to (heartbeat interval
+  + grace window) ≈ 1 hour by default.
+- **Audit + anomaly signals.** Authority Core records every
+  authenticated call and the operator can quarantine on anomaly.
+- **No re-enrollment shortcut.** A stolen token cannot bootstrap a
+  fresh long-lived credential — re-enrollment is operator-explicit
+  (see "Re-enrollment").
+
+**Phase 1+ upgrade path (planned, not committed).** Real machine
+binding requires one of:
+
+1. **mTLS** with a Phase-1 PKI: the Edge Node generates a keypair at
+   install, the Authority signs a CSR during enrollment, every
+   request authenticates the cert. Operator burden is the PKI.
+2. **DPoP-style proof-of-possession** (RFC 9449): every request
+   carries a signed JWT proving control of a private key bound to
+   the issued node token. Lower operator burden than mTLS; needs
+   server-side replay protection per the RFC.
+3. **Platform-attested keys** (TPM 2.0 / Secure Enclave / Windows
+   Platform Crypto): the private key never leaves the host's secure
+   element. Strongest guarantee; constrained by platform availability.
+
+Until one of those lands, **the spec calls the token a "per-node
+bearer," not "machine-bound."** All other references in this spec
+(security review, R&B, comparator analysis) are amended to match.
 
 ## Enrollment, rotation, and lifecycle (first-draft contract)
 
@@ -350,13 +431,69 @@ ephemeral / pre-approved / tagged auth keys).
 | Token | Scope | Lifetime | Issuer | Storage |
 |---|---|---|---|---|
 | **Bootstrap token** | `edge:enroll` only | one-time, ≤ 15 min default TTL | Authority Core (Admin > Platform Development action; or installer auto-issued for local-host enrollment) | not persisted on Edge Node — consumed and discarded |
-| **Node token** (`dpfedge_*`) | `edge:heartbeat`, `discovery:submit`, plus capability-specific scopes from §"Token model" above | rotating; default 24h with refresh | Authority Core after successful enroll | OS-native secure store (Keychain / Credential Manager / libsecret); never written to plaintext config |
-| **Refresh** | `edge:rotate` | bound to machine fingerprint + recent heartbeat | Authority Core | Edge Node calls heartbeat with current node token; Authority Core mints replacement token in response |
+| **Node token** (`dpfedge_*`) | `edge:heartbeat`, `discovery:submit`, plus capability-specific scopes from §"Token model" above | rotating; default 24h with refresh | Authority Core after successful enroll | **Preferred:** OS-native secure store (Keychain / Credential Manager / libsecret). **Phase 0 fallback (Linux container Mode 1):** 0600 file under the container's state directory — explicitly a security downgrade; see "Phase 0 storage downgrade" below for required controls. |
+| **Refresh** | `edge:rotate` | per-node bearer; rotation gate is a successful heartbeat with the current token (Phase 0). Phase 1+ adds cryptographic key binding (mTLS / DPoP / platform-attested), at which point rotation also re-attests possession of the key. | Authority Core | Edge Node calls heartbeat with current node token; Authority Core mints replacement token in response |
 
 Bootstrap tokens are **never reusable**. Operators wanting bulk
 enrollment must request N bootstrap tokens (Tailscale's one-off-key
 pattern); a long-lived shared bootstrap token would replicate the
 "shared API key in CI" anti-pattern.
+
+### Phase 0 storage downgrade (Linux container Mode 1)
+
+The OS-native secure store is the preferred storage target. The
+Linux-container Phase 0 deployment (Mode 1) cannot reach the host's
+libsecret / Keychain / Credential Manager from inside a container,
+so it falls back to a **0600 file under the container's
+container-private state directory** (currently
+`/var/lib/dpf-edge-node/state.json`, implemented in
+[`services/edge-node/src/state.ts`](../../../services/edge-node/src/state.ts)).
+This is **explicitly a security downgrade** from the preferred
+posture; the spec accepts it for Phase 0 only because the
+container's filesystem is owned by a dedicated UID that no other
+workload shares.
+
+The downgrade is acceptable **only if** all of the following
+controls are present:
+
+- **File owner**: a non-root, dedicated UID created by the
+  Dockerfile (e.g. `dpf:dpf`). Never `root`. The state dir is
+  `chown`ed to that UID at image build time.
+- **File mode**: `0600`. Enforced at write time (`fs.writeFile` /
+  `fs.chmod` after `rename` to absorb umask drift); verified at
+  read time before trusting the contents.
+- **Volume isolation**: the state directory is a docker-managed
+  volume, not a bind-mount from the host. Mounting host paths into
+  the Edge Node container is forbidden (and would defeat the
+  whole point of running outside the container fleet in the
+  native Mode-2 path).
+- **No Docker socket mount**: the Edge Node container does **not**
+  mount `/var/run/docker.sock`. Docker introspection in Mode 1 is
+  out of scope; if needed, it must be a Mode-2 native binary
+  capability with explicit operator opt-in.
+- **Backup exclusion**: this state file holds a live credential.
+  Backup tooling that snapshots the volume must redact or
+  exclude `state.json`. The installer's backup runbook calls
+  this out explicitly.
+- **Log redaction**: the binary never logs `state.nodeToken` in
+  plaintext. Telemetry that includes the state object MUST
+  redact the token field; verified by a unit test against the
+  log-emitter.
+- **Rotation on suspected copy**: if an operator suspects the
+  state file was copied (host compromise, volume snapshot
+  exfiltration, container escape), they revoke the node from
+  Admin > Platform Development. The next request from any
+  holder of the copied token returns 401 and forces
+  re-enrollment.
+- **No re-use across nodes**: each Edge Node has its own state
+  directory. If two Edge Node containers share a volume by
+  configuration mistake, both observe the other's nodeId on
+  startup and refuse to launch; the binary's `loadState` does a
+  fingerprint check before trusting cached state.
+
+Mode 2 (native macOS / Windows) and Mode 4 (TPM-attested, Phase
+1+) bypass this downgrade entirely — they use Keychain /
+Credential Manager / libsecret / TPM directly.
 
 ### Approval policy
 
@@ -380,24 +517,44 @@ auto-approval for local-host nodes**:
 
 ### Quarantine
 
-A node moves to `trustState: quarantined` when:
+**Phase 0 contract: manual operator action is the only trigger.**
 
-- the platform's anomaly detection flags the node's submissions
-  (e.g. observation deltas exceed configured deviance thresholds),
-- the operator manually quarantines via Admin > Platform
-  Development,
-- the node fails a periodic re-attestation check
-  (binary-signature mismatch, host-fingerprint drift),
-- the node misses heartbeats beyond the soft-fail window plus a
-  configured grace period.
+A node moves to `trustState: quarantined` in Phase 0 only when an
+operator explicitly quarantines it via Admin > Platform
+Development. Implementations and tests in Phase 0 must rely on this
+exact contract — no automatic flips, no anomaly-detection wiring,
+no re-attestation polling, no heartbeat-miss timer. The Authority
+Core surface in Phase 0 exposes a single operator action and
+records `quarantinedAt` + `quarantineReason`.
 
-**Quarantined behavior:** the node may still heartbeat (so operators
-can see it's alive) but **must not** submit observations that flow
-into trusted inventory. Submissions from quarantined nodes are
-dropped (or archived to a separate `QuarantinedSubmission` table if
-the operator opts in for forensic review). Quarantine never
-auto-clears; an operator action is required to restore trust or
-revoke.
+**Phase 1+ planned triggers (out of scope for Phase 0).**
+
+The following triggers are part of the long-term contract but
+must NOT ship in Phase 0. Each requires its own design slice and
+security review before implementation:
+
+- **Anomaly-detection trigger.** The platform's observation-delta
+  analyzer flags a node's submissions (deviance thresholds tuned
+  per capability). Requires a baseline-modeling subsystem and a
+  per-node anomaly-score table. Out of Phase 0 scope.
+- **Re-attestation drift trigger.** Periodic re-attestation
+  detects binary-signature mismatch or host-fingerprint drift.
+  Requires (a) signed binary distribution per the
+  "Release and rollback" section and (b) the fingerprint subsystem
+  not yet defined for Phase 0.
+- **Missed-heartbeat trigger.** Auto-quarantine after N consecutive
+  missed heartbeats beyond the soft-fail window plus an operator-
+  configured grace. Requires the soft-fail window subsystem
+  ("Soft-fail policy windows" below) to be fully implemented; in
+  Phase 0 the window is documented but not enforced server-side.
+
+**Quarantined behavior (applies to any trigger):** the node may
+still heartbeat (so operators can see it's alive) but **must not**
+submit observations that flow into trusted inventory. Submissions
+from quarantined nodes are dropped (or archived to a separate
+`QuarantinedSubmission` table if the operator opts in for forensic
+review). Quarantine never auto-clears; an operator action is
+required to restore trust or revoke.
 
 ### Revocation
 
@@ -581,14 +738,14 @@ human-triggered manual sweep that requires the
 container-bound pathway the Edge Node is meant to escape.
 
 Edge Nodes need a different shape. They run scans on their own host
-and POST results in. Proposed:
+and POST results in. Wire shape:
 
 ```
 POST /api/v1/edge/discovery-runs
 Authorization: Bearer dpfedge_<token>
 
 {
-  "nodeId": "edge_a1b2c3",
+  "runKey": "uuid-v4-from-the-edge-node",
   "agentMode": "native-darwin",
   "agentVersion": "0.1.0",
   "observedAt": "2026-05-09T12:00:00Z",
@@ -599,9 +756,41 @@ Authorization: Bearer dpfedge_<token>
 }
 ```
 
-Or expose it as an MCP tool (`submit_discovery_observations`) that
-goes through the same `/api/mcp/v1` machinery so all governance,
-audit, and rate-limiting applies uniformly.
+**Identity attribution rule (CRITICAL).** The persisted
+`edgeNodeId`, `nodeId`, `principalId`, and `sourceSlug` columns on
+the resulting `DiscoveryRun` row **come exclusively from the
+authenticated token's resolution context** (`resolveEdgeNodeAuth`
+in `apps/web/lib/auth/edge-node-token.ts`). Body fields that
+shadow identity attributes are either:
+
+- **not present in the wire shape** (the canonical envelope above
+  omits `nodeId`, `edgeNodeId`, `principalId` entirely — server
+  reads them from the bearer token), or
+- **informational only and verified before use.** If a future
+  envelope revision re-introduces a body `nodeId` for diagnostic
+  echo purposes, the server compares it against the auth-resolved
+  `nodeId` and returns `401 nodeId_mismatch` on any divergence.
+  The body field is **never** the source of truth for attribution.
+
+This rule closes a class of impersonation attacks where a compromised
+or curious node holding a valid token for node A submits observations
+claiming to come from node B by writing `B` in the body. The token
+is the only authority on which Edge Node submitted the run.
+
+The earlier proposed envelope above (older draft) included
+`"nodeId": "edge_a1b2c3"` in the request body; that shape is
+**deprecated** by this rule. The current implementation in
+`apps/web/app/api/v1/edge/discovery-runs/route.ts` does not include
+a body `nodeId` field — the Zod schema rejects unknown keys via
+`.passthrough()` semantics on the wire shape, and only the
+auth-resolved identity reaches `persistSubmittedDiscoveryRun`.
+
+Alternatively, the same ingestion can be exposed as an MCP tool
+(`submit_discovery_observations`) that goes through the
+`/api/mcp/v1` machinery for governance, audit, and rate-limiting.
+For Phase 0 the REST surface is the chosen path — see "REST
+ingestion controls (Phase 0)" below for the controls the REST path
+must add to compensate for not riding on the MCP envelope.
 
 **Server-side ingestion pipeline (corrected):** Edge Node
 submissions must **not** rerun local collectors. Today's
@@ -613,13 +802,17 @@ straight to normalization + persistence:
 
 ```
 Edge Node submission
-  → validate envelope (auth, schema, freshness, edgeNodeId trust)
+  → authenticate (resolveEdgeNodeAuth) → { edgeNodeId, nodeId,
+                                            principalId, trustState }
+  → validate envelope (Zod schema, freshness window,
+                       payload size caps, rate-limit gate,
+                       runKey idempotency check)
   → normalizeDiscoveredFacts(submittedItems, submittedRelationships)
   → inferCrossCollectorRelationships
   → persistSubmittedDiscoveryRun({
-       edgeNodeId,
-       agentMode,
-       agentVersion,
+       edgeNodeId,     // from auth, NEVER from body
+       agentMode,      // from body (informational; not identity)
+       agentVersion,   // from body (informational; not identity)
        submittedOutput,
        trigger: "edge_node",
      })
@@ -635,6 +828,83 @@ deduplication / promotion / Neo4j-projection logic is shared between
 them; only the source of the observation set differs. This is the
 function this epic introduces alongside the
 `/api/v1/edge/discovery-runs` route.
+
+### REST ingestion controls (Phase 0)
+
+The MCP transport at `/api/mcp/v1` provides governance, audit, rate
+limiting, and replay protection by construction. The Phase 0 REST
+path at `/api/v1/edge/*` chose REST first for the reasons in
+"Open question resolutions" — but that choice does not exempt the
+REST path from those controls. They must be added explicitly. The
+controls below are **binding** for Phase 0 and **must not** be
+deferred into "we'll add it when we move to MCP."
+
+- **Per-node rate limits.** Token-bucket gate per
+  `EdgeNodeToken.id` (or `EdgeNode.id`, whichever maps to the
+  rotating identity). Default Phase 0 ceilings:
+  - `/api/v1/edge/heartbeat`: 12 req/min per node (1 every 5s
+    sustained; bursts allowed up to 5 req/sec for 10s).
+  - `/api/v1/edge/discovery-runs`: 4 req/min per node, 60 req/hour
+    sustained. Discovery is meant to be a sweep, not a stream.
+  - `/api/v1/edge/enroll`: 1 req per bootstrap-token per session;
+    single-use enforcement already covers this server-side via the
+    `consumedByEdgeNodeId @unique` constraint.
+  Exceeding the bucket returns `429 Too Many Requests` with a
+  `Retry-After` header; audit records every 429.
+- **Payload size caps.** Hard limits enforced by the Zod schema on
+  the route handler **before** parsing the body:
+  - `items` array: ≤ 10,000 entries per run (already enforced).
+  - `relationships` array: ≤ 20,000 entries per run (already
+    enforced).
+  - Single-item `rawData`: ≤ 64 KB (string-encoded). Larger
+    payloads are split across multiple submissions.
+  - Total request body: ≤ 5 MB. Above that, the Next.js route
+    handler returns `413 Payload Too Large` before parsing.
+- **Run idempotency / replay protection.** Edge Nodes generate a
+  `runKey` (UUID v4) per discovery sweep. The server enforces
+  uniqueness on the `(edgeNodeId, runKey)` pair:
+  - First submission with a given `(edgeNodeId, runKey)` is
+    persisted normally.
+  - Re-submission of the same pair (e.g. network retry after a
+    response timeout) returns `200 OK` with the prior result
+    snapshot — idempotent. The Authority Core does NOT re-process
+    the run.
+  - Submission with a `runKey` already used by a *different*
+    `edgeNodeId` is silent: each node has its own runKey
+    namespace, so the schema's existing `runKey @unique` on
+    `DiscoveryRun` must be revised to `@@unique([runKey,
+    edgeNodeId])` in a follow-up migration. **This is a
+    Phase 0 schema follow-up gating discovery-run ingestion.**
+- **Replay protection on the auth credential.** Bearer tokens
+  themselves are not nonce-protected in Phase 0 (per the Phase 0
+  token-binding posture). A stolen token can replay until
+  rotation; the heartbeat-rotation cadence and the
+  trust-state-based quarantine path are the compensating controls.
+  Phase 1+ DPoP / mTLS adds per-request replay protection by
+  construction.
+- **Failure-audit requirements.** Every authenticated request
+  writes a `ToolExecution` row per AGENTS.md §8, including
+  failures. The minimum audit surface for the REST routes:
+  - 401 / 403: log `edgeNodeId` (if resolved), the failing scope,
+    and the reason code (`token_not_found`, `node_revoked`,
+    `scope_disallowed`, `node_quarantined`, etc.). Never log the
+    bearer plaintext.
+  - 429: log `edgeNodeId`, the route, and the bucket-state
+    diagnostic. Aggregated counters surface in the operator UI
+    so an Edge Node burning through its budget is visible.
+  - 5xx from `persistSubmittedDiscoveryRun`: log full error with
+    stack trace **server-side only**; client response masks the
+    internals.
+- **Freshness window.** The `observedAt` field on submissions must
+  be within ±24h of server time (default; per-deployment
+  configurable). Outside that window returns
+  `400 stale_observation`. Prevents back-dated submissions that
+  could pollute inventory history.
+
+Phase 1+ MCP migration: when `submit_discovery_observations`
+ships as an MCP tool, the controls above migrate into the MCP
+governance plane and the REST path can be deprecated. Until
+then, every control listed above is a Phase 0 gate.
 
 ## Authentication-provider implications
 
@@ -683,14 +953,46 @@ revisit without re-opening the doctrine.
 
 ### Edge Node lifecycle
 
-- **Language for the binary** *(durable)*: **Go**. Mature
-  cross-compilation, static linking, ~5 MB binary target, well-known
-  signing/notarization toolchains on every platform we target,
-  battle-tested in the comparators (osquery is C++, but Tailscale,
-  Cloudflare Tunnel `cloudflared`, and HashiCorp Boundary are Go and
-  closer to what we're building). Rust was the alternative;
-  rejected because the marginal correctness gain doesn't offset the
-  team's existing Go fluency and the cross-compilation story.
+- **Language for the binary** *(open — drift documented)*:
+  - **Spec's original resolution (durable):** Go. Mature
+    cross-compilation, static linking, ~5 MB binary target,
+    well-known signing/notarization toolchains on every platform,
+    battle-tested in the comparators (Tailscale, Cloudflare Tunnel
+    `cloudflared`, HashiCorp Boundary are Go and closer to what
+    we're building).
+  - **What actually shipped in Phase 0:** Node.js / TypeScript.
+    PR #501 (A3 — Edge Node service skeleton) implements the Mode 1
+    container service in TypeScript at
+    [`services/edge-node`](../../../services/edge-node), built on
+    `node:24-alpine`. Container image size is ~150 MB (vs Go's
+    ~5 MB target). This was a divergence from the spec's resolution
+    and was not amended in the spec before merge.
+  - **Status (2026-05-12):** the runtime drift is acknowledged but
+    not resolved. Two acceptable paths forward, both **must** be
+    decided before Mode 2 (macOS native binary) ships:
+    1. **Amend the spec to Node.js + bundling.** Standardize on
+       TypeScript across Modes 1 / 2 / 3 / 4. Use `bun build --compile`
+       (the leading single-file Node bundler in 2026) or `pkg` /
+       `nexe` for the native modes. Trade-offs: larger artifact
+       (~50 MB even bundled), worse cold-start than Go, but uses the
+       team's existing TypeScript fluency end-to-end and avoids a
+       Go/TS impedance mismatch between Mode 1 and Mode 2.
+    2. **Hold the spec's Go decision and rewrite Mode 1.** PR #501's
+       TypeScript service is replaced with a Go service for Mode 1
+       and used as-is for Mode 2 / 4. Trade-offs: smaller artifact,
+       better cold-start, matches the comparators — at the cost of
+       throwing away PR #501's working code and adding a Go
+       toolchain to the build pipeline.
+    The decision must be paired with a Mode 2 binary scaffolding PR.
+    Until then, the Mode 1 service in main is the authoritative
+    runtime and this open-question remains the source of truth on
+    the divergence.
+  - **Why this matters for security review:** the Phase 0 storage
+    downgrade controls (Phase 0 storage downgrade — Linux container
+    Mode 1) are scoped to the Node.js container shipped in #501.
+    If the Mode 1 implementation is rewritten in Go, those controls
+    must be re-applied to the Go service before that rewrite ships;
+    they are not transferable for free.
 - **Linux default networking** *(scoped to first slice)*:
   **`network_mode: host`** (observer-only). LLDP/CDP receive and
   segregated scanner roles require `macvlan`; that's a follow-on
@@ -923,9 +1225,11 @@ inventory.
   `/api/v1/edge/discovery-runs`, Authority Core is the SoT.
 - **Rejected:** authentication via a single API token. Netbox's
   API tokens are user-scoped, long-lived, and one-token-per-user.
-  Our `dpfedge_*` tokens are machine-bound, short-lived, and
-  rotate per heartbeat — the difference matters because the
-  Edge Node is an *unattended machine principal*, not a user.
+  Our `dpfedge_*` tokens are **per-node bearers** (Phase 0;
+  Phase 1+ adds cryptographic binding per "Token model"),
+  short-lived, and rotate per heartbeat — the difference matters
+  because the Edge Node is an *unattended machine principal*,
+  not a user.
 
 **Steampipe** (Turbot, MPL-2.0). SQL-over-cloud-APIs.
 
@@ -1037,12 +1341,16 @@ in order of severity:
 ### Critical (must be closed before Phase 0 lands)
 
 - **Node-token storage on the host.** Plaintext in config files
-  is the Wazuh anti-pattern. **Resolution:** OS-native secure
-  store — Keychain on macOS, Credential Manager on Windows,
+  is the Wazuh anti-pattern. **Resolution (preferred):** OS-native
+  secure store — Keychain on macOS, Credential Manager on Windows,
   libsecret on Linux. The binary reads the token from secure
-  storage at startup, never writes it to disk in plaintext. The
-  installer prompts for the OS-native secure-store password if
-  it cannot retrieve it non-interactively.
+  storage at startup, never writes it to disk in plaintext.
+  **Resolution (Phase 0 Mode 1 fallback):** a 0600 file in a
+  container-private volume, with the full controls in the
+  "Phase 0 storage downgrade" section above (non-root UID, no
+  Docker socket mount, backup exclusion, log redaction, rotation
+  on suspected copy). **This is an explicit downgrade**, not the
+  target posture; Modes 2 / 4 use the OS-native store directly.
 - **Bootstrap token reuse.** The osquery footgun.
   **Resolution:** every bootstrap token is **single-use**,
   enforced server-side by the `consumedAt` / `consumedByEdgeNodeId`
@@ -1054,6 +1362,27 @@ in order of severity:
   the local installer for the local-host Edge Node, and only
   with matching host fingerprint. Any mismatch falls back to
   operator approval. Configurable but defaulted-secure.
+- **Token impersonation by copy (Phase 0).** A copied
+  `dpfedge_*` token impersonates the node because Phase 0 has
+  no cryptographic token binding. **Resolution (Phase 0):** the
+  compensating controls listed in the "Phase 0 token-binding
+  posture" subsection — short TTL, heartbeat rotation, audit +
+  anomaly signals, no re-enrollment shortcut.
+  **Resolution (Phase 1+):** the upgrade path in the same
+  subsection — mTLS / DPoP / platform-attested keys. This finding
+  is **accepted as a Phase 0 risk** with the compensating
+  controls; **moves to "Critical, must close" before Phase 2
+  (macOS native binary) ships**, because Mode 2 is the path that
+  most plausibly handles tokens that escape the container
+  boundary.
+- **Ingestion attribution by body.** A node with a valid token
+  for Edge Node A could claim observations from Edge Node B by
+  shadowing `nodeId` in the request body. **Resolution:** the
+  ingestion route reads `edgeNodeId`, `nodeId`, and `principalId`
+  **only** from `resolveEdgeNodeAuth`. The Zod schema for
+  `POST /api/v1/edge/discovery-runs` does not include identity
+  fields. See "Identity attribution rule" in the ingestion
+  contract section.
 
 ### Important (must be addressed in Phase 0 or Phase 1)
 
@@ -1070,17 +1399,32 @@ in order of severity:
   but the network never went down" and quarantine it. The
   soft-fail windows are also operator-configurable per scope so
   high-stakes scopes (`mcp:gateway`, `a2a:gateway`) deny on
-  Authority Core unreachable regardless.
+  Authority Core unreachable regardless. Phase 0 note:
+  enforcement of the soft-fail-window timers is a Phase 1 item
+  per "Quarantine — Phase 1+ planned triggers" above; Phase 0
+  documents the windows but does not auto-trigger on
+  reachability claims.
 - **Binary tampering.** A modified Edge Node binary could
-  fabricate observations. **Resolution:** binary is signed
-  (Developer ID on macOS, Authenticode on Windows, GPG/Sigstore
-  on Linux) and the installer pins the expected signing
-  identity. Re-attestation on every heartbeat includes a hash
-  of the binary; mismatch triggers automatic quarantine.
+  fabricate observations. **Resolution (Phase 0):** binary is
+  signed (Developer ID on macOS, Authenticode on Windows,
+  GPG/Sigstore on Linux) and the installer pins the expected
+  signing identity. **Phase 0 limit:** the spec does NOT
+  ship automatic re-attestation quarantine in Phase 0 — that
+  belongs to the "Phase 1+ planned triggers" list in the
+  Quarantine section. Phase 0 relies on signed distribution +
+  manual operator quarantine when an operator sees evidence of
+  tamper. The auto-quarantine-on-binary-hash-mismatch flow is
+  Phase 1+.
 - **Linux capability surface.** Documented above:
   `CAP_NET_RAW` + `CAP_NET_ADMIN`, no `--privileged`, no
   `CAP_SYS_ADMIN`. The container variant's compose definition
   pins these and refuses to start with broader capabilities.
+- **REST ingestion controls.** REST chose Phase 0 — see "REST
+  ingestion controls (Phase 0)" in the ingestion contract
+  section for the binding list (per-node rate limits, payload
+  size caps, `runKey` idempotency, failure audit, freshness
+  window). Phase 1+ MCP migration moves these into the MCP
+  governance plane.
 
 ### Acceptable risks (documented, not blocked)
 
@@ -1096,6 +1440,12 @@ in order of severity:
   soft-fail policy windows are designed to handle exactly this,
   and heartbeat retries with backoff mean the node doesn't
   hammer the Authority Core on recovery.
+- **Phase 0 bearer-token replay during the rotation window.** A
+  copied token is valid until rotation; the heartbeat cadence
+  + rotation-grace bound the exposure window to approximately
+  one hour. Accepted for Phase 0 with the documented
+  compensating controls; Phase 1+ token binding closes this
+  hole structurally.
 
 ### Audit-trail consistency
 
