@@ -2799,10 +2799,34 @@ model EdgeNode {
   capabilityRows EdgeNodeCapability[]
   observations   DiscoveryRun[]       @relation("EdgeNodeObservations")
   bootstrapToken BootstrapToken?      @relation("EdgeNodeBootstrapToken")
+  tokens         EdgeNodeToken[]
 
   @@index([status])
   @@index([trustState])
   @@index([lastSeenAt])
+}
+
+// Per-node rotating bearer token. dpfedge_<base32> on the wire; sha256
+// hash stored at rest. Replaces the bootstrap token after enroll; rotates
+// per heartbeat per the spec's rotation contract. Multiple rows per
+// EdgeNode are expected (current + recently-rotated, accepted within
+// a grace window so heartbeat-race conditions don't lock the node out).
+model EdgeNodeToken {
+  id               String    @id @default(cuid())
+  edgeNodeId       String
+  tokenHash        String    @unique
+  prefix           String
+  scopes           String[]  @default([])
+  issuedAt         DateTime  @default(now())
+  expiresAt        DateTime
+  rotatedAt        DateTime?
+  revokedAt        DateTime?
+  revocationReason String?
+  lastUsedAt       DateTime?
+
+  node EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@index([edgeNodeId, revokedAt, expiresAt])
 }
 
 // One-time bootstrap token used in the Edge Node enrollment ceremony.
