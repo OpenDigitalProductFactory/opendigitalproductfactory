@@ -18,6 +18,14 @@ export default defineConfig({
     globals: false,
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
+    server: {
+      deps: {
+        // Auth.js imports the Next server runtime by extensionless subpath.
+        // Keep it inside Vite's resolver so the alias below can normalize that
+        // import for Node/Vitest on both Windows and Linux CI.
+        inline: ["next-auth"],
+      },
+    },
   },
   resolve: {
     dedupe: ["react", "react-dom"],
