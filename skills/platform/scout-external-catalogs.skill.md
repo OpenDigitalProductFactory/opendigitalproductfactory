@@ -51,6 +51,6 @@ repository. The source catalog is reference material, not code to import.
   with the suggestion.
 - Do not auto-create skills or coworkers from catalog entries. Humans review
   backlog items first.
-- Default cadence is weekly; do not lower it without a clear justification.
+- Default cadence is daily during active platform evolution; lower it to weekly or monthly once the archetype landscape stabilizes.
 - Single source for v1 (the 500-agents list). Generalise to other awesome-agent
   catalogs only after humans have curated at least one full run.
