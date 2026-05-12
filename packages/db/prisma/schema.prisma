@@ -217,14 +217,16 @@ model TeamMembership {
 }
 
 model Principal {
-  id          String           @id @default(cuid())
-  principalId String           @unique
-  kind        String
-  status      String           @default("active")
-  displayName String
-  aliases     PrincipalAlias[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                    String           @id @default(cuid())
+  principalId           String           @unique
+  kind                  String
+  status                String           @default("active")
+  displayName           String
+  aliases               PrincipalAlias[]
+  edgeNodesApproved     EdgeNode[]       @relation("EdgeNodeApprover")
+  bootstrapTokensIssued BootstrapToken[] @relation("BootstrapTokenIssuer")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 }
 
 model PrincipalAlias {
@@ -2753,11 +2755,21 @@ model DiscoveryRun {
   itemCount               Int                               @default(0)
   relationshipCount       Int                               @default(0)
   notes                   Json?
+  // Edge Node attribution per spec § Edge Node registry. Optional FK
+  // because (a) historical runs predate the Edge Node concept and
+  // (b) bootstrap-discovery runs (portal-resident) have no edgeNodeId.
+  // When set, this DiscoveryRun was submitted by an Edge Node via
+  // /api/v1/edge/discovery-runs and routed through
+  // persistSubmittedDiscoveryRun.
+  edgeNodeId              String?
   discoveredItems         DiscoveredItem[]
   discoveredRelations     DiscoveredRelationship[]
   fingerprintObservations DiscoveryFingerprintObservation[]
   confirmedEntities       InventoryEntity[]                 @relation("InventoryEntityConfirmedRun")
   confirmedRelations      InventoryRelationship[]           @relation("InventoryRelationshipConfirmedRun")
+  edgeNode                EdgeNode?                         @relation("EdgeNodeDiscoveryRuns", fields: [edgeNodeId], references: [id])
+
+  @@index([edgeNodeId])
 }
 
 model DiscoveredItem {
@@ -7224,4 +7236,158 @@ model EvidenceSource {
 
   @@index([evidenceBundleId])
   @@index([sourceType])
+}
+
+// ── DPF Edge Node (Phase 0 — A1) ────────────────────────────────────────────
+//
+// Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+// Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md
+//
+// Per AGENTS.md §11 principal-convergence rule, an EdgeNode's identity
+// is also represented as a PrincipalAlias row (aliasType = "edge_node",
+// aliasValue = EdgeNode.nodeId). The EdgeNode model itself stores
+// operational state; authorization decisions resolve through the
+// convergent Principal model. The application layer (A2) creates the
+// Principal + PrincipalAlias pair atomically with the EdgeNode row on
+// successful enrollment.
+
+model EdgeNode {
+  id          String  @id @default(cuid())
+  // Stable external identifier used in API URLs and tokens. Distinct
+  // from `id` (the cuid surrogate). Per spec, do not conflate the two.
+  nodeId      String  @unique
+  displayName String
+  // darwin | win32 | linux
+  platform    String
+  // native | container-host | container-vm
+  installMode String
+  version     String
+
+  // Operational state (changes on heartbeat / timeout):
+  //   pending  - enrolled but no heartbeat yet
+  //   active   - heartbeat received within the soft-fail window
+  //   offline  - heartbeat missed past threshold
+  //   quarantined - alive but submissions dropped (see trustState)
+  status     String    @default("pending")
+  // Trust state (changes on operator action / lifecycle events):
+  //   pending     - awaiting operator approval (default for remote nodes)
+  //   trusted     - submissions accepted into inventory
+  //   quarantined - alive but submissions dropped (operator can investigate)
+  //   revoked     - tokens invalidated; row preserved for audit
+  trustState String    @default("pending")
+  lastSeenAt DateTime?
+
+  // Capability advertisement (the agent's claim of what it can do).
+  // Authority's accepted set lives in EdgeNodeCapability rows. Stored
+  // here as a denormalized JSON array for fast read; the
+  // EdgeNodeCapability rows are the source of truth for per-capability
+  // mode + status.
+  capabilities Json
+  // Free-form: hostname, host fingerprint, operator-assigned tags.
+  // Hostname / IP intentionally not first-class fields per Wazuh-IP-as-key
+  // anti-pattern (R&B section).
+  metadata     Json?
+
+  // ── Auth (per spec § Token namespaces and lifecycle) ─────────────
+  // dpfedge_* node token, hashed at rest (mirrors McpApiToken pattern).
+  // Null until enrollment completes.
+  // Phase 0: single hash (atomic rotation; no grace window).
+  // Phase 1+: may add `previousTokenHash` for graceful rotation.
+  tokenHash      String?   @unique
+  // First 8 chars after `dpfedge_` prefix, for visual ID only. Not auth.
+  tokenPrefix    String?
+  tokenRotatedAt DateTime?
+
+  // ── Enrollment lifecycle (per spec § Enrollment, rotation, lifecycle)
+  enrolledAt            DateTime?
+  // Set when the trustState transitions from `pending` to `trusted`,
+  // either by operator approval or auto-approve policy.
+  approvedAt            DateTime?
+  // FK to the Principal that approved this node. NULL for auto-approve
+  // (installer-issued local-host bootstrap); populated for operator
+  // approval flows.
+  approvedByPrincipalId String?
+
+  // Quarantine + revocation (per spec § Quarantine / § Revocation)
+  quarantinedAt    DateTime?
+  quarantineReason String?
+  revokedAt        DateTime?
+  revocationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  approvedBy     Principal?           @relation("EdgeNodeApprover", fields: [approvedByPrincipalId], references: [id])
+  capabilityRows EdgeNodeCapability[]
+  discoveryRuns  DiscoveryRun[]       @relation("EdgeNodeDiscoveryRuns")
+  consumedTokens BootstrapToken[]     @relation("BootstrapTokenConsumer")
+
+  @@index([trustState])
+  @@index([status])
+  @@index([tokenHash])
+  @@index([lastSeenAt])
+}
+
+model BootstrapToken {
+  id String @id @default(cuid())
+  // Hashed at rest (mirrors McpApiToken pattern). Plaintext is shown
+  // to the operator exactly once at issuance and never persisted.
+  tokenHash String @unique
+  // First 8 chars after `dpfboot_` prefix, for visual ID in UI lists.
+  prefix    String
+  // Phase 0 ships only `edge:enroll` scope. Reserved column for future
+  // token kinds that might share this table.
+  scope     String @default("edge:enroll")
+
+  issuedAt            DateTime @default(now())
+  // FK to the Principal that issued this token (operator action via
+  // Admin > Platform Development, or the installer auto-issuing for
+  // local-host bootstrap).
+  issuedByPrincipalId String
+  // Per spec § Token namespaces and lifecycle: ≤15 min default TTL,
+  // operator-configurable up to 24h max. Application enforces the cap.
+  expiresAt           DateTime
+
+  // Single-use semantics. consumedAt + consumedByEdgeNodeId set when
+  // an EdgeNode successfully enrolls with this token. After that, the
+  // token is no longer valid for any further enrollment attempt.
+  consumedAt           DateTime?
+  consumedByEdgeNodeId String?
+
+  // Operators can pre-revoke a token before consumption.
+  revokedAt DateTime?
+
+  // Relations
+  issuedBy           Principal @relation("BootstrapTokenIssuer", fields: [issuedByPrincipalId], references: [id])
+  consumedByEdgeNode EdgeNode? @relation("BootstrapTokenConsumer", fields: [consumedByEdgeNodeId], references: [id])
+
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@index([consumedAt])
+}
+
+model EdgeNodeCapability {
+  id         String @id @default(cuid())
+  // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
+  edgeNodeId String
+  // Capability identifier from the spec § Edge Node capability envelope.
+  // Phase 0 accepts only "discovery.network".
+  capability String
+  // Authority's per-node decision:
+  //   enabled         - capability is active
+  //   reporting-only  - agent advertises it but Authority doesn't accept submissions
+  //   disabled        - agent cannot use this capability
+  mode       String @default("disabled")
+  // Last-known health from the agent's self-report.
+  //   healthy | degraded | failing | unknown
+  status     String @default("unknown")
+  // Free-form: error messages, metric snapshots the agent attached.
+  evidence   Json?
+  reportedAt DateTime @default(now())
+
+  node EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, capability])
+  @@index([capability])
 }
