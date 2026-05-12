@@ -2430,6 +2430,18 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "run_hive_scout_ingest",
+    description: "Run one external catalog scouting pass, diff the results against DPF coworker and skill coverage, and create deduplicated backlog suggestions for any uncovered archetype gaps.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "attribute_entity_to_product",
     description: "Link a discovered inventory entity to a portfolio taxonomy node so it counts toward the managed product estate. Use to resolve catalog_match_ambiguous or attribution_gap quality issues.",
     inputSchema: {
@@ -2910,7 +2922,7 @@ export async function executeTool(
   toolName: string,
   rawParams: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; agentId?: string; threadId?: string },
+  context?: { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string },
 ): Promise<ToolResult> {
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
@@ -9130,6 +9142,19 @@ export async function executeTool(
         message: result.skipped
           ? result.skipReason ?? "Discovery triage skipped."
           : `Discovery triage processed ${result.metrics.processed} entities with ${result.metrics.autoAttributed} auto-attributed.`,
+        data: result as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "run_hive_scout_ingest": {
+      const { runHiveScoutIngest } = await import("@/lib/actions/hive-scout/ingest-500-agents");
+      const result = await runHiveScoutIngest({
+        actorAgentId: context?.agentId,
+        taskRunId: context?.taskRunId,
+      });
+      return {
+        success: true,
+        message: `Hive Scout parsed ${result.catalogEntries} entries, detected ${result.gaps} gaps, created ${result.created} backlog suggestion${result.created === 1 ? "" : "s"}, skipped ${result.duplicates} duplicate${result.duplicates === 1 ? "" : "s"}, and deferred ${result.deferred}.`,
         data: result as unknown as Record<string, unknown>,
       };
     }

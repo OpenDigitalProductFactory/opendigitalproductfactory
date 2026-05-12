@@ -9,7 +9,17 @@ import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
+import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
 import type { UserContext } from "@/lib/permissions";
+
+async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Promise<string> {
+  const dbPrompt = await loadPrompt("route-persona", agentId, fallbackPrompt);
+  const dbIdentity = await loadPrompt("platform-identity", "identity-block");
+  const dbPreamble = await loadPrompt("platform-preamble", "platform-preamble");
+  const dbMission = await loadPrompt("platform-mission", "company-mission");
+  const preamble = [dbIdentity, dbMission, dbPreamble].filter(Boolean).join("\n\n");
+  return preamble ? preamble + "\n\n" + dbPrompt : dbPrompt;
+}
 
 /**
  * Server-side agent resolver with DB-loaded prompts and skills.
@@ -36,18 +46,33 @@ export async function resolveAgentForRouteWithPrompts(
     return { ...agent, skills };
   }
 
-  // Load DB-powered prompt (falls back to the hardcoded one)
-  const dbPrompt = await loadPrompt("route-persona", agent.agentId, agent.systemPrompt);
-  const dbIdentity = await loadPrompt("platform-identity", "identity-block");
-  const dbPreamble = await loadPrompt("platform-preamble", "platform-preamble");
-  const dbMission = await loadPrompt("platform-mission", "company-mission");
-
-  // Order: identity (who you are + page context rules) → mission → behavioral preamble → role persona
-  const preamble = [dbIdentity, dbMission, dbPreamble].filter(Boolean).join("\n\n");
-
   return {
     ...agent,
     skills,
-    systemPrompt: preamble ? preamble + "\n\n" + dbPrompt : dbPrompt,
+    systemPrompt: await loadPromptBackplane(agent.agentId, agent.systemPrompt),
+  };
+}
+
+export async function resolveAgentByIdWithPrompts(
+  agentId: string,
+  _userContext: UserContext,
+): Promise<AgentInfo> {
+  const identity = resolveCoworkerIdentity(agentId);
+  const agentName = identity?.displayName ?? identity?.agentName ?? agentId;
+  const fallbackPrompt = `You are ${agentName}. Complete the assigned scheduled work with your granted tools, prefer concrete action over narration, and finish with a concise operational summary.`;
+
+  await ensureAgentPrincipalIdentity(agentId);
+
+  const dbSkills = await getSkillsForAgentLegacy(agentId);
+  const skills: AgentSkill[] = dbSkills as AgentSkill[];
+
+  return {
+    agentId,
+    agentName,
+    agentDescription: `${agentName} scheduled specialist`,
+    canAssist: true,
+    sensitivity: "internal",
+    skills,
+    systemPrompt: await loadPromptBackplane(agentId, fallbackPrompt),
   };
 }

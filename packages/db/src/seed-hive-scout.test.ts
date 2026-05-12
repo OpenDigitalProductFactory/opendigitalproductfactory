@@ -1,0 +1,161 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  HIVE_SCOUT_AGENT_ID,
+  HIVE_SCOUT_ROUTE_CONTEXT,
+  HIVE_SCOUT_SCHEDULE,
+  HIVE_SCOUT_TASK_ID,
+  HIVE_SCOUT_TASK_TITLE,
+  buildHiveScoutScheduledPrompt,
+} from "./hive-scout-config";
+import { parseFrontmatter } from "./seed-skills";
+import { ensureHiveScoutScheduledTask } from "./seed-hive-scout";
+
+describe("Hive Scout seed helper", () => {
+  const user = {
+    findFirst: vi.fn(),
+  };
+  const scheduledAgentTask = {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  };
+  const scheduledJob = {
+    upsert: vi.fn(),
+  };
+
+  beforeEach(() => {
+    user.findFirst.mockReset();
+    scheduledAgentTask.findUnique.mockReset();
+    scheduledAgentTask.create.mockReset();
+    scheduledAgentTask.update.mockReset();
+    scheduledJob.upsert.mockReset();
+    delete process.env.INSTALL_TIMEZONE;
+  });
+
+  afterEach(() => {
+    delete process.env.INSTALL_TIMEZONE;
+  });
+
+  it("builds a scheduled prompt that invokes run_hive_scout_ingest", () => {
+    const prompt = buildHiveScoutScheduledPrompt();
+    expect(prompt).toContain("run_hive_scout_ingest");
+    expect(prompt).toContain("external catalog");
+  });
+
+  it("registers external-catalog-scout as a narrow specialist in the agent registry", () => {
+    const registryPath = join(__dirname, "..", "data", "agent_registry.json");
+    const raw = JSON.parse(readFileSync(registryPath, "utf8")) as {
+      agents: Array<{
+        agent_id: string;
+        agent_name: string;
+        displayName?: string;
+        aliases?: string[];
+        config_profile?: { tool_grants?: string[] };
+      }>;
+    };
+
+    const scout = raw.agents.find((agent) => agent.agent_name === HIVE_SCOUT_AGENT_ID);
+    expect(scout).toBeDefined();
+    expect(scout?.displayName).toBe("External Catalog Scout");
+    expect(scout?.aliases).toContain("hive-scout");
+    expect(scout?.config_profile?.tool_grants).toContain("backlog_write");
+    expect(scout?.config_profile?.tool_grants).toContain("registry_read");
+    expect(scout?.config_profile?.tool_grants).not.toContain("sandbox_execute");
+  });
+
+  it("assigns the external catalog skill and route persona to the Hive Scout coworker", () => {
+    const skillPath = join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "skills",
+      "platform",
+      "scout-external-catalogs.skill.md",
+    );
+    const promptPath = join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "prompts",
+      "route-persona",
+      "external-catalog-scout.prompt.md",
+    );
+
+    const skill = parseFrontmatter(readFileSync(skillPath, "utf8")).frontmatter;
+    const prompt = readFileSync(promptPath, "utf8");
+
+    expect(skill.assignTo).toEqual([HIVE_SCOUT_AGENT_ID]);
+    expect(skill.allowedTools).toContain("run_hive_scout_ingest");
+    expect(prompt).toContain("name: external-catalog-scout");
+    expect(prompt).toContain("run_hive_scout_ingest");
+  });
+
+  it("creates the scheduled task for the first superuser", async () => {
+    user.findFirst.mockResolvedValue({ id: "user-admin" });
+    scheduledAgentTask.findUnique.mockResolvedValue(null);
+
+    const result = await ensureHiveScoutScheduledTask(
+      { user, scheduledAgentTask, scheduledJob } as never,
+      new Date("2026-05-11T12:00:00Z"),
+    );
+
+    expect(result).toEqual({ created: true, ownerUserId: "user-admin" });
+    expect(scheduledAgentTask.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        taskId: HIVE_SCOUT_TASK_ID,
+        agentId: HIVE_SCOUT_AGENT_ID,
+        title: HIVE_SCOUT_TASK_TITLE,
+        routeContext: HIVE_SCOUT_ROUTE_CONTEXT,
+        schedule: HIVE_SCOUT_SCHEDULE,
+        timezone: "UTC",
+        ownerUserId: "user-admin",
+      }),
+    });
+    expect(scheduledJob.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { jobId: HIVE_SCOUT_TASK_ID },
+      }),
+    );
+  });
+
+  it("updates the existing task and preserves nextRunAt", async () => {
+    process.env.INSTALL_TIMEZONE = "America/Chicago";
+    user.findFirst.mockResolvedValue({ id: "user-admin" });
+    scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: HIVE_SCOUT_TASK_ID,
+      nextRunAt: new Date("2026-05-12T08:17:00Z"),
+    });
+
+    const result = await ensureHiveScoutScheduledTask(
+      { user, scheduledAgentTask, scheduledJob } as never,
+      new Date("2026-05-11T12:00:00Z"),
+    );
+
+    expect(result).toEqual({ created: false, ownerUserId: "user-admin" });
+    expect(scheduledAgentTask.update).toHaveBeenCalledWith({
+      where: { taskId: HIVE_SCOUT_TASK_ID },
+      data: expect.objectContaining({
+        agentId: HIVE_SCOUT_AGENT_ID,
+        timezone: "America/Chicago",
+        ownerUserId: "user-admin",
+        nextRunAt: new Date("2026-05-12T08:17:00Z"),
+      }),
+    });
+  });
+
+  it("fails loudly when no superuser exists", async () => {
+    user.findFirst.mockResolvedValue(null);
+
+    await expect(
+      ensureHiveScoutScheduledTask(
+        { user, scheduledAgentTask, scheduledJob } as never,
+        new Date("2026-05-11T12:00:00Z"),
+      ),
+    ).rejects.toThrow("seed: no superuser found");
+  });
+});

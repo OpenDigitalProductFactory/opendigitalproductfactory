@@ -8,7 +8,6 @@ import { routeWorkItem } from "./route-work-item";
 import { issueReportTriage } from "./issue-report-triage";
 import { agentTaskDispatch } from "./agent-task-dispatch";
 import { evalBackground, probeBackground } from "./eval-background";
-import { hiveScoutIngest } from "./hive-scout-ingest";
 import { brandExtract } from "./brand-extract";
 import { buildReviewVerification } from "./build-review-verification";
 import { deliberationRun } from "./deliberation-run";
@@ -34,7 +33,6 @@ export const allFunctions = [
   agentTaskDispatch,
   evalBackground,
   probeBackground,
-  hiveScoutIngest,
   brandExtract,
   buildReviewVerification,
   deliberationRun,

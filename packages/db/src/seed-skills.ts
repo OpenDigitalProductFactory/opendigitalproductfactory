@@ -28,6 +28,7 @@ type SkillFrontmatter = {
 // All known agent IDs — used when assignTo includes "*"
 const ALL_AGENT_IDS = [
   "portfolio-advisor",
+  "external-catalog-scout",
   "inventory-specialist",
   "ea-architect",
   "hr-specialist",
@@ -163,13 +164,63 @@ function discoverSkillFiles(): Array<{ category: string; filePath: string }> {
   return results;
 }
 
+type SkillAssignmentSeedClient = Pick<PrismaClient, "skillAssignment">;
+
+export async function reconcileSkillAssignments(
+  prisma: SkillAssignmentSeedClient,
+  skillId: string,
+  targetAgents: string[],
+  priority = 10,
+): Promise<{ created: number; removed: number }> {
+  const existingAssignments = await prisma.skillAssignment.findMany({
+    where: { skillId },
+    select: { agentId: true, assignedBy: true },
+  });
+
+  const desiredAgents = new Set(targetAgents);
+  const existingAgentIds = new Set(existingAssignments.map((assignment) => assignment.agentId));
+  let created = 0;
+  let removed = 0;
+
+  for (const agentId of targetAgents) {
+    if (existingAgentIds.has(agentId)) continue;
+    await prisma.skillAssignment.create({
+      data: {
+        skillId,
+        agentId,
+        priority,
+        enabled: true,
+        assignedBy: "system-seed",
+      },
+    });
+    created += 1;
+  }
+
+  for (const assignment of existingAssignments) {
+    if (assignment.assignedBy !== "system-seed") continue;
+    if (desiredAgents.has(assignment.agentId)) continue;
+    await prisma.skillAssignment.delete({
+      where: {
+        skillId_agentId: {
+          skillId,
+          agentId: assignment.agentId,
+        },
+      },
+    });
+    removed += 1;
+  }
+
+  return { created, removed };
+}
+
 export async function seedSkills(prisma: PrismaClient): Promise<void> {
   const files = discoverSkillFiles();
   if (files.length === 0) return;
 
   let created = 0;
   let updated = 0;
-  let assignments = 0;
+  let assignmentsCreated = 0;
+  let assignmentsRemoved = 0;
 
   for (const { category, filePath } of files) {
     const raw = readFileSync(filePath, "utf-8");
@@ -226,26 +277,17 @@ export async function seedSkills(prisma: PrismaClient): Promise<void> {
     const assignTo = frontmatter.assignTo ?? [];
     const targetAgents = assignTo.includes("*") ? ALL_AGENT_IDS : assignTo;
 
-    for (const agentId of targetAgents) {
-      const existing = await prisma.skillAssignment.findUnique({
-        where: { skillId_agentId: { skillId, agentId } },
-      });
-      if (!existing) {
-        await prisma.skillAssignment.create({
-          data: {
-            skillId,
-            agentId,
-            priority: assignTo.includes("*") ? 0 : 10, // Route-specific skills get higher priority
-            enabled: true,
-            assignedBy: "system-seed",
-          },
-        });
-        assignments++;
-      }
-    }
+    const reconcileResult = await reconcileSkillAssignments(
+      prisma,
+      skillId,
+      targetAgents,
+      assignTo.includes("*") ? 0 : 10,
+    );
+    assignmentsCreated += reconcileResult.created;
+    assignmentsRemoved += reconcileResult.removed;
   }
 
   console.log(
-    `Seeded skills: ${created} created, ${updated} updated, ${assignments} assignments`,
+    `Seeded skills: ${created} created, ${updated} updated, ${assignmentsCreated} assignments created, ${assignmentsRemoved} assignments removed`,
   );
 }
