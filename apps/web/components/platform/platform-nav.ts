@@ -52,6 +52,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     subItems: [
       { label: "Overview", href: "/platform/ai" },
       { label: "Operations Map", href: "/platform/ai/operations-map" },
+      { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },
       { label: "Assignments", href: "/platform/ai/assignments" },
       { label: "Prompts", href: "/platform/ai/prompts" },
       { label: "Skills", href: "/platform/ai/skills" },
