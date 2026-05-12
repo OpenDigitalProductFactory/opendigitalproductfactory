@@ -223,6 +223,7 @@ model Principal {
   status      String           @default("active")
   displayName String
   aliases     PrincipalAlias[]
+  edgeNode    EdgeNode?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 }
@@ -2753,11 +2754,96 @@ model DiscoveryRun {
   itemCount               Int                               @default(0)
   relationshipCount       Int                               @default(0)
   notes                   Json?
+  edgeNodeId              String?
+  edgeNode                EdgeNode?                         @relation("EdgeNodeObservations", fields: [edgeNodeId], references: [id], onDelete: SetNull)
   discoveredItems         DiscoveredItem[]
   discoveredRelations     DiscoveredRelationship[]
   fingerprintObservations DiscoveryFingerprintObservation[]
   confirmedEntities       InventoryEntity[]                 @relation("InventoryEntityConfirmedRun")
   confirmedRelations      InventoryRelationship[]           @relation("InventoryRelationshipConfirmedRun")
+
+  @@index([edgeNodeId])
+}
+
+// Edge Node registry — implements DPF Edge Node and Discovery Plane
+// Architecture spec (docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md).
+// Identity for an Edge Node lives on Principal + PrincipalAlias
+// (kind="edge-node", aliasType="edge-node") per AGENTS.md §11
+// Principal convergence. This table holds host-specific attributes
+// only and is keyed 1:1 to Principal via principalId.
+model EdgeNode {
+  id                    String    @id @default(cuid())
+  principalId           String    @unique
+  nodeId                String    @unique
+  platform              String
+  installMode           String
+  version               String
+  status                String    @default("pending")
+  trustState            String    @default("pending")
+  lastSeenAt            DateTime?
+  capabilities          Json      @default("[]")
+  metadata              Json?
+  enrollmentTokenId     String?
+  enrolledAt            DateTime?
+  approvedAt            DateTime?
+  approvedByPrincipalId String?
+  tokenRotatedAt        DateTime?
+  quarantinedAt         DateTime?
+  quarantineReason      String?
+  revokedAt             DateTime?
+  revocationReason      String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  principal      Principal            @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  capabilityRows EdgeNodeCapability[]
+  observations   DiscoveryRun[]       @relation("EdgeNodeObservations")
+  bootstrapToken BootstrapToken?      @relation("EdgeNodeBootstrapToken")
+
+  @@index([status])
+  @@index([trustState])
+  @@index([lastSeenAt])
+}
+
+// One-time bootstrap token used in the Edge Node enrollment ceremony.
+// Single-use: consumedAt + consumedByEdgeNodeId pin a token to exactly
+// one EdgeNode. Hashed at rest (mirrors McpApiToken pattern).
+model BootstrapToken {
+  id                   String    @id @default(cuid())
+  tokenHash            String    @unique
+  prefix               String
+  scope                String    @default("edge:enroll")
+  issuedAt             DateTime  @default(now())
+  issuedByPrincipalId  String
+  expiresAt            DateTime
+  consumedAt           DateTime?
+  consumedByEdgeNodeId String?   @unique
+  revokedAt            DateTime?
+  revocationReason     String?
+  metadata             Json?
+
+  consumedByEdgeNode EdgeNode? @relation("EdgeNodeBootstrapToken", fields: [consumedByEdgeNodeId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([consumedAt])
+}
+
+// Capability advertisements from an Edge Node — what the node claims
+// it can do, along with evidence the Authority Core can audit and
+// the operator-set mode (enabled | reporting-only | disabled).
+model EdgeNodeCapability {
+  id         String   @id @default(cuid())
+  edgeNodeId String
+  capability String
+  mode       String   @default("reporting-only")
+  status     String   @default("healthy")
+  evidence   Json?
+  reportedAt DateTime @default(now())
+
+  node EdgeNode @relation(fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, capability])
+  @@index([capability])
 }
 
 model DiscoveredItem {
