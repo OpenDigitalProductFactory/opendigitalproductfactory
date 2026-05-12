@@ -3,14 +3,21 @@
 This is the end-user install guide for the Open Digital Product Factory
 on **Apple Silicon Macs** (M1 / M2 / M3 / M4).
 
-> **Status: preview.** The macOS installer code is complete and passes
-> static CI gates, but end-to-end runtime verification on real Apple
-> Silicon hardware has not yet been completed (the `macos-14` GHA
-> runner can't nest-virtualize Docker Desktop, so CI only exercises
-> the `--dry-run` path). See
-> [verification-runbook.md](verification-runbook.md) for the matrix
-> that needs to land before promoting to GA. The Windows installer
-> remains the only GA install surface today.
+> **Status: Early access — please try it!**
+>
+> The macOS installer is code-complete and passes static CI gates.
+> What it hasn't seen yet is a real install on a real Apple Silicon
+> Mac in the wild — the `macos-14` GHA runner can't nest-virtualize
+> Docker Desktop, so CI only exercises the `--dry-run` path.
+>
+> **If you have an Apple Silicon Mac, you can change that.** Follow
+> the steps below, then [tell us how it went](#help-us-graduate-to-ga)
+> — both success stories and "the installer hit a wall at step X"
+> reports are equally useful. A handful of community verification
+> reports is what we need to flip this guide from "early access" to
+> "GA."
+>
+> The Windows installer remains the only GA install surface today.
 
 For the architectural background, see the
 [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
@@ -203,6 +210,46 @@ The portal is still running at `http://localhost:3000`.
 | `bash uninstall-dpf.sh --purge` | Above + all DPF docker volumes (filtered by the `com.docker.compose.project=dpf` label so other stacks on the same host are untouched), `.env`, `~/.dpf`. Destructive — irreversible. |
 | `bash uninstall-dpf.sh --purge --keep-env` | Purge but retain `.env`. |
 | `bash uninstall-dpf.sh --purge --keep-state` | Purge but retain `~/.dpf` install history. |
+
+## Help us graduate to GA
+
+We can't run this installer on real Apple Silicon hardware from CI
+(the GHA `macos-14` runner can't nest-virtualize Docker Desktop), so
+the path from "early access" to "GA" runs through the community.
+If you ran the install above on a real Mac, **please file a quick
+report** — happy paths and failures are equally valuable.
+
+**One-minute report:**
+
+1. Open a [new GitHub issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new)
+   titled `Install verification — macOS <version> <arch>`
+   (example: `Install verification — macOS 14.5 arm64 (M2 Pro)`).
+2. Paste the output of:
+   ```bash
+   sw_vers && uname -srm
+   docker --version 2>/dev/null
+   echo "DPF version: $(grep DPF_INSTALLER_VERSION install-dpf.sh)"
+   ```
+3. Note which steps you completed from the
+   [verification runbook §2](verification-runbook.md#2-macos-apple-silicon-end-to-end-install)
+   and which (if any) failed.
+4. Attach the doctor bundle:
+   ```bash
+   bash install-dpf.sh doctor
+   # Then attach ~/.dpf/doctor-<timestamp>.tar.gz to the issue.
+   # Secrets are redacted automatically; you can review the bundle
+   # before sending.
+   ```
+
+The verification runbook also covers:
+
+- LaunchAgent surviving an actual reboot
+- Docker Desktop `.dmg` install flow on a Gatekeeper-fresh machine
+- Discovery collectors emitting real `pkgutil` / `brew` data
+- LLM provider round-trip (Model Runner)
+
+Any subset is useful. We don't need every checkbox before reading your
+report — we'll integrate findings as they arrive.
 
 ## Going further
 
