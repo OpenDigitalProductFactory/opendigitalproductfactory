@@ -260,6 +260,7 @@ That means:
 - the coworker uses business archetype, geography, and services delivered to ask the next useful question
 - the coworker verifies official sources before it marks any operational posture as ready
 - if the seed is missing or stale, the coworker researches from zero and records what it found
+- requirement intelligence improved by one install flows back to every other install through the hive mind (obfuscated contribution), so the seed grows over time without any one tenant becoming a single source of authority
 
 Archetypes should influence **what to investigate**, not silently determine **what is true**.
 
@@ -321,6 +322,16 @@ Examples:
 - jurisdiction-specific filing or inspection charges
 
 ## 10. Proposed Domain Model
+
+### 10.0 Conventions And Reuse Audit
+
+Before implementing the models below, the schema audit (AGENTS.md §11 Data Model Stewardship) MUST be honoured:
+
+- **Prisma naming.** Field names below are illustrative. Actual Prisma models use `id String @id @default(cuid())` and snake-free camelCase; suffixes like `licenseRecordId` collapse to `id`. Cross-model FKs follow the existing `*Id` convention (e.g., `organizationLicenseProfileId`).
+- **Reuse `TaxJurisdictionReference` shape, do not parallel it.** `TaxJurisdictionReference` (packages/db/prisma/schema.prisma:2268) already carries `countryCode`, `authorityName`, `authorityType`, `officialWebsiteUrl`, `sourceUrls`, `confidence`, `lastVerifiedAt`, and `staleAfterDays`. `LicenseRequirementReference` shares ~90% of that surface. The implementation slice MUST first decide between (a) extracting a shared `JurisdictionReference` model with domain-scoped child tables, or (b) keeping two domain-specific models and documenting the duplication as deliberate. This is an Open Question (§19) — not a free implementation choice.
+- **Reuse canonical identity.** Per AGENTS.md §11 Principal convergence (effective 2026-05-09), every identity-bearing entity introduced after that date is modeled as a `PrincipalAlias` linked to a single `Principal`. `PersonLicenseRecord` (§10.4) MUST resolve its holder through `principalAliasId`, not through a direct FK to `EmployeeProfile`, `User`, or any other identity table. The alias kind tells the platform what surface the holder authenticated from; the licensing record stays identity-neutral.
+- **Reuse canonical organization.** `Organization` is the canonical platform identity for the tenant (AGENTS.md §11). `OrganizationLicenseProfile` is a 1:1 readiness-posture extension, not a parallel organization model. Org name, address, contact info read from `Organization`.
+- **Canonical enums.** Every string field below that takes a fixed value set (`requirementType`, `scopeLevel`, `status`, `severity`, `displayType`, `requirementLevel`, `feeType`, `confidence`, `setupStatus`, `investigationMode`, `paymentStatus`, `financeHandoffMode`, `issueType`) is a canonical enum. Per AGENTS.md §3, valid values are defined once in `apps/web/lib/licensing.ts` and mirrored in the MCP tool definitions before any data uses them. The implementation plan calls out the full enum table.
 
 ### 10.1 `LicenseRequirementReference`
 
@@ -404,7 +415,7 @@ Purpose:
 Suggested fields:
 
 - `personLicenseRecordId`
-- `employeeProfileId` or future `PrincipalAlias` reference
+- `principalAliasId` (REQUIRED — AGENTS.md §11 Principal convergence, 2026-05-09). The alias resolves to a single `Principal`; the platform reads holder identity through that resolution, regardless of whether the holder is an employee, contractor, owner, or external designated responsible individual. No direct FK to `EmployeeProfile`, `User`, or `CustomerContact` is permitted.
 - `organizationId`
 - `requirementReferenceId`
 - `jurisdictionRefId`
@@ -501,6 +512,8 @@ The archetype layer should therefore provide:
 
 This is conceptually similar to the existing marketing skill-rule pattern, but it must stay guidance-oriented and verification-backed.
 
+**Archetype is bootstrap, not running config.** Once licensing investigation has produced `OrganizationLicenseRecord` / `PersonLicenseRecord` rows, those records are the running source of truth. Changing the archetype later does NOT retroactively rewrite recorded licensing posture; it only re-opens the investigation prompts for net-new questions. This mirrors the existing portal archetype rule (StorefrontConfig archetype is write-once bootstrap; vocabulary, sections, and now licensing investigation derive from it at setup, not continuously).
+
 ## 12. Coworker Investigation Capability
 
 The finance/compliance coworker should act as an expert investigator, not a static form filler.
@@ -534,6 +547,22 @@ The coworker must not:
 - invent legal conclusions from archetype alone
 - treat seed hints as authoritative
 - bury operational truth inside conversation only
+
+### 12.1 Background Verification
+
+Live source verification (fetching authority pages, refreshing requirement summaries, re-checking `lastVerifiedAt` against `staleAfterDays`) MUST run as a background job, not inside the user-facing dialog. The coworker triggers the job, persists a pending verification, and returns control to the user immediately. The dialog reflects the job's outcome on completion via the existing coworker busy-state + notification pattern. This matches the platform's "background eval/probes" doctrine — verification is never UI-blocking.
+
+### 12.2 Improvement Loop Signals
+
+Every DPF coworker emits improvement-loop telemetry; the licensing investigator is no expectation. Minimum signals:
+
+- `investigation_started` (archetype, country, region)
+- `requirement_seed_hit` vs `requirement_seed_miss` (so seed-coverage gaps surface as backlog items rather than silent guesses)
+- `verification_succeeded` vs `verification_failed` (with authority URL + reason)
+- `legal_review_needed_flag` (when the coworker correctly defers to human/specialist judgment)
+- `record_persisted` (organization vs person, jurisdiction, requirement type)
+
+These signals feed both the local improvement loop (per-install) and the hive contribution path (§18).
 
 ## 13. UX Home And Cross-Module Boundaries
 
@@ -579,6 +608,16 @@ Marketing surfaces should consume:
 - trust-badge candidates
 
 Marketing should never infer a credential that Compliance has not verified.
+
+### 13.5 DPF As Conduit, Not Partner
+
+DPF must NOT enroll as a registered partner, broker, or filing agent with any licensing authority, professional board, or state portal. The platform:
+
+- links to authority URLs (`officialWebsiteUrl`, `applicationUrl`, `renewalUrl`)
+- captures what the customer holds, when, and where the evidence lives
+- guides the customer through their own application/renewal with their own credentials and their own vendor agreements
+
+The platform never holds licensing-authority credentials on the customer's behalf, never submits filings as an authorized representative, and never sells "DPF is a licensed filing service" as a value proposition. This is the same conduit posture DPF takes with enterprise HRIS/ERP/banking integrations: the customer brings the account, the relationship, and the legal authorization; DPF orchestrates and records.
 
 ## 14. Seed Strategy And Coverage Order
 
@@ -642,6 +681,10 @@ Avoid these anti-patterns:
 - treating employee certifications as a substitute for company permits
 - treating company permits as a substitute for professional staff licensing
 - showing coworker guidance cards on the operational page instead of in the dedicated coworker UX
+- introducing a `PersonLicenseRecord.employeeProfileId` (or equivalent) FK that bypasses `PrincipalAlias` — violates AGENTS.md §11 Principal convergence
+- shipping `LicenseRequirementReference` as a parallel near-clone of `TaxJurisdictionReference` without resolving the §10.0 reuse audit
+- leaking customer-identifying data in hive contributions — obfuscation rules (§18) are non-negotiable
+- treating seed data as authoritative; absence of a seed entry is NOT evidence that no requirement exists
 
 ## 16. Recommended Rollout Phases
 
@@ -686,3 +729,64 @@ Recommended starting point:
 4. seed bootstrap data for USA, UK, and Australia only
 
 That creates real operational value quickly and gives the coworker somewhere truthful to persist its research before deeper automation is attempted.
+
+## 18. Platform Posture Alignment
+
+### 18.1 IT4IT Value Stream Mapping
+
+Licensing readiness is not a standalone product surface; it threads through the IT4IT v3.0.1 value streams DPF already aligns to:
+
+- **Strategy-to-Portfolio.** Archetype selection at onboarding seeds the licensing investigation. New service lines, new jurisdictions, and acquisitions re-enter the investigation loop here.
+- **Requirement-to-Deploy.** Net-new licensing requirements (a new state, a new regulated activity) flow as backlog items that the platform's own build loop can act on — including hive-contributed requirement refinements.
+- **Request-to-Fulfill.** Application, payment, renewal, and evidence collection are fulfillable workflows triggered from the Compliance workspace.
+- **Detect-to-Correct.** Stale verification, missed renewals, expired credentials, and unmet display obligations surface as `LicenseReadinessIssue` rows owned by Compliance.
+
+Each surface in §13 anchors to one of these streams; reviewers should be able to walk a record's lifecycle through them.
+
+### 18.2 TAK Governance Substrate
+
+Licensing data is exactly the kind of evidence-bearing operational record the Trusted AI Kernel governs:
+
+- every `OrganizationLicenseRecord` / `PersonLicenseRecord` carries `officialSourceUrl` + `lastVerifiedAt` (provenance + freshness)
+- every coworker action that mutates these records writes to `ToolExecution` per AGENTS.md §8 (audit trail)
+- every legal-interpretation deferral creates a `LicenseReadinessIssue` with `severity=legal_review_needed` rather than silently asserting a conclusion
+- agent `tool_grants` gate which coworker can read/write licensing records; default grants seed `active` for the bundled compliance coworker
+
+### 18.3 Hive Contribution And Reusability
+
+Licensing requirement intelligence is one of the highest-value hive-mind contribution surfaces DPF has — every install that researches "what does a plumbing contractor need in Travis County, TX" is producing data every other install can reuse. Design intent:
+
+- **Contributable.** `LicenseRequirementReference` rows (jurisdiction, authority, requirement type, scope level, summary, official URLs, renewal cadence, source URLs, confidence, last verified) are designed to flow back to the hive registry via the existing contribution pipeline.
+- **Obfuscated, not anonymous.** Per the standing rule, contributions carry a stable pseudonym per install — not the `Organization` name, not user PII, but a stable identifier that distinguishes contributors so the hive can weight signals from reliable contributors. `OrganizationLicenseRecord`, `PersonLicenseRecord`, fee amounts paid, license numbers, and any field tying the record to a specific business or person are NEVER contributed.
+- **One-way trust at first.** Phase 1 contributes intelligence outward; consumption of hive-refined requirements lands behind a separate review gate in a later phase to avoid trust loops.
+
+### 18.4 Single Org Per Install
+
+DPF is single-tenant per install. `OrganizationLicenseProfile` is therefore 1:1 with the install's `Organization`. Multi-tenant licensing posture is explicitly out of scope; cross-org learning happens through the hive contribution path, not through shared tenancy.
+
+## 19. Open Questions
+
+These decisions are deferred from spec to implementation planning; reviewers should agree the LIST is complete even if the answers aren't yet:
+
+1. **Reference model unification.** Extract a shared `JurisdictionReference` model with domain-scoped child tables (`TaxJurisdictionDetail`, `LicenseJurisdictionDetail`) vs. keep `TaxJurisdictionReference` and `LicenseRequirementReference` as separate models with documented duplication. Resolve before BI-LIC-F36A08 schema lands.
+2. **Holder kinds.** Should `PersonLicenseRecord.principalAliasId` be constrained to specific `Principal.kind` values (e.g., `person`, `employee`) or accept any kind? Owners and external designated responsible parties argue for permissive; safety argues for an explicit allow-list enum.
+3. **Display obligation evidence.** Is `evidenceArtifactId` a new model or a reuse of `ComplianceEvidence`? §13 implies Compliance is the home, so reuse seems likely — confirm before BI-LIC-247DB1.
+4. **Fee handoff to finance.** `LicenseFeeSchedule.financeHandoffMode` — does Finance get a journal entry, an AP bill, both, or a configurable choice? Coordinate with the finance team before BI-LIC-247DB1.
+5. **Background job substrate.** Verification runs as a background job (§12.1). Which queue/worker substrate? Reuse the existing function queue (`apps/web/lib/queue/functions/`) or new? Resolve before BI-LIC-3621D8.
+6. **Hive contribution cutover.** When does outward contribution land — alongside BI-LIC-AA90DB seed work, or after Phase 1 ships? §18.3 implies Phase 1; needs explicit sign-off.
+7. **Renewal-date timezone semantics.** `expiresAt`, `dueDate`, and renewal cadence all imply a timezone. Authority of record is the jurisdiction's timezone, not the org's — confirm and document the comparison rule before issue-detection logic lands.
+8. **Archetype V2 dependency.** The investigation heuristic layer (§11) is richer if `EP-ARCH-8D4F2A` Archetype Model V2 ships first. Does this epic block on it, design around current archetype shape, or ship a thin slice that upgrades when V2 lands?
+
+## 20. Acceptance Criteria
+
+The Phase 1 slice is accepted when ALL of the following hold:
+
+1. Schema migration applies cleanly on a fresh install and a populated install (AGENTS.md §5 gate 4).
+2. `next build` passes with zero errors; `vitest run` passes for affected files (AGENTS.md §5 gates 1–2).
+3. Compliance workspace renders organization licenses, person credentials, display obligations, fee schedule, and open issues for a seeded org; all theme-aware styling rules pass (AGENTS.md §12).
+4. PersonLicenseRecord resolves the holder exclusively via `principalAliasId`; static analysis or a vitest invariant prevents any direct FK to identity models.
+5. Coworker investigation flow can be exercised end-to-end against the Docker-served app: archetype + country in, structured records out, with legal-review issues created where appropriate (AGENTS.md §5 gate 3).
+6. Bootstrap seed covers USA, UK, Australia at the authority-directory level with `confidence`, `sourceUrls`, and `lastVerifiedAt` populated; absence of a seed entry surfaces a seed-coverage backlog item, not a silent skip.
+7. Hive contribution path produces an obfuscated, PII-free payload for at least `LicenseRequirementReference` rows; payload is reviewable in `/platform/hive` (or equivalent) before transmission.
+8. Every coworker tool call against licensing data writes to `ToolExecution`; the `/platform/ai/authority` surface shows the licensing tools and their grants.
+9. Documentation updated: this spec moves from "Draft for review" to "Accepted"; AGENTS.md and area `AGENTS.md` files are NOT duplicated; pointers added where needed.
