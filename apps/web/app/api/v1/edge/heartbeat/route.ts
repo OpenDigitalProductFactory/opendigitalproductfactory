@@ -17,7 +17,10 @@ import {
 } from "@dpf/db/edge-node-types";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
+import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
 import { recordHeartbeat } from "@/lib/edge-node/enrollment";
+
+const ROUTE_CONTEXT = "/api/v1/edge/heartbeat";
 
 const HeartbeatBody = z
   .object({
@@ -34,14 +37,28 @@ const HeartbeatBody = z
   .default({});
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const authResult = await resolveEdgeNodeAuth(
     request.headers.get("authorization"),
     "edge:heartbeat",
   );
   if (!authResult.ok) {
+    const status = heartbeatAuthStatus(authResult.error);
+    await writeEdgeNodeAudit({
+      route: "edge.heartbeat",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status,
+      success: false,
+      error: authResult.error,
+      summary: { scope: "edge:heartbeat" },
+    });
     return NextResponse.json(
       { ok: false, error: authResult.error, message: authResult.message },
-      { status: heartbeatAuthStatus(authResult.error) },
+      { status },
     );
   }
 
@@ -52,6 +69,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const text = await request.text();
     body = text.length > 0 ? JSON.parse(text) : {};
   } catch {
+    await writeEdgeNodeAudit({
+      route: "edge.heartbeat",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_json",
+    });
     return NextResponse.json(
       { ok: false, error: "invalid_json" },
       { status: 400 },
@@ -59,6 +87,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const parsed = HeartbeatBody.safeParse(body);
   if (!parsed.success) {
+    await writeEdgeNodeAudit({
+      route: "edge.heartbeat",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_body",
+    });
     return NextResponse.json(
       {
         ok: false,
@@ -76,6 +115,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       : {}),
   });
 
+  await writeEdgeNodeAudit({
+    route: "edge.heartbeat",
+    routeContext: ROUTE_CONTEXT,
+    startedAt,
+    edgeNodeId: authResult.edgeNodeRowId,
+    nodeId: authResult.nodeId,
+    principalId: null,
+    status: 200,
+    success: true,
+    summary: {
+      trustState: authResult.trustState,
+      capabilityReportCount: parsed.data.capabilityReports?.length ?? 0,
+      acceptedCapabilities: result.acceptedCapabilities,
+    },
+  });
   return NextResponse.json(
     {
       ok: true,

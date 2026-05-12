@@ -23,6 +23,9 @@ import { z } from "zod";
 import { prisma } from "@dpf/db";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
+import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
+
+const ROUTE_CONTEXT = "/api/v1/edge/discovery-runs";
 
 // Per spec § REST ingestion controls (Phase 0): observedAt must be
 // within +/- this window of server time, else 400 stale_observation.
@@ -67,14 +70,28 @@ const DiscoveryRunBody = z.object({
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const authResult = await resolveEdgeNodeAuth(
     request.headers.get("authorization"),
     "discovery:submit",
   );
   if (!authResult.ok) {
+    const status = discoveryAuthStatus(authResult.error);
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status,
+      success: false,
+      error: authResult.error,
+      summary: { scope: "discovery:submit" },
+    });
     return NextResponse.json(
       { ok: false, error: authResult.error, message: authResult.message },
-      { status: discoveryAuthStatus(authResult.error) },
+      { status },
     );
   }
 
@@ -82,6 +99,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = await request.json();
   } catch {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_json",
+    });
     return NextResponse.json(
       { ok: false, error: "invalid_json" },
       { status: 400 },
@@ -89,6 +117,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const parsed = DiscoveryRunBody.safeParse(body);
   if (!parsed.success) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_body",
+    });
     return NextResponse.json(
       {
         ok: false,
@@ -106,6 +145,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const observedAt = new Date(parsed.data.observedAt);
   const skewMs = Math.abs(Date.now() - observedAt.getTime());
   if (skewMs > FRESHNESS_WINDOW_MS) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "stale_observation",
+      summary: { skewMs, observedAt: parsed.data.observedAt },
+    });
     return NextResponse.json(
       {
         ok: false,
@@ -140,6 +191,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     },
   });
   if (prior) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 200,
+      success: true,
+      summary: {
+        idempotentReplay: true,
+        runKey: parsed.data.runKey,
+        priorRunId: prior.id,
+        priorStatus: prior.status,
+      },
+    });
     return NextResponse.json(
       {
         ok: true,
@@ -157,22 +224,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // TODO(persistence wiring): replace with `persistSubmittedDiscoveryRun({
-  //   edgeNodeId: authResult.edgeNodeRowId,
-  //   nodeId: authResult.nodeId,
-  //   runKey: parsed.data.runKey,
-  //   agentMode: parsed.data.agentMode,
-  //   agentVersion: parsed.data.agentVersion,
-  //   observedAt,
-  //   capabilities: parsed.data.capabilities,
-  //   items: parsed.data.items,
-  //   relationships: parsed.data.relationships ?? [],
-  //   warnings: parsed.data.warnings ?? [],
   // })`. Until the persistence pipeline is fully wired (it needs the
   // normalize → infer → persist chain hooked up against the route's
   // input shape), the route accepts the envelope, exercises the
-  // idempotency + freshness gates, and returns 202 so the contract
-  // is testable end-to-end.
+  // idempotency + freshness gates, audits, and returns 202 so the
+  // contract is testable end-to-end.
+  await writeEdgeNodeAudit({
+    route: "edge.discovery_runs.submit",
+    routeContext: ROUTE_CONTEXT,
+    startedAt,
+    edgeNodeId: authResult.edgeNodeRowId,
+    nodeId: authResult.nodeId,
+    principalId: null,
+    status: 202,
+    success: true,
+    summary: {
+      runKey: parsed.data.runKey,
+      agentMode: parsed.data.agentMode,
+      agentVersion: parsed.data.agentVersion,
+      itemCount: parsed.data.items.length,
+      relationshipCount: parsed.data.relationships?.length ?? 0,
+      capabilityCount: parsed.data.capabilities.length,
+      persistencePending: true,
+    },
+  });
   return NextResponse.json(
     {
       ok: true,
