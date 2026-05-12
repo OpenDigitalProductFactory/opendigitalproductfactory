@@ -1,47 +1,81 @@
 ---
 title: Founder Kernel
 pageKind: index
-status: published
-abstract: Top-level index for the founder kernel. Lists what's authored, what's planned, and how to navigate.
+status: draft
+abstract: Top-level index for the founder kernel — stances, heuristics, entities, and the raw sources that back them.
 ---
 
 ## What this is
 
-The founder kernel is the wisdom layer that ships with DPF. It answers the question every user eventually asks: **&#34;what would Mark do?&#34;** Pages here are not summaries of external material; they are the platform's stance, organised by kind.
+The founder kernel is the wisdom layer that ships with DPF. It answers the question every user eventually asks: **&#34;what would Mark do?&#34;** Pages here are not summaries of external material; they are the platform&#39;s stance, organised by kind.
 
-This index page exists to make the kernel navigable for humans. Agents discover pages via the wiki retrieval layer (`wiki_query` MCP tool, passive recall into Block 5) — they don't need this index. Humans do.
+This first cut was researched and drafted from Mark&#39;s public corpus (LinkedIn long-form articles, Open Group publications including the W205 *Shift to Digital Product* white paper, BriefingsDirect interviews, Architecture &amp; Governance Magazine, ServiceNow community blogs, IT4IT v3 contributions, DPROM, and CSDM v5 materials). Every page is **`status: draft`** — Mark reviews, edits, and flips to `published` what survives.
 
-## Page kinds
+## Stances — Mark&#39;s positions
 
-Six kinds live under `wiki/`. Their roles are defined formally in [`SCHEMA.md`](../SCHEMA.md); briefly:
+The judgment kernel. Cite these when grounding an answer in his thinking.
 
-| Kind | Role |
-|---|---|
-| **stance** | A position. &#34;Mark's view on X.&#34; First-person, cited, opinionated. The judgment surface. |
-| **heuristic** | An operational rule of thumb derived from a stance. Smaller, more specific, often quantitative. |
-| **entity** | A canonical concept the platform refers to repeatedly (Digital Product, Portfolio, Value Stream, …). Neutral voice. |
-| **decision** | A formal record of a choice with context, options considered, and consequences. `DEC-YYYY-…` slug. |
-| **summary** | A distillation of external source material, with at least one extracted stance or heuristic. |
-| **runbook** | Operational procedure for a specific task. Step-by-step. |
-| **index** | Scaffolding — pages like this one that help navigate the kernel. |
+- `[[stances/digital-product-is-the-unit-of-organization]]` — Digital Product is the right primitive for portfolio, team, funding, lifecycle, governance.
+- `[[stances/persistent-product-teams-over-projects]]` — Replace project teams with persistent teams; annual budgets with rolling investment.
+- `[[stances/it4it-is-substrate]]` — IT4IT integrates ITIL, COBIT, TOGAF, DevOps, SAFe at the operating-model layer. It does not compete.
+- `[[stances/dont-integrate-ea-platform]]` — Consolidate on one data model (CSDM); don&#39;t integrate a third-party EA tool with ServiceNow. The integration goes through Independent → Honeymoon → Ugly Reckoning.
+- `[[stances/trust-the-cmdb-or-rebuild-it]]` — Most organisations have a CMDB; very few trust it. Trust requires three pillars: Ingestion, Insight, Governance.
+- `[[stances/ea-is-meteorology]]` — Architects produce forecasts and guidance, not raw model exhibits.
+- `[[stances/contextualize-dont-transform]]` — When introducing a standard, map first. Adoption follows mapping; transformation follows adoption.
 
-Read [`AUTHORING.md`](../AUTHORING.md) to add a page in under 60 seconds.
+## Heuristics — operational rules
 
-## What's authored right now
+Smaller and more specific than stances. Useful when an agent needs to act, not just reason.
 
-Nothing. This index is the first kernel page seeded.
+- `[[heuristics/contextualize-before-transforming]]` — map existing operations onto the standard first.
+- `[[heuristics/find-at-least-one-champion]]` — adoption without an internal evangelist stalls.
+- `[[heuristics/pitch-simple-adjust-per-audience]]` — lead with the simplest framing; adjust language per audience.
+- `[[heuristics/model-what-naturally-happens]]` — connect relationships that already exist; don&#39;t build a data lake.
+- `[[heuristics/auto-populate-or-its-wrong]]` — manually-maintained inventory data is already lying to you.
+- `[[heuristics/reuse-the-camera-in-your-pocket]]` — platform-native usually wins over specialist best-of-breed.
+- `[[heuristics/be-a-meteorologist]]` — produce the forecast, not the radar image.
 
-The platform plumbing is ready — schema, retrieval, lint, viewer, agent integration — and waiting for content. The fastest way to make the kernel useful is to author 3–5 stance pages on topics people already ask &#34;what would Mark do?&#34; about. Heuristics and entity pages can grow alongside.
+## Entities — canonical concepts
 
-## How to find your way around
+Neutral definitions the rest of the kernel cross-references.
 
-Once content lands:
+- `[[entities/digital-product]]` — anything that runs code, one party responsible, delivers outcomes for a consumer party.
+- `[[entities/portfolio]]` — a curated set of Digital Products grouped for a shared management purpose.
+- `[[entities/it4it]]` — The Open Group reference architecture; substrate that integrates ITIL/COBIT/TOGAF/DevOps/SAFe.
+- `[[entities/csdm]]` — Common Service Data Model; the canonical data spine.
+- `[[entities/value-stream]]` — one of the seven IT4IT v3 flows.
 
-- **Browse**: `/wiki` lists every published page grouped by kind. Stances and heuristics surface at the top.
-- **Search via the agent**: ask any coworker a question that touches a kernel concept. The wiki retrieval layer injects relevant pages into the system prompt automatically, and the agent can also call `wiki_query` directly for explicit lookup.
-- **Author**: copy a template from [`_templates/`](../_templates/) into `wiki/&lt;kind&gt;s/&lt;slug&gt;.md`, fill it in, run the seed.
-- **Audit**: `/admin/wiki/lint` shows findings (orphans, dangling refs, stale citations, summary pages missing extracted stances). The daily Inngest job populates this; the `wiki_lint` MCP tool triggers it on-demand.
+## Raw sources
 
-## Org overlay
+Cited by the stances and heuristics above. See [`RAW-SOURCES-LICENSE.md`](../RAW-SOURCES-LICENSE.md) for the licensing policy — Mark&#39;s own LinkedIn articles bundle fully under Apache-2.0; third-party material is abstract + locator only.
 
-Customers will eventually be able to override or extend kernel pages with their own takes. That overlay UX is plumbed (Prisma schema, retrieval helpers) but the propose-edit UI is not yet shipped. Everything in `docs/founder-kernel/` is currently kernel-scoped — visible to every install equally.
+- `raw-sources/articles/why-product-centric-approach-needed` — May 2025 LinkedIn Pulse.
+- `raw-sources/articles/why-product-centricity-critical` — Dec 2024 LinkedIn Pulse.
+- `raw-sources/articles/think-twice-ea-platform-servicenow` — LinkedIn Pulse on EA-platform consolidation.
+- `raw-sources/articles/possible-futures-enterprise-architecture` — Architecture &amp; Governance Magazine.
+- `raw-sources/articles/open-group-2017-managing-business-of-it` — Open Group blog interview, Jan 2017.
+- `raw-sources/articles/briefings-direct-it4it-2019` — BriefingsDirect podcast transcript, March 2019.
+- `raw-sources/articles/sibling-portfolios` — ServiceNow community blog (with David Thigpen).
+- `raw-sources/papers/shift-to-digital-product-w205` — The Open Group white paper W205, Dec 2020.
+- `raw-sources/frameworks/it4it-v3` — The Open Group IT4IT standard v3.
+- `raw-sources/frameworks/csdm` — ServiceNow Common Service Data Model (currently v5).
+
+## What&#39;s still missing
+
+This is a first cut. Pages that the research digest surfaced but haven&#39;t been drafted yet:
+
+- **Stance: agentic AI without governance is the 36-vendors scenario** — referenced repeatedly in Mark&#39;s 2024–2025 LinkedIn posts; the canonical satirical post needs a verified URL before drafting.
+- **Entity: DPROM** — co-authored 2025; deserves its own entity page once the source paper is bundled.
+- **Decision pages** — none yet. As Mark records explicit DEC-* style decisions (e.g., DEC-2020-shift-to-digital-product, DEC-2022-it4it-v3-refactor) these will land under `wiki/decisions/`.
+- **Apple-to-orange comparison pages** — explicit "framework vs framework" pages where his nuance lives (IT4IT vs ITIL, IT4IT vs COBIT, CSDM vs ArchiMate).
+
+## How to navigate
+
+- **Browse**: `/wiki` lists every published page grouped by kind. Until pages flip from `draft` to `published`, they won&#39;t appear in the default published view.
+- **Search via the agent**: ask any coworker a question that touches a kernel concept. The wiki retrieval layer injects relevant pages into the system prompt automatically once they&#39;re published.
+- **Author / edit**: copy a template from [`../_templates/`](../_templates/), or edit any page on this branch directly. See [`../AUTHORING.md`](../AUTHORING.md) for the 60-second loop.
+- **Audit**: `/admin/wiki/lint` shows findings. The five live detectors will flag orphans, dangling refs, stale citations, etc.
+
+## Status of this index page
+
+Drafted by Claude from research on Mark&#39;s public writing. Marked `status: draft` like the rest. Mark reviews and either edits in place or replaces with a version in his own voice.
