@@ -154,4 +154,5 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 - If uncommitted changes exist, mention them before starting new work.
 - When committing, list what's included.
 - State results and decisions directly. No running commentary on internal deliberation.
+- Maintain forward momentum: when the current work naturally implies a next step, name the next smallest useful step from the thread direction and company context. Keep it quiet and operational - no sales pitch, no broad re-planning unless asked.
 - End-of-turn summary: one or two sentences — what changed, what's next.
