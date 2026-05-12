@@ -226,6 +226,15 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("ungranted");
   });
 
+  it("directs coworkers to quietly advance the next logical step from context", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+
+    expect(prompt).toContain("NEXT LOGICAL STEP");
+    expect(prompt).toContain("overall thread direction");
+    expect(prompt).toContain("one concrete next move");
+    expect(prompt).toContain("Do not turn this into a sales pitch");
+  });
+
   // ─── EP-WIKI-001 §7: wikiContext injection in Block 5 ─────────────────────
 
   it("omits the wiki block when wikiContext is null or undefined", async () => {

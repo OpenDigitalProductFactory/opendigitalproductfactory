@@ -19,6 +19,15 @@ const {
     storefrontDonation: { count: vi.fn() },
     engagement: { groupBy: vi.fn() },
     opportunity: { groupBy: vi.fn() },
+    organizationTaxProfile: { findFirst: vi.fn() },
+    taxRegistration: { count: vi.fn(), findMany: vi.fn() },
+    taxIssue: { count: vi.fn(), findMany: vi.fn() },
+    recurringSchedule: { count: vi.fn() },
+    invoice: { count: vi.fn() },
+    taxAuthorityCredential: { count: vi.fn() },
+    taxRemittanceRun: { count: vi.fn() },
+    taxObligationPeriod: { count: vi.fn() },
+    taxJurisdictionReference: { findMany: vi.fn() },
   },
   mockGetPlaybook: vi.fn(),
   mockGetVocabulary: vi.fn(),
@@ -44,6 +53,17 @@ beforeEach(() => {
   mockPrisma.storefrontDonation.count.mockReset();
   mockPrisma.engagement.groupBy.mockReset();
   mockPrisma.opportunity.groupBy.mockReset();
+  mockPrisma.organizationTaxProfile.findFirst.mockReset();
+  mockPrisma.taxRegistration.count.mockReset();
+  mockPrisma.taxRegistration.findMany.mockReset();
+  mockPrisma.taxIssue.count.mockReset();
+  mockPrisma.taxIssue.findMany.mockReset();
+  mockPrisma.recurringSchedule.count.mockReset();
+  mockPrisma.invoice.count.mockReset();
+  mockPrisma.taxAuthorityCredential.count.mockReset();
+  mockPrisma.taxRemittanceRun.count.mockReset();
+  mockPrisma.taxObligationPeriod.count.mockReset();
+  mockPrisma.taxJurisdictionReference.findMany.mockReset();
   mockGetPlaybook.mockReset();
   mockGetVocabulary.mockReset();
 
@@ -109,6 +129,18 @@ beforeEach(() => {
   mockPrisma.engagement.groupBy.mockResolvedValue([]);
   mockPrisma.opportunity.groupBy.mockResolvedValue([]);
 
+  mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue(null);
+  mockPrisma.taxRegistration.count.mockResolvedValue(0);
+  mockPrisma.taxRegistration.findMany.mockResolvedValue([]);
+  mockPrisma.taxIssue.count.mockResolvedValue(0);
+  mockPrisma.taxIssue.findMany.mockResolvedValue([]);
+  mockPrisma.recurringSchedule.count.mockResolvedValue(0);
+  mockPrisma.invoice.count.mockResolvedValue(0);
+  mockPrisma.taxAuthorityCredential.count.mockResolvedValue(0);
+  mockPrisma.taxRemittanceRun.count.mockResolvedValue(0);
+  mockPrisma.taxObligationPeriod.count.mockResolvedValue(0);
+  mockPrisma.taxJurisdictionReference.findMany.mockResolvedValue([]);
+
   mockGetPlaybook.mockReturnValue({
     primaryGoal: "Build authority pipeline through expertise demonstration and client nurture",
     stakeholders: "Clients, prospects, referral partners, industry contacts",
@@ -153,5 +185,49 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("Investigation mode: expanding");
     expect(context).toContain("Requirement reference hints:");
     expect(context).toContain("Nevada State Contractors Board");
+  });
+
+  it("includes tax coworker investigation guidance and jurisdiction hints for finance tax setup", async () => {
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({
+      setupMode: "new_business",
+      setupStatus: "draft",
+      homeCountryCode: "US",
+      primaryRegionCode: "NV",
+      taxModel: "hybrid",
+      filingOwner: "dpf_coworker",
+      handoffMode: "dpf_readiness_only",
+      externalSystem: null,
+      footprintSummary: "Nevada services and possible local customer sites.",
+    });
+    mockPrisma.taxRegistration.count.mockResolvedValue(0);
+    mockPrisma.taxIssue.count.mockResolvedValue(2);
+    mockPrisma.taxIssue.findMany.mockResolvedValue([
+      {
+        title: "Tax authority research is still needed",
+        severity: "high",
+        issueType: "tax_registration_research_needed",
+      },
+    ]);
+    mockPrisma.taxJurisdictionReference.findMany.mockResolvedValue([
+      {
+        authorityName: "Nevada Department of Taxation",
+        countryCode: "US",
+        stateProvinceCode: "NV",
+        authorityType: "state",
+        taxTypes: ["sales_tax"],
+        filingUrl: "https://tax.nv.gov/",
+        officialWebsiteUrl: "https://tax.nv.gov/",
+      },
+    ]);
+
+    const context = await getRouteDataContext("/finance/settings/tax", "user-1");
+
+    expect(context).toContain("PAGE DATA — Finance:");
+    expect(context).toContain("Coworker investigation posture: first-time setup");
+    expect(context).toContain("Coworker next question: Where is the business legally registered and where are taxable services delivered?");
+    expect(context).toContain("Recommended next action: Research likely authorities from the seeded jurisdiction registry, then live-verify official sources before scheduling periods.");
+    expect(context).toContain("Top open tax issue: high tax_registration_research_needed - Tax authority research is still needed");
+    expect(context).toContain("Jurisdiction seed hints:");
+    expect(context).toContain("Nevada Department of Taxation");
   });
 });

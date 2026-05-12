@@ -432,6 +432,7 @@ async function getFinanceContext(): Promise<string> {
         filingOwner: true,
         handoffMode: true,
         externalSystem: true,
+        footprintSummary: true,
       },
     }),
     prisma.taxRegistration.count(),
@@ -469,6 +470,115 @@ async function getFinanceContext(): Promise<string> {
     `Recurring schedules: ${recurringCount}`,
     `Outstanding customer invoices: ${overdueInvoices}`,
   );
+
+  const jurisdictionWhere = taxProfile.homeCountryCode
+    ? {
+        countryCode: taxProfile.homeCountryCode,
+        ...(taxProfile.primaryRegionCode
+          ? {
+              OR: [
+                { stateProvinceCode: taxProfile.primaryRegionCode },
+                { stateProvinceCode: null },
+              ],
+            }
+          : {}),
+      }
+    : undefined;
+
+  const [topOpenIssues, unverifiedRegistrations, jurisdictionHints] = await Promise.all([
+    prisma.taxIssue.findMany({
+      where: { status: "open" },
+      select: {
+        title: true,
+        severity: true,
+        issueType: true,
+      },
+      orderBy: [{ openedAt: "asc" }],
+      take: 3,
+    }),
+    prisma.taxRegistration.findMany({
+      where: { lastVerifiedAt: null },
+      select: {
+        registrationNumber: true,
+        jurisdictionReference: {
+          select: {
+            authorityName: true,
+            jurisdictionRefId: true,
+          },
+        },
+      },
+      take: 5,
+    }),
+    prisma.taxJurisdictionReference.findMany({
+      where: jurisdictionWhere,
+      select: {
+        authorityName: true,
+        countryCode: true,
+        stateProvinceCode: true,
+        authorityType: true,
+        taxTypes: true,
+        filingUrl: true,
+        officialWebsiteUrl: true,
+      },
+      orderBy: [{ countryCode: "asc" }, { stateProvinceCode: "asc" }, { authorityName: "asc" }],
+      take: 6,
+    }),
+  ]);
+
+  if (taxProfile.setupMode === "new_business") {
+    sections.push(
+      "Coworker investigation posture: first-time setup",
+      "Coworker next question: Where is the business legally registered and where are taxable services delivered?",
+      "Recommended next action: Research likely authorities from the seeded jurisdiction registry, then live-verify official sources before scheduling periods.",
+    );
+  } else if (taxProfile.setupMode === "existing") {
+    sections.push(
+      "Coworker investigation posture: existing filing normalization",
+      "Coworker next question: Which authorities does the business already file with today, and who owns each filing?",
+      "Recommended next action: Add or verify each known registration, then reconcile open setup gaps before scheduling remittance runs.",
+    );
+  } else {
+    sections.push(
+      "Coworker investigation posture: setup mode unknown",
+      "Coworker next question: Is the business already filing sales tax, VAT, or GST anywhere today?",
+      "Recommended next action: Classify setup mode, capture home jurisdiction and operating footprint, then add the first known or likely authority registration.",
+    );
+  }
+
+  if (taxProfile.footprintSummary) {
+    sections.push(`Operating footprint summary: ${taxProfile.footprintSummary}`);
+  }
+
+  if (topOpenIssues.length > 0) {
+    sections.push(
+      "Open tax issues for coworker attention:",
+      ...topOpenIssues.map(
+        (issue) => `- ${issue.severity} ${issue.issueType} - ${issue.title}`,
+      ),
+      `Top open tax issue: ${topOpenIssues[0]?.severity} ${topOpenIssues[0]?.issueType} - ${topOpenIssues[0]?.title}`,
+    );
+  }
+
+  if (unverifiedRegistrations.length > 0) {
+    sections.push(
+      "Registrations needing live verification:",
+      ...unverifiedRegistrations.map(
+        (registration) =>
+          `- ${registration.jurisdictionReference.authorityName} (${registration.jurisdictionReference.jurisdictionRefId}) registration=${registration.registrationNumber ?? "pending"}`,
+      ),
+    );
+  }
+
+  if (jurisdictionHints.length > 0) {
+    sections.push(
+      "Jurisdiction seed hints:",
+      ...jurisdictionHints.map((hint) => {
+        const region = hint.stateProvinceCode ? `/${hint.stateProvinceCode}` : "";
+        const source = hint.filingUrl ?? hint.officialWebsiteUrl ?? "source pending";
+        return `- ${hint.authorityName} (${hint.countryCode}${region}, ${hint.authorityType}) taxes=${hint.taxTypes.join(", ")} source=${source}`;
+      }),
+    );
+  }
 
   return sections.join("\n");
 }

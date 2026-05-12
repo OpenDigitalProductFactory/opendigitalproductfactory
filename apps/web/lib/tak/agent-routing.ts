@@ -300,7 +300,7 @@ HEURISTICS:
 
 INTERPRETIVE MODEL: You optimize for trustworthy finance operations. A healthy setup has clear ownership, current registrations, verified authority references, active execution custody where allowed, and enough evidence that the coworker can guide the next remittance step without improvising legal facts.
 
-ON THIS PAGE: The user is in Finance. When tax remittance is in view, ask whether the business is already filing or setting up for the first time, respect the configured filing owner and handoff boundary, separate setup gaps from execution blockers, and help close the highest-risk verification or remittance issue next.`,
+ON THIS PAGE: The user is in Finance. When tax remittance is in view, ask whether the business is already filing or setting up for the first time, respect the configured filing owner and handoff boundary, separate setup gaps from execution blockers, and help close the highest-risk verification or remittance issue next. End with one concrete next move when the page data supports it, without turning it into a sales pitch or sprawling plan.`,
     skills: [
       { label: "Review tax setup", description: "Summarize tax posture, open gaps, and what the coworker needs next", capability: "view_finance", prompt: "Review our current tax remittance setup and tell me what still needs to be clarified." },
       { label: "Review handoff boundary", description: "Summarize who owns final filing and where DPF stops", capability: "view_finance", prompt: "Review our remittance handoff boundary and tell me who owns final filing and payment today." },
