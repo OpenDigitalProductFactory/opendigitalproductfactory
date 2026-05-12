@@ -310,3 +310,78 @@ describe("persistBootstrapDiscoveryRun", () => {
     expect(createdObservedKeys).toEqual(["duplicate:item"]);
   });
 });
+
+describe("persistSubmittedDiscoveryRun (Edge Node ingestion wrapper)", () => {
+  it("stamps edgeNodeId on the DiscoveryRun row and sets trigger=edge_node", async () => {
+    const { persistSubmittedDiscoveryRun } = await import("./discovery-sync");
+    const recordedCreateArgs: Array<Record<string, unknown>> = [];
+
+    const db = {
+      $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        discoveryRun: {
+          create: async ({ data }: { data: Record<string, unknown> }) => {
+            recordedCreateArgs.push(data);
+            return { id: "run-edge-1" };
+          },
+        },
+        inventoryEntity: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { entityKey: string } }) => ({
+            id: `entity:${where.entityKey}`,
+            entityKey: where.entityKey,
+          }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredItem: { create: async () => ({ id: "discovered" }) },
+        discoveredSoftwareEvidence: { upsert: async () => undefined },
+        inventoryRelationship: {
+          findMany: async () => [],
+          upsert: async ({ where }: { where: { relationshipKey: string } }) => ({
+            id: `rel:${where.relationshipKey}`,
+            relationshipKey: where.relationshipKey,
+          }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        discoveredRelationship: { create: async () => undefined },
+        portfolioQualityIssue: { findMany: async () => [], upsert: async () => undefined },
+      }),
+    };
+
+    await persistSubmittedDiscoveryRun(
+      db as never,
+      {
+        discoveredItems: [],
+        inventoryEntities: [],
+        inventoryRelationships: [],
+        softwareEvidence: [],
+      },
+      { edgeNodeId: "edge_db_1", agentVersion: "0.1.0", agentMode: "container-host" },
+      {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      },
+    );
+
+    expect(recordedCreateArgs).toHaveLength(1);
+    expect(recordedCreateArgs[0]!.edgeNodeId).toBe("edge_db_1");
+    expect(recordedCreateArgs[0]!.trigger).toBe("edge_node");
+    expect(recordedCreateArgs[0]!.sourceSlug).toBe("edge_node:edge_db_1");
+    expect(String(recordedCreateArgs[0]!.runKey)).toMatch(/^EDGE-edge_db_1-/);
+  });
+
+  it("throws when edgeNodeId is missing", async () => {
+    const { persistSubmittedDiscoveryRun } = await import("./discovery-sync");
+    await expect(
+      persistSubmittedDiscoveryRun(
+        { $transaction: async () => undefined } as never,
+        {
+          discoveredItems: [],
+          inventoryEntities: [],
+          inventoryRelationships: [],
+          softwareEvidence: [],
+        },
+        { edgeNodeId: "" as unknown as string, agentVersion: "0.1.0", agentMode: "container-host" },
+      ),
+    ).rejects.toThrow(/edgeNodeId/);
+  });
+});

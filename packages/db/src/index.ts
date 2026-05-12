@@ -76,6 +76,16 @@ export {
   type NormalizedInventoryRelationship,
   type NormalizedSoftwareEvidence,
 } from "./discovery-normalize";
+export type {
+  CollectorOutput,
+  CollectorContext,
+  CollectorName,
+  DiscoveredItemInput,
+  DiscoveredRelationshipInput,
+  DiscoveredSoftwareInput,
+  DiscoveryCollector,
+  DiscoverySourceKind,
+} from "./discovery-types";
 export {
   attributeInventoryEntity,
   buildDiscoveryDescriptor,
@@ -124,8 +134,10 @@ export {
 } from "./ea-structure";
 export {
   persistBootstrapDiscoveryRun,
+  persistSubmittedDiscoveryRun,
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,
+  type SubmittedDiscoveryMeta,
 } from "./discovery-sync";
 export {
   promoteInventoryEntities,
