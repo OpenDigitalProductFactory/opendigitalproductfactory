@@ -1,0 +1,227 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NextRequest } from "next/server";
+
+// Mock the orchestration layer. The route handler's contract is what
+// we're testing — `enrollEdgeNode` itself has its own coverage in
+// lib/edge-node/enrollment.test.ts (28 tests for the business logic).
+const { mockEnrollEdgeNode } = vi.hoisted(() => ({
+  mockEnrollEdgeNode: vi.fn(),
+}));
+
+vi.mock("@/lib/edge-node/enrollment", () => ({
+  enrollEdgeNode: mockEnrollEdgeNode,
+}));
+
+import { POST } from "./route";
+
+const VALID_BODY = {
+  displayName: "Test Mac",
+  platform: "darwin",
+  installMode: "native",
+  version: "0.1.0",
+  advertisedCapabilities: ["discovery.network"],
+};
+
+function makeReq(
+  body: unknown,
+  headers: Record<string, string> = {},
+  raw = false,
+): NextRequest {
+  return new Request("http://test/api/v1/edge/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: raw ? (body as string) : JSON.stringify(body),
+  }) as unknown as NextRequest;
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+describe("POST /api/v1/edge/enroll — auth header parsing", () => {
+  it("returns 401 missing_authorization when no Authorization header", async () => {
+    const res = await POST(makeReq(VALID_BODY));
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("missing_authorization");
+    expect(mockEnrollEdgeNode).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 invalid_scheme for non-Bearer schemes", async () => {
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Basic abcd" }));
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_scheme");
+    expect(mockEnrollEdgeNode).not.toHaveBeenCalled();
+  });
+
+  it("extracts the bootstrap token from a well-formed Bearer header", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: true,
+      nodeId: "edge_abc",
+      nodeToken: "dpfedge_NEW",
+      trustState: "pending",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_SECRET" }));
+    expect(mockEnrollEdgeNode).toHaveBeenCalledOnce();
+    expect(mockEnrollEdgeNode.mock.calls[0]![0].bootstrapToken).toBe("dpfboot_SECRET");
+  });
+});
+
+describe("POST /api/v1/edge/enroll — body validation", () => {
+  it("returns 400 invalid_json for malformed JSON", async () => {
+    const res = await POST(
+      makeReq("not json at all", { Authorization: "Bearer dpfboot_X" }, true),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_json");
+  });
+
+  it("returns 400 invalid_body for missing required fields", async () => {
+    const res = await POST(
+      makeReq({ platform: "darwin" }, { Authorization: "Bearer dpfboot_X" }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+    expect(body.issues).toBeTruthy();
+  });
+
+  it("returns 400 invalid_body for unknown platform", async () => {
+    const res = await POST(
+      makeReq(
+        { ...VALID_BODY, platform: "freebsd" },
+        { Authorization: "Bearer dpfboot_X" },
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+  });
+
+  it("returns 400 invalid_body when advertisedCapabilities is empty", async () => {
+    const res = await POST(
+      makeReq(
+        { ...VALID_BODY, advertisedCapabilities: [] },
+        { Authorization: "Bearer dpfboot_X" },
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/v1/edge/enroll — orchestrator-failure mapping", () => {
+  // The enrollEdgeNode error → status mapping is part of the route's
+  // wire contract; if it drifts, clients break.
+  const cases = [
+    { error: "invalid_token_format" as const, expected: 401 },
+    { error: "token_not_found" as const, expected: 401 },
+    { error: "token_expired" as const, expected: 401 },
+    { error: "token_already_consumed" as const, expected: 401 },
+    { error: "token_revoked" as const, expected: 401 },
+    { error: "invalid_platform" as const, expected: 400 },
+    { error: "invalid_install_mode" as const, expected: 400 },
+    { error: "no_acceptable_capabilities" as const, expected: 400 },
+  ];
+
+  for (const { error, expected } of cases) {
+    it(`maps "${error}" to ${expected}`, async () => {
+      mockEnrollEdgeNode.mockResolvedValue({
+        ok: false,
+        error,
+        message: `Test message for ${error}`,
+      });
+      const res = await POST(
+        makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }),
+      );
+      expect(res.status).toBe(expected);
+      const body = await res.json();
+      expect(body.error).toBe(error);
+      expect(body.message).toContain(error);
+    });
+  }
+});
+
+describe("POST /api/v1/edge/enroll — happy path", () => {
+  it("returns 200 with nodeId + nodeToken + intervals + capabilities", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: true,
+      nodeId: "edge_abc123",
+      nodeToken: "dpfedge_NEW_TOKEN",
+      trustState: "trusted",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+    const res = await POST(
+      makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      ok: true,
+      nodeId: "edge_abc123",
+      nodeToken: "dpfedge_NEW_TOKEN",
+      trustState: "trusted",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+  });
+
+  it("forces autoApprove=false (Phase 0 default — token metadata, not route, decides)", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: true,
+      nodeId: "edge_abc",
+      nodeToken: "dpfedge_X",
+      trustState: "pending",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }));
+    const call = mockEnrollEdgeNode.mock.calls[0]![0];
+    expect(call.autoApprove).toBe(false);
+  });
+
+  it("forwards optional hostFingerprint + metadata when present", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: true,
+      nodeId: "edge_abc",
+      nodeToken: "dpfedge_X",
+      trustState: "pending",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+    await POST(
+      makeReq(
+        { ...VALID_BODY, hostFingerprint: "abc-fingerprint", metadata: { hostname: "host.local" } },
+        { Authorization: "Bearer dpfboot_X" },
+      ),
+    );
+    const call = mockEnrollEdgeNode.mock.calls[0]![0];
+    expect(call.hostFingerprint).toBe("abc-fingerprint");
+    expect(call.metadata).toEqual({ hostname: "host.local" });
+  });
+
+  it("omits hostFingerprint and metadata when not provided (clean undefined, not null)", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: true,
+      nodeId: "edge_abc",
+      nodeToken: "dpfedge_X",
+      trustState: "pending",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }));
+    const call = mockEnrollEdgeNode.mock.calls[0]![0];
+    expect("hostFingerprint" in call).toBe(false);
+    expect("metadata" in call).toBe(false);
+  });
+});
