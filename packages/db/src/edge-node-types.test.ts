@@ -30,8 +30,10 @@ function makeNode(overrides: Partial<EdgeNode> = {}): EdgeNode {
   const now = new Date("2026-05-12T12:00:00Z");
   return {
     id: "edgenode_cuid_1",
+    // Per AGENTS.md §11 Principal convergence, EdgeNode is keyed 1:1
+    // to Principal via principalId. displayName lives on Principal.
+    principalId: "principal_cuid_1",
     nodeId: "edge_a1b2c3",
-    displayName: "Test Edge Node",
     platform: "linux",
     installMode: "container-host",
     version: "0.1.0",
