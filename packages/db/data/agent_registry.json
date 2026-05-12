@@ -2775,6 +2775,49 @@
       }
     },
     {
+      "agent_id": "AGT-WS-SCOUT",
+      "agent_name": "external-catalog-scout",
+      "displayName": "External Catalog Scout",
+      "aliases": ["hive-scout", "external-catalog-scout"],
+      "tier": "specialist",
+      "value_stream": "explore",
+      "capability_domain": "External coworker archetype reconnaissance. Scans approved external agent catalogs, detects meaningful platform gaps, and files governed backlog suggestions without importing code.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-200",
+      "it4it_sections": [
+        "5.2 Explore Value Stream",
+        "6.2.1 Portfolio Backlog FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.3,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 120000,
+          "per_task_limit": 24000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 1,
+        "tool_grants": [
+          "backlog_read",
+          "backlog_write",
+          "registry_read"
+        ]
+      }
+    },
+    {
       "agent_id": "AGT-WS-INVENTORY",
       "agent_name": "inventory-specialist",
       "displayName": "Digital Product Estate Specialist",

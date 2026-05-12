@@ -150,6 +150,11 @@ describe("TOOL_TO_GRANTS — Estate specialist entries", () => {
     expect(isToolAllowedByGrants("run_discovery_triage", ["registry_write"])).toBe(true);
     expect(isToolAllowedByGrants("run_discovery_triage", ["registry_read"])).toBe(false);
   });
+
+  it("run_hive_scout_ingest requires backlog_write", () => {
+    expect(isToolAllowedByGrants("run_hive_scout_ingest", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("run_hive_scout_ingest", ["registry_read"])).toBe(false);
+  });
 });
 
 describe("TOOL_TO_GRANTS — Admin entries", () => {
@@ -331,6 +336,7 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["explain_blast_radius"]).toEqual(["registry_read"]);
     expect(mapping["discovery_sweep"]).toEqual(["telemetry_read"]);
     expect(mapping["run_discovery_triage"]).toEqual(["registry_write"]);
+    expect(mapping["run_hive_scout_ingest"]).toEqual(["backlog_write"]);
   });
 
   it("includes hive mind tools", () => {

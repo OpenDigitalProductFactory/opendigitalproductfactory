@@ -18,11 +18,19 @@ vi.mock("@/lib/identity/principal-linking", () => ({
   ensureAgentPrincipalIdentity: vi.fn(),
 }));
 
+vi.mock("@/lib/coworker-identity", () => ({
+  resolveCoworkerIdentity: vi.fn(),
+}));
+
 import { resolveAgentForRoute } from "./agent-routing";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
-import { resolveAgentForRouteWithPrompts } from "./agent-routing-server";
+import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
+import {
+  resolveAgentByIdWithPrompts,
+  resolveAgentForRouteWithPrompts,
+} from "./agent-routing-server";
 
 describe("resolveAgentForRouteWithPrompts", () => {
   beforeEach(() => {
@@ -43,6 +51,12 @@ describe("resolveAgentForRouteWithPrompts", () => {
       if (key === "company-mission") return "Company mission";
       return fallback ?? "";
     });
+    vi.mocked(resolveCoworkerIdentity).mockReturnValue({
+      agentId: "external-catalog-scout",
+      agentName: "external-catalog-scout",
+      displayName: "External Catalog Scout",
+      aliases: ["hive-scout"],
+    });
     vi.mocked(ensureAgentPrincipalIdentity).mockResolvedValue(null);
   });
 
@@ -54,5 +68,38 @@ describe("resolveAgentForRouteWithPrompts", () => {
 
     expect(ensureAgentPrincipalIdentity).toHaveBeenCalledWith("hr-specialist");
     expect(result.agentId).toBe("hr-specialist");
+  });
+
+  it("can resolve a scheduled agent directly by agentId when the route persona does not match", async () => {
+    vi.mocked(getSkillsForAgentLegacy).mockResolvedValue([
+      {
+        label: "Scout external catalogs",
+        description: "Scan external catalogs",
+        capability: null,
+        prompt: "Run the scout.",
+      },
+    ]);
+
+    const result = await resolveAgentByIdWithPrompts("external-catalog-scout", {
+      platformRole: "HR-000",
+      isSuperuser: true,
+    });
+
+    expect(ensureAgentPrincipalIdentity).toHaveBeenCalledWith("external-catalog-scout");
+    expect(loadPrompt).toHaveBeenCalledWith(
+      "route-persona",
+      "external-catalog-scout",
+      expect.stringContaining("External Catalog Scout"),
+    );
+    expect(result.agentId).toBe("external-catalog-scout");
+    expect(result.agentName).toBe("External Catalog Scout");
+    expect(result.skills).toEqual([
+      {
+        label: "Scout external catalogs",
+        description: "Scan external catalogs",
+        capability: null,
+        prompt: "Run the scout.",
+      },
+    ]);
   });
 });

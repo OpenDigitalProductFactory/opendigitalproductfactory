@@ -25,6 +25,18 @@ export type ScheduledTaskSummary = {
   threadMessage: string;
 };
 
+type HiveScoutSummaryPayload = {
+  processedAt: string;
+  metrics: {
+    catalogEntries: number;
+    gaps: number;
+    created: number;
+    duplicates: number;
+    deferred: number;
+  };
+  createdItemIds?: string[];
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -105,4 +117,62 @@ export function extractDiscoveryTriageSummary(
     compactStatus,
     threadMessage,
   };
+}
+
+export function extractHiveScoutSummary(
+  executedTools: AgenticResult["executedTools"],
+): ScheduledTaskSummary | null {
+  const scoutTool = [...executedTools]
+    .reverse()
+    .find((entry) => entry.name === "run_hive_scout_ingest" && entry.result.success && isRecord(entry.result.data));
+
+  if (!scoutTool || !isRecord(scoutTool.result.data)) {
+    return null;
+  }
+
+  const createdItemIds = Array.isArray(scoutTool.result.data.createdItemIds)
+    ? scoutTool.result.data.createdItemIds.filter((item): item is string => typeof item === "string" && item.length > 0)
+    : [];
+
+  const payload: HiveScoutSummaryPayload = {
+    processedAt: new Date().toISOString(),
+    metrics: {
+      catalogEntries: asNumber(scoutTool.result.data.catalogEntries) ?? 0,
+      gaps: asNumber(scoutTool.result.data.gaps) ?? 0,
+      created: asNumber(scoutTool.result.data.created) ?? 0,
+      duplicates: asNumber(scoutTool.result.data.duplicates) ?? 0,
+      deferred: asNumber(scoutTool.result.data.deferred) ?? 0,
+    },
+    ...(createdItemIds.length > 0 ? { createdItemIds } : {}),
+  };
+
+  const compactStatus = [
+    "Hive Scout",
+    `parsed=${payload.metrics.catalogEntries}`,
+    `gaps=${payload.metrics.gaps}`,
+    `created=${payload.metrics.created}`,
+    `duplicates=${payload.metrics.duplicates}`,
+    `deferred=${payload.metrics.deferred}`,
+  ].join(" ");
+
+  const threadMessage = [
+    "[Scheduled summary: Hive Scout external catalog pass]",
+    "",
+    "Run completed against the approved external catalog source.",
+    "",
+    "```json",
+    JSON.stringify(payload, null, 2),
+    "```",
+  ].join("\n");
+
+  return {
+    compactStatus,
+    threadMessage,
+  };
+}
+
+export function extractScheduledTaskSummary(
+  executedTools: AgenticResult["executedTools"],
+): ScheduledTaskSummary | null {
+  return extractDiscoveryTriageSummary(executedTools) ?? extractHiveScoutSummary(executedTools);
 }
