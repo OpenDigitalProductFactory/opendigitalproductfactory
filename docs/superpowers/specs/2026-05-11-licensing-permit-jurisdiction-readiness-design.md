@@ -2,7 +2,7 @@
 
 **Epic:** `EP-LIC-C64FC2` Licensing, Permit, and Jurisdictional Readiness: Archetype-Aligned Compliance Foundation
 
-**Status:** Draft for review
+**Status:** Accepted
 
 ## 1. Problem Statement
 
@@ -328,7 +328,7 @@ Examples:
 Before implementing the models below, the schema audit (AGENTS.md §11 Data Model Stewardship) MUST be honoured:
 
 - **Prisma naming.** Field names below are illustrative. Actual Prisma models use `id String @id @default(cuid())` and snake-free camelCase; suffixes like `licenseRecordId` collapse to `id`. Cross-model FKs follow the existing `*Id` convention (e.g., `organizationLicenseProfileId`).
-- **Reuse `TaxJurisdictionReference` shape, do not parallel it.** `TaxJurisdictionReference` (packages/db/prisma/schema.prisma:2268) already carries `countryCode`, `authorityName`, `authorityType`, `officialWebsiteUrl`, `sourceUrls`, `confidence`, `lastVerifiedAt`, and `staleAfterDays`. `LicenseRequirementReference` shares ~90% of that surface. The implementation slice MUST first decide between (a) extracting a shared `JurisdictionReference` model with domain-scoped child tables, or (b) keeping two domain-specific models and documenting the duplication as deliberate. This is an Open Question (§19) — not a free implementation choice.
+- **Resolved phase-1 reference decision.** `TaxJurisdictionReference` (packages/db/prisma/schema.prisma:2268) is currently a tax-authority record, not a clean shared jurisdiction core. For this phase, DPF keeps `LicenseRequirementReference` separate and documents the overlap deliberately so the completed tax-remittance epics stay stable. A future cross-domain refactor may extract a shared geography/authority substrate once both domains have settled.
 - **Reuse canonical identity.** Per AGENTS.md §11 Principal convergence (effective 2026-05-09), every identity-bearing entity introduced after that date is modeled as a `PrincipalAlias` linked to a single `Principal`. `PersonLicenseRecord` (§10.4) MUST resolve its holder through `principalAliasId`, not through a direct FK to `EmployeeProfile`, `User`, or any other identity table. The alias kind tells the platform what surface the holder authenticated from; the licensing record stays identity-neutral.
 - **Reuse canonical organization.** `Organization` is the canonical platform identity for the tenant (AGENTS.md §11). `OrganizationLicenseProfile` is a 1:1 readiness-posture extension, not a parallel organization model. Org name, address, contact info read from `Organization`.
 - **Canonical enums.** Every string field below that takes a fixed value set (`requirementType`, `scopeLevel`, `status`, `severity`, `displayType`, `requirementLevel`, `feeType`, `confidence`, `setupStatus`, `investigationMode`, `paymentStatus`, `financeHandoffMode`, `issueType`) is a canonical enum. Per AGENTS.md §3, valid values are defined once in `apps/web/lib/licensing.ts` and mirrored in the MCP tool definitions before any data uses them. The implementation plan calls out the full enum table.
@@ -766,9 +766,9 @@ DPF is single-tenant per install. `OrganizationLicenseProfile` is therefore 1:1 
 
 ## 19. Open Questions
 
-These decisions are deferred from spec to implementation planning; reviewers should agree the LIST is complete even if the answers aren't yet:
+These decisions are deferred from spec to implementation planning unless marked resolved below:
 
-1. **Reference model unification.** Extract a shared `JurisdictionReference` model with domain-scoped child tables (`TaxJurisdictionDetail`, `LicenseJurisdictionDetail`) vs. keep `TaxJurisdictionReference` and `LicenseRequirementReference` as separate models with documented duplication. Resolve before BI-LIC-F36A08 schema lands.
+1. **Resolved for phase 1.** Keep `LicenseRequirementReference` separate from `TaxJurisdictionReference` and document the duplication. Reason: the current tax table is tax-authority-specific and refactoring it midstream would destabilize two completed epics. Revisit shared geography/authority extraction in a later cross-domain stewardship epic.
 2. **Holder kinds.** Should `PersonLicenseRecord.principalAliasId` be constrained to specific `Principal.kind` values (e.g., `person`, `employee`) or accept any kind? Owners and external designated responsible parties argue for permissive; safety argues for an explicit allow-list enum.
 3. **Display obligation evidence.** Is `evidenceArtifactId` a new model or a reuse of `ComplianceEvidence`? §13 implies Compliance is the home, so reuse seems likely — confirm before BI-LIC-247DB1.
 4. **Fee handoff to finance.** `LicenseFeeSchedule.financeHandoffMode` — does Finance get a journal entry, an AP bill, both, or a configurable choice? Coordinate with the finance team before BI-LIC-247DB1.

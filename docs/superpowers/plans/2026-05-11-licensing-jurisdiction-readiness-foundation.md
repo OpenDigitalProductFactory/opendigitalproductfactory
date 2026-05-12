@@ -33,7 +33,7 @@ Size: M
 
 Deliverables:
 
-- final spec review and acceptance (status moved from "Draft for review" → "Accepted" in the spec header)
+- final spec review and acceptance (status now `Accepted` in the spec header)
 - spec Open Questions §19 each resolved or explicitly punted with reason
 - authoritative source inventory for priority jurisdictions
 - archetype-to-investigation heuristic inventory
@@ -52,8 +52,8 @@ Size: L (touches schema + canonical enums + identity convergence rule)
 
 Implementation targets:
 
-- resolve spec Open Question #1 (shared `JurisdictionReference` vs. parallel `LicenseRequirementReference`) BEFORE writing the migration; record the decision in this file
-- add reference model for requirement intelligence (per resolution of Open Question #1)
+- Open Question #1 is resolved for phase 1: keep `LicenseRequirementReference` separate from `TaxJurisdictionReference`, document the overlap, and avoid destabilizing the completed tax-remittance epics
+- add reference model for requirement intelligence using the separate licensing reference model
 - add organization-held licensing records (`OrganizationLicenseProfile` 1:1 with `Organization`; reuse, do not parallel)
 - add person-held credential records — holder MUST be `principalAliasId`; no `employeeProfileId` FK (AGENTS.md §11 Principal convergence)
 - add display obligation and fee schedule records (resolve spec Open Questions #3, #4 before commit)
@@ -123,7 +123,7 @@ Size: M
 
 Implementation targets:
 
-- seed format for requirement/authority bootstrap data (decides AFTER Open Question #1 lands — schema follows the resolution)
+- seed format for requirement/authority bootstrap data using the separate licensing reference model
 - first coverage set for USA, UK, Australia
 - provenance and freshness fields (`sourceUrls`, `lastResearchedAt`, `lastVerifiedAt`, `confidence`, `staleAfterDays`)
 - refresh-from-research fallback pattern
@@ -201,8 +201,7 @@ Additional acceptance for this epic:
 
 The smallest good next execution slice is:
 
-- resolve spec Open Question #1 (shared vs parallel reference model)
-- implement the schema foundation from `BI-LIC-F36A08` per that resolution
+- implement the schema foundation from `BI-LIC-F36A08` using the separate licensing reference model
 - alongside the first USA/UK/Australia seed format from `BI-LIC-AA90DB`
 
 That gives the platform a stable persistence model and the minimum reference intelligence needed before any Compliance UX or coworker behavior is added.
@@ -213,7 +212,7 @@ This epic does not stand alone. Before BI-LIC-F36A08 commits schema:
 
 - **Principal convergence rule (AGENTS.md §11).** `Principal` and `PrincipalAlias` are in place (packages/db/prisma/schema.prisma:219). The licensing schema MUST route holder identity through them; the convergence rule applies to entities introduced after 2026-05-09, and today is 2026-05-11. No exception.
 - **`EP-ARCH-8D4F2A` Archetype Model V2.** Spec §11 archetype heuristics work against the current archetype shape, but become richer with V2. Resolve spec Open Question #8 before BI-LIC-3621D8 starts: block on V2, design around current shape, or ship a thin slice that upgrades when V2 lands.
-- **`TaxJurisdictionReference` shape ownership.** If Open Question #1 resolves toward extraction of a shared `JurisdictionReference`, the tax-remittance team needs to be in the loop — that becomes a refactor that touches two completed epics (EP-TAX-6C82D1, EP-TAX-41A6F2) plus this one.
+- **`TaxJurisdictionReference` shape ownership.** Phase 1 deliberately does not refactor the completed tax-remittance models. Any future shared geography/authority extraction becomes its own stewardship slice and must include the tax-remittance team.
 - **Background job substrate.** Reuse `apps/web/lib/queue/functions/` (existing pattern) unless a stronger case lands. Confirm before BI-LIC-3621D8.
 - **Hive contribution pipeline.** Existing `contribute_to_hive` plumbing (project memory: PR #137 fix for silent-failure gaps). Confirm it accepts a `LicenseRequirementReference` payload kind, with `autoApproveWhen` configured for pre-authorized flows.
 
