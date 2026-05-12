@@ -8,6 +8,11 @@ const {
   mockPrisma: {
     businessContext: { findFirst: vi.fn() },
     storefrontConfig: { findFirst: vi.fn() },
+    organizationLicenseProfile: { findFirst: vi.fn() },
+    organizationLicenseRecord: { count: vi.fn() },
+    personLicenseRecord: { count: vi.fn() },
+    licenseReadinessIssue: { count: vi.fn() },
+    licenseRequirementReference: { findMany: vi.fn() },
     storefrontBooking: { count: vi.fn() },
     storefrontInquiry: { count: vi.fn() },
     storefrontOrder: { count: vi.fn() },
@@ -28,6 +33,11 @@ import { getRouteDataContext } from "./route-context";
 beforeEach(() => {
   mockPrisma.businessContext.findFirst.mockReset();
   mockPrisma.storefrontConfig.findFirst.mockReset();
+  mockPrisma.organizationLicenseProfile.findFirst.mockReset();
+  mockPrisma.organizationLicenseRecord.count.mockReset();
+  mockPrisma.personLicenseRecord.count.mockReset();
+  mockPrisma.licenseReadinessIssue.count.mockReset();
+  mockPrisma.licenseRequirementReference.findMany.mockReset();
   mockPrisma.storefrontBooking.count.mockReset();
   mockPrisma.storefrontInquiry.count.mockReset();
   mockPrisma.storefrontOrder.count.mockReset();
@@ -64,6 +74,33 @@ beforeEach(() => {
       },
     },
   });
+
+  mockPrisma.organizationLicenseProfile.findFirst.mockResolvedValue({
+    id: "profile-1",
+    setupStatus: "investigating",
+    investigationMode: "expanding",
+    homeCountryCode: "US",
+    primaryRegionCode: "NV",
+    legalActivityConfidence: "medium",
+    researchCoverageStatus: "partial",
+  });
+  mockPrisma.organizationLicenseRecord.count.mockResolvedValue(2);
+  mockPrisma.personLicenseRecord.count.mockResolvedValue(1);
+  mockPrisma.licenseReadinessIssue.count.mockResolvedValue(3);
+  mockPrisma.licenseRequirementReference.findMany.mockResolvedValue([
+    {
+      authorityName: "Nevada State Contractors Board",
+      jurisdictionLabel: "Nevada",
+      requirementType: "license",
+      scopeLevel: "organization",
+    },
+    {
+      authorityName: "Clark County Business License Department",
+      jurisdictionLabel: "Clark County",
+      requirementType: "permit",
+      scopeLevel: "premises",
+    },
+  ]);
 
   mockPrisma.storefrontBooking.count.mockResolvedValue(0);
   mockPrisma.storefrontInquiry.count.mockResolvedValue(4);
@@ -106,5 +143,15 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("Billing mode: prepared-not-prescribed");
     expect(context).toContain("Customer graph: separate-customer-projection");
     expect(context).toContain("Estate separation: strict");
+  });
+
+  it("includes archetype and licensing readiness details for /compliance/licensing", async () => {
+    const context = await getRouteDataContext("/compliance/licensing", "user-1");
+
+    expect(context).toContain("PAGE DATA — Licensing Readiness:");
+    expect(context).toContain("Business archetype: IT Managed Services");
+    expect(context).toContain("Investigation mode: expanding");
+    expect(context).toContain("Requirement reference hints:");
+    expect(context).toContain("Nevada State Contractors Board");
   });
 });

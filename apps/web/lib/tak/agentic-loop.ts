@@ -146,6 +146,91 @@ function hasAuthoritativeToolProgress(
   ) ?? false;
 }
 
+type AgentRouteConfig = {
+  minimumDimensions?: Record<string, number>;
+  budgetClass?: "minimize_cost" | "balanced" | "quality_first";
+  preferredProviderId?: string;
+  preferredModelId?: string;
+  effort?: "low" | "medium" | "high" | "max";
+};
+
+function resolveEffectiveAgentRouteConfig(params: {
+  agentModelConfig: {
+    minimumTier: string;
+    budgetClass: string;
+    pinnedProviderId: string | null;
+    pinnedModelId: string | null;
+  } | null;
+  modelRequirements: unknown;
+}): AgentRouteConfig {
+  const codeConfig: AgentRouteConfig =
+    params.modelRequirements && typeof params.modelRequirements === "object"
+      ? {
+          ...("defaultMinimumTier" in params.modelRequirements
+            ? {
+                minimumDimensions:
+                  TIER_MINIMUM_DIMENSIONS[
+                    params.modelRequirements.defaultMinimumTier as QualityTier
+                  ] ?? {},
+              }
+            : "minimumDimensions" in params.modelRequirements
+              ? {
+                  minimumDimensions:
+                    params.modelRequirements.minimumDimensions as Record<string, number>,
+                }
+              : {}),
+          ...("defaultBudgetClass" in params.modelRequirements
+            ? {
+                budgetClass: params.modelRequirements.defaultBudgetClass as
+                  | "minimize_cost"
+                  | "balanced"
+                  | "quality_first",
+              }
+            : "budgetClass" in params.modelRequirements
+              ? {
+                  budgetClass: params.modelRequirements.budgetClass as
+                    | "minimize_cost"
+                    | "balanced"
+                    | "quality_first",
+                }
+              : {}),
+          ...("preferredProviderId" in params.modelRequirements
+            ? { preferredProviderId: params.modelRequirements.preferredProviderId as string }
+            : {}),
+          ...("preferredModelId" in params.modelRequirements
+            ? { preferredModelId: params.modelRequirements.preferredModelId as string }
+            : {}),
+          ...("defaultEffort" in params.modelRequirements
+            ? {
+                effort: params.modelRequirements.defaultEffort as
+                  | "low"
+                  | "medium"
+                  | "high"
+                  | "max",
+              }
+            : {}),
+        }
+      : {};
+
+  if (!params.agentModelConfig) return codeConfig;
+
+  return {
+    ...codeConfig,
+    minimumDimensions:
+      TIER_MINIMUM_DIMENSIONS[params.agentModelConfig.minimumTier as QualityTier] ??
+      codeConfig.minimumDimensions ??
+      {},
+    budgetClass: params.agentModelConfig.budgetClass as
+      | "minimize_cost"
+      | "balanced"
+      | "quality_first",
+    preferredProviderId:
+      params.agentModelConfig.pinnedProviderId ?? codeConfig.preferredProviderId,
+    preferredModelId:
+      params.agentModelConfig.pinnedModelId ?? codeConfig.preferredModelId,
+  };
+}
+
 /** Detect when the agent claims completion or narrates code without having called authoritative tools. */
 export function detectFabrication(
   response: string,
@@ -564,41 +649,10 @@ export async function runAgenticLoop(params: {
     agentModelConfig?.minimumContextTokens ?? DEFAULT_MINIMUM_CONTEXT_TOKENS;
 
   // Resolve effective config: DB row > code defaults > nothing
-  const effectiveConfig = agentModelConfig
-    ? {
-        minimumDimensions: TIER_MINIMUM_DIMENSIONS[agentModelConfig.minimumTier as QualityTier] ?? {},
-        budgetClass: agentModelConfig.budgetClass as "minimize_cost" | "balanced" | "quality_first",
-        preferredProviderId: agentModelConfig.pinnedProviderId ?? undefined,
-        preferredModelId: agentModelConfig.pinnedModelId ?? undefined,
-        // EP-INF-013: defaultEffort not yet in AgentModelConfig schema (EP-INF-013b).
-        // Fall through to code-level default when DB row exists.
-        ...(modelRequirements && typeof modelRequirements === "object" && "defaultEffort" in modelRequirements
-          ? { effort: modelRequirements.defaultEffort as "low" | "medium" | "high" | "max" }
-          : {}),
-      }
-    : {
-        // Fall back to code-level modelRequirements (defaultMinimumTier / legacy)
-        ...(modelRequirements && typeof modelRequirements === "object" && "defaultMinimumTier" in modelRequirements
-          ? { minimumDimensions: TIER_MINIMUM_DIMENSIONS[modelRequirements.defaultMinimumTier as QualityTier] ?? {} }
-          : modelRequirements && typeof modelRequirements === "object" && "minimumDimensions" in modelRequirements
-            ? { minimumDimensions: modelRequirements.minimumDimensions as Record<string, number> }
-            : {}),
-        ...(modelRequirements && typeof modelRequirements === "object" && "defaultBudgetClass" in modelRequirements
-          ? { budgetClass: modelRequirements.defaultBudgetClass as "minimize_cost" | "balanced" | "quality_first" }
-          : modelRequirements && typeof modelRequirements === "object" && "budgetClass" in modelRequirements
-            ? { budgetClass: modelRequirements.budgetClass as "minimize_cost" | "balanced" | "quality_first" }
-            : {}),
-        ...(modelRequirements && typeof modelRequirements === "object" && "preferredProviderId" in modelRequirements
-          ? { preferredProviderId: modelRequirements.preferredProviderId as string }
-          : {}),
-        ...(modelRequirements && typeof modelRequirements === "object" && "preferredModelId" in modelRequirements
-          ? { preferredModelId: modelRequirements.preferredModelId as string }
-          : {}),
-        // EP-INF-013: Read defaultEffort from code-level modelRequirements
-        ...(modelRequirements && typeof modelRequirements === "object" && "defaultEffort" in modelRequirements
-          ? { effort: modelRequirements.defaultEffort as "low" | "medium" | "high" | "max" }
-          : {}),
-      };
+  const effectiveConfig = resolveEffectiveAgentRouteConfig({
+    agentModelConfig,
+    modelRequirements,
+  });
 
   // Build routeAndCall options once (reused every iteration)
   const routeOptions = {

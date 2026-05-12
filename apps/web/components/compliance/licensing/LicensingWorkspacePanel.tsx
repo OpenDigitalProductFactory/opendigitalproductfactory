@@ -7,8 +7,10 @@ import {
   updateOrganizationLicenseProfile,
   type UpdateOrganizationLicenseProfileInput,
 } from "@/lib/actions/licensing-compliance";
+import { AgentWorkLauncher } from "@/components/agent/AgentWorkLauncher";
 import { CreateOrganizationLicenseRecordForm } from "@/components/compliance/licensing/CreateOrganizationLicenseRecordForm";
 import { CreatePersonLicenseRecordForm } from "@/components/compliance/licensing/CreatePersonLicenseRecordForm";
+import { buildLicensingCoworkerTopics } from "@/lib/licensing/licensing-coworker-topics";
 import type { LicensingWorkspace } from "@/lib/licensing-workspace-types";
 
 const inputClasses =
@@ -64,6 +66,7 @@ export function LicensingWorkspacePanel({ workspace }: Props) {
     researchCoverageStatus: workspace.profile.researchCoverageStatus,
     notes: workspace.profile.notes ?? "",
   });
+  const coworkerTopics = buildLicensingCoworkerTopics(workspace);
 
   function updateField<K extends keyof UpdateOrganizationLicenseProfileInput>(
     key: K,
@@ -223,6 +226,12 @@ export function LicensingWorkspacePanel({ workspace }: Props) {
         <MetricCard label="Pending fees" value={workspace.summary.pendingFeeCount} accent="var(--dpf-warning)" />
         <MetricCard label="Open issues" value={workspace.summary.openIssueCount} accent="var(--dpf-error)" />
       </div>
+
+      <AgentWorkLauncher
+        agentName="Licensing Specialist"
+        primaryActionLabel="Start licensing investigation"
+        topics={coworkerTopics}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <div className="space-y-6">
@@ -428,7 +437,7 @@ export function LicensingWorkspacePanel({ workspace }: Props) {
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Open issues</p>
                 <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-                  Gaps that still block readiness. Coworker-created investigation issues can layer into this list in the next slice.
+                  Gaps that still block readiness, including factual investigation issues the licensing coworker records from this route.
                 </p>
               </div>
               <Link href="/employee" className="text-xs text-[var(--dpf-accent)] hover:underline">

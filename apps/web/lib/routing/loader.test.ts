@@ -15,6 +15,29 @@ describe("resolveToolUse", () => {
     expect(resolveToolUse(profile as any)).toBe(false);
   });
 
+  it("provider hard floor beats catalog or admin claims of tool support", () => {
+    const profile = {
+      ...baseProfile,
+      profileSource: "admin",
+      capabilityOverrides: { toolUse: true },
+      capabilities: { toolUse: true },
+      supportsToolUse: true,
+      provider: { supportsToolUse: false },
+    };
+    expect(resolveToolUse(profile as any)).toBe(false);
+  });
+
+  it("explicit profile-level false beats stale capability metadata", () => {
+    const profile = {
+      ...baseProfile,
+      profileSource: "catalog",
+      capabilities: { toolUse: true },
+      supportsToolUse: false,
+      provider: { supportsToolUse: true },
+    };
+    expect(resolveToolUse(profile as any)).toBe(false);
+  });
+
   it("discovery capability value used for discovery-owned profiles", () => {
     const profile = { ...baseProfile, profileSource: "auto-discover", capabilities: { toolUse: true } };
     expect(resolveToolUse(profile as any)).toBe(true);
