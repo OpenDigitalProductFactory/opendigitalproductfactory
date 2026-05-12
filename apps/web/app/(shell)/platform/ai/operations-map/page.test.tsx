@@ -42,6 +42,7 @@ describe("AI operations map page", () => {
       },
     ] as never);
 
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([
       {
         id: "tool-1",
@@ -59,6 +60,7 @@ describe("AI operations map page", () => {
         summary: "Write blocked by policy",
       },
     ] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);

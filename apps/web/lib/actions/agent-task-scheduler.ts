@@ -242,17 +242,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       userContext,
     );
 
-    // Build message history
-    const rawMessages = await prisma.agentMessage.findMany({
-      where: { threadId: thread.id },
-      orderBy: { createdAt: "asc" },
-      take: 20,
-      select: { role: true, content: true },
-    });
-    const chatHistory = rawMessages.map((m) => ({
-      role: m.role as "user" | "assistant" | "system",
-      content: m.content,
-    }));
+    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${task.prompt}`;
+    const chatHistory = [
+      {
+        role: "user" as const,
+        content: scheduledPrompt,
+      },
+    ];
 
     const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
     const { getAvailableTools, toolsToOpenAIFormat, executeTool } = await import(
@@ -275,6 +271,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunId: taskRunRef.taskRunId,
     });
 
+    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
+    const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
+
     // Persist agent response
     await prisma.agentMessage.create({
       data: {
@@ -291,7 +290,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunRecordId: taskRunRef.id,
       contextId: taskRunRef.contextId,
       role: "agent",
-      content: result.content ?? "(No response)",
+      content: taskMessageContent,
       metadata: {
         source: "scheduled",
         taskId: task.taskId,
@@ -299,7 +298,6 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
     if (scheduledSummary) {
       await prisma.agentMessage.create({
         data: {

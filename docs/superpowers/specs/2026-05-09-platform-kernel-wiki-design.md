@@ -93,7 +93,7 @@ This design applies that pattern to a multi-tenant SaaS: the kernel ships in the
 | P3 | **Two-layer overlay with explicit lineage** | Kernel pages and per-org overrides are physically separate rows joined by `kernelPageId` + `derivedFromKernelVersion`. Kernel upgrades cleanly; drift is a first-class lint signal. |
 | P4 | **Source-cite enforcement** | Every published page cites at least one `RawSource`. Lint blocks publish if `WikiPageSource[]` is empty or if any `[[link]]` is dangling. |
 | P5 | **Schema-grounded ingest** | The LLM slots claims into a canonical entity registry defined in `SCHEMA.md`. New entities require an explicit `propose_new` step. |
-| P6 | **Reuse, don't duplicate** | Bridge `WikiPage.linkedArticleId → KnowledgeArticle`. Add `RawSource` as a standalone primitive rather than overload `EvidenceSource` (which is FK-bound to `EvidenceBundle` for deliberation). |
+| P6 | **Reuse, don't duplicate** | Absorb the `KnowledgeArticle` shape into `WikiPage` over the staged migration path in §11. Add `RawSource` as a standalone primitive rather than overload `EvidenceSource` (which is FK-bound to `EvidenceBundle` for deliberation). |
 
 ---
 
@@ -216,7 +216,6 @@ model WikiPage {
   inLinks                  WikiPageLink[] @relation("WikiInLinks")
   sources                  WikiPageSource[]
 
-  @@unique([organizationId, slug])
   @@index([slug])
   @@index([pageKind])
   @@index([status])
@@ -289,6 +288,20 @@ model WikiLintFinding {
   @@index([findingKind])
 }
 ```
+
+**Slug uniqueness note.** The schema block omits slug uniqueness because Prisma cannot express the exact Postgres constraint needed for nullable `organizationId`: a normal `@@unique([organizationId, slug])` would still allow duplicate kernel rows where `organizationId IS NULL`. Phase 1a must add partial unique indexes in the migration SQL:
+
+```sql
+CREATE UNIQUE INDEX "WikiPage_kernel_slug_key"
+  ON "WikiPage" ("slug")
+  WHERE "organizationId" IS NULL;
+
+CREATE UNIQUE INDEX "WikiPage_org_slug_key"
+  ON "WikiPage" ("organizationId", "slug")
+  WHERE "organizationId" IS NOT NULL;
+```
+
+These two indexes are load-bearing for kernel fallback, overlay masking, and kernel-drift detection.
 
 ### 4.2 Relations Added to Existing Models
 
@@ -460,5 +473,5 @@ Implementation note: because `KnowledgeArticle` carries zero production rows, th
 
 - `wiki_resolve_drift` 3-way merge tool.
 - Neo4j projection of `WikiPage` / `RawSource` for graph traversal — same pattern as today's `DigitalProduct` projection. Add when a query pattern emerges that Postgres + Qdrant cannot answer cleanly.
-- Promotion of `wiki_query` answers into `KnowledgeArticle` rows.
+- Promotion of `wiki_query` answers into draft `WikiPage` rows.
 - Search-rank tuning across `wiki-pages` + `platform-knowledge` + `agent-memory`.

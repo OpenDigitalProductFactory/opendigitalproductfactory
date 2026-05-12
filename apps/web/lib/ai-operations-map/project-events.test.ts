@@ -194,7 +194,21 @@ describe("AI operations map projection", () => {
     expect(projection.severity).toBe("normal");
     expect(projection.refs.backlogItemId).toBe("BI-123");
     expect(projection.refs.toolExecutionId).toBe("tool-3");
-    expect(projection.links.backlogHref).toBe("/platform/backlog?itemId=BI-123");
+    expect(projection.links.backlogHref).toBe("/ops?itemId=BI-123");
+  });
+
+  it("projects backlog evidence links with the human-readable item id when loaded", () => {
+    const projection = projectBacklogEvidence(
+      makeBacklogEvidence({
+        id: "activity-1",
+        backlogItemId: "internal-row-id",
+        backlogItem: { itemId: "BI-123" },
+        summary: "UX verification completed",
+      }),
+    );
+
+    expect(projection.refs.backlogItemId).toBe("BI-123");
+    expect(projection.links.backlogHref).toBe("/ops?itemId=BI-123");
   });
 
   it("projects external evidence through route context and history links", () => {

@@ -235,6 +235,54 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
     );
   });
 
+  it("uses the structured scheduled summary for task-facing agent messages when a triage tool ran", async () => {
+    arrangeScheduledTask();
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "I stopped because I was still describing work without using the required tools.",
+      executedTools: [
+        {
+          name: "run_discovery_triage",
+          args: { trigger: "cadence" },
+          result: {
+            success: true,
+            message: "ok",
+            data: {
+              trigger: "cadence",
+              processedAt: "2026-05-12T00:25:12.506Z",
+              runIdempotencyKey: "2026-05-12:inventory-specialist:cadence",
+              metrics: {
+                processed: 1,
+                decisionsCreated: 1,
+                autoAttributed: 0,
+                humanReview: 0,
+                taxonomyGap: 0,
+                needsMoreEvidence: 1,
+                dismissed: 0,
+                escalationQueueDepth: 0,
+                repeatUnresolved: 1,
+                autoApplyRate: 0,
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
+
+    const agentTaskMessage = mocks.prisma.taskMessage.create.mock.calls.find(
+      ([args]) => args.data.role === "agent",
+    )?.[0];
+
+    expect(agentTaskMessage?.data.parts).toEqual([
+      {
+        type: "message",
+        text: expect.stringContaining("Discovery triage cadence processed=1"),
+      },
+    ]);
+    expect(agentTaskMessage?.data.parts[0].text).not.toContain("I stopped because");
+  });
+
   it("marks the TaskRun failed and preserves the next schedule when the loop throws", async () => {
     arrangeScheduledTask();
     mocks.runAgenticLoop.mockRejectedValue(new Error("LLM unavailable"));
@@ -260,6 +308,32 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
           taskRunId: "TR-SCHED-ABCDE",
           nextRunAt: expect.any(Date),
         }),
+      }),
+    );
+  });
+
+  it("executes scheduled tasks with only the current scheduled prompt, not stale thread history", async () => {
+    arrangeScheduledTask();
+    mocks.prisma.agentMessage.findMany.mockResolvedValue([
+      { role: "user", content: "Prior scheduled prompt." },
+      { role: "assistant", content: "Previous tool failure." },
+      { role: "assistant", content: "[Scheduled summary: old run]" },
+    ]);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Done.",
+      executedTools: [],
+    });
+
+    await executeScheduledAgentTask("discovery-taxonomy-gap-triage-daily");
+
+    expect(mocks.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatHistory: [
+          {
+            role: "user",
+            content: "[Scheduled task: Discovery Taxonomy Gap Triage]\n\nTriage taxonomy gaps.",
+          },
+        ],
       }),
     );
   });

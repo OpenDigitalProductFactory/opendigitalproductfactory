@@ -228,6 +228,45 @@ describe("getTaskNodeStatus", () => {
   });
 });
 
+describe("normalizeBuildSnapshot — shape drift tolerance", () => {
+  // Regression: a rogue writer (snake_case claim summary) used to crash the
+  // Build Studio with "Cannot read properties of undefined (reading 'split')".
+  it("skips task entries missing the required string fields", () => {
+    const row = makeRow({
+      phase: "ideate",
+      // Shape that crashed the renderer in production: a triage/claim summary
+      // stored under taskResults with no title/specialist on the entries.
+      taskResults: {
+        tasks: [{ status: "claimed_by_ai_coworker", item_id: "BI-B6423E18" }],
+      } as unknown as FeatureBuildRow["taskResults"],
+    });
+
+    expect(() => normalizeBuildSnapshot(row)).not.toThrow();
+    const snap = normalizeBuildSnapshot(row);
+    expect(snap.storedTaskResults.size).toBe(0);
+    expect(snap.taskActors.size).toBe(0);
+  });
+
+  it("keeps valid entries when malformed entries are mixed in", () => {
+    const row = makeRow({
+      phase: "build",
+      taskResults: {
+        tasks: [
+          { title: "Add schema", specialist: "data-architect", outcome: "DONE", durationMs: 1000 },
+          { status: "claimed_by_ai_coworker", item_id: "BI-1234" },
+          { title: "Add API", specialist: "software-engineer", outcome: "DONE", durationMs: 2000 },
+        ],
+      } as unknown as FeatureBuildRow["taskResults"],
+    });
+
+    const snap = normalizeBuildSnapshot(row);
+    expect(snap.storedTaskResults.size).toBe(2);
+    expect(snap.storedTaskResults.has("Add schema")).toBe(true);
+    expect(snap.storedTaskResults.has("Add API")).toBe(true);
+    expect(snap.taskActors.get("Add schema")?.label).toBe("Data Architect");
+  });
+});
+
 describe("buildTaskGraph", () => {
   it("returns empty nodes and edges when buildPlan is null", () => {
     const row = makeRow({ buildPlan: null });

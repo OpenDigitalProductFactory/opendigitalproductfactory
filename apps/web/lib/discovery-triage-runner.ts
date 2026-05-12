@@ -55,6 +55,9 @@ export type DiscoveryTriageRunnerDb = {
   portfolioQualityIssue: {
     findMany(args: Record<string, unknown>): Promise<DiscoveryTriageRunnerIssue[]>;
   };
+  taxonomyNode: {
+    findMany(args: Record<string, unknown>): Promise<Array<{ id: string; nodeId: string }>>;
+  };
   discoveryTriageDecision: {
     findFirst(args: Record<string, unknown>): Promise<{ decisionId: string } | null>;
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
@@ -181,6 +184,38 @@ function finalizeMetrics(metrics: DiscoveryTriageRunMetrics): DiscoveryTriageRun
   };
 }
 
+async function loadTaxonomyNodeLookup(
+  db: DiscoveryTriageRunnerDb,
+  entities: DiscoveryTriageRunnerEntity[],
+): Promise<Map<string, string>> {
+  const candidateIds = new Set<string>();
+  for (const entity of entities) {
+    for (const candidate of normalizeCandidateTaxonomy(entity.candidateTaxonomy)) {
+      if (candidate.nodeId.trim()) candidateIds.add(candidate.nodeId);
+    }
+  }
+
+  if (candidateIds.size === 0) return new Map();
+
+  const candidates = [...candidateIds];
+  const nodes = await db.taxonomyNode.findMany({
+    where: {
+      OR: [
+        { id: { in: candidates } },
+        { nodeId: { in: candidates } },
+      ],
+    },
+    select: { id: true, nodeId: true },
+  });
+
+  const lookup = new Map<string, string>();
+  for (const node of nodes) {
+    lookup.set(node.id, node.id);
+    lookup.set(node.nodeId, node.id);
+  }
+  return lookup;
+}
+
 export async function runDiscoveryTriagePass(
   db: DiscoveryTriageRunnerDb = prisma as unknown as DiscoveryTriageRunnerDb,
   options: {
@@ -217,6 +252,7 @@ export async function runDiscoveryTriagePass(
     }),
   ]);
 
+  const taxonomyNodeIdByCandidate = await loadTaxonomyNodeLookup(db, entities);
   const issueByEntityId = new Map(
     issues
       .filter((issue) => issue.inventoryEntityId)
@@ -240,7 +276,10 @@ export async function runDiscoveryTriagePass(
     const outcome = resolveDiscoveryTriageOutcome(score, packetWithRunMetadata, thresholds);
     const requiresHumanReview = outcome === "human-review" || outcome === "taxonomy-gap";
     const autoApply = shouldAutoApplyTriageDecision(score, packetWithRunMetadata, thresholds);
-    const selectedTaxonomyNodeId = packetWithRunMetadata.candidateTaxonomy[0]?.nodeId ?? null;
+    const selectedTaxonomyCandidateId = packetWithRunMetadata.candidateTaxonomy[0]?.nodeId ?? null;
+    const selectedTaxonomyNodeId = selectedTaxonomyCandidateId
+      ? taxonomyNodeIdByCandidate.get(selectedTaxonomyCandidateId) ?? null
+      : null;
     const selectedIdentity = packetWithRunMetadata.identityCandidates[0]
       ? {
           label: packetWithRunMetadata.identityCandidates[0].identity,
@@ -250,7 +289,10 @@ export async function runDiscoveryTriagePass(
         }
       : null;
     const proposedRule = outcome === "auto-attributed"
-      ? synthesizeDiscoveryFingerprintRule(packetWithRunMetadata, score, thresholds)
+      ? withResolvedProposedRuleTaxonomyNodeId(
+        synthesizeDiscoveryFingerprintRule(packetWithRunMetadata, score, thresholds),
+        selectedTaxonomyNodeId,
+      )
       : null;
 
     if (autoApply && selectedTaxonomyNodeId) {
@@ -359,6 +401,17 @@ export async function runDiscoveryTriageDaily(
     runIdempotencyKey,
     thresholds: options.thresholds,
   });
+}
+
+function withResolvedProposedRuleTaxonomyNodeId<T extends { taxonomyNodeId: string } | null>(
+  proposedRule: T,
+  selectedTaxonomyNodeId: string | null,
+): T {
+  if (!proposedRule || !selectedTaxonomyNodeId) return proposedRule;
+  return {
+    ...proposedRule,
+    taxonomyNodeId: selectedTaxonomyNodeId,
+  };
 }
 
 export async function maybeTriggerDiscoveryTriageForVolume(

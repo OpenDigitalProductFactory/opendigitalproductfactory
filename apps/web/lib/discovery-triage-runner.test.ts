@@ -16,6 +16,9 @@ function createRunnerDb() {
     portfolioQualityIssue: {
       findMany: vi.fn(),
     },
+    taxonomyNode: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     discoveryTriageDecision: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({}),
@@ -26,6 +29,12 @@ function createRunnerDb() {
 describe("runDiscoveryTriagePass", () => {
   it("auto-applies safe high-confidence matches and records the decision", async () => {
     const db = createRunnerDb();
+    db.taxonomyNode.findMany.mockResolvedValue([
+      {
+        id: "tax-node-container-platform",
+        nodeId: "foundational/platform_services/container_platform",
+      },
+    ]);
     db.inventoryEntity.findMany.mockResolvedValue([
       {
         id: "entity-1",
@@ -61,7 +70,7 @@ describe("runDiscoveryTriagePass", () => {
     expect(db.inventoryEntity.update).toHaveBeenCalledWith({
       where: { id: "entity-1" },
       data: expect.objectContaining({
-        taxonomyNodeId: "foundational/platform_services/container_platform",
+        taxonomyNodeId: "tax-node-container-platform",
         attributionStatus: "attributed",
         attributionMethod: "ai-proposed",
       }),
@@ -72,7 +81,15 @@ describe("runDiscoveryTriagePass", () => {
         actorType: "agent",
         actorId: "inventory-specialist",
         outcome: "auto-attributed",
+        selectedTaxonomyNodeId: "tax-node-container-platform",
         requiresHumanReview: false,
+        evidencePacket: expect.objectContaining({
+          candidateTaxonomy: expect.arrayContaining([
+            expect.objectContaining({
+              nodeId: "foundational/platform_services/container_platform",
+            }),
+          ]),
+        }),
       }),
     });
     expect(result.metrics.autoAttributed).toBe(1);

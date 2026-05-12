@@ -42,11 +42,13 @@ type Props = {
   sort: EpicSort;
   onEdit: (epic: EpicWithRelations) => void;
   onItemEdit: (item: BacklogItemWithRelations) => void;
+  focusedItemId?: string;
 };
 
-export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
+export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Props) {
   const router = useRouter();
-  const [expanded, setExpanded] = useState(false);
+  const hasFocusedItem = epic.items.some((item) => isFocusedBacklogItem(item, focusedItemId));
+  const [expanded, setExpanded] = useState(hasFocusedItem);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -185,7 +187,12 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
           ) : (
             <div className="flex flex-col gap-1.5">
               {sortedItems(epic.items, sort).map((item) => (
-                <BacklogItemRow key={item.id} item={item} onEdit={onItemEdit} />
+                <BacklogItemRow
+                  key={item.id}
+                  item={item}
+                  onEdit={onItemEdit}
+                  focused={isFocusedBacklogItem(item, focusedItemId)}
+                />
               ))}
             </div>
           )}
@@ -193,4 +200,8 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit }: Props) {
       )}
     </div>
   );
+}
+
+function isFocusedBacklogItem(item: BacklogItemWithRelations, focusedItemId?: string): boolean {
+  return Boolean(focusedItemId && (item.itemId === focusedItemId || item.id === focusedItemId));
 }

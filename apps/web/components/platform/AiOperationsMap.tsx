@@ -17,6 +17,7 @@ import {
   summarizeProjectionCounts,
 } from "@/lib/ai-operations-map/project-events";
 import {
+  clearOperationsMapViewPreference,
   loadOperationsMapViewPreference,
   saveOperationsMapViewPreference,
   type OperationsMapStoredQuickViewId,
@@ -113,6 +114,12 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
     setSourceFilters(filters.sources);
     setSeverityFilters(filters.severities);
   };
+  const resetView = () => {
+    clearOperationsMapViewPreference();
+    setActiveQuickViewId(DEFAULT_QUICK_VIEW_ID);
+    setSourceFilters(getOperationsMapQuickViewFilters(DEFAULT_QUICK_VIEW_ID).sources);
+    setSeverityFilters(getOperationsMapQuickViewFilters(DEFAULT_QUICK_VIEW_ID).severities);
+  };
   const toggleSourceFilter = (source: OperationsMapProjectionSource) => {
     setActiveQuickViewId("custom");
     setSourceFilters((current) => toggleFilterOption(current, source, SOURCE_OPTIONS));
@@ -152,6 +159,13 @@ export function AiOperationsMap({ template, agents, projections, recentWindowLab
             <p className="mt-1 text-xs text-[var(--dpf-muted)]">
               Showing {filteredProjections.length} of {projections.length} activities
             </p>
+            <button
+              type="button"
+              onClick={resetView}
+              className="mt-2 text-xs font-medium text-[var(--dpf-accent)] hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+            >
+              Reset view
+            </button>
           </div>
           <div className="grid gap-3 lg:grid-cols-3">
             <FilterGroup label="Quick views">

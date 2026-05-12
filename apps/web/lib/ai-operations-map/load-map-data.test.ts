@@ -163,6 +163,11 @@ describe("loadOperationsMapData", () => {
         recordedById: true,
         recordedByAgentId: true,
         toolExecutionId: true,
+        backlogItem: {
+          select: {
+            itemId: true,
+          },
+        },
       },
     });
     expect(prisma.externalEvidenceRecord.findMany).toHaveBeenCalledWith({
@@ -257,6 +262,7 @@ function makeBacklogEvidenceRow() {
     recordedById: "user-1",
     recordedByAgentId: "support-specialist",
     toolExecutionId: "tool-1",
+    backlogItem: { itemId: "BI-123" },
   };
 }
 
