@@ -127,6 +127,15 @@ describe("shouldNudge", () => {
     })).toBe(true);
   });
 
+  it("does not nudge a short summary after an authoritative action tool", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 3, maxIterations: 40,
+      hasTools: true, executedToolCount: 1, responseLength: 42,
+      responseText: "Discovery triage skipped for today's cadence.",
+      hasAuthoritativeToolExecution: true,
+    })).toBe(false);
+  });
+
   it("does not nudge if already nudged once", () => {
     expect(shouldNudge({
       continuationNudges: 1, iteration: 0, maxIterations: 40,
@@ -252,6 +261,16 @@ describe("detectFabrication", () => {
     expect(detectFabrication(
       "Here's what I added to the code.",
       3, false, ["saveBuildEvidence", "propose_file_change"],
+    )).toBe(false);
+  });
+
+  it("does not flag completion after a side-effect action tool was used", () => {
+    expect(detectFabrication(
+      "Discovery triage completed for today's cadence.",
+      1,
+      false,
+      ["run_discovery_triage"],
+      new Set(["run_discovery_triage"]),
     )).toBe(false);
   });
 });

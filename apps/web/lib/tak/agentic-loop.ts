@@ -137,24 +137,34 @@ const BUILD_PROGRESS_TOOL_NAMES = new Set([
   "propose_file_change",
 ]);
 
-/** Detect when the agent claims completion or narrates code without having called build tools. */
+function hasAuthoritativeToolProgress(
+  executedToolNames: string[] | undefined,
+  authoritativeToolNames?: Set<string>,
+): boolean {
+  return executedToolNames?.some((name) =>
+    BUILD_TOOL_NAMES.has(name) || authoritativeToolNames?.has(name),
+  ) ?? false;
+}
+
+/** Detect when the agent claims completion or narrates code without having called authoritative tools. */
 export function detectFabrication(
   response: string,
   executedToolCount: number,
   hasProposal: boolean,
   executedToolNames?: string[],
+  authoritativeToolNames?: Set<string>,
 ): boolean {
   if (hasProposal) return false;
 
   // If no tools were called at all, any completion claim is fabrication
   if (executedToolCount === 0) return COMPLETION_CLAIM_PATTERN.test(response);
 
-  // If tools were called but none were BUILD tools (only read/search), the
+  // If tools were called but none were authoritative action tools (only read/search), the
   // agent still cannot claim completion or narrate implementation as if it
   // persisted build-state evidence. Read-only investigation is not enough to
   // say a plan is ready, implementation started, or code was changed.
-  const usedBuildTool = executedToolNames?.some((n) => BUILD_TOOL_NAMES.has(n)) ?? false;
-  if (!usedBuildTool && (
+  const usedAuthoritativeTool = hasAuthoritativeToolProgress(executedToolNames, authoritativeToolNames);
+  if (!usedAuthoritativeTool && (
     COMPLETION_CLAIM_PATTERN.test(response) ||
     NARRATION_PATTERN.test(response)
   )) return true;
@@ -218,6 +228,7 @@ export function shouldNudge(params: {
   executedToolCount: number;
   responseLength: number;
   responseText?: string;
+  hasAuthoritativeToolExecution?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
   // to one targeted nudge, it won't respond to more and will just burn tokens.
@@ -243,7 +254,18 @@ export function shouldNudge(params: {
     return true;
   }
 
-  // Short response after using tools — model may have stalled
+  // Short response after using tools — model may have stalled. A short response
+  // after an authoritative action tool is allowed because scheduled/procedural
+  // runs often summarize a persisted tool result in one sentence.
+  if (
+    params.hasAuthoritativeToolExecution
+    && params.executedToolCount > 0
+    && params.responseText
+    && !NARRATION_PATTERN.test(params.responseText)
+    && !PERMISSION_SEEKING_PATTERN.test(params.responseText)
+  ) return false;
+
+  // Short response after using only read/context tools — model may have stalled
   if (params.executedToolCount > 0 && params.responseLength < 200) return true;
 
   // Agent is narrating code instead of using tools — nudge to use build tools
@@ -896,6 +918,7 @@ export async function runAgenticLoop(params: {
         executedTools.length,
         false,
         executedTools.map((t) => t.name),
+        new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
       );
 
       const isBuildRoute = BUILD_ROUTE_PATTERN.test(routeContext);
@@ -1016,6 +1039,11 @@ export async function runAgenticLoop(params: {
         executedToolCount: executedTools.length,
         responseLength: trimmed.length,
         responseText: trimmed,
+        hasAuthoritativeToolExecution: executedTools.some(
+          (executedTool) => executedTool.result.success && tools.some(
+            (tool) => tool.name === executedTool.name && tool.sideEffect,
+          ),
+        ),
       });
 
         if (shouldNudgeNow) {
@@ -1258,6 +1286,7 @@ export async function runAgenticLoop(params: {
     executedTools.length,
     false,
     executedTools.map((tool) => tool.name),
+    new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
   );
   return {
     content: fallbackIsFabricated
