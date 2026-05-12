@@ -70,10 +70,10 @@ export default async function CompliancePage() {
 
       {/* Posture Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard label="Obligations" value={activeObligationCount} color="#ef4444" />
-        <MetricCard label="Control Coverage" value={`${coveragePct}%`} color={coveragePct >= 80 ? "#4ade80" : "#fbbf24"} />
-        <MetricCard label="Open Incidents" value={openIncidentCount} color={openIncidentCount > 0 ? "#ef4444" : "#4ade80"} />
-        <MetricCard label="Overdue Actions" value={overdueActionCount} color={overdueActionCount > 0 ? "#ef4444" : "#4ade80"} />
+        <MetricCard label="Obligations" value={activeObligationCount} accent="var(--dpf-accent)" />
+        <MetricCard label="Control Coverage" value={`${coveragePct}%`} accent={coveragePct >= 80 ? "var(--dpf-success)" : "var(--dpf-warning)"} />
+        <MetricCard label="Open Incidents" value={openIncidentCount} accent={openIncidentCount > 0 ? "var(--dpf-error)" : "var(--dpf-success)"} />
+        <MetricCard label="Overdue Actions" value={overdueActionCount} accent={overdueActionCount > 0 ? "var(--dpf-error)" : "var(--dpf-success)"} />
       </div>
 
       {/* Regulatory Alerts */}
@@ -143,19 +143,25 @@ export default async function CompliancePage() {
       <section className="mt-8">
         <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">Policy Compliance</h2>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <MetricCard label="Published Policies" value={publishedPolicyCount} color="#a78bfa" />
-          <MetricCard label="Total Acknowledgments" value={totalAcks} color="#4ade80" />
+          <MetricCard label="Published Policies" value={publishedPolicyCount} accent="var(--dpf-accent)" />
+          <MetricCard label="Total Acknowledgments" value={totalAcks} accent="var(--dpf-success)" />
         </div>
       </section>
     </div>
   );
 }
 
-function MetricCard({ label, value, color }: { label: string; value: number | string; color: string }) {
+function MetricCard({ label, value, accent }: { label: string; value: number | string; accent: string }) {
   return (
-    <div className="p-4 rounded-lg border border-[var(--dpf-border)]">
+    <div
+      className="p-4 rounded-lg border"
+      style={{
+        borderColor: `color-mix(in srgb, ${accent} 28%, var(--dpf-border))`,
+        background: `color-mix(in srgb, ${accent} 8%, var(--dpf-surface-1))`,
+      }}
+    >
       <p className="text-xs text-[var(--dpf-muted)] mb-1">{label}</p>
-      <p className="text-2xl font-bold" style={{ color }}>{value}</p>
+      <p className="text-2xl font-bold" style={{ color: accent }}>{value}</p>
     </div>
   );
 }

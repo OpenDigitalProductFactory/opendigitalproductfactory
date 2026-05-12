@@ -20,6 +20,13 @@ const FAMILIES: ComplianceFamily[] = [
     subItems: [],
   },
   {
+    label: "Licensing",
+    href: "/compliance/licensing",
+    description: "Operate licensing, permit, credential, fee, and display-readiness workflows across the business.",
+    matchPrefixes: ["/compliance/licensing"],
+    subItems: [{ label: "Licensing workspace", href: "/compliance/licensing" }],
+  },
+  {
     label: "Library",
     href: "/compliance/policies",
     description: "Manage the rules you are accountable to and the internal policy library around them.",
