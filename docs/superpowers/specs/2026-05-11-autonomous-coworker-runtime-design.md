@@ -7,7 +7,7 @@
 | Related epics | EP-TAK-3F9A21, EP-CTRL-5E21A4 |
 | Related repo areas | `apps/web/lib/actions/agent-coworker.ts`, `apps/web/lib/actions/agent-task-scheduler.ts`, `apps/web/lib/tak/agentic-loop.ts`, `apps/web/lib/mcp-governed-execute.ts`, `apps/web/app/api/mcp/v1/route.ts`, `apps/web/lib/queue/functions/agent-task-dispatch.ts`, `apps/web/lib/tak/task-records.ts`, `apps/web/lib/ai-operations-map/*`, `packages/db/prisma/schema.prisma` |
 | Related DPF standards | `docs/architecture/trusted-ai-kernel.md`, `docs/architecture/GAID.md`, `docs/architecture/agent-standards-dpf-conformance.md`, `docs/architecture/ai-coworker-development-principles.md` |
-| Related specs | `2026-03-23-task-graph-orchestration-design.md`, `2026-03-23-task-governance-control-plane-design.md`, `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-04-29-coworker-execution-adapter-substrate-design.md`, `2026-04-29-orchestration-primitives-design.md`, `2026-04-30-ai-coworker-operator-pattern.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-05-10-build-studio-business-intake-innovation-radar-design.md` |
+| Related specs | `2026-03-23-task-graph-orchestration-design.md`, `2026-03-23-task-governance-control-plane-design.md`, `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-04-29-coworker-execution-adapter-substrate-design.md`, `2026-04-29-orchestration-primitives-design.md`, `2026-04-30-ai-coworker-operator-pattern.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-05-10-build-studio-business-intake-innovation-radar-design.md`, `2026-05-12-ai-capacity-continuity-design.md` |
 
 ## 1. Purpose
 
@@ -30,6 +30,8 @@ The design principle at the center is:
 This is not a slogan. It is the product strategy. Humans should spend attention on intent, judgment, exception handling, and governance. AI coworkers should absorb ambiguous, high-context, cross-system cognitive work. Once the pattern stabilizes, the platform should capture the repeated behavior as deterministic workflow, typed schema, policy, tests, or procedural code so future humans and future agents do not have to rediscover it.
 
 ## 2. Current State, Verified 2026-05-11
+
+> **Snapshot caveat.** §2 captures the pre-PR #468 state used as the design baseline. Slice 1 (§10) shipped after this snapshot; §2.3's "not yet a first-class `TaskRun`" claim and the `TaskRun` count in §2.1 are historical, not current. The post-Slice 1 schema is the authoritative state in §6.2.
 
 ### 2.1 Live runtime facts
 
@@ -240,6 +242,16 @@ The following are rejected:
 
 ## 5. Target Architecture
 
+### 5.0 Relationship to Capacity Continuity
+
+Capacity Continuity is the scheduling, funding, prioritization, and operating-tempo layer above this runtime. It decides which authorized work should consume available AI capacity during normal work, low-attention windows, vacations, holidays, events, after-hours periods, and owner inactivity.
+
+This autonomous runtime remains the execution layer. Capacity Continuity must submit work through `AutonomousWorkRun`; it must not invoke tools directly, create a parallel task identity, or bypass approval and evidence paths. Capacity-triggered work is just another governed trigger source whose execution still produces `TaskRun`, `ToolExecution`, receipts, evidence, Operations Map events, and return-briefing entries.
+
+The `AutonomousWorkTrigger` union (§5.1) includes `"capacity-continuity"` precisely so capacity-selected work is distinguishable in Operations Map projections without leaking capacity-policy concerns into the runtime. Provider/model preferences expressed by Capacity Continuity are *hints* fed to the existing dynamic routing; the runtime never honors a hardcoded provider pin (per the platform's no-provider-pinning principle).
+
+Routing hints have one canonical location: `TaskRun.a2aMetadata.cognitiveLoad.fundingFitHint` (shape: `{ providerClassHint, modelTierHint }`). The `AutonomousWorkRunInput` contract does **not** carry a top-level routing field — the router reads the hint off the persisted `a2aMetadata` so the audit record matches the decision. A trigger that needs no hint simply omits `fundingFitHint`; the router falls back to its default capability-tier/task-type resolution.
+
 ### 5.1 Canonical primitive: `AutonomousWorkRun`
 
 `AutonomousWorkRun` is a **service facade name**, not a parallel entity. The persistent work identity is `TaskRun`. This spec does not introduce a second ID space, a second status machine, or a second projection model. The `AutonomousWorkRun` service is the single function that every trigger calls to create or link a `TaskRun`, assemble context, resolve tools, and hand off to the agentic loop. The shape below is the service input contract, not a table:
@@ -252,7 +264,8 @@ type AutonomousWorkTrigger =
   | "build"
   | "deliberation"
   | "radar"
-  | "system-recovery";
+  | "system-recovery"
+  | "capacity-continuity";
 
 type AutonomousWorkRunInput = {
   trigger: AutonomousWorkTrigger;
@@ -266,7 +279,19 @@ type AutonomousWorkRunInput = {
   parentTaskRunId?: string;
   authorityScope?: string[];
   sourceRef?: {
-    kind: "scheduled-task" | "mcp-token" | "feature-build" | "backlog-item" | "manual-thread" | "deliberation-run";
+    kind:
+      | "scheduled-task"
+      | "mcp-token"
+      | "feature-build"
+      | "backlog-item"
+      | "manual-thread"
+      | "deliberation-run"
+      | "standing-order"
+      | "pull-request"
+      | "qa-gap"
+      | "spec"
+      | "capability-need"
+      | "proceduralization-candidate";
     id: string;
   };
 };
@@ -301,7 +326,7 @@ Required fields:
 | `contextId` | A2A-aligned continuity id. |
 | `initiatingAgentId` | Agent that accepted the work. |
 | `currentAgentId` | Agent currently responsible. |
-| `source` | `coworker`, `build`, `skill`, `proactive`, or extended enum if needed. |
+| `source` | `coworker`, `build`, `skill`, or `proactive`. Capacity-continuity runs use `source="proactive"` and are distinguished from scheduled runs by `a2aMetadata.trigger`; do not invent a `"capacity"` source value. |
 | `status` | A2A-shaped state: submitted, working, input-required, auth-required, completed, failed, canceled, rejected, archived. |
 | `authorityScope` | Narrowed scope for this run. |
 | `a2aMetadata` | Trigger, source ref, schedule id, MCP token id, route context, operating profile fingerprint. |
@@ -313,7 +338,7 @@ All run types should converge on:
 
 ```mermaid
 flowchart TD
-    A["Trigger: UI, schedule, MCP, Build Studio, radar, recovery"] --> B["AutonomousWorkRun service"]
+    A["Trigger: UI, schedule, MCP, Build Studio, radar, recovery, capacity-continuity"] --> B["AutonomousWorkRun service"]
     B --> C["TaskRun created or linked"]
     C --> D["Prompt, skills, memory, route context assembled"]
     D --> E["Tool list resolved by user capability and agent grants"]
@@ -361,7 +386,7 @@ Every autonomous run should record cognitive-load transfer signals:
 | --- | --- | --- |
 | `humanTouches` | approvals, clarifications, manual retries | Measures whether automation reduced or shifted burden. |
 | `agentSteps` | tool calls, task messages, artifacts | Shows cognitive work absorbed by coworker. |
-| `repetitionPatternKey` | `TaskRun.repeatedPatternKey` | Groups repeated cognitive burdens. |
+| `repetitionPatternKey` | `TaskRun.a2aMetadata.cognitiveLoad.repeatedPatternKey` (derived hash of `sourceRef.kind` + normalized `objective`) | Groups repeated cognitive burdens. Promote to a column only after Slice 5 baseline metrics stabilize (§13 open decision 3). |
 | `proceduralizationCandidate` | task metadata or backlog item | Marks patterns ready for deterministic code. |
 | `exceptionClass` | failed tool, auth, missing data, policy, model, schema | Shows what to fix next. |
 | `evidenceCompleteness` | receipts, artifacts, backlog evidence | Avoids "AI did something" claims without proof. |
@@ -409,19 +434,26 @@ Use:
 - `CoworkerCapabilityNeed` for agent-submitted needs,
 - `BacklogItemActivity` for backlog evidence.
 
-### 6.2 Likely schema changes
+### 6.2 Schema status
 
-Minimal first-slice changes (verified against `packages/db/prisma/schema.prisma` 2026-05-11):
+Re-verified against `packages/db/prisma/schema.prisma` 2026-05-12 (after PR #468):
 
-1. Add `taskRunId String?` to `ScheduledAgentTask` (currently absent — see schema lines 4281–4305) with an index on `(taskRunId)`.
-2. Add `taskRunId String?` to `ToolExecution` (currently absent — see schema lines 3007–3036) with an index on `(taskRunId, createdAt)`. `AgentMessage.taskRunId` (line 2886) and `AgentActionProposal.taskRunId` (line 2935) already exist and are the pattern to follow; code paths that pass `taskRunId` into `ToolExecution.create()` today are silently dropping it on the floor and must be reconciled in the same migration.
-3. Place `sourceRef`, `cognitiveLoad`, and `triggerKind` inside `TaskRun.a2aMetadata` rather than as new columns at first. Promote to columns only after Slice 5 metrics stabilize (§13 open decision 3).
+**Shipped (no further migration required for the attachment seam):**
 
-Potential later changes:
+1. `ScheduledAgentTask.taskRunId String?` — schema line 4329, indexed at line 4338. Set by `scheduled-task-runs.ts` to the latest TaskRun spawned by the schedule.
+2. `ToolExecution.taskRunId String?` — schema line 3029, indexed at line 3039. Persisted by `mcp-governed-execute.ts` when `context.taskRunId` is provided.
+3. `AgentMessage.taskRunId String?` and `AgentActionProposal.taskRunId String?` — schema lines 2886 and 2935. Pre-existing pattern that 1 and 2 followed.
 
-1. `AutonomousWorkPattern` for repeated proceduralization candidates.
-2. `HumanTouchpoint` if approval/clarification metrics outgrow `TaskMessage` and `AgentActionProposal`.
-3. `ProceduralizationCandidate` if backlog linkage alone is not enough.
+**Active recommendation:**
+
+Place `sourceRef`, `cognitiveLoad`, `triggerKind` (i.e. `trigger`, matching the `AutonomousWorkTrigger` union in §5.1), and `repeatedPatternKey` inside `TaskRun.a2aMetadata` rather than as new columns. Promote individual keys to columns only after Slice 5 metrics stabilize (§13 open decision 3) and the column is queried on a hot path the JSON path index cannot serve.
+
+**Potential later additions:**
+
+1. `TaskRun.repeatedPatternKey String?` indexed column — only if Slice 5 shows the metadata-path query is a bottleneck.
+2. `AutonomousWorkPattern` for repeated proceduralization candidates.
+3. `HumanTouchpoint` if approval/clarification metrics outgrow `TaskMessage` and `AgentActionProposal`.
+4. `ProceduralizationCandidate` if backlog linkage alone is not enough.
 
 ### 6.3 Status model
 
@@ -582,6 +614,7 @@ The model never owns authority. The runtime carries authority from:
 - service principal,
 - MCP token,
 - scheduled task owner,
+- standing-order owner (capacity-continuity trigger; see capacity spec §11.0a),
 - explicit delegation grant,
 - build/run policy.
 
@@ -628,38 +661,34 @@ This prevents "the agent did it twice, so hardcode it" from becoming a new short
 
 ## 10. Implementation Slices
 
-### Slice 1: Scheduled coworker as TaskRun
+### Slice 1: Scheduled coworker as TaskRun — SHIPPED (PR #468)
+
+Status: SHIPPED 2026-05-11 via PR #468 ("link scheduled runs to TaskRun"). Retained here as the historical record of the architectural choices the remaining slices build on.
 
 Goal: make the one existing scheduled coworker task a first-class autonomous work run.
 
-Scope:
+Shipped scope:
 
-- migration: add nullable `ScheduledAgentTask.taskRunId` and `ToolExecution.taskRunId` (§6.2),
-- create the `TaskRun` in `executeScheduledAgentTask()` **before** the first tool call,
-- pass `taskRunId` into `runAgenticLoop()` and through `governedExecuteTool()` so every `ToolExecution` row written during the run carries it,
-- write `TaskMessage` for scheduled prompt and final summary,
-- project blocked/failure/completed state into `progressPayload`,
-- preserve existing `ScheduledAgentTask` and `ScheduledJob` behavior,
-- verify the daily discovery triage task still runs.
+- migration: nullable `ScheduledAgentTask.taskRunId` and `ToolExecution.taskRunId` (§6.2 — schema lines 4329 and 3029 respectively),
+- `apps/web/lib/tak/scheduled-task-runs.ts:createTaskRunForScheduledTask()` creates the `TaskRun` **before** the agentic loop fires the first tool call, with `source="proactive"`, `a2aMetadata.trigger="scheduled"`, and `a2aMetadata.sourceRef={kind:"scheduled-task", id:taskId}`,
+- `taskRunId` flows through `runAgenticLoop()` and `governedExecuteTool()` into every `ToolExecution` row written during the run,
+- existing `ScheduledAgentTask` and `ScheduledJob` behavior preserved; the daily `discovery-taxonomy-gap-triage-daily` task continues running.
 
-Slice 1 is the first consumer of the shared seam that Slice 2 will extract. Implement the new code as a self-contained function on day one so Slice 2's extraction is a move, not a rewrite.
+Open follow-ups carried into later slices:
 
-Acceptance:
+- `TaskMessage` projection of scheduled prompt and final summary (Slice 2),
+- timezone honoring in cron computation or explicit "unsupported" UI surfacing (cross-cutting; tracked separately as a runtime-trust defect),
+- migration-blocking invariant test that every non-system `ToolExecution` from a scheduled run carries `taskRunId` (Slice 2 acceptance).
 
-- a scheduled run creates exactly one `TaskRun` and creates it before any tool call,
-- 100% of `ToolExecution` rows from the run carry the `taskRunId` FK (verified by a migration-blocking invariant test),
-- the run appears in the internal task endpoint output and the Operations Map,
-- failure marks the `TaskRun` failed and keeps next schedule intact,
-- timezone behavior is either implemented or clearly marked unsupported in UI (no silent ignore — that is a runtime-trust defect),
-- build gate (AGENTS.md §5) passes: vitest, `apps/web` next build, migration applies cleanly, UX exercised against the running install.
+The shipped implementation is the self-contained function Slice 2 will reuse — extraction is a move, not a rewrite.
 
-### Slice 2: AutonomousWorkRun service extraction
+### Slice 2: AutonomousWorkRun service extraction — STARTED
 
 Goal: reduce duplication between interactive and scheduled coworker paths.
 
 Scope:
 
-- introduce service wrapper around prompt/tool/run setup,
+- introduce service wrapper around `TaskRun` creation and trigger metadata,
 - preserve existing `sendMessage()` behavior,
 - reuse for scheduled execution,
 - centralize `TaskRun` creation/linking,
@@ -668,7 +697,8 @@ Scope:
 Acceptance:
 
 - no behavior regression in `/api/agent/send`,
-- scheduled and interactive paths use shared context/tool resolution,
+- scheduled execution uses the shared `AutonomousWorkRun` creation seam,
+- capacity-continuity can create `TaskRun` identity with `a2aMetadata.trigger = "capacity-continuity"` without tool execution,
 - existing agentic-loop tests still pass,
 - service can be called without Next route objects.
 
@@ -722,7 +752,7 @@ Goal: turn repeated cognitive load into code/workflow/policy candidates.
 Scope:
 
 - capture a one-week baseline before applying decline targets,
-- compute repeated pattern candidates from `TaskRun.repeatedPatternKey`, tool failures, approvals, and manual touches,
+- compute repeated pattern candidates from `TaskRun.a2aMetadata.cognitiveLoad.repeatedPatternKey` (per §5.5), tool failures, approvals, and manual touches; if the metadata-path query is a bottleneck under load, promote to the indexed column described in §6.2 as part of this slice's scope,
 - show candidates in AI Operations,
 - file governed backlog proposals,
 - link back to evidence.
@@ -791,25 +821,23 @@ Slice 5 must capture a one-week baseline before interpreting decline targets. Un
 
 The autonomous coworker runtime is considered coherent when:
 
-1. every scheduled coworker run has `TaskRun` identity (zero scheduled runs without `taskRunId` over a rolling 7-day window),
+1. every scheduled coworker run has `TaskRun` identity (zero scheduled runs without `taskRunId` over a rolling 7-day window) — **achieved by PR #468**,
 2. every external tool call and future remote task submission is governed through the same authority path (zero `ToolExecution` rows with `apiTokenId` set and `taskRunId` null when the call originated from `tasks/submit`),
-3. interactive, scheduled, remote, Build Studio, and deliberation work appear in one Operations Map projection,
-4. capability needs flow from runtime evidence to review/backlog with submitter attribution (zero open `CoworkerCapabilityNeed` older than the defined review SLA),
-5. repeated cognitive burdens are visible as proceduralization candidates,
-6. humans approve meaningful boundaries and exceptions, not routine internal steps,
-7. at least three proceduralization candidates have been promoted to procedural code, deterministic workflow, typed schema, or policy with linked evidence; the promotion record (§9.5) is the measurable artifact, not a vibes-level claim that "the agent learned."
+3. every capacity-continuity-triggered run has `TaskRun` identity (zero `TaskRun`s with `a2aMetadata.trigger = "capacity-continuity"` lacking an `ownerPrincipalId`-resolvable `userId`, and zero capacity-selected work invoking tools outside `AutonomousWorkRun`),
+4. interactive, scheduled, remote, Build Studio, deliberation, and capacity-continuity work appear in one Operations Map projection,
+5. capability needs flow from runtime evidence to review/backlog with submitter attribution (zero open `CoworkerCapabilityNeed` older than the defined review SLA),
+6. repeated cognitive burdens are visible as proceduralization candidates,
+7. humans approve meaningful boundaries and exceptions, not routine internal steps,
+8. at least three proceduralization candidates have been promoted to procedural code, deterministic workflow, typed schema, or policy with linked evidence; the promotion record (§9.5) is the measurable artifact, not a vibes-level claim that "the agent learned."
 
 ## 15. Recommendation
 
-Proceed with Slice 1 first: scheduled coworker as `TaskRun`.
+With Slice 1 shipped (PR #468) and Slice 2 in progress at `apps/web/lib/tak/autonomous-work-run.ts`, the next call is to **finish Slice 2 and use it to land the capacity-continuity attachment seam** (capacity spec Slice 3 / attachment plan Phases 1–3).
 
-It is the smallest slice that proves the architecture:
+Order of operations:
 
-- one active live scheduled coworker exists,
-- current code path is narrow,
-- schema already has `ScheduledAgentTask` and `TaskRun`,
-- `runAgenticLoop()` already accepts task context,
-- `governedExecuteTool()` already centralizes audit and grants,
-- the AI Operations Map can consume the resulting records.
+1. Complete the Slice 2 extraction: every interactive path that today calls `createTaskRunForScheduledTask`-shaped code (and the scheduled-task adapter itself) goes through the shared `AutonomousWorkRun` service, with the `AutonomousWorkTrigger` union as the only branching axis.
+2. Land the capacity-continuity attachment under the new seam: a `CapacityContinuityCandidate` flows through the same service, produces a `TaskRun` with `a2aMetadata.trigger = "capacity-continuity"`, and inherits all governance from §9.
+3. Defer Slice 3 (remote `tasks/submit`) and Slice 5 (proceduralization candidates) until the seam carries at least two trigger sources in production — that is the minimum evidence that the abstraction holds before adding more callers.
 
-This slice turns autonomous coworker work from "a scheduled chat message that happens to call tools" into "a governed, observable, resumable work run." That is the right foundation for remote invocation, self-assessment, capability needs, and proceduralization.
+Slice 4 (capability-needs flywheel) can proceed in parallel with Slice 2 because it consumes `TaskRun` evidence rather than producing it.

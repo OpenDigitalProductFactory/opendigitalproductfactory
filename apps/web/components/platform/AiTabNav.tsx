@@ -6,9 +6,12 @@ import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 
 const TABS = [
   { label: "Overview", href: "/platform/ai" },
+  { label: "Operations Map", href: "/platform/ai/operations-map" },
+  { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },
   { label: "Assignments", href: "/platform/ai/assignments" },
   { label: "Prompts", href: "/platform/ai/prompts" },
   { label: "Skills", href: "/platform/ai/skills" },
+  { label: "Capability Needs", href: "/platform/ai/capability-needs" },
   { label: "Providers & Routing", href: "/platform/ai/providers" },
   { label: BUILD_STUDIO_CONFIG_ROUTE_COPY.navLabel, href: "/platform/ai/build-studio" },
 ];

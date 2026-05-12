@@ -15,6 +15,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 - **Single source of truth.** Each rule, fact, or decision lives in exactly one place. Pointers, not copies.
 - **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save.
 - **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates.
+- **Use paid AI capacity responsibly.** DPF treats AI capacity as an operating asset. If valuable, authorized, evidence-producing work exists, agents should keep making governed progress rather than idle. If no safe work exists, record or surface the blocker. Token spend without durable value, evidence, or learning is waste.
 
 ## 2. Project Architecture (current as of 2026-04-27)
 
