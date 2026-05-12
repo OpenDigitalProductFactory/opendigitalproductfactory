@@ -3,7 +3,14 @@ import { getBacklogItems, getDigitalProductsForSelect, getTaxonomyNodesFlat, get
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 
-export default async function OpsPage() {
+export const dynamic = "force-dynamic";
+
+type Props = {
+  searchParams?: Promise<{ itemId?: string }>;
+};
+
+export default async function OpsPage({ searchParams }: Props) {
+  const sp = await searchParams;
   const [items, digitalProducts, taxonomyNodes, epics, portfolios] = await Promise.all([
     getBacklogItems(),
     getDigitalProductsForSelect(),
@@ -29,6 +36,7 @@ export default async function OpsPage() {
         taxonomyNodes={taxonomyNodes}
         epics={epics}
         portfolios={portfolios}
+        focusedItemId={sp?.itemId}
       />
     </div>
   );

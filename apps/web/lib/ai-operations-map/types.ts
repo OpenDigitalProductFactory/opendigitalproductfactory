@@ -79,6 +79,9 @@ export type OperationsMapToolExecutionReceipt = {
 export type OperationsMapBacklogEvidence = {
   id: string;
   backlogItemId: string;
+  backlogItem?: {
+    itemId: string;
+  } | null;
   kind: string;
   summary: string;
   payload: unknown;
