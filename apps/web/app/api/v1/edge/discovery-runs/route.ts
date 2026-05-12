@@ -1,23 +1,32 @@
 // POST /api/v1/edge/discovery-runs
 //
 // Edge Node submits a prepared discovery-run envelope. The Authority
-// validates auth + envelope shape and forwards to
+// validates auth + envelope shape, runs the idempotency check from
+// the spec's REST ingestion controls, and forwards to
 // `persistSubmittedDiscoveryRun` for normalization + persistence.
 //
-// Phase 0 status: this route validates the envelope and refuses if the
-// EdgeNode's trustState is not `trusted`. The actual persistence call
-// to `persistSubmittedDiscoveryRun` lands in A4 (collector extraction
-// + persistence sibling). Until A4 lands, this route returns 202
-// Accepted with `{ persistencePending: true }` so the Edge Node can
-// retry later or the test harness can validate the path is wired.
+// Phase 0 status: this route now enforces (edgeNodeId, runKey)
+// idempotency and the freshness window on observedAt. The actual
+// persistence wiring (calling persistSubmittedDiscoveryRun with the
+// normalized envelope) is still pending — the route returns 202
+// Accepted with `{ persistencePending: true }` after the gates pass,
+// so the Edge Node can retry later or the test harness can validate
+// the contract is wired.
 //
 // Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
 //   § Ingestion contract: submit observations, don't trigger sweeps
+//   § REST ingestion controls (Phase 0) — idempotency, freshness window
 
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { prisma } from "@dpf/db";
+
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
+
+// Per spec § REST ingestion controls (Phase 0): observedAt must be
+// within +/- this window of server time, else 400 stale_observation.
+const FRESHNESS_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
 
 const ObservationItem = z
   .object({
@@ -90,19 +99,80 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // TODO(A4): replace with `persistSubmittedDiscoveryRun({
+  // Freshness window: reject submissions outside +/- 24h of server
+  // time per spec § REST ingestion controls. Prevents back-dated
+  // submissions polluting inventory history; also catches Edge Nodes
+  // with badly skewed clocks before they pollute attribution.
+  const observedAt = new Date(parsed.data.observedAt);
+  const skewMs = Math.abs(Date.now() - observedAt.getTime());
+  if (skewMs > FRESHNESS_WINDOW_MS) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "stale_observation",
+        message: `observedAt must be within ${FRESHNESS_WINDOW_MS / 1000 / 3600}h of server time`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Idempotency check per spec § REST ingestion controls:
+  //   "First submission with a given (edgeNodeId, runKey) is
+  //    persisted normally. Re-submission of the same pair returns
+  //    the prior result snapshot — idempotent."
+  // The schema's @@unique([edgeNodeId, runKey]) backs this contract;
+  // the lookup uses the same composite key so a duplicate is a 200
+  // (not 202) with the prior run's state.
+  const prior = await prisma.discoveryRun.findUnique({
+    where: {
+      edgeNodeId_runKey: {
+        edgeNodeId: authResult.edgeNodeRowId,
+        runKey: parsed.data.runKey,
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      itemCount: true,
+      relationshipCount: true,
+      startedAt: true,
+      completedAt: true,
+    },
+  });
+  if (prior) {
+    return NextResponse.json(
+      {
+        ok: true,
+        accepted: true,
+        idempotentReplay: true,
+        runKey: parsed.data.runKey,
+        runId: prior.id,
+        status: prior.status,
+        itemCount: prior.itemCount,
+        relationshipCount: prior.relationshipCount,
+        startedAt: prior.startedAt.toISOString(),
+        completedAt: prior.completedAt?.toISOString() ?? null,
+      },
+      { status: 200 },
+    );
+  }
+
+  // TODO(persistence wiring): replace with `persistSubmittedDiscoveryRun({
   //   edgeNodeId: authResult.edgeNodeRowId,
   //   nodeId: authResult.nodeId,
   //   runKey: parsed.data.runKey,
   //   agentMode: parsed.data.agentMode,
   //   agentVersion: parsed.data.agentVersion,
-  //   observedAt: new Date(parsed.data.observedAt),
+  //   observedAt,
   //   capabilities: parsed.data.capabilities,
   //   items: parsed.data.items,
   //   relationships: parsed.data.relationships ?? [],
   //   warnings: parsed.data.warnings ?? [],
-  // })`. Until A4 lands, the route accepts the envelope and returns
-  // 202 so end-to-end auth + validation can be exercised by tests.
+  // })`. Until the persistence pipeline is fully wired (it needs the
+  // normalize → infer → persist chain hooked up against the route's
+  // input shape), the route accepts the envelope, exercises the
+  // idempotency + freshness gates, and returns 202 so the contract
+  // is testable end-to-end.
   return NextResponse.json(
     {
       ok: true,
@@ -111,7 +181,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       itemCount: parsed.data.items.length,
       relationshipCount: parsed.data.relationships?.length ?? 0,
       persistencePending: true,
-      note: "persistSubmittedDiscoveryRun ships in A4; envelope was validated and auth was checked",
+      note: "envelope validated, auth/freshness/idempotency gates passed; full persistence pipeline wiring is a follow-up",
     },
     { status: 202 },
   );
