@@ -126,7 +126,13 @@ export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,
+  type DiscoveryProjectionOptions,
+  type DiscoverySyncClient,
 } from "./discovery-sync";
+export {
+  persistSubmittedDiscoveryRun,
+  type SubmittedDiscoveryRunInput,
+} from "./persist-submitted-discovery-run";
 export {
   promoteInventoryEntities,
   generateProductId,

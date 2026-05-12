@@ -22,9 +22,14 @@ type DiscoveryRunMeta = {
   sourceSlug: string;
   trigger?: string;
   status?: string;
+  // Edge Node attribution per spec § Edge Node registry. Optional —
+  // bootstrap-discovery runs have no edgeNodeId. When set, the
+  // DiscoveryRun row carries this through so consumers can attribute
+  // observations back to a specific agent.
+  edgeNodeId?: string | null;
 };
 
-type DiscoveryProjectionOptions = {
+export type DiscoveryProjectionOptions = {
   projectInventoryEntity?: typeof syncInventoryEntityAsInfraCI;
   projectInventoryRelationship?: typeof syncInventoryRelationship;
 };
@@ -40,6 +45,7 @@ type DiscoverySyncTx = {
         completedAt: Date;
         itemCount: number;
         relationshipCount: number;
+        edgeNodeId?: string | null;
       };
       select: { id: true };
     }): Promise<{ id: string }>;
@@ -96,7 +102,7 @@ type DiscoverySyncTx = {
   };
 };
 
-type DiscoverySyncClient = {
+export type DiscoverySyncClient = {
   $transaction<T>(fn: (tx: DiscoverySyncTx) => Promise<T>): Promise<T>;
 };
 
@@ -194,6 +200,12 @@ export async function persistBootstrapDiscoveryRun(
         completedAt: now,
         itemCount: dedupedDiscoveredItems.length,
         relationshipCount: normalized.inventoryRelationships.length,
+        // Threaded through from runMeta so edge-node-submitted runs
+        // are attributable; bootstrap runs leave it undefined and the
+        // column default (null) takes effect.
+        ...(runMeta.edgeNodeId !== undefined
+          ? { edgeNodeId: runMeta.edgeNodeId }
+          : {}),
       },
       select: { id: true },
     });
