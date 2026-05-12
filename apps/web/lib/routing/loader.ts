@@ -31,11 +31,13 @@ import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
  *
  * Precedence (highest to lowest):
+ *   0. provider.supportsToolUse === false — hard backend floor, cannot be overridden
  *   1. capabilityOverrides.toolUse — explicit admin field-level override
- *   2. capabilities.toolUse (discovery-owned profiles only)
- *   3. capabilities.toolUse (catalog-owned profiles only)
- *   4. profile.supportsToolUse — set by provider-sync null-backfill or admin
- *   5. provider.supportsToolUse — floor
+ *   2. profile.supportsToolUse === false — explicit profile-level floor
+ *   3. capabilities.toolUse (discovery-owned profiles only)
+ *   4. capabilities.toolUse (catalog-owned profiles only)
+ *   5. profile.supportsToolUse — positive profile-level fallback
+ *   6. provider.supportsToolUse — permissive floor
  */
 export function resolveToolUse(
   profile: {
@@ -46,31 +48,40 @@ export function resolveToolUse(
     provider: { supportsToolUse: boolean | null };
   },
 ): boolean | null {
+  if (profile.provider.supportsToolUse === false) {
+    return false;
+  }
+
   // 1. Admin field-level override
   const overrides = profile.capabilityOverrides as Record<string, unknown> | null;
   if (overrides !== null && overrides !== undefined && "toolUse" in overrides) {
     return overrides.toolUse as boolean;
   }
 
+  // 2. Explicit profile-level floor
+  if (profile.supportsToolUse === false) {
+    return false;
+  }
+
   const caps = profile.capabilities as Record<string, unknown> | null;
   const src = profile.profileSource ?? "seed";
 
-  // 2. Discovery-owned: use adapter-extracted value
+  // 3. Discovery-owned: use adapter-extracted value
   if (src === "auto-discover" || src === "evaluated") {
     if (caps?.toolUse !== undefined && caps.toolUse !== null) return caps.toolUse as boolean;
   }
 
-  // 3. Catalog-owned: use reconciled value
+  // 4. Catalog-owned: use reconciled value
   if (src === "catalog" || src === "seed") {
     if (caps?.toolUse !== undefined && caps.toolUse !== null) return caps.toolUse as boolean;
   }
 
-  // 4. Profile-level boolean (set by provider-sync null-backfill)
+  // 5. Profile-level boolean (set by provider-sync null-backfill or seed)
   if (profile.supportsToolUse !== null && profile.supportsToolUse !== undefined) {
     return profile.supportsToolUse;
   }
 
-  // 5. Provider floor
+  // 6. Provider floor
   return profile.provider.supportsToolUse ?? null;
 }
 

@@ -27,6 +27,10 @@ import {
   DELIBERATION_STRATEGY_PROFILES,
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
+import {
+  createLicenseReadinessIssue,
+  saveLicensingInvestigationFinding,
+} from "@/lib/actions/licensing-compliance";
 import type { ReviewBranchInput } from "@/lib/integrate/build-reviewers";
 import {
   getIntegrationBenchmarkMetadata,
@@ -2326,6 +2330,47 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       required: ["name", "shortName", "sourceType"],
     },
     requiredCapability: "manage_compliance",
+    sideEffect: true,
+  },
+  {
+    name: "save_licensing_investigation",
+    description: "Persist the current licensing investigation posture for the business without requiring every field to be re-entered. Use this to save whether the business is existing, new, or expanding, plus jurisdiction and research-confidence updates discovered during the coworker conversation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        setupStatus: { type: "string", enum: ["draft", "investigating", "ready", "blocked"] },
+        investigationMode: { type: "string", enum: ["unknown", "existing", "new_business", "expanding"] },
+        homeCountryCode: { type: "string", description: "Two-letter country code when known" },
+        primaryRegionCode: { type: "string", description: "Primary state, province, or region code when known" },
+        operatingFootprintSummary: { type: "string", description: "Short summary of where the business operates or delivers regulated work" },
+        legalActivityConfidence: { type: "string", enum: ["low", "medium", "high"] },
+        researchCoverageStatus: { type: "string", enum: ["draft", "partial", "covered", "stale"] },
+        notes: { type: "string", description: "Investigation notes, official-source findings, or unresolved caveats" },
+        appendNotes: { type: "boolean", description: "When true, append notes to the existing profile notes instead of replacing them" },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_compliance",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "create_licensing_readiness_issue",
+    description: "Create a factual licensing readiness issue for a missing authority, unresolved legality question, missing staff credential, fee blocker, or display/posting gap discovered during investigation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        issueType: { type: "string", description: "Short machine-readable issue type such as missing_jurisdiction_research or missing_person_credential" },
+        severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        title: { type: "string", description: "Human-readable issue title" },
+        details: { type: "string", description: "Factual description of the gap, blocker, or unresolved question" },
+        organizationLicenseRecordId: { type: "string", description: "Optional linked organization-held license record id" },
+        personLicenseRecordId: { type: "string", description: "Optional linked person-held credential record id" },
+      },
+      required: ["issueType", "title"],
+    },
+    requiredCapability: "manage_compliance",
+    executionMode: "immediate",
     sideEffect: true,
   },
   {
@@ -8920,6 +8965,60 @@ export async function executeTool(
         success: true,
         message: `Onboarding draft created. Navigate to ${wizardUrl} to review and commit.`,
         data: { wizardUrl, draftId: draft.id },
+      };
+    }
+
+    case "save_licensing_investigation": {
+      const result = await saveLicensingInvestigationFinding({
+        setupStatus: typeof params["setupStatus"] === "string" ? params["setupStatus"] : undefined,
+        investigationMode: typeof params["investigationMode"] === "string" ? params["investigationMode"] : undefined,
+        homeCountryCode: typeof params["homeCountryCode"] === "string" ? params["homeCountryCode"] : undefined,
+        primaryRegionCode: typeof params["primaryRegionCode"] === "string" ? params["primaryRegionCode"] : undefined,
+        operatingFootprintSummary:
+          typeof params["operatingFootprintSummary"] === "string"
+            ? params["operatingFootprintSummary"]
+            : undefined,
+        legalActivityConfidence:
+          typeof params["legalActivityConfidence"] === "string"
+            ? params["legalActivityConfidence"]
+            : undefined,
+        researchCoverageStatus:
+          typeof params["researchCoverageStatus"] === "string"
+            ? params["researchCoverageStatus"]
+            : undefined,
+        notes: typeof params["notes"] === "string" ? params["notes"] : undefined,
+        appendNotes: typeof params["appendNotes"] === "boolean" ? params["appendNotes"] : undefined,
+      });
+
+      return {
+        success: result.ok,
+        entityId: result.id,
+        message: result.message,
+        ...(result.ok ? {} : { error: result.message }),
+      };
+    }
+
+    case "create_licensing_readiness_issue": {
+      const result = await createLicenseReadinessIssue({
+        issueType: String(params["issueType"] ?? ""),
+        severity: typeof params["severity"] === "string" ? params["severity"] : undefined,
+        title: String(params["title"] ?? ""),
+        details: typeof params["details"] === "string" ? params["details"] : undefined,
+        organizationLicenseRecordId:
+          typeof params["organizationLicenseRecordId"] === "string"
+            ? params["organizationLicenseRecordId"]
+            : undefined,
+        personLicenseRecordId:
+          typeof params["personLicenseRecordId"] === "string"
+            ? params["personLicenseRecordId"]
+            : undefined,
+      });
+
+      return {
+        success: result.ok,
+        entityId: result.id,
+        message: result.message,
+        ...(result.ok ? {} : { error: result.message }),
       };
     }
 

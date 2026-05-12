@@ -719,6 +719,74 @@ When generating or reviewing UI code, enforce these rules:
     ],
   },
 
+  "/compliance/licensing": {
+    routePrefix: "/compliance/licensing",
+    domain: "Licensing & Permit Readiness",
+    sensitivity: "confidential",
+    domainContext:
+      "This page manages licensing, permit, legality, display-obligation, fee, and staff-credential readiness for the business. " +
+      "Data here is classified as confidential because it can expose regulated activities, jurisdictional gaps, licensing blockers, responsible staff credentials, and fee obligations. " +
+      "The agent should treat seed reference data as a starting point only, ask whether the business is already operating, newly setting up, or expanding footprint, and use official sources to investigate what still needs to be verified. " +
+      "The operational page remains factual; coworker dialog owns the investigation, question flow, and recommendations.",
+    domainTools: [
+      "save_licensing_investigation",
+      "create_licensing_readiness_issue",
+      "search_public_web",
+      "create_backlog_item",
+      "wiki_query",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/compliance/index",
+    skills: [
+      {
+        label: "Classify setup posture",
+        description: "Decide whether the business is already operating, newly setting up, or expanding",
+        capability: "manage_compliance",
+        taskType: "analysis" as const,
+        prompt:
+          "Review the visible licensing posture and ask only the next useful question needed to classify this business as already operating, newly setting up, or expanding into new jurisdictions. When you have enough evidence, call save_licensing_investigation so the posture is persisted.",
+      },
+      {
+        label: "Investigate licensing footprint",
+        description: "Research likely authority layers and unresolved licensing questions for this business",
+        capability: "manage_compliance",
+        taskType: "analysis" as const,
+        prompt:
+          "Use the business archetype, geography, and visible licensing records to investigate what authority layers or regulated activities still need review. Use official public sources when needed, persist findings with save_licensing_investigation, and create factual licensing readiness issues for unresolved gaps.",
+      },
+      {
+        label: "Review company permits",
+        description: "Find missing organization-held permits, registrations, or display requirements",
+        capability: "view_compliance",
+        taskType: "analysis" as const,
+        prompt:
+          "Review company-held licensing readiness on this page. Tell me which organization licenses, permits, postings, or fee obligations look complete, incomplete, stale, or unsupported by evidence.",
+      },
+      {
+        label: "Review staff credential gaps",
+        description: "Check whether person-held credentials or supervising roles are missing",
+        capability: "view_compliance",
+        taskType: "analysis" as const,
+        prompt:
+          "Review the person-held credential posture for this business. Call out missing credentials, weak supervising-role coverage, expiring records, or qualifications that should be tied to staffing readiness.",
+      },
+      {
+        label: "Create readiness issue",
+        description: "Record a concrete licensing blocker or open investigation follow-up",
+        capability: "manage_compliance",
+        prompt:
+          "Create a factual licensing readiness issue for the gap we just identified. Use a specific title, name the jurisdiction or authority layer when known, and avoid inventing legal conclusions.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/compliance": {
     routePrefix: "/compliance",
     domain: "Compliance & Regulatory",

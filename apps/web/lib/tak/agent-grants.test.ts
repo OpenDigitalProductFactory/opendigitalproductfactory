@@ -174,6 +174,25 @@ describe("TOOL_TO_GRANTS — Admin entries", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS — Licensing compliance entries", () => {
+  it("save_licensing_investigation requires policy_write", () => {
+    expect(isToolAllowedByGrants("save_licensing_investigation", ["policy_write"])).toBe(true);
+    expect(isToolAllowedByGrants("save_licensing_investigation", ["registry_read"])).toBe(false);
+  });
+
+  it("create_licensing_readiness_issue requires policy_write", () => {
+    expect(isToolAllowedByGrants("create_licensing_readiness_issue", ["policy_write"])).toBe(true);
+    expect(isToolAllowedByGrants("create_licensing_readiness_issue", ["backlog_write"])).toBe(false);
+  });
+
+  it("licensing specialist grants allow licensing write tools", () => {
+    const licensingSpecialistGrants = getAgentToolGrants("licensing-specialist");
+    expect(licensingSpecialistGrants).toContain("policy_write");
+    expect(isToolAllowedByGrants("save_licensing_investigation", licensingSpecialistGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("create_licensing_readiness_issue", licensingSpecialistGrants ?? [])).toBe(true);
+  });
+});
+
 describe("default-deny: unmapped tools are blocked", () => {
   it("denies a tool not in TOOL_TO_GRANTS", () => {
     expect(isToolAllowedByGrants("totally_unknown_tool", ["backlog_read", "file_read"])).toBe(false);

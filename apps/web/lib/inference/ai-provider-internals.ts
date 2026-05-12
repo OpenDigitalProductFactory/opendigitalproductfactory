@@ -620,17 +620,27 @@ export async function profileModelsInternal(
 
     // EP-INF-003: ModelCard metadata fields — always safe to overwrite on re-sync.
     // supportsToolUse uses a fallback chain:
-    //   1. extracted value (non-null) — authoritative from provider metadata
-    //   2. existing DB value when profileSource is evaluated/admin — preserves manual overrides
-    //   3. provider-level supportsToolUse flag — provider knows its models better than per-model metadata
-    //   4. null — unknown (not false); prevents permanent tool disabling on undiscovered models
+    //   1. provider-level false — hard backend floor
+    //   2. existing DB false — explicit profile-level floor
+    //   3. extracted value (non-null) — authoritative from provider metadata
+    //   4. existing DB value when profileSource is evaluated/admin — preserves manual overrides
+    //   5. provider-level supportsToolUse flag — permissive provider fallback
+    //   6. null — unknown (not false); prevents permanent tool disabling on undiscovered models
+    const providerToolFloor = provider!.supportsToolUse;
     const extractedToolUse = card.capabilities.toolUse;
     const isManuallySet = existingProfile?.profileSource === "evaluated" || existingProfile?.profileSource === "admin";
-    const resolvedToolUse = extractedToolUse !== null && extractedToolUse !== undefined
+    const resolvedToolUse = providerToolFloor === false
+      ? false
+      : existingProfile?.supportsToolUse === false
+      ? false
+      : extractedToolUse !== null && extractedToolUse !== undefined
       ? extractedToolUse
       : isManuallySet
-        ? (existingProfile.supportsToolUse ?? provider!.supportsToolUse ?? null)
-        : (provider!.supportsToolUse ?? null);
+        ? (existingProfile.supportsToolUse ?? providerToolFloor ?? null)
+        : (providerToolFloor ?? null);
+    const resolvedCapabilities = providerToolFloor === false || existingProfile?.supportsToolUse === false
+      ? { ...card.capabilities, toolUse: false }
+      : card.capabilities;
 
     const metadataFields = {
       modelFamily: card.modelFamily,
@@ -639,8 +649,8 @@ export async function profileModelsInternal(
       inputModalities: card.inputModalities,
       outputModalities: card.outputModalities,
       capabilities: (providerId === "local" || providerId === "ollama")
-        ? { ...card.capabilities, streaming: true } as any
-        : card.capabilities as any,
+        ? { ...resolvedCapabilities, streaming: true } as any
+        : resolvedCapabilities as any,
       pricing: card.pricing as any,
       supportedParameters: card.supportedParameters,
       defaultParameters: card.defaultParameters as any,

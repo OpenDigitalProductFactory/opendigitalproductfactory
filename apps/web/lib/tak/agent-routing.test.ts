@@ -78,6 +78,22 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("routes /compliance/licensing to the licensing specialist instead of the workspace COO", () => {
+    const result = resolveAgentForRoute("/compliance/licensing", superuser);
+    expect(result.agentId).toBe("licensing-specialist");
+    expect(result.agentName).toBe("Licensing & Permit Specialist");
+    expect(result.canAssist).toBe(true);
+    expect(result.systemPrompt).toContain("jurisdictional readiness");
+    expect(result.systemPrompt).toContain("Never guess legal facts");
+    expect(result.modelRequirements?.preferredProviderId).toBe("anthropic");
+  });
+
+  it("keeps licensing route access gated by compliance permissions", () => {
+    const result = resolveAgentForRoute("/compliance/licensing", noRole);
+    expect(result.agentId).toBe("licensing-specialist");
+    expect(result.canAssist).toBe(false);
+  });
+
   it("gives the marketing specialist an operator lifecycle for persistent work", () => {
     const result = resolveAgentForRoute("/customer/marketing/strategy", superuser);
 
@@ -190,5 +206,12 @@ describe("generateCannedResponse", () => {
 
     expect(response).toContain("Finance Specialist");
     expect(response).toContain("tax");
+  });
+
+  it("uses licensing-oriented canned copy for the licensing specialist", () => {
+    const response = generateCannedResponse("licensing-specialist", "/compliance/licensing", "HR-000");
+
+    expect(response).toContain("Licensing & Permit Specialist");
+    expect(response).toContain("jurisdiction");
   });
 });
