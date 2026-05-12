@@ -88,7 +88,7 @@ What we **haven't** done — and what you can help with — is run the full inst
 
 …please try it and tell us how it went. Both happy-path success stories and "the installer hit a wall at step X" failures are equally useful — the wall-hits are how we close the gap between "we believe it works" and "we know it works."
 
-**How to report:** open a GitHub issue titled `Install verification — <platform> <distro/version>` and attach the diagnostic bundle produced by `bash install-dpf.sh doctor` (it lives at `~/.dpf/doctor-<timestamp>.tar.gz` and redacts secrets automatically). The [verification runbook](docs/install/verification-runbook.md) lists what to check and what artifacts to capture.
+**How to report:** open a GitHub issue using the [Install verification report template](.github/ISSUE_TEMPLATE/install_verification.md) (titled `Install verification — <platform> <version>`) and attach the diagnostic bundle produced by `bash install-dpf.sh doctor` (it lives at `~/.dpf/doctor-<timestamp>.tar.gz` and redacts secrets automatically). The [verification runbook](docs/install/verification-runbook.md) lists what to check and what artifacts to capture.
 
 The Windows installer remains the only GA path — production stable, used by real customers. The macOS / Linux paths graduate from "Early access" to "GA" once we have a handful of community verification reports per platform.
 

@@ -14,12 +14,13 @@
 > and run through it.** Both happy-path and failure reports are
 > valuable.
 >
-> **How to report:** open a [GitHub issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new)
-> titled `Install verification — <platform> <version>`, paste your
-> environment fingerprint, note which steps passed / failed, and
-> attach the doctor bundle (`bash install-dpf.sh doctor` →
-> `~/.dpf/doctor-<timestamp>.tar.gz`). Secrets are redacted
-> automatically.
+> **How to report:** open an issue using the
+> [Install verification report template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md)
+> (it pre-fills the title prefix `Install verification — ` and the
+> `install-verification` label). Paste your environment fingerprint,
+> tick the checklist items you observed, and attach the doctor bundle
+> (`bash install-dpf.sh doctor` → `~/.dpf/doctor-<timestamp>.tar.gz`).
+> Secrets are redacted automatically.
 >
 > We don't need every checkbox before reading your report —
 > partial reports are useful too.
@@ -228,14 +229,22 @@ Linked spec: [docs/superpowers/specs/2026-05-09-cloud-deployment-design.md](../s
 
 ## Reporting verification results
 
-When you've run a section, **open a GitHub issue** titled
-`Install verification — <platform> <version>` and include:
+When you've run a section, file your report through the
+[Install verification report template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md).
+The form mirrors the checklist above and pre-fills:
 
-- Your environment fingerprint (`uname -a`, `sw_vers` / `cat /etc/os-release`)
-- Which checklist boxes you ticked, which you skipped, and which failed
-- The doctor bundle (`bash install-dpf.sh doctor` → attach the
+- Title prefix `Install verification — `
+- Labels: `install-verification`, `community-report`
+
+The template prompts for everything maintainers need:
+
+- Environment fingerprint (`uname -a`, `sw_vers` / `cat /etc/os-release`,
+  Docker version, Node + pnpm versions, installer version)
+- Install command + outcome (cleanly / with warnings / hit a wall)
+- Checklist of preflight, install, autostart, discovery, lifecycle steps
+- Doctor bundle attachment (`bash install-dpf.sh doctor` → attach
   `~/.dpf/doctor-<timestamp>.tar.gz`)
-- Any screenshots of unexpected portal behavior
+- Free-text "anything else" for surprises, papercuts, copy issues
 
 Maintainers will:
 
