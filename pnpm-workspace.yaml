@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "services/adp"
+  - "services/edge-node"
   - "services/integration-test-harness"
 allowBuilds:
   '@prisma/client': true
