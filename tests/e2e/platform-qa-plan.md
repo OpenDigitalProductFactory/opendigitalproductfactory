@@ -109,6 +109,7 @@ When adding or changing a QA ID for Build Studio, Ops/backlog, Discovery, Storef
 | GRC-05 | Navigate to Policies tab | Page loads |
 | GRC-06 | Navigate to Incidents tab | Page loads |
 | GRC-07 | Navigate to Gaps analysis | Gap analysis loads (may be empty) |
+| GRC-08 | Navigate to `/compliance/licensing`, save licensing posture, create a company license with display/fee details, then create a person credential | Licensing workspace loads with the Licensing tab active, the main page stays factual with no coworker dialog content, the posture save succeeds, and both new records appear in their sections while display obligations and fee readiness update on the same page |
 
 ## Phase 7: Operations & Backlog
 
