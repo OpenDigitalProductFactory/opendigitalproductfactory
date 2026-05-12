@@ -84,6 +84,7 @@ function buildSetupSnippets(plaintext: string, baseUrl: string): {
     {
       mcpServers: {
         dpf: {
+          type: "http",
           url,
           headers: { Authorization: `Bearer ${plaintext}` },
         },
@@ -97,6 +98,7 @@ function buildSetupSnippets(plaintext: string, baseUrl: string): {
     {
       mcpServers: {
         dpf: {
+          type: "http",
           url,
           headers: { Authorization: `Bearer ${plaintext}` },
         },
@@ -110,6 +112,7 @@ function buildSetupSnippets(plaintext: string, baseUrl: string): {
     {
       servers: {
         dpf: {
+          type: "http",
           url,
           headers: { Authorization: `Bearer ${plaintext}` },
         },
