@@ -18,6 +18,7 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   "/platform/ai/providers": getProvidersContext,
   "/platform/tools/discovery": getDiscoveryOperationsContext,
   "/ops": getOpsContext,
+  "/compliance/licensing": getLicensingReadinessContext,
   "/compliance": getComplianceContext,
   "/workspace": getWorkspaceContext,
   "/finance": getFinanceContext,
@@ -67,6 +68,110 @@ export async function getRouteDataContext(routeContext: string, userId: string):
 }
 
 // ─── Route Context Providers ────────────────────────────────────────────────
+
+async function getLicensingReadinessContext(): Promise<string> {
+  const profile = await prisma.organizationLicenseProfile.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: {
+      setupStatus: true,
+      investigationMode: true,
+      homeCountryCode: true,
+      primaryRegionCode: true,
+      operatingFootprintSummary: true,
+      legalActivityConfidence: true,
+      researchCoverageStatus: true,
+      notes: true,
+    },
+  });
+
+  const requirementWhere = profile?.homeCountryCode
+    ? {
+        OR: [
+          { countryCode: profile.homeCountryCode },
+          ...(profile.primaryRegionCode ? [{ stateProvinceCode: profile.primaryRegionCode }] : []),
+        ],
+      }
+    : undefined;
+
+  const [storefrontConfig, organizationLicenseCount, personLicenseCount, openIssueCount, requirementHints] =
+    await Promise.all([
+      prisma.storefrontConfig.findFirst({
+        include: {
+          archetype: {
+            select: {
+              name: true,
+              category: true,
+              ctaType: true,
+            },
+          },
+        },
+      }),
+      prisma.organizationLicenseRecord.count(),
+      prisma.personLicenseRecord.count(),
+      prisma.licenseReadinessIssue.count({ where: { status: "open" } }),
+      prisma.licenseRequirementReference.findMany({
+        where: requirementWhere,
+        select: {
+          authorityName: true,
+          jurisdictionLabel: true,
+          requirementType: true,
+          scopeLevel: true,
+        },
+        orderBy: [{ countryCode: "asc" }, { stateProvinceCode: "asc" }, { authorityName: "asc" }],
+        take: 6,
+      }),
+    ]);
+
+  const sections: string[] = ["\nPAGE DATA — Licensing Readiness:"];
+
+  if (storefrontConfig?.archetype) {
+    sections.push(
+      `Business archetype: ${storefrontConfig.archetype.name}`,
+      `Archetype category: ${storefrontConfig.archetype.category}`,
+      `Primary public CTA: ${storefrontConfig.archetype.ctaType}`,
+    );
+  }
+
+  if (!profile) {
+    sections.push(
+      "No licensing profile exists yet.",
+      `Organization-held license records: ${organizationLicenseCount}`,
+      `Person-held credential records: ${personLicenseCount}`,
+      `Open licensing issues: ${openIssueCount}`,
+    );
+  } else {
+    sections.push(
+      `Setup status: ${profile.setupStatus}`,
+      `Investigation mode: ${profile.investigationMode}`,
+      `Home jurisdiction: ${profile.homeCountryCode ?? "unassigned"}${profile.primaryRegionCode ? ` / ${profile.primaryRegionCode}` : ""}`,
+      `Legal activity confidence: ${profile.legalActivityConfidence}`,
+      `Research coverage: ${profile.researchCoverageStatus}`,
+      `Organization-held license records: ${organizationLicenseCount}`,
+      `Person-held credential records: ${personLicenseCount}`,
+      `Open licensing issues: ${openIssueCount}`,
+    );
+
+    if (profile.operatingFootprintSummary) {
+      sections.push(`Operating footprint summary: ${profile.operatingFootprintSummary}`);
+    }
+    if (profile.notes) {
+      sections.push(`Current notes: ${profile.notes}`);
+    }
+  }
+
+  if (requirementHints.length > 0) {
+    sections.push(
+      "",
+      "Requirement reference hints:",
+      ...requirementHints.map(
+        (item) =>
+          `- ${item.authorityName} (${item.jurisdictionLabel}) — ${item.requirementType}, scope=${item.scopeLevel}`,
+      ),
+    );
+  }
+
+  return sections.join("\n");
+}
 
 async function getComplianceContext(_userId: string, routeContext: string): Promise<string> {
   const sections: string[] = ["\nPAGE DATA — Compliance:"];

@@ -15,6 +15,7 @@ import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
 import { getShellNavSections } from "@/lib/permissions";
 import { AppRail } from "@/components/shell/AppRail";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -34,7 +35,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   const user = session.user;
 
-  const [latestDiscoveryRun, activeBranding, organization] = await Promise.all([
+  const [latestDiscoveryRun, activeBranding, organization, useUnifiedCoworker] = await Promise.all([
     prisma.discoveryRun.findFirst({
       orderBy: { startedAt: "desc" },
       select: { id: true },
@@ -49,6 +50,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     prisma.organization.findFirst({
       select: { name: true, logoUrl: true },
     }),
+    isUnifiedCoworkerEnabled(),
   ]);
 
   if (!latestDiscoveryRun) {
@@ -187,6 +189,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         </div>
         <AgentCoworkerShell
           userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+          useUnifiedCoworker={useUnifiedCoworker}
         />
         {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
         <QueueFlusher />

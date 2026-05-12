@@ -41,6 +41,7 @@ vi.mock("@dpf/db", () => ({
     },
     licenseReadinessIssue: {
       findMany: vi.fn(),
+      create: vi.fn(),
     },
     principalAlias: {
       findMany: vi.fn(),
@@ -59,8 +60,10 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import {
+  createLicenseReadinessIssue,
   createOrganizationLicenseRecord,
   getLicensingWorkspace,
+  saveLicensingInvestigationFinding,
 } from "./licensing-compliance";
 
 const mockSession = {
@@ -204,5 +207,85 @@ describe("createOrganizationLicenseRecord", () => {
     expect(transaction.organizationLicenseRecord.create).toHaveBeenCalledOnce();
     expect(transaction.licenseDisplayObligation.createMany).toHaveBeenCalledOnce();
     expect(transaction.licenseFeeSchedule.createMany).toHaveBeenCalledOnce();
+  });
+});
+
+describe("saveLicensingInvestigationFinding", () => {
+  it("merges partial investigation updates into the licensing profile without requiring every field", async () => {
+    vi.mocked(prisma.organizationLicenseProfile.findFirst).mockResolvedValue({
+      id: "profile-1",
+      organizationId: "org-1",
+      setupStatus: "draft",
+      investigationMode: "unknown",
+      homeCountryCode: null,
+      primaryRegionCode: null,
+      operatingFootprintSummary: null,
+      legalActivityConfidence: "medium",
+      researchCoverageStatus: "draft",
+      notes: "Initial note",
+    } as never);
+    vi.mocked(prisma.organizationLicenseProfile.update).mockResolvedValue({
+      id: "profile-1",
+    } as never);
+    vi.mocked(prisma.complianceAuditLog.create).mockResolvedValue({} as never);
+
+    const result = await saveLicensingInvestigationFinding({
+      investigationMode: "expanding",
+      homeCountryCode: "us",
+      primaryRegionCode: "nv",
+      notes: "Needs Clark County review.",
+      appendNotes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(prisma.organizationLicenseProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "profile-1" },
+        data: expect.objectContaining({
+          investigationMode: "expanding",
+          homeCountryCode: "US",
+          primaryRegionCode: "NV",
+          notes: expect.stringContaining("Initial note"),
+        }),
+      }),
+    );
+  });
+});
+
+describe("createLicenseReadinessIssue", () => {
+  it("creates a factual licensing readiness issue linked to the active organization profile", async () => {
+    vi.mocked(prisma.organizationLicenseProfile.findFirst).mockResolvedValue({
+      id: "profile-1",
+      organizationId: "org-1",
+      setupStatus: "investigating",
+      investigationMode: "existing",
+      legalActivityConfidence: "medium",
+      researchCoverageStatus: "draft",
+    } as never);
+    vi.mocked(prisma.licenseReadinessIssue.create).mockResolvedValue({
+      id: "issue-row-1",
+      issueId: "LIC-ISSUE-1",
+    } as never);
+    vi.mocked(prisma.complianceAuditLog.create).mockResolvedValue({} as never);
+
+    const result = await createLicenseReadinessIssue({
+      issueType: "missing_jurisdiction_research",
+      severity: "high",
+      title: "Research Nevada local licensing",
+      details: "The coworker identified open local licensing questions in Clark County.",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(prisma.licenseReadinessIssue.create).toHaveBeenCalledOnce();
+    expect(prisma.licenseReadinessIssue.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationLicenseProfileId: "profile-1",
+          issueType: "missing_jurisdiction_research",
+          severity: "high",
+          title: "Research Nevada local licensing",
+        }),
+      }),
+    );
   });
 });

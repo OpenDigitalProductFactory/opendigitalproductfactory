@@ -32,6 +32,7 @@ import {
 
 type Props = {
   userContext: UserContext;
+  useUnifiedCoworker: boolean;
 };
 
 function getViewport() {
@@ -46,7 +47,7 @@ function getShellContentTop(): number {
   return shellContent?.getBoundingClientRect().top ?? 16;
 }
 
-export function AgentCoworkerShell({ userContext }: Props) {
+export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition>({ x: 0, y: 0 });
@@ -397,6 +398,7 @@ export function AgentCoworkerShell({ userContext }: Props) {
             threadId={threadId}
             initialMessages={initialMessages}
             userContext={userContext}
+            useUnifiedCoworker={useUnifiedCoworker}
             onClose={handleClose}
             onDragStart={handleDragStart}
             pendingAutoMessage={pendingAutoMessage}

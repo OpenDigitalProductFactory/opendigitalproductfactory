@@ -428,6 +428,52 @@ describe("runAgenticLoop", () => {
     expect(toolMsg!.content).toContain("Found 3 files");
   });
 
+  it("keeps route-level provider preferences when agent config does not pin a provider", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue({
+      agentId: "licensing-specialist",
+      minimumTier: "strong",
+      budgetClass: "balanced",
+      pinnedProviderId: null,
+      pinnedModelId: null,
+      minimumCapabilities: { toolUse: true },
+      minimumContextTokens: 32000,
+    } as never);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Licensing investigation ready.",
+      inputTokens: 60,
+      outputTokens: 30,
+    }));
+
+    await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/compliance/licensing",
+      agentId: "licensing-specialist",
+      taskType: "conversation",
+      modelRequirements: {
+        defaultMinimumTier: "strong",
+        defaultBudgetClass: "balanced",
+        preferredProviderId: "anthropic",
+      },
+      tools: [],
+      toolsForProvider: undefined,
+    });
+
+    expect(mockRoute).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(String),
+      "internal",
+      expect.objectContaining({
+        preferredProviderId: "anthropic",
+        budgetClass: "balanced",
+        minimumCapabilities: { toolUse: true },
+        agentMinimumContextTokens: 32000,
+      }),
+    );
+  });
+
   it("returns text-only response when no tool calls (after nudge)", async () => {
     const mockRoute = vi.mocked(routeAndCall);
 

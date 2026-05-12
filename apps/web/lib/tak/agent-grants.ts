@@ -156,6 +156,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Compliance
   prefill_onboarding_wizard: ["data_governance_validate"],
+  save_licensing_investigation: ["policy_write"],
+  create_licensing_readiness_issue: ["policy_write"],
 
   // Tool evaluation (EP-GOVERN-002)
   evaluate_tool: ["tool_evaluation_create"],

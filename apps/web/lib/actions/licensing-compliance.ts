@@ -67,6 +67,27 @@ export type CreatePersonLicenseRecordInput = {
   feeNotes?: string;
 };
 
+export type SaveLicensingInvestigationFindingInput = {
+  setupStatus?: string;
+  investigationMode?: string;
+  homeCountryCode?: string;
+  primaryRegionCode?: string;
+  operatingFootprintSummary?: string;
+  legalActivityConfidence?: string;
+  researchCoverageStatus?: string;
+  notes?: string;
+  appendNotes?: boolean;
+};
+
+export type CreateLicenseReadinessIssueInput = {
+  issueType: string;
+  severity?: string;
+  title: string;
+  details?: string;
+  organizationLicenseRecordId?: string;
+  personLicenseRecordId?: string;
+};
+
 async function requireViewCompliance() {
   const session = await auth();
   const user = session?.user;
@@ -156,6 +177,10 @@ function displayObligationId() {
 
 function feeScheduleId() {
   return `LIC-FEE-${nanoid(8).toUpperCase()}`;
+}
+
+function readinessIssueId() {
+  return `LIC-ISS-${nanoid(8).toUpperCase()}`;
 }
 
 function revalidateLicensingRoutes() {
@@ -318,6 +343,105 @@ export async function updateOrganizationLicenseProfile(
 
   revalidateLicensingRoutes();
   return { ok: true, message: "Licensing posture saved." };
+}
+
+export async function saveLicensingInvestigationFinding(
+  input: SaveLicensingInvestigationFindingInput,
+): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const organization = await requireOrganization();
+  const profile = await getOrCreateLicenseProfile(organization.id);
+  const employeeId = await getSessionEmployeeId();
+
+  const nextNotes = (() => {
+    const incoming = nullableString(input.notes);
+    if (!incoming) return profile.notes;
+    if (!input.appendNotes || !profile.notes?.trim()) return incoming;
+    return `${profile.notes.trim()}\n\n${incoming}`;
+  })();
+
+  await prisma.organizationLicenseProfile.update({
+    where: { id: profile.id },
+    data: {
+      setupStatus: nullableString(input.setupStatus) ?? profile.setupStatus,
+      investigationMode: nullableString(input.investigationMode) ?? profile.investigationMode,
+      homeCountryCode:
+        nullableString(input.homeCountryCode)?.toUpperCase() ??
+        profile.homeCountryCode ??
+        null,
+      primaryRegionCode:
+        nullableString(input.primaryRegionCode)?.toUpperCase() ??
+        profile.primaryRegionCode ??
+        null,
+      operatingFootprintSummary:
+        nullableString(input.operatingFootprintSummary) ??
+        profile.operatingFootprintSummary ??
+        null,
+      legalActivityConfidence:
+        nullableString(input.legalActivityConfidence) ?? profile.legalActivityConfidence,
+      researchCoverageStatus:
+        nullableString(input.researchCoverageStatus) ?? profile.researchCoverageStatus,
+      notes: nextNotes ?? null,
+    },
+  });
+
+  await prisma.complianceAuditLog.create({
+    data: {
+      entityType: "licensing-profile",
+      entityId: profile.id,
+      action: "investigation-saved",
+      performedByEmployeeId: employeeId,
+      agentId: null,
+      notes: "Saved licensing investigation findings",
+    },
+  });
+
+  revalidateLicensingRoutes();
+  return { ok: true, message: "Licensing investigation findings saved." };
+}
+
+export async function createLicenseReadinessIssue(
+  input: CreateLicenseReadinessIssueInput,
+): Promise<ComplianceActionResult> {
+  await requireManageCompliance();
+  const organization = await requireOrganization();
+  const profile = await getOrCreateLicenseProfile(organization.id);
+  const employeeId = await getSessionEmployeeId();
+
+  if (!nullableString(input.issueType)) {
+    return { ok: false, message: "Issue type is required." };
+  }
+
+  if (!nullableString(input.title)) {
+    return { ok: false, message: "Issue title is required." };
+  }
+
+  const created = await prisma.licenseReadinessIssue.create({
+    data: {
+      issueId: readinessIssueId(),
+      organizationLicenseProfileId: profile.id,
+      organizationLicenseRecordId: nullableString(input.organizationLicenseRecordId),
+      personLicenseRecordId: nullableString(input.personLicenseRecordId),
+      issueType: input.issueType.trim(),
+      severity: nullableString(input.severity) ?? "medium",
+      title: input.title.trim(),
+      details: nullableString(input.details),
+    },
+  });
+
+  await prisma.complianceAuditLog.create({
+    data: {
+      entityType: "licensing-readiness-issue",
+      entityId: created.id,
+      action: "created",
+      performedByEmployeeId: employeeId,
+      agentId: null,
+      notes: `Created readiness issue: ${input.title.trim()}`,
+    },
+  });
+
+  revalidateLicensingRoutes();
+  return { ok: true, message: "Licensing readiness issue saved.", id: created.id };
 }
 
 export async function createOrganizationLicenseRecord(

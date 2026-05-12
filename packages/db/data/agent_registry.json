@@ -1975,6 +1975,56 @@
       }
     },
     {
+      "agent_id": "AGT-905",
+      "agent_name": "licensing-specialist",
+      "displayName": "Licensing & Permit Specialist",
+      "aliases": ["compliance-licensing-specialist", "permit-specialist"],
+      "tier": "cross-cutting",
+      "value_stream": "cross-cutting",
+      "capability_domain": "Archetype-aware licensing, permit, legality, display-obligation, and staff-credential readiness investigation across jurisdiction layers. Classifies operating posture, records evidence-backed findings, and raises factual readiness blockers without guessing legal facts.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": [
+        "6.1.5 Service Operations FC"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": "claude-haiku-4-5-20251001",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "provider_id": "anthropic",
+          "credential_ref": "anthropic-prod",
+          "auth_type": "api_key"
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 60
+        },
+        "token_budget": {
+          "daily_limit": 100000,
+          "per_task_limit": 5000
+        },
+        "tool_grants": [
+          "registry_read",
+          "backlog_read",
+          "backlog_write",
+          "consumer_read",
+          "policy_write",
+          "policy_read",
+          "spec_plan_read",
+          "web_search"
+        ],
+        "memory": {
+          "type": "session",
+          "backend": null
+        },
+        "concurrency_limit": 4
+      }
+    },
+    {
       "agent_id": "AGT-901",
       "agent_name": "architecture-agent",
       "tier": "cross-cutting",
