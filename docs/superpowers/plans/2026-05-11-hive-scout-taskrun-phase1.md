@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn Hive Scout from a standalone weekly queue job into a seeded, scheduled coworker run with governed tool execution, durable task identity, and backlog evidence created from the same run.
+**Goal:** Turn Hive Scout from a standalone daily queue job into a seeded, scheduled coworker run with governed tool execution, durable task identity, and backlog evidence created from the same run.
 
 **Architecture:** Reuse the existing scheduled coworker substrate instead of extending the old `hive-scout-ingest` cron path. Seed a dedicated `external-catalog-scout` coworker plus a scheduled task, add one governed `run_hive_scout_ingest` tool that wraps the deterministic ingest logic, and make scheduled task prompt resolution honor `task.agentId` so non-route coworkers can run without borrowing the wrong persona.
 
@@ -72,7 +72,7 @@
 - Modify: `apps/web/lib/queue/functions/hive-scout-ingest.ts`
   - Convert from durable schedule entry point to compatibility/manual shim or retire it.
 - Modify: `apps/web/lib/queue/functions/index.ts`
-  - Remove the weekly standalone Hive Scout cron from the primary queue registry if fully superseded by the seeded scheduled task.
+  - Remove the standalone Hive Scout cron from the primary queue registry if fully superseded by the seeded scheduled task.
 
 ## Chunk 1: Seed the Hive Scout coworker and scheduled task
 
@@ -107,7 +107,7 @@ Expected:
 Mirror discovery triage:
 - agent id: `external-catalog-scout`
 - task id: deterministic semantic id
-- schedule: weekly UTC cadence matching the prior Hive Scout window unless reviewed docs require otherwise
+- schedule: daily UTC cadence while the platform is still evolving rapidly
 - route context: keep the operations-facing context agreed in the reviewed spec
 
 - [ ] **Step 4: Re-run the seed-helper tests**
@@ -304,7 +304,7 @@ Expected:
 - [ ] **Step 1: Add the failing queue/seed assertions**
 
 Cover:
-- Hive Scout no longer depends on its own weekly queue function as the durable schedule path
+- Hive Scout no longer depends on its own standalone queue function as the durable schedule path
 - seed path ensures the scheduled task exists
 
 - [ ] **Step 2: Run the affected tests**
@@ -322,7 +322,7 @@ Expected:
 
 Transition rule:
 - the seeded `ScheduledAgentTask` is the canonical scheduler
-- keep a manual/dev replay path, but do not leave two competing weekly schedulers active
+- keep a manual/dev replay path, but do not leave two competing schedulers active
 
 - [ ] **Step 4: Re-run the affected tests**
 
@@ -379,4 +379,3 @@ Suggested commits:
 2. governed Hive Scout tool + grants
 3. scheduled task resolver + runtime wiring
 4. queue transition + verification
-

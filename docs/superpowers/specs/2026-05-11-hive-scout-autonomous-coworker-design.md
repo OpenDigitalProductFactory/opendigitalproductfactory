@@ -30,7 +30,7 @@ This design updates the architectural direction for Hive Scout:
 The current implementation is real and useful:
 
 - [ingest-500-agents.ts](D:/DPF/apps/web/lib/actions/hive-scout/ingest-500-agents.ts:1) fetches and parses the MIT-licensed `500-AI-Agents-Projects` README, maps industries to IT4IT value streams, detects likely gaps, and creates deduplicated `BacklogItem` rows.
-- [hive-scout-ingest.ts](D:/DPF/apps/web/lib/queue/functions/hive-scout-ingest.ts:1) runs the ingest weekly through Inngest.
+- [hive-scout-ingest.ts](D:/DPF/apps/web/lib/queue/functions/hive-scout-ingest.ts:1) originally ran the ingest through Inngest on a weekly cadence; the seeded scheduled coworker path now supports a faster daily cadence while the platform is still evolving.
 - [index.ts](D:/DPF/apps/web/lib/queue/functions/index.ts:1) registers the function in the queue runtime.
 - [scout-external-catalogs.skill.md](D:/DPF/skills/platform/scout-external-catalogs.skill.md:1) describes the operator-facing intent.
 - [hive-scout-archetype-gap.prompt.md](D:/DPF/prompts/specialist/hive-scout-archetype-gap.prompt.md:1) provides the backlog-item body template.
@@ -80,7 +80,7 @@ That makes Hive Scout a strong next consumer:
 
 The AI Operations Map already projects proactive `TaskRun`, `ToolExecution`, receipt, backlog-evidence, and external-evidence records in [load-map-data.ts](D:/DPF/apps/web/lib/ai-operations-map/load-map-data.ts:1).
 
-Hive Scout should appear there as real AI workforce activity instead of being hidden inside a weekly queue function.
+Hive Scout should appear there as real AI workforce activity instead of being hidden inside a standalone queue function.
 
 ### 3.4 Use-it-or-lose-it economics
 

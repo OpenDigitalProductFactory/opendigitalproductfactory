@@ -41,6 +41,8 @@ describe("Hive Scout seed helper", () => {
 
   it("builds a scheduled prompt that invokes run_hive_scout_ingest", () => {
     const prompt = buildHiveScoutScheduledPrompt();
+    expect(HIVE_SCOUT_SCHEDULE).toBe("17 8 * * *");
+    expect(prompt).toContain("daily");
     expect(prompt).toContain("run_hive_scout_ingest");
     expect(prompt).toContain("external catalog");
   });
@@ -128,6 +130,7 @@ describe("Hive Scout seed helper", () => {
     user.findFirst.mockResolvedValue({ id: "user-admin" });
     scheduledAgentTask.findUnique.mockResolvedValue({
       taskId: HIVE_SCOUT_TASK_ID,
+      schedule: HIVE_SCOUT_SCHEDULE,
       nextRunAt: new Date("2026-05-12T08:17:00Z"),
     });
 
@@ -146,6 +149,37 @@ describe("Hive Scout seed helper", () => {
         nextRunAt: new Date("2026-05-12T08:17:00Z"),
       }),
     });
+  });
+
+  it("recomputes nextRunAt when the existing task is outside the current cadence window", async () => {
+    user.findFirst.mockResolvedValue({ id: "user-admin" });
+    scheduledAgentTask.findUnique.mockResolvedValue({
+      taskId: HIVE_SCOUT_TASK_ID,
+      schedule: HIVE_SCOUT_SCHEDULE,
+      nextRunAt: new Date("2026-05-18T08:17:00Z"),
+    });
+
+    const now = new Date("2026-05-11T12:00:00Z");
+    await ensureHiveScoutScheduledTask(
+      { user, scheduledAgentTask, scheduledJob } as never,
+      now,
+    );
+
+    expect(scheduledAgentTask.update).toHaveBeenCalledWith({
+      where: { taskId: HIVE_SCOUT_TASK_ID },
+      data: expect.objectContaining({
+        schedule: HIVE_SCOUT_SCHEDULE,
+        nextRunAt: new Date("2026-05-12T08:17:00Z"),
+      }),
+    });
+    expect(scheduledJob.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          schedule: HIVE_SCOUT_SCHEDULE,
+          nextRunAt: new Date("2026-05-12T08:17:00Z"),
+        }),
+      }),
+    );
   });
 
   it("fails loudly when no superuser exists", async () => {

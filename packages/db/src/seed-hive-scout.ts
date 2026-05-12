@@ -46,6 +46,20 @@ function computeNextCronRun(cronExpr: string, from: Date): Date {
   return next;
 }
 
+function shouldPreserveNextRun(
+  cronExpr: string,
+  now: Date,
+  nextRunAt: Date | null,
+): boolean {
+  if (!nextRunAt || nextRunAt <= now) {
+    return false;
+  }
+
+  const firstExpectedRun = computeNextCronRun(cronExpr, now);
+  const secondExpectedRun = computeNextCronRun(cronExpr, new Date(firstExpectedRun.getTime() + 1000));
+  return nextRunAt <= secondExpectedRun;
+}
+
 export async function ensureHiveScoutScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
@@ -66,8 +80,15 @@ export async function ensureHiveScoutScheduledTask(
 
   const existingTask = await prisma.scheduledAgentTask.findUnique({
     where: { taskId: HIVE_SCOUT_TASK_ID },
-    select: { taskId: true, nextRunAt: true },
+    select: { taskId: true, schedule: true, nextRunAt: true },
   });
+
+  const nextScheduledRunAt =
+    existingTask &&
+    existingTask.schedule === HIVE_SCOUT_SCHEDULE &&
+    shouldPreserveNextRun(HIVE_SCOUT_SCHEDULE, now, existingTask.nextRunAt)
+      ? existingTask.nextRunAt ?? nextRunAt
+      : nextRunAt;
 
   if (existingTask) {
     await prisma.scheduledAgentTask.update({
@@ -81,7 +102,7 @@ export async function ensureHiveScoutScheduledTask(
         timezone,
         ownerUserId: owner.id,
         isActive: true,
-        nextRunAt: existingTask.nextRunAt ?? nextRunAt,
+        nextRunAt: nextScheduledRunAt,
       },
     });
   } else {
@@ -106,12 +127,12 @@ export async function ensureHiveScoutScheduledTask(
       jobId: HIVE_SCOUT_TASK_ID,
       name: HIVE_SCOUT_SCHEDULED_JOB_NAME,
       schedule: HIVE_SCOUT_SCHEDULE,
-      nextRunAt: existingTask?.nextRunAt ?? nextRunAt,
+      nextRunAt: nextScheduledRunAt,
     },
     update: {
       name: HIVE_SCOUT_SCHEDULED_JOB_NAME,
       schedule: HIVE_SCOUT_SCHEDULE,
-      nextRunAt: existingTask?.nextRunAt ?? nextRunAt,
+      nextRunAt: nextScheduledRunAt,
     },
   });
 
