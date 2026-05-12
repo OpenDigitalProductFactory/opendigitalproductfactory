@@ -235,6 +235,7 @@ model PrincipalAlias {
   issuer      String    @default("")
   createdAt   DateTime  @default(now())
   principal   Principal @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  personLicenseRecords PersonLicenseRecord[]
 
   @@unique([aliasType, aliasValue, issuer])
   @@index([principalId])
@@ -2204,6 +2205,8 @@ model Organization {
   marketingKpiCheckpoints       MarketingKpiCheckpoint[]
   marketingAutomationCandidates MarketingAutomationCandidate[]
   taxProfile                    OrganizationTaxProfile?
+  licenseProfile                OrganizationLicenseProfile?
+  personLicenseRecords          PersonLicenseRecord[]
   platformSetupProgress         PlatformSetupProgress?         @relation("OrgSetupProgress")
   wikiPages                     WikiPage[]
   wikiRawSources                RawSource[]
@@ -2263,6 +2266,26 @@ model OrganizationTaxProfile {
   decisionSnapshots  TaxDecisionSnapshot[]
   liabilityEntries   TaxLiabilityEntry[]
   authorityCredentials TaxAuthorityCredential[]
+}
+
+model OrganizationLicenseProfile {
+  id                       String    @id @default(cuid())
+  organizationId           String    @unique
+  setupStatus              String    @default("draft")
+  investigationMode        String    @default("unknown")
+  homeCountryCode          String?
+  primaryRegionCode        String?
+  operatingFootprintSummary String?
+  legalActivityConfidence  String    @default("medium")
+  researchCoverageStatus   String    @default("draft")
+  notes                    String?
+  lastVerifiedAt           DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  licenseRecords   OrganizationLicenseRecord[]
+  readinessIssues  LicenseReadinessIssue[]
 }
 
 model TaxJurisdictionReference {
@@ -2492,6 +2515,181 @@ model TaxAuthorityCredential {
 
   @@index([organizationTaxProfileId])
   @@index([registrationId, status])
+}
+
+model LicenseRequirementReference {
+  id                 String   @id @default(cuid())
+  requirementRefId   String   @unique
+  countryCode        String
+  stateProvinceCode  String?
+  jurisdictionLabel  String
+  authorityName      String
+  authorityType      String
+  requirementType    String
+  scopeLevel         String
+  archetypeCategories String[]
+  activityTags       String[]
+  summary            String
+  officialWebsiteUrl String?
+  applicationUrl     String?
+  renewalUrl         String?
+  helpUrl            String?
+  displayRuleSummary String?
+  renewalCadenceHint String?
+  sourceUrls         String[]
+  sourceKind         String   @default("official")
+  lastResearchedAt   DateTime?
+  lastVerifiedAt     DateTime?
+  confidence         String   @default("medium")
+  staleAfterDays     Int      @default(180)
+  tags               String[] @default([])
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organizationLicenseRecords OrganizationLicenseRecord[]
+  personLicenseRecords       PersonLicenseRecord[]
+
+  @@index([countryCode, stateProvinceCode])
+  @@index([requirementType])
+  @@index([authorityType])
+}
+
+model OrganizationLicenseRecord {
+  id                          String    @id @default(cuid())
+  licenseRecordId             String    @unique
+  organizationLicenseProfileId String
+  requirementReferenceId      String?
+  licenseKind                 String
+  status                      String    @default("draft")
+  licenseNumber               String?
+  issuedAt                    DateTime?
+  effectiveFrom               DateTime?
+  expiresAt                   DateTime?
+  renewalCadence              String?
+  renewalFeeAmount            Decimal?  @db.Decimal(12, 2)
+  renewalFeeCurrency          String?
+  displayRequirementStatus    String    @default("unknown")
+  officialSourceUrl           String?
+  lastVerifiedAt              DateTime?
+  verificationNotes           String?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  organizationLicenseProfile OrganizationLicenseProfile @relation(fields: [organizationLicenseProfileId], references: [id], onDelete: Cascade)
+  requirementReference      LicenseRequirementReference? @relation(fields: [requirementReferenceId], references: [id], onDelete: SetNull)
+  displayObligations        LicenseDisplayObligation[]
+  feeSchedules              LicenseFeeSchedule[]
+  readinessIssues           LicenseReadinessIssue[]
+
+  @@index([organizationLicenseProfileId])
+  @@index([requirementReferenceId])
+  @@index([status, expiresAt])
+}
+
+model PersonLicenseRecord {
+  id                    String    @id @default(cuid())
+  personLicenseRecordId String    @unique
+  principalAliasId      String
+  organizationId        String
+  requirementReferenceId String?
+  credentialType        String
+  status                String    @default("draft")
+  credentialNumber      String?
+  issuingAuthority      String?
+  issuedAt              DateTime?
+  expiresAt             DateTime?
+  renewalCadence        String?
+  supervisoryOrDisplayRole String?
+  officialSourceUrl     String?
+  lastVerifiedAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  principalAlias       PrincipalAlias              @relation(fields: [principalAliasId], references: [id], onDelete: Cascade)
+  organization         Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requirementReference LicenseRequirementReference? @relation(fields: [requirementReferenceId], references: [id], onDelete: SetNull)
+  displayObligations   LicenseDisplayObligation[]
+  feeSchedules         LicenseFeeSchedule[]
+  readinessIssues      LicenseReadinessIssue[]
+
+  @@index([principalAliasId])
+  @@index([organizationId])
+  @@index([requirementReferenceId])
+  @@index([status, expiresAt])
+}
+
+model LicenseDisplayObligation {
+  id                       String   @id @default(cuid())
+  displayObligationId      String   @unique
+  organizationLicenseRecordId String?
+  personLicenseRecordId    String?
+  evidenceId               String?
+  displayType              String
+  requirementLevel         String
+  displayLocation          String?
+  isSatisfied              Boolean  @default(false)
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organizationLicenseRecord OrganizationLicenseRecord? @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: SetNull)
+  personLicenseRecord       PersonLicenseRecord?       @relation(fields: [personLicenseRecordId], references: [id], onDelete: SetNull)
+  evidence                  ComplianceEvidence?        @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([evidenceId])
+  @@index([requirementLevel, isSatisfied])
+}
+
+model LicenseFeeSchedule {
+  id                       String   @id @default(cuid())
+  feeScheduleId            String   @unique
+  organizationLicenseRecordId String?
+  personLicenseRecordId    String?
+  feeType                  String
+  amount                   Decimal  @db.Decimal(12, 2)
+  currency                 String   @default("USD")
+  dueDate                  DateTime?
+  paymentStatus            String   @default("pending")
+  financeHandoffMode       String   @default("track_only")
+  externalReference        String?
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organizationLicenseRecord OrganizationLicenseRecord? @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: SetNull)
+  personLicenseRecord       PersonLicenseRecord?       @relation(fields: [personLicenseRecordId], references: [id], onDelete: SetNull)
+
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([paymentStatus, dueDate])
+}
+
+model LicenseReadinessIssue {
+  id                         String    @id @default(cuid())
+  issueId                    String    @unique
+  organizationLicenseProfileId String
+  organizationLicenseRecordId String?
+  personLicenseRecordId      String?
+  issueType                  String
+  severity                   String    @default("medium")
+  status                     String    @default("open")
+  title                      String
+  details                    String?
+  openedAt                   DateTime  @default(now())
+  resolvedAt                 DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  organizationLicenseProfile OrganizationLicenseProfile @relation(fields: [organizationLicenseProfileId], references: [id], onDelete: Cascade)
+  organizationLicenseRecord  OrganizationLicenseRecord? @relation(fields: [organizationLicenseRecordId], references: [id], onDelete: SetNull)
+  personLicenseRecord        PersonLicenseRecord?       @relation(fields: [personLicenseRecordId], references: [id], onDelete: SetNull)
+
+  @@index([organizationLicenseProfileId])
+  @@index([organizationLicenseRecordId])
+  @@index([personLicenseRecordId])
+  @@index([status, severity])
 }
 
 model TaxRemittanceRun {
@@ -4480,6 +4678,7 @@ model ComplianceEvidence {
   obligation            Obligation?          @relation(fields: [obligationId], references: [id])
   supersededBy          ComplianceEvidence?  @relation("EvidenceSupersession", fields: [supersededById], references: [id])
   supersedes            ComplianceEvidence[] @relation("EvidenceSupersession")
+  licenseDisplayObligations LicenseDisplayObligation[]
 
   @@index([obligationId])
   @@index([controlId])

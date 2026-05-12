@@ -1,0 +1,85 @@
+{
+  "generatedAt": "2026-05-11T00:00:00.000Z",
+  "entries": [
+    {
+      "requirementRefId": "LIC-REQ-US-BUSINESS-LICENSE",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "U.S. Small Business Administration",
+      "authorityType": "federal_directory",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": ["professional-services", "home-services", "healthcare-wellness", "retail-goods", "software-platform"],
+      "activityTags": ["business-setup", "federal-state-local", "licensing-research"],
+      "summary": "Bootstrap directory for federal, state, and local business license and permit research in the United States.",
+      "officialWebsiteUrl": "https://www.sba.gov/business-guide/launch-your-business/apply-licenses-permits",
+      "applicationUrl": "https://www.sba.gov/business-guide/launch-your-business/apply-licenses-permits",
+      "renewalUrl": null,
+      "helpUrl": "https://www.sba.gov/business-guide/launch-your-business/apply-licenses-permits",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.sba.gov/business-guide/launch-your-business/apply-licenses-permits"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": ["us", "bootstrap", "directory"]
+    },
+    {
+      "requirementRefId": "LIC-REQ-GB-LICENCE-FINDER",
+      "countryCode": "GB",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United Kingdom",
+      "authorityName": "GOV.UK",
+      "authorityType": "national_directory",
+      "requirementType": "licence_directory",
+      "scopeLevel": "activity",
+      "archetypeCategories": ["professional-services", "home-services", "healthcare-wellness", "food-hospitality", "software-platform"],
+      "activityTags": ["licensing-research", "regulated-professions", "permit-finder"],
+      "summary": "Bootstrap licence finder and regulated-professions research entrypoint for UK business activities and professional work.",
+      "officialWebsiteUrl": "https://www.gov.uk/find-licences",
+      "applicationUrl": "https://www.gov.uk/find-licences",
+      "renewalUrl": null,
+      "helpUrl": "https://www.regulated-professions.service.gov.uk/",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.gov.uk/find-licences",
+        "https://www.regulated-professions.service.gov.uk/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": ["uk", "bootstrap", "directory"]
+    },
+    {
+      "requirementRefId": "LIC-REQ-AU-ABLIS",
+      "countryCode": "AU",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "Australia",
+      "authorityName": "Australian Business Licence and Information Service",
+      "authorityType": "national_directory",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": ["professional-services", "home-services", "healthcare-wellness", "retail-goods", "software-platform"],
+      "activityTags": ["licensing-research", "federal-state-local", "permit-finder"],
+      "summary": "Bootstrap multi-government business licence information source for Australian federal, state, territory, and local licensing research.",
+      "officialWebsiteUrl": "https://ablis.business.gov.au/about",
+      "applicationUrl": "https://ablis.business.gov.au/",
+      "renewalUrl": null,
+      "helpUrl": "https://ablis.business.gov.au/about",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://ablis.business.gov.au/about",
+        "https://ablis.business.gov.au/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": ["au", "bootstrap", "directory"]
+    }
+  ]
+}
