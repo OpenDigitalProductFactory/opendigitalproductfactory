@@ -24,6 +24,7 @@ Capacity Continuity selects useful, authorized work when paid AI capacity is ava
 - `apps/web/lib/capacity-continuity/finance-routing.ts` turns finance utilization signals into provider-class/model-tier routing hints and finance tracking metadata without pinning a provider.
 - `apps/web/lib/capacity-continuity/finance-signals.ts` reads live AI-provider finance profiles, active/draft supplier contracts, allowances, and latest usage snapshots into normalized capacity finance signals.
 - `apps/web/lib/capacity-continuity/backlog-selector.ts` provides the first live safe-queue adapter: open backlog items become read-only review candidates, enriched with finance/routing metadata, deduped against recent capacity-triggered `TaskRun`s, and optionally mapped to `AutonomousWorkRunInput`s through the shared grant map.
+- `apps/web/lib/capacity-continuity/runner.ts` provides the first governed runner entrypoint: it starts accepted backlog-review work only by creating `TaskRun`s through `AutonomousWorkRun` and records rejected backlog candidates as `BacklogItemActivity` evidence.
 - Focused tests cover the capacity mapper, finance/routing hints, finance-signal normalization, backlog safe-queue selection, hard-rejection behavior, and standing-order attribution rules.
 
 **Schema already in place** (re-verified 2026-05-12):
@@ -245,4 +246,4 @@ Build the attachment seam before deep funding optimization.
 
 The platform needs a safe execution path first. Funding research then improves ranking and provider choice without changing the core authority model.
 
-Concrete next action: add the first governed runner entrypoint that calls `selectBacklogReviewCapacityWorkInputs()`, creates `TaskRun`s through `AutonomousWorkRun`, and records idle/blocker entries for every rejection. That runner must still perform no direct MCP/tool execution; the autonomous runtime remains the only execution path.
+Concrete next action: connect the governed runner to an explicit operator-triggered action from `/platform/ai/capacity-continuity`, then project capacity-triggered `TaskRun`s and `BacklogItemActivity` rejection evidence into Operations Map/return briefing views. The runner must continue to perform no direct MCP/tool execution; the autonomous runtime remains the only execution path.

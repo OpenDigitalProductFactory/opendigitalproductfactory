@@ -188,6 +188,7 @@ describe("selectBacklogReviewCapacityWorkInputs", () => {
     expect(result.rejections).toEqual([
       {
         candidateId: "backlog-review:BI-123",
+        sourceRef: { kind: "backlog-item", id: "BI-123" },
         rejection: expect.objectContaining({
           code: "forbidden_grant",
         }),

@@ -40,6 +40,7 @@ export type BacklogReviewCapacityWorkInputResult = {
   inputs: AutonomousWorkRunInput[];
   rejections: Array<{
     candidateId: string;
+    sourceRef: CapacityContinuityCandidate["sourceRef"];
     rejection: Exclude<
       ReturnType<typeof mapCapacityCandidateToAutonomousWorkRunInput>,
       { ok: true }
@@ -87,6 +88,7 @@ export async function selectBacklogReviewCapacityWorkInputs(
     } else {
       result.rejections.push({
         candidateId: candidate.candidateId,
+        sourceRef: candidate.sourceRef,
         rejection: mapped.rejection,
       });
     }

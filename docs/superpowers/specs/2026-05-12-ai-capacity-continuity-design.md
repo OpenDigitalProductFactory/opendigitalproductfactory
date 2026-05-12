@@ -546,7 +546,7 @@ Acceptance:
 
 Goal: connect Capacity Continuity to the autonomous runtime without creating a second execution model.
 
-Status: started. The shared `AutonomousWorkRun` service, the first pure capacity-candidate mapper/rejection seam, the finance/routing hint planner, live finance signal adapter, and the first backlog safe-queue selector exist in `apps/web/lib/tak/autonomous-work-run.ts`, `apps/web/lib/capacity-continuity/candidates.ts`, `apps/web/lib/capacity-continuity/finance-routing.ts`, `apps/web/lib/capacity-continuity/finance-signals.ts`, and `apps/web/lib/capacity-continuity/backlog-selector.ts`. The remaining work is governed runner integration, idle/blocker persistence, and Operations Map projection.
+Status: started. The shared `AutonomousWorkRun` service, the first pure capacity-candidate mapper/rejection seam, the finance/routing hint planner, live finance signal adapter, backlog safe-queue selector, and governed backlog-review runner exist in `apps/web/lib/tak/autonomous-work-run.ts`, `apps/web/lib/capacity-continuity/candidates.ts`, `apps/web/lib/capacity-continuity/finance-routing.ts`, `apps/web/lib/capacity-continuity/finance-signals.ts`, `apps/web/lib/capacity-continuity/backlog-selector.ts`, and `apps/web/lib/capacity-continuity/runner.ts`. The remaining work is operator-triggered action wiring, broader idle/blocker persistence, and Operations Map projection.
 
 Scope:
 
@@ -554,6 +554,8 @@ Scope:
 - map selected candidates into `AutonomousWorkRunInput`,
 - derive finance-aware routing hints from AI-provider finance snapshots without provider/model pins,
 - select read-only backlog review candidates from existing open backlog items as the first safe queue,
+- start accepted backlog-review work only by creating `TaskRun`s through `AutonomousWorkRun`,
+- record rejected backlog candidates as entity-scoped `BacklogItemActivity` evidence,
 - store capacity metadata in `TaskRun.a2aMetadata`,
 - link idle/blocker reasons to capability needs or backlog proposals,
 - ensure every selected capacity run appears in Operations Map.
