@@ -1,0 +1,443 @@
+// Enrollment business logic for the DPF Edge Node Phase 0.
+//
+// Operator (or installer) issues a bootstrap token via Admin > Platform
+// Development. Edge Node calls POST /api/v1/edge/enroll with the
+// bootstrap token + its host fingerprint + advertised capabilities.
+// This module:
+//
+//   1. Validates the bootstrap token (single-use, not revoked, not
+//      expired) per BootstrapToken invariants.
+//   2. Atomically (in a Prisma transaction):
+//      - Marks the bootstrap token consumed.
+//      - Creates a Principal + PrincipalAlias pair for the EdgeNode's
+//        identity (per AGENTS.md §11 principal-convergence rule).
+//      - Creates the EdgeNode row with the chosen trustState
+//        (per spec § Approval policy: auto-approved if the bootstrap
+//        token's `scope` flags it as installer-issued local-host;
+//        otherwise pending operator approval).
+//      - Mints a node token (dpfedge_*) and stores its hash.
+//      - Creates EdgeNodeCapability rows for the accepted capability
+//        intersection.
+//   3. Returns the plaintext node token + intervals (heartbeat / sweep)
+//      so the Edge Node can immediately start operating.
+//
+// Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+//   § Enrollment, rotation, and lifecycle
+//   § Approval policy
+//   § Token namespaces and lifecycle
+
+import { randomUUID } from "crypto";
+
+import { prisma } from "@dpf/db";
+import {
+  EDGE_NODE_ALIAS_KIND,
+  EDGE_NODE_INSTALL_MODES,
+  EDGE_NODE_PLATFORMS,
+  PHASE_0_CAPABILITIES,
+  isBootstrapTokenUsable,
+  type EdgeNodeInstallMode,
+  type EdgeNodePlatform,
+  type Phase0Capability,
+} from "@dpf/db/edge-node-types";
+
+import {
+  classifyTokenPrefix,
+  computeBootstrapExpiry,
+  generateBootstrapToken,
+  generateNodeToken,
+  hashToken,
+} from "./tokens";
+
+// ── Issuance (operator-side) ─────────────────────────────────────────────────
+
+export type IssueBootstrapInput = {
+  /** Operator (or installer service-account) Principal id. */
+  issuedByPrincipalId: string;
+  /** TTL in milliseconds. Defaults to 15 min; capped at 24h per spec. */
+  ttlMs?: number;
+  /**
+   * Reserved for future scope expansion. Phase 0 only accepts
+   * `edge:enroll`. Out-of-band scopes are rejected at the API layer,
+   * not here.
+   */
+  scope?: string;
+};
+
+export type IssueBootstrapResult = {
+  /** The opaque tokenId — for revocation lookup. */
+  tokenId: string;
+  /** Plaintext token. SHOWN TO OPERATOR ONCE; never persisted. */
+  plaintext: string;
+  /** First 12 chars of the plaintext for visual ID in operator lists. */
+  prefix: string;
+  /** When this token will stop being usable. */
+  expiresAt: Date;
+};
+
+/**
+ * Mint a new bootstrap token. The plaintext appears in the response
+ * exactly once; the caller must surface it to the operator immediately
+ * and not log it. Only the hash and prefix are persisted.
+ */
+export async function issueBootstrapToken(
+  input: IssueBootstrapInput,
+): Promise<IssueBootstrapResult> {
+  const { plaintext, hash, prefix } = generateBootstrapToken();
+  const expiresAt = computeBootstrapExpiry(input.ttlMs);
+
+  const row = await prisma.bootstrapToken.create({
+    data: {
+      tokenHash: hash,
+      prefix,
+      scope: input.scope ?? "edge:enroll",
+      issuedByPrincipalId: input.issuedByPrincipalId,
+      expiresAt,
+    },
+  });
+
+  return {
+    tokenId: row.id,
+    plaintext,
+    prefix,
+    expiresAt,
+  };
+}
+
+// ── Enrollment (Edge-Node-side) ──────────────────────────────────────────────
+
+export type EnrollInput = {
+  /** Plaintext bootstrap token presented by the Edge Node. */
+  bootstrapToken: string;
+  /** Operator-set or agent-derived display name. */
+  displayName: string;
+  /** "darwin" | "win32" | "linux". */
+  platform: EdgeNodePlatform;
+  /** "native" | "container-host" | "container-vm". */
+  installMode: EdgeNodeInstallMode;
+  /** Edge Node binary version, e.g. "0.1.0". */
+  version: string;
+  /** Capabilities the agent advertises support for. */
+  advertisedCapabilities: string[];
+  /** Host fingerprint for verification + drift detection. */
+  hostFingerprint?: string;
+  /** Free-form metadata — hostname, tags, OS details. */
+  metadata?: Record<string, unknown>;
+  /**
+   * Whether this enrollment should auto-approve per spec § Approval
+   * policy. Default false (operator approval required); installer-
+   * issued local-host enrollments pass true.
+   */
+  autoApprove?: boolean;
+};
+
+export type EnrollResult =
+  | {
+      ok: true;
+      edgeNodeId: string;
+      /** Stable external identifier; appears in API URLs going forward. */
+      nodeId: string;
+      /** Plaintext node token. SENT TO EDGE NODE ONCE. */
+      nodeToken: string;
+      /** Authority-decided heartbeat interval (seconds). */
+      heartbeatIntervalSec: number;
+      /** Authority-decided discovery sweep interval (seconds). */
+      sweepIntervalSec: number;
+      /** Capabilities the Authority accepted from the agent's advertised set. */
+      acceptedCapabilities: Phase0Capability[];
+      /** trustState at enrollment ("trusted" if auto-approved else "pending"). */
+      trustState: "trusted" | "pending";
+    }
+  | {
+      ok: false;
+      error:
+        | "invalid_token_format"
+        | "token_not_found"
+        | "token_expired"
+        | "token_already_consumed"
+        | "token_revoked"
+        | "invalid_platform"
+        | "invalid_install_mode"
+        | "no_acceptable_capabilities";
+      message: string;
+    };
+
+const DEFAULT_HEARTBEAT_INTERVAL_SEC = 60;
+const DEFAULT_SWEEP_INTERVAL_SEC = 300; // 5 min
+
+/**
+ * Validate a bootstrap token + create an EdgeNode + Principal + alias
+ * + initial capabilities atomically. Returns the plaintext node token
+ * for the agent.
+ */
+export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> {
+  // Cheap precondition: prefix must look like a bootstrap token. Avoids
+  // burning a hash on garbage input and accidentally matching a node
+  // token by collision.
+  if (classifyTokenPrefix(input.bootstrapToken) !== "bootstrap") {
+    return {
+      ok: false,
+      error: "invalid_token_format",
+      message: "bootstrap token must use the dpfboot_ prefix",
+    };
+  }
+
+  if (!EDGE_NODE_PLATFORMS.includes(input.platform)) {
+    return {
+      ok: false,
+      error: "invalid_platform",
+      message: `platform must be one of: ${EDGE_NODE_PLATFORMS.join(", ")}`,
+    };
+  }
+  if (!EDGE_NODE_INSTALL_MODES.includes(input.installMode)) {
+    return {
+      ok: false,
+      error: "invalid_install_mode",
+      message: `installMode must be one of: ${EDGE_NODE_INSTALL_MODES.join(", ")}`,
+    };
+  }
+
+  const acceptedCapabilities = input.advertisedCapabilities.filter(
+    (cap): cap is Phase0Capability =>
+      (PHASE_0_CAPABILITIES as readonly string[]).includes(cap),
+  );
+  if (acceptedCapabilities.length === 0) {
+    return {
+      ok: false,
+      error: "no_acceptable_capabilities",
+      message: `Phase 0 accepts only: ${PHASE_0_CAPABILITIES.join(", ")}`,
+    };
+  }
+
+  const presentedHash = hashToken(input.bootstrapToken);
+  const tokenRow = await prisma.bootstrapToken.findUnique({
+    where: { tokenHash: presentedHash },
+  });
+
+  if (!tokenRow) {
+    return {
+      ok: false,
+      error: "token_not_found",
+      message: "bootstrap token does not match any issued token",
+    };
+  }
+  if (tokenRow.consumedAt !== null) {
+    return {
+      ok: false,
+      error: "token_already_consumed",
+      message: "bootstrap token has already been consumed",
+    };
+  }
+  if (tokenRow.revokedAt !== null) {
+    return {
+      ok: false,
+      error: "token_revoked",
+      message: "bootstrap token was revoked before consumption",
+    };
+  }
+  if (!isBootstrapTokenUsable(tokenRow)) {
+    return {
+      ok: false,
+      error: "token_expired",
+      message: "bootstrap token has expired",
+    };
+  }
+
+  const nodeId = `edge_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+  const nodeToken = generateNodeToken();
+  const trustState = input.autoApprove ? "trusted" : "pending";
+  const status = input.autoApprove ? "active" : "pending";
+  const now = new Date();
+
+  // Atomic transaction: consume the bootstrap token + create the
+  // Principal + alias + EdgeNode + initial capability rows. If any
+  // step fails the whole enrollment unwinds, leaving the bootstrap
+  // token usable for a retry.
+  await prisma.$transaction(async (tx) => {
+    // 1. Consume the bootstrap token (single-use).
+    await tx.bootstrapToken.update({
+      where: {
+        id: tokenRow.id,
+        // Optimistic concurrency: only update if still unconsumed.
+        // If two enrolls race the same token, one wins and the other
+        // gets a not-found here, which propagates as the transaction
+        // rollback the API layer maps to `token_already_consumed`.
+        consumedAt: null,
+      },
+      data: {
+        consumedAt: now,
+      },
+    });
+
+    // 2. Create the convergent Principal for the Edge Node identity.
+    const principal = await tx.principal.create({
+      data: {
+        principalId: `principal_${nodeId}`,
+        kind: EDGE_NODE_ALIAS_KIND,
+        displayName: input.displayName,
+      },
+    });
+
+    // 3. Create the alias so authorization decisions can resolve
+    //    through Principal regardless of which surface authenticated.
+    await tx.principalAlias.create({
+      data: {
+        principalId: principal.id,
+        aliasType: EDGE_NODE_ALIAS_KIND,
+        aliasValue: nodeId,
+      },
+    });
+
+    // 4. Create the EdgeNode row.
+    const edgeNode = await tx.edgeNode.create({
+      data: {
+        nodeId,
+        displayName: input.displayName,
+        platform: input.platform,
+        installMode: input.installMode,
+        version: input.version,
+        status,
+        trustState,
+        capabilities: input.advertisedCapabilities,
+        metadata: input.metadata
+          ? {
+              ...input.metadata,
+              hostFingerprint: input.hostFingerprint ?? null,
+            }
+          : input.hostFingerprint
+            ? { hostFingerprint: input.hostFingerprint }
+            : undefined,
+        tokenHash: nodeToken.hash,
+        tokenPrefix: nodeToken.prefix,
+        tokenRotatedAt: now,
+        enrolledAt: now,
+        ...(input.autoApprove
+          ? { approvedAt: now, approvedByPrincipalId: tokenRow.issuedByPrincipalId }
+          : {}),
+      },
+    });
+
+    // 5. Link the consumed bootstrap token to the EdgeNode for audit.
+    await tx.bootstrapToken.update({
+      where: { id: tokenRow.id },
+      data: { consumedByEdgeNodeId: edgeNode.id },
+    });
+
+    // 6. Create capability rows for the accepted set. Mode = `enabled`
+    //    for auto-approved nodes; `disabled` for pending nodes (they
+    //    can heartbeat but Authority does not yet accept their
+    //    submissions).
+    const mode = input.autoApprove ? "enabled" : "disabled";
+    for (const capability of acceptedCapabilities) {
+      await tx.edgeNodeCapability.create({
+        data: {
+          edgeNodeId: edgeNode.id,
+          capability,
+          mode,
+          status: "unknown",
+        },
+      });
+    }
+  });
+
+  return {
+    ok: true,
+    edgeNodeId: nodeId,
+    nodeId,
+    nodeToken: nodeToken.plaintext,
+    heartbeatIntervalSec: DEFAULT_HEARTBEAT_INTERVAL_SEC,
+    sweepIntervalSec: DEFAULT_SWEEP_INTERVAL_SEC,
+    acceptedCapabilities,
+    trustState,
+  };
+}
+
+// ── Heartbeat (Edge-Node-side) ───────────────────────────────────────────────
+
+export type HeartbeatInput = {
+  /** Resolved EdgeNode (auth middleware loads this). */
+  edgeNodeId: string;
+  /** Optional capability self-report from the agent. */
+  capabilityReports?: Array<{
+    capability: string;
+    status: "healthy" | "degraded" | "failing" | "unknown";
+    evidence?: Record<string, unknown>;
+  }>;
+};
+
+export type HeartbeatResult = {
+  /** Echo of the Authority-decided heartbeat interval. */
+  heartbeatIntervalSec: number;
+  /** Echo of the Authority-decided sweep interval. */
+  sweepIntervalSec: number;
+  /** Capabilities currently accepted (Authority can revoke between heartbeats). */
+  acceptedCapabilities: string[];
+};
+
+/**
+ * Update lastSeenAt; optionally update per-capability status from the
+ * agent's self-report. Returns the current intervals + accepted-
+ * capability set so the agent can adjust on the fly without restart.
+ */
+export async function recordHeartbeat(
+  input: HeartbeatInput,
+): Promise<HeartbeatResult> {
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.edgeNode.update({
+      where: { id: input.edgeNodeId },
+      data: {
+        lastSeenAt: now,
+        // Pending nodes flip to active on first heartbeat.
+        status: "active",
+      },
+    });
+
+    if (input.capabilityReports) {
+      for (const report of input.capabilityReports) {
+        // Upsert capability rows: edge case where agent advertises a
+        // new capability post-enrollment. Authority defaults new
+        // capabilities to disabled until operator promotes them.
+        await tx.edgeNodeCapability.upsert({
+          where: {
+            edgeNodeId_capability: {
+              edgeNodeId: input.edgeNodeId,
+              capability: report.capability,
+            },
+          },
+          create: {
+            edgeNodeId: input.edgeNodeId,
+            capability: report.capability,
+            mode: "disabled",
+            status: report.status,
+            evidence: (report.evidence ?? null) as never,
+            reportedAt: now,
+          },
+          update: {
+            status: report.status,
+            evidence: (report.evidence ?? null) as never,
+            reportedAt: now,
+          },
+        });
+      }
+    }
+  });
+
+  // Query accepted capabilities (mode=enabled or reporting-only) to
+  // tell the agent what Authority will currently accept submissions
+  // for. Done after the transaction so the agent's reports influence
+  // the response shape immediately.
+  const accepted = await prisma.edgeNodeCapability.findMany({
+    where: {
+      edgeNodeId: input.edgeNodeId,
+      mode: { in: ["enabled", "reporting-only"] },
+    },
+    select: { capability: true },
+  });
+
+  return {
+    heartbeatIntervalSec: DEFAULT_HEARTBEAT_INTERVAL_SEC,
+    sweepIntervalSec: DEFAULT_SWEEP_INTERVAL_SEC,
+    acceptedCapabilities: accepted.map((row) => row.capability),
+  };
+}
