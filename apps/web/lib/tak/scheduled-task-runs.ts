@@ -1,5 +1,4 @@
-import { randomUUID } from "crypto";
-import { prisma } from "@dpf/db";
+import { createAutonomousWorkRun } from "@/lib/tak/autonomous-work-run";
 
 export type ScheduledTaskRunRef = {
   id: string;
@@ -16,30 +15,18 @@ export async function createTaskRunForScheduledTask(input: {
   title: string;
   prompt: string;
 }): Promise<ScheduledTaskRunRef> {
-  const taskRunId = `TR-SCHED-${randomUUID().slice(0, 8).toUpperCase()}`;
-
-  return prisma.taskRun.create({
-    data: {
-      taskRunId,
-      userId: input.ownerUserId,
-      threadId: input.threadId,
-      contextId: input.threadId,
-      initiatingAgentId: input.agentId,
-      currentAgentId: input.agentId,
-      routeContext: input.routeContext,
-      title: input.title,
-      objective: input.prompt.slice(0, 1000),
-      source: "proactive",
-      status: "working",
-      authorityScope: [],
-      a2aMetadata: {
-        trigger: "scheduled",
-        sourceRef: {
-          kind: "scheduled-task",
-          id: input.taskId,
-        },
-      },
+  return createAutonomousWorkRun({
+    trigger: "scheduled",
+    userId: input.ownerUserId,
+    agentId: input.agentId,
+    routeContext: input.routeContext,
+    title: input.title,
+    objective: input.prompt,
+    prompt: input.prompt,
+    threadId: input.threadId,
+    sourceRef: {
+      kind: "scheduled-task",
+      id: input.taskId,
     },
-    select: { id: true, taskRunId: true, contextId: true },
   });
 }
