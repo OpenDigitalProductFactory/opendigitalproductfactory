@@ -133,6 +133,13 @@ function isOriginAllowed(origin: string | null): boolean {
 // reflects the *internal* bind address (e.g. 0.0.0.0) and protocol, not what
 // the client actually connected to. We must consult X-Forwarded-Proto and
 // X-Forwarded-Host (or the Host header) to know the client's view.
+//
+// MCP_INSECURE_INTERNAL_HOSTS — comma-separated hostnames that are trusted
+// to call the MCP transport over plain HTTP. Required for sandbox→portal
+// MCP traffic on the internal Docker bridge (`portal`, `host.docker.internal`,
+// etc.) where TLS termination is not available. Operator opt-in: empty/unset
+// means localhost-only. Bearer-token auth, origin check, scope/grant checks
+// are all still enforced — this only relaxes the transport-layer TLS gate.
 function isTransportAllowed(request: Request): boolean {
   const xfProto = request.headers.get("x-forwarded-proto");
   const url = new URL(request.url);
@@ -144,7 +151,18 @@ function isTransportAllowed(request: Request): boolean {
   const rawHost = (xfHost?.split(",")[0]?.trim() || hostHeader || url.host).toLowerCase();
   // Strip port; bracketed IPv6 retains brackets after URL.host parsing.
   const hostname = rawHost.replace(/^\[(.+)\]:?\d*$/, "$1").replace(/:\d+$/, "");
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+    return true;
+  }
+  const internalAllowlist = process.env.MCP_INSECURE_INTERNAL_HOSTS;
+  if (internalAllowlist) {
+    const allowed = internalAllowlist
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter((h) => h.length > 0);
+    if (allowed.includes(hostname)) return true;
+  }
+  return false;
 }
 
 async function loadUserContext(userId: string): Promise<UserContext> {
