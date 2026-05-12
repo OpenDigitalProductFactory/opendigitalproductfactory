@@ -74,4 +74,18 @@ describe("AgentPanelHeader", () => {
     expect(html).toContain("Cancel");
     expect(html).toContain("Erase now");
   });
+
+  it("renders Act and Advise controls when unified coworker mode is enabled", () => {
+    const html = renderToStaticMarkup(
+      <AgentPanelHeader
+        {...baseProps}
+        useUnified
+        coworkerMode="act"
+        onToggleCoworkerMode={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Act");
+    expect(html).not.toContain("External Off");
+  });
 });

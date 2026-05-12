@@ -83,6 +83,14 @@ describe("resolveRouteContext", () => {
     expect(ctx.docsPath).toBe("/docs/finance/banking-and-reconciliation");
   });
 
+  it("matches licensing routes ahead of the broader compliance context", () => {
+    const ctx = resolveRouteContext("/compliance/licensing");
+    expect(ctx.domain).toBe("Licensing & Permit Readiness");
+    expect(ctx.routePrefix).toBe("/compliance/licensing");
+    expect(ctx.domainTools).toContain("save_licensing_investigation");
+    expect(ctx.domainTools).toContain("create_licensing_readiness_issue");
+  });
+
   it("returns route-aware docs for platform provider routes", () => {
     const ctx = resolveRouteContext("/platform/ai/providers/provider-123");
     expect(ctx.docsPath).toBe("/docs/ai-workforce/connecting-providers");
@@ -112,6 +120,7 @@ describe("ROUTE_CONTEXT_MAP", () => {
       "/employee",
       "/customer",
       "/customer/marketing",
+      "/compliance/licensing",
       "/storefront",
       "/ops",
       "/build",
@@ -186,6 +195,14 @@ describe("ROUTE_CONTEXT_MAP", () => {
     expect(storefrontRoute.domain).toBe("Storefront Operations");
     expect(storefrontRoute.domainTools).not.toContain("get_marketing_summary");
     expect(storefrontRoute.domainTools).not.toContain("suggest_campaign_ideas");
+  });
+
+  it("keeps licensing investigation skills on the licensing route instead of the generic compliance route", () => {
+    const licensingRoute = ROUTE_CONTEXT_MAP["/compliance/licensing"]!;
+    const complianceRoute = ROUTE_CONTEXT_MAP["/compliance"]!;
+
+    expect(licensingRoute.skills.some((skill) => skill.label === "Investigate licensing footprint")).toBe(true);
+    expect(complianceRoute.skills.some((skill) => skill.label === "Investigate licensing footprint")).toBe(false);
   });
 });
 

@@ -69,14 +69,14 @@
       "plainDescription": "Anthropic's Claude models accessed through a subscription plan.",
       "authExplained": "Sign in with your Claude account via OAuth, or paste a subscription token. No separate API key needed.",
       "costTier": "subscription",
-      "costExplained": "Included in your Claude subscription. Limited to Haiku-class models.",
-      "capabilitySummary": "Good at conversation and basic analysis. Limited to smaller models.",
-      "limitations": "Only Haiku-class models available. Cannot access Sonnet or Opus through subscription.",
+      "costExplained": "Included in your Claude subscription. Availability can vary by account and backend state.",
+      "capabilitySummary": "Good at conversation, analysis, and guided text work when custom MCP tool execution is not required.",
+      "limitations": "Do not route custom MCP tool-based coworker work here. Treat this backend as no-custom-tool-use for governed platform tasks.",
       "dataResidency": "United States (Anthropic servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "Same as Anthropic. SOC 2 Type II certified."
     },
-    "supportsToolUse": true
+    "supportsToolUse": false
   },
   {
     "providerId": "openai",

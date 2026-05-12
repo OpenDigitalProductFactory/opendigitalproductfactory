@@ -460,14 +460,17 @@ which surface authenticated the request.
 
 The convergence layout for an Edge Node identity is:
 
-- `Principal { kind: "edge-node", status, displayName, principalId: "PRN-…" }`
+- `Principal { kind: "edge_node", status, displayName, principalId: "PRN-…" }`
   — the canonical identity row. Used by every authorization decision
   the same way `kind: "human"` and `kind: "agent"` are used today.
-- `PrincipalAlias { aliasType: "edge-node", aliasValue: nodeId, principalId }`
+- `PrincipalAlias { aliasType: "edge_node", aliasValue: nodeId, principalId }`
   — binds the externally-visible `nodeId` (used in API URLs and
   embedded in the `dpfedge_*` token) to the Principal. `aliasType:
-  "edge-node"` is a new value joining the existing set (`user`,
-  `employee`, `agent`, `gaid`, `customer_contact`, `email`).
+  "edge_node"` is a new value joining the existing set (`user`,
+  `employee`, `agent`, `gaid`, `customer_contact`, `email`). The
+  underscore form matches the existing aliasType convention; see
+  `packages/db/src/edge-node-types.ts` for the canonical constant
+  (`EDGE_NODE_ALIAS_KIND`).
 - `EdgeNode { principalId @unique, …host attributes }` — host facts
   only. No identity-bearing field that's not derivable from the
   Principal.
@@ -475,12 +478,12 @@ The convergence layout for an Edge Node identity is:
 ```prisma
 // EXISTING — packages/db/prisma/schema.prisma:219. Shown for context;
 // no change to the model definition. New value added to `kind`:
-// "edge-node".
+// "edge_node".
 //
 // model Principal {
 //   id          String           @id @default(cuid())
 //   principalId String           @unique
-//   kind        String   // "human" | "agent" | "customer" | "edge-node"
+//   kind        String   // "human" | "agent" | "customer" | "edge_node"
 //   status      String   @default("active")
 //   displayName String
 //   aliases     PrincipalAlias[]
@@ -488,12 +491,12 @@ The convergence layout for an Edge Node identity is:
 // }
 //
 // EXISTING — packages/db/prisma/schema.prisma:230. New value added
-// to `aliasType`: "edge-node" (aliasValue holds the stable nodeId).
+// to `aliasType`: "edge_node" (aliasValue holds the stable nodeId).
 //
 // model PrincipalAlias {
 //   id          String    @id @default(cuid())
 //   principalId String
-//   aliasType   String   // ..., "edge-node"
+//   aliasType   String   // ..., "edge_node"
 //   aliasValue  String
 //   issuer      String    @default("")
 //   ...
@@ -504,7 +507,7 @@ The convergence layout for an Edge Node identity is:
 model EdgeNode {
   id                    String    @id @default(cuid())
   principalId           String    @unique             // 1:1 with Principal
-  nodeId                String    @unique             // stable external id (mirrored to PrincipalAlias.aliasValue where aliasType="edge-node")
+  nodeId                String    @unique             // stable external id (mirrored to PrincipalAlias.aliasValue where aliasType="edge_node")
   platform              String    // darwin | win32 | linux
   installMode           String    // native | container-host | container-vm
   version               String
@@ -790,7 +793,7 @@ revisit without re-opening the doctrine.
   honor Principal convergence (AGENTS.md §11). `DiscoveryRun`
   gains an optional `edgeNodeId` FK in the same migration that
   introduces `EdgeNode`, `BootstrapToken`, `EdgeNodeCapability`,
-  and the new `kind: "edge-node"` and `aliasType: "edge-node"`
+  and the new `kind: "edge_node"` and `aliasType: "edge_node"`
   values for Principal / PrincipalAlias.
 - **Endpoint vs MCP tool** *(durable)*: **REST first
   (`/api/v1/edge/*`), MCP tool follow-up**. Reasoning: the first
@@ -1241,7 +1244,7 @@ target misconfiguration.**
       to honor AGENTS.md §11 Principal convergence (EdgeNode
       becomes a host-attributes side table keyed by
       `principalId`; identity lives on Principal + PrincipalAlias
-      with new kind `edge-node` and alias type `edge-node`).
+      with new kind `edge_node` and alias type `edge_node`).
       `DiscoveryRun.edgeNodeId` added as optional FK in the same
       migration. `persistSubmittedDiscoveryRun` sibling of
       `persistBootstrapDiscoveryRun` specified in "Ingestion
