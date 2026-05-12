@@ -43,6 +43,16 @@
 >   (6) Critical / Important / Acceptable security findings list
 >   updated to match the corrections, with explicit notes on what
 >   is Phase 0 risk vs Phase 1+ closure.
+>   (7) Orphan scope name `edge:register` from the original draft
+>   removed; canonical scope vocabulary `edge:enroll`,
+>   `edge:heartbeat`, `edge:rotate`, `discovery:submit`,
+>   `metrics:submit`, `mcp:gateway`, `a2a:gateway`, `policy:fetch`
+>   documented as the authoritative list.
+>   (8) Runtime-language drift documented: Phase 0 Mode 1 shipped
+>   Node.js / TypeScript (PR #501) against a spec that named Go.
+>   The drift is acknowledged with two acceptable paths forward
+>   (standardize on TypeScript or hold the Go decision and rewrite
+>   Mode 1) — decision must land before Mode 2 macOS native ships.
 >
 > Source plan: `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
 > (the "Discovery plane refactor" subsection under Future direction).
@@ -175,11 +185,11 @@ that's compatible with its environment.
 
 | Platform | Runtime | Notes |
 |---|---|---|
-| Linux native Docker | Container with `network_mode: host` (or `macvlan`) | Default for Linux server installs. Decision between `network_mode: host` (observer) and `macvlan` (LAN peer) is an open question — see below. |
-| macOS | Native LaunchAgent | Statically-linked binary (~5 MB, Go or Rust). Same auto-start mechanism as the platform itself. |
-| Windows | Native service | Same binary, Windows service registration. |
-| Docker Desktop fallback | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. |
-| Remote managed host | Native service or container per host class | Same code, same API contract, same auth scope. |
+| Linux native Docker (Mode 1) | Container with `network_mode: host` (or `macvlan`) | Default for Linux server installs. Phase 0 ships Node.js / TypeScript per [`services/edge-node`](../../../services/edge-node) (PR #501); the open-question resolution below documents the runtime-language drift between this spec and the shipped service. Decision between `network_mode: host` (observer) and `macvlan` (LAN peer) is an open question — see below. |
+| macOS native (Mode 2) | Native LaunchDaemon (or LaunchAgent) | Self-contained binary. The original spec assumed Go or Rust for the native-binary path; Phase 0's Mode 1 actually shipped Node.js / TypeScript (#501). The runtime for Mode 2 is **open**: either re-pack the Node service as a self-contained binary (`bun build --compile`, `pkg`, `nexe`) or revisit the Go choice for the native-binary path. See "Runtime drift — Mode 1 Node.js, Mode 2 TBD" in Open question resolutions. |
+| Windows native (Mode 4) | Native Windows Service | Same runtime decision as Mode 2 — open pending the drift resolution. |
+| Docker Desktop fallback (Mode 3) | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. Same Node.js / TypeScript image as Mode 1. |
+| Remote managed host | Native service or container per host class | Same API contract, same auth scope; runtime per the host's mode. |
 
 **Hard constraint preserved from the prior draft (refined):** Docker
 Desktop runs Docker Engine inside a lightweight Linux VM and proxies
@@ -303,15 +313,25 @@ dpfedge_<token>      # or dpfagent_<token>
 With narrow scope grants:
 
 ```
-edge:register
-edge:heartbeat
-edge:rotate
-discovery:submit
-metrics:submit
-mcp:gateway
-a2a:gateway
-policy:fetch
+edge:enroll       # bootstrap-token scope only; consumed at enroll
+edge:heartbeat    # keepalive + rotation; allowed for pending and quarantined nodes
+edge:rotate       # token rotation (server-side stamps rotatedAt, mints new token)
+discovery:submit  # POST /api/v1/edge/discovery-runs; trusted-only
+metrics:submit    # reserved for future host-metrics capability slice
+mcp:gateway       # reserved for future MCP-gateway capability slice
+a2a:gateway       # reserved for future A2A-gateway capability slice
+policy:fetch      # reserved for future policy-cache capability slice
 ```
+
+The scope vocabulary is closed; new scopes require an AGENTS.md
+update + this list. The first-draft `edge:register` name was renamed
+to `edge:enroll` during the implementation in PR #498 — the
+bootstrap-token scope is `edge:enroll`, the enrollment ceremony
+endpoint is `POST /api/v1/edge/enroll`, and the in-code constant
+`EDGE_NODE_ALIAS_KIND`-adjacent surfaces all use the `enroll`
+spelling. This list is authoritative; if you see `edge:register`
+in an older draft or commit message, it's the orphan name and
+should be treated as `edge:enroll`.
 
 Tokens are **per-node bearers**: issued by the Authority Core to a
 specific `EdgeNode.nodeId`, short-lived, rotated via heartbeat /
@@ -933,14 +953,46 @@ revisit without re-opening the doctrine.
 
 ### Edge Node lifecycle
 
-- **Language for the binary** *(durable)*: **Go**. Mature
-  cross-compilation, static linking, ~5 MB binary target, well-known
-  signing/notarization toolchains on every platform we target,
-  battle-tested in the comparators (osquery is C++, but Tailscale,
-  Cloudflare Tunnel `cloudflared`, and HashiCorp Boundary are Go and
-  closer to what we're building). Rust was the alternative;
-  rejected because the marginal correctness gain doesn't offset the
-  team's existing Go fluency and the cross-compilation story.
+- **Language for the binary** *(open — drift documented)*:
+  - **Spec's original resolution (durable):** Go. Mature
+    cross-compilation, static linking, ~5 MB binary target,
+    well-known signing/notarization toolchains on every platform,
+    battle-tested in the comparators (Tailscale, Cloudflare Tunnel
+    `cloudflared`, HashiCorp Boundary are Go and closer to what
+    we're building).
+  - **What actually shipped in Phase 0:** Node.js / TypeScript.
+    PR #501 (A3 — Edge Node service skeleton) implements the Mode 1
+    container service in TypeScript at
+    [`services/edge-node`](../../../services/edge-node), built on
+    `node:24-alpine`. Container image size is ~150 MB (vs Go's
+    ~5 MB target). This was a divergence from the spec's resolution
+    and was not amended in the spec before merge.
+  - **Status (2026-05-12):** the runtime drift is acknowledged but
+    not resolved. Two acceptable paths forward, both **must** be
+    decided before Mode 2 (macOS native binary) ships:
+    1. **Amend the spec to Node.js + bundling.** Standardize on
+       TypeScript across Modes 1 / 2 / 3 / 4. Use `bun build --compile`
+       (the leading single-file Node bundler in 2026) or `pkg` /
+       `nexe` for the native modes. Trade-offs: larger artifact
+       (~50 MB even bundled), worse cold-start than Go, but uses the
+       team's existing TypeScript fluency end-to-end and avoids a
+       Go/TS impedance mismatch between Mode 1 and Mode 2.
+    2. **Hold the spec's Go decision and rewrite Mode 1.** PR #501's
+       TypeScript service is replaced with a Go service for Mode 1
+       and used as-is for Mode 2 / 4. Trade-offs: smaller artifact,
+       better cold-start, matches the comparators — at the cost of
+       throwing away PR #501's working code and adding a Go
+       toolchain to the build pipeline.
+    The decision must be paired with a Mode 2 binary scaffolding PR.
+    Until then, the Mode 1 service in main is the authoritative
+    runtime and this open-question remains the source of truth on
+    the divergence.
+  - **Why this matters for security review:** the Phase 0 storage
+    downgrade controls (Phase 0 storage downgrade — Linux container
+    Mode 1) are scoped to the Node.js container shipped in #501.
+    If the Mode 1 implementation is rewritten in Go, those controls
+    must be re-applied to the Go service before that rewrite ships;
+    they are not transferable for free.
 - **Linux default networking** *(scoped to first slice)*:
   **`network_mode: host`** (observer-only). LLDP/CDP receive and
   segregated scanner roles require `macvlan`; that's a follow-on
