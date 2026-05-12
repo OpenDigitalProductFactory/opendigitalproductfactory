@@ -1,10 +1,9 @@
-import { createAutonomousWorkRun } from "@/lib/tak/autonomous-work-run";
+import {
+  createAutonomousWorkRun,
+  type AutonomousWorkRunRef,
+} from "@/lib/tak/autonomous-work-run";
 
-export type ScheduledTaskRunRef = {
-  id: string;
-  taskRunId: string;
-  contextId: string | null;
-};
+export type ScheduledTaskRunRef = AutonomousWorkRunRef;
 
 export async function createTaskRunForScheduledTask(input: {
   taskId: string;

@@ -37,6 +37,10 @@ import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
 import { loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
 import type { RoutingMeta } from "@/lib/process-observer-hook";
+import {
+  executeAutonomousAgenticLoop,
+  findCurrentAutonomousWorkRun,
+} from "@/lib/tak/autonomous-work-run";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
@@ -907,14 +911,9 @@ export async function sendMessage(input: {
   let responseModelId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
-  const currentTaskRun = await prisma.taskRun.findFirst({
-    where: {
-      userId: user.id!,
-      threadId: input.threadId,
-      archivedAt: null,
-    },
-    orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
-    select: { taskRunId: true },
+  const currentTaskRun = await findCurrentAutonomousWorkRun({
+    userId: user.id!,
+    threadId: input.threadId,
   }).catch(() => null);
 
   // EP-AI-WORKFORCE-001: Provider pinning is now via AgentModelConfig.pinnedProviderId
@@ -1031,7 +1030,6 @@ export async function sendMessage(input: {
   try {
     // ── Agentic execution loop ──────────────────────────────────────────────
     // EP-INF-009b: The loop handles V2 routing internally via routeAndCall().
-    const { runAgenticLoop } = await import("@/lib/agentic-loop");
     const { agentEventBus } = await import("@/lib/agent-event-bus");
 
     // Build Specialist Operator Contract platform guards (clauses 2.2/2.4/2.6)
@@ -1043,7 +1041,7 @@ export async function sendMessage(input: {
       select: { id: true, phase: true },
     }).catch(() => null);
 
-    const agenticResult = await runAgenticLoop({
+    const agenticResult = await executeAutonomousAgenticLoop({
       chatHistory,
       systemPrompt: populatedPrompt,
       sensitivity: agent.sensitivity,
