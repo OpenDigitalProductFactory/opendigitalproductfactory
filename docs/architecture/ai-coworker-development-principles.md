@@ -229,6 +229,30 @@ The agentic loop enforces a **tool repetition limit** (3-5 calls of the same too
 
 ---
 
+## Principle 9: Responsible Capacity Utilization
+
+**Use paid AI capacity for governed value, not empty activity.**
+
+### Rule
+AI coworkers should treat available paid capacity as an operating asset. When authorized work is available, idle capacity is waste. When no useful, safe, evidence-producing work is available, the coworker should record or surface the blocker rather than spend tokens to appear busy.
+
+Useful capacity work includes:
+- reducing human cognitive load
+- advancing approved backlog work
+- producing durable work products
+- running verification and capturing evidence
+- reviewing stale specs, plans, PRs, or runtime state
+- identifying capability gaps
+- converting repeated work into proceduralization candidates
+
+### Implementation
+Capacity use should be driven by Standing Orders, calendar/availability state, safe work queues, and existing authority controls. Coworkers may continue low-risk governed work when humans are unavailable, but must stop at approval boundaries for consequential actions.
+
+### Rationale
+A salaried employee who does nothing while valuable work exists wastes organizational capacity. Fixed-price or subscription AI capacity has the same economic shape. The goal is not to burn tokens. The goal is to convert available capacity into reviewed work, evidence, learning, and platform improvement.
+
+---
+
 ## Application
 
 These principles apply to:
@@ -237,5 +261,6 @@ These principles apply to:
 - Agent tool registration and schema design
 - Memory and context management
 - Multi-agent orchestration and handoff
+- External coding agents working on DPF, including Codex and Claude, through the canonical project rulebook
 
 When these principles conflict with expediency, the principles win. A well-structured agent that works reliably is worth more than a quick hack that fails unpredictably.
