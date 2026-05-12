@@ -13,6 +13,7 @@ import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
+import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
 
 /** Renders setup action buttons only when the setup overlay is active (data attribute on <html>) */
 function SetupActionButtonsWrapper({ isPending }: { isPending: boolean }) {
@@ -60,6 +61,7 @@ type Props = {
   threadId: string | null;
   initialMessages: AgentMessageRow[];
   userContext: UserContext;
+  useUnifiedCoworker: boolean;
   onClose: () => void;
   onDragStart: (e: React.MouseEvent) => void;
   pendingAutoMessage?: string | null;
@@ -90,6 +92,7 @@ export function AgentCoworkerPanel({
   threadId,
   initialMessages,
   userContext,
+  useUnifiedCoworker,
   onClose,
   onDragStart,
   pendingAutoMessage,
@@ -417,6 +420,14 @@ export function AgentCoworkerPanel({
 
     setIsBusy(true);
 
+    const runtimeMode = resolveCoworkerRuntimeMode({
+      pathname,
+      devMode,
+      useUnifiedCoworker,
+      coworkerMode,
+      externalAccessEnabled,
+    });
+
     // EP-ASYNC-COWORKER-001: Non-blocking fetch to API route.
     // Returns immediately. Agent execution runs in background on the server.
     // Completion is signaled via SSE "done" event (handled in useEffect below).
@@ -427,8 +438,8 @@ export function AgentCoworkerPanel({
         threadId,
         content,
         routeContext: effectiveRoute,
-        coworkerMode: devMode || pathname.startsWith("/build") ? "act" : coworkerMode,
-        externalAccessEnabled: devMode || coworkerMode === "act" ? true : externalAccessEnabled,
+        coworkerMode: runtimeMode.coworkerMode,
+        externalAccessEnabled: runtimeMode.externalAccessEnabled,
         elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(activeBuildId ? { buildId: activeBuildId } : {}),
@@ -594,6 +605,7 @@ export function AgentCoworkerPanel({
         coworkerMode={coworkerMode}
         onToggleCoworkerMode={handleToggleCoworkerMode}
         onViewProfile={() => setShowProfile(true)}
+        useUnified={useUnifiedCoworker}
         sensitivityLevel={agent.sensitivity}
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}

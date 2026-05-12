@@ -130,11 +130,12 @@ fi
 #     user_configured providers over bundled locals automatically, and the
 #     fallback chain diversifies across providers. The pin turned every codex
 #     hiccup (disabled, rate-limit, auth) into a full collapse to local
-#     Gemma4 instead of a clean fallback to anthropic-sub.
-#   * Forcing anthropic-sub.supportsToolUse = false.
-#     Obsolete since #112 and #118: the codex-cli and claude-cli adapters
-#     now both rescue tool_use blocks out of assistant text. Claude CLI can
-#     execute MCP tools — the override was wrong once those shipped.
+#     Gemma4 instead of a clean fallback.
+#   * Post-init anthropic-sub capability rewrites.
+#     Tool capability for anthropic-sub is now a seed/catalog contract
+#     enforced in providers-registry.json, model-profiles.json,
+#     KNOWN_PROVIDER_MODELS, and packages/db/src/seed.ts. Do not override
+#     it here or we reintroduce drift between startup scripts and the catalog.
 #
 # If either seed needs to come back, add it to the Prisma seed (packages/db
 # src/seed.ts) as initial state only, NOT as a post-init UPDATE that

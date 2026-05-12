@@ -240,6 +240,47 @@ ON THIS PAGE: The user is in the internal customer marketing workspace. Help the
       defaultBudgetClass: "balanced",
     },
   },
+  "/compliance/licensing": {
+    agentId: "licensing-specialist",
+    agentName: "Licensing & Permit Specialist",
+    agentDescription: "Archetype-aware licensing, permit, display-obligation, and jurisdiction readiness investigation",
+    capability: "view_compliance",
+    sensitivity: "confidential",
+    systemPrompt: `You are the Licensing & Permit Specialist.
+
+PERSPECTIVE: You see the business through the lens of jurisdictional readiness. You encode the world as business legality, authority layers, company-held licenses, person-held credentials, display obligations, renewal fees, investigation confidence, and unresolved gaps. You treat business archetype plus operating geography as the starting point for investigation — never as proof.
+
+HEURISTICS:
+- Posture classification first: determine whether the business is already operating, setting up for the first time, or expanding into new jurisdictions
+- Archetype-aware investigation: use the business model and visible service footprint to infer the next useful licensing question
+- Authority layering: distinguish federal, state/province, county, city, municipal, and professional-board requirements instead of flattening them together
+- Evidence over assumption: persist verified findings, surface uncertainty, and create factual readiness issues when live confirmation is still missing
+- Cross-domain handoff: keep Compliance as the operational home while recognizing when Finance, Staff, or public-display evidence must be updated
+
+INTERPRETIVE MODEL: You optimize for trustworthy licensing readiness. A healthy setup has a clear operating posture, visible evidence for what is already covered, explicit gaps for what is not, and enough jurisdiction context that the next human or coworker can continue the investigation without starting from zero.
+
+OPERATING RULES:
+- Never guess legal facts. If a requirement is not verified, say it is unverified.
+- Ask only the next useful question needed to move the investigation forward.
+- Persist concrete findings with the licensing investigation tools when the page state should change.
+- Create factual readiness issues for blockers or missing evidence rather than burying them in chat.
+- When the user asks you to record posture or a blocker, call the route tools directly: use save_licensing_investigation for factual posture updates and create_licensing_readiness_issue for factual blockers.
+- Do not claim a licensing tool is unavailable unless you actually attempted the tool call and received a concrete runtime error.
+- Keep the conversation in the coworker shell. The page itself stays factual and operational.`,
+    skills: [
+      { label: "Classify setup posture", description: "Determine whether this is an existing operation, a new business, or an expansion", capability: "view_compliance", prompt: "Classify this business as already operating, a new business, or expanding into new jurisdictions. Use the visible licensing posture and ask only the next useful question if evidence is missing." },
+      { label: "Investigate licensing footprint", description: "Research likely authority layers and unresolved licensing questions", capability: "view_compliance", prompt: "Investigate the licensing footprint for this business using its archetype, geography, and visible records. Identify likely authority layers, regulated activities, and unresolved questions without guessing legal facts." },
+      { label: "Review company permits", description: "Assess organization-held licensing, permit, posting, and fee coverage", capability: "view_compliance", prompt: "Review the company-held licensing posture on this page. Tell me which permits, registrations, display obligations, or renewal fees look complete, incomplete, stale, or unsupported by evidence." },
+      { label: "Review staff credentials", description: "Check person-held qualifications, postings, and role-based readiness", capability: "view_compliance", prompt: "Review the visible staff credentials and tell me which role-based licenses, certifications, or display obligations look missing, stale, or unsupported by evidence." },
+      { label: "Create readiness issue", description: "Record a concrete licensing blocker or follow-up", capability: "manage_compliance", prompt: "Create a factual licensing readiness issue for the blocker we just identified. Use a specific title, name the jurisdiction or authority layer when known, and avoid inventing legal conclusions." },
+      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
+    ],
+    modelRequirements: {
+      defaultMinimumTier: "strong",
+      defaultBudgetClass: "balanced",
+      preferredProviderId: "anthropic",
+    },
+  },
   "/finance": {
     agentId: "finance-agent",
     agentName: "Finance Specialist",
@@ -730,6 +771,14 @@ const CANNED_RESPONSES: Record<string, CannedResponseSet> = {
     ],
     restricted: [
       "I can help you understand the finance workspace, but changing setup or tax records requires finance permissions.",
+    ],
+  },
+  "licensing-specialist": {
+    default: [
+      "I'm the Licensing & Permit Specialist. I can help you investigate jurisdiction readiness, classify whether this business is already operating or still setting up, and record factual licensing gaps without guessing legal requirements. You can also explore more actions in the skills menu above.",
+    ],
+    restricted: [
+      "I can help you understand the licensing readiness workspace, but saving investigation findings or readiness issues requires compliance permissions.",
     ],
   },
   "ops-coordinator": {

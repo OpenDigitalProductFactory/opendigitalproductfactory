@@ -24,6 +24,7 @@ import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
+import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -1445,9 +1446,8 @@ async function seedLocalModels(): Promise<void> {
 async function seedCodexModels(): Promise<void> {
   const codexFamilies = ["gpt-5.4", "gpt-5.3-codex", "codex-mini"];
 
-  // Ensure codex provider exists and is active. The CLI adapter (anthropic-sub)
-  // cannot execute MCP tools — codex via the responses adapter is the only
-  // provider that supports both tool use and OAuth auth for the coworker agentic loop.
+  // Ensure codex provider exists and is active. Codex remains the canonical
+  // OAuth-backed route for governed custom-tool coworker work.
   await prisma.modelProvider.upsert({
     where: { providerId: "codex" },
     create: {
@@ -1476,9 +1476,8 @@ async function seedCodexModels(): Promise<void> {
   //   * #107 introduced provider-tier preference so user-configured
   //     providers always beat bundled local in routing — no pin needed to
   //     keep build-specialist off Gemma4.
-  //   * #112 and #118 broadened the codex-cli and claude-cli tool_use
-  //     parsers so anthropic-sub can also execute MCP tools — no reason
-  //     to force codex specifically.
+  //   * Coworker tool execution is routed by capability floor and backend
+  //     contract, not by hard provider pins.
   //
   // Per feedback_no_provider_pinning: routing picks the right LLM for the
   // job from capability tier + task type. Pins are a lie about the world —
@@ -1658,7 +1657,11 @@ async function seedChatGPTModels(): Promise<void> {
     } else if (existing.profileSource === "seed") {
       await prisma.modelProfile.update({
         where: { providerId_modelId: { providerId: "chatgpt", modelId: m.modelId } },
-        data: scoreFields,
+        data: {
+          ...scoreFields,
+          supportsToolUse: false,
+          capabilities: { toolUse: false, streaming: true, structuredOutput: true, imageInput: true } as any,
+        },
       });
       updated++;
     }
@@ -1677,11 +1680,9 @@ async function seedAnthropicSubScope(): Promise<void> {
     update: {},  // preserve existing credentials on re-seed
   });
 
-  // anthropic-sub uses the Claude CLI adapter which runs Claude Code in a
-  // sandbox subprocess. The CLI has NO access to MCP tools — tool-based
-  // agentic work (coworker conversations) must route to codex instead.
-  // Mark supportsToolUse=false so the routing pipeline skips this provider
-  // for tool-based requests.
+  // anthropic-sub is conversation-capable but not a governed custom-tool
+  // backend for coworker work. Mark supportsToolUse=false so the routing
+  // pipeline excludes it whenever an agent requires tool execution.
   await prisma.modelProvider.updateMany({
     where: { providerId: "anthropic-sub" },
     data: { supportsToolUse: false },
@@ -1690,6 +1691,16 @@ async function seedAnthropicSubScope(): Promise<void> {
     where: { providerId: "anthropic-sub" },
     data: { supportsToolUse: false },
   });
+  await prisma.$executeRaw`
+    UPDATE "ModelProfile"
+    SET "capabilities" = jsonb_set(
+      COALESCE("capabilities", '{}'::jsonb),
+      '{toolUse}',
+      'false'::jsonb,
+      true
+    )
+    WHERE "providerId" = 'anthropic-sub'
+  `;
 
   console.log("Seeded anthropic-sub credential scope (toolUse=false)");
 }
@@ -1905,36 +1916,9 @@ async function seedAgentModelDefaults(): Promise<void> {
   // routing's decision and drag agents down to stale models as the
   // provider landscape shifts. Encode real requirements as
   // minimumTier / minimumCapabilities / minimumContextTokens.
-  const defaults: Array<{
-    agentId: string;
-    minimumTier: string;
-    budgetClass: string;
-    minimumCapabilities?: Record<string, boolean>;
-    minimumContextTokens?: number;
-  }> = [
-    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "ops-coordinator",     minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "portfolio-advisor",   minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "external-catalog-scout", minimumTier: "adequate", budgetClass: "balanced",   minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced",     minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "ea-architect",        minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "customer-advisor",    minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "marketing-specialist", minimumTier: "adequate", budgetClass: "balanced",     minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "storefront-advisor",  minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "onboarding-coo",      minimumTier: "basic",    budgetClass: "minimize_cost", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-    { agentId: "doc-specialist",      minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "data-architect",      minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "compliance-officer",  minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
-    { agentId: "finance-controller",  minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-  ];
-
   let seeded = 0;
   let existed = 0;
-  for (const d of defaults) {
+  for (const d of AGENT_MODEL_CONFIG_DEFAULTS) {
     const existing = await prisma.agentModelConfig.findUnique({
       where: { agentId: d.agentId },
     });
@@ -2043,12 +2027,12 @@ async function main(): Promise<void> {
   await ensureHiveScoutScheduledTask(prisma);
   await seedMcpServers();
   await seedSandboxPool();
-  await seedAnthropicSubScope();
   await seedProviderRegistry();
   await seedCodexModels();
   await seedChatGPTModels();
   await seedLocalModels();
   await seedModelProfiles();
+  await seedAnthropicSubScope();
   await ensureBuildStudioModelConfig();
   await seedModelPricing();
   await seedAgentModelDefaults();

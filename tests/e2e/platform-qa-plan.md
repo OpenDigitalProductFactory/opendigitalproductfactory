@@ -109,6 +109,7 @@ When adding or changing a QA ID for Build Studio, Ops/backlog, Discovery, Storef
 | GRC-05 | Navigate to Policies tab | Page loads |
 | GRC-06 | Navigate to Incidents tab | Page loads |
 | GRC-07 | Navigate to Gaps analysis | Gap analysis loads (may be empty) |
+| GRC-08 | On `/compliance/licensing`, open the AI coworker and ask it to classify whether the business is already operating, newly setting up, or expanding into new jurisdictions, then ask it to record a concrete licensing blocker | The coworker stays in the dedicated dialog UX, uses licensing/archetype/jurisdiction framing instead of generic compliance language, persists any posture update into the factual licensing page state, and creates a factual readiness issue without adding conversational guidance cards to the page |
 | GRC-08 | Navigate to `/compliance/licensing`, save licensing posture, create a company license with display/fee details, then create a person credential | Licensing workspace loads with the Licensing tab active, the main page stays factual with no coworker dialog content, the posture save succeeds, and both new records appear in their sections while display obligations and fee readiness update on the same page |
 
 ## Phase 7: Operations & Backlog
