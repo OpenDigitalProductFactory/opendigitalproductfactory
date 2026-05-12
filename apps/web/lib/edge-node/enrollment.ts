@@ -287,11 +287,14 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
       },
     });
 
-    // 4. Create the EdgeNode row.
+    // 4. Create the EdgeNode row. Per AGENTS.md §11 Principal
+    //    convergence (retrofit in migration 20260512030000), EdgeNode
+    //    is keyed 1:1 to Principal via principalId. displayName lives
+    //    on Principal — readers join through `edgeNode.principal`.
     const edgeNode = await tx.edgeNode.create({
       data: {
+        principalId: principal.id,
         nodeId,
-        displayName: input.displayName,
         platform: input.platform,
         installMode: input.installMode,
         version: input.version,

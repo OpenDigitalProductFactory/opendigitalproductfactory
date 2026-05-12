@@ -223,6 +223,10 @@ model Principal {
   status                String           @default("active")
   displayName           String
   aliases               PrincipalAlias[]
+  // Per AGENTS.md §11 (Principal convergence, 2026-05-09): EdgeNode
+  // identity lives on Principal + PrincipalAlias, with EdgeNode as a
+  // host-attributes side table keyed by `principalId`. 1:1 cardinality.
+  edgeNode              EdgeNode?        @relation("EdgeNodeIdentity")
   edgeNodesApproved     EdgeNode[]       @relation("EdgeNodeApprover")
   bootstrapTokensIssued BootstrapToken[] @relation("BootstrapTokenIssuer")
   createdAt             DateTime         @default(now())
@@ -7253,10 +7257,17 @@ model EvidenceSource {
 
 model EdgeNode {
   id          String  @id @default(cuid())
+  // Identity for an Edge Node lives on Principal + PrincipalAlias per
+  // AGENTS.md §11 Principal convergence (kind="edge-node",
+  // aliasType="edge-node"). EdgeNode is a host-attributes side table
+  // keyed 1:1 to Principal via principalId. `displayName` reads from
+  // the joined Principal row, never directly from EdgeNode.
+  principalId String  @unique
   // Stable external identifier used in API URLs and tokens. Distinct
-  // from `id` (the cuid surrogate). Per spec, do not conflate the two.
+  // from `id` (the cuid surrogate) and from `principalId` (the
+  // identity FK). Mirrored to PrincipalAlias.aliasValue where
+  // aliasType="edge-node". Per spec, do not conflate the three.
   nodeId      String  @unique
-  displayName String
   // darwin | win32 | linux
   platform    String
   // native | container-host | container-vm
@@ -7318,6 +7329,7 @@ model EdgeNode {
   updatedAt DateTime @updatedAt
 
   // Relations
+  principal      Principal            @relation("EdgeNodeIdentity", fields: [principalId], references: [id], onDelete: Cascade)
   approvedBy     Principal?           @relation("EdgeNodeApprover", fields: [approvedByPrincipalId], references: [id])
   capabilityRows EdgeNodeCapability[]
   discoveryRuns  DiscoveryRun[]       @relation("EdgeNodeDiscoveryRuns")
