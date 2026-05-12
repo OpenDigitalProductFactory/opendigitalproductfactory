@@ -62,6 +62,7 @@ describe("AI operations map page", () => {
     ] as never);
     vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
 
