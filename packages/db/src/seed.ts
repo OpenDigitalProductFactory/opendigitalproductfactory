@@ -15,6 +15,7 @@ import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
+import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
@@ -2013,6 +2014,7 @@ async function main(): Promise<void> {
   await ensureBootstrapOrganization();
   await seedGeographicData(prisma);
   await seedTaxJurisdictions(prisma);
+  await seedLicenseRequirements(prisma);
   await seedRoles();
   await seedGovernanceReferenceData(prisma);
   await seedWorkforceReferenceData(prisma);
