@@ -85,10 +85,16 @@ else.
 Silicon and Linux test rigs).
 
 ### Epic B — Edge Node implementation
-**Status:** spec stub shipped; needs Research & Benchmarking,
-schema review, security review (heavy), and a slice plan before
-implementation.
+**Status:** spec stub shipped; roadmap shipped 2026-05-12; needs
+Research & Benchmarking, schema review, security review (heavy),
+and open-question resolution to close before any implementation
+PR lands.
 **Spec:** `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`
+**Roadmap:** `docs/superpowers/plans/2026-05-12-edge-node-roadmap.md`
+— six-phase sequencing (maturity gates → Phase 0 Authority Core
+foundation → Phase 1 binary pipeline + Linux Mode 1 → Phase 2
+macOS Mode 2 → Phase 3 macOS Mode 3 in-VM fallback → Phase 4
+Windows parity → Phase 5 status flip).
 **First slice:** `capability.discovery.network` only — Linux
 container with `network_mode: host`, plus the native helper binary
 (Mode B) for macOS / Windows hosts that need accurate host topology.

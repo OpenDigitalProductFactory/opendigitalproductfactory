@@ -581,6 +581,11 @@ target-specific == owning spec.**
   implement contracts 1, 2, 3, 7, 8.
 - `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` —
   Edge Node, the canonical implementation of contract 5.
+  Implementation sequencing in
+  `docs/superpowers/plans/2026-05-12-edge-node-roadmap.md`
+  (six phases: maturity gates → Authority Core foundation → binary
+  pipeline + Linux Mode 1 → macOS Mode 2 → macOS Mode 3 in-VM →
+  Windows parity → status flip).
 - `docs/superpowers/specs/2026-05-09-cloud-deployment-design.md`
   — customer-cloud deployment shapes; wraps contracts 1-8 per
   cloud substrate.

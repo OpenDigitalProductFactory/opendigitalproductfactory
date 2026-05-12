@@ -267,6 +267,7 @@ Publication outputs are generated from the Markdown sources of truth:
 | **Web-Hosted SaaS** | Customer-cloud deployment via Terraform on AWS / GCP / Azure — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). DPF stays single-tenant; "SaaS" here means "customer hosts on rented compute," not multi-tenant. |
 | **Mac & Linux Installers** | Code-complete and merged on `main` for native macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)). Currently **early access** — please try it on your hardware and [tell us how it went](docs/install/verification-runbook.md). A handful of community verification reports per platform is what we need to graduate to GA. |
 | **TAPPaaS Module** | Self-hosted private-platform packaging via [TAPPaaS](https://tappaas.org/) — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). |
+| **DPF Edge Node** | Host-resident component that sees the things the container can't — real LAN topology, host software, private-network MCP / A2A peers. Six-phase rollout sequenced in the [Edge Node roadmap](docs/superpowers/plans/2026-05-12-edge-node-roadmap.md); architectural rationale in the [Edge Node design spec](docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md). **Design partner wanted** — Apple Silicon and Windows verifiers will be needed once the binary lands. |
 
 ---
 
