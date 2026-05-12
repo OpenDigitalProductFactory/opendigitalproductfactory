@@ -22,6 +22,12 @@ type DiscoveryRunMeta = {
   sourceSlug: string;
   trigger?: string;
   status?: string;
+  /**
+   * Optional FK to EdgeNode.id when this run was submitted by an Edge Node
+   * (Mode 1 / 2 / 3 per the Edge Node spec). Stamped on the DiscoveryRun row
+   * so observations can be attributed back to the agent that produced them.
+   */
+  edgeNodeId?: string;
 };
 
 type DiscoveryProjectionOptions = {
@@ -40,6 +46,7 @@ type DiscoverySyncTx = {
         completedAt: Date;
         itemCount: number;
         relationshipCount: number;
+        edgeNodeId?: string;
       };
       select: { id: true };
     }): Promise<{ id: string }>;
@@ -194,6 +201,7 @@ export async function persistBootstrapDiscoveryRun(
         completedAt: now,
         itemCount: dedupedDiscoveredItems.length,
         relationshipCount: normalized.inventoryRelationships.length,
+        ...(runMeta.edgeNodeId ? { edgeNodeId: runMeta.edgeNodeId } : {}),
       },
       select: { id: true },
     });
@@ -589,4 +597,51 @@ export async function persistBootstrapDiscoveryRun(
   }
 
   return projected.summary;
+}
+
+export type SubmittedDiscoveryMeta = {
+  edgeNodeId: string;
+  agentVersion?: string;
+  agentMode?: string;
+  /** Override runKey if you need deterministic identifiers; otherwise auto-generated. */
+  runKey?: string;
+  /** Override sourceSlug; default is `edge_node:<edgeNodeId>`. */
+  sourceSlug?: string;
+};
+
+/**
+ * Sibling of `persistBootstrapDiscoveryRun` for observations submitted by a
+ * DPF Edge Node. Takes an already-normalized observation set (the route
+ * normalizes the wire envelope before calling this) and persists it with
+ * `edgeNodeId` stamped on the resulting `DiscoveryRun` row so the
+ * inventory write is attributable.
+ *
+ * The function does NOT re-run local collectors — that's the whole reason
+ * the Edge Node exists per the spec's "Ingestion contract" section.
+ * The downstream deduplication, promotion, Neo4j projection logic is
+ * shared with the bootstrap path via direct delegation.
+ *
+ * Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+ * (Ingestion contract: submit observations, don't trigger sweeps).
+ */
+export async function persistSubmittedDiscoveryRun(
+  db: DiscoverySyncClient,
+  normalized: NormalizedDiscoveryOutput,
+  meta: SubmittedDiscoveryMeta,
+  options: DiscoveryProjectionOptions = {},
+): Promise<DiscoveryPersistenceSummary> {
+  if (!meta.edgeNodeId) {
+    throw new Error("persistSubmittedDiscoveryRun requires edgeNodeId");
+  }
+  return persistBootstrapDiscoveryRun(
+    db,
+    normalized,
+    {
+      runKey: meta.runKey ?? `EDGE-${meta.edgeNodeId}-${Date.now()}`,
+      sourceSlug: meta.sourceSlug ?? `edge_node:${meta.edgeNodeId}`,
+      trigger: "edge_node",
+      edgeNodeId: meta.edgeNodeId,
+    },
+    options,
+  );
 }
