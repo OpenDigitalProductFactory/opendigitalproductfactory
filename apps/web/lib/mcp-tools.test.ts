@@ -133,6 +133,16 @@ describe("mcp tools", () => {
     expect(triage!.executionMode).toBe("immediate");
     expect(triage!.sideEffect).toBe(true);
   });
+
+  it("exposes Hive Scout ingest as an immediate backlog-management tool", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const scout = tools.find((tool) => tool.name === "run_hive_scout_ingest");
+
+    expect(scout).toBeDefined();
+    expect(scout!.requiredCapability).toBe("manage_backlog");
+    expect(scout!.executionMode).toBe("immediate");
+    expect(scout!.sideEffect).toBe(true);
+  });
 });
 
 describe("sanitizeToolParams", () => {

@@ -3,15 +3,23 @@
 This is the end-user install guide for the Open Digital Product Factory
 on **native Linux Docker Engine** (no Docker Desktop).
 
-> **Status: preview.** The Linux installer code is complete and passes
-> static CI gates. An on-demand end-to-end install gate runs the full
-> compose stack on `ubuntu-latest`
-> ([`.github/workflows/install-verification.yml`](../../.github/workflows/install-verification.yml));
-> distro coverage beyond Ubuntu (Debian 12, Fedora 39) and the
-> autostart-after-reboot path still need fresh-hardware verification
-> per [verification-runbook.md](verification-runbook.md) before
-> promotion to GA. The Windows installer remains the only GA install
-> surface today.
+> **Status: Early access — please try it!**
+>
+> The Linux installer is code-complete and passes static CI gates.
+> An on-demand end-to-end install gate runs the full compose stack
+> on `ubuntu-latest`
+> ([`.github/workflows/install-verification.yml`](../../.github/workflows/install-verification.yml)),
+> but we still need real-world reports on **distros beyond Ubuntu**
+> (Debian 12+, Fedora 39+) and on the **autostart-after-reboot** path
+> — neither of which CI can exercise.
+>
+> **If you run Debian, Fedora, or a Linux VM you can spare for an
+> hour, please try the install and [tell us how it went](#help-us-graduate-to-ga).**
+> Happy paths and failures are equally useful. A handful of community
+> verification reports is what we need to flip this guide from
+> "early access" to "GA."
+>
+> The Windows installer remains the only GA install surface today.
 
 For the architectural background, see the
 [installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
@@ -244,6 +252,48 @@ in by default. To opt out:
 
 `loginctl disable-linger $USER` is **not** run automatically; if you
 enabled lingering only for DPF, disable it manually after uninstall.
+
+## Help us graduate to GA
+
+The CI gate proves the install path works on `ubuntu-latest`. What
+it doesn't prove: that it works on your specific distro, your specific
+kernel, your specific Docker version, with your specific user setup.
+**That's where you come in.**
+
+**One-minute report:**
+
+1. Open a [new GitHub issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new)
+   titled `Install verification — Linux <distro> <version>`
+   (example: `Install verification — Linux Debian 12.6 (cloud VM)`).
+2. Paste the output of:
+   ```bash
+   uname -srm && cat /etc/os-release | head -5
+   docker --version 2>/dev/null && docker compose version 2>/dev/null
+   echo "DPF version: $(grep DPF_INSTALLER_VERSION install-dpf.sh)"
+   ```
+3. Note which steps you completed from the
+   [verification runbook §1](verification-runbook.md#1-linux-end-to-end-install-real-distro-coverage)
+   and which (if any) failed.
+4. Attach the doctor bundle:
+   ```bash
+   bash install-dpf.sh doctor
+   # Then attach ~/.dpf/doctor-<timestamp>.tar.gz to the issue.
+   # Secrets are redacted automatically.
+   ```
+
+We especially want reports from:
+
+- **Debian 12+** (similar to Ubuntu but uses different package
+  defaults; auto-install via `apt` path)
+- **Fedora 39+** (different package manager — `dnf` — and SELinux
+  context)
+- **A real reboot** verifying `systemctl --user` + `loginctl
+  enable-linger` survives session loss
+- **Air-gapped or restricted-egress installs** if you have a relevant
+  environment
+
+Any subset is useful. We don't need every checkbox before reading your
+report — we'll integrate findings as they arrive.
 
 ## Going further
 

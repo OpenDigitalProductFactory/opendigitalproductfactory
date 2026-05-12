@@ -765,6 +765,17 @@ Acceptance:
 - candidate can create a backlog item through governed MCP/backlog workflow,
 - no candidate is auto-implemented without human review.
 
+### Immediate candidate fit: Hive Scout
+
+Hive Scout is a strong near-term proving ground for this doctrine. Its deterministic core already exists as a scheduled external-catalog ingest, but its higher-order judgments remain human-heavy: novelty, archetype fit, value-stream alignment, and proposal quality. That makes it a good match for the ladder in §4:
+
+1. deterministic fetch/parse/dedupe stays procedural,
+2. ambiguous novelty and fit move to a bounded coworker run,
+3. repeated review corrections become filters/mappings/rules,
+4. the resulting run becomes visible in the Operations Map as proactive work rather than hidden cron behavior.
+
+Because Hive Scout is low-risk, asynchronous, and reviewable, it is also a good candidate for background execution when provider policy indicates lagging prepaid subscription quota. A dedicated design note for this application lives in `2026-05-11-hive-scout-autonomous-coworker-design.md`.
+
 ## 11. Metrics
 
 ### 11.1 Outcome metrics

@@ -97,6 +97,7 @@ export interface IngestResult {
   created: number;
   duplicates: number;
   deferred: number;
+  createdItemIds?: string[];
 }
 
 // ─── Parsing ────────────────────────────────────────────────────────────────
@@ -341,6 +342,10 @@ export interface IngestOptions {
   readmeUrl?: string;
   /** Override the fetcher (used in tests). */
   fetcher?: (url: string) => Promise<string>;
+  /** Optional actor attribution when run through a coworker tool/task. */
+  actorAgentId?: string;
+  /** Optional parent task run id for backlog evidence provenance. */
+  taskRunId?: string;
 }
 
 async function defaultFetcher(url: string): Promise<string> {
@@ -386,6 +391,7 @@ export async function runHiveScoutIngest(
   let created = 0;
   let duplicates = 0;
   let deferred = 0;
+  const createdItemIds: string[] = [];
 
   for (const entry of entries) {
     if (!isGap(entry, skillNames, coworkerNames)) continue;
@@ -402,7 +408,7 @@ export async function runHiveScoutIngest(
     const status = match.confidence === "mapped" ? "open" : "deferred";
     if (status === "deferred") deferred++;
 
-    await prisma.backlogItem.create({
+    const createdItem = await prisma.backlogItem.create({
       data: {
         itemId,
         title: `Coworker archetype: ${entry.name} (${entry.industry})`,
@@ -410,6 +416,24 @@ export async function runHiveScoutIngest(
         status,
         body: renderBody(bodyTemplate, entry, match),
         source: BACKLOG_SOURCE,
+      },
+    });
+    createdItemIds.push(itemId);
+    await prisma.backlogItemActivity.create({
+      data: {
+        backlogItemId: createdItem.id,
+        kind: "evidence",
+        summary: `Hive Scout identified external catalog gap: ${entry.name}`,
+        payload: {
+          taskRunId: options.taskRunId ?? null,
+          catalog: CATALOG_NAME,
+          catalogLicense: CATALOG_LICENSE,
+          sourceUrl: entry.sourceUrl,
+          framework: entry.framework ?? null,
+          valueStream: match.stream,
+          valueStreamConfidence: match.confidence,
+        },
+        recordedByAgentId: options.actorAgentId ?? null,
       },
     });
     created++;
@@ -423,6 +447,7 @@ export async function runHiveScoutIngest(
     created,
     duplicates,
     deferred,
+    createdItemIds,
   };
 }
 

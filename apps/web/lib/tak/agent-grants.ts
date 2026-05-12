@@ -108,6 +108,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   explain_blast_radius: ["registry_read"],
   discovery_sweep: ["telemetry_read"],
   run_discovery_triage: ["registry_write"],
+  run_hive_scout_ingest: ["backlog_write"],
   attribute_entity_to_product: ["registry_write"],
   dismiss_entity: ["registry_write"],
   resolve_portfolio_quality_issue: ["registry_write"],

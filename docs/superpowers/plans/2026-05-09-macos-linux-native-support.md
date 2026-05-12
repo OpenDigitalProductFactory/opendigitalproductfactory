@@ -1,26 +1,24 @@
 # Mac (Apple Silicon) + Linux Native Support — Roadmap
 
-> **Status: CODE SHIPPED — RUNTIME VERIFICATION PENDING (2026-05-11).**
+> **Status: CODE SHIPPED — EARLY ACCESS (2026-05-11).**
 > All 11 phases (0–10) of the *code* roadmap shipped across 13 PRs.
 > The bash installer, lifecycle scripts, CI release gates, and docs
-> are on `main`. **However**, the gates that ran in CI are
-> dry-run / static checks (`shellcheck`, `docker compose config`,
-> `install-dpf.sh --dry-run`) — they do **not** prove the installer
-> works end-to-end on a real host.
+> are on `main`, and an ubuntu-latest end-to-end install gate
+> ([`.github/workflows/install-verification.yml`](../../../.github/workflows/install-verification.yml))
+> proves the install path works on a real Linux runner.
 >
-> What's verified vs. unverified is tracked in
-> [docs/install/verification-runbook.md](../../install/verification-runbook.md).
-> Until the matrix in that file is checked off for macOS and Linux,
-> the installers are **preview**, not GA. The Windows installer
-> remains GA (real production usage).
+> **Now we want real-world reports.** The macOS / Linux installers
+> are in **early access**: please install on your hardware and tell
+> us how it went. Verification matrix + reporting instructions live
+> at [docs/install/verification-runbook.md](../../install/verification-runbook.md).
 >
-> An ubuntu-latest end-to-end install gate landed alongside this
-> stamp ([`.github/workflows/install-verification.yml`](../../../.github/workflows/install-verification.yml))
-> — on-demand + tag-triggered — that converts the Linux runtime row
-> from "believed correct" to "observed to reach `/api/health=200` as
-> of commit X". Apple Silicon, distro coverage beyond Ubuntu, TAPPaaS,
-> Edge Node, and cloud substrates still need real-hardware /
-> real-substrate verification (see the runbook).
+> A handful of community verification reports per platform is what
+> we need to flip macOS / Linux from "early access" to "GA" in the
+> README. The Windows installer is the only path with that
+> designation today (real production usage). TAPPaaS, DPF Edge Node,
+> and cloud substrates are spec-only and tagged "design partner
+> wanted" in the runbook — they need actual implementation work, not
+> just runtime verification.
 
 > Branch: `claude/mac-docker-compatibility-uN4Ya`
 > Deliverable for this branch: **this plan only**. Each phase below lands as a

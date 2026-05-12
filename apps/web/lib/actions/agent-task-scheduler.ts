@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
-import { extractDiscoveryTriageSummary } from "./agent-task-scheduler-summary";
+import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
   type ScheduledTaskRunRef,
@@ -234,25 +234,25 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     };
 
     // Resolve agent prompts
-    const { resolveAgentForRouteWithPrompts } = await import(
+    const { resolveAgentByIdWithPrompts, resolveAgentForRouteWithPrompts } = await import(
       "@/lib/tak/agent-routing-server"
     );
-    const agentInfo = await resolveAgentForRouteWithPrompts(
+    const routedAgentInfo = await resolveAgentForRouteWithPrompts(
       task.routeContext,
       userContext,
     );
+    const agentInfo =
+      routedAgentInfo.agentId === task.agentId
+        ? routedAgentInfo
+        : await resolveAgentByIdWithPrompts(task.agentId, userContext);
 
-    // Build message history
-    const rawMessages = await prisma.agentMessage.findMany({
-      where: { threadId: thread.id },
-      orderBy: { createdAt: "asc" },
-      take: 20,
-      select: { role: true, content: true },
-    });
-    const chatHistory = rawMessages.map((m) => ({
-      role: m.role as "user" | "assistant" | "system",
-      content: m.content,
-    }));
+    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${task.prompt}`;
+    const chatHistory = [
+      {
+        role: "user" as const,
+        content: scheduledPrompt,
+      },
+    ];
 
     const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
     const { getAvailableTools, toolsToOpenAIFormat, executeTool } = await import(
@@ -275,6 +275,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunId: taskRunRef.taskRunId,
     });
 
+    const scheduledSummary = extractScheduledTaskSummary(result.executedTools);
+    const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
+
     // Persist agent response
     await prisma.agentMessage.create({
       data: {
@@ -291,7 +294,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunRecordId: taskRunRef.id,
       contextId: taskRunRef.contextId,
       role: "agent",
-      content: result.content ?? "(No response)",
+      content: taskMessageContent,
       metadata: {
         source: "scheduled",
         taskId: task.taskId,
@@ -299,7 +302,6 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     });
 
-    const scheduledSummary = extractDiscoveryTriageSummary(result.executedTools);
     if (scheduledSummary) {
       await prisma.agentMessage.create({
         data: {

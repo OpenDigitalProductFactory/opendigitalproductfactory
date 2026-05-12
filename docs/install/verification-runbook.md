@@ -1,30 +1,45 @@
 # DPF Install Verification Runbook
 
-**Purpose:** The CI gates in `.github/workflows/release-gates.yml` and
-`install-verification.yml` cover what GitHub-hosted runners can run.
-This runbook covers everything else — the environments and end-states
-that need a real human at a real host to verify.
-
-Until each row in the matrix below is checked off, the corresponding
-install path is **"shipped, runtime-verification pending"** — not
-**"GA"**. The README and roadmap status should reflect that until
-verification lands.
+> **For early adopters with hardware in hand.** The CI gates in
+> `.github/workflows/release-gates.yml` and `install-verification.yml`
+> cover what GitHub-hosted runners can run. **This runbook covers
+> everything CI can't reach** — and you're the person who can close
+> those gaps.
+>
+> The macOS and Linux installers are code-complete and statically
+> CI-green. They graduate to GA when the community sends us
+> verification reports from real hardware. If you have an Apple
+> Silicon Mac, a non-Ubuntu Linux box, a TAPPaaS environment, or a
+> cloud VM you can spare for an hour, **please pick a section below
+> and run through it.** Both happy-path and failure reports are
+> valuable.
+>
+> **How to report:** open an issue using the
+> [Install verification report template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md)
+> (it pre-fills the title prefix `Install verification — ` and the
+> `install-verification` label). Paste your environment fingerprint,
+> tick the checklist items you observed, and attach the doctor bundle
+> (`bash install-dpf.sh doctor` → `~/.dpf/doctor-<timestamp>.tar.gz`).
+> Secrets are redacted automatically.
+>
+> We don't need every checkbox before reading your report —
+> partial reports are useful too.
 
 ## Verification matrix
 
 | Path | What CI proves | What this runbook covers | Status |
 |------|----------------|--------------------------|--------|
 | Windows installer | n/a (no CI gate today) | Production usage by real users | ✓ verified |
-| Linux end-to-end install | `install-verification.yml` (ubuntu-latest, dev + release modes) — full compose up, `/api/health=200`, doctor bundle | Distro coverage beyond Ubuntu: Debian 12, Fedora 39. Autostart-after-reboot. | **pending** |
-| macOS end-to-end install | dry-run only (`macos-14` can't nest-virt Docker Desktop) | The actual `.dmg` install + Docker Desktop boot + portal up + LaunchAgent reboot survival | **pending** |
-| Discovery collectors (darwin) | unit tests with mocked deps | Real `pkgutil --pkgs` / `brew list` enumeration emits sensible discovery items | **pending** |
-| Observability stack | compose-render only | Prometheus actually scrapes metrics; Grafana dashboards populate; `linux-monitoring` profile cAdvisor / node-exporter on real Linux | **pending** |
-| LLM provider — Docker Model Runner | dry-run | Real Model Runner serves chat completions to portal | **pending** |
-| LLM provider — Ollama (Linux) | compose-render | `ollama` service actually pulls + serves a model | **pending** |
-| LLM provider — external | code review | Real `LLM_BASE_URL` (Anthropic / OpenAI / hosted Ollama) round-trips | **pending** |
-| TAPPaaS deployment | none — spec only | Pilot deploy into a real TAPPaaS environment | **not started** |
-| DPF Edge Node enrollment | none — spec only | First-draft enrollment ceremony executed end-to-end | **not started** |
-| Cloud deployment (Single VM / Container / k8s) | none — spec only | At least one substrate pilot per packaging target | **not started** |
+| Linux end-to-end install | `install-verification.yml` (ubuntu-latest, dev + release modes) — full compose up, `/api/health=200`, doctor bundle | Distro coverage beyond Ubuntu: Debian 12, Fedora 39. Autostart-after-reboot. | 🙋 **reports wanted** |
+| macOS end-to-end install | dry-run only (`macos-14` can't nest-virt Docker Desktop) | The actual `.dmg` install + Docker Desktop boot + portal up + LaunchAgent reboot survival | 🙋 **reports wanted** |
+| Discovery collectors (darwin) | unit tests with mocked deps | Real `pkgutil --pkgs` / `brew list` enumeration emits sensible discovery items | 🙋 **reports wanted** |
+| Observability stack | compose-render only | Prometheus actually scrapes metrics; Grafana dashboards populate; `linux-monitoring` profile cAdvisor / node-exporter on real Linux | 🙋 **reports wanted** |
+| LLM provider — Docker Model Runner | dry-run | Real Model Runner serves chat completions to portal | 🙋 **reports wanted** |
+| LLM provider — Ollama (Linux) | compose-render | `ollama` service actually pulls + serves a model | 🙋 **reports wanted** |
+| LLM provider — external | code review | Real `LLM_BASE_URL` (Anthropic / OpenAI / hosted Ollama) round-trips | 🙋 **reports wanted** |
+| TAPPaaS deployment | none — spec only | Pilot deploy into a real TAPPaaS environment | 🧪 **design partner wanted** |
+| DPF Edge Node enrollment | none — spec only | First-draft enrollment ceremony executed end-to-end | 🧪 **design partner wanted** |
+| Cloud deployment (Single VM / Container / k8s) | none — spec only | At least one substrate pilot per packaging target | 🧪 **design partner wanted** |
 
 ## How to run each verification
 
@@ -214,11 +229,34 @@ Linked spec: [docs/superpowers/specs/2026-05-09-cloud-deployment-design.md](../s
 
 ## Reporting verification results
 
-When a row in the matrix is verified, update its row to `✓ verified`
-plus the verifier's name, date, and a link to the captured artifacts
-(GitHub issue, Drive folder, etc.). Don't mark anything "✓ verified"
-without artifacts — the bar is "we have evidence", not "we believe".
+When you've run a section, file your report through the
+[Install verification report template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md).
+The form mirrors the checklist above and pre-fills:
 
-Until the Linux + macOS rows are both `✓ verified`, the README install
-section should say **"preview"** alongside macOS / Linux entries, not
-**"GA"**.
+- Title prefix `Install verification — `
+- Labels: `install-verification`, `community-report`
+
+The template prompts for everything maintainers need:
+
+- Environment fingerprint (`uname -a`, `sw_vers` / `cat /etc/os-release`,
+  Docker version, Node + pnpm versions, installer version)
+- Install command + outcome (cleanly / with warnings / hit a wall)
+- Checklist of preflight, install, autostart, discovery, lifecycle steps
+- Doctor bundle attachment (`bash install-dpf.sh doctor` → attach
+  `~/.dpf/doctor-<timestamp>.tar.gz`)
+- Free-text "anything else" for surprises, papercuts, copy issues
+
+Maintainers will:
+
+- For 🙋 **reports wanted** rows: integrate your findings and, once a
+  handful of independent reports come in for a row, flip its status
+  from "reports wanted" to ✅ **verified** and the corresponding
+  README row from "Early access" to **GA**.
+- For 🧪 **design partner wanted** rows (TAPPaaS / Edge Node / Cloud):
+  reach out to discuss scope — those need actual implementation work
+  before they're runnable; what we're looking for is co-design
+  partners, not bug reports against shipping code.
+
+The bar for ✅ verified is "we have evidence on real hardware",
+not "we believe". Partial reports still count — even a "got to step
+N and failed" failure report is more valuable than no report.
