@@ -18,6 +18,20 @@ export default defineConfig({
     globals: false,
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
+    // Auth.js v5 (next-auth@5.0.0-beta.31) imports `next/server` (no extension)
+    // from `next-auth/lib/env.js`. Under Node ESM strict resolution that fails
+    // with "Cannot find module .../next/server. Did you mean to import
+    // 'next/server.js'?" The `resolve.alias` below already maps `next/server`
+    // to the .js file, but Vite's aliases only apply to deps Vite actually
+    // transforms. By default Vitest externalizes `next-auth` (lets Node load
+    // it natively), bypassing the alias. Inlining `next-auth` brings it back
+    // inside the Vite resolver so the alias takes effect on every Linux + CI
+    // run, not just the ones where Node happened to honor the deep export.
+    server: {
+      deps: {
+        inline: ["next-auth"],
+      },
+    },
   },
   resolve: {
     dedupe: ["react", "react-dom"],
