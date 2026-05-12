@@ -14,7 +14,8 @@
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
     "./location-normalize": "./src/location-normalize.ts",
-    "./seed-deliberation": "./src/seed-deliberation.ts"
+    "./seed-deliberation": "./src/seed-deliberation.ts",
+    "./edge-node-types": "./src/edge-node-types.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
