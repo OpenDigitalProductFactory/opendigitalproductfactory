@@ -232,7 +232,11 @@ export function AgentPanelHeader({
                 e.stopPropagation();
                 onToggleDev();
               }}
-              title={devMode ? "Exit dev mode — back to normal" : "Dev mode — search code, diagnose issues, propose fixes for this page"}
+              title={
+                devMode
+                  ? "Exit diagnostics mode"
+                  : "Diagnostics: inspect page context and explain likely fixes. Use Build Studio for code-changing work"
+              }
               style={{
                 fontSize: 9,
                 textTransform: "uppercase",
@@ -247,7 +251,7 @@ export function AgentPanelHeader({
                 lineHeight: 1.2,
               }}
             >
-              Dev
+              Diagnostics
             </button>
           )}
           {sensitivityLevel && (

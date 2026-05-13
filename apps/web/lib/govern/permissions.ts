@@ -141,6 +141,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "ea_modeler",    label: "EA Modeler",    route: "/ea",           capabilityKey: "view_ea_modeler",  accentColor: "var(--dpf-accent)" },
   { key: "ai_workforce", label: "AI Workforce",  route: "/platform/ai",  capabilityKey: "view_platform",    accentColor: "var(--dpf-info)" },
   { key: "build",       label: "Build Studio", route: "/build",       capabilityKey: "view_platform",    accentColor: "var(--dpf-success)" },
+  { key: "documents",   label: "Documents",    route: "/workspace/documents", capabilityKey: "view_platform", accentColor: "var(--dpf-accent)" },
   { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "var(--dpf-success)" },
   { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "var(--dpf-info)" },
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "var(--dpf-accent)" },
@@ -188,6 +189,14 @@ const SHELL_ITEMS: ShellNavItem[] = [
     description: "See what needs attention next.",
     sectionKey: "workspace",
     capabilityKey: null,
+  },
+  {
+    key: "documents",
+    label: "Documents",
+    href: "/workspace/documents",
+    description: "Search, open, publish, and trace managed documents.",
+    sectionKey: "workspace",
+    capabilityKey: "view_platform",
   },
   {
     key: "customer",
@@ -321,7 +330,7 @@ const WORKSPACE_SECTION_BLUEPRINTS: Array<{
     key: "ai-control",
     label: "Direct AI coworkers",
     description: "A small human team can supervise specialists here while AI fills in deep expertise.",
-    tileKeys: ["ai_workforce", "build", "platform", "admin"],
+    tileKeys: ["ai_workforce", "build", "documents", "platform", "admin"],
   },
   {
     key: "product-oversight",

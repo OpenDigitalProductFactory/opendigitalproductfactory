@@ -108,6 +108,76 @@ export async function syncPortfolio(p: {
   );
 }
 
+export async function syncDocumentNode(doc: {
+  documentId: string;
+  title: string;
+  currentState?: string | null;
+  documentKind?: string | null;
+}): Promise<void> {
+  await runCypher(
+    `MERGE (doc:Document {documentId: $documentId})
+     SET doc.title = $title,
+         doc.currentState = $currentState,
+         doc.documentKind = $documentKind,
+         doc.syncedAt = datetime()`,
+    {
+      documentId: doc.documentId,
+      title: doc.title,
+      currentState: doc.currentState ?? null,
+      documentKind: doc.documentKind ?? null,
+    },
+  );
+}
+
+export async function syncDocumentReference(ref: {
+  sourceDocumentId: string;
+  sourceTitle: string;
+  sourceState?: string | null;
+  sourceKind?: string | null;
+  sourceVersionId?: string | null;
+  targetDocumentId: string;
+  targetTitle: string;
+  targetState?: string | null;
+  targetKind?: string | null;
+  targetVersionId?: string | null;
+  refType: string;
+  anchor?: string | null;
+}): Promise<void> {
+  await runCypher(
+    `MERGE (source:Document {documentId: $sourceDocumentId})
+     SET source.title = $sourceTitle,
+         source.currentState = $sourceState,
+         source.documentKind = $sourceKind,
+         source.syncedAt = datetime()
+     MERGE (target:Document {documentId: $targetDocumentId})
+     SET target.title = $targetTitle,
+         target.currentState = $targetState,
+         target.documentKind = $targetKind,
+         target.syncedAt = datetime()
+     MERGE (source)-[edge:DOC_REFERENCES {
+       refType: $refType,
+       sourceVersionId: $sourceVersionId,
+       targetVersionId: $targetVersionId
+     }]->(target)
+     SET edge.anchor = $anchor,
+         edge.syncedAt = datetime()`,
+    {
+      sourceDocumentId: ref.sourceDocumentId,
+      sourceTitle: ref.sourceTitle,
+      sourceState: ref.sourceState ?? null,
+      sourceKind: ref.sourceKind ?? null,
+      sourceVersionId: ref.sourceVersionId ?? null,
+      targetDocumentId: ref.targetDocumentId,
+      targetTitle: ref.targetTitle,
+      targetState: ref.targetState ?? null,
+      targetKind: ref.targetKind ?? null,
+      targetVersionId: ref.targetVersionId ?? null,
+      refType: ref.refType,
+      anchor: ref.anchor ?? null,
+    },
+  );
+}
+
 export interface InfraCIExtendedProps {
   baseUrl?: string;
   gpu?: string;

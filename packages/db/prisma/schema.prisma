@@ -229,6 +229,13 @@ model Principal {
   edgeNode              EdgeNode?        @relation("EdgeNodeIdentity")
   edgeNodesApproved     EdgeNode[]       @relation("EdgeNodeApprover")
   bootstrapTokensIssued BootstrapToken[] @relation("BootstrapTokenIssuer")
+  ownedDocuments        Document[]       @relation("DocumentOwner")
+  createdDocuments      Document[]       @relation("DocumentCreator")
+  documentVersions      DocumentVersion[] @relation("DocumentVersionCreator")
+  documentReferences    DocumentReference[] @relation("DocumentReferenceCreator")
+  documentAccessGrants  DocumentAccessGrant[] @relation("DocumentAccessGrantPrincipal")
+  documentAccessGrantsCreated DocumentAccessGrant[] @relation("DocumentAccessGrantCreator")
+  documentLifecycleEvents DocumentLifecycleEvent[] @relation("DocumentLifecycleActor")
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 }
@@ -2218,6 +2225,7 @@ model Organization {
   wikiRawSources                RawSource[]
   wikiIngestEvents              WikiIngestEvent[]
   wikiLintFindings              WikiLintFinding[]
+  documents                     Document[]
 }
 
 model BusinessContext {
@@ -3248,6 +3256,7 @@ model ToolExecution {
   // Persisted by mcp-governed-execute.ts when context.taskRunId is provided.
   taskRunId     String?
   receipt       ToolExecutionReceipt?
+  documentLifecycleEvents DocumentLifecycleEvent[]
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -3319,6 +3328,187 @@ model AgentAttachment {
 
   @@index([threadId])
   @@index([messageId])
+}
+
+// ─── Managed Document Store ─────────────────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-12-document-management-capability.md
+//
+// This is the minimum Documentum-class foundation: stable document identity,
+// independent versions, durable references, lifecycle events, access metadata,
+// and content-addressed blob/rendition pointers. Postgres full-text, Qdrant,
+// and Neo4j remain projections; Postgres rows are authoritative.
+
+model Document {
+  id                   String                   @id @default(cuid())
+  documentId           String                   @unique
+  organizationId       String
+  ownerPrincipalId     String?
+  title                String
+  slug                 String?
+  documentKind         String
+  contentFormat        String
+  sourceKind           String                   @default("managed")
+  externalLocator      Json?
+  currentVersionId     String?
+  currentState         String                   @default("draft")
+  accessScope          String                   @default("organization")
+  classification       String?
+  semanticIndexedAt    DateTime?
+  fullTextIndexedAt    DateTime?
+  archivedAt           DateTime?
+  createdByPrincipalId String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  organization         Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerPrincipal       Principal?               @relation("DocumentOwner", fields: [ownerPrincipalId], references: [id])
+  createdByPrincipal   Principal?               @relation("DocumentCreator", fields: [createdByPrincipalId], references: [id])
+  versions             DocumentVersion[]        @relation("DocumentVersions")
+  currentVersion       DocumentVersion?         @relation("DocumentCurrentVersion", fields: [currentVersionId], references: [id])
+  outgoingReferences   DocumentReference[]      @relation("DocumentReferenceSource")
+  incomingReferences   DocumentReference[]      @relation("DocumentReferenceTarget")
+  tags                 DocumentTag[]
+  accessGrants         DocumentAccessGrant[]
+  lifecycleEvents      DocumentLifecycleEvent[]
+
+  @@index([organizationId, currentState])
+  @@index([ownerPrincipalId])
+  @@index([createdByPrincipalId])
+  @@index([documentKind])
+  @@index([contentFormat])
+  @@index([sourceKind])
+  @@index([updatedAt])
+}
+
+model DocumentVersion {
+  id                         String              @id @default(cuid())
+  documentId                 String
+  version                    Int
+  title                      String
+  contentFormat              String
+  contentText                String?             @db.Text
+  contentBlobId              String?
+  contentSha256              String?
+  sizeBytes                  Int?
+  summary                    String?             @db.Text
+  createdByPrincipalId       String?
+  createdAt                  DateTime            @default(now())
+  document                   Document            @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  currentForDocuments        Document[]          @relation("DocumentCurrentVersion")
+  contentBlob                DocumentBlob?       @relation(fields: [contentBlobId], references: [id], onDelete: SetNull)
+  createdByPrincipal         Principal?          @relation("DocumentVersionCreator", fields: [createdByPrincipalId], references: [id])
+  sourceReferences           DocumentReference[] @relation("DocumentReferenceSourceVersion")
+  targetReferences           DocumentReference[] @relation("DocumentReferenceTargetVersion")
+  renditions                 DocumentRendition[]
+
+  @@unique([documentId, version])
+  @@index([documentId])
+  @@index([contentBlobId])
+  @@index([contentSha256])
+  @@index([createdByPrincipalId])
+  @@index([createdAt])
+}
+
+model DocumentBlob {
+  id          String              @id @default(cuid())
+  sha256      String              @unique
+  storageKey  String              @unique
+  mimeType    String?
+  sizeBytes   Int
+  createdAt   DateTime            @default(now())
+  versions    DocumentVersion[]
+  renditions  DocumentRendition[]
+
+  @@index([sizeBytes])
+}
+
+model DocumentReference {
+  id                   String           @id @default(cuid())
+  sourceDocumentId     String
+  sourceVersionId      String?
+  targetDocumentId     String?
+  targetVersionId      String?
+  targetExternalRef    String?
+  refType              String
+  anchor               String?          @db.Text
+  createdByPrincipalId String?
+  createdAt            DateTime         @default(now())
+  sourceDocument       Document         @relation("DocumentReferenceSource", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  sourceVersion        DocumentVersion? @relation("DocumentReferenceSourceVersion", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  targetDocument       Document?        @relation("DocumentReferenceTarget", fields: [targetDocumentId], references: [id], onDelete: SetNull)
+  targetVersion        DocumentVersion? @relation("DocumentReferenceTargetVersion", fields: [targetVersionId], references: [id], onDelete: SetNull)
+  createdByPrincipal   Principal?       @relation("DocumentReferenceCreator", fields: [createdByPrincipalId], references: [id])
+
+  @@index([sourceDocumentId])
+  @@index([sourceVersionId])
+  @@index([targetDocumentId])
+  @@index([targetVersionId])
+  @@index([refType])
+  @@index([createdByPrincipalId])
+}
+
+model DocumentTag {
+  documentId String
+  tag        String
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, tag])
+  @@index([tag])
+}
+
+model DocumentAccessGrant {
+  id                   String     @id @default(cuid())
+  documentId           String
+  principalId          String?
+  grantKind            String
+  createdByPrincipalId String?
+  createdAt            DateTime   @default(now())
+  expiresAt            DateTime?
+  document             Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  principal            Principal? @relation("DocumentAccessGrantPrincipal", fields: [principalId], references: [id], onDelete: Cascade)
+  createdByPrincipal   Principal? @relation("DocumentAccessGrantCreator", fields: [createdByPrincipalId], references: [id])
+
+  @@unique([documentId, principalId, grantKind])
+  @@index([documentId])
+  @@index([principalId])
+  @@index([grantKind])
+  @@index([createdByPrincipalId])
+}
+
+model DocumentLifecycleEvent {
+  id                   String         @id @default(cuid())
+  documentId           String
+  fromState            String?
+  toState              String
+  reason               String?        @db.Text
+  actorPrincipalId     String?
+  toolExecutionId      String?
+  createdAt            DateTime       @default(now())
+  document             Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actorPrincipal       Principal?     @relation("DocumentLifecycleActor", fields: [actorPrincipalId], references: [id])
+  toolExecution        ToolExecution? @relation(fields: [toolExecutionId], references: [id])
+
+  @@index([documentId, createdAt])
+  @@index([toState])
+  @@index([actorPrincipalId])
+  @@index([toolExecutionId])
+}
+
+model DocumentRendition {
+  id                String          @id @default(cuid())
+  documentVersionId String
+  renditionKind     String
+  contentText       String?         @db.Text
+  blobId            String?
+  mimeType          String?
+  createdAt         DateTime        @default(now())
+  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  blob              DocumentBlob?   @relation(fields: [blobId], references: [id], onDelete: SetNull)
+
+  @@unique([documentVersionId, renditionKind])
+  @@index([documentVersionId])
+  @@index([blobId])
+  @@index([renditionKind])
 }
 
 model ApiToken {

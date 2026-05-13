@@ -14,10 +14,17 @@ type Output = {
 };
 
 export function resolveCoworkerRuntimeMode(input: Input): Output {
-  if (input.devMode || input.pathname.startsWith("/build")) {
+  if (input.pathname.startsWith("/build")) {
     return {
       coworkerMode: "act",
       externalAccessEnabled: true,
+    };
+  }
+
+  if (input.devMode) {
+    return {
+      coworkerMode: "act",
+      externalAccessEnabled: input.externalAccessEnabled,
     };
   }
 

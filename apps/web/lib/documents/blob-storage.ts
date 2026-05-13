@@ -1,0 +1,102 @@
+import { prisma } from "@dpf/db";
+import { lazyCrypto, lazyFsPromises, lazyPath } from "../shared/lazy-node";
+
+export const DOCUMENT_TEXT_INLINE_LIMIT_BYTES = 10 * 1024 * 1024;
+export const DOCUMENT_BLOB_PREFIX = "documents/sha256";
+
+type DocumentBlobContent = Buffer | Uint8Array | string;
+
+type ResolveDocumentBlobStorageRootOptions = {
+  configuredPath?: string | null;
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+};
+
+export type DocumentBlobWriteResult = {
+  sha256: string;
+  storageKey: string;
+  sizeBytes: number;
+};
+
+function toBuffer(content: DocumentBlobContent): Buffer {
+  if (Buffer.isBuffer(content)) return content;
+  if (typeof content === "string") return Buffer.from(content, "utf-8");
+  return Buffer.from(content);
+}
+
+export function hashDocumentBlobContent(content: DocumentBlobContent): string {
+  const crypto = lazyCrypto();
+  return crypto.createHash("sha256").update(toBuffer(content)).digest("hex");
+}
+
+export function buildDocumentBlobStorageKey(sha256: string): string {
+  if (!/^[a-f0-9]{64}$/.test(sha256)) {
+    throw new Error("Document blob storage keys require a lowercase SHA-256 hash.");
+  }
+
+  return `${DOCUMENT_BLOB_PREFIX}/${sha256.slice(0, 2)}/${sha256.slice(2, 4)}/${sha256}`;
+}
+
+export function resolveDocumentBlobStorageRoot(options: ResolveDocumentBlobStorageRootOptions = {}): string {
+  const path = lazyPath();
+  const configuredPath = typeof options.configuredPath === "string" && options.configuredPath.trim().length > 0
+    ? options.configuredPath
+    : undefined;
+  const root = configuredPath ?? options.env?.UPLOAD_STORAGE_PATH ?? "./data/uploads";
+  return path.resolve(options.cwd ?? process.cwd(), root);
+}
+
+export async function getDocumentBlobStorageRoot(): Promise<string> {
+  const config = await prisma.platformConfig.findUnique({
+    where: { key: "upload_storage_path" },
+    select: { value: true },
+  });
+
+  return resolveDocumentBlobStorageRoot({
+    configuredPath: typeof config?.value === "string" ? config.value : null,
+    env: process.env,
+  });
+}
+
+export async function writeDocumentBlob(input: {
+  content: DocumentBlobContent;
+  storageRoot?: string;
+}): Promise<DocumentBlobWriteResult> {
+  const content = toBuffer(input.content);
+  const sha256 = hashDocumentBlobContent(content);
+  const storageKey = buildDocumentBlobStorageKey(sha256);
+  const storageRoot = input.storageRoot ?? await getDocumentBlobStorageRoot();
+  const fs = lazyFsPromises();
+  const path = lazyPath();
+  const absolutePath = path.join(storageRoot, storageKey);
+  const directory = path.dirname(absolutePath);
+  const result = { sha256, storageKey, sizeBytes: content.byteLength };
+
+  await fs.mkdir(directory, { recursive: true });
+
+  try {
+    await fs.access(absolutePath);
+    return result;
+  } catch {
+    // Missing content falls through to an atomic write below.
+  }
+
+  const { randomUUID } = lazyCrypto();
+  const temporaryPath = path.join(directory, `.${path.basename(absolutePath)}.${process.pid}.${randomUUID()}.tmp`);
+
+  try {
+    await fs.writeFile(temporaryPath, content, { flag: "wx" });
+    await fs.rename(temporaryPath, absolutePath);
+  } catch (error) {
+    await fs.unlink(temporaryPath).catch(() => {});
+
+    try {
+      await fs.access(absolutePath);
+      return result;
+    } catch {
+      throw error;
+    }
+  }
+
+  return result;
+}

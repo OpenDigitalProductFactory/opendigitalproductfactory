@@ -6,7 +6,7 @@ vi.mock("./neo4j", () => ({
 }));
 
 import { runCypher } from "./neo4j";
-import { syncInfraCI, syncInventoryRelationship } from "./neo4j-sync";
+import { syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./neo4j-sync";
 
 const mockRunCypher = vi.mocked(runCypher);
 
@@ -169,5 +169,41 @@ describe("syncInventoryRelationship", () => {
     expect(mockRunCypher).toHaveBeenCalledTimes(1);
     const cypher = mockRunCypher.mock.calls[0]![0] as string;
     expect(cypher).toContain(":HOSTS");
+  });
+});
+
+describe("syncDocumentReference", () => {
+  beforeEach(() => {
+    mockRunCypher.mockClear();
+  });
+
+  it("projects stable document nodes and a DOC_REFERENCES edge", async () => {
+    await syncDocumentReference({
+      sourceDocumentId: "DOC-AAA11111",
+      sourceTitle: "Workspace pattern",
+      sourceState: "draft",
+      sourceKind: "spec",
+      sourceVersionId: "version-a",
+      targetDocumentId: "DOC-BBB22222",
+      targetTitle: "Document management",
+      targetState: "published",
+      targetKind: "spec",
+      targetVersionId: "version-b",
+      refType: "cites",
+      anchor: "section 7",
+    });
+
+    expect(mockRunCypher).toHaveBeenCalledTimes(1);
+    const cypher = mockRunCypher.mock.calls[0]![0] as string;
+    const params = mockRunCypher.mock.calls[0]![1] as Record<string, unknown>;
+    expect(cypher).toContain("MERGE (source:Document {documentId: $sourceDocumentId})");
+    expect(cypher).toContain(":DOC_REFERENCES");
+    expect(params).toMatchObject({
+      sourceDocumentId: "DOC-AAA11111",
+      targetDocumentId: "DOC-BBB22222",
+      refType: "cites",
+      sourceVersionId: "version-a",
+      targetVersionId: "version-b",
+    });
   });
 });
