@@ -16,6 +16,7 @@ describe("shouldIndexCodeGraphPath", () => {
   it("rejects unsupported binary and generated file extensions", () => {
     expect(shouldIndexCodeGraphPath("apps/web/public/logo.png")).toBe(false);
     expect(shouldIndexCodeGraphPath("apps/web/.next/build-manifest.js")).toBe(false);
+    expect(shouldIndexCodeGraphPath("packages/db/generated/client/index.d.ts")).toBe(false);
     expect(shouldIndexCodeGraphPath("node_modules/pkg/index.ts")).toBe(false);
   });
 });
@@ -28,5 +29,6 @@ describe("buildListTrackedFilesCommand", () => {
     expect(command).toContain('"**/*.ts"');
     expect(command).toContain('":(exclude)**/node_modules/**"');
     expect(command).toContain('":(exclude)**/.next/**"');
+    expect(command).toContain('":(exclude)packages/db/generated/**"');
   });
 });

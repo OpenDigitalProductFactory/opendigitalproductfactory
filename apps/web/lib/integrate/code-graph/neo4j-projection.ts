@@ -31,7 +31,7 @@ export function buildCodeFileKey(graphKey: string, filePath: string): string {
 
 export async function clearCodeGraph(graphKey: string): Promise<void> {
   await runCypher(
-    "MATCH (n:CodeFile {graphKey: $graphKey}) DETACH DELETE n",
+    "MATCH (n {graphKey: $graphKey}) DETACH DELETE n",
     { graphKey },
   );
 }

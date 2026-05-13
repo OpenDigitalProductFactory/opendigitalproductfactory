@@ -7,6 +7,7 @@ import {
   listAvailableMcpScopes,
   listMyMcpTokens,
   revokeMyMcpToken,
+  upgradeMyMcpTokenForCodingAgent,
 } from "@/lib/actions/mcp-tokens";
 import { defaultMcpTokenScopes } from "@/lib/mcp-token-scopes";
 
@@ -125,6 +126,13 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     });
   }
 
+  function upgradeForCodeIntelligence(tokenId: string) {
+    startTransition(async () => {
+      await upgradeMyMcpTokenForCodingAgent({ tokenId });
+      refresh();
+    });
+  }
+
   return (
     <section className="mt-6 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
       <div className="flex items-center justify-between gap-3">
@@ -160,6 +168,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           {tokens.map((t) => {
             const revoked = t.revokedAt != null;
             const expired = t.expiresAt != null && new Date(t.expiresAt).getTime() < Date.now();
+            const missingCodingScopes = defaultMcpTokenScopes(scopes).filter((scope) => !t.scopes.includes(scope));
             return (
               <li
                 key={t.id}
@@ -198,14 +207,26 @@ export function McpTokenManager(props: McpTokenManagerProps) {
                   </div>
                 </div>
                 {!revoked && (
-                  <button
-                    type="button"
-                    onClick={() => revoke(t.id)}
-                    disabled={pending}
-                    className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-50"
-                  >
-                    Revoke
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {!expired && missingCodingScopes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => upgradeForCodeIntelligence(t.id)}
+                        disabled={pending}
+                        className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
+                      >
+                        Enable code intelligence
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => revoke(t.id)}
+                      disabled={pending}
+                      className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  </div>
                 )}
               </li>
             );

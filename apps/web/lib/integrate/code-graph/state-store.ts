@@ -1,7 +1,9 @@
 import { prisma } from "@dpf/db";
+import { CODE_GRAPH_PROJECTION_VERSION } from "./constants";
 
 export type CodeGraphIndexStateRecord = {
   graphKey: string;
+  graphVersion?: number | null;
   indexStatus?: string | null;
   indexedFileCount?: number | null;
   lastIndexedHeadSha: string | null;
@@ -42,7 +44,7 @@ export async function markCodeGraphIndexing(
     where: { graphKey },
     create: {
       graphKey,
-      graphVersion: 1,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "updating",
       lastIndexedBranch: input.branch,
@@ -52,6 +54,7 @@ export async function markCodeGraphIndexing(
       lastError: null,
     },
     update: {
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "updating",
       lastIndexedBranch: input.branch,
@@ -77,7 +80,7 @@ export async function markCodeGraphReady(
     where: { graphKey },
     create: {
       graphKey,
-      graphVersion: 1,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "ready",
       lastIndexedAt: input.observedAt,
@@ -89,6 +92,7 @@ export async function markCodeGraphReady(
       lastError: null,
     },
     update: {
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "ready",
       lastIndexedAt: input.observedAt,
@@ -118,7 +122,7 @@ export async function markCodeGraphFailed(
     where: { graphKey },
     create: {
       graphKey,
-      graphVersion: 1,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "failed",
       lastIndexedBranch: input.branch,
@@ -128,6 +132,7 @@ export async function markCodeGraphFailed(
       lastError,
     },
     update: {
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "failed",
       lastIndexedBranch: input.branch,
@@ -163,6 +168,10 @@ export async function upsertCodeGraphFileHash(input: {
 
 export async function deleteCodeGraphFileHash(graphKey: string, filePath: string): Promise<void> {
   await codeGraphPrisma.codeGraphFileHash.deleteMany({ where: { graphKey, filePath } });
+}
+
+export async function clearCodeGraphFileHashes(graphKey: string): Promise<void> {
+  await codeGraphPrisma.codeGraphFileHash.deleteMany({ where: { graphKey } });
 }
 
 export async function countCodeGraphFileHashes(graphKey: string): Promise<number> {

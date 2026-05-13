@@ -1,5 +1,16 @@
-import { prisma } from "@dpf/db";
+import { prisma, runCypher } from "@dpf/db";
+import type { CodeGraphEdgeKind } from "./code-graph/types";
 import { CODE_GRAPH_GRAPH_KEY } from "./code-graph/constants";
+
+const BENCHMARK_REQUIRED_RELATIONSHIPS = [
+  "DEFINES",
+  "IMPORTS",
+  "IMPLEMENTS_ROUTE",
+  "EXPOSES_TOOL",
+  "TESTED_BY",
+] as const satisfies readonly CodeGraphEdgeKind[];
+
+type BenchmarkRelationship = (typeof BENCHMARK_REQUIRED_RELATIONSHIPS)[number];
 
 export type CodeGraphFreshness = {
   graphKey: string;
@@ -11,6 +22,7 @@ export type CodeGraphFreshness = {
   workspaceDirty: boolean;
   indexedFileCount: number;
   lastError: string | null;
+  relationshipCounts?: Record<BenchmarkRelationship, number>;
   warnings: string[];
   summary: string;
 };
@@ -53,8 +65,69 @@ function buildFreshnessWarnings(input: {
   return warnings;
 }
 
+function toCount(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (
+    value &&
+    typeof value === "object" &&
+    "toNumber" in value &&
+    typeof (value as { toNumber: unknown }).toNumber === "function"
+  ) {
+    return (value as { toNumber: () => number }).toNumber();
+  }
+  return 0;
+}
+
+async function inspectStructuralRelationshipHealth(graphKey: string): Promise<{
+  counts: Record<BenchmarkRelationship, number>;
+  warnings: string[];
+}> {
+  const counts = Object.fromEntries(
+    BENCHMARK_REQUIRED_RELATIONSHIPS.map((relationship) => [relationship, 0]),
+  ) as Record<BenchmarkRelationship, number>;
+
+  try {
+    const rows = await runCypher<{ relationship?: unknown; count?: unknown }>(
+      [
+        "MATCH ()-[r {graphKey: $graphKey}]->()",
+        "WHERE type(r) IN $relationships",
+        "RETURN type(r) AS relationship, count(r) AS count",
+      ].join("\n"),
+      { graphKey, relationships: [...BENCHMARK_REQUIRED_RELATIONSHIPS] },
+    );
+    for (const row of rows) {
+      const relationship = row.relationship;
+      if (
+        typeof relationship === "string" &&
+        BENCHMARK_REQUIRED_RELATIONSHIPS.includes(relationship as BenchmarkRelationship)
+      ) {
+        counts[relationship as BenchmarkRelationship] = toCount(row.count);
+      }
+    }
+  } catch (error) {
+    return {
+      counts,
+      warnings: [
+        `Could not inspect code graph relationship health: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      ],
+    };
+  }
+
+  const missing = BENCHMARK_REQUIRED_RELATIONSHIPS.filter((relationship) => counts[relationship] === 0);
+  return {
+    counts,
+    warnings:
+      missing.length > 0
+        ? [`Code graph structural relationships are missing: ${missing.join(", ")}.`]
+        : [],
+  };
+}
+
 export async function getCodeGraphFreshness(
   graphKey = CODE_GRAPH_GRAPH_KEY,
+  options: { inspectStructuralHealth?: boolean } = {},
 ): Promise<CodeGraphFreshness> {
   const state = await prisma.codeGraphIndexState.findUnique({
     where: { graphKey },
@@ -76,12 +149,19 @@ export async function getCodeGraphFreshness(
     };
   }
 
-  const warnings = buildFreshnessWarnings({
+  const relationshipHealth = options.inspectStructuralHealth
+    ? await inspectStructuralRelationshipHealth(graphKey)
+    : null;
+
+  const warnings = [
+    ...buildFreshnessWarnings({
     available: true,
     indexStatus: state.indexStatus,
     workspaceDirty: state.workspaceDirty,
     lastError: state.lastError,
-  });
+    }),
+    ...(relationshipHealth?.warnings ?? []),
+  ];
 
   const summary = [
     `Code graph is ${state.indexStatus} for ${state.indexedFileCount} indexed files.`,
@@ -101,6 +181,7 @@ export async function getCodeGraphFreshness(
     workspaceDirty: state.workspaceDirty,
     indexedFileCount: state.indexedFileCount,
     lastError: state.lastError,
+    ...(relationshipHealth ? { relationshipCounts: relationshipHealth.counts } : {}),
     warnings,
     summary,
   };

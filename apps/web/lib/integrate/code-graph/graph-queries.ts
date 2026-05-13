@@ -350,7 +350,7 @@ export async function searchCodeGraph(input: {
       "  WHEN toLower(coalesce(n.path, '')) = $query THEN 1",
       "  ELSE 2",
       "END, path ASC, name ASC",
-      "LIMIT $limit",
+      "LIMIT toInteger($limit)",
     ].join("\n"),
     {
       graphKey,
@@ -440,7 +440,7 @@ export async function findRelatedTests(input: {
       "       r.startLine AS startLine,",
       "       r.endLine AS endLine",
       "ORDER BY confidence ASC, path ASC",
-      "LIMIT $limit",
+      "LIMIT toInteger($limit)",
     ].join("\n"),
     {
       graphKey,
