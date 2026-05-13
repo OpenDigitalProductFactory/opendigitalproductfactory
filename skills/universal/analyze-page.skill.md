@@ -1,11 +1,11 @@
 ---
 name: analyze-page
-description: "Analyze the current page and surface key insights, actionable items, or missing elements the user might overlook"
+description: "Analyze the current page from PAGE DATA and surface non-obvious operational insights, missing information, stale state, or next actions without calling tools."
 category: universal
 assignTo: ["*"]
 capability: null
 taskType: conversation
-triggerPattern: "analyze|insights|what's here|summarize page|what am I looking at"
+triggerPattern: "analyze page|insights|what's here|summarize page|what am I looking at|anything important"
 userInvocable: true
 agentInvocable: true
 allowedTools: []
@@ -16,38 +16,39 @@ riskBand: low
 
 # Analyze This Page
 
-Examine the current page context and deliver concise, actionable insights without calling any tools.
+Read the page context already available to the coworker and return the most useful insight. This is a lightweight read-only skill for orientation, not a license to call tools or restate visible UI.
 
-## What This Skill Does
+Do not use this for UX/accessibility audits; use `evaluate-page` instead. Do not use this for creating records or acting on the page; use `do-primary-action` instead.
 
-Reads the PAGE DATA section already present in the agent's context and produces a short assessment of what matters most on the current page. This is a pure conversation skill -- no tool calls, no side effects.
+## Read First
 
-## Instructions
+| Source | Path | What to extract |
+| --- | --- | --- |
+| Page context | PAGE DATA | Route, page title, visible records, empty states, counts, errors, and workflow state |
+| Conversation | recent user message | What the user is trying to understand right now |
+| DPF conventions | AGENTS.md | Truthfulness, live-state preference, and concise communication rules |
 
-1. **Read the PAGE DATA section** in your current context. This contains the route, page title, visible data, and any relevant state.
+## Steps
 
-2. **Identify what matters.** Look for:
-   - Data that stands out (outliers, empty fields, stale dates, unusual counts)
-   - Actionable items the user should address (pending approvals, incomplete records, items at risk)
-   - Missing elements that a well-maintained page would normally have
-   - Patterns or trends visible in the data
+1. Read PAGE DATA and identify the page type: dashboard, form, list, detail, setup, or workflow.
+2. Look for outliers, stale data, missing required fields, blockers, or unusually empty sections.
+3. Ignore decorative layout details unless they obscure task completion.
+4. Return 2-3 sentences with the most important insight first.
+5. If nothing notable appears, say that clearly and mention one concrete positive observation.
 
-3. **Deliver 2-3 sentences of insight.** Be specific -- reference actual values, names, or counts from the page data. Do not be generic.
+## Output Template
 
-4. **If nothing notable**, respond with "Looks good!" and optionally mention one positive observation.
+`<Most important observation>. <Why it matters or what it implies>. <Optional next action if there is one>.`
 
 ## Guidelines
 
-- Do NOT call any tools. This skill uses only the context you already have.
-- Do NOT describe the page layout or restate what the user can already see. Focus on non-obvious observations.
-- Be direct. Start with the most important finding, not a preamble.
-- If the page has a list or table, comment on distribution, completeness, or outliers rather than listing items back.
-- Tailor your language to the page type: dashboards get metric-focused analysis, forms get completeness checks, lists get coverage assessments.
+- Do not call tools.
+- Do not list everything visible on the page.
+- Reference actual names, counts, statuses, or dates when present.
+- If PAGE DATA is missing, say that the analysis is limited by missing page context.
 
-## Examples
+## Example
 
-**Dashboard page:** "3 of your 5 epics have been in-progress for over 2 weeks with no recent activity -- they may be stalled. The 'Storefront' epic has 12 open items, which is double the next largest."
+Input: "What am I looking at?"
 
-**Empty list page:** "No items here yet. This is the backlog for the Portfolio workspace -- you'll want to create at least one epic before starting a build cycle."
-
-**Form page:** "The description field is empty and the priority is set to the default. Both are worth filling in before saving -- downstream agents use these for prioritization."
+Output: "Three high-priority backlog items are open and none are claimed, so this queue is ready for triage rather than implementation. The oldest item is the discovery constraint failure, which looks like the first operational blocker to resolve."

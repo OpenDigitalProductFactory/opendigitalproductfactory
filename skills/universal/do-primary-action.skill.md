@@ -1,54 +1,58 @@
 ---
 name: do-primary-action
-description: "Perform the primary action on this page -- fill forms, create entries, or summarize what needs attention"
+description: "Infer and perform the safest primary action for the current page when the user says to handle it, while asking first for destructive or materially ambiguous actions."
 category: universal
 assignTo: ["*"]
 capability: null
-taskType: conversation
+taskType: action
 triggerPattern: "do it|do this|just do it|primary action|handle this|take action"
 userInvocable: true
 agentInvocable: true
-allowedTools: []
+allowedTools: [create_backlog_item, update_backlog_item_status]
 composesFrom: []
 contextRequirements: []
-riskBand: low
+riskBand: medium
 ---
 
 # Do This For Me
 
-Determine the primary action for the current page and execute the safest well-supported action using available tools.
+Identify the current page's likely primary action and carry it out when the action is safe, supported, and sufficiently clear. This skill should feel helpful, but it must not guess through destructive changes or pretend unsupported tools exist.
 
-## What This Skill Does
+Do not use this for read-only insight; use `analyze-page` instead. Do not use this for UX/accessibility review; use `evaluate-page` instead.
 
-Looks at the page context, infers what a human would most likely do next, and does it when that action is well-supported. This is an action-oriented skill, but not a guessing license.
+## Read First
 
-## Instructions
+| Source | Path | What to extract |
+| --- | --- | --- |
+| Page context | PAGE DATA | Route, visible form/list/detail state, available actions, and missing fields |
+| Tool context | available tools | Whether the needed create/update/navigate tool is actually available |
+| Project rules | AGENTS.md | Canonical enum values, confirmation rules, and live-state expectations |
 
-1. **Identify the page type** from your PAGE DATA context:
-   - **Form page** -- Fill fields with sensible defaults and submit. Use domain knowledge to pick reasonable values (e.g., status: "open", type based on context, descriptive titles).
-   - **List/table page** -- Create a new entry if the list is sparse, or summarize what needs attention if populated.
-   - **Dashboard page** -- Summarize the current state and highlight the top 1-2 items needing action.
-   - **Detail page** -- Check for incomplete fields and offer to fill them, or summarize the item's status.
-   - **Settings page** -- Review current settings and flag anything that looks misconfigured.
+## Steps
 
-2. **Act using your tools.** Call the appropriate MCP tools to create items, update records, or navigate. Do not ask for confirmation unless the action is destructive (deleting data, changing permissions) or the context is too ambiguous to act correctly.
+1. Read PAGE DATA and classify the page as form, list, dashboard, detail, settings, or workflow.
+2. Identify the single safest primary action a human operator would expect on that page.
+3. Check whether the required tool is available and permitted.
+4. Ask one short question if the action is destructive, permission-changing, or outcome-changing ambiguity exists.
+5. Execute the action only when it is supported; otherwise create or suggest the smallest trackable follow-up.
+6. Report what changed and what remains.
 
-3. **Report what you did** in 1-2 sentences after completing the action.
+## Output Template
+
+- Action: `<what you did or why you paused>`
+- Record: `<created or updated item, if any>`
+- Evidence: `<page data or tool result used>`
+- Next: `<one follow-up, or none>`
 
 ## Guidelines
 
-- Bias toward action, but keep integrity first. If you can reasonably infer what to do, do it. If ambiguity would materially change the outcome, ask one short clarifying question instead of forcing an answer.
-- Use sensible defaults that follow project conventions (see CLAUDE.md for canonical enum values).
-- For forms: fill ALL required fields. Leave optional fields empty only if you have no reasonable value.
-- For lists: prefer creating one well-formed entry over multiple placeholder entries.
-- If the page context is ambiguous and multiple actions are equally valid, pick the most common one and mention what else you could have done.
-- Never perform destructive actions (delete, reset, clear) without explicit user confirmation.
-- Never optimize for a proxy pass signal alone. Preserve the user's actual intent rather than taking brittle shortcuts.
+- Prefer one well-formed action over multiple vague changes.
+- Use DPF canonical values such as `open`, `in-progress`, `done`, and `deferred` when creating backlog work.
+- Never delete, reset, clear, or change permissions without explicit confirmation.
+- If the right tool is missing, do not improvise with unsupported claims; explain the blocker and track it.
 
-## Examples
+## Example
 
-**Backlog list page:** Create a new backlog item with type "product", status "open", and a title derived from the current workspace context.
+Input: "Do this" on a sparse backlog page.
 
-**Epic detail page with empty description:** Fill in the description based on the epic title and existing backlog items, then confirm what was written.
-
-**Dashboard with stale items:** "You have 3 items stuck in 'in-progress' for over a week. The highest priority is 'API Authentication' -- want me to check its build status?"
+Output: Create one backlog item with a specific title, type `product`, status `open`, and context from the page, then report the new item and next triage step.

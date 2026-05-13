@@ -1,14 +1,14 @@
 ---
 name: report-issue
-description: "Report a bug, usability problem, or provide feedback about the current page"
+description: "Collect a concise bug, usability, or feedback report from the current page and create a trackable backlog item without making the user repeat known context."
 category: universal
 assignTo: ["*"]
 capability: null
-taskType: conversation
-triggerPattern: "report|bug|issue|feedback|broken|problem|not working|wrong"
+taskType: action
+triggerPattern: "report issue|bug report|feedback|broken|problem|not working|wrong|file issue"
 userInvocable: true
 agentInvocable: false
-allowedTools: []
+allowedTools: [create_backlog_item]
 composesFrom: []
 contextRequirements: []
 riskBand: low
@@ -16,45 +16,43 @@ riskBand: low
 
 # Report an Issue
 
-Collect a structured bug report or feedback from the user about the current page.
+Turn a user's bug report or feedback into a useful backlog item. The skill should capture enough context for another coworker or developer to act without forcing the user through a long support form.
 
-## What This Skill Does
+Do not use this for broad UX audits; use `evaluate-page` instead. Do not use this for feature intake when there is no defect or feedback; use `start-feature` or the route-specific skill instead.
 
-Guides the user through reporting an issue by gathering the right details, then creates a trackable backlog item.
+## Read First
 
-## Instructions
+| Source | Path | What to extract |
+| --- | --- | --- |
+| User message | current conversation | The user's own words about what is broken or confusing |
+| Page context | PAGE DATA | Route, page title, visible errors, empty states, and relevant record IDs |
+| Backlog rules | AGENTS.md | Canonical type/status values and live backlog expectations |
 
-1. **Acknowledge the report.** If the user already described the issue, skip to step 3.
+## Steps
 
-2. **Ask what happened.** Use one open question:
-   - "What went wrong, or what could be better?"
+1. Read the user's report and PAGE DATA before asking anything.
+2. Ask one clarifying question only if the report is too ambiguous to title.
+3. Classify the report as bug, UX feedback, feature request, or data issue.
+4. Create one backlog item with type `product`, status `open`, and a title in the user's language.
+5. Include route, visible state, expected behavior, actual behavior, and any known reproduction detail.
+6. Confirm the created item title and what will happen next.
 
-3. **Clarify if needed.** Only ask one follow-up if the report is ambiguous:
-   - "Does this happen every time, or just sometimes?"
-   - "What did you expect to happen instead?"
+## Output Template
 
-4. **Capture context automatically** from PAGE DATA:
-   - Current route/page
-   - Any visible error messages or empty states
-   - User workspace or project context
-
-5. **Classify the issue:**
-   - **Bug**: Something is broken or behaves incorrectly
-   - **UX feedback**: Works but confusing or could be better
-   - **Feature request**: User wants something that does not exist
-
-6. **Create a backlog item** with:
-   - Title: Clear, specific summary
-   - Description: What the user reported plus auto-captured context
-   - Type: "product"
-   - Status: "open"
-
-7. **Confirm** that the issue was recorded with the item title.
+- Issue type: `<bug, UX feedback, feature request, data issue>`
+- Backlog item: `<title>`
+- Context captured: `<route and key visible state>`
+- Next: `<triage or build follow-up>`
 
 ## Guidelines
 
-- Never make the user repeat information they already provided.
-- Keep the conversation to 2-3 exchanges maximum.
-- Do not ask the user to reproduce, provide screenshots, or check console.
-- Use the user's own words in the backlog item title.
-- If the user is frustrated, acknowledge briefly and move to resolution.
+- Do not ask the user for screenshots, console logs, or reproduction steps they have not already offered.
+- Do not over-interview; keep the exchange to one follow-up at most.
+- Preserve the user's wording in the title when it is specific.
+- If the backlog tool is unavailable, say the issue is not recorded yet and provide the exact draft.
+
+## Example
+
+Input: "This button does nothing on finance setup."
+
+Output: Create `Finance setup button does nothing` with the current route, visible setup state, expected navigation, and actual no-op behavior, then confirm the item was recorded.
