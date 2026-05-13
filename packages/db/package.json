@@ -24,6 +24,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed.ts",
+    "skills:audit": "tsx src/skill-quality-audit.ts",
     "studio": "prisma studio",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
