@@ -228,21 +228,117 @@ Both happy-path and failure reports are valuable. A failure report
 that names the symptom and the LAN topology is more useful than no
 report at all.
 
+## Optional — upgrade the LAN path to HTTPS
+
+The Phase 0 floor is plain HTTP with bearer tokens. On a LAN that
+isn't physically isolated (any office network, any shared subnet),
+the `dpfedge_*` and `dpfboot_*` tokens are sniffable. T2.2 adds an
+HTTPS path with an operator-issued self-signed cert + CA bundle. The
+Edge Node trusts the CA via `NODE_EXTRA_CA_CERTS`; Caddy on the
+Authority host terminates TLS in front of the portal.
+
+This step is optional but strongly recommended for anything past a
+private lab.
+
+### A — Issue the cert (Host A)
+
+```bash
+# On Host A, in the DPF repo:
+bash scripts/issue-authority-tls-cert.sh --hostname dpf-authority.lan
+# Add IP SANs if you also use the IP directly:
+#   --hostname dpf-authority.lan --hostname 192.168.1.42
+```
+
+Output files (under `~/.dpf/tls` by default):
+
+- `authority.crt` — the self-signed certificate (also serves as its
+  own CA root)
+- `authority.key` — private key (mode 0600)
+- `ca-bundle.crt` — the CA cert Edge Nodes mount as `NODE_EXTRA_CA_CERTS`
+- `Caddyfile` — drop-in reverse-proxy config for the TLS sidecar
+
+### B — Start the TLS sidecar (Host A)
+
+```bash
+# Same shell where you ran issue-authority-tls-cert.sh:
+export DPF_TLS_DIR="$HOME/.dpf/tls"
+docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+
+# Verify from the LAN:
+curl --cacert ~/.dpf/tls/ca-bundle.crt \
+     https://dpf-authority.lan:443/api/health
+# Should print {"ok":true,...}
+```
+
+If you don't have `dpf-authority.lan` in your DNS, add an
+`/etc/hosts` entry on both hosts pointing at Host A's LAN IP, or
+re-run the cert helper with `--hostname <IP>` and use the IP in
+`DPF_AUTHORITY_URL` instead.
+
+### C — Distribute the CA bundle (Host A → Host B)
+
+```bash
+# From Host A:
+scp ~/.dpf/tls/ca-bundle.crt operator@host-b:/etc/dpf-edge/ca-bundle.crt
+
+# Or via your config-management of choice; the CA is not secret.
+```
+
+### D — Switch Edge Node to HTTPS (Host B)
+
+In Host B's `.env`:
+
+```ini
+DPF_AUTHORITY_URL=https://dpf-authority.lan:443
+DPF_AUTHORITY_CA_CERT=/etc/dpf-edge/ca-bundle.crt
+```
+
+Bring the node up with the TLS overlay:
+
+```bash
+docker compose -f docker-compose.edge-standalone.yml \
+               -f docker-compose.edge-standalone-tls.yml \
+               up -d
+```
+
+Compose refuses to start if `DPF_AUTHORITY_CA_CERT` is unset under
+the TLS overlay — loud failure beats silent CA-unknown HTTPS.
+
+### E — Verify TLS is in the path
+
+```bash
+# Inside the Edge Node container:
+docker compose -f docker-compose.edge-standalone.yml \
+               -f docker-compose.edge-standalone-tls.yml \
+               exec edge-node sh -c \
+  'node -e "const c=require(\"undici\");c.request(process.env.DPF_AUTHORITY_URL+\"/api/health\").then(r=>r.body.text()).then(b=>console.log(\"ok:\",b)).catch(e=>console.error(\"err:\",e.cause?.code||e.message))"'
+# Expect: ok: {"ok":true,...}
+# If you see err: UNABLE_TO_VERIFY_LEAF_SIGNATURE the CA bundle isn't
+# mounted; re-check DPF_AUTHORITY_CA_CERT and that the host file is
+# readable by the container UID.
+```
+
+### Cert lifecycle
+
+The default validity is 825 days (the Apple-compatible max). When
+the cert nears expiry, re-run `issue-authority-tls-cert.sh --force`
+on Host A; you must redistribute the new `ca-bundle.crt` to every
+Edge Node host or they'll fail their next handshake. Track this in
+your operational calendar — there is no auto-rotation in T2.
+
 ## What's deferred
 
-- **HTTPS + CA bundle** — T2.2 will document operator-issued
-  self-signed certs and `NODE_EXTRA_CA_CERTS` on the Edge Node.
-  Until then, bearer tokens flow over plain HTTP; treat the LAN as
-  a trust boundary.
-- **Submission freshness tolerance configuration** — T2.3 will add
-  an explicit env knob and document NTP as a hard prerequisite.
+- **Freshness tolerance configuration** — T2.3 will add an explicit
+  env knob and document NTP as a hard prerequisite.
 - **Surfacing IP / hostname in the admin UI list** — T2.4. For now,
   the address shows up in `EdgeNode.metadata`; the admin UI lists
   the row but doesn't render the address field yet. Query the DB
   to confirm enrollment topology, as the SQL in Step 6 shows.
-- **mTLS** — T4. The Phase 0 + T2 floor is bearer-over-HTTPS with
-  an operator-trusted CA. Mutual auth where the Edge Node holds a
-  client cert is a future iteration.
+- **mTLS** — T4. T2.2's floor is bearer-over-HTTPS with an
+  operator-trusted CA. Mutual auth where the Edge Node holds a
+  client cert and the Authority verifies it is a future iteration.
+- **Auto-rotation** — T4 area. The current cert helper is a one-shot
+  generator; rotation is a manual re-run + redistribute.
 - **Air-gapped** — T5.
 - **macOS / Windows native binaries** — T3.
 
@@ -253,4 +349,7 @@ report at all.
 - Phase 0 single-host runbook: [`docs/install/verification-runbook.md § 7 — DPF Edge Node enrollment`](verification-runbook.md#7-dpf-edge-node-enrollment)
 - Single-host overlay compose: [`docker-compose.edge.yml`](../../docker-compose.edge.yml)
 - Standalone compose: [`docker-compose.edge-standalone.yml`](../../docker-compose.edge-standalone.yml)
+- TLS overlay for standalone: [`docker-compose.edge-standalone-tls.yml`](../../docker-compose.edge-standalone-tls.yml)
+- Authority TLS sidecar overlay: [`docker-compose.tls.yml`](../../docker-compose.tls.yml)
+- Cert helper: [`scripts/issue-authority-tls-cert.sh`](../../scripts/issue-authority-tls-cert.sh)
 - Env example: [`.env.edge-standalone.example`](../../.env.edge-standalone.example)
