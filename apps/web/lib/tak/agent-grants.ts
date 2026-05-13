@@ -75,6 +75,10 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   wiki_query: ["registry_read"],
   // EP-WIKI-001 Phase 4b2b: on-demand wiki lint trigger
   wiki_lint: ["registry_read"],
+  // Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support
+  // over governance principles. Read-only — returns scored options with a
+  // contribution ledger; never executes the recommended option itself.
+  principle_decide: ["registry_read"],
 
   // Build / Sandbox
   launch_sandbox: ["sandbox_execute"],
