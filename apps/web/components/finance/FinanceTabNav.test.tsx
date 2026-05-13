@@ -65,6 +65,7 @@ describe("FinanceTabNav", () => {
     const html = renderToStaticMarkup(<FinanceTabNav />);
 
     expect(html).toContain('href="/finance/settings"');
+    expect(html).toContain('href="/finance/settings/setup"');
     expect(html).toContain('href="/finance/settings/currency"');
     expect(html).toContain('href="/finance/settings/dunning"');
     expect(html).toContain('href="/finance/settings/tax"');
