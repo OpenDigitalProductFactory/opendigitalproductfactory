@@ -1,0 +1,462 @@
+"use client";
+
+import { useState, useTransition } from "react";
+
+import {
+  approveEdgeNodeAction,
+  issueEdgeBootstrapTokenAction,
+  quarantineEdgeNodeAction,
+  revokeEdgeNodeAction,
+} from "@/lib/actions/edge-nodes";
+
+type EdgeNodeRow = {
+  id: string;
+  nodeId: string;
+  platform: string;
+  installMode: string;
+  version: string;
+  status: string;
+  trustState: string;
+  lastSeenAt: string | null;
+  enrolledAt: string | null;
+  approvedAt: string | null;
+  quarantinedAt: string | null;
+  quarantineReason: string | null;
+  revokedAt: string | null;
+  revocationReason: string | null;
+  displayName: string;
+  capabilities: string[];
+};
+
+type BootstrapTokenRow = {
+  id: string;
+  prefix: string;
+  scope: string;
+  issuedAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  consumedByNodeId: string | null;
+  revokedAt: string | null;
+};
+
+type Props = {
+  nodes: EdgeNodeRow[];
+  tokens: BootstrapTokenRow[];
+};
+
+type FlashMessage = {
+  kind: "success" | "error";
+  text: string;
+};
+
+// Display the just-issued plaintext token. Shown exactly once; the
+// operator must copy it before navigating away.
+type IssuedTokenView = {
+  plaintext: string;
+  prefix: string;
+  expiresAt: string;
+};
+
+function trustStateBadgeColor(trustState: string): string {
+  switch (trustState) {
+    case "trusted":
+      return "var(--dpf-success)";
+    case "pending":
+      return "var(--dpf-warning)";
+    case "quarantined":
+      return "var(--dpf-danger)";
+    case "revoked":
+      return "var(--dpf-muted)";
+    default:
+      return "var(--dpf-muted)";
+  }
+}
+
+function formatTimestamp(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
+  const [flash, setFlash] = useState<FlashMessage | null>(null);
+  const [issuedToken, setIssuedToken] = useState<IssuedTokenView | null>(null);
+  const [ttlMinutes, setTtlMinutes] = useState<number>(15);
+  const [isPending, startTransition] = useTransition();
+
+  function clearFlash() {
+    setFlash(null);
+  }
+
+  function onIssueBootstrap() {
+    clearFlash();
+    setIssuedToken(null);
+    startTransition(async () => {
+      const result = await issueEdgeBootstrapTokenAction({
+        ttlMs: Math.max(60_000, ttlMinutes * 60_000),
+      });
+      if (result.ok) {
+        setIssuedToken({
+          plaintext: result.plaintext,
+          prefix: result.prefix,
+          expiresAt: result.expiresAt,
+        });
+        setFlash({
+          kind: "success",
+          text: "Bootstrap token issued. Copy it now — it will not be shown again.",
+        });
+      } else {
+        setFlash({
+          kind: "error",
+          text: `Bootstrap-token issuance failed: ${result.message}`,
+        });
+      }
+    });
+  }
+
+  function onApprove(node: EdgeNodeRow) {
+    clearFlash();
+    if (!confirm(`Approve Edge Node "${node.displayName}" (${node.nodeId})?`)) return;
+    startTransition(async () => {
+      const result = await approveEdgeNodeAction(node.id);
+      setFlash(
+        result.ok
+          ? { kind: "success", text: `Approved ${node.displayName}` }
+          : { kind: "error", text: `Approve failed: ${result.message}` },
+      );
+    });
+  }
+
+  function onQuarantine(node: EdgeNodeRow) {
+    clearFlash();
+    const reason = prompt(
+      `Quarantine "${node.displayName}" — reason (will be recorded for audit):`,
+    );
+    if (!reason?.trim()) return;
+    startTransition(async () => {
+      const result = await quarantineEdgeNodeAction(node.id, reason.trim());
+      setFlash(
+        result.ok
+          ? { kind: "success", text: `Quarantined ${node.displayName}` }
+          : { kind: "error", text: `Quarantine failed: ${result.message}` },
+      );
+    });
+  }
+
+  function onRevoke(node: EdgeNodeRow) {
+    clearFlash();
+    const reason = prompt(
+      `REVOKE "${node.displayName}"? This invalidates its node token immediately. Re-enrollment requires a fresh bootstrap token. Reason:`,
+    );
+    if (!reason?.trim()) return;
+    startTransition(async () => {
+      const result = await revokeEdgeNodeAction(node.id, reason.trim());
+      setFlash(
+        result.ok
+          ? { kind: "success", text: `Revoked ${node.displayName}` }
+          : { kind: "error", text: `Revoke failed: ${result.message}` },
+      );
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      {flash && (
+        <div
+          role="status"
+          className="rounded border p-3 text-sm"
+          style={{
+            borderColor:
+              flash.kind === "success" ? "var(--dpf-success)" : "var(--dpf-danger)",
+            backgroundColor: "var(--dpf-surface-1)",
+            color: "var(--dpf-text)",
+          }}
+        >
+          {flash.text}
+          <button
+            type="button"
+            onClick={clearFlash}
+            className="ml-3 text-[var(--dpf-muted)] hover:underline"
+          >
+            dismiss
+          </button>
+        </div>
+      )}
+
+      {issuedToken && (
+        <div
+          className="rounded border-2 p-4 text-sm"
+          style={{
+            borderColor: "var(--dpf-warning)",
+            backgroundColor: "var(--dpf-surface-1)",
+          }}
+        >
+          <h3 className="mb-2 text-base font-semibold text-[var(--dpf-text)]">
+            Bootstrap token issued — copy now
+          </h3>
+          <p className="mb-2 text-[var(--dpf-muted)]">
+            This plaintext is shown <strong>exactly once</strong>. Paste it into the new Edge
+            Node's installer with <code>DPF_BOOTSTRAP_TOKEN=...</code>. The token expires{" "}
+            {formatTimestamp(issuedToken.expiresAt)}.
+          </p>
+          <div className="flex items-center gap-2">
+            <code
+              className="flex-1 break-all rounded p-2 font-mono text-xs"
+              style={{
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            >
+              {issuedToken.plaintext}
+            </code>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(issuedToken.plaintext)}
+              className="rounded px-3 py-1 text-xs font-medium"
+              style={{
+                backgroundColor: "var(--dpf-accent)",
+                color: "white",
+              }}
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => setIssuedToken(null)}
+              className="rounded px-3 py-1 text-xs"
+              style={{
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      <section
+        className="rounded border p-4"
+        style={{
+          borderColor: "var(--dpf-border)",
+          backgroundColor: "var(--dpf-surface-1)",
+        }}
+      >
+        <h2 className="mb-3 text-base font-semibold text-[var(--dpf-text)]">
+          Issue bootstrap token
+        </h2>
+        <p className="mb-3 text-sm text-[var(--dpf-muted)]">
+          One-time enrollment credential for a new Edge Node. Single-use, hashed at rest. TTL
+          15 min default; cap 24h.
+        </p>
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[var(--dpf-text)]">
+            TTL (minutes)
+            <input
+              type="number"
+              min={1}
+              max={24 * 60}
+              value={ttlMinutes}
+              onChange={(e) => setTtlMinutes(parseInt(e.target.value, 10) || 15)}
+              className="ml-2 w-20 rounded border px-2 py-1 text-sm"
+              style={{
+                borderColor: "var(--dpf-border)",
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onIssueBootstrap}
+            disabled={isPending}
+            className="rounded px-4 py-1.5 text-sm font-medium disabled:opacity-50"
+            style={{
+              backgroundColor: "var(--dpf-accent)",
+              color: "white",
+            }}
+          >
+            {isPending ? "Issuing…" : "Issue token"}
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-base font-semibold text-[var(--dpf-text)]">
+          Enrolled nodes ({nodes.length})
+        </h2>
+        {nodes.length === 0 ? (
+          <p className="text-sm text-[var(--dpf-muted)]">
+            No Edge Nodes have enrolled yet. Issue a bootstrap token above to onboard the first one.
+          </p>
+        ) : (
+          <div
+            className="overflow-x-auto rounded border"
+            style={{
+              borderColor: "var(--dpf-border)",
+              backgroundColor: "var(--dpf-surface-1)",
+            }}
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Display name</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Node ID</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Platform / mode</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Trust state</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Last seen</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((n) => (
+                  <tr
+                    key={n.id}
+                    style={{ borderBottom: "1px solid var(--dpf-border)" }}
+                  >
+                    <td className="p-2 text-[var(--dpf-text)]">{n.displayName}</td>
+                    <td className="p-2 font-mono text-xs text-[var(--dpf-muted)]">
+                      {n.nodeId}
+                    </td>
+                    <td className="p-2 text-[var(--dpf-muted)]">
+                      {n.platform} / {n.installMode}
+                    </td>
+                    <td className="p-2">
+                      <span
+                        className="inline-block rounded px-2 py-0.5 text-xs font-medium"
+                        style={{
+                          backgroundColor: trustStateBadgeColor(n.trustState),
+                          color: "white",
+                        }}
+                      >
+                        {n.trustState}
+                      </span>
+                    </td>
+                    <td className="p-2 text-xs text-[var(--dpf-muted)]">
+                      {formatTimestamp(n.lastSeenAt)}
+                    </td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap gap-1">
+                        {n.trustState === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => onApprove(n)}
+                            disabled={isPending}
+                            className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
+                            style={{
+                              backgroundColor: "var(--dpf-success)",
+                              color: "white",
+                            }}
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {n.trustState === "quarantined" && (
+                          <button
+                            type="button"
+                            onClick={() => onApprove(n)}
+                            disabled={isPending}
+                            className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
+                            style={{
+                              backgroundColor: "var(--dpf-success)",
+                              color: "white",
+                            }}
+                          >
+                            Restore (clear quarantine)
+                          </button>
+                        )}
+                        {(n.trustState === "trusted" || n.trustState === "pending") && (
+                          <button
+                            type="button"
+                            onClick={() => onQuarantine(n)}
+                            disabled={isPending}
+                            className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
+                            style={{
+                              backgroundColor: "var(--dpf-warning)",
+                              color: "white",
+                            }}
+                          >
+                            Quarantine
+                          </button>
+                        )}
+                        {n.trustState !== "revoked" && (
+                          <button
+                            type="button"
+                            onClick={() => onRevoke(n)}
+                            disabled={isPending}
+                            className="rounded px-2 py-1 text-xs font-medium disabled:opacity-50"
+                            style={{
+                              backgroundColor: "var(--dpf-danger)",
+                              color: "white",
+                            }}
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-base font-semibold text-[var(--dpf-text)]">
+          Recent bootstrap tokens ({tokens.length})
+        </h2>
+        {tokens.length === 0 ? (
+          <p className="text-sm text-[var(--dpf-muted)]">No bootstrap tokens issued yet.</p>
+        ) : (
+          <div
+            className="overflow-x-auto rounded border"
+            style={{
+              borderColor: "var(--dpf-border)",
+              backgroundColor: "var(--dpf-surface-1)",
+            }}
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Prefix</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Issued</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Expires</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokens.map((t) => {
+                  const expired = !t.consumedAt && new Date(t.expiresAt) < new Date();
+                  const status = t.consumedAt
+                    ? `consumed by ${t.consumedByNodeId ?? "?"}`
+                    : expired
+                      ? "expired"
+                      : "available";
+                  return (
+                    <tr key={t.id} style={{ borderBottom: "1px solid var(--dpf-border)" }}>
+                      <td className="p-2 font-mono text-xs text-[var(--dpf-muted)]">
+                        {t.prefix}
+                      </td>
+                      <td className="p-2 text-xs text-[var(--dpf-muted)]">
+                        {formatTimestamp(t.issuedAt)}
+                      </td>
+                      <td className="p-2 text-xs text-[var(--dpf-muted)]">
+                        {formatTimestamp(t.expiresAt)}
+                      </td>
+                      <td className="p-2 text-xs text-[var(--dpf-muted)]">{status}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

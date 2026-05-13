@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify-lifecycle": "tsx scripts/verify-lifecycle.ts"
   },
   "dependencies": {
     "undici": "^8.2.0",

@@ -202,17 +202,62 @@ Linked spec: [docs/superpowers/specs/2026-05-09-cloud-deployment-design.md](../s
 
 ### 7. DPF Edge Node enrollment
 
-**Status:** spec-only — no code shipped. This row stays "not started"
-until a Phase-0 spike lands.
+**Status:** Phase 0 code shipped — Authority Core surface
+(`/api/v1/edge/enroll`, `/heartbeat`, `/discovery-runs`), service
+skeleton at `services/edge-node`, Admin UI at
+`/platform/edge-nodes`, lifecycle verification script.
+**Verification reports wanted** for a real Edge Node enrolling
+against a running Authority Core on each platform.
 
-The spike should:
+#### How to run the lifecycle verification script
 
-- [ ] Implement the enrollment ceremony first-draft contract per the spec.
-- [ ] Stand up one Edge Node (container with `network_mode: host` on a separate Linux box) and enroll it against an Authority Core.
-- [ ] Run a discovery sweep from the Edge Node and verify items appear in the Authority Core's Postgres + Neo4j with the `edgeNodeId` foreign key populated.
-- [ ] Validate the "in-VM fallback" mode on a macOS host (Edge Node as a binary inside the Docker Desktop VM since `host` networking isn't supported there).
+The script exercises the spec's reference flow (enroll → heartbeat →
+submit → idempotent replay → stale_observation → rate limit) against
+a running Authority Core and exits non-zero on any assertion failure.
+
+```bash
+# 1. Bring up the platform.
+bash dpf-start.sh   # or dpf-start on Windows
+
+# 2. Sign in as an HR-000 / superuser at /platform/edge-nodes and
+#    issue a bootstrap token. Copy the plaintext shown ONCE.
+
+# 3. Run the lifecycle verification.
+cd services/edge-node
+DPF_AUTHORITY_URL=http://localhost:3000 \
+DPF_BOOTSTRAP_TOKEN='dpfboot_YOURPLAINTEXTHERE' \
+DPF_VERIFY_NODE_NAME='verify-2026-05-12-mike-laptop' \
+  pnpm verify-lifecycle
+
+# 4. The script enrolls; if your Approval policy is "operator
+#    approval required" (the default for paste-provisioned tokens),
+#    it pauses at Phase 2 and prints a "node needs approval" message.
+#    Go back to /platform/edge-nodes, click Approve on the new
+#    pending node, then re-run the script. (Phases 1-2 will run
+#    again because the script issues a fresh runKey per invocation.)
+#
+#    On a "trusted" enroll path (auto-approve metadata on the
+#    bootstrap token), the script runs all six phases in one pass.
+
+# 5. The script prints
+#       Results: N passed, M failed
+#    and exits 0 if M = 0.
+```
+
+Then file the verification report (template below) and check off the
+matrix row for your platform.
+
+#### Phase 0 verification matrix
+
+- [ ] **Linux container (Mode 1)** — Edge Node service from `services/edge-node` enrolls and submits against a Linux Authority install, full six-phase pass.
+- [ ] **macOS host (Mode 2 native binary, Phase 1+)** — blocked by the binary-language decision (see spec § Open question resolutions). When unblocked, repeat the lifecycle on real Apple Silicon.
+- [ ] **macOS Docker Desktop fallback (Mode 3)** — Edge Node container in Docker Desktop's VM enrolls and submits with the documented degraded capability set.
+- [ ] **Windows native (Mode 4, Phase 1+)** — blocked on Mode 2 decision.
+- [ ] **DB attribution check** — after a successful submit, query Postgres directly: `SELECT id, runKey, edgeNodeId, sourceSlug FROM "DiscoveryRun" WHERE edgeNodeId IS NOT NULL ORDER BY startedAt DESC LIMIT 5;` — verify the `edgeNodeId` is populated, `sourceSlug` matches `edge-node:<nodeId>`, and items projected to `InventoryEntity`.
+- [ ] **Audit chain check** — `SELECT toolName, executionMode, parameters->>'nodeId' AS nodeId, result->>'status' AS status, success FROM "ToolExecution" WHERE executionMode='edge-rest' ORDER BY "createdAt" DESC LIMIT 10;` — verify every route invocation produced a row, including the 429 / 413 / 401 rejections you exercised.
 
 Linked spec: [docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md](../superpowers/specs/2026-05-09-dpf-edge-node-design.md).
+Lifecycle script: [services/edge-node/scripts/verify-lifecycle.ts](../../services/edge-node/scripts/verify-lifecycle.ts).
 
 ### 8. Cloud deployment patterns
 
