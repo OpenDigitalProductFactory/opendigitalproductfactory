@@ -41,7 +41,42 @@
 | DPF Edge Node enrollment | none — spec only | First-draft enrollment ceremony executed end-to-end | 🧪 **design partner wanted** |
 | Cloud deployment (Single VM / Container / k8s) | none — spec only | At least one substrate pilot per packaging target | 🧪 **design partner wanted** |
 
-## How to run each verification
+## Fastest path: one command for the whole sweep
+
+If you just want to run **all** the Linux + observability + Edge Node
+verification in one shot and produce one tarball to attach to a GitHub
+issue, use the wrapper:
+
+```bash
+# On a host that already has DPF installed and running:
+bash scripts/verify-install-edge.sh
+
+# Or, on a fresh host (clones + installs first):
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf
+cd ~/dpf
+bash install-dpf.sh --headless --release --no-autostart
+bash scripts/verify-install-edge.sh
+```
+
+The wrapper covers ledger rows 1–4 in a single sweep:
+
+- Captures host fingerprint (uname, sw_vers / os-release, docker / node / pnpm versions, installer version)
+- Asserts portal `/api/health` returns 200
+- Snapshots Prometheus scrape targets (observability outcome)
+- Issues a bootstrap token via `apps/web/scripts/issue-edge-bootstrap-token.ts`
+- Runs `services/edge-node/scripts/verify-lifecycle.ts` end-to-end (enroll → heartbeat → discovery-run + idempotency)
+- Captures `install-dpf.sh doctor` diagnostic bundle
+- Bundles everything into `~/.dpf/verify-bundle-<timestamp>.tar.gz` and prints a paste-able markdown summary
+
+Attach the resulting tarball to a [new install-verification issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md)
+and paste the printed summary into the body. That's a complete
+verification report for the Linux row of the matrix.
+
+The wrapper does **not** cover macOS (no `--bootstrap` path for the
+`.dmg` install yet), real-LAN multi-host, or the TAPPaaS / Edge / cloud
+substrate spikes. Those still need the manual sections below.
+
+## How to run each verification (manual sections)
 
 Each section below is paste-able. Copy the block, fill in the
 prompts, capture the artifacts named at the bottom of the section,
