@@ -61,6 +61,7 @@ import { prisma } from "@dpf/db";
 import {
   buildListTrackedFilesCommand,
   CODE_GRAPH_GRAPH_KEY,
+  CODE_GRAPH_PROJECTION_VERSION,
   reconcileCodeGraph,
 } from "./code-graph-refresh";
 
@@ -113,9 +114,12 @@ describe("reconcileCodeGraph", () => {
     expect(result.headSha).toBe("head-1");
     expect(result.workspaceDirty).toBe(false);
     expect(mockRunCypher).toHaveBeenCalledWith(
-      expect.stringContaining("MATCH (n:CodeFile"),
+      expect.stringContaining("MATCH (n {graphKey: $graphKey})"),
       expect.objectContaining({ graphKey: CODE_GRAPH_GRAPH_KEY }),
     );
+    expect(prisma.codeGraphFileHash.deleteMany).toHaveBeenCalledWith({
+      where: { graphKey: CODE_GRAPH_GRAPH_KEY },
+    });
     expect(prisma.codeGraphIndexState.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { graphKey: CODE_GRAPH_GRAPH_KEY },
@@ -126,6 +130,7 @@ describe("reconcileCodeGraph", () => {
   it("performs an incremental reconcile when HEAD changes", async () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
       graphKey: CODE_GRAPH_GRAPH_KEY,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       lastIndexedHeadSha: "head-1",
     } as never);
 
@@ -167,6 +172,7 @@ describe("reconcileCodeGraph", () => {
   it("returns noop when the indexed head already matches HEAD and marks dirty worktrees", async () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
       graphKey: CODE_GRAPH_GRAPH_KEY,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       lastIndexedHeadSha: "head-2",
     } as never);
 
@@ -188,5 +194,34 @@ describe("reconcileCodeGraph", () => {
         }),
       }),
     );
+  });
+
+  it("performs a full rebuild when the stored graph projection version is stale", async () => {
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
+      graphKey: CODE_GRAPH_GRAPH_KEY,
+      graphVersion: 1,
+      lastIndexedHeadSha: "head-2",
+    } as never);
+
+    mockExec.mockImplementation(async (command: string) => {
+      if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
+      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (command.startsWith("git ls-files -- ")) {
+        return {
+          stdout: "apps/web/lib/integrate/code-graph/graph-queries.ts\n",
+          stderr: "",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    mockReadFile.mockResolvedValue("export const searchCodeGraph = true;");
+
+    const result = await reconcileCodeGraph({ reason: "scheduled" });
+
+    expect(result.mode).toBe("full");
+    expect(result.changedFiles).toEqual(["apps/web/lib/integrate/code-graph/graph-queries.ts"]);
+    expect(mockExec).not.toHaveBeenCalledWith("git diff --name-only head-2..head-2", expect.anything());
   });
 });

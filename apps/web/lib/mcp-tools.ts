@@ -5639,7 +5639,7 @@ export async function executeTool(
 
     case "get_code_graph_freshness": {
       const { getCodeGraphFreshness } = await import("@/lib/integrate/code-graph-access");
-      const freshness = await getCodeGraphFreshness();
+      const freshness = await getCodeGraphFreshness(undefined, { inspectStructuralHealth: true });
       return {
         success: true,
         message: freshness.summary,

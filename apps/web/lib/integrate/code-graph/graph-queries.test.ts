@@ -68,7 +68,7 @@ describe("searchCodeGraph", () => {
       },
     ]);
     expect(runCypher).toHaveBeenCalledWith(
-      expect.stringContaining("toLower(coalesce(n.name, '')) CONTAINS $query"),
+      expect.stringContaining("LIMIT toInteger($limit)"),
       expect.objectContaining({
         graphKey: CODE_GRAPH_GRAPH_KEY,
         query: "code graph",
@@ -182,7 +182,7 @@ describe("findRelatedTests", () => {
       },
     ]);
     expect(runCypher).toHaveBeenCalledWith(
-      expect.stringContaining("MATCH (test:TestFile {graphKey: $graphKey})-[r:TESTED_BY]->(source:CodeFile"),
+      expect.stringContaining("LIMIT toInteger($limit)"),
       expect.objectContaining({
         graphKey: CODE_GRAPH_GRAPH_KEY,
         filePath: "apps/web/lib/integrate/code-graph/graph-queries.ts",

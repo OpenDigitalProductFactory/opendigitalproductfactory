@@ -60,40 +60,172 @@ WORKSPACE=/workspace
 IMAGE_VERSION=$(cat /app/.dpf-image-version 2>/dev/null | tr -cd '[:alnum:]._-')
 IMAGE_VERSION=${IMAGE_VERSION:-dev}
 USER_MANAGED_WORKSPACE=false
+MANAGED_WORKSPACE=false
 
-if [ -d "$WORKSPACE/.git" ] && [ -f "$WORKSPACE/package.json" ]; then
+if [ -f "$WORKSPACE/.dpf-version" ]; then
+  MANAGED_WORKSPACE=true
+fi
+
+if [ "$MANAGED_WORKSPACE" != "true" ] && [ -d "$WORKSPACE/.git" ] && [ -f "$WORKSPACE/package.json" ]; then
   USER_MANAGED_WORKSPACE=true
 fi
+
+sync_image_source_to_workspace() {
+  echo "  Syncing source volume from image version $IMAGE_VERSION..."
+  mkdir -p "$WORKSPACE/apps" "$WORKSPACE/packages" "$WORKSPACE/scripts"
+  rm -rf "$WORKSPACE/apps/web" "$WORKSPACE/packages" "$WORKSPACE/scripts"
+  mkdir -p "$WORKSPACE/apps/web" "$WORKSPACE/packages" "$WORKSPACE/scripts"
+  cp -r /app/apps/web-src/. "$WORKSPACE/apps/web/"
+  cp -r /app/packages-src/. "$WORKSPACE/packages/"
+  rm -rf "$WORKSPACE/apps/web/.next" \
+         "$WORKSPACE/apps/web/tsconfig.tsbuildinfo" \
+         "$WORKSPACE/packages/db/generated"
+  cp -r /app/scripts/. "$WORKSPACE/scripts/"
+  cp /app/pnpm-workspace.yaml "$WORKSPACE/" 2>/dev/null || true
+  cp /app/pnpm-lock.yaml "$WORKSPACE/" 2>/dev/null || true
+  cp /app/package.json "$WORKSPACE/" 2>/dev/null || true
+  cp /app/tsconfig.base.json "$WORKSPACE/" 2>/dev/null || true
+  cp /app/.gitignore "$WORKSPACE/" 2>/dev/null || true
+}
+
+install_workspace_dependencies() {
+  echo "  Installing dependencies (this takes 1-2 minutes on first run)..."
+  cd "$WORKSPACE"
+  pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1
+  echo "  Dependencies installed"
+  pnpm --filter @dpf/db exec prisma generate 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
+}
+
+is_workspace_housekeeping_status() {
+  case "$1" in
+    "?? .dpf-version" | \
+    "D  .pnpm-store/"* | \
+    "D  node_modules/"* | \
+    "D  \"node_modules/"* | \
+    "D  .next/"* | \
+    "D  apps/web/.next/"* | \
+    "D  apps/web/tsconfig.tsbuildinfo" | \
+    "A  .gitignore")
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+status_line_path() {
+  path=${1#???}
+  case "$path" in
+    \"*\")
+      path=${path#\"}
+      path=${path%\"}
+      ;;
+  esac
+  printf '%s\n' "$path"
+}
+
+image_source_path_for_workspace_path() {
+  case "$1" in
+    apps/web/*)
+      printf '/app/apps/web-src/%s\n' "${1#apps/web/}"
+      ;;
+    packages/*)
+      printf '/app/packages-src/%s\n' "${1#packages/}"
+      ;;
+    scripts/*)
+      printf '/app/scripts/%s\n' "${1#scripts/}"
+      ;;
+    pnpm-workspace.yaml | pnpm-lock.yaml | package.json | tsconfig.base.json | .gitignore)
+      printf '/app/%s\n' "$1"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+workspace_path_matches_image_source() {
+  workspace_path=$1
+  image_path=$(image_source_path_for_workspace_path "$workspace_path" 2>/dev/null || true)
+  [ -n "$image_path" ] || return 1
+
+  if [ -f "$WORKSPACE/$workspace_path" ] && [ -f "$image_path" ]; then
+    cmp -s "$WORKSPACE/$workspace_path" "$image_path"
+    return $?
+  fi
+
+  if [ ! -e "$WORKSPACE/$workspace_path" ] && [ ! -e "$image_path" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+workspace_has_user_changes() {
+  cd "$WORKSPACE"
+  ensure_workspace_git_excludes
+  # Older source-volume bootstraps accidentally tracked dependency stores.
+  # Removing them from the managed git index is housekeeping, not user work.
+  git rm -r --cached --ignore-unmatch -q .pnpm-store node_modules .next apps/web/.next apps/web/tsconfig.tsbuildinfo 2>/dev/null || true
+
+  status_file=$(mktemp)
+  git status --porcelain > "$status_file"
+  has_user_changes=false
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if is_workspace_housekeeping_status "$line"; then
+      continue
+    fi
+    path=$(status_line_path "$line")
+    if workspace_path_matches_image_source "$path"; then
+      continue
+    fi
+    has_user_changes=true
+    break
+  done < "$status_file"
+  rm -f "$status_file"
+
+  [ "$has_user_changes" = "true" ]
+}
+
+ensure_workspace_git_excludes() {
+  cd "$WORKSPACE"
+  mkdir -p .git/info
+  touch .git/info/exclude
+  for entry in ".dpf-version" ".pnpm-store/" "node_modules/" ".next/" "apps/web/.next/" "*.tsbuildinfo"; do
+    grep -qxF "$entry" .git/info/exclude || echo "$entry" >> .git/info/exclude
+  done
+}
+
+commit_workspace_snapshot() {
+  cd "$WORKSPACE"
+  git config user.email "build-studio@dpf.local"
+  git config user.name "DPF Build Studio"
+  ensure_workspace_git_excludes
+  git rm -r --cached --ignore-unmatch -q .pnpm-store node_modules .next apps/web/.next apps/web/tsconfig.tsbuildinfo 2>/dev/null || true
+  git add -A .
+  git reset -- .dpf-version 2>/dev/null || true
+  if git diff --cached --quiet; then
+    echo "  -- Source volume already matches image content"
+  else
+    git commit -m "chore: sync from dpf-image v${IMAGE_VERSION}"
+  fi
+}
 
 if [ "$USER_MANAGED_WORKSPACE" = "true" ]; then
   echo "  -- Existing user-managed workspace detected at /workspace, skipping bootstrap"
 elif [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
   echo "  Bootstrapping source volume from image version $IMAGE_VERSION..."
 
-  # Copy source from image to volume
-  mkdir -p "$WORKSPACE/apps/web" "$WORKSPACE/packages" "$WORKSPACE/scripts"
-  cp -r /app/apps/web-src/. "$WORKSPACE/apps/web/"
-  cp -r /app/packages-src/. "$WORKSPACE/packages/"
-  cp -r /app/scripts/. "$WORKSPACE/scripts/"
-  cp /app/pnpm-workspace.yaml "$WORKSPACE/" 2>/dev/null || true
-  cp /app/pnpm-lock.yaml "$WORKSPACE/" 2>/dev/null || true
-  cp /app/package.json "$WORKSPACE/" 2>/dev/null || true
-  cp /app/tsconfig.base.json "$WORKSPACE/" 2>/dev/null || true
-
-  # Install dependencies so the sandbox is ready immediately
-  echo "  Installing dependencies (this takes 1-2 minutes on first run)..."
-  cd "$WORKSPACE"
-  pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1
-  echo "  Dependencies installed"
-
-  # Generate Prisma client
-  pnpm --filter @dpf/db exec prisma generate 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
+  sync_image_source_to_workspace
+  install_workspace_dependencies
 
   # Initialise git — force-create branches to be idempotent on partial failure
   git init -b dpf-upstream
   git config user.email "build-studio@dpf.local"
   git config user.name "DPF Build Studio"
-  git add -A
+  ensure_workspace_git_excludes
+  git add -A .
+  git reset -- .dpf-version 2>/dev/null || true
   git commit -m "chore: bootstrap from dpf-image v${IMAGE_VERSION}"
   # -B force-creates or resets the branch — safe on re-run after partial failure
   git checkout -B my-changes
@@ -106,14 +238,30 @@ elif [ -f "$WORKSPACE/.dpf-version" ]; then
   VOLUME_VERSION=$(cat "$WORKSPACE/.dpf-version" 2>/dev/null || echo "unknown")
   if [ "$IMAGE_VERSION" != "$VOLUME_VERSION" ]; then
     echo "  Platform update detected: $VOLUME_VERSION -> $IMAGE_VERSION"
-    # Use psql to upsert — available via postgresql16-client in the image
-    psql "$DATABASE_URL" -c "
-      INSERT INTO \"PlatformDevConfig\" (id, \"updatePending\", \"pendingVersion\", \"configuredAt\")
-      VALUES ('singleton', true, '$IMAGE_VERSION', NOW())
-      ON CONFLICT (id) DO UPDATE SET \"updatePending\" = true, \"pendingVersion\" = '$IMAGE_VERSION';
-    " || echo "  WARN Update detection had warnings (non-fatal)"
-    echo "  OK Update pending flag set"
+    if [ -d "$WORKSPACE/.git" ] && ! workspace_has_user_changes; then
+      sync_image_source_to_workspace
+      install_workspace_dependencies
+      commit_workspace_snapshot
+      echo "$IMAGE_VERSION" > "$WORKSPACE/.dpf-version"
+      psql "$DATABASE_URL" -c "
+        INSERT INTO \"PlatformDevConfig\" (id, \"updatePending\", \"pendingVersion\", \"configuredAt\")
+        VALUES ('singleton', false, NULL, NOW())
+        ON CONFLICT (id) DO UPDATE SET \"updatePending\" = false, \"pendingVersion\" = NULL;
+      " || echo "  WARN Update-clear SQL had warnings (non-fatal)"
+      echo "  OK Source volume refreshed"
+    else
+      # Use psql to upsert — available via postgresql16-client in the image
+      psql "$DATABASE_URL" -c "
+        INSERT INTO \"PlatformDevConfig\" (id, \"updatePending\", \"pendingVersion\", \"configuredAt\")
+        VALUES ('singleton', true, '$IMAGE_VERSION', NOW())
+        ON CONFLICT (id) DO UPDATE SET \"updatePending\" = true, \"pendingVersion\" = '$IMAGE_VERSION';
+      " || echo "  WARN Update detection had warnings (non-fatal)"
+      echo "  OK Update pending flag set"
+    fi
   else
+    if [ -d "$WORKSPACE/.git" ] && ! workspace_has_user_changes; then
+      commit_workspace_snapshot
+    fi
     echo "  -- Source volume already bootstrapped ($VOLUME_VERSION)"
   fi
 else
