@@ -3,6 +3,7 @@
 **Date:** 2026-05-13
 **Status:** Draft addendum
 **Related work:** `2026-05-13-paused-ai-work-approval-surface.md`, `2026-03-19-mobile-companion-app-design.md`, `2026-03-16-async-agent-operations-design.md`, `2026-04-04-collaborative-work-queue-design.md`, `2026-05-11-autonomous-coworker-runtime-design.md`
+**Readiness report:** `docs/superpowers/audits/2026-05-13-realtime-hitl-mobile-readiness-report.md`
 
 ---
 
