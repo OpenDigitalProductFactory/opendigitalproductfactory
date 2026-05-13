@@ -129,9 +129,10 @@ describe("resolveAgentForRoute", () => {
     expect(result.agentDescription).toBeTruthy();
   });
 
-  it("prefers codex for the build route by default", () => {
+  it("does not pin the build route to a single provider by default", () => {
     const result = resolveAgentForRoute("/build", superuser);
-    expect(result.modelRequirements?.preferredProviderId).toBe("codex");
+    expect(result.modelRequirements?.preferredProviderId).toBeUndefined();
+    expect(result.modelRequirements?.defaultMinimumTier).toBe("strong");
   });
 
   it("mentions public website branding analysis in the admin assistant prompt", () => {

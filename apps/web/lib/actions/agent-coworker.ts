@@ -21,7 +21,7 @@ import {
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
 // mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing
-import type { BuildPhaseTag } from "@/lib/mcp-tools";
+import type { BuildPhaseTag, ToolDefinition } from "@/lib/mcp-tools";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
@@ -41,8 +41,28 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
+import {
+  buildExternalAccessDisabledInstruction,
+  getExternalAccessToolSummaries,
+  recordExternalAccessPermissionAudit,
+  shouldRequestExternalAccess,
+} from "@/lib/agent-external-access-permission";
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
+
+function filterToolsForCoworkerRuntime(
+  tools: ToolDefinition[],
+  input: { coworkerMode?: "advise" | "act"; activeBuildPhase: string | null },
+): ToolDefinition[] {
+  return tools.filter((tool) => {
+    if (input.coworkerMode === "advise" && tool.sideEffect) return false;
+    if (input.activeBuildPhase) {
+      if (!tool.buildPhases) return false;
+      return tool.buildPhases.includes(input.activeBuildPhase as BuildPhaseTag);
+    }
+    return true;
+  });
+}
 
 async function requireAuthUser() {
   const session = await auth();
@@ -374,6 +394,11 @@ export async function sendMessage(input: {
     role: m.role as ChatMessage["role"],
     content: m.content,
   }));
+  const recentContentForClassification = chatHistory
+    .slice(-3)
+    .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
+  const taskClassification = classifyTask(trimmedContent, recentContentForClassification);
+  let taskTypeId: string = taskClassification.taskType;
 
   // Enrich the last user message with file content so the LLM sees it inline,
   // not just in the system prompt. LLMs pay more attention to message content
@@ -636,10 +661,11 @@ export async function sendMessage(input: {
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
-  const allPlatformTools = await getAvailableTools({
+  const toolUserContext = {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
-  }, {
+  };
+  const allPlatformTools = await getAvailableTools(toolUserContext, {
     externalAccessEnabled: input.externalAccessEnabled === true,
     // Skip mode filtering here — applied to merged set
     unifiedMode: useUnified,
@@ -676,18 +702,25 @@ export async function sendMessage(input: {
     }
   }
 
-  const availableTools = mergedTools.filter((t) => {
-    // Advise mode: exclude side-effect tools
-    if (input.coworkerMode === "advise" && t.sideEffect) return false;
-    // Build phase filtering: when in a build, ONLY include tools that are
-    // explicitly assigned to the current phase. This prevents tool overload
-    // (53+ tools) which causes smaller models to miss critical tools.
-    if (activeBuildPhase) {
-      if (!t.buildPhases) return false; // Exclude general-purpose tools during builds
-      return t.buildPhases.includes(activeBuildPhase as BuildPhaseTag);
-    }
-    return true;
+  const availableTools = filterToolsForCoworkerRuntime(mergedTools, {
+    coworkerMode: input.coworkerMode,
+    activeBuildPhase,
   });
+
+  let disabledExternalTools: Array<{ name: string; description: string }> = [];
+  if (input.externalAccessEnabled !== true) {
+    const externalEnabledPlatformTools = await getAvailableTools(toolUserContext, {
+      externalAccessEnabled: true,
+      unifiedMode: useUnified,
+      agentId: agent.agentId,
+    });
+    disabledExternalTools = getExternalAccessToolSummaries(
+      filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {
+        coworkerMode: input.coworkerMode,
+        activeBuildPhase,
+      }),
+    );
+  }
 
   // Conversation-only detection: if the message is a conversational skill (analyze, advise),
   // strip tools entirely so the model responds with text instead of trying to call tools.
@@ -850,7 +883,37 @@ export async function sendMessage(input: {
         toolList,
         "Use these tools when the user asks about external websites, URLs, web searches, or public information.",
       ].join("\n");
+      if (shouldRequestExternalAccess({
+        content: trimmedContent,
+        taskRequiresWebSearch: taskClassification.requiresWebSearch,
+        externalTools,
+      })) {
+        await recordExternalAccessPermissionAudit({
+          decision: "approval",
+          threadId: input.threadId,
+          agentId: agent.agentId,
+          userId: user.id!,
+          routeContext: input.routeContext,
+          content: trimmedContent,
+          requestedTools: externalTools.map((tool) => tool.name),
+        });
+      }
     }
+  } else if (shouldRequestExternalAccess({
+    content: trimmedContent,
+    taskRequiresWebSearch: taskClassification.requiresWebSearch,
+    externalTools: disabledExternalTools,
+  })) {
+    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools);
+    await recordExternalAccessPermissionAudit({
+      decision: "request",
+      threadId: input.threadId,
+      agentId: agent.agentId,
+      userId: user.id!,
+      routeContext: input.routeContext,
+      content: trimmedContent,
+      requestedTools: disabledExternalTools.map((tool) => tool.name),
+    });
   }
 
   // Surface MCP service resources that are discoverable but not yet enabled for this org
@@ -923,25 +986,17 @@ export async function sendMessage(input: {
   // --- Task classification and performance profile injection ---
   // EP-INF-009b: Routing is handled by the agentic loop via routeAndCall().
   // We classify here for metadata and performance profile instruction injection.
-  let taskTypeId: string = "unknown";
-
-  {
-    const recentContent = chatHistory.slice(-3).map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));
-    const classification = classifyTask(trimmedContent, recentContent);
-    taskTypeId = classification.taskType;
-
-    // Inject task-specific instructions from performance profile (if confident classification)
-    if (classification.taskType !== "unknown" && classification.confidence >= 0.5) {
-      try {
-        const profiles = await loadPerformanceProfiles(classification.taskType);
-        // Find the best performance profile to inject guidance from
-        const profile = profiles[0];
-        if (profile?.currentInstructions) {
-          populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
-        }
-      } catch (err) {
-        console.error("[routing] performance profile load error:", err);
+  // Inject task-specific instructions from performance profile (if confident classification)
+  if (taskClassification.taskType !== "unknown" && taskClassification.confidence >= 0.5) {
+    try {
+      const profiles = await loadPerformanceProfiles(taskClassification.taskType);
+      // Find the best performance profile to inject guidance from
+      const profile = profiles[0];
+      if (profile?.currentInstructions) {
+        populatedPrompt += `\n\n--- TASK GUIDANCE ---\n${profile.currentInstructions}`;
       }
+    } catch (err) {
+      console.error("[routing] performance profile load error:", err);
     }
   }
 
