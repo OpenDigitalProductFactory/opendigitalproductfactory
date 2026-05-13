@@ -2294,7 +2294,10 @@
           "backlog_write",
           "decision_record_create",
           "architecture_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "document_read",
+          "document_write",
+          "document_publish"
         ],
         "memory": {
           "type": "session",

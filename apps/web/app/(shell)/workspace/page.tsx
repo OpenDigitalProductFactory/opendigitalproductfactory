@@ -44,6 +44,7 @@ export default async function WorkspacePage() {
     userCount,
     eaViewCount,
     buildCount,
+    documentCount,
     activeObligationCount,
     openIncidentCount,
     implementedControlCount,
@@ -72,6 +73,7 @@ export default async function WorkspacePage() {
     prisma.user.count(),
     prisma.eaView.count(),
     prisma.featureBuild.count(),
+    prisma.document.count(),
     prisma.obligation.count({ where: { status: "active" } }),
     prisma.complianceIncident.count({ where: { status: { in: ["open", "investigating"] } } }),
     prisma.control.count({ where: { implementationStatus: "implemented", status: "active" } }),
@@ -142,6 +144,11 @@ export default async function WorkspacePage() {
     build: {
       metrics: [
         { label: "Builds", value: buildCount, color: "var(--dpf-success)" },
+      ],
+    },
+    documents: {
+      metrics: [
+        { label: "Managed", value: documentCount, color: "var(--dpf-accent)" },
       ],
     },
     portfolio: {
