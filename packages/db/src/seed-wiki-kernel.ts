@@ -17,10 +17,15 @@ import { join } from "path";
 import type { PrismaClient } from "../generated/client/client";
 import { QDRANT_COLLECTIONS, upsertVectors, type VectorPoint } from "./qdrant";
 import {
+  PRINCIPLE_DIMENSIONS,
+  isPrincipleDimension,
+} from "./wiki-taxonomy";
+import {
   appendRevision,
   attachSource,
   linkPages,
   upsertWikiPage,
+  type WikiPagePrincipleInput,
   type WikiPageKind,
   type WikiPageStatus,
 } from "./wiki-store";
@@ -49,6 +54,19 @@ export type WikiPageFrontmatter = {
   abstract?: string;
   /** Source slugs (relative to raw-sources/) that this page cites. */
   sources?: string[];
+  // ─── Principle-only frontmatter (spec section 9) ───
+  // Required-field gating lives in lint detectors per spec section 14, not
+  // here. The seed walker accepts incomplete principle data so lint can
+  // surface findings on saved drafts.
+  principleTier?: string;
+  principleDirection?: string;
+  principleWeight?: number;
+  principleWeightRationale?: string;
+  principleDimensionVector?: Record<string, number>;
+  principleDimensions?: string[];
+  principleAppliesTo?: string[];
+  principlePublic?: boolean;
+  principlePublicRationale?: string;
 };
 
 // ─── Manifest ───────────────────────────────────────────────────────────────
@@ -140,12 +158,129 @@ export function parseFrontmatter<T extends Record<string, unknown>>(
       continue;
     }
 
-    // Scalar (with optional surrounding quotes)
-    fm[key] = value.replace(/^["']|["']$/g, "");
+    // Inline JSON object: { "key": value, ... }
+    // Used primarily for principleDimensionVector. Authors must use JSON
+    // syntax (quoted keys); YAML-style unquoted keys are not supported here.
+    if (value.startsWith("{") && value.endsWith("}")) {
+      try {
+        fm[key] = JSON.parse(value);
+        i++;
+        continue;
+      } catch {
+        // Fall through to scalar handling if the JSON parse fails — better
+        // to surface as a typed-value mismatch downstream than to silently
+        // accept a malformed value.
+      }
+    }
+
+    // Scalar (with optional surrounding quotes). Quoted values stay strings;
+    // unquoted true/false/numbers coerce to their typed shape so principle
+    // frontmatter (principlePublic: true, principleWeight: 0.85, etc.)
+    // round-trips with the right type.
+    const hasQuotes = /^["'].*["']$/.test(value);
+    const scalarRaw = value.replace(/^["']|["']$/g, "");
+    if (!hasQuotes && scalarRaw === "true") {
+      fm[key] = true;
+    } else if (!hasQuotes && scalarRaw === "false") {
+      fm[key] = false;
+    } else if (!hasQuotes && scalarRaw !== "" && /^-?\d+(\.\d+)?$/.test(scalarRaw)) {
+      fm[key] = parseFloat(scalarRaw);
+    } else {
+      fm[key] = scalarRaw;
+    }
     i++;
   }
 
   return { frontmatter: fm as T, body };
+}
+
+// ─── Principle Payload Extractor ───────────────────────────────────────────
+
+/**
+ * Pull the principle-only fields out of a `WikiPageFrontmatter` and shape
+ * them for `upsertWikiPage`'s `WikiPagePrincipleInput`.
+ *
+ * - Returns `{}` for non-principle pages so callers can spread the result
+ *   unconditionally without leaking principle keys onto other kinds.
+ * - Validates every key in `principleDimensionVector` and every entry in
+ *   `principleDimensions` against the `PRINCIPLE_DIMENSIONS` registry.
+ *   Throws with a clear message naming the offending key — per
+ *   `feedback_check_tool_signals.md`, silent skip on bad frontmatter is
+ *   the failure mode to avoid.
+ * - Derives `principleDimensions` from `Object.keys(principleDimensionVector)`
+ *   when the frontmatter omits it, so authors do not have to repeat the
+ *   axis list in two places.
+ * - Required-field gating (direction present for commandment/core, etc.)
+ *   lives in lint detectors per spec section 14, not in this helper.
+ */
+export function extractPrinciplePayload(
+  frontmatter: WikiPageFrontmatter,
+): WikiPagePrincipleInput {
+  if (frontmatter.pageKind !== "principle") {
+    return {};
+  }
+
+  // Validate dimension vector keys against the registry.
+  if (frontmatter.principleDimensionVector) {
+    for (const dim of Object.keys(frontmatter.principleDimensionVector)) {
+      if (!isPrincipleDimension(dim)) {
+        throw new Error(
+          `Unknown principle dimension "${dim}" in principleDimensionVector. ` +
+            `Allowed dimensions: ${PRINCIPLE_DIMENSIONS.join(", ")}. ` +
+            `Add the dimension to PRINCIPLE_DIMENSIONS in wiki-taxonomy.ts ` +
+            `via a follow-up spec/PR before referencing it from frontmatter.`,
+        );
+      }
+    }
+  }
+
+  // Validate explicit principleDimensions if supplied.
+  if (frontmatter.principleDimensions) {
+    for (const dim of frontmatter.principleDimensions) {
+      if (!isPrincipleDimension(dim)) {
+        throw new Error(
+          `Unknown principle dimension "${dim}" in principleDimensions. ` +
+            `Allowed dimensions: ${PRINCIPLE_DIMENSIONS.join(", ")}.`,
+        );
+      }
+    }
+  }
+
+  const dimensions =
+    frontmatter.principleDimensions ??
+    (frontmatter.principleDimensionVector
+      ? Object.keys(frontmatter.principleDimensionVector)
+      : undefined);
+
+  const payload: WikiPagePrincipleInput = {};
+  if (frontmatter.principleTier !== undefined) {
+    payload.principleTier = frontmatter.principleTier as never;
+  }
+  if (frontmatter.principleDirection !== undefined) {
+    payload.principleDirection = frontmatter.principleDirection;
+  }
+  if (frontmatter.principleWeight !== undefined) {
+    payload.principleWeight = frontmatter.principleWeight;
+  }
+  if (frontmatter.principleWeightRationale !== undefined) {
+    payload.principleWeightRationale = frontmatter.principleWeightRationale;
+  }
+  if (frontmatter.principleDimensionVector !== undefined) {
+    payload.principleDimensionVector = frontmatter.principleDimensionVector;
+  }
+  if (dimensions !== undefined) {
+    payload.principleDimensions = dimensions as never;
+  }
+  if (frontmatter.principleAppliesTo !== undefined) {
+    payload.principleAppliesTo = frontmatter.principleAppliesTo as never;
+  }
+  if (frontmatter.principlePublic !== undefined) {
+    payload.principlePublic = frontmatter.principlePublic;
+  }
+  if (frontmatter.principlePublicRationale !== undefined) {
+    payload.principlePublicRationale = frontmatter.principlePublicRationale;
+  }
+  return payload;
 }
 
 // ─── Wikilink Extractor ─────────────────────────────────────────────────────
@@ -288,6 +423,8 @@ async function seedWikiPages(
     const slug = frontmatter.slug ?? deriveSlug(file, wikiDir);
     const status = frontmatter.status ?? "published";
 
+    const principlePayload = extractPrinciplePayload(frontmatter);
+
     const upserted = (await upsertWikiPage(prisma, {
       slug,
       title: frontmatter.title,
@@ -297,6 +434,7 @@ async function seedWikiPages(
       isKernel: true,
       kernelVersion,
       abstract: frontmatter.abstract ?? null,
+      ...principlePayload,
     })) as { id: string };
 
     slugToId.set(slug, upserted.id);

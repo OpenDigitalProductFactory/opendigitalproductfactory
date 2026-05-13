@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildKernelQdrantPoints,
   deriveSlug,
+  extractPrinciplePayload,
   extractWikilinks,
   parseFrontmatter,
   type SeedablePage,
@@ -74,6 +75,174 @@ Body.`;
 
   it("throws on missing frontmatter delimiters", () => {
     expect(() => parseFrontmatter("no frontmatter here")).toThrow(/frontmatter delimiters/);
+  });
+
+  it("parses inline JSON objects (used for principleDimensionVector)", () => {
+    const raw = `---
+title: T
+pageKind: principle
+principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding": 0.8, "speed_to_value": -0.4}
+---
+
+Body.`;
+    const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+    expect(frontmatter.principleDimensionVector).toEqual({
+      long_term_maintainability: 1.0,
+      schema_grounding: 0.8,
+      speed_to_value: -0.4,
+    });
+  });
+
+  it("coerces true/false scalars to booleans", () => {
+    const raw = `---
+title: T
+pageKind: principle
+principlePublic: true
+---
+
+Body.`;
+    const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+    expect(frontmatter.principlePublic).toBe(true);
+  });
+
+  it("coerces numeric scalars to numbers", () => {
+    const raw = `---
+title: T
+pageKind: principle
+principleWeight: 0.85
+---
+
+Body.`;
+    const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+    expect(frontmatter.principleWeight).toBe(0.85);
+  });
+
+  it("keeps quoted booleans/numbers as strings (escape hatch for values that look numeric)", () => {
+    const raw = `---
+title: T
+pageKind: principle
+principleWeightRationale: "0.8"
+---
+
+Body.`;
+    const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+    expect(frontmatter.principleWeightRationale).toBe("0.8");
+  });
+});
+
+describe("seed-wiki-kernel: extractPrinciplePayload", () => {
+  it("returns the principle subset of frontmatter for a principle page", () => {
+    const payload = extractPrinciplePayload({
+      title: "Architecture Over Shortcuts",
+      pageKind: "principle",
+      principleTier: "commandment",
+      principleDirection:
+        "Prefer long-term maintainability over short-term speed.",
+      principleDimensionVector: {
+        long_term_maintainability: 1.0,
+        schema_grounding: 0.8,
+      },
+      principleAppliesTo: ["in_platform_coworker", "external_coding_agent"],
+      principlePublic: true,
+      principlePublicRationale:
+        "Adopters need to understand DPF's architecture posture.",
+    });
+
+    expect(payload).toEqual({
+      principleTier: "commandment",
+      principleDirection:
+        "Prefer long-term maintainability over short-term speed.",
+      principleDimensionVector: {
+        long_term_maintainability: 1.0,
+        schema_grounding: 0.8,
+      },
+      principleDimensions: ["long_term_maintainability", "schema_grounding"],
+      principleAppliesTo: ["in_platform_coworker", "external_coding_agent"],
+      principlePublic: true,
+      principlePublicRationale:
+        "Adopters need to understand DPF's architecture posture.",
+    });
+  });
+
+  it("derives principleDimensions from vector keys when not explicit", () => {
+    const payload = extractPrinciplePayload({
+      title: "T",
+      pageKind: "principle",
+      principleTier: "core",
+      principleDimensionVector: {
+        capacity_utilization: 1.0,
+        governance_compliance: 0.7,
+      },
+      principleAppliesTo: ["in_platform_coworker"],
+    });
+    expect(payload.principleDimensions).toEqual([
+      "capacity_utilization",
+      "governance_compliance",
+    ]);
+  });
+
+  it("preserves explicit principleDimensions (even when sparser than vector keys)", () => {
+    const payload = extractPrinciplePayload({
+      title: "T",
+      pageKind: "principle",
+      principleTier: "core",
+      principleDimensions: ["capacity_utilization"],
+      principleDimensionVector: {
+        capacity_utilization: 1.0,
+        governance_compliance: 0.7,
+      },
+      principleAppliesTo: ["in_platform_coworker"],
+    });
+    expect(payload.principleDimensions).toEqual(["capacity_utilization"]);
+  });
+
+  it("throws with a clear message when the vector references an unknown dimension", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "commandment",
+        principleDimensionVector: {
+          fictional_axis: 1.0,
+          long_term_maintainability: 0.5,
+        },
+        principleAppliesTo: ["in_platform_coworker"],
+      }),
+    ).toThrow(/fictional_axis/);
+  });
+
+  it("throws when an explicit dimension is outside the registry", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleDimensions: ["long_term_maintainability", "totally_made_up"],
+        principleAppliesTo: ["in_platform_coworker"],
+      }),
+    ).toThrow(/totally_made_up/);
+  });
+
+  it("returns an empty payload for non-principle pages", () => {
+    const payload = extractPrinciplePayload({
+      title: "Edge Node",
+      pageKind: "entity",
+    });
+    expect(payload).toEqual({});
+  });
+
+  it("accepts incomplete principle data — validation lives in lint", () => {
+    // A draft principle missing direction and vector should still extract;
+    // lint detectors (spec section 14) surface the missing fields later.
+    const payload = extractPrinciplePayload({
+      title: "Draft",
+      pageKind: "principle",
+      principleTier: "core",
+      principleAppliesTo: ["human"],
+    });
+    expect(payload.principleTier).toBe("core");
+    expect(payload.principleAppliesTo).toEqual(["human"]);
+    expect(payload.principleDirection).toBeUndefined();
   });
 });
 

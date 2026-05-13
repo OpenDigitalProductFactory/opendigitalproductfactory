@@ -15,7 +15,8 @@
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",
     "./location-normalize": "./src/location-normalize.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",
-    "./edge-node-types": "./src/edge-node-types.ts"
+    "./edge-node-types": "./src/edge-node-types.ts",
+    "./wiki-taxonomy": "./src/wiki-taxonomy.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
