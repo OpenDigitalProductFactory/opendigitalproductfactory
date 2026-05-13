@@ -13,6 +13,10 @@
 // Phase 3b; this PR is the passive path only.
 
 import { searchWikiPages, type WikiSearchResult } from "./embeddings";
+import {
+  recallPrincipleContext,
+  type PrincipleAppliesToPopulation,
+} from "./principle-recall";
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -83,4 +87,82 @@ export async function recallWikiContext(
     console.warn("[recallWikiContext] failed:", err);
     return null;
   }
+}
+
+// ─── Principle-aware variant ────────────────────────────────────────────────
+
+export type RecallWikiContextWithPrinciplesInput = RecallWikiContextInput & {
+  /**
+   * Population whose principles should apply. Drives the principle recall
+   * branch — commandments are always injected for in-scope rows; relevant
+   * core and contextual principles are pulled from Qdrant.
+   */
+  callingPopulation: PrincipleAppliesToPopulation;
+};
+
+export type RecallWikiContextWithPrinciplesResult = {
+  /** Background wiki context (entity / stance / heuristic / etc.). */
+  wikiBlock: string | null;
+  /** Governance principles. Rendered separately so the prompt assembler can inject distinct sections. */
+  principleBlock: string | null;
+};
+
+/**
+ * Principle-aware companion to `recallWikiContext`. Runs the two
+ * retrievals in parallel and returns both blocks separately so the
+ * prompt assembler can render them into distinct sections (background
+ * vs. governance).
+ *
+ * Silent-degradation contract:
+ * - Wiki retrieval failure → `wikiBlock: null`, principles still surface.
+ * - Principle retrieval failure (or all branches empty) → `principleBlock: null`,
+ *   wiki still surfaces.
+ * - Both failing → `{ wikiBlock: null, principleBlock: null }`; the
+ *   prompt skips both blocks rather than throwing.
+ *
+ * Existing `recallWikiContext` callers are unchanged — this is additive.
+ * Switch to this function when the calling context has a known
+ * population (coworker chat, agent prompt assembly with grant scope).
+ */
+export async function recallWikiContextWithPrinciples(
+  input: RecallWikiContextWithPrinciplesInput,
+): Promise<RecallWikiContextWithPrinciplesResult> {
+  const wikiPromise = (async () => {
+    try {
+      const results = await searchWikiPages({
+        query: input.query,
+        organizationId: input.organizationId,
+        limit: input.limit ?? 4,
+        scoreThreshold: input.scoreThreshold,
+      });
+      return formatWikiContext(results);
+    } catch (err) {
+      console.warn("[recallWikiContextWithPrinciples] wiki branch failed:", err);
+      return null;
+    }
+  })();
+
+  const principlePromise = (async () => {
+    try {
+      const result = await recallPrincipleContext({
+        query: input.query,
+        organizationId: input.organizationId,
+        callingPopulation: input.callingPopulation,
+      });
+      return result?.block ?? null;
+    } catch (err) {
+      console.warn(
+        "[recallWikiContextWithPrinciples] principle branch failed:",
+        err,
+      );
+      return null;
+    }
+  })();
+
+  const [wikiBlock, principleBlock] = await Promise.all([
+    wikiPromise,
+    principlePromise,
+  ]);
+
+  return { wikiBlock, principleBlock };
 }
