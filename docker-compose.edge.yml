@@ -1,0 +1,158 @@
+# DPF Edge Node — operator overlay.
+#
+# Brings up an Edge Node container alongside the Authority Core
+# (portal) in the same compose project. This is the simplest
+# Phase 0 deployment: one Edge Node, one Authority, one host.
+#
+# Multi-host (Edge Node on a separate machine from Authority) and
+# native binary modes (macOS / Windows) are out of scope for this
+# overlay — they ship in T2 and T3 of the parent installer roadmap.
+#
+# Spec:    docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+# Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md A6
+#
+# ─── Usage ──────────────────────────────────────────────────────────
+#
+# 1. In the portal: Admin > Platform Development > Edge Nodes,
+#    click "Issue bootstrap token", copy the token (15 min TTL,
+#    single-use).
+#
+# 2. Put the token in your local .env (NEVER commit the .env):
+#
+#      DPF_BOOTSTRAP_TOKEN=dpfedge_xxxxxxxxxxxxxxxx
+#
+# 3. Bring up the Edge Node alongside the portal:
+#
+#      # Linux (host network — the Edge Node sees host interfaces):
+#      docker compose -f docker-compose.yml \
+#                     -f docker-compose.linux.yml \
+#                     -f docker-compose.edge.yml \
+#                     --profile linux-host-network up -d edge-node
+#
+#      # Mac / Windows / Docker Desktop (bridge network — the Edge
+#      # Node only sees the compose-internal subnet, so the network
+#      # discovery collector is limited to the Docker bridge):
+#      docker compose -f docker-compose.yml \
+#                     -f docker-compose.edge.yml up -d edge-node
+#
+# 4. Watch the logs; within ~30s the Edge Node should enroll, and
+#    within ~1 sweep interval (default 5 min) it submits its first
+#    discovery run. Verify in the portal:
+#      Admin > Platform Development > Edge Nodes
+#        - row exists, trustState=trusted, lastSeenAt within 60s
+#        - one DiscoveryRun visible with edgeNodeId populated
+#
+# ─── Image source ───────────────────────────────────────────────────
+#
+# Default: pull `ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}`
+# matching the rest of the DPF release artifacts (Contract 1 of the
+# deployment doctrine). For dev workflow against unreleased changes,
+# uncomment the `build:` block instead of `image:`.
+
+services:
+  edge-node:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
+    # For dev work on unreleased changes, swap the `image:` line above
+    # for a build block. Comment-out + uncomment as needed:
+    # build:
+    #   context: .
+    #   dockerfile: services/edge-node/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Authority Core URL — point at the portal service in the same
+      # compose project. The compose internal DNS resolves `portal`
+      # to the portal container. Override DPF_AUTHORITY_URL in .env
+      # if running the Edge Node against a remote Authority.
+      DPF_AUTHORITY_URL: ${DPF_AUTHORITY_URL:-http://portal:3000}
+
+      # Bootstrap token. REQUIRED on first run; consumed and
+      # discarded. After successful enrollment the node uses its
+      # state-stored node token, so this can be safely unset on
+      # subsequent runs.
+      #
+      # Issue a token in the portal: Admin > Platform Development >
+      # Edge Nodes > Issue bootstrap token.
+      DPF_BOOTSTRAP_TOKEN: ${DPF_BOOTSTRAP_TOKEN:-}
+
+      # Operator-friendly node name (shows up in the admin UI).
+      # Defaults to the container hostname, which inside compose is
+      # the service name — usually not what an operator wants. Set
+      # this to a descriptive name like the host's actual hostname.
+      DPF_EDGE_NODE_NAME: ${DPF_EDGE_NODE_NAME:-edge-node-1}
+
+      # Install mode classification for the audit + admin UI:
+      #   container-host = running inside a container on a Linux/macOS host
+      #   container-vm   = running inside a container in a VM (Docker Desktop)
+      #   native         = running as a host binary (Phase 1+)
+      DPF_INSTALL_MODE: ${DPF_INSTALL_MODE:-container-host}
+
+      # State directory inside the container; matches the Dockerfile
+      # default + the volume mount below.
+      DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
+
+    volumes:
+      # State (node token, intervals, capabilities). Survives
+      # restarts; rebuilds preserve enrollment.
+      - edge_node_state:/var/lib/dpf-edge-node
+
+    depends_on:
+      portal:
+        condition: service_healthy
+
+    # Phase 0 doesn't need any extra capabilities. The host-info
+    # collector uses Node's `os` module which doesn't require
+    # CAP_NET_ADMIN / CAP_SYS_PTRACE. Future collectors that scan
+    # the LAN (subnet sweep, ARP) will need either `network_mode:
+    # host` (the linux-host-network profile below) or
+    # CAP_NET_RAW on a bridge network.
+
+    healthcheck:
+      # The container is healthy if the state directory exists and
+      # the Node process is up. We avoid a more invasive probe
+      # (e.g. hitting the Authority) so a brief Authority outage
+      # doesn't restart-loop the Edge Node — its own retry buffer
+      # handles transient Authority unavailability.
+      test:
+        - CMD
+        - node
+        - -e
+        - "process.exit(0)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── Linux host-network profile ────────────────────────────────────
+  #
+  # Enable this profile on Linux deployments where the Edge Node
+  # needs to discover host-network interfaces, not just the
+  # compose-internal bridge. Activates `network_mode: host` which
+  # disables compose-internal DNS — DPF_AUTHORITY_URL must then
+  # point at a reachable address from the host's perspective
+  # (typically http://localhost:3000 when portal is also on the host,
+  # or the LAN IP when Authority is on another machine).
+  #
+  #   docker compose ... --profile linux-host-network up -d edge-node-host
+  #
+  # macOS / Windows note: Docker Desktop does NOT honor
+  # `network_mode: host` in the way Linux does — the "host" is the
+  # Docker Desktop VM, not the user's machine. Don't enable this
+  # profile on those platforms.
+  edge-node-host:
+    profiles:
+      - linux-host-network
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      DPF_AUTHORITY_URL: ${DPF_AUTHORITY_URL:-http://localhost:3000}
+      DPF_BOOTSTRAP_TOKEN: ${DPF_BOOTSTRAP_TOKEN:-}
+      DPF_EDGE_NODE_NAME: ${DPF_EDGE_NODE_NAME:-edge-node-host-1}
+      DPF_INSTALL_MODE: ${DPF_INSTALL_MODE:-container-host}
+      DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
+    volumes:
+      - edge_node_state_host:/var/lib/dpf-edge-node
+
+volumes:
+  edge_node_state:
+  edge_node_state_host:
