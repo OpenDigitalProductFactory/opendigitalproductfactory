@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
 const { mockResolveAuth, mockRecordHeartbeat } = vi.hoisted(() => ({
@@ -14,6 +14,7 @@ vi.mock("@/lib/edge-node/enrollment", () => ({
 }));
 
 import { POST } from "./route";
+import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
 
 const AUTHED = {
   ok: true as const,
@@ -40,9 +41,20 @@ function makeReq(
   }) as unknown as NextRequest;
 }
 
+const auditCalls: Array<Record<string, unknown>> = [];
+
 beforeEach(() => {
   vi.resetAllMocks();
   mockRecordHeartbeat.mockResolvedValue(HEARTBEAT_OK);
+  auditCalls.length = 0;
+  setToolExecutionCreateOverride(async (data) => {
+    auditCalls.push(data);
+    return { id: "audit_heartbeat_test" };
+  });
+});
+
+afterEach(() => {
+  setToolExecutionCreateOverride(null);
 });
 
 describe("POST /api/v1/edge/heartbeat — auth gate", () => {
@@ -163,5 +175,89 @@ describe("POST /api/v1/edge/heartbeat — happy path", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.trustState).toBe("quarantined");
+  });
+});
+
+describe("POST /api/v1/edge/heartbeat — audit", () => {
+  it("writes a failure audit row on auth failure with null edgeNodeId", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "token_not_found",
+      message: "no such token",
+    });
+    await POST(makeReq({}, { Authorization: "Bearer x" }));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect(row.toolName).toBe("edge.heartbeat");
+    expect(row.success).toBe(false);
+    const result = row.result as { error: string; status: number };
+    expect(result.error).toBe("token_not_found");
+    expect(result.status).toBe(401);
+    const params = row.parameters as { edgeNodeId: string | null; summary: { scope: string } };
+    expect(params.edgeNodeId).toBeNull();
+    expect(params.summary.scope).toBe("edge:heartbeat");
+  });
+
+  it("writes a scope_disallowed audit at 403", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "scope_disallowed",
+      message: "no scope",
+    });
+    await POST(makeReq({}, { Authorization: "Bearer x" }));
+    const result = auditCalls[0]!.result as { error: string; status: number };
+    expect(result.error).toBe("scope_disallowed");
+    expect(result.status).toBe(403);
+  });
+
+  it("writes audit with resolved edgeNodeId on invalid_body", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(
+      makeReq(
+        { capabilityReports: [{ capability: "unknown.cap", status: "healthy" }] },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    expect((row.result as { error: string }).error).toBe("invalid_body");
+    const params = row.parameters as { edgeNodeId: string; nodeId: string };
+    expect(params.edgeNodeId).toBe("edgenode_cuid_1");
+    expect(params.nodeId).toBe("edge_abc");
+  });
+
+  it("writes a success audit row on 200 heartbeat with capabilityReportCount", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(
+      makeReq(
+        {
+          capabilityReports: [
+            { capability: "discovery.network", status: "healthy" },
+          ],
+        },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(200);
+    const summary = (row.parameters as { summary: { capabilityReportCount: number; trustState: string } }).summary;
+    expect(summary.capabilityReportCount).toBe(1);
+    expect(summary.trustState).toBe("trusted");
+  });
+
+  it("audits empty-body heartbeats with capabilityReportCount=0", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(makeReq("", { Authorization: "Bearer x" }, true));
+    const summary = (auditCalls[0]!.parameters as { summary: { capabilityReportCount: number } }).summary;
+    expect(summary.capabilityReportCount).toBe(0);
+  });
+
+  it("never includes the bearer token plaintext in the audit row", async () => {
+    const SECRET = "dpfedge_SUPERSECRETNODETOKEN67890";
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(makeReq({}, { Authorization: `Bearer ${SECRET}` }));
+    const serialized = JSON.stringify(auditCalls[0]);
+    expect(serialized).not.toContain(SECRET);
+    expect(serialized).not.toContain("SUPERSECRETNODETOKEN");
   });
 });

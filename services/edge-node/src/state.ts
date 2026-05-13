@@ -8,10 +8,21 @@
 // Manager, libsecret) as preferred, but in the Linux-container Phase 0
 // deployment the host's libsecret isn't available. The 0600 file under
 // a container-owned directory is the agreed Phase 0 fallback per the
-// spec § Maturity gates security review scope.
+// spec § Phase 0 storage downgrade (Linux container Mode 1).
+//
+// Read-time enforcement per spec:
+//   - File mode must be 0600 (refuse if loosened by host bind-mount,
+//     volume export, or operator copy).
+//   - File owner UID must match the current process UID (refuse if
+//     a different account dropped state into our directory — e.g. a
+//     host bind-mount leaking a different container's state).
+// Cross-container fingerprint detection (the spec's stronger
+// promise) is Phase 1+; for now the docker-managed-volume + non-root
+// dedicated UID controls bound the risk.
 
 import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
+import * as os from "node:os";
 
 import { z } from "zod";
 
@@ -41,16 +52,88 @@ export function statePath(stateDir: string): string {
 }
 
 /**
+ * Get the current process UID. Returns null on platforms without
+ * POSIX UIDs (Windows in tests). Owner enforcement is skipped on
+ * those platforms; the spec's Mode 1 controls only bind in the
+ * Linux-container deployment where UIDs are real.
+ */
+function currentUid(): number | null {
+  if (typeof process.getuid !== "function") return null;
+  try {
+    return process.getuid();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Skip the file-mode and owner checks on hosts that don't have POSIX
+ * permission semantics (Windows). The container deployment is Linux;
+ * skipping on Windows preserves dev-host ergonomics while keeping the
+ * production-path checks intact.
+ */
+function shouldEnforcePosixPerms(): boolean {
+  return os.platform() !== "win32";
+}
+
+/**
+ * Verify the state file's mode is 0600 and owner is the current
+ * process UID. Throws with a descriptive error if either check fails
+ * — refusing to read state we don't trust is the point.
+ */
+async function verifyStatePerms(path: string): Promise<void> {
+  if (!shouldEnforcePosixPerms()) return;
+
+  const stat = await fs.stat(path);
+
+  // Mode check: the lower 9 bits encode rwxrwxrwx. We require 0600
+  // exactly (owner read/write, no group, no other). If the file is
+  // group/world readable, the token is exposed to anything else
+  // running as that group or on that host.
+  const modeBits = stat.mode & 0o777;
+  if (modeBits !== 0o600) {
+    throw new Error(
+      `Edge Node state file at ${path} has unsafe permissions: `
+      + `expected mode 0600, got 0${modeBits.toString(8).padStart(3, "0")}. `
+      + `Refusing to load; the node token in this file may be exposed. `
+      + `Fix: chmod 600 ${path} (and investigate how the loose mode got there).`,
+    );
+  }
+
+  // Owner check: the file must be owned by the current process UID.
+  // A different owner means either (a) a host bind-mount leaked
+  // another account's state into this container, or (b) the
+  // installer ran as a different account than the runtime. Either
+  // way, the token in the file is not ours to use.
+  const myUid = currentUid();
+  if (myUid !== null && stat.uid !== myUid) {
+    throw new Error(
+      `Edge Node state file at ${path} is owned by UID ${stat.uid}, `
+      + `but the current process runs as UID ${myUid}. `
+      + `Refusing to load; cross-account state-file read is the host-bind-mount-leak threat the spec's storage downgrade controls bound. `
+      + `Fix: ensure the state directory is owned by the runtime's dedicated UID (e.g. dpf:dpf in the Dockerfile), and the state directory is a docker-managed volume, not a host bind-mount.`,
+    );
+  }
+}
+
+/**
  * Read state from disk. Returns null if the state file doesn't exist
  * (caller should treat as "first run" and trigger enrollment). Throws
- * if the file exists but doesn't parse — corruption shouldn't be
- * silently ignored.
+ * if:
+ *   - the file exists but parsing fails (corruption shouldn't be
+ *     silently ignored);
+ *   - the file mode is not 0600 (per spec § Phase 0 storage downgrade);
+ *   - the file owner UID doesn't match the current process UID (same).
  */
 export async function loadState(stateDir: string): Promise<EdgeNodeState | null> {
   const path = statePath(stateDir);
-  let raw: string;
+
+  // Existence check first via stat — lets us return null cleanly for
+  // ENOENT without doing the perm check on a phantom path. Any other
+  // stat error (EACCES, EPERM, etc.) propagates.
+  let exists = true;
   try {
-    raw = await fs.readFile(path, "utf8");
+    await fs.access(path);
   } catch (err: unknown) {
     if (
       typeof err === "object" &&
@@ -58,10 +141,19 @@ export async function loadState(stateDir: string): Promise<EdgeNodeState | null>
       "code" in err &&
       (err as { code?: string }).code === "ENOENT"
     ) {
-      return null;
+      exists = false;
+    } else {
+      throw err;
     }
-    throw err;
   }
+  if (!exists) return null;
+
+  // File exists — enforce the mode + owner controls BEFORE reading
+  // the contents. Reading first would mean a loose-perms file gets
+  // its plaintext token slurped into the Node process anyway.
+  await verifyStatePerms(path);
+
+  const raw = await fs.readFile(path, "utf8");
 
   let parsed: unknown;
   try {

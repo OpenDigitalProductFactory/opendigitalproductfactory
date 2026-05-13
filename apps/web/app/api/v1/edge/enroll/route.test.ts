@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
 // Mock the orchestration layer. The route handler's contract is what
@@ -13,6 +13,7 @@ vi.mock("@/lib/edge-node/enrollment", () => ({
 }));
 
 import { POST } from "./route";
+import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
 
 const VALID_BODY = {
   displayName: "Test Mac",
@@ -34,8 +35,23 @@ function makeReq(
   }) as unknown as NextRequest;
 }
 
+// Audit-row captures for tests that need to assert on the audit write.
+// `setToolExecutionCreateOverride(null)` clears it back to the
+// production prisma path, but each test starts with the override in
+// place so audits don't fall through to a real DB call.
+const auditCalls: Array<Record<string, unknown>> = [];
+
 beforeEach(() => {
   vi.resetAllMocks();
+  auditCalls.length = 0;
+  setToolExecutionCreateOverride(async (data) => {
+    auditCalls.push(data);
+    return { id: "audit_enroll_test" };
+  });
+});
+
+afterEach(() => {
+  setToolExecutionCreateOverride(null);
 });
 
 describe("POST /api/v1/edge/enroll — auth header parsing", () => {
@@ -223,5 +239,93 @@ describe("POST /api/v1/edge/enroll — happy path", () => {
     const call = mockEnrollEdgeNode.mock.calls[0]![0];
     expect("hostFingerprint" in call).toBe(false);
     expect("metadata" in call).toBe(false);
+  });
+});
+
+describe("POST /api/v1/edge/enroll — audit", () => {
+  it("writes a failure audit row on missing_authorization", async () => {
+    await POST(makeReq(VALID_BODY));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect(row.toolName).toBe("edge.enroll");
+    expect(row.success).toBe(false);
+    expect((row.result as { error: string }).error).toBe("missing_authorization");
+    expect((row.result as { status: number }).status).toBe(401);
+    expect(row.routeContext).toBe("/api/v1/edge/enroll");
+  });
+
+  it("writes a failure audit row on invalid_scheme", async () => {
+    await POST(makeReq(VALID_BODY, { Authorization: "Basic xyz" }));
+    expect(auditCalls).toHaveLength(1);
+    expect((auditCalls[0]!.result as { error: string }).error).toBe("invalid_scheme");
+  });
+
+  it("writes a failure audit row on invalid_json", async () => {
+    await POST(makeReq("not json", { Authorization: "Bearer dpfboot_X" }, true));
+    expect(auditCalls).toHaveLength(1);
+    expect((auditCalls[0]!.result as { error: string }).error).toBe("invalid_json");
+  });
+
+  it("writes a failure audit row on invalid_body", async () => {
+    await POST(
+      makeReq({ platform: "darwin" }, { Authorization: "Bearer dpfboot_X" }),
+    );
+    expect(auditCalls).toHaveLength(1);
+    expect((auditCalls[0]!.result as { error: string }).error).toBe("invalid_body");
+  });
+
+  it("writes a failure audit row when enrollEdgeNode returns an error", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: false,
+      error: "token_not_found",
+      message: "bootstrap token not found",
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(false);
+    expect((row.result as { error: string }).error).toBe("token_not_found");
+    expect((row.parameters as { summary: { platform: string } }).summary.platform).toBe("darwin");
+  });
+
+  it("writes a success audit row on successful enroll", async () => {
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: true,
+      edgeNodeId: "edge_db_1",
+      nodeId: "edge_abc123",
+      nodeToken: "dpfedge_X",
+      trustState: "trusted",
+      heartbeatIntervalSec: 60,
+      sweepIntervalSec: 300,
+      acceptedCapabilities: ["discovery.network"],
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(200);
+    const params = row.parameters as {
+      edgeNodeId: string | null;
+      nodeId: string | null;
+      summary: { trustState: string; acceptedCapabilities: string[] };
+    };
+    expect(params.edgeNodeId).toBe("edge_db_1");
+    expect(params.nodeId).toBe("edge_abc123");
+    expect(params.summary.trustState).toBe("trusted");
+    expect(params.summary.acceptedCapabilities).toEqual(["discovery.network"]);
+  });
+
+  it("never includes the bootstrap-token plaintext in the audit row", async () => {
+    const SECRET = "dpfboot_SUPERSECRETTOKEN12345";
+    mockEnrollEdgeNode.mockResolvedValue({
+      ok: false,
+      error: "token_not_found",
+      message: "not found",
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: `Bearer ${SECRET}` }));
+    expect(auditCalls).toHaveLength(1);
+    const serialized = JSON.stringify(auditCalls[0]);
+    expect(serialized).not.toContain(SECRET);
+    expect(serialized).not.toContain("SUPERSECRETTOKEN");
   });
 });

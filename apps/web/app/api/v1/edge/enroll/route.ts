@@ -23,7 +23,10 @@ import {
   EDGE_NODE_PLATFORMS,
 } from "@dpf/db/edge-node-types";
 
+import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
 import { enrollEdgeNode } from "@/lib/edge-node/enrollment";
+
+const ROUTE_CONTEXT = "/api/v1/edge/enroll";
 
 // We expect the bootstrap token in the Authorization: Bearer header
 // (consistent with the rest of the dpf*_ token family) AND we accept
@@ -43,9 +46,21 @@ const EnrollBody = z.object({
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   // Bootstrap-token extraction — header only.
   const authHeader = request.headers.get("authorization");
   if (!authHeader) {
+    await writeEdgeNodeAudit({
+      route: "edge.enroll",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status: 401,
+      success: false,
+      error: "missing_authorization",
+    });
     return NextResponse.json(
       { ok: false, error: "missing_authorization" },
       { status: 401 },
@@ -53,6 +68,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const match = /^Bearer\s+(.+)$/.exec(authHeader.trim());
   if (!match) {
+    await writeEdgeNodeAudit({
+      route: "edge.enroll",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status: 401,
+      success: false,
+      error: "invalid_scheme",
+    });
     return NextResponse.json(
       { ok: false, error: "invalid_scheme" },
       { status: 401 },
@@ -65,6 +91,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = await request.json();
   } catch {
+    await writeEdgeNodeAudit({
+      route: "edge.enroll",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_json",
+    });
     return NextResponse.json(
       { ok: false, error: "invalid_json" },
       { status: 400 },
@@ -72,6 +109,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const parsed = EnrollBody.safeParse(body);
   if (!parsed.success) {
+    await writeEdgeNodeAudit({
+      route: "edge.enroll",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_body",
+    });
     return NextResponse.json(
       {
         ok: false,
@@ -106,12 +154,47 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   if (!result.ok) {
     const status = mapEnrollErrorStatus(result.error);
+    await writeEdgeNodeAudit({
+      route: "edge.enroll",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status,
+      success: false,
+      error: result.error,
+      summary: {
+        platform: parsed.data.platform,
+        installMode: parsed.data.installMode,
+        // Bootstrap-token-related errors carry the prefix only — never
+        // log the plaintext bearer. The token is hashed at lookup so we
+        // could log the hash if needed; declining for now to keep audit
+        // rows lean.
+      },
+    });
     return NextResponse.json(
       { ok: false, error: result.error, message: result.message },
       { status },
     );
   }
 
+  await writeEdgeNodeAudit({
+    route: "edge.enroll",
+    routeContext: ROUTE_CONTEXT,
+    startedAt,
+    edgeNodeId: result.edgeNodeId,
+    nodeId: result.nodeId,
+    principalId: null, // enrollEdgeNode result does not currently expose principalId; can wire in later
+    status: 200,
+    success: true,
+    summary: {
+      platform: parsed.data.platform,
+      installMode: parsed.data.installMode,
+      trustState: result.trustState,
+      acceptedCapabilities: result.acceptedCapabilities,
+    },
+  });
   return NextResponse.json(
     {
       ok: true,

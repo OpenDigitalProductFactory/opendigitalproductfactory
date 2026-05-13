@@ -106,11 +106,7 @@ describe("POST — transport guards", () => {
     expect(res.status).toBe(401); // got past TLS guard, failed at auth
   });
 
-  // Regression: when Next.js runs inside a container or behind a proxy,
-  // request.url reflects the *internal* bind address (e.g. 0.0.0.0). The
-  // transport guard must consult the forwarded host/proto headers — what
-  // the client actually connected to — not the URL Next reconstructed.
-  it("allows containerized request when X-Forwarded-Host points to localhost", async () => {
+  it("rejects spoofed X-Forwarded-Host on plain HTTP", async () => {
     resolveMock.mockResolvedValue(null);
     const res = await POST(
       makeRequest({
@@ -120,7 +116,7 @@ describe("POST — transport guards", () => {
         body: { jsonrpc: "2.0", id: 1, method: "initialize" },
       }),
     );
-    expect(res.status).toBe(401); // past transport guard, fails at auth
+    expect(res.status).toBe(403);
   });
 
   it("allows containerized request when X-Forwarded-Proto is https", async () => {
@@ -183,7 +179,6 @@ describe("POST — transport guards", () => {
         makeRequest({
           url: "http://portal:3000/api/mcp/v1",
           bearer: "dpfmcp_X",
-          forwardedHost: "portal:3000",
           body: { jsonrpc: "2.0", id: 1, method: "initialize" },
         }),
       );
@@ -196,7 +191,6 @@ describe("POST — transport guards", () => {
         makeRequest({
           url: "http://other-internal:3000/api/mcp/v1",
           bearer: "dpfmcp_X",
-          forwardedHost: "other-internal:3000",
           body: { jsonrpc: "2.0", id: 1, method: "initialize" },
         }),
       );
@@ -210,11 +204,23 @@ describe("POST — transport guards", () => {
         makeRequest({
           url: "http://portal:3000/api/mcp/v1",
           bearer: "dpfmcp_X",
-          forwardedHost: "portal:3000",
           body: { jsonrpc: "2.0", id: 1, method: "initialize" },
         }),
       );
       expect(res.status).toBe(401);
+    });
+
+    it("does not use X-Forwarded-Host to satisfy MCP_INSECURE_INTERNAL_HOSTS", async () => {
+      process.env.MCP_INSECURE_INTERNAL_HOSTS = "portal";
+      const res = await POST(
+        makeRequest({
+          url: "http://evil.example.com/api/mcp/v1",
+          bearer: "dpfmcp_X",
+          forwardedHost: "portal:3000",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(403);
     });
   });
 

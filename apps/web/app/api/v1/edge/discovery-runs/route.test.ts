@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
 const { mockResolveAuth, mockDiscoveryRunFindUnique } = vi.hoisted(() => ({
@@ -18,6 +18,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { POST } from "./route";
+import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
 
 const AUTHED = {
   ok: true as const,
@@ -67,12 +68,23 @@ function makeReq(
   }) as unknown as NextRequest;
 }
 
+const auditCalls: Array<Record<string, unknown>> = [];
+
 beforeEach(() => {
   vi.resetAllMocks();
   // Default: no prior run exists, so the idempotency lookup returns null
   // and the route falls through to the 202 stub branch. Tests that need
   // the idempotent-replay path override this per-test.
   mockDiscoveryRunFindUnique.mockResolvedValue(null);
+  auditCalls.length = 0;
+  setToolExecutionCreateOverride(async (data) => {
+    auditCalls.push(data);
+    return { id: "audit_discovery_test" };
+  });
+});
+
+afterEach(() => {
+  setToolExecutionCreateOverride(null);
 });
 
 describe("POST /api/v1/edge/discovery-runs — auth gate", () => {
@@ -259,6 +271,24 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
     );
     expect(res.status).toBe(202);
   });
+
+  it("writes a stale_observation audit row at 400 (with skew + observedAt in summary)", async () => {
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    await POST(
+      makeReq(
+        makeValidBody({ observedAt: stale }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    expect((row.result as { error: string }).error).toBe("stale_observation");
+    expect((row.result as { status: number }).status).toBe(400);
+    const summary = (row.parameters as {
+      summary: { skewMs: number; observedAt: string };
+    }).summary;
+    expect(summary.skewMs).toBeGreaterThan(24 * 60 * 60 * 1000);
+    expect(summary.observedAt).toBe(stale);
+  });
 });
 
 describe("POST /api/v1/edge/discovery-runs — (edgeNodeId, runKey) idempotency", () => {
@@ -328,5 +358,132 @@ describe("POST /api/v1/edge/discovery-runs — (edgeNodeId, runKey) idempotency"
     expect(body.idempotentReplay).toBe(true);
     expect(body.completedAt).toBeNull();
     expect(body.status).toBe("running");
+  });
+
+  it("writes a success audit row on idempotency replay at 200 with idempotentReplay summary marker", async () => {
+    mockDiscoveryRunFindUnique.mockResolvedValue({
+      id: "run_db_1",
+      status: "completed",
+      itemCount: 5,
+      relationshipCount: 2,
+      startedAt: new Date(Date.now() - 60_000),
+      completedAt: new Date(Date.now() - 30_000),
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(200);
+    const summary = (row.parameters as {
+      summary: {
+        idempotentReplay: boolean;
+        runKey: string;
+        priorRunId: string;
+        priorStatus: string;
+      };
+    }).summary;
+    expect(summary.idempotentReplay).toBe(true);
+    expect(summary.runKey).toBe("run_a1b2c3");
+    expect(summary.priorRunId).toBe("run_db_1");
+    expect(summary.priorStatus).toBe("completed");
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — audit", () => {
+  it("writes a failure audit on auth failure with discovery:submit scope context", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "node_revoked",
+      message: "revoked",
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect(row.toolName).toBe("edge.discovery_runs.submit");
+    expect((row.result as { error: string }).error).toBe("node_revoked");
+    expect((row.parameters as { summary: { scope: string } }).summary.scope).toBe("discovery:submit");
+  });
+
+  it("writes scope_disallowed audit at 403", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "scope_disallowed",
+      message: "no",
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect((auditCalls[0]!.result as { status: number }).status).toBe(403);
+  });
+
+  it("writes invalid_body audit with resolved edgeNodeId", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(
+      makeReq(
+        { runKey: "x" /* missing other required fields */ },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    expect((row.result as { error: string }).error).toBe("invalid_body");
+    expect((row.parameters as { edgeNodeId: string }).edgeNodeId).toBe("edgenode_cuid_1");
+  });
+
+  it("writes a success audit row on 202 with envelope summary fields", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(202);
+    const summary = (row.parameters as {
+      summary: {
+        runKey: string;
+        agentMode: string;
+        agentVersion: string;
+        itemCount: number;
+        relationshipCount: number;
+        capabilityCount: number;
+        persistencePending: boolean;
+      };
+    }).summary;
+    expect(summary.runKey).toBe("run_a1b2c3");
+    expect(summary.agentMode).toBe("container-host");
+    expect(summary.agentVersion).toBe("0.1.0");
+    expect(summary.itemCount).toBe(1);
+    expect(summary.relationshipCount).toBe(0);
+    expect(summary.capabilityCount).toBe(1);
+    expect(summary.persistencePending).toBe(true);
+  });
+
+  it("audit summary tracks larger envelopes correctly", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    const existingItems = VALID_BODY.items as Array<Record<string, unknown>>;
+    const big = {
+      ...VALID_BODY,
+      items: [
+        ...existingItems,
+        { observedKey: "h2", itemType: "host", name: "h2", rawData: {} },
+        { observedKey: "h3", itemType: "host", name: "h3", rawData: {} },
+      ],
+      relationships: [
+        {
+          fromObservedKey: "host:linux:abcdef",
+          toObservedKey: "h2",
+          relationshipType: "peers_with",
+        },
+      ],
+    };
+    await POST(makeReq(big, { Authorization: "Bearer x" }));
+    const summary = (auditCalls[0]!.parameters as {
+      summary: { itemCount: number; relationshipCount: number };
+    }).summary;
+    expect(summary.itemCount).toBe(3);
+    expect(summary.relationshipCount).toBe(1);
+  });
+
+  it("never includes the bearer token plaintext in the audit row", async () => {
+    const SECRET = "dpfedge_DISCOVERYSUBMITSECRET99999";
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(makeReq(VALID_BODY, { Authorization: `Bearer ${SECRET}` }));
+    const serialized = JSON.stringify(auditCalls[0]);
+    expect(serialized).not.toContain(SECRET);
+    expect(serialized).not.toContain("DISCOVERYSUBMITSECRET");
   });
 });
