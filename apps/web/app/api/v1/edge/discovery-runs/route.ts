@@ -27,6 +27,14 @@ const ROUTE_CONTEXT = "/api/v1/edge/discovery-runs";
 // within +/- this window of server time, else 400 stale_observation.
 const FRESHNESS_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
 
+// Per spec § REST ingestion controls (Phase 0): hard payload caps to
+// prevent DoS via oversized requests. The route enforces both a total
+// body cap (5 MB) and a per-item rawData cap (64 KB). Above either,
+// the route returns 413 Payload Too Large with an audit row capturing
+// the size + cap.
+const MAX_BODY_BYTES = 5 * 1024 * 1024;   // 5 MB total request body
+const MAX_RAW_DATA_BYTES = 64 * 1024;     // 64 KB per item.rawData object
+
 const ObservationItem = z
   .object({
     observedKey: z.string().min(1),
@@ -126,9 +134,100 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Body size cap: hard limit at MAX_BODY_BYTES (5 MB). Two-stage check:
+  //   1. Trust the declared Content-Length for early rejection — if the
+  //      client says it's sending > 5 MB we don't need to buffer the
+  //      stream to find out. A lying client gets caught at stage 2.
+  //   2. Read the body as bytes (arrayBuffer) and check actual length.
+  //      Required because Content-Length is optional and clients can
+  //      under-declare. The arrayBuffer reads the whole body — but the
+  //      Next.js runtime caps request size anyway; this gives us a
+  //      precise check + audit row instead of an opaque 413 from below.
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength) {
+    const declared = parseInt(declaredLength, 10);
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      await writeEdgeNodeAudit({
+        route: "edge.discovery_runs.submit",
+        routeContext: ROUTE_CONTEXT,
+        startedAt,
+        edgeNodeId: authResult.edgeNodeRowId,
+        nodeId: authResult.nodeId,
+        principalId: null,
+        status: 413,
+        success: false,
+        error: "payload_too_large",
+        summary: {
+          declaredBytes: declared,
+          capBytes: MAX_BODY_BYTES,
+          stage: "content-length",
+        },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "payload_too_large",
+          message: `request body exceeds ${MAX_BODY_BYTES} bytes`,
+        },
+        { status: 413 },
+      );
+    }
+  }
+
+  // Stage 2: read the actual body, verify byte count. We use
+  // arrayBuffer() rather than text() so we measure bytes (not UTF-16
+  // code units) — gives a precise cap independent of character
+  // encoding.
+  let bodyBytes: ArrayBuffer;
+  try {
+    bodyBytes = await request.arrayBuffer();
+  } catch {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_json",
+    });
+    return NextResponse.json(
+      { ok: false, error: "invalid_json" },
+      { status: 400 },
+    );
+  }
+  if (bodyBytes.byteLength > MAX_BODY_BYTES) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 413,
+      success: false,
+      error: "payload_too_large",
+      summary: {
+        actualBytes: bodyBytes.byteLength,
+        capBytes: MAX_BODY_BYTES,
+        stage: "buffered",
+      },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "payload_too_large",
+        message: `request body exceeds ${MAX_BODY_BYTES} bytes`,
+      },
+      { status: 413 },
+    );
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(new TextDecoder().decode(bodyBytes));
   } catch {
     await writeEdgeNodeAudit({
       route: "edge.discovery_runs.submit",
@@ -167,6 +266,48 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
       { status: 400 },
     );
+  }
+
+  // Per-item rawData cap: reject if any single item.rawData object
+  // exceeds MAX_RAW_DATA_BYTES (64 KB) when serialized as JSON.
+  // Bounds memory damage from a runaway item while still allowing
+  // rich attribute sets per typical observation. Measured via
+  // TextEncoder so the cap is in actual UTF-8 bytes, not UTF-16
+  // code units.
+  for (let i = 0; i < parsed.data.items.length; i++) {
+    const item = parsed.data.items[i]!;
+    const rawDataBytes = new TextEncoder().encode(
+      JSON.stringify(item.rawData),
+    ).byteLength;
+    if (rawDataBytes > MAX_RAW_DATA_BYTES) {
+      await writeEdgeNodeAudit({
+        route: "edge.discovery_runs.submit",
+        routeContext: ROUTE_CONTEXT,
+        startedAt,
+        edgeNodeId: authResult.edgeNodeRowId,
+        nodeId: authResult.nodeId,
+        principalId: null,
+        status: 413,
+        success: false,
+        error: "raw_data_too_large",
+        summary: {
+          itemIndex: i,
+          itemObservedKey: item.observedKey,
+          rawDataBytes,
+          capBytes: MAX_RAW_DATA_BYTES,
+        },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "raw_data_too_large",
+          message: `items[${i}].rawData exceeds ${MAX_RAW_DATA_BYTES} bytes (${rawDataBytes} bytes)`,
+          itemIndex: i,
+          itemObservedKey: item.observedKey,
+        },
+        { status: 413 },
+      );
+    }
   }
 
   // Freshness window: reject submissions outside +/- 24h of server
