@@ -7,7 +7,12 @@ export type DiscoverySourceKind =
   | "network"
   | "unifi"
   | "snmp"
-  | "arp_scan";
+  | "arp_scan"
+  // Edge Node ingestion (POST /api/v1/edge/discovery-runs). Tags an
+  // observation as originating from an out-of-container agent rather
+  // than from a portal-resident collector. See the Edge Node spec's
+  // "Ingestion contract" section.
+  | "edge_node";
 
 export type DiscoveredItemInput = {
   sourceKind?: DiscoverySourceKind;

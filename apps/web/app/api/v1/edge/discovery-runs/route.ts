@@ -1,17 +1,12 @@
 // POST /api/v1/edge/discovery-runs
 //
 // Edge Node submits a prepared discovery-run envelope. The Authority
-// validates auth + envelope shape, runs the idempotency check from
-// the spec's REST ingestion controls, and forwards to
-// `persistSubmittedDiscoveryRun` for normalization + persistence.
-//
-// Phase 0 status: this route now enforces (edgeNodeId, runKey)
-// idempotency and the freshness window on observedAt. The actual
-// persistence wiring (calling persistSubmittedDiscoveryRun with the
-// normalized envelope) is still pending — the route returns 202
-// Accepted with `{ persistencePending: true }` after the gates pass,
-// so the Edge Node can retry later or the test harness can validate
-// the contract is wired.
+// runs (in order) auth → body schema → freshness window →
+// (edgeNodeId, runKey) idempotency lookup → persist via
+// `persistSubmittedDiscoveryRun` (normalize + dedupe + Postgres
+// upsert + Neo4j projection). Returns 201 with the persistence
+// summary on first-time submission, 200 with the prior snapshot on
+// idempotent replay, or 4xx/5xx with an audit-logged failure.
 //
 // Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
 //   § Ingestion contract: submit observations, don't trigger sweeps
@@ -20,13 +15,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { prisma } from "@dpf/db";
+import { persistSubmittedDiscoveryRun, prisma } from "@dpf/db";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
+import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
+import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
+
+const ROUTE_CONTEXT = "/api/v1/edge/discovery-runs";
 
 // Per spec § REST ingestion controls (Phase 0): observedAt must be
 // within +/- this window of server time, else 400 stale_observation.
 const FRESHNESS_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+
+// Per spec § REST ingestion controls (Phase 0): hard payload caps to
+// prevent DoS via oversized requests. The route enforces both a total
+// body cap (5 MB) and a per-item rawData cap (64 KB). Above either,
+// the route returns 413 Payload Too Large with an audit row capturing
+// the size + cap.
+const MAX_BODY_BYTES = 5 * 1024 * 1024;   // 5 MB total request body
+const MAX_RAW_DATA_BYTES = 64 * 1024;     // 64 KB per item.rawData object
 
 const ObservationItem = z
   .object({
@@ -67,21 +74,172 @@ const DiscoveryRunBody = z.object({
 });
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const startedAt = Date.now();
   const authResult = await resolveEdgeNodeAuth(
     request.headers.get("authorization"),
     "discovery:submit",
   );
   if (!authResult.ok) {
+    const status = discoveryAuthStatus(authResult.error);
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: null,
+      nodeId: null,
+      principalId: null,
+      status,
+      success: false,
+      error: authResult.error,
+      summary: { scope: "discovery:submit" },
+    });
     return NextResponse.json(
       { ok: false, error: authResult.error, message: authResult.message },
-      { status: discoveryAuthStatus(authResult.error) },
+      { status },
+    );
+  }
+
+  // Per-node rate limit: 4/min + 60/hour per the spec § REST ingestion
+  // controls. Discovery is a sweep, not a stream. Fires AFTER auth so
+  // we can attribute to a specific Edge Node, and BEFORE body parsing
+  // so misbehaving nodes can't burn server CPU on JSON parsing in a
+  // retry storm.
+  const rateLimit = checkEdgeRateLimit(
+    "edge.discovery_runs.submit",
+    authResult.edgeNodeRowId,
+  );
+  if (!rateLimit.allowed) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 429,
+      success: false,
+      error: "rate_limited",
+      summary: { retryAfter: rateLimit.retryAfter, ceiling: "4/min+60/hour" },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: rateLimit.retryAfter,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfter ?? 60) },
+      },
+    );
+  }
+
+  // Body size cap: hard limit at MAX_BODY_BYTES (5 MB). Two-stage check:
+  //   1. Trust the declared Content-Length for early rejection — if the
+  //      client says it's sending > 5 MB we don't need to buffer the
+  //      stream to find out. A lying client gets caught at stage 2.
+  //   2. Read the body as bytes (arrayBuffer) and check actual length.
+  //      Required because Content-Length is optional and clients can
+  //      under-declare. The arrayBuffer reads the whole body — but the
+  //      Next.js runtime caps request size anyway; this gives us a
+  //      precise check + audit row instead of an opaque 413 from below.
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength) {
+    const declared = parseInt(declaredLength, 10);
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      await writeEdgeNodeAudit({
+        route: "edge.discovery_runs.submit",
+        routeContext: ROUTE_CONTEXT,
+        startedAt,
+        edgeNodeId: authResult.edgeNodeRowId,
+        nodeId: authResult.nodeId,
+        principalId: null,
+        status: 413,
+        success: false,
+        error: "payload_too_large",
+        summary: {
+          declaredBytes: declared,
+          capBytes: MAX_BODY_BYTES,
+          stage: "content-length",
+        },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "payload_too_large",
+          message: `request body exceeds ${MAX_BODY_BYTES} bytes`,
+        },
+        { status: 413 },
+      );
+    }
+  }
+
+  // Stage 2: read the actual body, verify byte count. We use
+  // arrayBuffer() rather than text() so we measure bytes (not UTF-16
+  // code units) — gives a precise cap independent of character
+  // encoding.
+  let bodyBytes: ArrayBuffer;
+  try {
+    bodyBytes = await request.arrayBuffer();
+  } catch {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_json",
+    });
+    return NextResponse.json(
+      { ok: false, error: "invalid_json" },
+      { status: 400 },
+    );
+  }
+  if (bodyBytes.byteLength > MAX_BODY_BYTES) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 413,
+      success: false,
+      error: "payload_too_large",
+      summary: {
+        actualBytes: bodyBytes.byteLength,
+        capBytes: MAX_BODY_BYTES,
+        stage: "buffered",
+      },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "payload_too_large",
+        message: `request body exceeds ${MAX_BODY_BYTES} bytes`,
+      },
+      { status: 413 },
     );
   }
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(new TextDecoder().decode(bodyBytes));
   } catch {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_json",
+    });
     return NextResponse.json(
       { ok: false, error: "invalid_json" },
       { status: 400 },
@@ -89,6 +247,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const parsed = DiscoveryRunBody.safeParse(body);
   if (!parsed.success) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "invalid_body",
+    });
     return NextResponse.json(
       {
         ok: false,
@@ -99,6 +268,48 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Per-item rawData cap: reject if any single item.rawData object
+  // exceeds MAX_RAW_DATA_BYTES (64 KB) when serialized as JSON.
+  // Bounds memory damage from a runaway item while still allowing
+  // rich attribute sets per typical observation. Measured via
+  // TextEncoder so the cap is in actual UTF-8 bytes, not UTF-16
+  // code units.
+  for (let i = 0; i < parsed.data.items.length; i++) {
+    const item = parsed.data.items[i]!;
+    const rawDataBytes = new TextEncoder().encode(
+      JSON.stringify(item.rawData),
+    ).byteLength;
+    if (rawDataBytes > MAX_RAW_DATA_BYTES) {
+      await writeEdgeNodeAudit({
+        route: "edge.discovery_runs.submit",
+        routeContext: ROUTE_CONTEXT,
+        startedAt,
+        edgeNodeId: authResult.edgeNodeRowId,
+        nodeId: authResult.nodeId,
+        principalId: null,
+        status: 413,
+        success: false,
+        error: "raw_data_too_large",
+        summary: {
+          itemIndex: i,
+          itemObservedKey: item.observedKey,
+          rawDataBytes,
+          capBytes: MAX_RAW_DATA_BYTES,
+        },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "raw_data_too_large",
+          message: `items[${i}].rawData exceeds ${MAX_RAW_DATA_BYTES} bytes (${rawDataBytes} bytes)`,
+          itemIndex: i,
+          itemObservedKey: item.observedKey,
+        },
+        { status: 413 },
+      );
+    }
+  }
+
   // Freshness window: reject submissions outside +/- 24h of server
   // time per spec § REST ingestion controls. Prevents back-dated
   // submissions polluting inventory history; also catches Edge Nodes
@@ -106,6 +317,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const observedAt = new Date(parsed.data.observedAt);
   const skewMs = Math.abs(Date.now() - observedAt.getTime());
   if (skewMs > FRESHNESS_WINDOW_MS) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 400,
+      success: false,
+      error: "stale_observation",
+      summary: { skewMs, observedAt: parsed.data.observedAt },
+    });
     return NextResponse.json(
       {
         ok: false,
@@ -140,6 +363,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     },
   });
   if (prior) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 200,
+      success: true,
+      summary: {
+        idempotentReplay: true,
+        runKey: parsed.data.runKey,
+        priorRunId: prior.id,
+        priorStatus: prior.status,
+      },
+    });
     return NextResponse.json(
       {
         ok: true,
@@ -157,33 +396,122 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // TODO(persistence wiring): replace with `persistSubmittedDiscoveryRun({
-  //   edgeNodeId: authResult.edgeNodeRowId,
-  //   nodeId: authResult.nodeId,
-  //   runKey: parsed.data.runKey,
-  //   agentMode: parsed.data.agentMode,
-  //   agentVersion: parsed.data.agentVersion,
-  //   observedAt,
-  //   capabilities: parsed.data.capabilities,
-  //   items: parsed.data.items,
-  //   relationships: parsed.data.relationships ?? [],
-  //   warnings: parsed.data.warnings ?? [],
-  // })`. Until the persistence pipeline is fully wired (it needs the
-  // normalize → infer → persist chain hooked up against the route's
-  // input shape), the route accepts the envelope, exercises the
-  // idempotency + freshness gates, and returns 202 so the contract
-  // is testable end-to-end.
+  // Persistence pipeline: map the wire envelope to the CollectorOutput
+  // shape that persistSubmittedDiscoveryRun consumes, then normalize +
+  // dedupe + write to Postgres + project to Neo4j. The submitted
+  // observations are tagged sourceKind="edge_node" so admins can
+  // distinguish them from portal-resident collector output.
+  const submittedOutput = {
+    items: parsed.data.items.map((it) => ({
+      sourceKind: "edge_node" as const,
+      itemType: it.itemType,
+      name: it.name,
+      externalRef: it.observedKey,
+      ...(it.sourcePath != null ? { sourcePath: it.sourcePath } : {}),
+      ...(it.confidence !== undefined ? { confidence: it.confidence } : {}),
+      attributes: it.rawData,
+    })),
+    relationships: (parsed.data.relationships ?? []).map((r) => ({
+      sourceKind: "edge_node" as const,
+      relationshipType: r.relationshipType,
+      fromExternalRef: r.fromObservedKey,
+      toExternalRef: r.toObservedKey,
+      attributes: r.rawData ?? {},
+    })),
+    warnings: parsed.data.warnings ?? [],
+  };
+
+  let summary;
+  try {
+    // `prisma as never` matches the established pattern at the bootstrap
+    // ingestion sites (apps/web/app/(shell)/layout.tsx,
+    // apps/web/app/api/v1/discovery/sweep/route.ts). The real prisma
+    // client is structurally compatible with the DiscoverySyncClient
+    // surface; the strict types don't match at compile time.
+    summary = await persistSubmittedDiscoveryRun(prisma as never, {
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      runKey: parsed.data.runKey,
+      submittedOutput,
+    });
+  } catch (err) {
+    // Persistence failures: audit at 500 with the redacted error.
+    // Client gets a generic message so internal failure modes don't
+    // leak (the audit row carries the detail for operator review).
+    const errMsg = err instanceof Error ? err.message : "unknown persistence error";
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 500,
+      success: false,
+      error: "persistence_failed",
+      summary: {
+        runKey: parsed.data.runKey,
+        agentMode: parsed.data.agentMode,
+        agentVersion: parsed.data.agentVersion,
+        itemCount: parsed.data.items.length,
+        relationshipCount: parsed.data.relationships?.length ?? 0,
+        // The audit row keeps the detail; the client response masks it.
+        errorMessage: errMsg,
+      },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "persistence_failed",
+        message: "submission accepted but persistence failed; operator audit captured the detail",
+      },
+      { status: 500 },
+    );
+  }
+
+  await writeEdgeNodeAudit({
+    route: "edge.discovery_runs.submit",
+    routeContext: ROUTE_CONTEXT,
+    startedAt,
+    edgeNodeId: authResult.edgeNodeRowId,
+    nodeId: authResult.nodeId,
+    principalId: null,
+    status: 201,
+    success: true,
+    summary: {
+      runKey: parsed.data.runKey,
+      runId: summary.runId,
+      agentMode: parsed.data.agentMode,
+      agentVersion: parsed.data.agentVersion,
+      itemCount: parsed.data.items.length,
+      relationshipCount: parsed.data.relationships?.length ?? 0,
+      capabilityCount: parsed.data.capabilities.length,
+      createdEntities: summary.createdEntities,
+      updatedEntities: summary.updatedEntities,
+      createdRelationships: summary.createdRelationships,
+      updatedRelationships: summary.updatedRelationships,
+      createdIssues: summary.createdIssues,
+    },
+  });
   return NextResponse.json(
     {
       ok: true,
       accepted: true,
+      runId: summary.runId,
       runKey: parsed.data.runKey,
       itemCount: parsed.data.items.length,
       relationshipCount: parsed.data.relationships?.length ?? 0,
-      persistencePending: true,
-      note: "envelope validated, auth/freshness/idempotency gates passed; full persistence pipeline wiring is a follow-up",
+      persisted: {
+        createdEntities: summary.createdEntities,
+        updatedEntities: summary.updatedEntities,
+        staleEntities: summary.staleEntities,
+        createdRelationships: summary.createdRelationships,
+        updatedRelationships: summary.updatedRelationships,
+        staleRelationships: summary.staleRelationships,
+        createdIssues: summary.createdIssues,
+      },
     },
-    { status: 202 },
+    { status: 201 },
   );
 }
 

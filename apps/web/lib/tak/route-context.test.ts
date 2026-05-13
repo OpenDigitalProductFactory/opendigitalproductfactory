@@ -230,4 +230,47 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("Jurisdiction seed hints:");
     expect(context).toContain("Nevada Department of Taxation");
   });
+
+  it("tells the finance coworker to research official sources and propose DPF tax processing for Texas software sales", async () => {
+    mockPrisma.businessContext.findFirst.mockResolvedValue({
+      industry: "software-platform",
+      description: "Open Digital Product Factory sells DPF subscriptions and implementation services.",
+      targetMarket: "Texas businesses buying DPF",
+      revenueModel: "Software subscription billing and implementation services",
+      ctaType: "inquiry",
+      companySize: null,
+      geographicScope: "Texas, United States",
+    });
+    mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({
+      setupMode: "unknown",
+      setupStatus: "draft",
+      homeCountryCode: "US",
+      primaryRegionCode: "TX",
+      taxModel: "hybrid",
+      filingOwner: "dpf_coworker",
+      handoffMode: "dpf_readiness_only",
+      externalSystem: null,
+      footprintSummary: "DPF selling DPF in Texas with recurring software subscriptions.",
+    });
+    mockPrisma.taxJurisdictionReference.findMany.mockResolvedValue([
+      {
+        authorityName: "Texas Comptroller of Public Accounts",
+        countryCode: "US",
+        stateProvinceCode: "TX",
+        authorityType: "state",
+        taxTypes: ["sales_tax", "franchise_tax"],
+        filingUrl: "https://comptroller.texas.gov/taxes/",
+        officialWebsiteUrl: "https://comptroller.texas.gov/",
+      },
+    ]);
+
+    const context = await getRouteDataContext("/finance/settings/tax", "user-1");
+
+    expect(context).toContain("External tax research requirement: External Access is required");
+    expect(context).toContain("search_public_web");
+    expect(context).toContain("fetch_public_website");
+    expect(context).toContain("DPF tax processing proposal required");
+    expect(context).toContain("Likely DPF/Texas research focus");
+    expect(context).toContain("Texas Comptroller");
+  });
 });

@@ -417,10 +417,48 @@ async function getWorkspaceContext(): Promise<string> {
   ].join("\n");
 }
 
+function containsAnyToken(value: string | null | undefined, tokens: string[]): boolean {
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+  return tokens.some((token) => normalized.includes(token.toLowerCase()));
+}
+
+function isTexasFinanceFootprint(input: {
+  region?: string | null;
+  footprint?: string | null;
+  businessGeographicScope?: string | null;
+  businessTargetMarket?: string | null;
+}): boolean {
+  const values = [
+    input.region,
+    input.footprint,
+    input.businessGeographicScope,
+    input.businessTargetMarket,
+  ];
+
+  return values.some((value) => {
+    if (!value) return false;
+    return value.trim().toUpperCase() === "TX"
+      || containsAnyToken(value, ["Texas", " TX", "TX,", "TX."]);
+  });
+}
+
+function isSoftwarePlatformBusiness(input: {
+  industry?: string | null;
+  description?: string | null;
+  revenueModel?: string | null;
+}): boolean {
+  return [
+    input.industry,
+    input.description,
+    input.revenueModel,
+  ].some((value) => containsAnyToken(value, ["software", "saas", "platform", "subscription", "digital product"]));
+}
+
 async function getFinanceContext(): Promise<string> {
   const sections: string[] = ["\nPAGE DATA — Finance:"];
 
-  const [taxProfile, registrationCount, openIssueCount, recurringCount, overdueInvoices, activeCredentialCount, blockedRunCount, readyPeriodCount] = await Promise.all([
+  const [taxProfile, businessContext, registrationCount, openIssueCount, recurringCount, overdueInvoices, activeCredentialCount, blockedRunCount, readyPeriodCount] = await Promise.all([
     prisma.organizationTaxProfile.findFirst({
       orderBy: { createdAt: "asc" },
       select: {
@@ -433,6 +471,15 @@ async function getFinanceContext(): Promise<string> {
         handoffMode: true,
         externalSystem: true,
         footprintSummary: true,
+      },
+    }),
+    prisma.businessContext.findFirst({
+      select: {
+        industry: true,
+        description: true,
+        targetMarket: true,
+        revenueModel: true,
+        geographicScope: true,
       },
     }),
     prisma.taxRegistration.count(),
@@ -450,6 +497,9 @@ async function getFinanceContext(): Promise<string> {
       `Recurring schedules: ${recurringCount}`,
       `Outstanding customer invoices: ${overdueInvoices}`,
       `Ready tax periods: ${readyPeriodCount}`,
+      "External tax research requirement: External Access is required before recommending registrations, filing schedules, or tax-processing setup from live law.",
+      "Research tool instruction: when External Access is enabled, use search_public_web for official tax authority pages and fetch_public_website for the strongest official sources before making a DPF tax processing proposal. If External Access is off, ask the user to enable it and provide the official-source targets to verify.",
+      "DPF tax processing proposal required: propose DPF configuration changes for tax capture, registrations, tax codes, liability tracking, obligation periods, remittance schedule, evidence, and accounting handoff. Mark assumptions and human approval boundaries.",
     );
     return sections.join("\n");
   }
@@ -542,6 +592,39 @@ async function getFinanceContext(): Promise<string> {
       "Coworker investigation posture: setup mode unknown",
       "Coworker next question: Is the business already filing sales tax, VAT, or GST anywhere today?",
       "Recommended next action: Classify setup mode, capture home jurisdiction and operating footprint, then add the first known or likely authority registration.",
+    );
+  }
+
+  const setupNeedsOfficialResearch =
+    taxProfile.setupMode !== "existing"
+    || taxProfile.setupStatus !== "complete"
+    || registrationCount === 0
+    || openIssueCount > 0;
+
+  if (setupNeedsOfficialResearch) {
+    sections.push(
+      "External tax research requirement: External Access is required before recommending registrations, filing schedules, or tax-processing setup from live law.",
+      "Research tool instruction: when External Access is enabled, use search_public_web for official tax authority pages and fetch_public_website for the strongest official sources before making a DPF tax processing proposal. If External Access is off, ask the user to enable it and provide the official-source targets to verify.",
+      "DPF tax processing proposal required: propose DPF configuration changes for tax capture, registrations, tax codes, liability tracking, obligation periods, remittance schedule, evidence, and accounting handoff. Mark assumptions and human approval boundaries.",
+    );
+  }
+
+  const likelyTexas = isTexasFinanceFootprint({
+    region: taxProfile.primaryRegionCode,
+    footprint: taxProfile.footprintSummary,
+    businessGeographicScope: businessContext?.geographicScope,
+    businessTargetMarket: businessContext?.targetMarket,
+  });
+  const likelySoftware = isSoftwarePlatformBusiness({
+    industry: businessContext?.industry,
+    description: businessContext?.description,
+    revenueModel: businessContext?.revenueModel,
+  });
+
+  if (likelyTexas && likelySoftware) {
+    sections.push(
+      "Likely DPF/Texas research focus: software-platform or SaaS-style sales into Texas; verify Texas Comptroller guidance before configuring tax capture.",
+      "Official-source starting points: Texas Comptroller sales/use tax permit FAQ, Texas taxable services guidance, and Texas franchise tax taxable-entities FAQ.",
     );
   }
 

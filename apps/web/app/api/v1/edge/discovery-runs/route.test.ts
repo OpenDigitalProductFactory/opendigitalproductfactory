@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockDiscoveryRunFindUnique } = vi.hoisted(() => ({
+const { mockResolveAuth, mockDiscoveryRunFindUnique, mockPersistSubmittedDiscoveryRun } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockDiscoveryRunFindUnique: vi.fn(),
+  mockPersistSubmittedDiscoveryRun: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/edge-node-token", () => ({
@@ -15,9 +16,26 @@ vi.mock("@dpf/db", () => ({
       findUnique: mockDiscoveryRunFindUnique,
     },
   },
+  persistSubmittedDiscoveryRun: mockPersistSubmittedDiscoveryRun,
 }));
 
+// Default persistence summary used when persistSubmittedDiscoveryRun isn't
+// overridden per-test. Mirrors the DiscoveryPersistenceSummary type from
+// @dpf/db's discovery-sync.ts.
+const DEFAULT_PERSIST_SUMMARY = {
+  runId: "run_db_new_1",
+  createdEntities: 1,
+  updatedEntities: 0,
+  staleEntities: 0,
+  createdRelationships: 0,
+  updatedRelationships: 0,
+  staleRelationships: 0,
+  createdIssues: 0,
+};
+
 import { POST } from "./route";
+import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
+import { _resetEdgeRateLimits } from "@/lib/edge-node/rate-limit";
 
 const AUTHED = {
   ok: true as const,
@@ -67,12 +85,30 @@ function makeReq(
   }) as unknown as NextRequest;
 }
 
+const auditCalls: Array<Record<string, unknown>> = [];
+
 beforeEach(() => {
   vi.resetAllMocks();
   // Default: no prior run exists, so the idempotency lookup returns null
-  // and the route falls through to the 202 stub branch. Tests that need
+  // and the route falls through to persist a new run. Tests that need
   // the idempotent-replay path override this per-test.
   mockDiscoveryRunFindUnique.mockResolvedValue(null);
+  // Default: persistence succeeds with a synthetic summary. Tests that
+  // need failure behavior override this per-test.
+  mockPersistSubmittedDiscoveryRun.mockResolvedValue(DEFAULT_PERSIST_SUMMARY);
+  auditCalls.length = 0;
+  setToolExecutionCreateOverride(async (data) => {
+    auditCalls.push(data);
+    return { id: "audit_discovery_test" };
+  });
+  // Rate-limit state is process-global; reset between tests so a burst
+  // from one test doesn't leak into the next.
+  _resetEdgeRateLimits();
+});
+
+afterEach(() => {
+  setToolExecutionCreateOverride(null);
+  _resetEdgeRateLimits();
 });
 
 describe("POST /api/v1/edge/discovery-runs — auth gate", () => {
@@ -168,19 +204,30 @@ describe("POST /api/v1/edge/discovery-runs — body validation", () => {
   });
 });
 
-describe("POST /api/v1/edge/discovery-runs — happy path (A4 not yet wired)", () => {
+describe("POST /api/v1/edge/discovery-runs — happy path (persists)", () => {
   beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
 
-  it("returns 202 with persistencePending:true (stub state)", async () => {
+  it("returns 201 with the persistence summary on first-time submission", async () => {
     const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.accepted).toBe(true);
-    expect(body.persistencePending).toBe(true);
+    expect(body.runId).toBe("run_db_new_1");
     expect(body.runKey).toBe("run_a1b2c3");
     expect(body.itemCount).toBe(1);
     expect(body.relationshipCount).toBe(0);
+    expect(body.persisted).toEqual({
+      createdEntities: 1,
+      updatedEntities: 0,
+      staleEntities: 0,
+      createdRelationships: 0,
+      updatedRelationships: 0,
+      staleRelationships: 0,
+      createdIssues: 0,
+    });
+    // Old 202-stub field must NOT appear on the persisted response.
+    expect(body.persistencePending).toBeUndefined();
   });
 
   it("counts items + relationships from the parsed envelope", async () => {
@@ -209,10 +256,148 @@ describe("POST /api/v1/edge/discovery-runs — happy path (A4 not yet wired)", (
         { Authorization: "Bearer x" },
       ),
     );
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.itemCount).toBe(2);
     expect(body.relationshipCount).toBe(1);
+  });
+
+  it("calls persistSubmittedDiscoveryRun with the correctly-mapped CollectorOutput shape", async () => {
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(mockPersistSubmittedDiscoveryRun).toHaveBeenCalledOnce();
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.edgeNodeId).toBe("edgenode_cuid_1");
+    expect(input.nodeId).toBe("edge_abc");
+    expect(input.runKey).toBe("run_a1b2c3");
+    expect(input.submittedOutput.items).toEqual([
+      {
+        sourceKind: "edge_node",
+        itemType: "host",
+        name: "edge-test",
+        externalRef: "host:linux:abcdef",
+        attributes: { kernel: "6.5.0" },
+      },
+    ]);
+    expect(input.submittedOutput.relationships).toEqual([]);
+    expect(input.submittedOutput.warnings).toEqual([]);
+  });
+
+  it("maps wire `rawData` to attributes and `observedKey` to externalRef per item", async () => {
+    await POST(
+      makeReq(
+        {
+          ...VALID_BODY,
+          items: [
+            {
+              observedKey: "container:abc123",
+              itemType: "container",
+              name: "nginx",
+              sourcePath: "/var/run/docker.sock",
+              confidence: 0.92,
+              rawData: { image: "nginx:1.27", ports: ["80/tcp"] },
+            },
+          ],
+        },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.submittedOutput.items[0]).toEqual({
+      sourceKind: "edge_node",
+      itemType: "container",
+      name: "nginx",
+      externalRef: "container:abc123",
+      sourcePath: "/var/run/docker.sock",
+      confidence: 0.92,
+      attributes: { image: "nginx:1.27", ports: ["80/tcp"] },
+    });
+  });
+
+  it("maps relationships via fromObservedKey / toObservedKey → fromExternalRef / toExternalRef", async () => {
+    await POST(
+      makeReq(
+        {
+          ...VALID_BODY,
+          relationships: [
+            {
+              fromObservedKey: "host:a",
+              toObservedKey: "host:b",
+              relationshipType: "peers_with",
+              rawData: { latencyMs: 3 },
+            },
+          ],
+        },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.submittedOutput.relationships[0]).toEqual({
+      sourceKind: "edge_node",
+      relationshipType: "peers_with",
+      fromExternalRef: "host:a",
+      toExternalRef: "host:b",
+      attributes: { latencyMs: 3 },
+    });
+  });
+
+  it("forwards envelope `warnings` to the CollectorOutput", async () => {
+    await POST(
+      makeReq(
+        { ...VALID_BODY, warnings: ["nmap output truncated"] },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.submittedOutput.warnings).toEqual(["nmap output truncated"]);
+  });
+
+  it("returns 500 persistence_failed when persistSubmittedDiscoveryRun throws", async () => {
+    mockPersistSubmittedDiscoveryRun.mockRejectedValue(
+      new Error("Postgres connection refused"),
+    );
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("persistence_failed");
+    // The audit row captures the underlying error; the client response
+    // does not leak it.
+    expect(JSON.stringify(body)).not.toContain("Postgres connection refused");
+  });
+
+  it("writes a persistence_failed audit row on 500 carrying the redacted error", async () => {
+    mockPersistSubmittedDiscoveryRun.mockRejectedValue(
+      new Error("Postgres connection refused"),
+    );
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(500);
+    expect((row.result as { error: string }).error).toBe("persistence_failed");
+    const summary = row.parameters as { summary: { errorMessage: string } };
+    expect(summary.summary.errorMessage).toBe("Postgres connection refused");
+  });
+
+  it("writes a 201 success audit row with persistence counters", async () => {
+    mockPersistSubmittedDiscoveryRun.mockResolvedValue({
+      ...DEFAULT_PERSIST_SUMMARY,
+      runId: "run_db_42",
+      createdEntities: 3,
+      createdRelationships: 2,
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(201);
+    const summary = (row.parameters as {
+      summary: {
+        runId: string;
+        createdEntities: number;
+        createdRelationships: number;
+      };
+    }).summary;
+    expect(summary.runId).toBe("run_db_42");
+    expect(summary.createdEntities).toBe(3);
+    expect(summary.createdRelationships).toBe(2);
   });
 });
 
@@ -257,7 +442,26 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
         { Authorization: "Bearer x" },
       ),
     );
-    expect(res.status).toBe(202);
+    // 201 now that persistence is wired (was 202 stub before this PR).
+    expect(res.status).toBe(201);
+  });
+
+  it("writes a stale_observation audit row at 400 (with skew + observedAt in summary)", async () => {
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    await POST(
+      makeReq(
+        makeValidBody({ observedAt: stale }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    expect((row.result as { error: string }).error).toBe("stale_observation");
+    expect((row.result as { status: number }).status).toBe(400);
+    const summary = (row.parameters as {
+      summary: { skewMs: number; observedAt: string };
+    }).summary;
+    expect(summary.skewMs).toBeGreaterThan(24 * 60 * 60 * 1000);
+    expect(summary.observedAt).toBe(stale);
   });
 });
 
@@ -304,13 +508,16 @@ describe("POST /api/v1/edge/discovery-runs — (edgeNodeId, runKey) idempotency"
     });
   });
 
-  it("falls through to 202 stub when no prior run exists for (edgeNodeId, runKey)", async () => {
+  it("falls through to persist a new run when no prior exists for (edgeNodeId, runKey)", async () => {
     mockDiscoveryRunFindUnique.mockResolvedValue(null);
     const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.idempotentReplay).toBeUndefined();
-    expect(body.persistencePending).toBe(true);
+    expect(body.persisted).toBeDefined();
+    expect(body.runId).toBe("run_db_new_1");
+    // The pre-#513-merge stub field must not appear on persisted responses.
+    expect(body.persistencePending).toBeUndefined();
   });
 
   it("preserves null completedAt for an in-flight prior run", async () => {
@@ -328,5 +535,340 @@ describe("POST /api/v1/edge/discovery-runs — (edgeNodeId, runKey) idempotency"
     expect(body.idempotentReplay).toBe(true);
     expect(body.completedAt).toBeNull();
     expect(body.status).toBe("running");
+  });
+
+  it("writes a success audit row on idempotency replay at 200 with idempotentReplay summary marker", async () => {
+    mockDiscoveryRunFindUnique.mockResolvedValue({
+      id: "run_db_1",
+      status: "completed",
+      itemCount: 5,
+      relationshipCount: 2,
+      startedAt: new Date(Date.now() - 60_000),
+      completedAt: new Date(Date.now() - 30_000),
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(200);
+    const summary = (row.parameters as {
+      summary: {
+        idempotentReplay: boolean;
+        runKey: string;
+        priorRunId: string;
+        priorStatus: string;
+      };
+    }).summary;
+    expect(summary.idempotentReplay).toBe(true);
+    expect(summary.runKey).toBe("run_a1b2c3");
+    expect(summary.priorRunId).toBe("run_db_1");
+    expect(summary.priorStatus).toBe("completed");
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — audit", () => {
+  it("writes a failure audit on auth failure with discovery:submit scope context", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "node_revoked",
+      message: "revoked",
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect(row.toolName).toBe("edge.discovery_runs.submit");
+    expect((row.result as { error: string }).error).toBe("node_revoked");
+    expect((row.parameters as { summary: { scope: string } }).summary.scope).toBe("discovery:submit");
+  });
+
+  it("writes scope_disallowed audit at 403", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "scope_disallowed",
+      message: "no",
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect((auditCalls[0]!.result as { status: number }).status).toBe(403);
+  });
+
+  it("writes invalid_body audit with resolved edgeNodeId", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(
+      makeReq(
+        { runKey: "x" /* missing other required fields */ },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    expect((row.result as { error: string }).error).toBe("invalid_body");
+    expect((row.parameters as { edgeNodeId: string }).edgeNodeId).toBe("edgenode_cuid_1");
+  });
+
+  it("writes a success audit row on 201 with envelope summary fields", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(201);
+    const summary = (row.parameters as {
+      summary: {
+        runKey: string;
+        runId: string;
+        agentMode: string;
+        agentVersion: string;
+        itemCount: number;
+        relationshipCount: number;
+        capabilityCount: number;
+        createdEntities: number;
+      };
+    }).summary;
+    expect(summary.runKey).toBe("run_a1b2c3");
+    expect(summary.runId).toBe("run_db_new_1");
+    expect(summary.agentMode).toBe("container-host");
+    expect(summary.agentVersion).toBe("0.1.0");
+    expect(summary.itemCount).toBe(1);
+    expect(summary.relationshipCount).toBe(0);
+    expect(summary.capabilityCount).toBe(1);
+    // Persistence counters now in the audit summary (was persistencePending:true before this PR).
+    expect(summary.createdEntities).toBe(1);
+  });
+
+  it("audit summary tracks larger envelopes correctly", async () => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    const existingItems = VALID_BODY.items as Array<Record<string, unknown>>;
+    const big = {
+      ...VALID_BODY,
+      items: [
+        ...existingItems,
+        { observedKey: "h2", itemType: "host", name: "h2", rawData: {} },
+        { observedKey: "h3", itemType: "host", name: "h3", rawData: {} },
+      ],
+      relationships: [
+        {
+          fromObservedKey: "host:linux:abcdef",
+          toObservedKey: "h2",
+          relationshipType: "peers_with",
+        },
+      ],
+    };
+    await POST(makeReq(big, { Authorization: "Bearer x" }));
+    const summary = (auditCalls[0]!.parameters as {
+      summary: { itemCount: number; relationshipCount: number };
+    }).summary;
+    expect(summary.itemCount).toBe(3);
+    expect(summary.relationshipCount).toBe(1);
+  });
+
+  it("never includes the bearer token plaintext in the audit row", async () => {
+    const SECRET = "dpfedge_DISCOVERYSUBMITSECRET99999";
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    await POST(makeReq(VALID_BODY, { Authorization: `Bearer ${SECRET}` }));
+    const serialized = JSON.stringify(auditCalls[0]);
+    expect(serialized).not.toContain(SECRET);
+    expect(serialized).not.toContain("DISCOVERYSUBMITSECRET");
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — rate limit (4/min)", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("allows up to 4 submissions within a minute", async () => {
+    for (let i = 0; i < 4; i++) {
+      const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+      expect(res.status).toBe(201);
+    }
+  });
+
+  it("rejects the 5th submission with 429 + Retry-After header", async () => {
+    for (let i = 0; i < 4; i++) {
+      await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    }
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toMatch(/^\d+$/);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
+    expect(body.retryAfter).toBeGreaterThan(0);
+  });
+
+  it("writes a rate_limited audit row at 429 with the 4/min+60/hour ceiling", async () => {
+    for (let i = 0; i < 4; i++) {
+      await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    }
+    auditCalls.length = 0;
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(429);
+    expect((row.result as { error: string }).error).toBe("rate_limited");
+    const summary = (row.parameters as {
+      summary: { retryAfter: number; ceiling: string };
+    }).summary;
+    expect(summary.ceiling).toBe("4/min+60/hour");
+  });
+
+  it("rate limit fires BEFORE body parsing — misbehaving nodes can't burn CPU on JSON parse retry storms", async () => {
+    // Burn the bucket via 4 valid submissions, then send a malformed
+    // body 100 times. The route should not parse them; the bucket
+    // check should reject first.
+    for (let i = 0; i < 4; i++) {
+      await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    }
+    // Send malformed JSON; would normally produce 400 invalid_json,
+    // but the 429 should fire first.
+    const res = await POST(
+      makeReq("not json", { Authorization: "Bearer x" }, true),
+    );
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — payload size caps", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("rejects 413 when Content-Length declares > 5 MB (early rejection, no buffering)", async () => {
+    const req = new Request("http://test/api/v1/edge/discovery-runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer x",
+        "Content-Length": String(6 * 1024 * 1024),
+      },
+      body: "{}",
+    }) as unknown as NextRequest;
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.error).toBe("payload_too_large");
+  });
+
+  it("writes a payload_too_large audit on Content-Length rejection (stage=content-length)", async () => {
+    const req = new Request("http://test/api/v1/edge/discovery-runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer x",
+        "Content-Length": String(10 * 1024 * 1024),
+      },
+      body: "{}",
+    }) as unknown as NextRequest;
+    await POST(req);
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(413);
+    expect((row.result as { error: string }).error).toBe("payload_too_large");
+    const summary = (row.parameters as {
+      summary: { declaredBytes: number; capBytes: number; stage: string };
+    }).summary;
+    expect(summary.declaredBytes).toBe(10 * 1024 * 1024);
+    expect(summary.capBytes).toBe(5 * 1024 * 1024);
+    expect(summary.stage).toBe("content-length");
+  });
+
+  it("rejects 413 when actual body bytes exceed 5 MB (buffered stage)", async () => {
+    // Construct a body that's actually > 5 MB without declaring an
+    // honest Content-Length. The "warnings" array can carry padding
+    // because Zod allows arbitrary strings there.
+    const padding = "x".repeat(1024); // 1 KB per entry
+    const big = {
+      ...VALID_BODY,
+      // 6 MB of warnings: 6144 entries × 1 KB each + JSON framing.
+      warnings: Array.from({ length: 6144 }, () => padding),
+    };
+    const res = await POST(makeReq(big, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.error).toBe("payload_too_large");
+  });
+
+  it("writes a payload_too_large audit on buffered rejection (stage=buffered)", async () => {
+    const padding = "x".repeat(1024);
+    const big = {
+      ...VALID_BODY,
+      warnings: Array.from({ length: 6144 }, () => padding),
+    };
+    await POST(makeReq(big, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    const summary = (row.parameters as {
+      summary: { actualBytes: number; capBytes: number; stage: string };
+    }).summary;
+    expect(summary.actualBytes).toBeGreaterThan(5 * 1024 * 1024);
+    expect(summary.capBytes).toBe(5 * 1024 * 1024);
+    expect(summary.stage).toBe("buffered");
+  });
+
+  it("rejects 413 raw_data_too_large when a single item's rawData > 64 KB", async () => {
+    const bigRawDataItem = {
+      observedKey: "host:bloat",
+      itemType: "host",
+      name: "bloat",
+      // 70 KB rawData blob.
+      rawData: { blob: "y".repeat(70 * 1024) },
+    };
+    const body = {
+      ...VALID_BODY,
+      items: [...(VALID_BODY.items as unknown[]), bigRawDataItem],
+    };
+    const res = await POST(makeReq(body, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(413);
+    const responseBody = await res.json();
+    expect(responseBody.error).toBe("raw_data_too_large");
+    expect(responseBody.itemIndex).toBe(1);
+    expect(responseBody.itemObservedKey).toBe("host:bloat");
+  });
+
+  it("writes a raw_data_too_large audit with the offending item index", async () => {
+    const bigRawDataItem = {
+      observedKey: "host:bloat",
+      itemType: "host",
+      name: "bloat",
+      rawData: { blob: "y".repeat(70 * 1024) },
+    };
+    const body = {
+      ...VALID_BODY,
+      items: [...(VALID_BODY.items as unknown[]), bigRawDataItem],
+    };
+    await POST(makeReq(body, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(413);
+    expect((row.result as { error: string }).error).toBe("raw_data_too_large");
+    const summary = (row.parameters as {
+      summary: {
+        itemIndex: number;
+        itemObservedKey: string;
+        rawDataBytes: number;
+        capBytes: number;
+      };
+    }).summary;
+    expect(summary.itemIndex).toBe(1);
+    expect(summary.itemObservedKey).toBe("host:bloat");
+    expect(summary.rawDataBytes).toBeGreaterThan(64 * 1024);
+    expect(summary.capBytes).toBe(64 * 1024);
+  });
+
+  it("accepts items with rawData just under the 64 KB cap", async () => {
+    const okItem = {
+      observedKey: "host:medium",
+      itemType: "host",
+      name: "medium",
+      rawData: { blob: "y".repeat(50 * 1024) }, // 50 KB — under
+    };
+    const body = { ...VALID_BODY, items: [okItem] };
+    const res = await POST(makeReq(body, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(201);
+  });
+
+  it("rawData cap fires BEFORE the idempotency lookup — oversized payloads never touch the DB", async () => {
+    const bigRawDataItem = {
+      observedKey: "host:bloat",
+      itemType: "host",
+      name: "bloat",
+      rawData: { blob: "y".repeat(70 * 1024) },
+    };
+    const body = {
+      ...VALID_BODY,
+      items: [...(VALID_BODY.items as unknown[]), bigRawDataItem],
+    };
+    await POST(makeReq(body, { Authorization: "Bearer x" }));
+    expect(mockDiscoveryRunFindUnique).not.toHaveBeenCalled();
   });
 });

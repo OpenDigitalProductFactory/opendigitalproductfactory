@@ -381,4 +381,12 @@ describe("agent registry grant lookup", () => {
       expect.arrayContaining(["marketing_read", "marketing_write"]),
     );
   });
+
+  it("lets the finance specialist use public web research when External Access is enabled", () => {
+    const financeGrants = getAgentToolGrants("finance-agent");
+
+    expect(financeGrants).toEqual(expect.arrayContaining(["web_search"]));
+    expect(isToolAllowedByGrants("search_public_web", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("fetch_public_website", financeGrants ?? [])).toBe(true);
+  });
 });

@@ -59,6 +59,11 @@ describe("resolveAgentForRoute", () => {
     expect(result.systemPrompt).toContain("tax remittance");
     expect(result.systemPrompt).toContain("handoff");
     expect(result.systemPrompt).toContain("one concrete next move");
+    expect(result.systemPrompt).toContain("External Access");
+    expect(result.systemPrompt).toContain("search_public_web");
+    expect(result.systemPrompt).toContain("fetch_public_website");
+    expect(result.systemPrompt).toContain("DPF tax processing proposal");
+    expect(result.skills.some((skill) => skill.label === "Research tax processing proposal")).toBe(true);
   });
 
   it("returns canAssist=false when platformRole is null on gated route", () => {
