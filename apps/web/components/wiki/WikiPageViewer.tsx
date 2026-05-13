@@ -1,10 +1,15 @@
 // EP-WIKI-001 Phase 6a: page detail viewer.
-// Displays a wiki page's metadata header (title, kind, kernel/overlay
-// origin, citations count, last reviewed) above its rendered body.
-// Server component.
+// Principles-as-wiki-kind Phase 0: principle pages get an extra metadata
+// panel below the title (tier, applies-to, public state, weight, dimension
+// vector). Server component.
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+
+import {
+  PRINCIPLE_TIER_DEFAULT_WEIGHT,
+  isPrincipleTier,
+} from "@dpf/db/wiki-taxonomy";
 
 import { WikiBodyRenderer } from "./WikiBodyRenderer";
 import { WikiPageKindBadge } from "./WikiPageKindBadge";
@@ -26,6 +31,45 @@ export type WikiPageDetail = {
   lastReviewedAt: Date | null;
   updatedAt: Date;
   sources: WikiSourceCitation[];
+  // ─── Principle-only (only meaningful when pageKind === "principle") ─────
+  principleTier?: string | null;
+  principleDirection?: string | null;
+  principleWeight?: number | null;
+  principleDimensionVector?: Record<string, number> | null;
+  principleDimensions?: string[];
+  principleAppliesTo?: string[];
+  principlePublic?: boolean;
+};
+
+/**
+ * Resolve the effective weight a principle contributes to decision math:
+ * the explicit override if set, otherwise the tier default. Returns null
+ * for principles without a recognized tier so the UI can fall back to a
+ * neutral display.
+ */
+export function getPrincipleDisplayWeight(
+  tier: string | null | undefined,
+  override: number | null | undefined,
+): number | null {
+  if (typeof override === "number") {
+    return override;
+  }
+  if (tier && isPrincipleTier(tier)) {
+    return PRINCIPLE_TIER_DEFAULT_WEIGHT[tier];
+  }
+  return null;
+}
+
+const TIER_LABEL: Record<string, string> = {
+  commandment: "Commandment",
+  core: "Core",
+  contextual: "Contextual",
+};
+
+const APPLIES_TO_LABEL: Record<string, string> = {
+  in_platform_coworker: "In-platform coworker",
+  external_coding_agent: "External coding agent",
+  human: "Human",
 };
 
 type Props = {
@@ -42,6 +86,98 @@ function formatOrigin(page: WikiPageDetail): string {
       : "Org overlay";
   }
   return "Org-original";
+}
+
+function PrincipleMetadataPanel({ page }: { page: WikiPageDetail }): ReactNode {
+  const tier = page.principleTier;
+  const tierLabel = tier ? TIER_LABEL[tier] ?? tier : "Untiered";
+  const weight = getPrincipleDisplayWeight(tier, page.principleWeight);
+  const appliesTo = page.principleAppliesTo ?? [];
+  const dimensions = page.principleDimensions ?? [];
+  const vector = page.principleDimensionVector ?? null;
+
+  return (
+    <section
+      aria-label="Principle metadata"
+      className="mb-6 p-4 border border-[var(--dpf-border)] rounded bg-[var(--dpf-surface-2)]"
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide border border-[var(--dpf-border)] text-[var(--dpf-text)] bg-[var(--dpf-surface-1)]">
+          {tierLabel}
+        </span>
+        {weight !== null && (
+          <span className="text-xs text-[var(--dpf-muted)]">
+            weight {weight.toFixed(2)}
+          </span>
+        )}
+        <span className="text-xs text-[var(--dpf-muted)]">
+          · {page.principlePublic ? "Public" : "Internal"}
+        </span>
+        <span className="text-xs text-[var(--dpf-muted)]">
+          · {page.sources.length} source{page.sources.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {page.principleDirection && (
+        <p className="text-sm text-[var(--dpf-text)] mb-3 leading-relaxed">
+          {page.principleDirection}
+        </p>
+      )}
+
+      {appliesTo.length > 0 && (
+        <div className="mb-3">
+          <h3 className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mb-1">
+            Applies to
+          </h3>
+          <div className="flex flex-wrap gap-1">
+            {appliesTo.map((aud) => (
+              <span
+                key={aud}
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-[var(--dpf-border)] text-[var(--dpf-muted)] bg-[var(--dpf-surface-1)]"
+              >
+                {APPLIES_TO_LABEL[aud] ?? aud}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {dimensions.length > 0 && (
+        <div>
+          <h3 className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mb-1">
+            Decision dimensions
+          </h3>
+          {vector ? (
+            <table className="text-xs w-full">
+              <tbody>
+                {dimensions.map((dim) => (
+                  <tr key={dim} className="border-t border-[var(--dpf-border)]">
+                    <td className="py-1 text-[var(--dpf-text)]">{dim}</td>
+                    <td className="py-1 text-right text-[var(--dpf-muted)] font-mono">
+                      {typeof vector[dim] === "number"
+                        ? vector[dim].toFixed(2)
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {dimensions.map((dim) => (
+                <span
+                  key={dim}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+                >
+                  {dim}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function WikiPageViewer({ page }: Props): ReactNode {
@@ -73,6 +209,8 @@ export function WikiPageViewer({ page }: Props): ReactNode {
           </p>
         )}
       </header>
+
+      {page.pageKind === "principle" && <PrincipleMetadataPanel page={page} />}
 
       <section className="mb-8">
         <WikiBodyRenderer body={page.body} />

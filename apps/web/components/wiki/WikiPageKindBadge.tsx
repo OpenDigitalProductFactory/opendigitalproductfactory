@@ -9,7 +9,7 @@
 
 import type { ReactNode } from "react";
 
-const KIND_LABELS: Record<string, string> = {
+export const WIKI_PAGE_KIND_LABELS: Record<string, string> = {
   entity: "Entity",
   summary: "Summary",
   decision: "Decision",
@@ -17,17 +17,26 @@ const KIND_LABELS: Record<string, string> = {
   index: "Index",
   stance: "Stance",
   heuristic: "Heuristic",
+  principle: "Principle",
 };
+
+/**
+ * Pure helper: resolve the human-readable label for a page kind. Falls
+ * back to the raw kind string for unknown values so unrecognized kinds
+ * still render legibly instead of as a blank badge.
+ */
+export function getWikiPageKindLabel(pageKind: string): string {
+  return WIKI_PAGE_KIND_LABELS[pageKind] ?? pageKind;
+}
 
 type Props = {
   pageKind: string;
 };
 
 export function WikiPageKindBadge({ pageKind }: Props): ReactNode {
-  const label = KIND_LABELS[pageKind] ?? pageKind;
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide border border-[var(--dpf-border)] text-[var(--dpf-muted)] bg-[var(--dpf-surface-2)]">
-      {label}
+      {getWikiPageKindLabel(pageKind)}
     </span>
   );
 }
