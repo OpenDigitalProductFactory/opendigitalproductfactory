@@ -89,12 +89,26 @@ fine — leave them unchecked.
 
 ## Diagnostic bundle
 
-Please attach the diagnostic bundle. Secrets are redacted automatically:
+**Fastest path — one command produces a complete bundle:**
+
+```bash
+bash scripts/verify-install-edge.sh
+# Then drag-and-drop ~/.dpf/verify-bundle-<timestamp>.tar.gz into this issue.
+```
+
+That bundle includes the host fingerprint, the doctor diagnostic, the
+Prometheus targets snapshot, the Edge Node lifecycle log, and a
+paste-able summary — covers everything below in one go.
+
+**If you only want the basic doctor bundle** (Linux smoke without the
+Edge Node + observability checks):
 
 ```bash
 bash install-dpf.sh doctor
 # Then drag-and-drop ~/.dpf/doctor-<timestamp>.tar.gz into this issue.
 ```
+
+Secrets are redacted automatically in both bundles.
 
 ## Anything else
 
