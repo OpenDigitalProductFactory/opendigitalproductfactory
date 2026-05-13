@@ -52,9 +52,31 @@ An implementation:
 
 - `MUST` declare the highest conformance profile it claims
 - `MUST NOT` claim a higher profile if any mandatory control for that profile is absent
-- `MUST` distinguish between self-asserted, organization-attested, and independently-certified claims
+- `MUST` distinguish between self-asserted, organization-attested, independently-assessed, and accredited-certified claims
 - `SHOULD` publish an implementation statement showing how each control is met
 - `MAY` implement controls beyond those required by its claimed profile
+
+### 2.1 Standard Versioning, Lifecycle, and Conformance Assertions
+
+This standard `SHOULD` be versioned using a semantic-style scheme:
+
+- major versions for normative incompatibilities
+- minor versions for additive normative capabilities or profiles
+- patch versions for clarifications, errata, or non-substantive corrections
+
+Implementations claiming conformance `SHOULD` declare:
+
+- the supported `GAID` version
+- the claimed conformance profile
+- any declared public-trust profile such as private-only, federated, certificate-backed, or decentralized-portability
+
+Each normative `MUST` statement in this standard `SHOULD` map to one or more explicit conformance assertions in a companion test suite or implementation statement. This document does not require one central verifier implementation, but it does require that conformance claims be testable rather than rhetorical.
+
+A suggested companion assertion rubric for this revision is published in `gaid-conformance-tests.md`.
+
+The intended lifecycle of `GAID` is open standards progression through multistakeholder implementation and liaison rather than indefinite treatment as an internal white paper.
+
+The preferred near-term disposition is publication as an open industry specification with explicit liaison to `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, and relevant `IETF` OAuth / `GNAP` work, with later venue-specific profiles or registrations preserving the same identity and evidence semantics.
 
 ## 3. Normative References
 
@@ -63,19 +85,49 @@ The following references are relevant to this standard and informed its design:
 | Reference | Relevance |
 |-----------|-----------|
 | [ISO/IEC 42001:2023](https://www.iso.org/standard/81230.html) | Organization-level AI management systems |
+| [ISO/IEC 12792:2025](https://www.iso.org/standard/84111.html) | Transparency taxonomy for AI systems relevant to `AIDoc` and badge disclosure posture |
+| [ISO/IEC DIS 42102](https://www.iso.org/standard/86898.html) | Framework for characterizing AI system methods and capabilities |
 | [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Risk management framing for AI systems |
 | [NIST AI Agent Standards Initiative](https://www.nist.gov/caisi/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agent interoperability, identity, and security |
 | [NCCoE concept paper: Accelerating the Adoption of Software and AI Agent Identity and Authorization](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd) | Identity, authorization, auditing, and non-repudiation concerns for agents |
-| [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2024-11-05/basic/index) | Tool and context interoperability |
+| [OpenID Foundation AIIM Community Group](https://openid.net/cg/artificial-intelligence-identity-management-community-group/) | Open identity-community venue focused on AI agent identity, modularization, and liaison work |
+| [OpenID Foundation: Identity Management for Agentic AI](https://openid.net/wp-content/uploads/2025/10/Identity-Management-for-Agentic-AI.pdf) | Agent identity, authorization, and interoperability white paper from the AIIM community |
+| [OIDF response to NIST on AI agent security](https://openid.net/wp-content/uploads/2026/03/Attachment1_NIST-2025-0035-0001.pdf) | Threat-model and identity-layer response to current U.S. agent security policy work |
+| [W3C Agent Identity Registry Protocol Community Group](https://www.w3.org/community/agent-identity/) | Active W3C venue for verifiable AI agent identity infrastructure and liaison positioning |
+| [CoSAI: Agentic Identity and Access Management](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf) | Practical enterprise model for representing and governing AI agent identities |
+| [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic) | Tool and context interoperability |
+| [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) | OAuth-based authorization profile for protected MCP deployments |
 | [Anthropic: Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) | Background on MCP as an open protocol |
 | [Agent2Agent Protocol specification](https://google-a2a.github.io/A2A/specification/) | Agent-to-agent interoperability and discovery |
-| [Google: Announcing the Agent2Agent Protocol](https://developers.googleblog.com/es/a2a-a-new-era-of-agent-interoperability/) | Background on A2A as an open protocol |
+| [Google: Announcing the Agent2Agent Protocol](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/) | Background on A2A as an open protocol |
+| [Linux Foundation: Agentic AI Foundation announcement](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation?hs_amp=true) | Neutral governance venue for MCP and `AGENTS.md` stewardship |
+| [RFC 4512 Lightweight Directory Access Protocol (LDAP): Directory Information Models](https://www.rfc-editor.org/rfc/rfc4512.html) | Enterprise directory modeling relevant to internal agent identity projection |
+| [RFC 7643 System for Cross-domain Identity Management: Core Schema](https://www.rfc-editor.org/rfc/rfc7643) | Enterprise lifecycle and identity-provisioning schema baseline |
+| [RFC 7644 System for Cross-domain Identity Management: Protocol](https://www.rfc-editor.org/rfc/rfc7644) | Enterprise lifecycle and provisioning protocol baseline |
+| [RFC 9728 OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728) | Protected-resource discovery and metadata model relevant to verifier and server trust surfaces |
+| [RFC 9635 Grant Negotiation and Authorization Protocol (GNAP)](https://www.rfc-editor.org/rfc/rfc9635) | Negotiated delegated authorization model for dynamic agent rights |
+| [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767) | Resource-server-facing GNAP model for binding access rights to protected resources |
+| [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449) | Sender-constrained token and proof binding for high-assurance agent requests |
 | [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model/) | Credential format and issuer-verifier trust patterns |
+| [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/) | Optional decentralized public identity profile for portable verification |
 | [W3C Trace Context](https://www.w3.org/TR/trace-context/) | Cross-system trace propagation |
 | [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/info/rfc9421) | Message-level integrity and signing |
-| [SLSA Provenance v1.1](https://slsa.dev/spec/v1.1/provenance) | Provenance and verifiable supply-chain evidence |
+| [RFC 9162 Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162) | Public transparency log pattern for trust, status, and auditability (Experimental) |
+| [SCITT architecture draft](https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/22/) | Transparency and verifiable publication pattern for signed statements |
+| [SLSA Provenance v1.2](https://slsa.dev/spec/v1.2/provenance) | Provenance and verifiable supply-chain evidence |
+| [in-toto Attestation Framework Specification](https://github.com/in-toto/attestation/blob/main/spec/README.md) | Practical statement and envelope model for signed evidence and receipt payloads |
+| [Sigstore Documentation](https://docs.sigstore.dev/) | Operational transparency and verification substrate for signed identity and receipt artifacts |
+| [C2PA Content Credentials Technical Specification v2.2](https://spec.c2pa.org/specifications/specifications/2.2/specs/C2PA_Specification.html) | Cryptographically bound provenance and content-credential pattern for agent-produced artifacts |
+| [C2PA Implementation Guidance](https://spec.c2pa.org/specifications/specifications/2.4/guidance/Guidance.html) | Guidance on AI/ML content provenance and `digitalSourceType` disclosure |
+| [AP2 Agent Payments Protocol core concepts](https://ap2-protocol.org/topics/core-concepts/) | Adjacent mandate and verifiable-credential pattern for consequential agent commerce and payment authorization |
 | [Package URL / ECMA-427](https://www.packageurl.org/) | Software identification patterns relevant to normalized agent component references |
-| [OWASP GenAI Security Project](https://genai.owasp.org/) | Security considerations for LLM and agentic systems |
+| [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/2025/12/09/owasp-top-10-for-agentic-applications-the-benchmark-for-agentic-security-in-the-age-of-autonomous-ai/) | Concrete agentic risk taxonomy and mitigation guidance |
+| [CSA MAESTRO](https://labs.cloudsecurityalliance.org/maestro/) | Agentic AI threat-modeling framework |
+| [MITRE ATLAS](https://atlas.mitre.org/) | Adversarial tactics and techniques knowledge base for AI systems |
+| [EU General-Purpose AI Code of Practice](https://digital-strategy.ec.europa.eu/en/policies/contents-code-gpai) | Current EU transparency, safety, security, and documentation expectations for GPAI providers |
+| [Regulation (EU) 2016/679 (GDPR)](https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=celex%3A32016R0679) | Privacy-law baseline for personal data minimization, accountability, and records implications of receipts and identity documents |
+| [IMDA Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai) | National governance framework for agentic AI deployment |
+| [ISO/IEC 27701:2025](https://www.iso.org/standard/85819.html) | Privacy information management system reference for `AIDoc` and receipt minimization obligations |
 
 ## 4. Terms and Definitions
 
@@ -89,7 +141,7 @@ For the purposes of this standard:
 | `registry` | The namespace management layer that delegates or recognizes issuer prefixes |
 | `AIDoc` | The signed `Agent Identity Document` describing an agent's identity, operating surface, governance claims, and status |
 | `badge` | A structured claim about an agent's capability, governance posture, assurance status, or operating constraint |
-| `assurance level` | The strength of evidence behind a claim, such as self-asserted, organization-attested, or independently-certified |
+| `assurance level` | The strength of evidence behind a claim, such as self-asserted, organization-attested, independently-assessed, or accredited-certified |
 | `authorization class` | A portable declaration of the kinds of actions or data access an agent is designed to request or perform |
 | `public namespace` | The globally resolvable identifier space intended for cross-organizational or public consumption |
 | `private namespace` | An internally governed identifier space intended for local or intra-organizational use |
@@ -145,6 +197,10 @@ Examples:
 
 An implementation `MAY` maintain additional internal identifiers, but the canonical `GAID` `MUST` remain the primary interoperable identifier.
 
+Public standardization of the identifier form remains an open deployment task. A future public profile `SHOULD` either register `GAID` as a URI scheme or profile it as a `URN` namespace in line with the relevant IANA process, rather than leaving the colon-delimited form permanently informal.
+
+An early public-federation work item `SHOULD` therefore include an explicit IANA registration plan, naming authority expectations, and backward-compatibility rules for private deployments that began before a public namespace decision was finalized.
+
 ![GAID namespace model](gaid-diagrams/png/01-gaid-namespace.png)
 
 _Figure 1. `GAID` separates private and public namespaces while preserving governed mapping between them._
@@ -175,6 +231,7 @@ For private identifiers:
 - the issuer `MUST` ensure uniqueness within its boundary
 - the issuer `MUST` maintain a local resolution mechanism
 - the issuer `SHOULD` maintain an internal status and revocation record
+- the issuer prefix `MUST` include a stable installation, domain, or equivalent namespace discriminator so future federation does not require subject renaming
 - the identifier `MUST NOT` be represented as publicly accredited unless it has passed through a recognized public issuance process
 
 ### 6.5 Boundary Mapping
@@ -260,6 +317,139 @@ The operating state `SHOULD` include materially relevant elements such as:
 
 A change to operating state `SHOULD` create a new governed version or state record beneath the same `GAID`, rather than replacing the `GAID` itself.
 
+### 6.10 Public Verification Architecture Options
+
+For cross-organizational or public trust, this standard recognizes several viable authority architectures:
+
+- `directory-first private only`
+- `public PKI and domain-anchored issuer model`
+- `federated trust-list model`
+- `decentralized identifier and verifiable credential model`
+- `hybrid model`
+
+The standard does not require one monopoly authority architecture. It does, however, require that a public `GAID` ecosystem clearly specify:
+
+- who the recognized issuers are
+- how issuer status is validated
+- how revocation and suspension are published
+- how relying parties verify current trust status
+
+### 6.11 Preferred Public Architecture
+
+The preferred public architecture under this standard is a hybrid model:
+
+- private enterprise identity remains directory-native
+- public identity is issuer-accredited and publicly verifiable
+- verifiable credential and decentralized identifier projections `MAY` be supported as optional portability profiles
+- transparency publication `SHOULD` exist regardless of whether the underlying authority model is centralized, federated, or decentralized
+
+This preference is based on current adoption and operational precedent:
+
+- directory systems remain the practical enterprise anchor for internal identity
+- certificate and domain-controlled trust models remain the most deployable public-trust pattern
+- decentralized profiles remain useful, but should not be the only available public-validation path
+
+This standard is intended to be complementary to, and in active liaison with, adjacent identity efforts rather than competitive with them. In particular:
+
+- `OpenID` `AIIM` occupies the transaction, authentication, authorization, and identity-modularization layer
+- the `W3C` Agent Identity Registry Protocol Community Group occupies an adjacent verifiable identity-infrastructure lane
+- `CoSAI` occupies a practical control-framework lane for enterprise deployment
+
+`GAID` focuses on the compositional identity, badge, receipt, and issuer-governance semantics that these efforts can consume, profile, or align around.
+
+![GAID public verification architecture](gaid-diagrams/png/05-public-verification-architecture.png)
+
+_Figure 2. Preferred hybrid `GAID` verification composes private identity, accredited public identity, status, and verifier workflows rather than collapsing trust into one mechanism._
+
+### 6.12 Staged Adoption Model
+
+`GAID` is designed for staged adoption.
+
+The expected path is:
+
+1. `enterprise-private foundation`
+2. `federated or accredited cross-boundary trust`
+3. `global public trust fabric`
+
+In the first stage:
+
+- private `GAID` issuance
+- internal `AIDoc` resolution
+- enterprise directory projection
+- organization-attested badges
+- internal receipts
+
+In the second stage:
+
+- public or partner-facing `GAID`
+- accredited issuer or recognized federation participation
+- signed public `AIDoc`
+- public status and revocation
+- stronger assurance and transparency publication
+
+In the third stage:
+
+- broader public verifier interoperability
+- optional decentralized portability profiles
+- stronger cross-jurisdiction governance and dispute handling
+
+This staged model is not a sign of incompleteness. It follows the historical pattern by which durable identifier systems such as `ISBN`, `DNS`, and public certificate ecosystems became operationally trusted at scale.
+
+### 6.13 Governance Dependencies and Economic Model
+
+Public `GAID` operation depends on recognized governance and sustainable funding.
+
+Therefore a `GAID-Public` ecosystem `MUST` define:
+
+- root or federation authority responsibilities
+- issuer accreditation requirements
+- audit and dispute processes
+- status and revocation publication responsibilities
+- funding and fee policies for the operating trust system
+
+The preferred funding posture is:
+
+- no mandatory public-fee dependency for private enterprise `GAID`
+- issuer accreditation and operating fees for public issuance
+- optional certification fees for higher-assurance badges
+- transparency and status infrastructure funded primarily by issuers or federation participants rather than by per-action usage charges
+
+The standard `SHOULD NOT` assume a per-receipt or per-agent-action public fee model because that scales poorly for high-volume operational use.
+
+### 6.14 Open Questions for Global Adoption and Scale
+
+The following questions remain important for global-scale adoption and `SHOULD` be treated as governance work items rather than ignored ambiguities:
+
+- whether one root, many roots, or federated trust lists should dominate
+- how cross-jurisdiction disputes, fraud, and reassignment are handled
+- how public transparency avoids creating unnecessary surveillance or correlation risk
+- how small issuers, open-source communities, and public-interest organizations participate affordably
+- how sector overlays and badge vocabularies are governed without fragmentation
+- how platform migrations, mergers, or provider changes preserve durable identity
+
+These open questions do not block private or early federated adoption. They do, however, matter for credible global public operation.
+
+### 6.15 Optional Decentralized Portability Profile
+
+`GAID` `MAY` support a decentralized portability profile using `VC`, `DID`, or another recognized controlled-identifier model.
+
+If such a profile is used:
+
+- the core `GAID` semantics `MUST` remain unchanged
+- sensitive or rapidly changing operating metadata `SHOULD NOT` be forced into an immutable public ledger
+- off-chain status, receipt, and evidence services `MAY` still remain necessary
+- ledger or registry anchoring `SHOULD` be used primarily for proof commitments, status references, or key material rather than for full public disclosure of agent internals
+
+### 6.16 Bootstrap and Recognition Path
+
+Early public `GAID` ecosystems `SHOULD` support a bootstrap model in which:
+
+- organizations or sector alliances publish mutual-recognition trust lists
+- recognized issuers publish their validation material, status endpoints, and policy references
+- relying parties can adopt one or more roots or trust lists without waiting for a single global authority
+
+This mirrors the way durable trust systems often mature in practice: through interoperable recognition and policy alignment first, and tighter accreditation convergence later.
+
 ## 7. Agent Identity Document (AIDoc)
 
 ### 7.1 Core Requirement
@@ -278,7 +468,7 @@ The `AIDoc` `MAY` be represented in JSON, JSON-LD, or another interoperable enco
 
 ![AIDoc resolution](gaid-diagrams/png/02-aidoc-resolution.png)
 
-_Figure 2. Public trust depends on being able to resolve an agent identifier into current, signed identity metadata._
+_Figure 3. Public trust depends on being able to resolve an agent identifier into current, signed identity metadata._
 
 ### 7.2 Minimum AIDoc Fields
 
@@ -292,8 +482,12 @@ At minimum, an `AIDoc` `MUST` contain the following fields:
 | `status` | `MUST` | Current lifecycle status |
 | `subject_type` | `MUST` | Coordinator, specialist, assistant, service agent, or equivalent |
 | `owner_organization` | `MUST` | Organizational owner or controlling entity |
+| `owner_of_record` | `SHOULD` | Named accountable owner, sponsor, or steward for the agent subject |
+| `responsible_team` | `SHOULD` | Team or function responsible for operating governance and maintenance |
+| `controlling_humans` | `SHOULD` | Human supervisors, sponsors, or approval authorities materially tied to the subject |
 | `service_endpoints` | `SHOULD` | Public or internal endpoints through which the agent is reached |
 | `exposure_state` | `SHOULD` | Whether the identity is operating in private, federated, or public posture |
+| `directory_bindings` | `SHOULD` | Internal directory or lifecycle projections such as `LDAP`, `AD`, `Entra`, or `SCIM` references |
 | `versioning` | `MUST` | Agent software or deployment version references |
 | `model_binding` | `MUST` | Model family, provider, and version where known |
 | `runtime_profile` | `SHOULD` | Runtime type, region, or managed environment references |
@@ -306,6 +500,14 @@ At minimum, an `AIDoc` `MUST` contain the following fields:
 | `memory_profile` | `SHOULD` | Durable memory characteristics and retention posture |
 | `hitl_profile` | `SHOULD` | Default oversight or approval posture |
 | `data_sensitivity_profile` | `SHOULD` | Declared data handling and sensitivity scope |
+| `entitlement_scope` | `SHOULD` | Declared scope of access or privilege types the agent may request or hold |
+| `reachable_systems` | `SHOULD` | Classes of systems, services, or environments the agent can materially affect |
+| `reachable_data_classes` | `SHOULD` | Classes of data the agent can materially access or process |
+| `credential_bindings` | `SHOULD` | Credential, token, or delegated identity model used to act as the agent |
+| `least_privilege_posture` | `SHOULD` | Whether the declared access posture is attested as least-privilege, over-scoped, unknown, or under review |
+| `blast_radius_profile` | `SHOULD` | Structured statement of the potential operational impact if the agent or its credentials are misused |
+| `mcp_surfaces` | `SHOULD` | Declared `MCP` servers, tools, or connection surfaces the identity exposes or consumes |
+| `a2a_surfaces` | `SHOULD` | Declared `A2A` cards, endpoints, or task-interaction surfaces |
 | `authorization_classes` | `SHOULD` | Portable action and access classes |
 | `badges` | `SHOULD` | Structured assurance and capability claims |
 | `verification_material` | `MUST` for `GAID-Public` | Public keys, certificates, or equivalent verifier references |
@@ -334,7 +536,25 @@ then the field `MUST` be marked as:
 
 The point is not to force perfect disclosure. The point is to make missing evidence explicit.
 
-### 7.4 Operating Surface Declarations
+For adoption, a `GAID-Private` implementation `SHOULD` be able to publish a minimum viable `AIDoc` using only the `MUST` fields plus the smallest set of local accountability fields needed to inventory and govern the subject.
+
+### 7.4 Minimum Viable Private AIDoc
+
+A minimum viable private `AIDoc` `SHOULD` usually be sufficient if it contains:
+
+- `gaid`
+- `subject_name`
+- `issuer`
+- `status`
+- `subject_type`
+- `owner_organization`
+- `versioning`
+- `model_binding`
+- `tool_surface`
+
+Most enterprises will also want at least one local accountability field such as `owner_of_record`, `responsible_team`, or `directory_bindings`.
+
+### 7.5 Operating Surface Declarations
 
 The `AIDoc` `SHOULD` declare the surfaces that materially affect trust, including:
 
@@ -347,7 +567,7 @@ The `AIDoc` `SHOULD` declare the surfaces that materially affect trust, includin
 
 An implementation `MUST NOT` claim that an agent is narrowly scoped if its declared operating surface is materially broader.
 
-### 7.5 Validation Continuity
+### 7.6 Validation Continuity
 
 An `AIDoc` `SHOULD` make it possible for a relying party to distinguish between:
 
@@ -360,6 +580,35 @@ This means an implementation `SHOULD` expose enough state to answer:
 - is this still the same materially validated operating state?
 
 The answer to the second question `MAY` change even when the answer to the first remains yes.
+
+### 7.7 Enterprise Directory and Lifecycle Projection
+
+For enterprise-private operation, the `AIDoc` `SHOULD` make it possible to project the enduring agent subject into directory and lifecycle systems without fragmenting identity.
+
+At minimum, an enterprise projection `SHOULD` make visible where policy allows:
+
+- the canonical private `GAID`
+- display name and subject type
+- owner, sponsor, or responsible team
+- directory or tenant-local lifecycle identifiers
+- coarse access or group posture
+- current validation or restriction state
+
+The purpose is not to turn `LDAP` or `SCIM` into `GAID`. The purpose is to let internal IAM, access review, and inventory systems reason about agent identity using familiar enterprise carriers.
+
+### 7.8 Example Machine-Readable AIDoc Pattern
+
+An `AIDoc` `SHOULD` be rich enough that a relying party can answer basic trust questions without trial-and-error probing.
+
+Those questions include:
+
+- who owns and sponsors this agent
+- what identity systems it is bound to internally
+- what kinds of systems and data it can reach
+- what protocols it exposes
+- what evidence exists for the current claims
+
+This standard does not require one single serialization format, but it `SHOULD` encourage a predictable JSON-based baseline so enterprises can inventory, compare, and validate agents programmatically.
 
 ## 8. Badge and Assurance Model
 
@@ -381,12 +630,16 @@ A conforming implementation `SHOULD` support badge categories at least sufficien
 
 | Badge Category | Examples |
 |----------------|----------|
+| `identity-and-accountability` | sponsor assigned, accountable team declared, directory binding validated |
 | `capability` | code generation, research, CRM update, scheduling, deployment coordination |
 | `governance` | human approval required, audit logging enabled, immutable instructions controlled |
 | `data-sensitivity` | public, internal, confidential, regulated, export-controlled |
+| `access-and-blast-radius` | least-privilege attested, broad entitlement scope, production write capable, public-facing |
 | `action-class` | read, recommend, create, update, approve, execute, delegate |
 | `interoperability` | `MCP`, `A2A`, HTTP API, queue-based worker, UI protocol compatibility |
 | `fit-for-purpose` | customer support, policy drafting, architecture review, clinical triage support |
+| `business-archetype-and-operating-model` | HOA management, nonprofit community intake, professional services assistant, software platform coworker |
+| `model-and-provider-posture` | provider-bound, multi-provider approved, context-window constrained, memory-enabled |
 | `safety-and-risk` | prompt-injection hardened, sandboxed execution, external content disclosure required |
 | `evaluation` | benchmark coverage, red-team coverage, failure mode tests, calibration tests |
 | `provenance` | model card reference, software provenance reference, supply-chain evidence |
@@ -397,12 +650,24 @@ Each badge `MUST` identify:
 
 - badge type
 - claim statement
-- scope
+- claim scope
 - issuer
 - assurance level
 - issuance date
 - expiry or review date where applicable
 - evidence reference or explicit statement that evidence is absent
+
+For scoped claims, the badge `SHOULD` structure scope explicitly rather than leaving it as prose.
+
+At minimum, scoped fit-for-purpose or governance badges `SHOULD` make it possible to express:
+
+- applicable business archetypes or sectors
+- applicable operating-model classes
+- applicable workflow or task classes
+- applicable data classes
+- required oversight or `HITL` posture
+- excluded uses or prohibited contexts
+- jurisdictional or regulatory overlays where relevant
 
 ### 8.4 Assurance Levels
 
@@ -412,9 +677,10 @@ At minimum, the following assurance levels `MUST` be supported:
 |-------|---------|
 | `self-asserted` | Claim made by the agent operator or issuer without independent verification |
 | `org-attested` | Claim reviewed and attested by the operating organization |
-| `independently-certified` | Claim assessed by an independent assessor or accredited body |
+| `independently-assessed` | Claim assessed by an independent assessor but not necessarily within an accredited certification regime |
+| `accredited-certified` | Claim assessed under a recognized accredited certification or recognized public-assurance regime |
 
-An issuer `MUST NOT` present a self-asserted claim as if it were independently-certified.
+An issuer `MUST NOT` present a self-asserted claim as if it were independently-assessed or accredited-certified.
 
 ### 8.5 Benchmark and Disclosure Claims
 
@@ -434,6 +700,15 @@ Examples include:
 - effective context-window utilization under declared conditions
 - hallucination or fabrication rate under defined tests
 - known limits or exclusions
+
+Where possible, the evidence model `SHOULD` reuse adjacent standards and recognized evidence artifacts such as:
+
+- model cards
+- benchmark or evaluation reports
+- `VC`-carried attestations
+- `SPDX`, `CycloneDX`, or `purl` references for software and component identification
+- `SLSA` or equivalent provenance statements
+- signed receipts and transparency-log references
 
 ### 8.6 Badge Freshness
 
@@ -477,6 +752,7 @@ Material changes include, at minimum:
 - prompt or instruction bundle changes
 - tool-surface changes
 - autonomy or governance changes
+- verification key, certificate, or credential-binding changes that affect identity, signing, or delegated authority
 - runtime dependency drift that alters practical capability or risk
 
 ### 8.9 Practical Capability Drift
@@ -493,7 +769,21 @@ Where meaningful drift is detected:
 
 ![GAID assurance model](gaid-diagrams/png/04-assurance-model.png)
 
-_Figure 3. `GAID` separates identity from the strength of evidence behind claims about that identity._
+_Figure 4. `GAID` separates identity from the strength of evidence behind claims about that identity._
+
+### 8.10 Archetype, Workflow, and Data-Scope Scrutiny
+
+`GAID` fit-for-purpose claims `MUST NOT` be treated as universal simply because an agent performs well in one narrow context.
+
+For materially consequential badges, a conforming implementation `SHOULD` scrutinize claims against:
+
+- the business archetypes or sectors in which the claim is intended to apply
+- the workflow classes the agent is expected to perform
+- the data sensitivity and jurisdiction classes in which the claim will operate
+- the oversight posture required to keep the claim valid
+- explicitly excluded or higher-risk scenarios where the claim does not apply
+
+This is especially important where organizations are trying to govern broad families of internal and public AI agents. A badge that is useful for a low-risk intake workflow in one archetype `MUST NOT` be implied to cover high-risk approval or regulated decision support in another.
 
 ## 9. Authorization Classes
 
@@ -510,7 +800,9 @@ A conforming implementation `SHOULD` support at least the following portable cla
 | Class | Meaning |
 |-------|---------|
 | `observe` | read or inspect data without mutation |
+| `monitor` | passively observe, watch, or alert on changes without directly mutating the target system |
 | `analyze` | derive recommendations, rankings, or assessments |
+| `report` | read or analyze data and publish a summary, notification, or evidence artifact without directly changing the target record |
 | `create` | create new records or artifacts |
 | `update` | modify existing records or configurations |
 | `approve` | approve or reject governed actions |
@@ -556,7 +848,7 @@ At minimum, a receipt `MUST` contain:
 | `action_type` | Action or tool classification |
 | `authorization_class` | Portable action class reference |
 | `execution_mode` | Proposal, immediate, review-after, or equivalent |
-| `target_ref` | Target system, record, or resource reference |
+| `target_ref` | Target system, record, or resource reference, preferably as a URI, URN, `purl`, or similarly stable typed locator |
 | `request_hash` | Hash of governing request or parameters |
 | `result_hash` | Hash or digest of the resulting artifact, output, or change set where applicable |
 | `trace_context` | Trace identifiers sufficient for distributed correlation |
@@ -578,8 +870,11 @@ For multi-step or multi-agent flows:
 For `GAID-Federated` and above:
 
 - receipts `MUST` be tamper-evident
-- signatures `SHOULD` use `RFC 9421`, `JOSE`, `COSE`, or an equivalent standard mechanism
+- signatures `SHOULD` use `RFC 9421`, `JOSE`, `COSE`, `DSSE`, or an equivalent standard mechanism
 - verification material `MUST` be discoverable through the `AIDoc` or issuer metadata
+- sender-constrained token or proof-of-possession binding such as `DPoP` `SHOULD` be used where receipts depend on bearer-style access tokens across trust boundaries
+- content artifacts produced or transformed by agents `SHOULD` support provenance mechanisms such as `C2PA` where the relying-party context expects content-level authenticity or AI-origin disclosure
+- implementers `SHOULD` prefer working evidence stacks such as `in-toto` attestations and `Sigstore` verification or transparency services where they fit the deployment model, rather than inventing proprietary receipt envelopes
 
 ### 10.5 Privacy and Minimization
 
@@ -591,9 +886,11 @@ Accordingly:
 - sensitive user content `SHOULD` be referenced by digest, pointer, or protected evidence store rather than copied directly
 - internal-only context `MAY` be redacted in public-facing receipts while remaining available to authorized auditors
 
+Implementations handling identifiable human context `SHOULD` align receipt and `AIDoc` retention with applicable privacy controls such as `GDPR` and `ISO/IEC 27701`, including minimization, retention, and accountability expectations.
+
 ![Receipt chain](gaid-diagrams/png/03-receipt-chain.png)
 
-_Figure 4. `GAID` receipts preserve the chain from principal to agent to delegate to resulting evidence._
+_Figure 5. `GAID` receipts preserve the chain from principal to agent to delegate to resulting evidence._
 
 ## 11. Protocol Profiles and Interoperability
 
@@ -636,6 +933,7 @@ For `MCP` environments:
 - the agent `SHOULD` expose its `GAID` and relevant `AIDoc` reference in connection or server metadata where possible
 - declared tools in the `AIDoc` `SHOULD` align with the actual exposed tool surface
 - remote tool invocation receipts `SHOULD` preserve acting agent identity and trace context
+- protected `MCP` deployments `SHOULD` align their verifier and authorization metadata with the `MCP` authorization profile and `RFC 9728` discovery model rather than inventing parallel discovery semantics
 
 ### 11.5 A2A Profile
 
@@ -645,6 +943,7 @@ For `A2A` environments:
 - the published skills and capabilities `SHOULD` align with `AIDoc` claims
 - task and artifact events `SHOULD` preserve chain-of-custody identifiers
 - public agents `SHOULD` bind `Agent Card` metadata to issuer-controlled verification material
+- where `A2A` agent cards advertise `securitySchemes` or authenticated extended cards, the published `GAID` projection `SHOULD` remain consistent across both public and authenticated card variants
 
 ### 11.6 HTTP and API Profile
 
@@ -695,7 +994,28 @@ Where agent interactions are surfaced to humans through approvals, task cards, o
 
 - the visible agent identity `SHOULD` map to the canonical `GAID`
 - approval prompts `SHOULD` disclose enough badge and assurance information that the human can make an informed decision
+- approval prompts `SHOULD` disclose the relevant `receipt_id` or proposed receipt reference so the approval can later be audited and referenced precisely
 - any generated UI `SHOULD NOT` obscure who the acting agent is, what class of action is proposed, or what evidence exists
+
+### 11.11 Public Verifier Profile
+
+For public verification flows, a conforming implementation `SHOULD` make it possible for a relying party or verifier to:
+
+1. resolve the canonical public `GAID`
+2. retrieve the current `AIDoc`
+3. verify issuer signature or equivalent cryptographic protection
+4. verify issuer accreditation or federation trust status
+5. verify current suspension, revocation, or retirement status
+6. verify current badge validity and assurance level
+7. inspect or validate receipt or trace evidence where a consequential action is in question
+
+The verifier profile `SHOULD` support this flow without requiring disclosure of internal-only prompts, secrets, or sensitive enterprise-only entitlement details.
+
+The verifier profile `SHOULD` also:
+
+- support either HTTPS issuer resolution or approved decentralized-resolution profiles where applicable
+- resolve issuer trust through an explicit trust anchor or trust-list source
+- enforce freshness policy for cached status material
 
 ## 12. Security and Privacy Considerations
 
@@ -708,7 +1028,11 @@ An implementation conforming to this standard:
 - `SHOULD` bind public agent identity to organizational certificates or equivalent verification material
 - `SHOULD` use transparency logging for public issuance and revocation events
 - `SHOULD` minimize personally identifiable information in public identity documents and receipts
+- `SHOULD` align threat analysis and control mapping with public catalogs such as `OWASP` Top 10 for Agentic Applications, `CSA MAESTRO`, and `MITRE ATLAS`
+- `SHOULD` consider applicable privacy and transparency obligations under frameworks such as the `EU` GPAI Code of Practice, enterprise privacy programs, and sector-specific disclosure rules
 - `MAY` support selective disclosure for regulated or classified environments
+
+A shared starter artifact for this work `MAY` be published as `agent-standards-threat-model.md`, provided implementations still adapt it to their real issuer, verifier, and deployment boundaries.
 
 An issuer `MUST NOT` imply that identity proof alone guarantees behavioral safety. Identity enables accountability. It does not replace runtime controls.
 
@@ -721,6 +1045,8 @@ A `GAID-Private` implementation:
 - `MUST` issue stable private identifiers
 - `MUST` maintain local `AIDoc` resolution
 - `MUST` record status
+- `SHOULD` project the identity into enterprise directory or lifecycle systems where relevant
+- `SHOULD` carry owner, sponsor, or responsible-team accountability metadata
 - `SHOULD` issue receipts for consequential actions
 - `MAY` omit public accreditation and external certificate validation
 
@@ -733,7 +1059,8 @@ A `GAID-Federated` implementation:
 - `MUST` support signed `AIDoc` publication
 - `MUST` support receipt integrity and status checking
 - `SHOULD` maintain a transparency log
-- `SHOULD` support organization-attested and independently-certified badges
+- `SHOULD` support organization-attested, independently-assessed, and accredited-certified badges
+- `SHOULD` support verifier-facing trust-list or federation publication
 
 ### 13.3 `GAID-Public`
 
@@ -745,6 +1072,9 @@ A `GAID-Public` implementation:
 - `MUST` support public revocation and status checks
 - `MUST` provide public-facing badge and assurance disclosures appropriate to relying-party trust
 - `SHOULD` support certificate-backed identity binding for public endpoints and organizational ownership
+- `SHOULD` support hybrid verification in which domain or certificate control, issuer status, and optional decentralized portability can coexist without fragmenting the canonical subject identity
+
+Implementations claiming any `GAID` profile `SHOULD` publish an assertion mapping, evidence pack, or equivalent rubric such as the companion `gaid-conformance-tests.md` document.
 
 ## 14. Informative Annexes
 
@@ -774,15 +1104,66 @@ The standards are therefore complementary.
   "status": "active",
   "subject_type": "specialist",
   "owner_organization": "Example Insurance Group",
+  "versioning": {
+    "agent_release": "2026.04.3"
+  },
+  "owner_of_record": {
+    "type": "person",
+    "display_name": "Director of Claims Operations"
+  },
+  "responsible_team": "Claims Automation Team",
+  "controlling_humans": [
+    {
+      "role": "sponsor",
+      "display_name": "Director of Claims Operations"
+    },
+    {
+      "role": "approval_authority",
+      "display_name": "Claims Governance Board"
+    }
+  ],
+  "directory_bindings": [
+    {
+      "system": "entra",
+      "tenant_ref": "contoso-tenant",
+      "subject_ref": "11111111-2222-3333-4444-555555555555"
+    }
+  ],
   "model_binding": {
     "provider": "example-provider",
     "model_family": "frontier-assistant",
     "model_version": "2026-04"
   },
+  "operating_profile_fingerprint": "sha256:3d034b7f46c7b3b4adf8d2f6e7027fe4967963f4b7091d988b41b0d4fcf25e8b",
   "tool_surface": [
     "claims.lookup",
     "policy.lookup",
     "note.create"
+  ],
+  "entitlement_scope": [
+    "claims_read",
+    "policy_read",
+    "case_note_create"
+  ],
+  "reachable_systems": [
+    "claims-platform",
+    "policy-system"
+  ],
+  "reachable_data_classes": [
+    "internal-confidential",
+    "customer-pii"
+  ],
+  "least_privilege_posture": "org-attested",
+  "blast_radius_profile": {
+    "system_impact": "bounded",
+    "data_impact": "moderate",
+    "requires_hitl_for_side_effects": true
+  },
+  "mcp_surfaces": [
+    "claims-tools-server"
+  ],
+  "a2a_surfaces": [
+    "https://agents.example.ai/cards/claims-review-agent"
   ],
   "authorization_classes": [
     "observe",
@@ -791,15 +1172,42 @@ The standards are therefore complementary.
   ],
   "badges": [
     {
+      "badge_id": "badge-fit-claims-triage-v3",
       "category": "fit-for-purpose",
       "claim": "claims-triage-support",
-      "assurance_level": "org-attested"
+      "assurance_level": "org-attested",
+      "claim_scope": {
+        "business_archetypes": [
+          "insurance-claims"
+        ],
+        "workflow_classes": [
+          "triage",
+          "summarization"
+        ],
+        "data_classes": [
+          "customer-pii"
+        ],
+        "required_hitl_tier": "approve-before-execution",
+        "excluded_uses": [
+          "claims-approval",
+          "coverage-denial"
+        ]
+      },
+      "evidence_refs": [
+        "https://issuer.example.ai/evidence/model-card/claims-review-agent",
+        "https://issuer.example.ai/evidence/evaluations/claims-review-agent-v3"
+      ]
     }
+  ],
+  "evidence_refs": [
+    "https://issuer.example.ai/evidence/policy/claims-review-agent",
+    "https://issuer.example.ai/evidence/runtime-profile/claims-review-agent"
   ],
   "verification_material": {
     "certificate_ref": "https://issuer.example.ai/certs/current"
   },
-  "status_endpoint": "https://issuer.example.ai/status/claims-review-agent"
+  "status_endpoint": "https://issuer.example.ai/status/claims-review-agent",
+  "transparency_log": "https://issuer.example.ai/log/claims-review-agent"
 }
 ```
 
@@ -815,4 +1223,79 @@ Identity works at scale only when:
 - status changes are visible
 - historical evidence is preserved
 
+The staged adoption model in this standard follows that precedent:
+
+- core identifier and semantics first
+- private or local operational use second
+- delegated or accredited public issuance third
+- broader public verification, transparency, and portability after that
+
 That is the governance posture `GAID` is intended to establish for AI agents.
+
+### Annex D: Suggested Public Verifier Pseudocode
+
+```text
+function verifyPublicGAID(gaid, expected_fingerprint = null, max_status_age = "PT15M"):
+  aidoc = resolveAIDoc(gaid, resolution_profiles = ["https", "approved-decentralized"])
+  if aidoc is null:
+    return failure("aidoc_not_found")
+
+  trustAnchor = resolveIssuerTrustAnchor(aidoc.issuer)
+  if trustAnchor is null:
+    return failure("issuer_not_trusted")
+
+  if not verifySignature(aidoc, trustAnchor):
+    return failure("invalid_aidoc_signature")
+
+  if not verifyIssuerStatus(aidoc.issuer, trustAnchor):
+    return failure("issuer_status_invalid")
+
+  if not verifyCurrentStatus(aidoc.status_endpoint, aidoc.status, max_status_age):
+    return failure("subject_status_invalid")
+
+  if expected_fingerprint is not null:
+    if not verifyOperatingProfileContinuity(aidoc.operating_profile_fingerprint, expected_fingerprint):
+      return failure("operating_profile_mismatch")
+
+  if not verifyBadgeValidity(aidoc.badges):
+    return failure("badge_posture_invalid")
+
+  if not verifyTransparencyReference(aidoc.transparency_log):
+    return failure("transparency_reference_invalid")
+
+  return {
+    subject_identity_valid: true,
+    issuer_valid: true,
+    status_valid: true,
+    badge_posture: summarizeBadges(aidoc.badges)
+  }
+```
+
+### Annex E: Suggested Receipt Verifier Pseudocode
+
+```text
+function verifyReceipt(receipt, aidoc, max_receipt_age = "P30D"):
+  if receipt is null:
+    return failure("receipt_not_found")
+
+  if receipt.gaid != aidoc.gaid:
+    return failure("receipt_subject_mismatch")
+
+  if not verifyReceiptSignature(receipt, aidoc.verification_material):
+    return failure("invalid_receipt_signature")
+
+  if not verifyReceiptFreshness(receipt.timestamp, max_receipt_age):
+    return failure("receipt_stale")
+
+  if receipt.parent_receipt is not null:
+    if not verifyParentReceiptLink(receipt.parent_receipt, receipt.trace_context):
+      return failure("parent_receipt_invalid")
+
+  if not verifyTraceContext(receipt.trace_context):
+    return failure("trace_context_invalid")
+
+  if not verifyAuthorizationClass(receipt.authorization_class, aidoc.authorization_classes):
+    return failure("authorization_class_invalid")
+
+  return success("receipt_verified")
+```

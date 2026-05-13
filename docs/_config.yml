@@ -17,10 +17,6 @@ permalink: pretty
 exclude:
   - superpowers
   - Reference
-  - "*.docx"
-  - "Trusted-AI-Kernel-Architecture.docx"
-  - "GAID.docx"
-  - "Trusted-AI-Agent-Governance-White-Paper.docx"
   - dark-theme-development-guidelines.md
   - architecture/ea-diagrams
   - architecture/gaid-diagrams
