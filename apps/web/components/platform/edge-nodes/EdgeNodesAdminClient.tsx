@@ -26,6 +26,8 @@ type EdgeNodeRow = {
   revocationReason: string | null;
   displayName: string;
   capabilities: string[];
+  hostHostname: string | null;
+  hostIpAddresses: string[] | null;
 };
 
 type BootstrapTokenRow = {
@@ -80,6 +82,55 @@ function formatTimestamp(iso: string | null): string {
     return iso;
   }
 }
+
+/**
+ * Render hostname + LAN IP addresses for the Edge Node admin table.
+ * Pure presentational — extracted so the row map stays readable AND
+ * the cell is unit-testable in isolation.
+ *
+ * Renders:
+ *   - "—" when neither field is populated (pre-T2.4 enrollment, or
+ *     a node with only loopback)
+ *   - "<hostname>" alone when only hostname is known
+ *   - "<hostname> · <ip>[, <ip2>, ...]" when both are populated
+ *     (first 2 IPs inline, rest collapse into a "(+N more)" badge
+ *     so a 12-IP host doesn't break the row layout)
+ *   - "<ip>[, <ip2>, ...]" alone when hostname is missing
+ */
+function HostAddressCell({
+  hostname,
+  ipAddresses,
+}: {
+  hostname: string | null;
+  ipAddresses: string[] | null;
+}) {
+  const ips = ipAddresses ?? [];
+  if (!hostname && ips.length === 0) {
+    return <span className="text-[var(--dpf-muted)]">—</span>;
+  }
+  const visibleIps = ips.slice(0, 2);
+  const overflowCount = Math.max(0, ips.length - visibleIps.length);
+  return (
+    <div className="flex flex-col gap-0.5">
+      {hostname && (
+        <span className="font-mono text-[var(--dpf-text)]">{hostname}</span>
+      )}
+      {visibleIps.length > 0 && (
+        <span className="font-mono text-[var(--dpf-muted)]">
+          {visibleIps.join(", ")}
+          {overflowCount > 0 && (
+            <span className="ml-1 italic">(+{overflowCount} more)</span>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Exported only so the route-level page tests can import it without
+// the rest of the client surface. Production callers use the table
+// above; this is not part of the public component API.
+export { HostAddressCell as __test_HostAddressCell };
 
 export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
   const [flash, setFlash] = useState<FlashMessage | null>(null);
@@ -306,6 +357,7 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Display name</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Node ID</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Platform / mode</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Host / LAN address</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Trust state</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Last seen</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
@@ -323,6 +375,12 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
                     </td>
                     <td className="p-2 text-[var(--dpf-muted)]">
                       {n.platform} / {n.installMode}
+                    </td>
+                    <td className="p-2 text-xs text-[var(--dpf-muted)]">
+                      <HostAddressCell
+                        hostname={n.hostHostname}
+                        ipAddresses={n.hostIpAddresses}
+                      />
                     </td>
                     <td className="p-2">
                       <span
