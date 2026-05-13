@@ -34,6 +34,8 @@ export type LintPrincipleWikiPage = LintWikiPage & {
   principleAppliesTo: string[];
   principlePublic: boolean;
   principlePublicRationale: string | null;
+  /** Used by detectPrincipleCommandmentCapExceeded for newest-first ordering. */
+  lastReviewedAt: Date | null;
 };
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ function makePrinciplePage(
     principleAppliesTo: overrides.principleAppliesTo ?? [],
     principlePublic: overrides.principlePublic ?? false,
     principlePublicRationale: overrides.principlePublicRationale ?? null,
+    lastReviewedAt: overrides.lastReviewedAt ?? null,
   };
 }
 
