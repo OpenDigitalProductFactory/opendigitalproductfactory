@@ -18,6 +18,7 @@ docs/founder-kernel/
 │   ├── entity.template.md
 │   ├── stance.template.md
 │   ├── heuristic.template.md
+│   ├── principle.template.md
 │   ├── decision.template.md
 │   ├── summary.template.md
 │   ├── runbook.template.md
@@ -33,6 +34,7 @@ docs/founder-kernel/
     ├── entities/
     ├── stances/
     ├── heuristics/
+    ├── principles/
     ├── decisions/
     ├── summaries/
     └── runbooks/
@@ -44,7 +46,7 @@ The seed walker (`packages/db/src/seed-wiki-kernel.ts`) only scans `raw-sources/
 
 ## 2. Add a new wiki page in 60 seconds
 
-1. **Pick a kind.** Read [`SCHEMA.md` §2](SCHEMA.md) to choose between `entity`, `stance`, `heuristic`, `decision`, `runbook`, `summary`, or `index`. Stance and heuristic are the founder-judgment kinds; the others are scaffolding.
+1. **Pick a kind.** Read [`SCHEMA.md` §2](SCHEMA.md) to choose between `entity`, `stance`, `heuristic`, `principle`, `decision`, `runbook`, `summary`, or `index`. Stance, heuristic, and principle are the founder-judgment kinds; the others are scaffolding. `principle` is the heaviest of the three — it carries tier, applies-to scope, and a decision vector that contribute to advisory aggregation across every matching context.
 2. **Copy the template.** `cp _templates/<kind>.template.md wiki/<kind>s/<slug>.md`. The slug must match `[a-z0-9/_-]+` and is what `[[wikilinks]]` resolve against.
 3. **Fill the frontmatter.** At minimum: `title`, `pageKind`, plus optional `abstract`, `status`, `sources:`.
 4. **Write the body.** Markdown. Use `[[wiki/path]]` to link other pages. Cite a raw source by adding its slug to the frontmatter `sources:` array.
