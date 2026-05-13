@@ -14,7 +14,7 @@ const URGENCY_COLORS: Record<string, string> = {
   emergency: "bg-red-100 text-red-800 border-red-300",
   urgent: "bg-orange-100 text-orange-800 border-orange-300",
   priority: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  routine: "bg-gray-100 text-gray-700 border-gray-300",
+  routine: "bg-[var(--dpf-surface-2)] text-[var(--dpf-text-secondary)] border-[var(--dpf-border)]",
 };
 
 const EFFORT_LABELS: Record<string, string> = {
@@ -54,7 +54,7 @@ export default async function MyQueuePage() {
       <h1 className="text-2xl font-semibold mb-6">My Queue</h1>
 
       {sorted.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16 text-[var(--dpf-text-secondary)]">
           <p className="text-lg">No items in your queue</p>
           <p className="text-sm mt-1">Work items will appear here when assigned to you or available for claiming.</p>
         </div>
@@ -72,17 +72,17 @@ export default async function MyQueuePage() {
                   >
                     {item.urgency}
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-[var(--dpf-text-secondary)]">
                     {EFFORT_LABELS[item.effortClass] ?? item.effortClass}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-[var(--dpf-muted)]">
                     {item.sourceType}
                   </span>
                 </div>
-                <h3 className="font-medium text-gray-900 truncate">{item.title}</h3>
-                <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{item.description}</p>
+                <h3 className="font-medium text-[var(--dpf-text)] truncate">{item.title}</h3>
+                <p className="text-sm text-[var(--dpf-text-secondary)] mt-0.5 line-clamp-2">{item.description}</p>
                 {item.dueAt && (
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-[var(--dpf-muted)] mt-1">
                     Due: {new Date(item.dueAt).toLocaleDateString()}
                   </p>
                 )}
@@ -94,7 +94,7 @@ export default async function MyQueuePage() {
                 {item.assignedToUserId === session.user.id ? (
                   <span className="text-xs text-green-600">Assigned to you</span>
                 ) : (
-                  <span className="text-xs text-gray-400">Unassigned</span>
+                  <span className="text-xs text-[var(--dpf-muted)]">Unassigned</span>
                 )}
               </div>
             </div>
