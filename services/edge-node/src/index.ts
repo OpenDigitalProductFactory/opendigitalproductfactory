@@ -3,20 +3,24 @@
 // Phase 0 lifecycle:
 //   1. Load config from env (refuses to start if invalid).
 //   2. Try to load existing state from disk.
-//   3a. If state exists: skip enrollment, run heartbeat loop.
+//   3a. If state exists: skip enrollment, run heartbeat + sweep loops.
 //   3b. If state missing: require DPF_BOOTSTRAP_TOKEN env, run enrollment,
-//       persist state, then run heartbeat loop.
+//       persist state, then run heartbeat + sweep loops.
 //
-// Sweep + submission loop ships in A5.
+// Heartbeat and sweep loops run concurrently. Heartbeat owns
+// liveness + runtime-config refresh; sweep owns periodic discovery
+// submission. If either loop returns (e.g. node revoked), the
+// process exits so the supervisor can restart it.
 //
 // Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
-// Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md A3
+// Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md A3 + A5
 
 import { AuthorityApiClient } from "./api-client";
 import { loadConfig } from "./config";
 import { runEnrollment } from "./enroll";
 import { runHeartbeatLoop } from "./heartbeat";
 import { loadState } from "./state";
+import { runSweepLoop } from "./sweep";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -41,7 +45,18 @@ async function main(): Promise<void> {
     );
   }
 
-  await runHeartbeatLoop({ config, api, state });
+  log(
+    "info",
+    `Starting heartbeat (every ${state.heartbeatIntervalSec}s) + sweep (every ${state.sweepIntervalSec}s) loops.`,
+  );
+
+  // Race: if either loop returns (heartbeat exits on revocation,
+  // sweep currently runs forever), let the process exit. The
+  // container supervisor will restart with a fresh state load.
+  await Promise.race([
+    runHeartbeatLoop({ config, api, state }),
+    runSweepLoop({ config, api, state }),
+  ]);
 }
 
 function log(level: "info" | "warn" | "error", msg: string): void {
