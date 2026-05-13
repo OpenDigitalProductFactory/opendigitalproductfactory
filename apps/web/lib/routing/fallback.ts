@@ -38,6 +38,7 @@ export async function callWithFallbackChain(
   tools?: Array<Record<string, unknown>>,
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
+  mcpSession?: import("./adapter-types").AdapterMcpSession,
 ): Promise<FallbackResult> {
   if (!decision.selectedEndpoint) {
     throw new Error(
@@ -108,6 +109,7 @@ export async function callWithFallbackChain(
         tools,
         i === 0 ? plan : undefined,
         i === 0 ? previousResponseId : undefined,
+        mcpSession,
       );
 
       // EP-INF-004: Record successful request for rate tracking

@@ -22,6 +22,7 @@ export type GovernedExecuteSource =
   | "rest"
   | "jsonrpc"
   | "external-jsonrpc"
+  | "internal-mcp-session"
   | "agentic-loop";
 
 export type GovernedExecuteContext = {

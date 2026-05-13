@@ -22,9 +22,16 @@ import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
+import { createMcpSessionToken } from "@/lib/mcp/session-token";
+import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 180_000; // 3 minutes — matches chat adapter's AbortSignal.timeout
+
+/** Internal portal URL the sandbox uses to reach `/api/mcp/v1`. The standard
+ *  self-host docker bridge resolves `portal` to the portal container; override
+ *  for non-standard layouts (e.g. host-network setups) via env. */
+const INTERNAL_PORTAL_URL = process.env.DPF_INTERNAL_PORTAL_URL ?? "http://portal:3000";
 
 /**
  * Claude Code CLI's built-in tools shadow the platform's MCP-style tools when
@@ -120,6 +127,15 @@ interface CliStreamEvent {
 }
 
 /**
+ * Tool calls with this prefix are dispatched by the Claude CLI itself against
+ * a `--mcp-config`-mounted server. They have already been executed by the CLI
+ * by the time we see the output; the agentic loop must NOT re-execute them.
+ * Filter them out at the parser level so even if a future CLI version surfaces
+ * the unresolved tool_use in the final JSON, we won't double-dispatch.
+ */
+const MCP_TOOL_NAME_PREFIX = "mcp__dpf__";
+
+/**
  * Parse Claude CLI `--output-format stream-json` output into AdapterResult.
  *
  * Each line is a JSON object. Key event types:
@@ -150,7 +166,7 @@ function parseCliStreamOutput(output: string): {
 
     if (event.type === "assistant" && event.content) {
       textParts.push(event.content);
-    } else if (event.type === "tool_use" && event.name) {
+    } else if (event.type === "tool_use" && event.name && !event.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
       toolCalls.push({
         id: event.id ?? event.tool_use_id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
         name: event.name,
@@ -200,12 +216,14 @@ function parseCliJsonOutput(output: string): {
     const parsed = JSON.parse(output.trim()) as Record<string, unknown>;
     const text = typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result ?? "");
 
-    // Extract tool calls from content blocks if present
+    // Extract tool calls from content blocks if present. Skip mcp__dpf__*
+    // entries — those were already dispatched by the CLI's MCP client and
+    // re-running them in the agentic loop would double-execute side effects.
     const toolCalls: ToolCallEntry[] = [];
     const content = parsed.content as Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }> | undefined;
     if (Array.isArray(content)) {
       for (const block of content) {
-        if (block.type === "tool_use" && block.name) {
+        if (block.type === "tool_use" && block.name && !block.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
           toolCalls.push({
             id: block.id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
             name: block.name,
@@ -254,7 +272,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
   type: "claude-cli",
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
-    const { providerId, modelId, messages, systemPrompt, tools } = request;
+    const { providerId, modelId, messages, systemPrompt, tools, mcpSession } = request;
     const startMs = Date.now();
 
     // 1. Resolve auth
@@ -280,12 +298,82 @@ export const cliAdapter: ExecutionAdapterHandler = {
     }
     const prompt = promptParts.join("\n\n");
 
-    // 3. Build tool definitions for --allowedTools or --mcp-config
-    // For platform MCP tools (create_backlog_item, etc.), we pass them as
-    // tool descriptions in the system prompt so Claude knows about them.
-    // The agentic loop intercepts tool_use events and executes them server-side.
+    // 3. Decide tool delivery mode.
+    //
+    //    NATIVE-MCP mode (when `mcpSession` AND `tools` are both present):
+    //      Mount the platform MCP server at `/api/mcp/v1` via `--mcp-config`.
+    //      The CLI calls `tools/list` on the server during startup, surfaces
+    //      the platform tools to the model as native `mcp__dpf__*` tool_use
+    //      definitions, and dispatches each `tool_use` block back through
+    //      the MCP server. The agentic loop never sees those calls — they
+    //      are executed inside the CLI session and only the final assistant
+    //      text returns. This is the post-#510 architecture.
+    //
+    //    LEGACY mode (everything else: no mcpSession, or no tools):
+    //      Fall back to the text-described tool list + structured-JSON
+    //      contract that the agentic loop's tool_use extractor parses.
+    //      Used by callers that don't have a (userId, agentId) attribution,
+    //      and as a safety net if MCP token issuance fails.
+    const useNativeMcp = Boolean(mcpSession && tools && tools.length > 0);
+
     let toolContext = "";
-    if (tools && tools.length > 0) {
+    let mcpJwt: string | null = null;
+    let scopesForJwt: string[] = [];
+    let capabilityForJwt: "read" | "write" = "read";
+    if (useNativeMcp) {
+      // Derive the JWT scopes from the tools the agentic loop already filtered
+      // to. The MCP route still gates per-tool by user capability + agent
+      // grants, so a wider scope here cannot widen actual access.
+      const grantMap = getToolGrantMapping();
+      const sideEffectingNames = new Set<string>();
+      const requestedScopes = new Set<string>();
+      for (const t of tools!) {
+        const fn = (t as { function?: { name?: string } }).function;
+        const name = fn?.name;
+        if (!name) continue;
+        const grants = grantMap[name];
+        if (grants) {
+          for (const g of grants) requestedScopes.add(g);
+          // A grant ending in _write / _create / _triage / _promote /
+          // _execute / _approve indicates a side-effecting tool — bump
+          // capability accordingly.
+          if (grants.some((g) => /_(write|create|triage|promote|execute|approve)$/.test(g))) {
+            sideEffectingNames.add(name);
+          }
+        }
+      }
+      capabilityForJwt = sideEffectingNames.size > 0 ? "write" : "read";
+      // Always include backlog_read so the model can situate itself even when
+      // its primary task only needs writes; this matches the breadth most
+      // existing dpfmcp_* PATs in the install carry.
+      requestedScopes.add("backlog_read");
+      scopesForJwt = Array.from(requestedScopes).sort();
+
+      try {
+        mcpJwt = await createMcpSessionToken({
+          userId: mcpSession!.userId,
+          agentId: mcpSession!.agentId ?? null,
+          threadId: mcpSession!.threadId ?? null,
+          routeContext: mcpSession!.routeContext ?? null,
+          scopes: scopesForJwt,
+          capability: capabilityForJwt,
+        });
+      } catch (err) {
+        // If JWT minting fails (e.g. AUTH_SECRET missing in this env), fall
+        // back to legacy mode rather than failing the whole inference call —
+        // the build-specialist's existing degraded-mode behavior is at least
+        // testable, where a hard fail strands the user mid-conversation.
+        console.warn(
+          `[cli-adapter] MCP session-token mint failed; falling back to text-tool mode: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        mcpJwt = null;
+      }
+    }
+
+    if (!mcpJwt && tools && tools.length > 0) {
+      // LEGACY-mode tool injection (preserved for callers without mcpSession).
       const toolDescriptions = tools.map((t) => {
         const fn = (t as { type?: string; function?: { name?: string; description?: string; parameters?: unknown } }).function;
         if (fn) {
@@ -293,12 +381,6 @@ export const cliAdapter: ExecutionAdapterHandler = {
         }
         return `- ${JSON.stringify(t)}`;
       });
-      // Be explicit about the tool_use JSON shape. The Claude CLI's
-      // stream-json parser only recognises STRUCTURED tool_use events emitted
-      // as top-level stream entries — tool_use JSON embedded inside
-      // assistant-text content leaks through as plain chat (observed on
-      // /build with anthropic-sub). The downstream fallback extractor below
-      // rescues such cases; the prompt still asks for the canonical shape.
       toolContext =
         `\n\nAvailable tools. To invoke a tool, output ONE JSON object per ` +
         `invocation using exactly this shape:\n` +
@@ -315,6 +397,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const promptFile = `/tmp/cli-prompt-${slug}.txt`;
     const systemFile = `/tmp/cli-system-${slug}.txt`;
     const tokenFile = `/tmp/cli-token-${slug}.txt`;
+    const mcpConfigFile = `/tmp/cli-mcp-${slug}.json`;
     const runnerScript = `/tmp/cli-run-${slug}.sh`;
 
     const cp = lazyChildProcess();
@@ -326,7 +409,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       const promptB64 = Buffer.from(prompt).toString("base64");
       const systemB64 = Buffer.from(fullSystemPrompt).toString("base64");
 
-      await Promise.all([
+      const writes: Promise<unknown>[] = [
         execAsync(
           `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 644 ${promptFile}"`,
           { timeout: 5_000 },
@@ -335,7 +418,33 @@ export const cliAdapter: ExecutionAdapterHandler = {
           `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${systemB64}' | base64 -d > ${systemFile} && chmod 644 ${systemFile}"`,
           { timeout: 5_000 },
         ),
-      ]);
+      ];
+
+      if (mcpJwt) {
+        // Per-call mcp-config — includes the short-lived JWT in the
+        // X-MCP-Session header. File lives only for this call (cleaned in
+        // finally) so the JWT cannot leak to subsequent CLI invocations.
+        const mcpConfig = {
+          mcpServers: {
+            dpf: {
+              type: "http",
+              url: `${INTERNAL_PORTAL_URL}/api/mcp/v1`,
+              headers: {
+                "X-MCP-Session": mcpJwt,
+              },
+            },
+          },
+        };
+        const mcpB64 = Buffer.from(JSON.stringify(mcpConfig)).toString("base64");
+        writes.push(
+          execAsync(
+            `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${mcpB64}' | base64 -d > ${mcpConfigFile} && chmod 600 ${mcpConfigFile}"`,
+            { timeout: 5_000 },
+          ),
+        );
+      }
+
+      await Promise.all(writes);
 
       // 5. Build auth env and runner script
       let authExportLine: string;
@@ -352,21 +461,27 @@ export const cliAdapter: ExecutionAdapterHandler = {
         bareFlag = "--bare ";
       }
 
-      // Build the CLI command
-      // Use --output-format json for reliable parsing (stream-json is for streaming UX)
-      // Read prompt from stdin (< file) to avoid shell quoting issues with large prompts.
-      // System prompt is read from file and passed via env var to avoid $(cat) in args.
+      // Build the CLI command.
       //
-      // --disallowedTools: see CLAUDE_CODE_NATIVE_TOOLS above. Suppresses Claude
-      // Code's built-in tools so they don't shadow platform MCP-style tools that
-      // the agentic loop dispatches (BI-931303FF).
+      // NATIVE-MCP path: --mcp-config + --strict-mcp-config mounts the platform
+      // MCP server. Native CLI tools (Read, Bash, etc.) remain disallowed via
+      // --disallowedTools so the model cannot pick a Bash workaround over the
+      // platform tool intended for the task — the audit doc notes this as the
+      // backstop against the BI-931303FF shadowing failure mode.
+      //
+      // LEGACY path: text-described tool list (toolContext above) + same
+      // --disallowedTools. The agentic loop's tool_use extractor parses the
+      // model's structured-JSON output as before.
       const cliModel = modelId || "sonnet";
+      const mcpFlags = mcpJwt
+        ? `--mcp-config ${mcpConfigFile} --strict-mcp-config `
+        : "";
       const script = [
         "#!/bin/sh",
         "cd /workspace",
         authExportLine,
         `SYSPROMPT=$(cat ${systemFile})`,
-        `exec claude ${bareFlag}-p - --dangerously-skip-permissions --disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile}`,
+        `exec claude ${bareFlag}-p - --dangerously-skip-permissions ${mcpFlags}--disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile}`,
       ].join("\n");
 
       const scriptB64 = Buffer.from(script).toString("base64");
@@ -376,7 +491,11 @@ export const cliAdapter: ExecutionAdapterHandler = {
       );
 
       // 6. Spawn the CLI process
-      console.log(`[cli-adapter] Dispatching to Claude CLI: model=${cliModel}, provider=${providerId}, messages=${messages.length}`);
+      console.log(
+        `[cli-adapter] Dispatching to Claude CLI: model=${cliModel}, provider=${providerId}, ` +
+        `messages=${messages.length}, mode=${mcpJwt ? "native-mcp" : "legacy-text-tools"}` +
+        (mcpJwt ? `, scopes=${scopesForJwt.length}, capability=${capabilityForJwt}` : ""),
+      );
 
       const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
         const proc = spawnCb("docker", [
@@ -497,9 +616,12 @@ export const cliAdapter: ExecutionAdapterHandler = {
         inferenceMs,
       };
     } finally {
-      // Clean up temp files (fire-and-forget)
+      // Clean up temp files (fire-and-forget). The mcp-config file carries the
+      // short-lived JWT; even though it's already 5-minute capped, we wipe it
+      // so a leaked sandbox shell can't dump the bearer from disk after the
+      // call returns.
       execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${runnerScript}"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript}"`,
         { timeout: 5_000 },
       ).catch(() => {});
     }
