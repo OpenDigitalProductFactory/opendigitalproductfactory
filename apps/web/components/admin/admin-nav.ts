@@ -57,6 +57,7 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     description: "Reach specialist controls that still live under Admin while Platform consolidation continues.",
     matchPrefixes: [
       "/admin/platform-development",
+      "/admin/edge-nodes",
       "/admin/prompts",
       "/admin/skills",
       "/admin/issue-reports",
@@ -64,6 +65,7 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
     ],
     subItems: [
       { label: "Platform Development", href: "/admin/platform-development" },
+      { label: "Edge Nodes", href: "/admin/edge-nodes" },
       { label: "Prompts", href: "/admin/prompts" },
       { label: "Skills", href: "/admin/skills" },
       { label: "Issue Reports", href: "/admin/issue-reports" },
