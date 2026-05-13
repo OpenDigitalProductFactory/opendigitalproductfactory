@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { auditSkillMarkdown, summarizeSkillAudit } from "./skill-quality-audit";
 
 describe("skill quality audit", () => {
@@ -117,5 +119,40 @@ Output: Blockers first.
     expect(summary.totalSkills).toBe(2);
     expect(summary.failingSkills).toBe(1);
     expect(summary.results[0].path).toBe("skills/workspace/create-task.skill.md");
+  });
+
+  it("keeps high-impact Build Studio and universal skills above the quality bar", () => {
+    const skillPaths = [
+      "skills/build/start-feature.skill.md",
+      "skills/build/build-page.skill.md",
+      "skills/build/design-component.skill.md",
+      "skills/build/manage-sandbox.skill.md",
+      "skills/build/check-status.skill.md",
+      "skills/build/ship-feature.skill.md",
+      "skills/universal/analyze-page.skill.md",
+      "skills/universal/do-primary-action.skill.md",
+      "skills/universal/evaluate-page.skill.md",
+      "skills/universal/report-issue.skill.md",
+      "skills/universal/add-skill.skill.md",
+    ];
+
+    const rootDir = join(process.cwd(), "..", "..");
+    const results = skillPaths.map((path) => auditSkillMarkdown({
+      path,
+      content: readFileSync(join(rootDir, path), "utf-8"),
+    }));
+
+    expect(results.map((result) => ({
+      path: result.path,
+      score: result.score,
+      findings: result.findings.map((finding) => finding.code),
+    }))).toEqual(
+      results.map((result) => ({
+        path: result.path,
+        score: expect.any(Number),
+        findings: [],
+      })),
+    );
+    expect(results.every((result) => result.score >= 80)).toBe(true);
   });
 });

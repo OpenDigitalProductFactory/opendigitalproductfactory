@@ -1,11 +1,11 @@
 ---
 name: evaluate-page
-description: "Run a UX evaluation on this page -- accessibility audit, contrast check, layout analysis, and usability assessment"
+description: "Evaluate the current page for accessibility, theme-token use, layout stability, and usability issues using code inspection plus live audit evidence when tools are available."
 category: universal
 assignTo: ["*"]
 capability: null
 taskType: analysis
-triggerPattern: "evaluate|audit|accessibility|ux review|usability|contrast|a11y"
+triggerPattern: "evaluate page|audit page|accessibility audit|ux review|usability review|contrast|a11y"
 userInvocable: true
 agentInvocable: true
 allowedTools: []
@@ -16,57 +16,47 @@ riskBand: low
 
 # Evaluate This Page
 
-Perform a comprehensive UX evaluation combining code analysis and live accessibility auditing.
+Combine source inspection and rendered-page evidence to identify concrete usability defects. Findings must be measurable and tied to DPF's theme-aware UI rules, not personal design preference.
 
-## What This Skill Does
+Do not use this for general page summaries; use `analyze-page` instead. Do not use this to implement fixes; create a follow-up brief or backlog item instead.
 
-Analyzes both the source code and the rendered page to identify usability issues -- accessibility violations, contrast problems, layout concerns, and UX anti-patterns. Groups findings into actionable backlog items.
+## Read First
 
-## Instructions
+| Source | Path | What to extract |
+| --- | --- | --- |
+| Route source | apps/web/app | Page, layout, loading, error, and imported component files |
+| Component source | apps/web/components | Markup, state handling, tokens, labels, and interaction patterns |
+| Live page | rendered route via `evaluate_page` | Accessibility, contrast, focus, and layout issues |
+| UI rules | AGENTS.md and docs/platform-usability-standards.md | DPF theme-token and verification requirements |
 
-### Phase 1: Code Analysis
+## Steps
 
-1. **Find the component code.** Use `search_project_files` to locate the component file for the current route. Check `apps/web/app/` for the route's `page.tsx` and any components it imports.
+1. Find the component code for the current route.
+2. Read the page and imported components before judging behavior.
+3. Run the live audit when `evaluate_page` is available.
+4. Merge code-level and live findings, deduplicating repeated issues.
+5. Prioritize accessibility, keyboard, contrast, layout stability, labels, and empty/error states.
+6. Create backlog items by category only when findings are real and actionable.
+7. Return blockers first, then lower-risk improvements.
 
-2. **Read the component code.** Use `read_project_file` to examine:
-   - Semantic HTML usage (headings, landmarks, labels)
-   - ARIA attributes and roles
-   - Keyboard interaction handlers
-   - Color/contrast values in Tailwind classes
-   - Responsive design patterns
-   - Loading and error states
+## Output Template
 
-### Phase 2: Live Audit
-
-3. **Run the live audit.** Use `evaluate_page` to execute an automated accessibility scan on the rendered page. This checks WCAG 2.1 compliance, color contrast ratios, focus management, and interactive element accessibility.
-
-### Phase 3: Synthesis
-
-4. **Merge findings.** Combine code-level observations with live audit results. Deduplicate where both sources flag the same issue.
-
-5. **Group by category.** Organize findings into categories:
-   - **Accessibility**: ARIA, semantics, screen reader support
-   - **Visual**: Contrast, color usage, spacing, alignment
-   - **Interaction**: Keyboard nav, focus traps, touch targets
-   - **Content**: Labels, error messages, empty states
-   - **Performance**: Large renders, missing lazy loading
-
-6. **Present findings** in plain language. For each category with issues:
-   - Describe what was found (specific elements, specific violations)
-   - Explain why it matters (who is affected, what breaks)
-   - Suggest the fix in one sentence
-
-7. **Create backlog items.** One item per category (not per finding). Use type "product" and status "open".
-
-### Phase 4: Offer Next Steps
-
-8. **Ask the user** if they want to fix issues now. If yes:
-   - Assemble a FeatureBrief from the findings
-   - Launch Build Studio to implement the fixes
+- Accessibility: `<issues or none found>`
+- Visual/theme: `<hardcoded colors, contrast, spacing, layout stability>`
+- Interaction: `<keyboard, focus, touch target, loading state>`
+- Content/state: `<labels, empty, error, or helper text>`
+- Backlog created: `<item titles or none>`
+- Fix path: `<smallest implementation slice>`
 
 ## Guidelines
 
-- Be specific. "Button lacks accessible name" is useful. "Improve accessibility" is not.
-- Prioritize by impact: issues affecting keyboard-only users and screen readers come first.
-- Do not flag stylistic preferences as issues. Focus on measurable problems (WCAG violations, missing labels, broken keyboard nav).
-- If the live audit returns no issues, say so clearly -- but still report any code-level concerns.
+- Do not flag stylistic preferences as defects.
+- Do not claim live audit coverage if the tool was unavailable.
+- Use exact file paths or visible elements when possible.
+- Group many similar issues into one backlog item per category.
+
+## Example
+
+Input: "Evaluate this page."
+
+Output: "Accessibility: the icon-only save button lacks an accessible name in `SettingsToolbar`. Visual/theme: the panel uses `text-gray-500` instead of `var(--dpf-muted)`. Backlog created: `Fix settings toolbar accessibility and theme tokens`."

@@ -1,11 +1,11 @@
 ---
 name: add-skill
-description: "Add a new skill (quick-action button) to this page's agent by creating a .skill.md file"
+description: "Help define and create a new `.skill.md` quick action for the current page's coworker when the user needs a repeatable, governed agent behavior."
 category: universal
 assignTo: ["*"]
 capability: null
 taskType: code_generation
-triggerPattern: "add skill|new skill|create skill|custom action|add button"
+triggerPattern: "add skill|new skill|create skill|custom action|add button|quick action"
 userInvocable: true
 agentInvocable: true
 allowedTools: []
@@ -16,59 +16,47 @@ riskBand: low
 
 # Add a Skill
 
-Guide the user through creating a new skill for the current page's agent, then generate the skill file.
+Guide the user from a vague desired quick action to a well-structured `.skill.md` file that can be seeded into `SkillDefinition` and assigned to the right coworker. A good skill is routed by description, bounded by "do not use" rules, and specific about tools and output.
 
-## What This Skill Does
+Do not use this for one-off help; use the most relevant existing skill instead. Do not use this for marketplace ingestion or external tool adoption; use the governed tool evaluation path instead.
 
-A skill is a quick-action button in the agent panel that triggers a specific prompt. This skill walks the user through defining a new one, then creates the `.skill.md` file and registers it in the route context.
+## Read First
 
-## Instructions
+| Source | Path | What to extract |
+| --- | --- | --- |
+| Existing skills | skills/**/*.skill.md | Naming, category, frontmatter, and body structure |
+| Route context | PAGE DATA | Current route, coworker, category, and likely assignment |
+| Skill seed path | packages/db/src/seed-skills.ts | Supported frontmatter fields and assignment behavior |
+| DPF rules | AGENTS.md | Skills belong to coworkers, not routes; prompts live in seeded files |
 
-1. **Ask the user what the skill should do.** Prompt with:
-   - "What should this skill do? Describe the action in one sentence."
-   - If the user is vague, suggest 2-3 concrete options based on the current page type.
+## Steps
 
-2. **Gather the skill definition:**
-   - **Name**: Generate a kebab-case ID from the description (e.g., "export-to-csv")
-   - **Label**: Short button text (3-5 words)
-   - **Description**: One sentence explaining when to use it
-   - **Task type**: `conversation`, `code_generation`, or `analysis`
-   - **Prompt**: The instruction the agent receives when the skill is triggered
-   - **Category**: Derive from the current route (e.g., "portfolio", "build", "admin")
+1. Ask what repeatable action the skill should perform if the user has not already said it.
+2. Search existing skills for overlap before creating a new one.
+3. Generate a unique kebab-case `name`, clear description, category, assignment, task type, trigger pattern, allowed tools, and risk band.
+4. Confirm the definition when the action could affect data, permissions, or workflow authority.
+5. Create the `.skill.md` file with read-first sources, steps, output template, guidelines, and example.
+6. Name any route-context or seed follow-up required for the skill to appear in the UI.
 
-3. **Confirm the definition** with the user before creating anything.
+## Output Template
 
-4. **Create the `.skill.md` file** using `propose_file_change`:
-   - Path: `skills/<category>/<name>.skill.md`
-   - Include full YAML frontmatter matching the project pattern
-   - Write rich instructions below the frontmatter
-
-5. **Update the route context** to include the new skill in the appropriate route's skill list.
+- Skill id: `<kebab-case name>`
+- Category: `<category>`
+- Assigned to: `<coworker ids>`
+- Task type: `<conversation, analysis, action, code_generation>`
+- Allowed tools: `<tool names or none>`
+- File: `<skills/category/name.skill.md>`
+- Follow-up: `<route/seed/test work, if any>`
 
 ## Guidelines
 
-- Every skill needs a clear, specific prompt. Reject vague prompts like "help me" -- push the user to be concrete.
-- Skill names must be unique across the entire skills directory.
-- Keep prompts under 200 words. If the user describes something complex, split it into multiple skills.
-- Set `riskBand` based on what the skill does: "low" for read-only, "medium" for creating/updating data, "high" for destructive actions.
-- Match the frontmatter format exactly -- see existing `.skill.md` files in `skills/universal/` for reference.
+- Reject vague prompts such as "help me" and convert them into one concrete action.
+- Keep one skill to one repeatable procedure.
+- Include a routing boundary in the body: "Do not use this for X; use Y instead."
+- Do not grant tools casually; list only tools needed for the skill.
 
-## Frontmatter Template
+## Example
 
-```yaml
----
-name: skill-id-here
-description: "When to use this skill"
-category: derived-from-route
-assignTo: ["route-agent-id"]
-capability: null
-taskType: conversation
-triggerPattern: "keyword1|keyword2"
-userInvocable: true
-agentInvocable: false
-allowedTools: []
-composesFrom: []
-contextRequirements: []
-riskBand: low
----
-```
+Input: "Add a button that checks whether this customer account is stale."
+
+Output: Define `customer-staleness-check`, assign it to `customer-advisor`, include read-first PAGE DATA and customer account sources, and create a structured `.skill.md` that reports stale signals and next action.
