@@ -2,16 +2,17 @@
 
 ## Abstract
 
-The Trusted AI Kernel (`TAK`) is a normative runtime governance standard for trustworthy AI agent operation. It defines the minimum control model needed when AI agents act on behalf of human principals inside enterprise, public-sector, or cross-organizational systems.
+The Trusted AI Kernel (`TAK`) is a normative agent-harness and runtime-governance standard for trustworthy AI agent operation. It defines the minimum harness contract and control model needed when AI agents act on behalf of human principals inside enterprise, public-sector, or cross-organizational systems.
 
-The problem `TAK` addresses is straightforward: model capability alone does not create trustworthy agency. Trustworthy agency requires runtime mediation between human authority, agent capability, tool invocation, data sensitivity, memory, and oversight. `TAK` defines that mediation layer.
+The problem `TAK` addresses is broader than runtime mediation alone: model capability does not create trustworthy agency, and ad hoc agent wrappers do not create a consistent basis for governed deployment. Trustworthy agency requires a standard harness that defines how authority, instructions, tool invocation, provider use, data sensitivity, memory, oversight, and evidence are assembled and enforced at runtime. `TAK` defines that harness contract.
 
-`TAK` is intentionally concerned with runtime governance. It does not attempt to solve global agent naming or public badging. Those concerns belong to the companion `GAID` standard. `TAK` instead defines what a trustworthy runtime `MUST`, `SHOULD`, and `MAY` do once an identified agent is allowed to operate.
+`TAK` is intentionally concerned with runtime governance and harness consistency. It does not attempt to solve global agent naming or public badging. Those concerns belong to the companion `GAID` standard. `TAK` instead defines what a trustworthy agent harness and runtime `MUST`, `SHOULD`, and `MAY` do once an identified agent is allowed to operate.
 
 ## 1. Scope
 
 This standard specifies requirements for:
 
+- a consistent, vendor-neutral agent harness contract
 - authority mediation between humans, agents, tools, and data
 - runtime policy enforcement
 - immutable directive handling
@@ -58,22 +59,82 @@ An implementation:
 - `SHOULD` publish an implementation statement showing how each control is met
 - `MAY` implement controls beyond those required by its claimed profile
 
+### 2.1 Standard Versioning, Lifecycle, and Conformance Assertions
+
+This standard `SHOULD` be versioned using a semantic-style scheme:
+
+- major versions for normative incompatibilities
+- minor versions for additive normative requirements or profile extensions
+- patch versions for clarifications, errata, or non-substantive corrections
+
+Implementations claiming conformance `SHOULD` declare:
+
+- the `TAK` version supported
+- the claimed conformance profile
+- any profile extensions or deployment-specific constraints
+
+Each normative `MUST` statement in this standard `SHOULD` map to one or more explicit conformance assertions in a companion test suite or implementation statement. This document does not require a single central test harness, but it does require that conformance claims be testable rather than rhetorical.
+
+A suggested companion assertion rubric for this revision is published in `tak-conformance-tests.md`.
+
+The intended lifecycle of `TAK` is open standards progression through multistakeholder implementation and liaison rather than indefinite treatment as an internal white paper.
+
+The preferred near-term disposition is publication as an open industry specification with liaison into `NIST`, the `Agentic AI Foundation`, `OASIS` / `CoSAI`, and relevant `IETF` OAuth and `GNAP` work, with later venue-specific profiles or submissions preserving the same core runtime semantics.
+
 ## 3. Normative References
 
 The following references are relevant to this standard and informed its design:
 
 | Reference | Relevance |
 |-----------|-----------|
-| [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) | Organization-level AI management systems |
+| [ISO/IEC 42001:2023](https://www.iso.org/standard/81230.html) | Organization-level AI management systems |
 | [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Risk management framing for AI systems |
 | [NIST AI Agent Standards Initiative](https://www.nist.gov/caisi/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agents |
 | [NCCoE concept paper: software and AI agent identity and authorization](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd) | Identity, authorization, auditing, and non-repudiation concerns for agents |
 | [NIST AI 800-2 benchmark evaluation draft](https://www.nist.gov/news-events/news/2026/01/towards-best-practices-automated-benchmark-evaluations) | Evaluation transparency and benchmark discipline |
-| [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2024-11-05/basic/index) | Tool and context interoperability |
+| [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic) | Tool and context interoperability |
+| [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) | HTTP transport authorization profile for MCP servers and clients |
 | [Anthropic: Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) | Background on MCP as an open protocol |
+| [Linux Foundation: Agentic AI Foundation announcement](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation?hs_amp=true) | Neutral governance venue for MCP and `AGENTS.md` stewardship |
+| [AGENTS.md](https://agents.md/) | Open declarative instruction format used across coding-agent ecosystems |
+| [RFC 9728 OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728) | Discovery and metadata for protected resource authorization surfaces |
+| [RFC 9635 Grant Negotiation and Authorization Protocol (GNAP)](https://www.rfc-editor.org/rfc/rfc9635) | Negotiated delegated authorization model for dynamic access decisions |
+| [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767) | Resource-server-side GNAP discovery and access-right connection model |
+| [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449) | Sender-constrained token binding for high-assurance agent calls |
+| [OpenAI Preparedness Framework](https://openai.com/index/updating-our-preparedness-framework/) | Frontier-model safety governance prior art, useful for scoping what `TAK` does and does not standardize |
+| [Anthropic Responsible Scaling Policy](https://www.anthropic.com/responsible-scaling-policy) | Frontier-model safety and deployment governance prior art, complementary rather than substitutive to runtime kernel controls |
+| [Google DeepMind Frontier Safety Framework](https://deepmind.google/discover/blog/strengthening-our-frontier-safety-framework/) | Model-level severe-risk framework used to distinguish model governance from runtime governance |
+| [CoSAI: Agentic Identity and Access Management](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf) | Agentic IAM control framing aligned to enterprise runtime operation |
+| [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/2025/12/09/owasp-top-10-for-agentic-applications-the-benchmark-for-agentic-security-in-the-age-of-autonomous-ai/) | Concrete agentic risk taxonomy and mitigation guidance |
 | [W3C Trace Context](https://www.w3.org/TR/trace-context/) | Cross-system trace propagation |
 | [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/info/rfc9421) | Message-level signatures for integrity and non-repudiation |
-| [OWASP GenAI Security Project](https://genai.owasp.org/) | Security considerations for LLM and agentic systems |
+| [in-toto Attestation Framework Specification](https://github.com/in-toto/attestation/blob/main/spec/README.md) | Practical attestation statement and envelope model for signed evidence |
+| [Sigstore Documentation](https://docs.sigstore.dev/) | Operational signing, transparency, and verification substrate for attestations and release evidence |
+| [CSA MAESTRO](https://labs.cloudsecurityalliance.org/maestro/) | Agentic AI threat-modeling framework |
+| [MITRE ATLAS](https://atlas.mitre.org/) | Adversarial tactics and techniques knowledge base for AI systems |
+| [IMDA Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai) | National governance framework for agentic AI deployment |
+| [ISO/IEC 12792:2025](https://www.iso.org/standard/84111.html) | Transparency taxonomy for AI systems |
+| [ISO/IEC DIS 42102](https://www.iso.org/standard/86898.html) | Framework for characterizing AI system methods and capabilities |
+
+### 3.1 Reuse and Profiling Rule
+
+`TAK` is intended to compose adjacent standards, not replace them.
+
+Accordingly:
+
+- `TAK` `MUST` adopt an existing standard directly where that standard already defines the relevant control surface well
+- `TAK` `SHOULD` define a profile when an existing standard is useful but needs agent-runtime-specific constraints
+- `TAK` `MUST NOT` redefine transport, directory, credential, or trace standards merely because they are used by AI agents
+- `TAK` `MAY` define new runtime semantics only where the agent-governance problem is not already solved elsewhere
+
+In practice this means:
+
+- `MCP` and `A2A` are protocol-profile targets, not substitutes for runtime governance
+- `MCP` authorization and discovery mechanisms define transport-facing auth behavior; `TAK` defines the runtime policy and evidence semantics layered behind them
+- `W3C Trace Context` is the default correlation carrier for cross-system execution traces
+- `RFC 9421` is the preferred message-signing basis where `TAK` evidence crosses HTTP trust boundaries
+- declarative instruction artifacts such as `AGENTS.md` may complement runtime governance, but they do not replace kernel-governed control metadata
+- `LDAP`, `SCIM`, `VC`, and other adjacent standards remain companion carriers or claim envelopes rather than being redefined by `TAK`
 
 ## 4. Terms and Definitions
 
@@ -83,7 +144,8 @@ For the purposes of this standard:
 |------|------------|
 | `agent` | A software system that can reason, decide, and perform actions with or without tool use on behalf of a principal or workflow |
 | `principal` | The human or organizational authority under which an agent operates |
-| `runtime` | The execution environment that mediates prompts, tools, memory, policies, and outputs |
+| `runtime` | The execution environment that implements the agent harness and mediates prompts, tools, memory, policies, and outputs |
+| `agent harness` | The standard runtime structure that binds authority, instructions, model access, tools, memory, oversight, and evidence into one governed execution contract |
 | `immutable directive` | A runtime-enforced instruction that the agent cannot change through conversation |
 | `tool` | A callable capability that reads, writes, transforms, or acts on an internal or external system |
 | `execution mode` | The enforcement class governing how a tool call is handled at runtime |
@@ -107,15 +169,17 @@ For the purposes of this standard:
 
 The core principle of `TAK` is:
 
-> Humans hold authority. Agents hold capability. The kernel mediates.
+> Humans hold authority. Agents hold capability. The kernel provides the standard harness on which trustworthy AI agents are built, operated, and evidenced.
 
-The point is not merely to restrict the model. The point is to ensure that authority, capability, and evidence remain aligned throughout execution.
+The point is not merely to restrict the model or intercept model calls. The point is to establish a consistent and governable basis for how AI agents are built, invoked, supervised, and evidenced. Mediation is one function of that harness, but the larger purpose is to ensure that authority, capability, directives, execution, and evidence remain aligned throughout runtime operation.
 
 ## 6. Design Principles
 
 An implementation of `TAK`:
 
+- `MUST` provide a consistent harness contract for how governed agents are assembled, invoked, supervised, and evidenced
 - `MUST` mediate all consequential agent action through an explicit control plane
+- `MUST` treat mediation as one responsibility of a broader governed harness rather than as the entirety of the kernel
 - `MUST` separate human authority from model capability
 - `MUST` load only approved operating profile state for governed agents
 - `MUST` treat tool invocation as governed execution, not model free-form behavior
@@ -164,7 +228,7 @@ This is not only a usability optimization. It is a control. Smaller, better-boun
 
 ![TAK authority layers](tak-diagrams/png/02-authority-layers.png)
 
-_Figure 1. Layered authority mediation is a required kernel behavior, not only a UI convenience._
+_Figure 1. Layered authority mediation is a required kernel behavior inside the broader `TAK` harness, not only a UI convenience._
 
 ### 7.4 Approved Operating Profiles
 
@@ -235,6 +299,8 @@ For governed agents, the runtime `SHOULD` support:
 - a visible fingerprint or version marker for materially relevant operating profile state
 - stronger protected attestation material sufficient to bind that profile state to trusted kernel execution
 
+Acceptable higher-assurance attestation substrates `MAY` include hardware-rooted measurements such as `TPM`, `TDX`, or `SEV-SNP`, as well as software evidence stacks such as `DSSE`, `in-toto`, `Sigstore`, or `SCITT`-style statement publication, provided they let a verifier bind profile state to the governed runtime instance that actually executed the work.
+
 This allows relying parties and auditors to distinguish between:
 
 - the same enduring agent subject
@@ -257,6 +323,23 @@ For example:
 
 An implementation `SHOULD` document those profile mappings explicitly so external systems know which parts of `TAK` they can rely on and which parts remain internal kernel evidence.
 
+### 7.10 Vendor-Neutral Reference Model
+
+The following reference model is intentionally independent from any one product platform.
+
+It shows the stable `TAK` control relationship between:
+
+- human and organizational authority
+- identity and governance context
+- interaction surfaces
+- coordinator and specialist agents
+- the kernel control plane
+- tools, protocols, and evidence
+
+![TAK reference model](tak-diagrams/png/11-neutral-trust-model.png)
+
+_Figure 2. `TAK` defines a vendor-neutral harness control plane that sits between authority, agents, tools, and evidence._
+
 ## 8. Tool Execution and Action Gating
 
 ### 8.1 Tool Definitions
@@ -271,6 +354,8 @@ A conforming implementation `MUST` define tools with machine-readable metadata s
 - required authority or capability class
 
 The runtime `MUST NOT` rely solely on natural-language tool descriptions for governance decisions.
+
+Declarative instruction artifacts such as `AGENTS.md` `MAY` provide human- and agent-readable operating guidance for coding or workflow agents, but the runtime `MUST` still maintain machine-readable tool and control metadata independently of those documents.
 
 ### 8.2 Execution Modes
 
@@ -310,7 +395,7 @@ If a tool:
 - publishes or deploys
 - reaches across an organizational boundary with consequences
 
-then the runtime `SHOULD` default that tool to `proposal` unless a higher-assurance policy explicitly permits immediate execution.
+then the runtime `MUST` default that tool to `proposal` unless a higher-assurance policy explicitly permits immediate execution.
 
 ### 8.5 Provider Budgets and Backpressure
 
@@ -325,6 +410,8 @@ A conforming runtime `MUST` implement provider-aware rate budgeting and backpres
 
 These limits are runtime-governance signals, not merely application exceptions.
 
+Predictive backpressure is often inferred rather than explicitly published by providers. A conforming runtime `MAY` derive predictive state from recent `429` behavior, `Retry-After` hints, token-usage headers, contract ceilings, or observed admission patterns where direct provider telemetry is incomplete.
+
 The runtime `MUST`:
 
 - maintain a governed representation of provider budget state
@@ -332,7 +419,7 @@ The runtime `MUST`:
 - surface blocking or degraded capacity in both machine-readable and human-consumable form
 - avoid presenting provider-specific failures as unexplained or opaque application errors
 
-### 8.7 Dependency Drift and Revalidation
+### 8.6 Dependency Drift and Revalidation
 
 The runtime `MUST` recognize that material drift can originate from dependencies as well as from deliberate local configuration edits.
 
@@ -353,7 +440,7 @@ At minimum, the human-consumable runtime state `SHOULD` distinguish conditions s
 - blocked pending approval or escalation
 - blocked by provider auth, billing, contract, or policy status
 
-### 8.6 Bounded and Resumable Inference Queues
+### 8.7 Bounded and Resumable Inference Queues
 
 A conforming runtime `MUST` support bounded, resumable inference queues rather than assuming every user request maps directly to an immediate model call.
 
@@ -377,7 +464,7 @@ Queue entries `SHOULD` carry, at minimum:
 - next eligible execution time
 - current provider or failover state
 
-### 8.7 Policy-Based Failover and Scheduled Retry
+### 8.8 Policy-Based Failover and Scheduled Retry
 
 A conforming runtime `SHOULD` support policy-based fallback to another approved model or provider when the originally selected path is unavailable, rate-limited, misconfigured, or otherwise unsuitable.
 
@@ -395,6 +482,142 @@ If scheduled retry is used, the runtime `MUST`:
 - preserve queue state across the deferral
 - surface the deferred state and next retry condition to operators and users
 - stop retrying when policy, expiry, or repeated failure thresholds require escalation instead
+
+### 8.9 Illustrative Queue and Provider Pseudocode
+
+The following pseudocode is informative, but it expresses the minimum runtime behavior the standard expects.
+
+```text
+function processInferenceRequest(request):
+  prior = findCompletedInferenceByIdempotencyKey(request.idempotency_key)
+  if prior is not null:
+    emit("tak.inference.reused", request, prior)
+    return prior
+
+  profile = resolveApprovedOperatingProfile(request.agent_id)
+  tier = resolveCapabilityTier(request.task_class, request.sensitivity_class)
+  budget = getProviderBudget(profile.primary_provider, profile.model_binding)
+
+  if not budget.canAdmit(request):
+    emit("tak.provider.backpressure", request, budget)
+    queue.defer(
+      request,
+      reason = "provider_budget",
+      next_eligible_time = budget.nextResetWindow()
+    )
+    emit("tak.queue.deferred", request, budget)
+    return deferredToUser(request, budget)
+
+  queue.admit(request)
+  emit("tak.queue.admitted", request, budget)
+
+  result = tryPrimaryExecution(request, profile)
+  lastResult = result
+  if result.success:
+    emit("tak.inference.completed", request, result)
+    return result
+
+  if policyAllowsFailover(request, profile, tier, result.failure_reason):
+    alternate = selectApprovedAlternateProvider(request, profile, tier)
+    emit("tak.provider.failover_selected", request, alternate)
+    retry = executeWithProvider(request, alternate)
+    lastResult = retry
+    if retry.success:
+      emit("tak.inference.completed", request, retry)
+      return retry
+
+  if lastResult.retry_after_window is not null:
+    queue.defer(
+      request,
+      reason = "retry_after_window",
+      next_eligible_time = lastResult.retry_after_window
+    )
+    emit("tak.queue.deferred", request, lastResult)
+    return deferredToUser(request, lastResult)
+
+  escalateToHuman(
+    request,
+    incident_class = classifyProviderIncident(lastResult),
+    evidence = lastResult
+  )
+  emit("tak.hitl.escalated", request, lastResult)
+  return escalationNotice(request, lastResult)
+```
+
+At minimum, this behavior demonstrates:
+
+- idempotent resumption and duplicate-prevention behavior
+- provider budget is checked before execution
+- queueing is bounded and explicit
+- failover is policy-controlled rather than opportunistic
+- retry-after windows are first-class runtime state
+- unresolved provider or governance incidents escalate to humans
+
+### 8.10 Example Runtime Event Shapes
+
+`TAK` implementations `SHOULD` make runtime state machine-readable even when the user-facing UI remains conversational.
+
+Illustrative examples:
+
+```json
+{
+  "event_type": "tak.queue.admitted",
+  "agent_id": "AGT-ORCH-200",
+  "principal_id": "HR-200",
+  "request_id": "req-7d1a",
+  "task_class": "architecture-review",
+  "capability_tier": "reasoning-high",
+  "provider": "anthropic",
+  "model": "claude-opus-4-6",
+  "queue_depth": 3,
+  "created_at": "2026-05-11T14:06:12Z"
+}
+```
+
+```json
+{
+  "event_type": "tak.provider.backpressure",
+  "agent_id": "AGT-ORCH-200",
+  "request_id": "req-7d1a",
+  "provider": "anthropic",
+  "reason": "token_throughput_limit",
+  "retry_after_seconds": 45,
+  "budget_state": {
+    "daily_remaining": 142000,
+    "burst_state": "exhausted"
+  },
+  "created_at": "2026-05-11T14:06:14Z"
+}
+```
+
+```json
+{
+  "event_type": "tak.provider.failover_selected",
+  "agent_id": "AGT-ORCH-200",
+  "request_id": "req-7d1a",
+  "primary_provider": "anthropic",
+  "primary_model": "claude-opus-4-6",
+  "alternate_provider": "openai",
+  "alternate_model": "gpt-5.4",
+  "policy_basis": [
+    "capability_tier_match",
+    "approved_for_internal_confidential"
+  ],
+  "created_at": "2026-05-11T14:06:16Z"
+}
+```
+
+```json
+{
+  "event_type": "tak.hitl.escalated",
+  "agent_id": "AGT-ORCH-200",
+  "request_id": "req-7d1a",
+  "incident_class": "provider_auth_or_contract_failure",
+  "needs_human_action": true,
+  "gaid_scope_violation_detected": false,
+  "created_at": "2026-05-11T14:06:20Z"
+}
+```
 
 ## 9. Human-in-the-Loop and Oversight Tiers
 
@@ -441,7 +664,8 @@ A conforming implementation `MUST` distinguish between:
 
 If a directive is marked immutable, the runtime `MUST` ensure that:
 
-- the user cannot override it by prompt alone
+- the runtime presents and enforces it on every relevant governed call
+- contradictory user or downstream-agent instructions do not silently displace it
 - downstream agents cannot silently remove it
 - tool outputs cannot weaken it
 
@@ -459,7 +683,7 @@ The runtime `SHOULD NOT` expose raw hidden prompts to end users by default, but 
 
 ![TAK directive flow](tak-diagrams/png/08-directive-injection.png)
 
-_Figure 2. Directives are not merely prompt text. They are a governed runtime control surface._
+_Figure 3. Directives are not merely prompt text. They are a governed runtime control surface._
 
 ## 11. Delegation, Coordination, and Specialist Topology
 
@@ -514,7 +738,7 @@ When such an incident is detected, the runtime `MUST`:
 
 ![TAK delegation chain](tak-diagrams/png/04-delegation-chain.png)
 
-_Figure 3. Delegation is valid only when authority narrows, not widens._
+_Figure 4. Delegation is valid only when authority narrows, not widens._
 
 ## 12. Memory and Context-Window Governance
 
@@ -538,6 +762,8 @@ A `TAK-Managed` or higher implementation `MUST` define policies for:
 - durable preference or decision memory
 - operational evidence and audit history
 - sensitive data retention and expiry
+
+The runtime `MUST NOT` expose memory derived from one principal, tenant, or authorization boundary to another principal, tenant, or authorization boundary without explicit policy permission.
 
 ### 12.3 Context Truncation and Summarization
 
@@ -600,7 +826,7 @@ For `TAK-Assured`, the runtime `SHOULD` support cryptographic binding or message
 
 ![TAK audit surfaces](tak-diagrams/png/06-audit-trail.png)
 
-_Figure 4. Audit is not a side effect of the runtime. It is part of the runtime._
+_Figure 5. Audit is not a side effect of the runtime. It is part of the runtime._
 
 ## 14. Runtime Transparency
 
@@ -662,6 +888,20 @@ The runtime `MUST NOT` silently route restricted data into lower-trust tools, pr
 
 External network or cross-boundary tools `SHOULD` be treated as higher-risk surfaces. A `TAK-Managed` implementation `SHOULD` explicitly classify such tools rather than treating them as ordinary local operations.
 
+### 15.5 Threat-Model Alignment
+
+An implementation `SHOULD` maintain an explicit threat model for the agent runtime.
+
+At minimum, that threat model `SHOULD` identify:
+
+- protected assets such as authority context, tool credentials, memory, evidence, and provider bindings
+- relevant attackers such as malicious users, compromised delegates, compromised tools, hostile providers, and prompt-injection sources
+- trust boundaries across prompts, tools, memory, providers, and cross-agent delegation
+
+Threat enumeration `SHOULD` align where useful to emerging public catalogs such as the `OWASP` Top 10 for Agentic Applications, `CSA MAESTRO`, and `MITRE ATLAS`.
+
+A shared starter artifact for this work `MAY` be published as `agent-standards-threat-model.md`, provided implementations still adapt it to their real deployment boundaries.
+
 ## 16. Evaluation and Red Teaming
 
 ### 16.1 Minimum Evaluation Expectations
@@ -677,6 +917,8 @@ A conforming implementation `MUST` test the runtime, not only the model. At mini
 - queueing, resumption, and duplicate-prevention behavior
 - approval-gate compliance
 
+Fabrication resistance and related trust claims `MUST` be backed by a published evaluation methodology and baseline rates, either by profiling a recognized benchmark suite or by documenting an organization-specific evaluation pack with reproducible pass criteria.
+
 ### 16.2 Advanced Evaluation
 
 A `TAK-Assured` implementation `SHOULD` additionally evaluate:
@@ -691,7 +933,20 @@ A `TAK-Assured` implementation `SHOULD` additionally evaluate:
 
 ### 16.3 External Signals
 
-The growing public focus on agent security, identity, evaluation, and interoperability is relevant here. NIST’s current work on agent standards and benchmark evaluation confirms that trustworthy agency is not only a model-quality problem, but a runtime governance problem as well.
+The growing public focus on agent security, identity, evaluation, and interoperability is relevant here. `NIST`'s current work on agent standards and benchmark evaluation confirms that trustworthy agency is not only a model-quality problem, but a runtime governance problem as well.
+
+### 16.4 Evaluation Cadence and Threat Catalog Coverage
+
+Evaluation `MUST NOT` be treated as a one-time launch ritual.
+
+At minimum, a conforming implementation `MUST` re-run the applicable evaluation set:
+
+- on material runtime change
+- on model or provider substitution
+- on major instruction-bundle or tool-surface change
+- on release into a new trust boundary or exposure state
+
+`TAK-Assured` implementations `SHOULD` additionally map at least the most relevant scenarios to external threat catalogs such as `OWASP` Top 10 for Agentic Applications, `CSA MAESTRO`, and `MITRE ATLAS`, so evaluation coverage is legible outside one vendor stack.
 
 ## 17. Conformance Profiles
 
@@ -699,6 +954,7 @@ The growing public focus on agent security, identity, evaluation, and interopera
 
 `TAK-Basic` requires:
 
+- standardized runtime harness control-plane behavior
 - layered authority mediation
 - tool metadata with execution modes
 - basic approval gating for consequential actions
@@ -730,6 +986,8 @@ The growing public focus on agent security, identity, evaluation, and interopera
 - governed failover and substitution traceability across approved provider sets
 - stronger traceability across delegation and cross-system flows
 - documented control ownership and change management
+
+Implementations claiming any `TAK` profile `SHOULD` publish an assertion mapping, evidence pack, or equivalent rubric such as the companion `tak-conformance-tests.md` document.
 
 ## 18. Security Considerations
 
@@ -769,10 +1027,25 @@ In practical terms:
 
 That makes `DPF` a useful proving ground for the first conformance assessment of this standard.
 
+For the purposes of this standards family, `DPF` should be understood as an initial implementation prototype rather than as a claim of full conformance.
+
+The prototype value is that `DPF` can concretely demonstrate:
+
+- which `TAK` controls are already practical in a real enterprise-facing platform
+- which controls require more explicit machine-readable surfaces
+- what evidence and runtime-state publication patterns need to be added next
+
+The most useful near-term `DPF` outcomes under this standard include:
+
+- explicit queue and provider-budget state publication
+- stronger runtime event typing for backpressure, failover, and escalation
+- tighter linkage between runtime evidence and companion `GAID` receipts
+- clearer supervisor-facing transparency for active runtime posture
+
 ## 21. Summary
 
 The key message of this standard is simple:
 
-AI agents become trustworthy in practice only when a runtime kernel mediates authority, tools, memory, oversight, and evidence with discipline.
+AI agents become trustworthy and repeatable in practice only when they run inside a standard kernel harness that governs authority, tools, memory, provider use, oversight, and evidence with discipline.
 
-`TAK` provides that discipline. It is not a substitute for broader organizational governance. It is the runtime control model that makes operational governance real.
+`TAK` provides that discipline. It is not a substitute for broader organizational governance. It is the runtime harness standard and control model that makes operational governance real.

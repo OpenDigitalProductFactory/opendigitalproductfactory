@@ -17,6 +17,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -95,16 +96,27 @@ function renderMermaidDiagrams(diagramsDir) {
     const base = file.replace(".mmd", "");
     const pngOutput = join(pngDir, `${base}.png`);
     const svgOutput = join(svgDir, `${base}.svg`);
+    const inputMtime = statSync(input).mtimeMs;
+    const configMtime = existsSync(mmdConfig) ? statSync(mmdConfig).mtimeMs : 0;
+    const freshnessFloor = Math.max(inputMtime, configMtime);
+    const outputsFresh =
+      existsSync(svgOutput)
+      && statSync(svgOutput).mtimeMs >= freshnessFloor;
+
+    if (outputsFresh) {
+      console.log(`  ${file} -> up to date`);
+      continue;
+    }
 
     console.log(`  ${file} -> svg, png`);
     try {
       execSync(
         `pnpm exec mmdc -i "${input}" -o "${svgOutput}" -c "${mmdConfig}" -b white`,
-        { cwd: ROOT, stdio: "pipe", timeout: 60_000, env },
+        { cwd: ROOT, stdio: "pipe", timeout: 180_000, env },
       );
       execSync(
-        `pnpm exec mmdc -i "${input}" -o "${pngOutput}" -c "${mmdConfig}" -b white -s 3`,
-        { cwd: ROOT, stdio: "pipe", timeout: 60_000, env },
+        `pnpm exec mmdc -i "${input}" -o "${pngOutput}" -c "${mmdConfig}" -b white -s 4`,
+        { cwd: ROOT, stdio: "pipe", timeout: 180_000, env },
       );
     } catch (err) {
       const message = err?.stderr?.toString?.().split("\n")[0] || err?.message || "Unknown render error";
@@ -200,6 +212,7 @@ function resolveLocalPath(baseDir, href) {
 }
 
 function readPngDimensions(filePath) {
+  if (!existsSync(filePath)) return null;
   const data = readFileSync(filePath);
   if (data.length < 24 || data.toString("ascii", 1, 4) !== "PNG") {
     return null;
@@ -208,6 +221,29 @@ function readPngDimensions(filePath) {
     width: data.readUInt32BE(16),
     height: data.readUInt32BE(20),
   };
+}
+
+function readSvgDimensions(filePath) {
+  if (!existsSync(filePath)) return null;
+  const data = readFileSync(filePath, "utf8");
+  const viewBoxMatch = data.match(/viewBox="[\d.\-]+\s+[\d.\-]+\s+([\d.\-]+)\s+([\d.\-]+)"/i);
+  if (viewBoxMatch) {
+    return {
+      width: Number(viewBoxMatch[1]),
+      height: Number(viewBoxMatch[2]),
+    };
+  }
+
+  const widthMatch = data.match(/width="([\d.]+)(px)?"/i);
+  const heightMatch = data.match(/height="([\d.]+)(px)?"/i);
+  if (widthMatch && heightMatch) {
+    return {
+      width: Number(widthMatch[1]),
+      height: Number(heightMatch[1]),
+    };
+  }
+
+  return null;
 }
 
 function fitWithin(dimensions, maxDimensions) {
@@ -263,7 +299,9 @@ function resolveDiagramCompanions(localPath) {
 
 function createImageRunFromLocalPath(localPath, maxDimensions) {
   const source = resolveDiagramCompanions(localPath);
-  const dimensions = readPngDimensions(source.dimensionsPath);
+  const dimensions =
+    readPngDimensions(source.dimensionsPath)
+    ?? (source.primaryType === "svg" ? readSvgDimensions(source.primaryPath) : null);
   const transformation = fitWithin(dimensions, maxDimensions);
 
   if (source.primaryType === "svg" && source.fallbackPath && existsSync(source.fallbackPath)) {
@@ -284,6 +322,12 @@ function createImageRunFromLocalPath(localPath, maxDimensions) {
     transformation,
     type: source.primaryType,
   });
+}
+
+function canRenderLocalImage(localPath) {
+  if (!localPath) return false;
+  const source = resolveDiagramCompanions(localPath);
+  return existsSync(source.primaryPath);
 }
 
 function inlineRunsFromTokens(tokens = [], baseDir, style = {}) {
@@ -323,7 +367,7 @@ function inlineRunsFromTokens(tokens = [], baseDir, style = {}) {
     }
     if (token.type === "image") {
       const localPath = resolveLocalPath(baseDir, token.href);
-      if (localPath && existsSync(localPath)) {
+      if (canRenderLocalImage(localPath)) {
         runs.push(createImageRunFromLocalPath(localPath, INLINE_IMAGE_MAX));
       } else {
         runs.push(plainTextRun(`[Missing image: ${token.href}]`, { italics: true }));
@@ -401,7 +445,7 @@ function buildTable(token, baseDir) {
 
 function imageParagraph(token, baseDir) {
   const localPath = resolveLocalPath(baseDir, token.href);
-  if (!localPath || !existsSync(localPath)) {
+  if (!canRenderLocalImage(localPath)) {
     return para([plainTextRun(`[Missing image: ${token.href}]`, { italics: true })], { align: AlignmentType.CENTER });
   }
   return new Paragraph({
