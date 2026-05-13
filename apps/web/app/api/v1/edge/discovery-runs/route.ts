@@ -24,8 +24,60 @@ import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
 const ROUTE_CONTEXT = "/api/v1/edge/discovery-runs";
 
 // Per spec § REST ingestion controls (Phase 0): observedAt must be
-// within +/- this window of server time, else 400 stale_observation.
-const FRESHNESS_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+// within the operator-configured freshness window of server time, else
+// 400 stale_observation.
+//
+// Asymmetric tolerance — past and future are bounded separately:
+//
+//   PAST_SEC (default 24h, matches spec § Soft-fail policy windows):
+//     how old observedAt may be. The spec allows Edge Nodes to queue
+//     submissions for up to 24h when the Authority is unreachable,
+//     stamping the original observedAt; the queue-flush submission
+//     comes through with observedAt as much as 24h before "now".
+//
+//   FUTURE_SEC (default 5 min, matches NTP-synced LAN clock skew):
+//     how far ahead observedAt may be. A healthy NTP-synced LAN has
+//     sub-second skew between hosts. Five minutes catches the case
+//     of a freshly-provisioned VM that hasn't synced NTP yet without
+//     blocking the install entirely — operators with chronic clock
+//     drift can widen this knowingly via DPF_EDGE_FRESHNESS_FUTURE_SEC.
+//     Aggressive forward skew (hours ahead) is almost always a
+//     misconfigured clock and worth rejecting; back-dated forward
+//     submissions also pollute attribution timelines.
+//
+// Both bounds are env-configurable so operators can tune for their
+// environment without code changes (e.g. tighter PAST_SEC for air-gap
+// deployments where 24h-stale data is suspicious by definition).
+const DEFAULT_FRESHNESS_PAST_SEC = 24 * 60 * 60;   // 24 h
+const DEFAULT_FRESHNESS_FUTURE_SEC = 5 * 60;        // 5 min
+
+function parseFreshnessEnv(
+  raw: string | undefined,
+  fallback: number,
+): number {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.floor(n);
+}
+
+/**
+ * Read the configured freshness window. Reads env on every call so
+ * tests can override per-test via process.env without import-time
+ * caching. Cheap — two env lookups + two parseInt-equivalents per
+ * request.
+ */
+function getFreshnessConfig(): { pastMs: number; futureMs: number } {
+  const pastSec = parseFreshnessEnv(
+    process.env.DPF_EDGE_FRESHNESS_PAST_SEC,
+    DEFAULT_FRESHNESS_PAST_SEC,
+  );
+  const futureSec = parseFreshnessEnv(
+    process.env.DPF_EDGE_FRESHNESS_FUTURE_SEC,
+    DEFAULT_FRESHNESS_FUTURE_SEC,
+  );
+  return { pastMs: pastSec * 1000, futureMs: futureSec * 1000 };
+}
 
 // Per spec § REST ingestion controls (Phase 0): hard payload caps to
 // prevent DoS via oversized requests. The route enforces both a total
@@ -310,13 +362,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Freshness window: reject submissions outside +/- 24h of server
-  // time per spec § REST ingestion controls. Prevents back-dated
-  // submissions polluting inventory history; also catches Edge Nodes
-  // with badly skewed clocks before they pollute attribution.
+  // Freshness window: reject submissions outside the operator-
+  // configured past/future bounds per spec § REST ingestion controls.
+  // Prevents back-dated submissions polluting inventory history; also
+  // catches Edge Nodes with badly skewed clocks before they pollute
+  // attribution. Asymmetric — see top-of-file comment for rationale.
+  const { pastMs, futureMs } = getFreshnessConfig();
   const observedAt = new Date(parsed.data.observedAt);
-  const skewMs = Math.abs(Date.now() - observedAt.getTime());
-  if (skewMs > FRESHNESS_WINDOW_MS) {
+  const deltaMs = observedAt.getTime() - Date.now(); // +ve = future, -ve = past
+  const tooOld = deltaMs < -pastMs;
+  const tooFutureSkewed = deltaMs > futureMs;
+  if (tooOld || tooFutureSkewed) {
+    const direction = tooFutureSkewed ? "future" : "past";
     await writeEdgeNodeAudit({
       route: "edge.discovery_runs.submit",
       routeContext: ROUTE_CONTEXT,
@@ -327,13 +384,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       status: 400,
       success: false,
       error: "stale_observation",
-      summary: { skewMs, observedAt: parsed.data.observedAt },
+      summary: {
+        // Keep skewMs (absolute) for backward compatibility with audit
+        // consumers; add signed deltaMs + direction for new clarity.
+        skewMs: Math.abs(deltaMs),
+        deltaMs,
+        direction,
+        observedAt: parsed.data.observedAt,
+        pastWindowSec: pastMs / 1000,
+        futureWindowSec: futureMs / 1000,
+      },
     });
+    const pastH = pastMs / 1000 / 3600;
+    const futureMin = futureMs / 1000 / 60;
     return NextResponse.json(
       {
         ok: false,
         error: "stale_observation",
-        message: `observedAt must be within ${FRESHNESS_WINDOW_MS / 1000 / 3600}h of server time`,
+        message:
+          direction === "future"
+            ? `observedAt must be at most ${futureMin.toFixed(1)}min ahead of server time (likely cause: NTP skew on the Edge Node host)`
+            : `observedAt must be at most ${pastH.toFixed(1)}h before server time`,
       },
       { status: 400 },
     );

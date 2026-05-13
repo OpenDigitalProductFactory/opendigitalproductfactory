@@ -10,6 +10,26 @@
 
 ---
 
+## Locked Architectural Decisions
+
+These are binding for V1. They are *decisions*, not judgment calls. They exist so that downstream slices (Active Runs surface, CWQ unification, V2 resume paths) do not collide with V1 contracts.
+
+1. **Status vocabulary is closed.** `TaskRun.status` continues to use the A2A-aligned set documented at `packages/db/prisma/schema.prisma:3914` — `submitted | working | input-required | auth-required | completed | failed | canceled | rejected | archived`. "Request changes" is not a new status; it appends a `TaskMessage` and leaves the run at `input-required`. No `needs-revision` / `paused` / `awaiting` strings introduced anywhere.
+2. **`AuthorizationDecisionLog.actionKey` vocabulary is locked to:** `task.paused.approve`, `task.paused.reject`, `task.paused.request_changes`. Future paused-work decision types extend this namespace; they do not invent parallel ones.
+3. **Decision `TaskMessage` shape is locked.** `role = "user"`, `metadata.kind = "operator-decision"`, `metadata.decision = "approve" | "reject" | "request_changes"`, `metadata.actorPrincipalId`, `metadata.actionKey`. Anything else goes in `metadata.detail`.
+4. **Principal convergence (AGENTS.md §11, 2026-05-09 addendum).** `AuthorizationDecisionLog.actorRef` and `humanContextRef` carry resolved `Principal` ids — never raw `User.id`. The alias kind (`mcp-token`, `mcp-session`, `web-session`, etc.) goes in the rationale payload alongside the decision context. `TaskRun.userId` continues to carry the `Principal` id per the runtime spec §9.2.
+5. **`auth-required` is "missing credential / authority", not "human judgment".** V1 lists `auth-required` runs in the inbox so they are not invisible, surfaces the missing scope or credential, and disables `Approve and resume` for them. The remediation flow (re-issue token, grant scope, attach delegation) is V2. Reject and request-changes remain available because they audit the decision to abandon or clarify.
+6. **Approve-and-resume scope.** V1 implements resume only for `a2aMetadata.trigger === "external-mcp"`. Paused `scheduled`, `build`, `interactive`, `deliberation`, and `capacity-continuity` runs appear in the inbox (so they are not invisible) and support reject + request-changes, but `Approve and resume` is disabled with a clear "resume not yet wired for this trigger" message. Each trigger's resume path is its own slice and must use the same `AutonomousWorkRun` seam.
+7. **Idempotency is enforced by status-conditional update, not by application checks.** Every decision writes through a Prisma `update` whose `where` includes the current status (`status: { in: ["input-required", "auth-required"] }`) and returns a count. Zero affected rows means another operator already decided; the action returns a conflict result without re-reading first.
+8. **Operator authorization rule.** A user may decide a paused `TaskRun` if (a) their resolved `Principal` matches `TaskRun.userId`, or (b) their platform role grants the `governance.approve_task` capability. Pick the existing capability key during implementation (`apps/web/lib/permissions.ts` is the source of truth — if no exact match, add it in the same commit as the decision module, not later). No "owner can always" carve-outs beyond (a).
+9. **`AgentActionProposal` is read-only linkage, never the owning record.** If a paused `TaskRun` has a related `AgentActionProposal` (via `AgentActionProposal.taskRunId`), the detail panel shows it as evidence. The decision still writes to `AuthorizationDecisionLog` + `TaskMessage` on the `TaskRun`. The proposal-card API path is not invoked.
+10. **No `WorkItem` rows created in V1.** `WorkItem` / `WorkQueue` (EP-CWQ-001) are a separate ownership/routing primitive. Re-evaluate unification when *either* (a) the same `TaskRun` legitimately needs to appear in multiple operator queues with independent claim state, *or* (b) the autonomous-runtime spec's "Active Runs" surface lands and Paused Work becomes a filtered view of it. Until then, Paused Work is a read-projection over `TaskRun`.
+11. **Naming alignment with the runtime spec.** The autonomous-coworker-runtime spec §8.1 names "Active Runs" as the broader surface; this slice ships the narrower, action-focused "Paused Work" first. When Active Runs lands, "Paused Work" becomes a default-filtered view inside it, not a sibling page. The route `/platform/ai/paused-work` is preserved as a stable deep-link target.
+12. **`a2aMetadata` JSON-path is the V1 query surface; columns are not promoted yet.** Loaders read `riskClass`, `trigger`, `sourceRef`, `apiTokenId` from `a2aMetadata` / `progressPayload`. Promotion of `triggerKind` or `riskClass` to indexed columns is deferred to autonomous-runtime spec Slice 5 metrics or to the point where the Operations-Map paused-count query exceeds 50 ms p95 — whichever comes first.
+13. **Hooks into existing escalation primitives are not built, but are not blocked either.** `ValueStreamHitlGate.channels`, `escalationPath`, and `escalationTimeoutMinutes` exist. V1 does not consume them and does not introduce a parallel notification stack. The V2 notification slice attaches to those.
+
+---
+
 ## Current State
 
 The runtime already has the important substrate:
@@ -74,21 +94,26 @@ Primary layout:
 - Use icons from the existing icon library if present in the touched files; otherwise keep text labels plain and compact.
 - Use only DPF theme CSS variables. No hardcoded Tailwind gray classes, no hardcoded hex colors, and no inline non-token color styles.
 
-The list row should show: title, status, risk class, trigger/source, coworker, route context, age, and decision SLA if available.
+The list row should show: title, status, risk class, trigger/source, coworker, route context, and age (time since `startedAt`).
+
+List ordering is fixed: **high-risk first, then bounded-write, then read; within each tier, oldest paused first (FIFO).** This is an approval queue, not an activity feed. Tests must pin this order — see Task 2.
+
+No "decision SLA" column in V1. Per Locked Decision 13, escalation timeouts live on `ValueStreamHitlGate` and are not consumed yet; we do not invent a parallel SLA on `TaskRun`.
 
 The detail panel should show:
 
-- decision brief,
+- **AI-prepared decision brief.** V1 source order: (a) `progressPayload.decisionBrief` if the coworker wrote one before pausing, (b) `progressPayload.summary` if present, (c) computed fallback = first 240 chars of the user prompt + a one-line tool/risk summary. The brief is always labeled "AI-prepared" so the operator knows it is not raw evidence. Future slices may have coworkers author the brief explicitly before pausing; the loader contract does not change.
+- **Raw requested action / prompt — unaltered.** This is the first `TaskMessage` with `role = "user"` for the run, rendered verbatim. It is shown adjacent to the AI brief, not nested inside it. This is the OWASP "Lies in the Loop" defense: the operator must always be able to compare AI summary against original text.
 - pause reason,
-- requested action or prompt,
 - risk class and authority scope,
 - initiating source (`mcp-token`, `mcp-session`, `scheduled-task`, etc.),
-- token/source attribution where present,
+- token/source attribution where present (`a2aMetadata.sourceRef`, `apiTokenId`),
 - coworker and route context,
 - prior `TaskMessage` entries,
-- related `ToolExecution` rows if any,
-- raw metadata disclosure in an advanced section,
-- action bar with `Approve and resume`, `Reject`, and `Request changes`.
+- related `ToolExecution` rows scoped by `taskRunId`,
+- related `AgentActionProposal` rows joined on `AgentActionProposal.taskRunId` — display-only evidence, never decided here,
+- raw `a2aMetadata` and `progressPayload` disclosure in an advanced section,
+- action bar with `Approve and resume`, `Reject`, and `Request changes`. `Approve and resume` is **disabled** for `auth-required` runs and for any trigger other than `external-mcp` in V1, with a tooltip explaining why and what slice will unlock it.
 
 ## Email and Messaging Approval Policy
 
@@ -172,9 +197,11 @@ Expected: PASS or only unrelated pre-existing failures, which must be documented
 Cover:
 
 - list returns only unarchived `input-required` and `auth-required` TaskRuns;
-- list sorts oldest waiting work first inside severity buckets or newest first consistently, with the chosen order documented in the test name;
+- list orders by `riskClass` (high-risk, bounded-write, read) then by `startedAt` ascending (FIFO within tier) — Locked Decision 11 plus the ordering rule in §UX Decision;
 - list extracts `riskClass`, `trigger`, `sourceRef`, `apiTokenId`, and summary from `a2aMetadata` / `progressPayload`;
-- detail includes `TaskMessage` entries and related `ToolExecution` rows by `taskRunId`;
+- detail includes `TaskMessage` entries (ordered `createdAt` asc) and related `ToolExecution` rows by `taskRunId`;
+- detail joins related `AgentActionProposal` rows via `AgentActionProposal.taskRunId` and returns them as evidence only — Locked Decision 9;
+- the raw-prompt field of the detail is exactly the first `TaskMessage` with `role = "user"`, unaltered — OWASP "Lies in the Loop" defense;
 - count returns only actionable paused work for nav badges.
 
 Run: `pnpm --filter web exec vitest run apps/web/lib/paused-ai-work/data.test.ts`
@@ -308,10 +335,11 @@ Cover:
 
 - reject only works for `input-required` / `auth-required`;
 - reject sets `status = "rejected"`, `completedAt`, and decision metadata in `progressPayload`;
-- request changes appends a `TaskMessage`, leaves status paused, and records decision metadata;
-- all decisions write `AuthorizationDecisionLog`;
-- duplicate decision attempts fail clearly;
-- unauthorized user cannot decide another user's paused work unless existing platform role checks allow it.
+- request changes appends a `TaskMessage` (role `user`, `metadata.kind = "operator-decision"`, `metadata.decision = "request_changes"` — Locked Decision 3), leaves status `input-required`, and records decision metadata in `progressPayload`;
+- all decisions write `AuthorizationDecisionLog` with `actionKey` in the locked vocabulary — `task.paused.approve` | `task.paused.reject` | `task.paused.request_changes` (Locked Decision 2) — and `actorRef` / `humanContextRef` set to the resolved `Principal` id, not `User.id` (Locked Decision 4);
+- idempotency: a duplicate decision attempt issued through a status-conditional update returns zero affected rows and the function returns a `{ kind: "conflict" }` result without re-reading state (Locked Decision 7);
+- operator authorization: only the originating `Principal` or a user with the `governance.approve_task` capability can decide; any other caller gets a `{ kind: "forbidden" }` result (Locked Decision 8) — the test uses the same capability key the implementation lands;
+- `auth-required` runs: reject and request-changes succeed; approve returns a structured `{ kind: "unsupported", reason: "auth-required-needs-credential" }` result and does **not** mutate status (Locked Decision 5).
 
 Run: `pnpm --filter web exec vitest run apps/web/lib/paused-ai-work/decisions.test.ts`
 
@@ -386,7 +414,7 @@ Keep parsing, idempotency lookup, and initial pause creation in `submitRemoteCow
 
 - [ ] **Step 4: Add approve decision wrapper**
 
-`approvePausedAiWork()` routes only `external-mcp` TaskRuns to remote resume in V1. Other paused triggers should return a clear unsupported-trigger error and remain paused.
+`approvePausedAiWork()` routes only `external-mcp` TaskRuns to remote resume in V1 (Locked Decision 6). For any other trigger, return `{ kind: "unsupported", reason: "approve-not-wired-for-trigger", trigger }` and leave status untouched. For `auth-required` runs of any trigger, return `{ kind: "unsupported", reason: "auth-required-needs-credential" }` per Locked Decision 5. In both cases, no status mutation, no `AuthorizationDecisionLog` row written — these are pre-decision validation failures, not decisions.
 
 - [ ] **Step 5: Run tests**
 
@@ -451,6 +479,18 @@ Run:
 git add apps/web/lib/ai-operations-map
 git commit -s -m "feat(ai): route paused map events to approval surface"
 ```
+
+## Per-Chunk Build-Gate Hygiene (AGENTS.md §4–§5)
+
+This work runs in a topic worktree, not the root clone. Before starting Chunk 1: `git worktree add ../DPF-paused-ai-work-approval -b doc/paused-ai-work-approval-surface` from the root clone, then `scripts/seed-worktree-mcp.ps1` (or `.sh`) inside the new worktree.
+
+At the end of every chunk (1 through 4), run:
+
+```bash
+pnpm --filter web typecheck
+```
+
+The pre-commit hook runs this on changed files, but per-chunk catches cross-file regressions before the chunk commits and stops failures from compounding into Chunk 5. Do not defer typecheck to E2E.
 
 ## Chunk 5: End-to-End Verification
 
@@ -558,18 +598,21 @@ Expected: draft PR created with verification evidence.
 
 ## Open Judgment Calls
 
-1. **Badge count:** V1 can omit a nav badge if the existing nav components do not have a badge pattern. If a badge is cheap and token-safe, show the paused count in `Paused Work`; otherwise rely on the tab and Operations Map attention links.
-2. **Auth-required behavior:** `auth-required` should appear in the inbox immediately, but V1 approval may only support `input-required` external MCP pauses. If stronger auth is not wired yet, the action should explain what credential or authority is missing.
-3. **Email/messaging:** Keep portal approval canonical in V1. Add Slack/Teams/email deep-link notifications only after this route proves the decision artifact and UX.
-4. **Collaborative Work Queue bridge:** Do not create `WorkItem` rows in this slice. Revisit once the queue implementation exists or once paused-work metrics show multi-worker assignment/escalation is needed.
-5. **Proceduralization feedback:** This slice should store enough decision metadata to support Slice 5 metrics. It does not need to build the proceduralization dashboard.
+Most of the prior open questions have been promoted into Locked Architectural Decisions above. Remaining open:
+
+1. **Badge count:** V1 can omit a nav badge if the existing nav components do not have a badge pattern. If a badge is cheap and token-safe, show the paused count on `Paused Work`; otherwise rely on the tab and Operations Map attention links. Pick during Task 3 implementation.
+2. **`governance.approve_task` capability key:** Locked Decision 8 binds the rule but lets implementation pick the capability key from existing `apps/web/lib/permissions.ts`. If no exact-fit key exists, add it in the same commit as `decisions.ts` — do not defer.
+3. **Email/messaging:** Per §Email and Messaging Approval Policy, V1 stays portal-canonical. The follow-on realtime/mobile notification track is captured in `docs/superpowers/specs/2026-05-13-realtime-hitl-mobile-companion-design.md`; add Slack/Teams/email deep-link notifications via the existing `ValueStreamHitlGate.channels` primitive only after this route proves the decision artifact and UX.
+4. **Decision-brief authorship by coworkers.** V1 falls back to `progressPayload.summary` + prompt prefix. Whether and when coworkers should populate `progressPayload.decisionBrief` explicitly before pausing is a coworker-prompt change owned by a separate slice — flagged here so the loader contract for `decisionBrief` is non-breaking when that lands.
+5. **Proceduralization feedback:** This slice stores enough decision metadata to support autonomous-runtime spec Slice 5 metrics (decision counts by `actionKey` + `trigger` + `riskClass`). It does not build the proceduralization dashboard.
 
 ## Done Criteria
 
 - A paused high-risk remote MCP TaskRun is visible without hunting through raw API endpoints.
-- The operator sees enough context to decide without reconstructing the entire run manually.
-- Approve resumes external MCP paused work through the existing autonomous runtime seam.
-- Reject and request-changes paths are audited and idempotent.
+- The operator sees enough context to decide without reconstructing the entire run manually, and the raw user prompt is always shown adjacent to (not nested inside) the AI-prepared brief.
+- Approve resumes `external-mcp` paused work through the existing autonomous runtime seam; non-`external-mcp` triggers and `auth-required` runs return a clear `unsupported` result without mutating state.
+- Reject and request-changes paths are audited (every decision writes `AuthorizationDecisionLog` with an `actionKey` from the locked vocabulary and a resolved `Principal` id) and idempotent by status-conditional update.
 - Operations Map attention events deep-link to the paused decision context.
-- Focused tests, typecheck, production build, Docker rebuild, and live MCP pause/approve/reject smokes pass.
+- Focused tests, typecheck (per chunk and at E2E), production build, Docker rebuild, and live MCP pause/approve/reject smokes pass.
 - The implementation reduces cognitive load and does not create a new approval-fatigue inbox without evidence and policy context.
+- Zero new status strings, zero new identity-bearing entities outside `Principal`, zero new approval API surfaces — all locked decisions hold.

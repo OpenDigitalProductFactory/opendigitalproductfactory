@@ -294,6 +294,64 @@ matrix row for your platform.
 Linked spec: [docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md](../superpowers/specs/2026-05-09-dpf-edge-node-design.md).
 Lifecycle script: [services/edge-node/scripts/verify-lifecycle.ts](../../services/edge-node/scripts/verify-lifecycle.ts).
 
+#### Clock sync prerequisite (NTP)
+
+The Authority's `/api/v1/edge/discovery-runs` route enforces a
+freshness window on submitted observations. The default bounds are
+asymmetric:
+
+- **Past:** 24 hours (matches spec § Soft-fail policy windows — Edge
+  Nodes are allowed to queue submissions locally for up to 24h when
+  the Authority is unreachable, then flush on reconnect stamping the
+  original `observedAt`).
+- **Future:** 5 minutes (NTP-tightened — a healthy NTP-synced LAN has
+  sub-second skew between hosts; anything more than a few minutes
+  ahead is almost certainly a clock-sync problem on the Edge Node
+  side and worth catching loudly).
+
+**Prerequisite:** every Edge Node host must run NTP. On a freshly
+provisioned VM:
+
+```bash
+# Debian / Ubuntu — systemd-timesyncd is the default
+sudo timedatectl set-ntp true
+timedatectl status                # expect: System clock synchronized: yes
+
+# Fedora / RHEL — chrony is the default
+sudo systemctl enable --now chronyd
+chronyc tracking                  # expect: Leap status: Normal
+```
+
+If you see `stale_observation` errors with the message "must be at
+most 5.0min ahead of server time (likely cause: NTP skew on the Edge
+Node host)" or "must be at most 24.0h before server time", that's the
+freshness gate firing. Fix NTP first, then re-check; widening the
+bounds with the env vars below should be a last resort.
+
+**Operator-configurable bounds:**
+
+The Authority Core honors two env vars (set on the **Authority** host,
+not on the Edge Node — the check runs server-side):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `DPF_EDGE_FRESHNESS_PAST_SEC` | `86400` (24h) | How old `observedAt` may be. Tighten for air-gap deployments where 24h-stale data is suspicious by definition. |
+| `DPF_EDGE_FRESHNESS_FUTURE_SEC` | `300` (5min) | How far ahead `observedAt` may be. Widen only if you have chronic clock skew that's expected (rare). |
+
+Either bound set to a non-numeric value or `<= 0` falls back to the
+default — operator typos don't accidentally disable the check.
+
+Audit rows for rejections include the signed `deltaMs`, `direction`
+(`past` or `future`), and the bounds in force at the time:
+
+```sql
+SELECT parameters->'summary' AS summary
+FROM "ToolExecution"
+WHERE "toolName" = 'edge.discovery_runs.submit'
+  AND "result"->>'error' = 'stale_observation'
+ORDER BY "createdAt" DESC LIMIT 5;
+```
+
 ### 8. Cloud deployment patterns
 
 **Status:** spec-only — no code shipped per substrate.

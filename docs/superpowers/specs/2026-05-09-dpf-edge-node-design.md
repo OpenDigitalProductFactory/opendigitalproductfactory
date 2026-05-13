@@ -955,10 +955,23 @@ deferred into "we'll add it when we move to MCP."
     stack trace **server-side only**; client response masks the
     internals.
 - **Freshness window.** The `observedAt` field on submissions must
-  be within ±24h of server time (default; per-deployment
-  configurable). Outside that window returns
-  `400 stale_observation`. Prevents back-dated submissions that
-  could pollute inventory history.
+  fall within an **asymmetric** window of server time:
+  - **Past bound** default 24h, env `DPF_EDGE_FRESHNESS_PAST_SEC` —
+    matches § Soft-fail policy windows (queue-flush submissions
+    stamp the original `observedAt`, which may be up to 24h old).
+  - **Future bound** default 5min, env
+    `DPF_EDGE_FRESHNESS_FUTURE_SEC` — NTP-tightened; healthy
+    NTP-synced LAN hosts have sub-second skew, so an `observedAt`
+    more than minutes ahead is almost always a clock-sync problem
+    on the Edge Node side.
+  Outside either bound returns `400 stale_observation`. The audit
+  row surfaces signed `deltaMs` and a `direction` field (`past` |
+  `future`) so operators can distinguish queue-replay from clock
+  skew at a glance. Prevents back-dated submissions that could
+  pollute inventory history; also flags misconfigured NTP early.
+  Operators may widen / tighten either bound at runtime via env;
+  invalid values fall back to defaults so a typo doesn't disable
+  the gate.
 
 Phase 1+ MCP migration: when `submit_discovery_observations`
 ships as an MCP tool, the controls above migrate into the MCP

@@ -391,7 +391,42 @@ Every autonomous run should record cognitive-load transfer signals:
 | `exceptionClass` | failed tool, auth, missing data, policy, model, schema | Shows what to fix next. |
 | `evidenceCompleteness` | receipts, artifacts, backlog evidence | Avoids "AI did something" claims without proof. |
 
-### 5.6 Proceduralization path
+### 5.6 Run lifecycle: concurrency, cancellation, failure, handoff
+
+The doctrine and ladder in §4 are only safe if the run itself has well-defined dynamics. These four are not optional; every slice in §10 must satisfy them.
+
+**Concurrency.** Each `(agentId, contextId)` pair admits at most one `working` `TaskRun` at a time. A second trigger for the same pair while the first is `working` either attaches as a `TaskNode` child if it is a continuation, or is rejected with `status = "rejected"` and a structured reason if it is a competing top-level run. The runtime must never allow two `working` siblings for the same `(agentId, contextId)`. Cross-pair concurrency is bounded by per-user and per-provider quotas resolved through the existing routing/rate-limit layer; the runtime does not invent a second rate limiter.
+
+**Cancellation.** A run can be canceled by its `userId`, by a supervisor with cancel authority, or by the runtime itself on policy breach. Cancellation is cooperative at the agent-loop boundary and synchronous at the tool boundary:
+
+1. The runtime marks `TaskRun.status = "canceled"` and stops the agentic loop before the next inference call.
+2. In-flight `governedExecuteTool()` calls run to completion; the tool side effect either lands or does not land, and the runtime does not invent compensating actions it cannot prove are safe.
+3. Any tool with a defined rollback receipt can offer a `cancel-followup` task. The runtime does not auto-execute rollback without an explicit policy that pre-authorizes it.
+4. `TaskMessage` records the canceler identity, reason, and timestamp.
+
+Canceling a parent `TaskRun` cascades to its `working` children with the same rules. Canceling a `submitted` or `input-required` run is immediate and writes no rollback follow-up because no side effects have run.
+
+**Failure taxonomy.** `exceptionClass` (§5.5) is not free-form. It is a closed enum that drives routing for proceduralization, retries, and operator triage:
+
+| Class | Meaning | Default disposition |
+| --- | --- | --- |
+| `tool-error` | A tool returned an error or threw. | Retry-eligible per the tool retry policy; surface to operator after N retries. |
+| `tool-denied` | Grant or capability check denied the call. | No retry. File `CoworkerCapabilityNeed`. |
+| `auth-required` | Tool needs delegated credentials or external authorization. | Move run to `auth-required`. |
+| `policy-violation` | Tool result or run state violates a policy gate. | No retry. Operator review. |
+| `prompt-injection-suspected` | External tool result contained suspected injection content. | Quarantine result, escalate, and do not feed it back to the model uncritically. |
+| `model-error` | Provider returned an unrecoverable error. | Retry through routing fallback; if all fallbacks fail, fail run. |
+| `rate-limited` | Provider or internal quota refused the call. | Back off per routing policy; not a run-level failure unless exhausted. |
+| `schema-violation` | Structured output, parser output, or typed payload failed to validate. | Retry with corrective prompt or deterministic fallback up to N times. |
+| `missing-data` | Required context, grant, memory, or upstream record is absent. | Move run to `input-required` or file a capability need. |
+| `human-rejected` | Approval card was rejected. | End run as `rejected`, not `failed`. |
+| `runtime-defect` | Invariant violation in the runtime itself. | Fail run, page operator, and file a defect backlog item. |
+
+A run can fail without any `exceptionClass` only if the failure cannot be classified. That case itself files a `runtime-defect` follow-up because unclassified failure is itself a defect.
+
+**Handoff (`currentAgentId` transitions).** When one coworker hands work to another through specialist handoff, orchestrator-worker delegation, or escalation, `currentAgentId` advances but `initiatingAgentId` does not change. Each handoff writes a `TaskMessage` recording prior agent, new agent, reason, and authority delta. Authority is not inherited unconditionally: the new `currentAgentId` operates under the intersection of the run's `authorityScope` and the new agent's grants. If the intersection is empty, the handoff fails as `tool-denied` rather than silently expanding authority.
+
+### 5.7 Proceduralization path
 
 When a repeated autonomous pattern appears, DPF should file or update a backlog item with:
 
@@ -472,6 +507,24 @@ Prefer the A2A-aligned `TaskRun.status` vocabulary for autonomous work:
 Do not invent a second scheduled-task status machine beyond `ScheduledAgentTask.lastStatus`. `ScheduledAgentTask` status is schedule health; `TaskRun.status` is work health.
 
 `archived` is not a normal completion state. It is reserved for runs intentionally removed from active operational views after retention, supersession, or operator review. Slice 4 owns the first archival policy because self-assessment and capability-need runs are the first expected source of long-lived review queues. Until that policy lands, implementation slices must not emit `archived`; they should use `completed`, `failed`, `canceled`, or `rejected`.
+
+### 6.4 Retention and archival
+
+Retention applies to `TaskRun`s and their projected records, not to the underlying audit trail. `ToolExecution`, `ToolExecutionReceipt`, and `BacklogItemActivity` are audit truth and follow their own retention policy, owned by the audit/governance specs rather than this one.
+
+Default retention bands for terminal `TaskRun`s, applied when Slice 4 lands:
+
+| Terminal status | Active operational visibility | Eligible for `archived` after |
+| --- | --- | --- |
+| `completed` | 30 days | 30 days, unless linked to an open backlog item, open capability need, or unresolved proceduralization candidate |
+| `failed` (non-`runtime-defect`) | 30 days | 30 days, after exception class is reviewed and either filed or dismissed |
+| `failed` (`runtime-defect`) | indefinite | only after the defect backlog item is closed |
+| `canceled` | 14 days | 14 days |
+| `rejected` | 14 days | 14 days |
+
+Archival never deletes the `TaskRun` row. It moves the run out of default operational views such as Operations Map, Active Runs, and capability-needs review while keeping audit, evidence, and proceduralization-candidate references intact. An archived run can be unarchived by a supervisor with the same authority that could cancel it.
+
+These bands are starting defaults, not policy law. Slice 4 must capture one week of baseline data before they become enforced behavior.
 
 ## 7. Runtime Flow Requirements
 
@@ -767,14 +820,9 @@ Acceptance:
 
 ### Immediate candidate fit: Hive Scout
 
-Hive Scout is a strong near-term proving ground for this doctrine. Its deterministic core already exists as a scheduled external-catalog ingest, but its higher-order judgments remain human-heavy: novelty, archetype fit, value-stream alignment, and proposal quality. That makes it a good match for the ladder in §4:
+Hive Scout is the recommended first non-build, non-recovery consumer of Slice 1's substrate: low-risk, asynchronous, reviewable, with a deterministic core already in place and clearly ambiguous higher-order judgments (novelty, archetype fit, value-stream alignment) that the ladder in §4 fits naturally. It is also the first realistic test case for burn-rate-aware background scheduling.
 
-1. deterministic fetch/parse/dedupe stays procedural,
-2. ambiguous novelty and fit move to a bounded coworker run,
-3. repeated review corrections become filters/mappings/rules,
-4. the resulting run becomes visible in the Operations Map as proactive work rather than hidden cron behavior.
-
-Because Hive Scout is low-risk, asynchronous, and reviewable, it is also a good candidate for background execution when provider policy indicates lagging prepaid subscription quota. A dedicated design note for this application lives in `2026-05-11-hive-scout-autonomous-coworker-design.md`.
+Detail on slices, ownership, burn-rate triggers, failure modes, and open decisions lives in [2026-05-11-hive-scout-autonomous-coworker-design.md](2026-05-11-hive-scout-autonomous-coworker-design.md). This spec owns the substrate; that spec owns the application.
 
 ## 11. Metrics
 
