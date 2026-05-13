@@ -120,6 +120,18 @@ describe("shouldNudge", () => {
     })).toBe(true);
   });
 
+  it("does not nudge governed External Access permission requests", () => {
+    expect(shouldNudge({
+      continuationNudges: 0,
+      iteration: 0,
+      maxIterations: 40,
+      hasTools: true,
+      executedToolCount: 0,
+      responseLength: 140,
+      responseText: "External Access is off for this page. Would you like me to use External Access so I can verify the official public sources before I answer?",
+    })).toBe(false);
+  });
+
   it("nudges when tools were used and model stalls with short response", () => {
     expect(shouldNudge({
       continuationNudges: 0, iteration: 3, maxIterations: 40,

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  buildExternalAccessContinuationPrompt,
   getExternalAccessSessionKey,
   loadExternalAccessSessionState,
   saveExternalAccessSessionState,
@@ -41,6 +42,17 @@ describe("agent external access session", () => {
   it("uses a session-scoped storage key", () => {
     expect(getExternalAccessSessionKey("user-1", "/admin")).toBe(
       "agent-external-access-session:user-1:/admin",
+    );
+  });
+
+  it("builds a continuation prompt from the latest External Access request", () => {
+    expect(
+      buildExternalAccessContinuationPrompt([
+        { role: "user", content: "Research official sales tax authority guidance." },
+        { role: "assistant", content: "External Access is off. Please enable External Access so I can verify official sources." },
+      ]),
+    ).toBe(
+      "External Access is now enabled for this page. Continue the previous request: Research official sales tax authority guidance.",
     );
   });
 });
