@@ -965,31 +965,39 @@ ships as an MCP tool, the controls above migrate into the MCP
 governance plane and the REST path can be deprecated. Until
 then, every control listed above is a Phase 0 gate.
 
-#### Implementation status (Phase 0 gates, not current runtime truth)
+#### Implementation status (Phase 0 gates, current runtime truth as of 2026-05-12)
 
-The controls above are **Phase 0 gates the ingestion path must
-satisfy before it is considered complete** — they are NOT a
-description of what the route handler currently does. The
-distinction matters: a reader who treats the controls as the
-current runtime contract will be surprised by what the merged
-route actually delivers. Current state:
+The controls above are the Phase 0 gates the ingestion path must
+satisfy before Phase 0 is considered complete. As of 2026-05-12
+all gates have either landed on `main` or are explicit
+risk-accepted-for-Phase-0 items. The table below captures the
+PR that closed each gate so a reader can audit the exact change
+that satisfied it.
 
-| Control | Status (post #513) | Where |
+| Control | Status (post #523 + #527 + #528) | Where |
 |---|---|---|
-| Auth gate (resolveEdgeNodeAuth) | **Implemented** | `app/api/v1/edge/discovery-runs/route.ts` |
+| Auth gate (resolveEdgeNodeAuth) | **Implemented** | `app/api/v1/edge/discovery-runs/route.ts`; `app/api/v1/edge/heartbeat/route.ts`; `app/api/v1/edge/enroll/route.ts` (per #498) |
 | Body schema validation (Zod) | **Implemented** | same; note `.passthrough()` on item / relationship schemas is intentional for forward-compat but allows unknown fields through |
 | Freshness window (±24h on `observedAt`) | **Implemented** (#513) | same; fires before DB lookup |
 | `(edgeNodeId, runKey)` idempotency lookup | **Implemented** (#513) | same; backed by `@@unique([edgeNodeId, runKey])` + partial unique on bootstrap path |
-| Persist via `persistSubmittedDiscoveryRun` | **Stub (202 persistencePending:true)** | the route does NOT yet call the persistence sibling that #499 added; the normalize → infer → persist chain wiring is a separate follow-up |
-| Per-node rate limits (12/min heartbeat, 4/min discovery) | **Not implemented** | needs a token-bucket gate keyed on `EdgeNodeToken.id`; route returns 429 with `Retry-After` and audit-logs |
-| Payload size caps (10k items / 20k relationships / 64 KB rawData / 5 MB total → 413) | **Partial** | Zod enforces `.max(10000)` on `items` and `.max(20000)` on `relationships`; the 64 KB rawData and 5 MB total body caps are not yet wired |
-| Failure audit to `ToolExecution` (401 / 403 / 429 / 5xx) | **Not implemented** | route returns the error JSON but doesn't write a `ToolExecution` row |
+| Persist via `persistSubmittedDiscoveryRun` | **Implemented** (#521) | route now calls `persistSubmittedDiscoveryRun(prisma, { edgeNodeId, nodeId, runKey, submittedOutput })` and returns 201 with the persistence summary on first-time submission; 200 with `idempotentReplay: true` when the `(edgeNodeId, runKey)` lookup already has a row |
+| Per-node rate limits (12/min heartbeat, 4/min discovery) | **Implemented** (#522) | sliding-window limiter at `apps/web/lib/edge-node/rate-limit.ts`; per-(route, edgeNodeId) buckets; returns 429 with `Retry-After` and writes an audit row |
+| Payload size caps (5 MB total body, 64 KB per-item `rawData`) | **Implemented** (#523) | two-stage body cap: declared `Content-Length` first (no buffering), then buffered byte count via `arrayBuffer()`; per-item `rawData` cap fires after Zod validation but BEFORE the idempotency DB lookup, so oversized payloads never touch the DB |
+| Failure audit to `ToolExecution` (401 / 403 / 413 / 429 / 5xx) | **Implemented** (#517) | `apps/web/lib/edge-node/audit.ts` exposes `writeEdgeNodeAudit` and a `setToolExecutionCreateOverride` test seam; all three REST routes (enroll, heartbeat, discovery-runs) write `userId: "system:edge-node"` rows with `executionMode: "edge-rest"` |
+| Storage downgrade controls (state file `0600` + owner-UID check) | **Implemented** (#515) | `services/edge-node/src/state.ts` calls `verifyStatePerms()` at read time on POSIX hosts; refuses to load when the file is group/world-readable or owned by a different UID |
 | Replay protection on bearer credential | **Phase 0 risk accepted** | bearer tokens aren't nonce-protected; the heartbeat-rotation cadence + grace window bound exposure to ~1h. Phase 1+ DPoP / mTLS closes this structurally. |
 
-Anything in the "Not implemented" or "Stub" rows is a Phase 0
-follow-up PR. Each follow-up is independently tractable; they
-do NOT block the convergence + idempotency contracts already
-landed.
+Phase 0 admin surface is also landed:
+
+| Surface | Status | Where |
+|---|---|---|
+| Admin > Edge Nodes UI (list + bootstrap-token issuance + approve / quarantine / revoke) | **Implemented** (#527) | server component at `apps/web/app/(shell)/platform/edge-nodes/page.tsx`; client at `apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx`; server actions at `apps/web/lib/actions/edge-nodes.ts` (gated by `manage_platform`) |
+| End-to-end lifecycle verification script | **Implemented** (#528) | `services/edge-node/scripts/verify-lifecycle.ts` walks enroll → heartbeat → discovery-runs (with idempotent replay) using `undici`; runbook at `docs/install/verification-runbook.md` § 7 |
+
+The replay-protection row is the only Phase 0 item that remains
+"risk accepted" rather than "implemented" — that one is
+structurally a Phase 1+ change (DPoP or mTLS) and is tracked as
+such in the roadmap rather than as a Phase 0 follow-up.
 
 ## Authentication-provider implications
 
