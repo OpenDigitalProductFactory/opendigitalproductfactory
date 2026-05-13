@@ -76,6 +76,19 @@ export type SearchWikiPagesInput = {
   limit?: number;
   /** Cosine score threshold per pass. Default 0.55, matching `searchKnowledgeArticles`. */
   scoreThreshold?: number;
+  // ─── Principle-only filters (Phase 2 of principles-as-wiki-kind) ──────────
+  // Translated to Qdrant payload-key matchers against the canonical principle
+  // payload keys written by storeWikiPage when pageKind === "principle". Use
+  // alongside `pageKind: "principle"` for the typical retrieval path.
+  // `principleAppliesTo` performs array-containment matching: Qdrant's
+  // `match: { value: "human" }` against an array payload key returns rows
+  // whose array contains that value.
+  /** Restrict to one tier: commandment | core | contextual. */
+  principleTier?: string;
+  /** Restrict to principles whose appliesTo array contains this population. */
+  principleAppliesTo?: string;
+  /** Restrict to principles with this public-classification state. */
+  principlePublic?: boolean;
 };
 
 // ─── Write ──────────────────────────────────────────────────────────────────
@@ -180,12 +193,38 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   const limit = input.limit ?? 5;
   const scoreThreshold = input.scoreThreshold ?? 0.55;
 
-  const baseFilter = [
+  const baseFilter: Array<{
+    key: string;
+    match: { value: string | boolean };
+  }> = [
     { key: "entityType", match: { value: ENTITY_TYPE } },
     { key: "status", match: { value: "published" } },
   ];
   if (input.pageKind) {
     baseFilter.push({ key: "pageKind", match: { value: input.pageKind } });
+  }
+  // Principle-only filters. Translated to Qdrant payload-key matchers
+  // against the canonical principle keys (principleTier, principleAppliesTo,
+  // principlePublic) written by storeWikiPage. principleAppliesTo matches
+  // by array containment — Qdrant treats `match: { value: X }` against an
+  // array payload as "X is in the array".
+  if (input.principleTier !== undefined) {
+    baseFilter.push({
+      key: "principleTier",
+      match: { value: input.principleTier },
+    });
+  }
+  if (input.principleAppliesTo !== undefined) {
+    baseFilter.push({
+      key: "principleAppliesTo",
+      match: { value: input.principleAppliesTo },
+    });
+  }
+  if (input.principlePublic !== undefined) {
+    baseFilter.push({
+      key: "principlePublic",
+      match: { value: input.principlePublic },
+    });
   }
 
   // ── Pass A — org-scoped, only when an organization is in context ──
