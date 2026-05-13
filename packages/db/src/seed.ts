@@ -968,7 +968,7 @@ async function seedCoworkerAgents(): Promise<void> {
     "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
     "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
     "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read"],
-    "doc-specialist":       ["file_read", "registry_read", "portfolio_read"],
+    "doc-specialist":       ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
     "compliance-officer":   ["policy_write", "data_governance_validate", "file_read", "backlog_read", "backlog_write", "tool_evaluation_create"],
     "finance-controller":   ["registry_read", "backlog_read", "portfolio_read"],
   };

@@ -344,6 +344,44 @@
       "implies": []
     },
     {
+      "key": "document_publish",
+      "description": "Move managed documents through governed publication lifecycle states.",
+      "category": "registry",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "doc_state_change"
+      ],
+      "implies": [
+        "document_read"
+      ]
+    },
+    {
+      "key": "document_read",
+      "description": "Read managed documents, versions, references, lifecycle history, and searchable metadata.",
+      "category": "registry",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "doc_list_references",
+        "doc_load",
+        "doc_search",
+        "doc_version_list"
+      ],
+      "implies": []
+    },
+    {
+      "key": "document_write",
+      "description": "Create, update, and link managed documents in the governed document store.",
+      "category": "registry",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "doc_link",
+        "doc_save"
+      ],
+      "implies": [
+        "document_read"
+      ]
+    },
+    {
       "key": "dependency_audit",
       "description": "dependency audit.",
       "category": "governance",
