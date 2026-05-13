@@ -1,0 +1,213 @@
+// Phase 0 Task 0.1 — typed constants for wiki page kinds, statuses, and
+// principle-only taxonomy. Single source of truth imported by seed, lint, MCP
+// schemas, retrieval, and UI. Spec: docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md
+// Plan: docs/superpowers/plans/2026-05-12-principles-as-wiki-kind.md (Phase 0)
+
+import { describe, expect, it } from "vitest";
+import {
+  WIKI_PAGE_KINDS,
+  WIKI_PAGE_STATUSES,
+  PRINCIPLE_TIERS,
+  PRINCIPLE_APPLIES_TO,
+  PRINCIPLE_DIMENSIONS,
+  PRINCIPLE_TIER_DEFAULT_WEIGHT,
+  PRINCIPLE_TIER_CAPS,
+  PRINCIPLE_DECIDE_DEFAULTS,
+  isWikiPageKind,
+  isWikiPageStatus,
+  isPrincipleTier,
+  isPrincipleAppliesTo,
+  isPrincipleDimension,
+} from "./wiki-taxonomy";
+
+describe("wiki-taxonomy: WIKI_PAGE_KINDS", () => {
+  it("includes the 8 expected kinds in the documented order", () => {
+    expect(WIKI_PAGE_KINDS).toEqual([
+      "entity",
+      "summary",
+      "decision",
+      "runbook",
+      "index",
+      "stance",
+      "heuristic",
+      "principle",
+    ]);
+  });
+
+  it("preserves the 7 pre-existing kinds from EP-WIKI-001 unchanged", () => {
+    expect(WIKI_PAGE_KINDS).toContain("entity");
+    expect(WIKI_PAGE_KINDS).toContain("summary");
+    expect(WIKI_PAGE_KINDS).toContain("decision");
+    expect(WIKI_PAGE_KINDS).toContain("runbook");
+    expect(WIKI_PAGE_KINDS).toContain("index");
+    expect(WIKI_PAGE_KINDS).toContain("stance");
+    expect(WIKI_PAGE_KINDS).toContain("heuristic");
+  });
+
+  it("adds principle as the 8th kind", () => {
+    expect(WIKI_PAGE_KINDS).toContain("principle");
+    expect(WIKI_PAGE_KINDS).toHaveLength(8);
+  });
+});
+
+describe("wiki-taxonomy: WIKI_PAGE_STATUSES", () => {
+  it("matches the EP-WIKI-001 lifecycle", () => {
+    expect(WIKI_PAGE_STATUSES).toEqual([
+      "draft",
+      "published",
+      "review-needed",
+      "archived",
+    ]);
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_TIERS", () => {
+  it("has exactly three tiers in descending weight order", () => {
+    expect(PRINCIPLE_TIERS).toEqual(["commandment", "core", "contextual"]);
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_APPLIES_TO", () => {
+  it("covers the three governed populations from spec section 5.3", () => {
+    expect(PRINCIPLE_APPLIES_TO).toEqual([
+      "in_platform_coworker",
+      "external_coding_agent",
+      "human",
+    ]);
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_DIMENSIONS", () => {
+  it("matches the spec section 10 dimension registry verbatim", () => {
+    expect(PRINCIPLE_DIMENSIONS).toEqual([
+      "long_term_maintainability",
+      "blast_radius",
+      "reusability",
+      "evidence_density",
+      "human_cognitive_load",
+      "capacity_utilization",
+      "governance_compliance",
+      "public_safety",
+      "speed_to_value",
+      "schema_grounding",
+    ]);
+  });
+
+  it("contains exactly ten starter dimensions", () => {
+    expect(PRINCIPLE_DIMENSIONS).toHaveLength(10);
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_TIER_DEFAULT_WEIGHT", () => {
+  it("encodes the tier weight hierarchy from spec section 5.1", () => {
+    expect(PRINCIPLE_TIER_DEFAULT_WEIGHT.commandment).toBe(1.0);
+    expect(PRINCIPLE_TIER_DEFAULT_WEIGHT.core).toBe(0.4);
+    expect(PRINCIPLE_TIER_DEFAULT_WEIGHT.contextual).toBe(0.1);
+  });
+
+  it("makes a single commandment outweigh ten contextual at peak alignment", () => {
+    expect(
+      PRINCIPLE_TIER_DEFAULT_WEIGHT.commandment,
+    ).toBeGreaterThanOrEqual(PRINCIPLE_TIER_DEFAULT_WEIGHT.contextual * 10);
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_TIER_CAPS", () => {
+  it("caps commandments at 10 published kernel principles", () => {
+    expect(PRINCIPLE_TIER_CAPS.commandment).toBe(10);
+  });
+
+  it("soft-caps core at 30", () => {
+    expect(PRINCIPLE_TIER_CAPS.core).toBe(30);
+  });
+
+  it("leaves contextual uncapped (null)", () => {
+    expect(PRINCIPLE_TIER_CAPS.contextual).toBeNull();
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_DECIDE_DEFAULTS", () => {
+  it("matches the principle_decide defaults from spec section 11", () => {
+    expect(PRINCIPLE_DECIDE_DEFAULTS.maxPrinciples).toBe(20);
+    expect(PRINCIPLE_DECIDE_DEFAULTS.tieMargin).toBe(0.2);
+    expect(PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold).toBe(0.75);
+    expect(PRINCIPLE_DECIDE_DEFAULTS.semanticFallbackWarnRatio).toBe(0.4);
+  });
+});
+
+describe("wiki-taxonomy: isWikiPageKind", () => {
+  it("accepts every documented kind", () => {
+    for (const kind of WIKI_PAGE_KINDS) {
+      expect(isWikiPageKind(kind)).toBe(true);
+    }
+  });
+
+  it("rejects unknown strings", () => {
+    expect(isWikiPageKind("article")).toBe(false);
+    expect(isWikiPageKind("")).toBe(false);
+    expect(isWikiPageKind("PRINCIPLE")).toBe(false); // case-sensitive
+  });
+
+  it("rejects non-string inputs", () => {
+    expect(isWikiPageKind(null)).toBe(false);
+    expect(isWikiPageKind(undefined)).toBe(false);
+    expect(isWikiPageKind(42)).toBe(false);
+    expect(isWikiPageKind({})).toBe(false);
+  });
+});
+
+describe("wiki-taxonomy: isWikiPageStatus", () => {
+  it("accepts every documented status", () => {
+    for (const status of WIKI_PAGE_STATUSES) {
+      expect(isWikiPageStatus(status)).toBe(true);
+    }
+  });
+
+  it("rejects unknown values", () => {
+    expect(isWikiPageStatus("pending")).toBe(false);
+    expect(isWikiPageStatus(null)).toBe(false);
+  });
+});
+
+describe("wiki-taxonomy: isPrincipleTier", () => {
+  it("accepts every documented tier", () => {
+    for (const tier of PRINCIPLE_TIERS) {
+      expect(isPrincipleTier(tier)).toBe(true);
+    }
+  });
+
+  it("rejects unknown tiers and non-strings", () => {
+    expect(isPrincipleTier("situational")).toBe(false);
+    expect(isPrincipleTier("")).toBe(false);
+    expect(isPrincipleTier(null)).toBe(false);
+    expect(isPrincipleTier(undefined)).toBe(false);
+  });
+});
+
+describe("wiki-taxonomy: isPrincipleAppliesTo", () => {
+  it("accepts every documented population", () => {
+    for (const population of PRINCIPLE_APPLIES_TO) {
+      expect(isPrincipleAppliesTo(population)).toBe(true);
+    }
+  });
+
+  it("rejects unknown populations", () => {
+    expect(isPrincipleAppliesTo("agent")).toBe(false);
+    expect(isPrincipleAppliesTo("all")).toBe(false); // `all` is not in the registry per spec section 5.3
+    expect(isPrincipleAppliesTo(null)).toBe(false);
+  });
+});
+
+describe("wiki-taxonomy: isPrincipleDimension", () => {
+  it("accepts every dimension in the registry", () => {
+    for (const dimension of PRINCIPLE_DIMENSIONS) {
+      expect(isPrincipleDimension(dimension)).toBe(true);
+    }
+  });
+
+  it("rejects unknown dimensions", () => {
+    expect(isPrincipleDimension("fictional_axis")).toBe(false);
+    expect(isPrincipleDimension("long_term")).toBe(false); // partial match should fail
+    expect(isPrincipleDimension(null)).toBe(false);
+  });
+});
