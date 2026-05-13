@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
 
 describe("resolveCoworkerRuntimeMode", () => {
-  it("forces act mode with external access in dev mode", () => {
+  it("forces act mode in dev mode without silently enabling external access", () => {
     expect(
       resolveCoworkerRuntimeMode({
         pathname: "/compliance/licensing",
@@ -13,7 +13,7 @@ describe("resolveCoworkerRuntimeMode", () => {
       }),
     ).toEqual({
       coworkerMode: "act",
-      externalAccessEnabled: true,
+      externalAccessEnabled: false,
     });
   });
 
