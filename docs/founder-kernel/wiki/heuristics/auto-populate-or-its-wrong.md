@@ -1,7 +1,7 @@
 ---
 title: Auto-populate or it's already wrong
 pageKind: heuristic
-status: draft
+status: published
 abstract: It is not humanly possible to manually track the rapid inflation and deflation of virtualised cloud, hybrid, and on-prem resources. If your CMDB depends on humans to enter records, it's already lying to you.
 sources:
   - frameworks/csdm

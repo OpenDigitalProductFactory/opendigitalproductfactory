@@ -1,7 +1,7 @@
 ---
 title: Reuse the camera in your pocket — platform-native usually wins
 pageKind: heuristic
-status: draft
+status: published
 abstract: For most IT tooling decisions, the integrated platform-native capability wins on practicality even when the best-of-breed specialist wins on feature depth. The cost of integration is the silent killer.
 sources:
   - articles/think-twice-ea-platform-servicenow
@@ -35,4 +35,4 @@ For the rare case where the feature gap *is* big enough — and it&#39;s rarer t
 
 - Parent stance: `[[stances/dont-integrate-ea-platform]]`
 - Related stance: `[[stances/trust-the-cmdb-or-rebuild-it]]` — the consolidation only works if the CMDB is trustworthy.
-- Raw source: `[[raw-sources/articles/think-twice-ea-platform-servicenow]]`
+- Raw source: `[raw-sources/articles/think-twice-ea-platform-servicenow](../../raw-sources/articles/think-twice-ea-platform-servicenow.md)`
