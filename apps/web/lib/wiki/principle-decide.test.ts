@@ -262,3 +262,208 @@ describe("buildOptionScores", () => {
     expect(score.contributions).toEqual([]);
   });
 });
+
+// ─── decide (guardrails: tie-margin, commandment-conflict, coverage) ───────
+
+describe("decide: tie-margin guardrail", () => {
+  it("flags confidence=low when the winning margin is below the configured tieMargin", async () => {
+    const { decide } = await import("./principle-decide");
+    const principles = [
+      principle("p", {
+        tier: "core",
+        weight: 0.4,
+        dimensionVector: { schema_grounding: 1.0 },
+      }),
+    ];
+    // Two options scoring nearly identically — margin will be tiny.
+    const result = decide(
+      [
+        option("a", { schema_grounding: 0.5 }),
+        option("b", { schema_grounding: 0.51 }),
+      ],
+      principles,
+      { tieMargin: 0.2 },
+    );
+
+    expect(result.recommendation).not.toBeNull();
+    expect(result.recommendation?.optionId).toBe("b");
+    expect(result.recommendation?.confidence).toBe("low");
+    expect(result.reasoning).toMatch(/(close|tied|tie|tie-margin)/i);
+  });
+
+  it("flags confidence=high when the margin exceeds tieMargin by a comfortable amount", async () => {
+    const { decide } = await import("./principle-decide");
+    const principles = [
+      principle("p", {
+        tier: "core",
+        weight: 1.0,
+        dimensionVector: { schema_grounding: 1.0 },
+      }),
+    ];
+    const result = decide(
+      [
+        option("a", { schema_grounding: 0.1 }),
+        option("b", { schema_grounding: 0.9 }),
+      ],
+      principles,
+      { tieMargin: 0.2 },
+    );
+
+    expect(result.recommendation?.optionId).toBe("b");
+    expect(result.recommendation?.confidence).toBe("high");
+  });
+});
+
+describe("decide: commandment-conflict guardrail", () => {
+  it("flags commandmentConflict=true when a commandment contributes strongly negatively to the top option", async () => {
+    const { decide } = await import("./principle-decide");
+    // Setup: one commandment opposes B; TWO core principles strongly
+    // favor B with high override weights. The cores outweigh the
+    // commandment so B still wins the composite, but the conflict must
+    // surface so a human reviewer can confirm the tension is intentional.
+    const principles = [
+      principle("ev", {
+        name: "Evidence Before Diagnosis",
+        tier: "commandment",
+        weight: 1.0,
+        dimensionVector: { evidence_density: 1.0 },
+      }),
+      principle("rs", {
+        name: "Reusability by Design",
+        tier: "core",
+        weight: 1.0, // override of the 0.4 default
+        dimensionVector: { reusability: 1.0 },
+      }),
+      principle("sp", {
+        name: "Specialization Over Generalization",
+        tier: "core",
+        weight: 1.0,
+        dimensionVector: { speed_to_value: 1.0 },
+      }),
+    ];
+    const result = decide(
+      [
+        option("a", { evidence_density: 0.5, reusability: 0.0, speed_to_value: 0.0 }),
+        option("b", { evidence_density: -0.8, reusability: 1.0, speed_to_value: 1.0 }),
+      ],
+      principles,
+    );
+
+    // B composite = (1.0 × -0.8) + (1.0 × 1.0) + (1.0 × 1.0) = +1.2
+    // A composite = (1.0 × 0.5) + 0 + 0 = +0.5
+    // B wins, but `ev`'s contribution to B is -0.8 → conflict flagged.
+    expect(result.recommendation?.optionId).toBe("b");
+    expect(result.flags.commandmentConflict).toBe(true);
+    expect(result.flags.commandmentConflictPrinciples).toContain("ev");
+  });
+
+  it("does NOT flag commandmentConflict when commandments only weakly oppose the top option", async () => {
+    const { decide } = await import("./principle-decide");
+    const principles = [
+      principle("p", {
+        tier: "commandment",
+        weight: 1.0,
+        dimensionVector: { schema_grounding: 1.0 },
+      }),
+    ];
+    const result = decide(
+      [
+        option("a", { schema_grounding: 0.1 }),
+        option("b", { schema_grounding: 0.9 }),
+      ],
+      principles,
+    );
+    // Top option B has a POSITIVE contribution from the commandment; no
+    // conflict.
+    expect(result.flags.commandmentConflict).toBe(false);
+    expect(result.flags.commandmentConflictPrinciples).toEqual([]);
+  });
+});
+
+describe("decide: structured-coverage guardrail", () => {
+  it("flags structuredCoverage=weak when more than 40% of contributions are semantic-mode", async () => {
+    const { decide } = await import("./principle-decide");
+    // 3 principles, 2 of which lack dimension vectors → semantic mode
+    const principles = [
+      principle("p1", { dimensionVector: { schema_grounding: 1.0 } }),
+      principle("p2", { dimensionVector: {}, directionEmbedding: [1, 0] }),
+      principle("p3", { dimensionVector: {}, directionEmbedding: [1, 0] }),
+    ];
+    const result = decide(
+      [option("a", { schema_grounding: 0.5 }, { embedding: [1, 0] })],
+      principles,
+      { semanticFallbackWarnRatio: 0.4 },
+    );
+    expect(result.flags.structuredCoverage).toBe("weak");
+  });
+
+  it("flags structuredCoverage=strong when semantic-mode ratio stays under the threshold", async () => {
+    const { decide } = await import("./principle-decide");
+    const principles = [
+      principle("p1", { dimensionVector: { schema_grounding: 1.0 } }),
+      principle("p2", { dimensionVector: { speed_to_value: 1.0 } }),
+      principle("p3", { dimensionVector: {}, directionEmbedding: [1, 0] }),
+    ];
+    const result = decide(
+      [option("a", { schema_grounding: 0.5, speed_to_value: 0.3 }, { embedding: [1, 0] })],
+      principles,
+      { semanticFallbackWarnRatio: 0.4 },
+    );
+    expect(result.flags.structuredCoverage).toBe("strong");
+  });
+
+  it("reports the semantic-fallback ratio in flags for inspectability", async () => {
+    const { decide } = await import("./principle-decide");
+    const principles = [
+      principle("p1", { dimensionVector: { schema_grounding: 1.0 } }),
+      principle("p2", { dimensionVector: {}, directionEmbedding: [1, 0] }),
+    ];
+    const result = decide(
+      [option("a", { schema_grounding: 0.5 }, { embedding: [1, 0] })],
+      principles,
+    );
+    // 1 of 2 contributions is semantic → 0.5
+    expect(result.flags.semanticFallbackRatio).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe("decide: empty / degenerate cases", () => {
+  it("returns recommendation=null and confidence=low when no principles apply", async () => {
+    const { decide } = await import("./principle-decide");
+    const result = decide([option("a", {}), option("b", {})], []);
+    expect(result.recommendation).toBeNull();
+    expect(result.reasoning).toMatch(/no .*principles/i);
+  });
+
+  it("returns recommendation=null when no options are supplied", async () => {
+    const { decide } = await import("./principle-decide");
+    const result = decide(
+      [],
+      [principle("p", { dimensionVector: { schema_grounding: 1.0 } })],
+    );
+    expect(result.recommendation).toBeNull();
+    expect(result.scores).toEqual([]);
+  });
+
+  it("returns reasoning naming the winning option and the top contributing principles", async () => {
+    const { decide } = await import("./principle-decide");
+    const principles = [
+      principle("arch", {
+        name: "Architecture Over Shortcuts",
+        tier: "commandment",
+        weight: 1.0,
+        dimensionVector: { schema_grounding: 1.0 },
+      }),
+    ];
+    const result = decide(
+      [
+        option("a", { schema_grounding: 0.1 }),
+        option("b", { schema_grounding: 0.9 }),
+      ],
+      principles,
+    );
+    expect(result.recommendation?.optionId).toBe("b");
+    expect(result.reasoning).toContain("b");
+    expect(result.reasoning).toContain("Architecture Over Shortcuts");
+  });
+});

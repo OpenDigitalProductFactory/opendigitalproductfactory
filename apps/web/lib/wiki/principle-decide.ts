@@ -154,6 +154,170 @@ export function computeSemanticAlignment(
  * Tasks 2.6 (guardrails: tie-margin, commandment-conflict, semantic-
  * fallback coverage) consume this output downstream.
  */
+// ─── Guardrails + advisory recommendation (Task 2.6) ───────────────────────
+
+export type DecisionFlags = {
+  /** The tie-margin threshold used for this decision (echo for inspectability). */
+  tieMargin: number;
+  /** Fraction of contributions that fell back to semantic alignment. */
+  semanticFallbackRatio: number;
+  /** "weak" when semanticFallbackRatio > semanticFallbackWarnRatio. */
+  structuredCoverage: "strong" | "weak";
+  /** True when any commandment contributed strongly negatively to the top option. */
+  commandmentConflict: boolean;
+  /** ids of commandments triggering the commandmentConflict flag. */
+  commandmentConflictPrinciples: string[];
+};
+
+export type DecisionRecommendation = {
+  optionId: string;
+  composite: number;
+  /** Composite of winner − composite of runner-up (0 when only one option). */
+  margin: number;
+  /** "low" when margin < tieMargin OR no principles applied. */
+  confidence: "high" | "low";
+};
+
+export type DecisionResult = {
+  recommendation: DecisionRecommendation | null;
+  scores: DecisionOptionScore[];
+  flags: DecisionFlags;
+  /** Human-readable summary naming the winner and top contributors. */
+  reasoning: string;
+};
+
+export type DecideConfig = {
+  tieMargin?: number;
+  semanticFallbackWarnRatio?: number;
+  /**
+   * A commandment contributes "strongly negatively" to the top option when
+   * its contribution is below -commandmentConflictThreshold (default 0.5).
+   * Tuned to catch values like -1.0 (full opposition under weight=1.0)
+   * without flagging routine small negatives.
+   */
+  commandmentConflictThreshold?: number;
+};
+
+const DEFAULT_TIE_MARGIN = 0.2;
+const DEFAULT_SEMANTIC_FALLBACK_WARN_RATIO = 0.4;
+const DEFAULT_COMMANDMENT_CONFLICT_THRESHOLD = 0.5;
+
+/**
+ * Top-level advisory decision call. Wraps buildOptionScores with the
+ * three guardrails from spec section 11.3 and a human-readable reasoning
+ * string. Returns a `recommendation: null` shape when no principles
+ * apply or no options are supplied so callers can surface "no signal"
+ * to the user rather than picking arbitrarily.
+ */
+export function decide(
+  options: DecisionOption[],
+  principles: DecisionPrinciple[],
+  config: DecideConfig = {},
+): DecisionResult {
+  const tieMargin = config.tieMargin ?? DEFAULT_TIE_MARGIN;
+  const semanticWarnRatio =
+    config.semanticFallbackWarnRatio ?? DEFAULT_SEMANTIC_FALLBACK_WARN_RATIO;
+  const commandmentConflictThreshold =
+    config.commandmentConflictThreshold ??
+    DEFAULT_COMMANDMENT_CONFLICT_THRESHOLD;
+
+  const scores = buildOptionScores(options, principles);
+
+  // No options or no principles → no signal; caller surfaces a "no
+  // recommendation" message rather than picking arbitrarily.
+  if (scores.length === 0 || principles.length === 0) {
+    const flags: DecisionFlags = {
+      tieMargin,
+      semanticFallbackRatio: 0,
+      structuredCoverage: "strong",
+      commandmentConflict: false,
+      commandmentConflictPrinciples: [],
+    };
+    const reasoning =
+      principles.length === 0
+        ? "No applicable principles to evaluate. The decision needs human judgment instead of advisory math."
+        : "No options supplied. Nothing to score.";
+    return { recommendation: null, scores, flags, reasoning };
+  }
+
+  // Rank by composite descending.
+  const ranked = [...scores].sort((a, b) => b.composite - a.composite);
+  const winner = ranked[0];
+  const runnerUpComposite = ranked[1]?.composite ?? winner.composite;
+  const margin = winner.composite - runnerUpComposite;
+  const confidence: "high" | "low" = margin < tieMargin ? "low" : "high";
+
+  // Coverage: ratio of semantic-mode contributions across all option × principle pairs.
+  const totalContribs = scores.reduce((sum, s) => sum + s.contributions.length, 0);
+  const semanticContribs = scores.reduce(
+    (sum, s) => sum + s.contributions.filter((c) => c.mode === "semantic").length,
+    0,
+  );
+  const semanticFallbackRatio = totalContribs === 0 ? 0 : semanticContribs / totalContribs;
+  const structuredCoverage: "strong" | "weak" =
+    semanticFallbackRatio > semanticWarnRatio ? "weak" : "strong";
+
+  // Commandment conflict against the top option.
+  const conflictingPrinciples = winner.contributions
+    .filter(
+      (c) =>
+        c.tier === "commandment" &&
+        c.contribution < -commandmentConflictThreshold,
+    )
+    .map((c) => c.principleId);
+
+  const flags: DecisionFlags = {
+    tieMargin,
+    semanticFallbackRatio,
+    structuredCoverage,
+    commandmentConflict: conflictingPrinciples.length > 0,
+    commandmentConflictPrinciples: conflictingPrinciples,
+  };
+
+  // Reasoning: name the winner, the top two contributing principles, and
+  // any quality warnings. Kept short — the contribution ledger carries
+  // the full inspectable breakdown.
+  const topContribs = [...winner.contributions]
+    .sort((a, b) => b.contribution - a.contribution)
+    .slice(0, 2)
+    .map((c) => c.principleName);
+  const parts: string[] = [];
+  parts.push(
+    `Recommends ${winner.optionId} (composite ${winner.composite.toFixed(3)}, margin ${margin.toFixed(3)}).`,
+  );
+  if (topContribs.length > 0) {
+    parts.push(`Strongest contributors: ${topContribs.join(", ")}.`);
+  }
+  if (confidence === "low") {
+    parts.push(
+      `Margin is below tieMargin (${tieMargin}); the call is close — recommend human review before committing.`,
+    );
+  }
+  if (flags.commandmentConflict) {
+    parts.push(
+      `Commandment conflict: ${conflictingPrinciples.join(", ")} oppose the recommended option. Re-check whether the tension is intentional.`,
+    );
+  }
+  if (flags.structuredCoverage === "weak") {
+    parts.push(
+      `Structured coverage is weak (${Math.round(semanticFallbackRatio * 100)}% semantic fallback). Consider supplying explicit dimension features on the options.`,
+    );
+  }
+  const reasoning = parts.join(" ");
+
+  return {
+    recommendation: {
+      optionId: winner.optionId,
+      composite: winner.composite,
+      margin,
+      confidence,
+    },
+    scores,
+    flags,
+    reasoning,
+  };
+}
+
 export function buildOptionScores(
   options: DecisionOption[],
   principles: DecisionPrinciple[],
