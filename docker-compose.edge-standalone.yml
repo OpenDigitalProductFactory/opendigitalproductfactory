@@ -177,6 +177,19 @@ services:
       # State directory inside the container; matches the volume mount.
       DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
 
+      # NOTE: HTTPS Authority URLs need a CA bundle for self-signed /
+      # private-PKI certs. The CA bundle is bind-mounted + the
+      # NODE_EXTRA_CA_CERTS env is set via the TLS overlay compose
+      # file rather than this base — keeping this file dependency-
+      # free of any host path that may not exist on every install.
+      #
+      # For HTTPS, layer the overlay:
+      #   docker compose -f docker-compose.edge-standalone.yml \
+      #                  -f docker-compose.edge-standalone-tls.yml \
+      #                  up -d
+      # See docker-compose.edge-standalone-tls.yml header for the
+      # required env vars + cert generation steps.
+
     volumes:
       # Persisted state (node token, intervals, accepted capabilities).
       # Survives restarts; rebuilds preserve enrollment. Docker-managed
