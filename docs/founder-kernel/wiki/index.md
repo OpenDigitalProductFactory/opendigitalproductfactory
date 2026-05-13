@@ -1,7 +1,7 @@
 ---
 title: Founder Kernel
 pageKind: index
-status: draft
+status: published
 abstract: Top-level index for the founder kernel — stances, heuristics, entities, and the raw sources that back them.
 ---
 

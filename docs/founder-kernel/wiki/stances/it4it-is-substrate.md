@@ -1,7 +1,7 @@
 ---
 title: IT4IT is the substrate — a hub of frameworks, not a competitor
 pageKind: stance
-status: draft
+status: published
 abstract: IT4IT integrates ITIL, COBIT, TOGAF, DevOps, and SAFe at the operating-model layer. It does not replace them. Pitch it as a framework for managing IT, or as an operating model, depending on audience.
 sources:
   - articles/briefings-direct-it4it-2019
@@ -45,4 +45,4 @@ The executive pitch reflects this: **"I pitch it as a framework for managing IT 
 
 - Entity: `[[entities/it4it]]`
 - Entity: `[[entities/value-stream]]`
-- Raw source: `[[raw-sources/articles/briefings-direct-it4it-2019]]`
+- Raw source: `[raw-sources/articles/briefings-direct-it4it-2019](../../raw-sources/articles/briefings-direct-it4it-2019.md)`

@@ -1,7 +1,7 @@
 ---
 title: Digital Product is the unit of organization for IT
 pageKind: stance
-status: draft
+status: published
 abstract: Anything that runs code that one party is responsible for that delivers outcomes for a consumer party. That's the right primitive — for portfolio, team, funding, lifecycle, governance, everything.
 sources:
   - articles/why-product-centric-approach-needed

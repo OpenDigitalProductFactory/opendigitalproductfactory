@@ -1,7 +1,7 @@
 ---
 title: CSDM (Common Service Data Model)
 pageKind: entity
-status: draft
+status: published
 abstract: The canonical data model that connects what naturally happens across asset, dev, ops, ITSM, and CSM.
 sources:
   - frameworks/csdm

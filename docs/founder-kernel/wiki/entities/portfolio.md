@@ -1,7 +1,7 @@
 ---
 title: Portfolio
 pageKind: entity
-status: draft
+status: published
 abstract: A curated set of Digital Products grouped for a shared management purpose — investment, governance, or operations.
 sources:
   - articles/sibling-portfolios
