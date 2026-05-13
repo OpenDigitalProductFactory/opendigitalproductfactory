@@ -39,18 +39,51 @@ type WikiPageSourceClient = Pick<WikiStoreClient, "wikiPageSource">;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** Page kinds defined in docs/founder-kernel/SCHEMA.md and EP-WIKI-001 §4. */
-export type WikiPageKind =
-  | "entity"
-  | "summary"
-  | "decision"
-  | "runbook"
-  | "index"
-  | "stance"
-  | "heuristic";
+// Page kinds, statuses, and the principle-only taxonomy live in
+// wiki-taxonomy.ts (the single source of truth used by seed, lint, MCP
+// schemas, retrieval, and UI). Imported for local use in this file's input
+// types AND re-exported so existing callers importing from wiki-store keep
+// working.
+import type {
+  PrincipleAppliesTo,
+  PrincipleDimension,
+  PrincipleTier,
+  WikiPageKind,
+  WikiPageStatus,
+} from "./wiki-taxonomy";
+export { WIKI_PAGE_KINDS, WIKI_PAGE_STATUSES } from "./wiki-taxonomy";
+export type {
+  PrincipleAppliesTo,
+  PrincipleDimension,
+  PrincipleTier,
+  WikiPageKind,
+  WikiPageStatus,
+};
 
-/** Status lifecycle defined in EP-WIKI-001 §4. */
-export type WikiPageStatus = "draft" | "published" | "review-needed" | "archived";
+/**
+ * Optional principle-only fields. Only meaningful when pageKind === "principle".
+ * The store layer accepts incomplete principle data; required-field gating
+ * (tier present, direction present for commandment/core, dimension vector
+ * dimensions in registry, applies-to populated, etc.) lives in lint
+ * detectors per spec section 14.
+ */
+export type WikiPagePrincipleInput = {
+  principleTier?: PrincipleTier | null;
+  principleDirection?: string | null;
+  principleWeight?: number | null;
+  principleWeightRationale?: string | null;
+  /**
+   * Signed dimension vector keyed by registry dimensions, values in [-1..1].
+   * Validation against PRINCIPLE_DIMENSIONS happens at the seed/lint layer;
+   * the store passes through whatever the caller supplies so a draft with
+   * an unknown key can still be saved for lint to surface.
+   */
+  principleDimensionVector?: Record<PrincipleDimension | string, number> | null;
+  principleDimensions?: PrincipleDimension[] | string[];
+  principleAppliesTo?: PrincipleAppliesTo[] | string[];
+  principlePublic?: boolean;
+  principlePublicRationale?: string | null;
+};
 
 /** Revision provenance defined in EP-WIKI-001 §4. */
 export type WikiRevisionChangeKind = "ingest" | "manual" | "lint-fix" | "kernel-merge";
@@ -69,7 +102,50 @@ export type UpsertWikiPageInput = {
   kernelPageId?: string | null;
   derivedFromKernelVersion?: string | null;
   abstract?: string | null;
-};
+} & WikiPagePrincipleInput;
+
+/**
+ * Build the principle-field subset of the create/update data object. Only
+ * emits keys when the caller supplied a principle-shaped input — preserves
+ * the contract that non-principle pages never carry principle metadata at
+ * the DB layer (their absence is the marker, not explicit nulls).
+ */
+function principleDataFromInput(
+  input: UpsertWikiPageInput,
+): Record<string, unknown> {
+  if (input.pageKind !== "principle") {
+    return {};
+  }
+  const data: Record<string, unknown> = {};
+  if (input.principleTier !== undefined) {
+    data.principleTier = input.principleTier;
+  }
+  if (input.principleDirection !== undefined) {
+    data.principleDirection = input.principleDirection;
+  }
+  if (input.principleWeight !== undefined) {
+    data.principleWeight = input.principleWeight;
+  }
+  if (input.principleWeightRationale !== undefined) {
+    data.principleWeightRationale = input.principleWeightRationale;
+  }
+  if (input.principleDimensionVector !== undefined) {
+    data.principleDimensionVector = input.principleDimensionVector;
+  }
+  if (input.principleDimensions !== undefined) {
+    data.principleDimensions = input.principleDimensions;
+  }
+  if (input.principleAppliesTo !== undefined) {
+    data.principleAppliesTo = input.principleAppliesTo;
+  }
+  if (input.principlePublic !== undefined) {
+    data.principlePublic = input.principlePublic;
+  }
+  if (input.principlePublicRationale !== undefined) {
+    data.principlePublicRationale = input.principlePublicRationale;
+  }
+  return data;
+}
 
 export type AppendRevisionInput = {
   pageId: string;
@@ -116,6 +192,7 @@ export async function upsertWikiPage(
   db: WikiPageUpsertClient,
   input: UpsertWikiPageInput,
 ): Promise<unknown> {
+  const principleData = principleDataFromInput(input);
   const data = {
     slug: input.slug,
     title: input.title,
@@ -128,6 +205,7 @@ export async function upsertWikiPage(
     kernelPageId: input.kernelPageId ?? null,
     derivedFromKernelVersion: input.derivedFromKernelVersion ?? null,
     abstract: input.abstract ?? null,
+    ...principleData,
   };
 
   const existing = (await db.wikiPage.findFirst({
@@ -148,6 +226,7 @@ export async function upsertWikiPage(
         kernelPageId: data.kernelPageId,
         derivedFromKernelVersion: data.derivedFromKernelVersion,
         abstract: data.abstract,
+        ...principleData,
       },
     });
   }

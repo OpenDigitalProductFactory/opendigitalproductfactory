@@ -32,7 +32,30 @@ export {
   type AppendRevisionInput,
   type LinkPagesInput,
   type AttachSourceInput,
+  type WikiPagePrincipleInput,
 } from "./wiki-store";
+
+// Principles-as-wiki-kind Phase 0: taxonomy constants + predicates so
+// retrieval, lint, MCP, and UI consumers in apps/web import them through
+// the @dpf/db barrel.
+export {
+  WIKI_PAGE_KINDS,
+  WIKI_PAGE_STATUSES,
+  PRINCIPLE_TIERS,
+  PRINCIPLE_APPLIES_TO,
+  PRINCIPLE_DIMENSIONS,
+  PRINCIPLE_TIER_DEFAULT_WEIGHT,
+  PRINCIPLE_TIER_CAPS,
+  PRINCIPLE_DECIDE_DEFAULTS,
+  isWikiPageKind,
+  isWikiPageStatus,
+  isPrincipleTier,
+  isPrincipleAppliesTo,
+  isPrincipleDimension,
+  type PrincipleTier,
+  type PrincipleAppliesTo,
+  type PrincipleDimension,
+} from "./wiki-taxonomy";
 export { initNeo4jSchema, backfillOsiLayers, NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
 export {
   getDownstreamImpact,

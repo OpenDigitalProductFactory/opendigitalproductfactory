@@ -45,6 +45,39 @@ Required sections:
 - **Worked example** — a short concrete case.
 - **Counterexamples** — where the heuristic fails.
 
+### `principle`
+
+A durable, tiered governance rule that contributes to decision aggregation across every matching context. More universal than a `stance` (which is a position on one topic) and more weight-bearing than a `heuristic` (which is situational). Spec: [`../superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md`](../superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md).
+
+Required frontmatter (in addition to `title` and `pageKind: principle`):
+- `principleTier` — `commandment` | `core` | `contextual` (see tier semantics below).
+- `principleDirection` — one declarative sentence naming what the principle favors. Used as the canonical retrieval text. Required for `commandment` and `core`.
+- `principleDimensionVector` — inline JSON map keyed by dimensions from the registry in [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts), values signed in `[-1, 1]`. Required for `commandment`; recommended for `core`.
+- `principleAppliesTo` — array; one or more of `in_platform_coworker`, `external_coding_agent`, `human`.
+- `principlePublic` — `true` if safe to surface on the public docs site, `false` otherwise. Defaults to `false`.
+- `principlePublicRationale` — short justification when `principlePublic: true`.
+
+Optional:
+- `principleWeight` — explicit override of the tier default (`1.0` / `0.4` / `0.1`). Requires `principleWeightRationale`.
+- `principleWeightRationale`.
+- `principleDimensions` — array of dimension keys. Auto-derived from `principleDimensionVector` keys when omitted.
+
+Required body sections (per spec §7.2):
+- **Rule** — one declarative sentence.
+- **Why** — strategic rationale.
+- **Applies To** — population and context boundaries (mirrors `principleAppliesTo` with prose).
+- **How To Apply** — concrete operating guidance.
+- **Decision Dimensions** — human-readable explanation of the signed dimension vector.
+- **Examples** — at least one positive example and one non-example.
+- **Sources** — frontmatter-driven; the viewer renders citations from `WikiPageSource`.
+
+**Tier semantics** (weights in [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts)):
+- `commandment` — default weight `1.0`; non-negotiable doctrine; hard cap of 10 published kernel commandments enforced by the lint detector `principle-commandment-cap-exceeded`.
+- `core` — default weight `0.4`; strong defaults; soft cap ~30.
+- `contextual` — default weight `0.1`; narrow operational rules; uncapped.
+
+Situational notes — operational reminders, project-specific quirks, dated decisions — do **not** belong here. They live in local memory, backlog comments, execution evidence, or dated specs. Promotion to the wiki principle layer requires that the rule be durable enough to retrieve across many sessions and product-safe enough for at least the in-platform coworkers to read.
+
 ### `decision`
 
 A formal decision codified for posterity. Mirrors the format of `docs/superpowers/decisions/`.
