@@ -62,7 +62,7 @@ describe("resolveCoworkerRuntimeMode", () => {
     });
   });
 
-  it("forces external access on in unified act mode", () => {
+  it("keeps external access separate from unified act mode", () => {
     expect(
       resolveCoworkerRuntimeMode({
         pathname: "/compliance/licensing",
@@ -73,7 +73,7 @@ describe("resolveCoworkerRuntimeMode", () => {
       }),
     ).toEqual({
       coworkerMode: "act",
-      externalAccessEnabled: true,
+      externalAccessEnabled: false,
     });
   });
 });

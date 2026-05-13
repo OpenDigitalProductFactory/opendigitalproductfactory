@@ -154,7 +154,7 @@ export function AgentPanelHeader({
               fontSize: 9,
               textTransform: "uppercase",
               letterSpacing: "0.08em",
-              color: elevatedAssistEnabled ? "#241700" : "var(--dpf-muted)",
+              color: elevatedAssistEnabled ? "var(--dpf-text)" : "var(--dpf-muted)",
               background: elevatedAssistEnabled ? "var(--dpf-warning)" : "transparent",
               border: `1px solid ${elevatedAssistEnabled ? "var(--dpf-warning)" : "var(--dpf-border)"}`,
               borderRadius: 999,
@@ -195,36 +195,35 @@ export function AgentPanelHeader({
             >
               {coworkerMode === "act" ? "Act" : "Advise"}
             </button>
-          ) : (
-            <button
-              type="button"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleExternalAccess();
-              }}
-              title={
-                externalAccessEnabled
-                  ? "External On: this page's coworker can use approved public web search and fetch tools during this session"
-                  : "External Off: this page's coworker cannot access approved public web search and fetch tools during this session"
-              }
-              style={{
-                fontSize: 9,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: externalAccessEnabled ? "var(--dpf-success)" : "var(--dpf-muted)",
-                background: externalAccessEnabled ? "color-mix(in srgb, var(--dpf-success) 16%, transparent)" : "transparent",
-                border: `1px solid ${externalAccessEnabled ? "color-mix(in srgb, var(--dpf-success) 55%, transparent)" : "var(--dpf-border)"}`,
-                borderRadius: 999,
-                padding: "2px 6px",
-                fontWeight: externalAccessEnabled ? 700 : 500,
-                cursor: "pointer",
-                lineHeight: 1.2,
-              }}
-            >
-              {externalAccessEnabled ? "External Access On" : "External Access Off"}
-            </button>
-          )}
+          ) : null}
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExternalAccess();
+            }}
+            title={
+              externalAccessEnabled
+                ? "External On: this page's coworker can use approved public web search and fetch tools during this session"
+                : "External Off: this page's coworker cannot access approved public web search and fetch tools during this session"
+            }
+            style={{
+              fontSize: 9,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: externalAccessEnabled ? "var(--dpf-success)" : "var(--dpf-muted)",
+              background: externalAccessEnabled ? "color-mix(in srgb, var(--dpf-success) 16%, transparent)" : "transparent",
+              border: `1px solid ${externalAccessEnabled ? "color-mix(in srgb, var(--dpf-success) 55%, transparent)" : "var(--dpf-border)"}`,
+              borderRadius: 999,
+              padding: "2px 6px",
+              fontWeight: externalAccessEnabled ? 700 : 500,
+              cursor: "pointer",
+              lineHeight: 1.2,
+            }}
+          >
+            {externalAccessEnabled ? "External Access On" : "External Access Off"}
+          </button>
           {canUseDev && onToggleDev && (
             <button
               type="button"

@@ -40,6 +40,7 @@ import {
   saveElevatedAssistPreference,
 } from "./agent-form-assist-prefs";
 import {
+  buildExternalAccessContinuationPrompt,
   loadExternalAccessSessionState,
   saveExternalAccessSessionState,
   loadCoworkerMode,
@@ -383,11 +384,21 @@ export function AgentCoworkerPanel({
   }
 
   function handleToggleExternalAccess() {
-    setExternalAccessEnabled((prev) => {
-      const next = !prev;
-      saveExternalAccessSessionState(preferenceUserKey, pathname, next);
-      return next;
-    });
+    const next = !externalAccessEnabled;
+    setExternalAccessEnabled(next);
+    saveExternalAccessSessionState(preferenceUserKey, pathname, next);
+
+    if (next && !isBusy) {
+      const continuation = buildExternalAccessContinuationPrompt(messages);
+      if (continuation) {
+        submitMessage(
+          continuation,
+          createOptimisticUserMessage(continuation, effectiveRoute),
+          true,
+          { externalAccessEnabled: true },
+        );
+      }
+    }
   }
 
   function handleToggleCoworkerMode() {
@@ -406,6 +417,7 @@ export function AgentCoworkerPanel({
     content: string,
     optimisticMessage = createOptimisticUserMessage(content, effectiveRoute),
     appendOptimistic = true,
+    runtimeOverride?: { externalAccessEnabled?: boolean },
   ) {
     if (!threadId) return;
     const formAssistContext = activeFormAssistRef.current
@@ -425,7 +437,7 @@ export function AgentCoworkerPanel({
       devMode,
       useUnifiedCoworker,
       coworkerMode,
-      externalAccessEnabled,
+      externalAccessEnabled: runtimeOverride?.externalAccessEnabled ?? externalAccessEnabled,
     });
 
     // EP-ASYNC-COWORKER-001: Non-blocking fetch to API route.
