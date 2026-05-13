@@ -411,7 +411,12 @@ ON THIS PAGE: The user sees the Build Studio with conversation panel, feature br
     modelRequirements: {
       defaultMinimumTier: "strong",
       defaultBudgetClass: "quality_first",
-      preferredProviderId: "codex",
+      // No provider pinning — V2 routing picks the strongest active endpoint
+      // by capability tier + budget. Hard-coding `preferredProviderId` here
+      // breaks the install whenever that provider is disabled or removed
+      // (per `feedback_no_provider_pinning` and the recurring "Pinned
+      // provider 'codex' not available" warnings on /build observed
+      // 2026-05-12 when codex was disabled in favor of anthropic-sub).
       defaultEffort: "high" as const,
     },
   },
