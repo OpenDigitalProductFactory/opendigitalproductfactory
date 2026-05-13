@@ -127,7 +127,7 @@ export async function observeConversation(
     });
     if (thread) {
       const build = await prisma.featureBuild.findFirst({
-        where: { createdById: thread.userId, phase: { notIn: ["complete", "failed"] } },
+        where: { createdById: thread.userId, phase: { notIn: ["complete", "failed", "abandoned"] } },
         orderBy: { updatedAt: "desc" },
         select: { digitalProductId: true },
       });
