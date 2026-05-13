@@ -19,6 +19,7 @@ export type WikiStoreClient = {
     update: PrismaWriteAction;
     findUnique: PrismaWriteAction;
     findFirst: PrismaWriteAction;
+    findMany: PrismaWriteAction;
   };
   wikiPageRevision: {
     create: PrismaWriteAction;
@@ -329,4 +330,73 @@ export async function getWikiPage(
       slug: args.slug,
     },
   });
+}
+
+// ─── List principles by tier ────────────────────────────────────────────────
+
+/**
+ * Postgres-first principle retrieval, used by recallPrincipleContext to
+ * always inject in-scope commandments regardless of Qdrant availability.
+ *
+ * - Filters to `pageKind = "principle"`, `status = "published"`, and the
+ *   supplied tier.
+ * - Scopes by `organizationId`: pass `null` for kernel-only; pass an org
+ *   id to include BOTH that org's overlay rows AND kernel rows (kernel
+ *   fallback per EP-WIKI-001 §3.3).
+ * - `appliesTo` performs Prisma `has` array containment against the
+ *   `principleAppliesTo` column.
+ * - Default `limit` is 50 — generous enough for every commandment (cap 10)
+ *   and a comfortable core slice; callers tighten as needed.
+ * - Orders by `lastReviewedAt` desc then `title` asc so repeated calls
+ *   return rows in the same order.
+ *
+ * Throws on unknown tier values to make seed/lint typos visible immediately
+ * instead of returning silently empty results.
+ */
+export async function listPrinciplesByTier(
+  db: { wikiPage: { findMany: PrismaWriteAction } },
+  args: {
+    tier: PrincipleTier;
+    organizationId?: string | null;
+    appliesTo?: PrincipleAppliesTo | string;
+    limit?: number;
+  },
+): Promise<unknown[]> {
+  if (
+    !(["commandment", "core", "contextual"] as readonly string[]).includes(
+      args.tier,
+    )
+  ) {
+    throw new Error(
+      `listPrinciplesByTier: unknown tier "${args.tier}". Allowed: commandment, core, contextual.`,
+    );
+  }
+
+  const where: Record<string, unknown> = {
+    pageKind: "principle",
+    status: "published",
+    principleTier: args.tier,
+  };
+
+  if (args.organizationId === null || args.organizationId === undefined) {
+    if (args.organizationId === null) {
+      where.organizationId = null;
+    }
+    // organizationId === undefined → no scope filter; caller wants either.
+  } else {
+    where.OR = [
+      { organizationId: args.organizationId },
+      { organizationId: null },
+    ];
+  }
+
+  if (args.appliesTo !== undefined) {
+    where.principleAppliesTo = { has: args.appliesTo };
+  }
+
+  return (await db.wikiPage.findMany({
+    where,
+    orderBy: [{ lastReviewedAt: "desc" }, { title: "asc" }],
+    take: args.limit ?? 50,
+  })) as unknown[];
 }
