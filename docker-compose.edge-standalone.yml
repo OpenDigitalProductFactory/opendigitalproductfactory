@@ -1,0 +1,206 @@
+# DPF Edge Node — standalone compose for second-host installs.
+#
+# This file is COMPLETE on its own: an operator brings up an Edge Node
+# on a host that is NOT the Authority Core. There is no portal,
+# postgres, neo4j, or any other DPF service in this file — those run
+# on a different machine (the Authority Core), reachable over the LAN.
+#
+# Spec:    docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+# Plan:    docs/superpowers/plans/2026-05-12-edge-node-t2-multi-host-lan.md
+#          (T2.1 — closes G1, G5, G8)
+# Runbook: docs/install/edge-node-multi-host.md
+#
+# ─── When to use this file vs docker-compose.edge.yml ─────────────
+#
+# Use docker-compose.edge.yml (the OVERLAY) when:
+#   - The Edge Node runs on the SAME host as the Authority Core,
+#     inside the same compose project. This is the Phase 0 single-host
+#     demo path.
+#
+# Use docker-compose.edge-standalone.yml (THIS FILE) when:
+#   - The Edge Node runs on a DIFFERENT host from the Authority Core.
+#   - You want to verify Edge Node enrollment against a remote DPF
+#     install over the LAN.
+#   - You are following the T2 multi-host verification runbook.
+#
+# ─── Required environment ──────────────────────────────────────────
+#
+# Place these in a local `.env` file alongside this compose file
+# (NEVER commit your .env):
+#
+#   # Routable URL of the Authority Core from THIS host. Localhost
+#   # / 127.0.0.1 / host.docker.internal do NOT work across hosts —
+#   # use the Authority's LAN IP, mDNS .local name, or DNS A record.
+#   #
+#   # Phase 0 floor is HTTP; T2.2 (separate PR) introduces HTTPS with
+#   # an operator-trusted CA bundle. Until T2.2 ships, treat the LAN
+#   # as a trust boundary — bearer tokens on plain HTTP are sniffable
+#   # by anyone on the same broadcast domain.
+#   DPF_AUTHORITY_URL=http://dpf-authority.lan:3000
+#
+#   # One-time bootstrap token issued from the Authority Core's
+#   # Admin > Platform Development > Edge Nodes page (15 min TTL,
+#   # single-use). The Edge Node consumes this on first run and
+#   # never sends it again; subsequent runs use the persisted node
+#   # token.
+#   DPF_BOOTSTRAP_TOKEN=dpfboot_xxxxxxxxxxxxxxxxxxxxxxxx
+#
+# Optional environment (sensible defaults shipped below):
+#
+#   DPF_EDGE_NODE_NAME=edge-node-warehouse-2   # operator-friendly name
+#   DPF_INSTALL_MODE=container-host            # appears in the admin UI
+#   GHCR_OWNER=opendigitalproductfactory       # image registry namespace
+#   DPF_IMAGE_TAG=latest                       # pinned tag for reproducibility
+#
+# ─── Bringing the node up ──────────────────────────────────────────
+#
+#   # 1. Authority side (one-time): issue a bootstrap token in
+#   #    Admin > Platform Development > Edge Nodes. Copy the
+#   #    plaintext value (shown once, 15 min TTL).
+#
+#   # 2. Edge Node side:
+#   cp .env.edge-standalone.example .env
+#   # Edit .env with your DPF_AUTHORITY_URL + DPF_BOOTSTRAP_TOKEN.
+#
+#   docker compose -f docker-compose.edge-standalone.yml up -d
+#   docker compose -f docker-compose.edge-standalone.yml logs -f edge-node
+#
+#   # 3. Authority side: approve the node in
+#   #    Admin > Platform Development > Edge Nodes. Paste-provisioned
+#   #    tokens land in trustState=pending; the node cannot submit
+#   #    observations until an operator clicks Approve. (See spec
+#   #    § Approval policy.)
+#
+#   # 4. Within one sweep interval (default 5 min) the node submits
+#   #    its first discovery run. Verify on the Authority:
+#   #      - EdgeNode row exists, trustState=trusted, lastSeenAt within 60s
+#   #      - DiscoveryRun has edgeNodeId populated
+#   #      - DiscoveredItem rows include real LAN-side IPs (not Docker
+#   #        bridge IPs)
+#
+# ─── Network mode ──────────────────────────────────────────────────
+#
+# `network_mode: host` is required for the Edge Node to enumerate the
+# host's physical NICs, see the host's ARP table, and (in future
+# phases) emit / receive L2 frames. On Linux this maps the container
+# directly onto the host's network namespace — the container has no
+# private bridge subnet at all. As a consequence:
+#
+#   - `DPF_AUTHORITY_URL` must be reachable from the HOST's network
+#     perspective (LAN IP / mDNS name / DNS), not from a compose-
+#     internal bridge alias.
+#   - There is no compose-internal `portal` DNS name — that only
+#     exists on the Authority side's compose project.
+#
+# host network mode is NOT honored by Docker Desktop for macOS or
+# Windows the way Linux does — on those platforms the "host" is the
+# Docker Desktop VM, not the user's machine. This file is intended
+# for native Linux Docker Engine deployments. If you must run the
+# Edge Node from Docker Desktop, fall back to the overlay
+# `docker-compose.edge.yml`'s default bridge profile and accept the
+# degraded capability set (see spec § Deployment modes).
+#
+# ─── Capabilities ──────────────────────────────────────────────────
+#
+# `cap_add: [NET_RAW, NET_ADMIN]` is granted so the discovery
+# collectors can:
+#
+#   - NET_RAW: open raw sockets (ICMP for ping sweeps, ARP frames,
+#     SNMP UDP from a non-privileged source port via raw socket if
+#     needed).
+#   - NET_ADMIN: configure network interfaces, manipulate routing
+#     tables temporarily for scan targets, run `arp-scan` and the
+#     raw-socket modes of `nmap`.
+#
+# Phase 0's host-info collector does NOT need these; it uses Node's
+# `os` module which doesn't open raw sockets. The capabilities are
+# added here so that:
+#
+#   (a) the same compose file works when later T2/T3 collectors plug
+#       in (no compose-file diff to land an ARP collector), and
+#   (b) the principle-of-least-surprise applies — operators don't
+#       have to wonder why their nmap collector silently falls back
+#       to TCP-connect-scan instead of SYN-scan.
+#
+# These are the only capabilities granted. The container runs as
+# a non-root UID per the Dockerfile; `NET_RAW` / `NET_ADMIN` give it
+# the network surface it needs without granting `--privileged` or
+# `CAP_SYS_ADMIN`.
+
+services:
+  edge-node:
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
+    restart: unless-stopped
+
+    # Host network so the Edge Node sees the host's real NICs and
+    # LAN topology, not a compose-internal bridge subnet. See the
+    # "Network mode" header above for the consequences.
+    network_mode: host
+
+    # Granted to future ARP / nmap raw-socket / SNMP collectors. See
+    # "Capabilities" header above. Phase 0's host-info collector does
+    # not strictly need either; the grant is documented and minimal.
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+    environment:
+      # REQUIRED — operator must set this in .env to a URL that
+      # resolves from the host's network perspective. The compose
+      # file deliberately does NOT default this to localhost or
+      # host.docker.internal; a wrong default silently produces a
+      # node that can never reach its Authority and looks "broken"
+      # in a way that wastes operator time.
+      DPF_AUTHORITY_URL: ${DPF_AUTHORITY_URL:?DPF_AUTHORITY_URL is required — set it in .env to the Authority Core URL reachable from this host (e.g. http://dpf-authority.lan:3000)}
+
+      # REQUIRED on first run only — single-use bootstrap token from
+      # Admin > Platform Development > Edge Nodes. Discarded from
+      # process memory immediately after enrollment. After successful
+      # enrollment the node uses its state-stored node token, so this
+      # can be safely unset on subsequent runs (the state file under
+      # the volume mount below survives restarts).
+      DPF_BOOTSTRAP_TOKEN: ${DPF_BOOTSTRAP_TOKEN:-}
+
+      # Operator-friendly node name; appears in the admin UI Edge
+      # Nodes table. Defaults to the container hostname which, under
+      # `network_mode: host`, is the host's actual hostname — a
+      # reasonable default for the standalone deployment. Override
+      # in .env if you want a more descriptive name.
+      DPF_EDGE_NODE_NAME: ${DPF_EDGE_NODE_NAME:-}
+
+      # Install mode for the admin UI:
+      #   container-host = container running on a Linux/macOS host
+      #   container-vm   = container in a VM (Docker Desktop)
+      #   native         = host binary (Phase 1+)
+      DPF_INSTALL_MODE: ${DPF_INSTALL_MODE:-container-host}
+
+      # State directory inside the container; matches the volume mount.
+      DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
+
+    volumes:
+      # Persisted state (node token, intervals, accepted capabilities).
+      # Survives restarts; rebuilds preserve enrollment. Docker-managed
+      # volume rather than a host bind-mount so the state file's owner
+      # UID matches the container's runtime UID (the Edge Node refuses
+      # to load state that another UID wrote — see services/edge-node/
+      # src/state.ts § verifyStatePerms).
+      - edge_node_state:/var/lib/dpf-edge-node
+
+    healthcheck:
+      # Healthy if the Node process is alive. We deliberately do NOT
+      # ping the Authority here — a brief Authority outage should not
+      # restart-loop the Edge Node; the agent's own retry buffer
+      # handles transient unavailability per spec § Soft-fail policy
+      # windows.
+      test:
+        - CMD
+        - node
+        - -e
+        - "process.exit(0)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  edge_node_state:
