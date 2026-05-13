@@ -24,6 +24,7 @@ import { prisma } from "@dpf/db";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
+import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
 
 const ROUTE_CONTEXT = "/api/v1/edge/discovery-runs";
 
@@ -92,6 +93,41 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       { ok: false, error: authResult.error, message: authResult.message },
       { status },
+    );
+  }
+
+  // Per-node rate limit: 4/min + 60/hour per the spec § REST ingestion
+  // controls. Discovery is a sweep, not a stream. Fires AFTER auth so
+  // we can attribute to a specific Edge Node, and BEFORE body parsing
+  // so misbehaving nodes can't burn server CPU on JSON parsing in a
+  // retry storm.
+  const rateLimit = checkEdgeRateLimit(
+    "edge.discovery_runs.submit",
+    authResult.edgeNodeRowId,
+  );
+  if (!rateLimit.allowed) {
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 429,
+      success: false,
+      error: "rate_limited",
+      summary: { retryAfter: rateLimit.retryAfter, ceiling: "4/min+60/hour" },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: rateLimit.retryAfter,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfter ?? 60) },
+      },
     );
   }
 

@@ -15,6 +15,7 @@ vi.mock("@/lib/edge-node/enrollment", () => ({
 
 import { POST } from "./route";
 import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
+import { _resetEdgeRateLimits, checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
 
 const AUTHED = {
   ok: true as const,
@@ -51,10 +52,14 @@ beforeEach(() => {
     auditCalls.push(data);
     return { id: "audit_heartbeat_test" };
   });
+  // Rate-limit state is process-global; reset between tests so a
+  // burst from one test doesn't leak into the next.
+  _resetEdgeRateLimits();
 });
 
 afterEach(() => {
   setToolExecutionCreateOverride(null);
+  _resetEdgeRateLimits();
 });
 
 describe("POST /api/v1/edge/heartbeat — auth gate", () => {
@@ -259,5 +264,91 @@ describe("POST /api/v1/edge/heartbeat — audit", () => {
     const serialized = JSON.stringify(auditCalls[0]);
     expect(serialized).not.toContain(SECRET);
     expect(serialized).not.toContain("SUPERSECRETNODETOKEN");
+  });
+});
+
+describe("POST /api/v1/edge/heartbeat — rate limit (12/min)", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("allows up to 12 heartbeats within a minute", async () => {
+    for (let i = 0; i < 12; i++) {
+      const res = await POST(makeReq({}, { Authorization: "Bearer x" }));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("rejects the 13th heartbeat with 429 + Retry-After header", async () => {
+    for (let i = 0; i < 12; i++) {
+      await POST(makeReq({}, { Authorization: "Bearer x" }));
+    }
+    const res = await POST(makeReq({}, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toMatch(/^\d+$/);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
+    expect(body.retryAfter).toBeGreaterThan(0);
+  });
+
+  it("writes a rate_limited audit row at 429 with retryAfter + ceiling in the summary", async () => {
+    for (let i = 0; i < 12; i++) {
+      await POST(makeReq({}, { Authorization: "Bearer x" }));
+    }
+    auditCalls.length = 0; // discard the 12 success audits
+    await POST(makeReq({}, { Authorization: "Bearer x" }));
+    expect(auditCalls).toHaveLength(1);
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(429);
+    expect((row.result as { error: string }).error).toBe("rate_limited");
+    const summary = (row.parameters as {
+      summary: { retryAfter: number; ceiling: string };
+    }).summary;
+    expect(summary.retryAfter).toBeGreaterThan(0);
+    expect(summary.ceiling).toBe("12/min");
+  });
+
+  it("rate limit fires AFTER auth — failed-auth requests don't consume slots", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ok: false,
+      error: "token_not_found",
+      message: "no",
+    });
+    // 100 failed-auth requests — none should affect the rate-limit bucket.
+    for (let i = 0; i < 100; i++) {
+      await POST(makeReq({}, { Authorization: "Bearer x" }));
+    }
+    // Now flip auth back on; the node still has its full 12/min quota.
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    for (let i = 0; i < 12; i++) {
+      const res = await POST(makeReq({}, { Authorization: "Bearer x" }));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("buckets are per-node — node A burning its quota doesn't block node B", async () => {
+    for (let i = 0; i < 12; i++) {
+      await POST(makeReq({}, { Authorization: "Bearer x" }));
+    }
+    expect((await POST(makeReq({}, { Authorization: "Bearer x" }))).status).toBe(429);
+    // Different node from the auth resolver.
+    mockResolveAuth.mockResolvedValue({
+      ...AUTHED,
+      edgeNodeRowId: "edgenode_cuid_2",
+      nodeId: "edge_xyz",
+    });
+    const res = await POST(makeReq({}, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(200);
+  });
+
+  it("a passed bucket-check is observable via checkEdgeRateLimit in isolation", async () => {
+    // Sanity: the route consumes from the same bucket the limiter
+    // module exposes. Make 5 requests, then peek at the limiter:
+    // remaining should be 7 (12 - 5).
+    for (let i = 0; i < 5; i++) {
+      await POST(makeReq({}, { Authorization: "Bearer x" }));
+    }
+    const peek = checkEdgeRateLimit("edge.heartbeat", AUTHED.edgeNodeRowId);
+    // The peek itself consumes a slot, so the remaining is 12 - 5 - 1 = 6.
+    expect(peek.allowed).toBe(true);
+    expect(peek.remaining).toBe(6);
   });
 });
