@@ -16,6 +16,8 @@ import {
   isPrincipleDimension,
 } from "@dpf/db/wiki-taxonomy";
 import type { LintFinding, LintWikiPage } from "./lint-detectors";
+import { detectPrincipleCommandmentCapExceeded } from "./principle-commandment-cap";
+import { detectPrinciplePublicUnsafeMarker } from "./principle-public-safety";
 
 // ─── Snapshot extension ─────────────────────────────────────────────────────
 
@@ -323,6 +325,37 @@ export function detectPrincipleTierWeightMismatch(input: {
     );
   }
   return findings;
+}
+
+// ─── Aggregator ─────────────────────────────────────────────────────────────
+
+/**
+ * Run every principle detector against a typed snapshot of principle
+ * pages and return the union of findings. Mirrors the shape of
+ * `runDetectors` in lint-detectors.ts; the orchestrator (lint.ts
+ * runWikiLint) calls this in addition to the original aggregator.
+ *
+ * Cross-page detectors (commandment-cap) and the public-safety detector
+ * are included here. The Qdrant-dependent detectors (duplicate,
+ * contradiction-review) live in their own modules because they need
+ * embedding similarity infrastructure that pure per-page detectors do
+ * not — they are wired in by the orchestrator in a follow-up commit.
+ */
+export function runPrincipleDetectors(input: {
+  pages: LintPrincipleWikiPage[];
+}): LintFinding[] {
+  return [
+    ...detectPrincipleMissingTier(input),
+    ...detectPrincipleMissingAppliesTo(input),
+    ...detectPrincipleMissingDirection(input),
+    ...detectPrincipleMissingVector(input),
+    ...detectPrincipleVectorDimensionMismatch(input),
+    ...detectPrincipleUnknownDimension(input),
+    ...detectPrincipleTierWeightMismatch(input),
+    ...detectPrinciplePublicMissingRationale(input),
+    ...detectPrincipleCommandmentCapExceeded(input),
+    ...detectPrinciplePublicUnsafeMarker(input),
+  ];
 }
 
 // ─── 8. principle-public-missing-rationale ──────────────────────────────────

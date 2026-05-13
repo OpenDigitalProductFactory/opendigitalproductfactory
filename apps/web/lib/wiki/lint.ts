@@ -21,6 +21,10 @@ import {
   type LintWikiPageLink,
   type LintWikiPageSource,
 } from "./lint-detectors";
+import {
+  runPrincipleDetectors,
+  type LintPrincipleWikiPage,
+} from "./principle-lint-detectors";
 
 // ─── Input ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +89,7 @@ export async function fetchWikiSnapshot(
   organizationId: string | null,
 ): Promise<{
   pages: LintWikiPage[];
+  principlePages: LintPrincipleWikiPage[];
   links: LintWikiPageLink[];
   sources: LintWikiPageSource[];
   rawSources: LintRawSource[];
@@ -101,8 +106,10 @@ export async function fetchWikiSnapshot(
     prisma.rawSource.findMany({}) as Promise<unknown[]>,
   ]);
 
+  const pageRows = pages as Array<Record<string, unknown>>;
   return {
-    pages: (pages as Array<Record<string, unknown>>).map(asLintWikiPage),
+    pages: pageRows.map(asLintWikiPage),
+    principlePages: pageRows.map(asLintPrincipleWikiPage),
     links: (links as Array<Record<string, unknown>>).map(asLintWikiPageLink),
     sources: (sources as Array<Record<string, unknown>>).map(asLintWikiPageSource),
     rawSources: (rawSources as Array<Record<string, unknown>>).map(asLintRawSource),
@@ -122,6 +129,36 @@ function asLintWikiPage(r: Record<string, unknown>): LintWikiPage {
     organizationId: (r["organizationId"] as string | null) ?? null,
     kernelPageId: (r["kernelPageId"] as string | null) ?? null,
     derivedFromKernelVersion: (r["derivedFromKernelVersion"] as string | null) ?? null,
+  };
+}
+
+/**
+ * Build a principle-aware snapshot row, populating the principle-only
+ * fields from the Prisma row. Non-principle rows still go through this
+ * helper so the principle aggregator can filter on pageKind === "principle"
+ * without a parallel pre-filter — the principle-only fields are nullable /
+ * empty for non-principles per the schema defaults.
+ */
+function asLintPrincipleWikiPage(
+  r: Record<string, unknown>,
+): LintPrincipleWikiPage {
+  const base = asLintWikiPage(r);
+  const reviewed = r["lastReviewedAt"];
+  return {
+    ...base,
+    principleTier: (r["principleTier"] as string | null) ?? null,
+    principleDirection: (r["principleDirection"] as string | null) ?? null,
+    principleWeight: (r["principleWeight"] as number | null) ?? null,
+    principleWeightRationale:
+      (r["principleWeightRationale"] as string | null) ?? null,
+    principleDimensionVector:
+      (r["principleDimensionVector"] as Record<string, number> | null) ?? null,
+    principleDimensions: (r["principleDimensions"] as string[] | undefined) ?? [],
+    principleAppliesTo: (r["principleAppliesTo"] as string[] | undefined) ?? [],
+    principlePublic: Boolean(r["principlePublic"] ?? false),
+    principlePublicRationale:
+      (r["principlePublicRationale"] as string | null) ?? null,
+    lastReviewedAt: reviewed instanceof Date ? reviewed : null,
   };
 }
 
@@ -240,14 +277,17 @@ export async function persistFindings(
 export async function runWikiLint(input: RunWikiLintInput): Promise<RunWikiLintResult> {
   const snap = await fetchWikiSnapshot(input.prisma, input.organizationId);
 
-  const findings = runDetectors({
-    pages: snap.pages,
-    links: snap.links,
-    sources: snap.sources,
-    rawSources: snap.rawSources,
-    currentKernelVersion: input.currentKernelVersion,
-    staleThresholdDays: input.staleThresholdDays,
-  });
+  const findings = [
+    ...runDetectors({
+      pages: snap.pages,
+      links: snap.links,
+      sources: snap.sources,
+      rawSources: snap.rawSources,
+      currentKernelVersion: input.currentKernelVersion,
+      staleThresholdDays: input.staleThresholdDays,
+    }),
+    ...runPrincipleDetectors({ pages: snap.principlePages }),
+  ];
 
   const persisted = await persistFindings(input.prisma, input.organizationId, findings);
 
