@@ -330,6 +330,7 @@ export async function callProvider(
   tools?: Array<Record<string, unknown>>,
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
+  mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession,
 ): Promise<InferenceResult> {
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -370,6 +371,7 @@ export async function callProvider(
       systemPrompt,
       tools,
       previousResponseId,
+      mcpSession,
     });
     endTimer();
   } catch (err) {

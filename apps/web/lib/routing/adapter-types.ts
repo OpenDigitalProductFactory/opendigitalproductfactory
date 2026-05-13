@@ -20,6 +20,19 @@ export interface ResolvedProvider {
   headers: Record<string, string>;
 }
 
+/**
+ * Optional MCP session context — populated by the agentic loop when calling
+ * routed inference. Adapters that need to mint short-lived MCP credentials
+ * (currently only the Claude CLI execution adapter, for `--mcp-config`)
+ * read this. Other adapters ignore it.
+ */
+export interface AdapterMcpSession {
+  userId: string;
+  agentId?: string | null;
+  threadId?: string | null;
+  routeContext?: string | null;
+}
+
 /** Input to an execution adapter */
 export interface AdapterRequest {
   providerId: string;
@@ -31,6 +44,13 @@ export interface AdapterRequest {
   tools?: Array<Record<string, unknown>>;
   /** Responses API: chain to a previous response for multi-turn conversation state. */
   previousResponseId?: string;
+  /**
+   * Optional caller context for adapters that need to mint MCP credentials
+   * (`apps/web/lib/mcp/session-token.ts`). Only the Claude CLI adapter
+   * consumes this today. Absent for tests and non-coworker callsites —
+   * those keep the legacy text-described tool path.
+   */
+  mcpSession?: AdapterMcpSession;
 }
 
 /** Normalized output from an execution adapter */

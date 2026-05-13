@@ -4,6 +4,10 @@ vi.mock("@/lib/auth/mcp-api-token", () => ({
   resolveMcpApiToken: vi.fn(),
 }));
 
+vi.mock("@/lib/mcp/session-token", () => ({
+  verifyMcpSessionToken: vi.fn(),
+}));
+
 vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: vi.fn(),
 }));
@@ -16,10 +20,12 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import { resolveMcpApiToken } from "@/lib/auth/mcp-api-token";
+import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { GET, POST } from "./route";
 
 const resolveMock = resolveMcpApiToken as unknown as ReturnType<typeof vi.fn>;
+const verifySessionMock = verifyMcpSessionToken as unknown as ReturnType<typeof vi.fn>;
 const govMock = governedExecuteTool as unknown as ReturnType<typeof vi.fn>;
 const userMock = prisma.user.findUnique as unknown as ReturnType<typeof vi.fn>;
 
@@ -27,6 +33,7 @@ function makeRequest(opts: {
   url?: string;
   method?: string;
   bearer?: string | null;
+  sessionJwt?: string | null;
   origin?: string | null;
   body?: unknown;
   forwardedProto?: string;
@@ -36,6 +43,9 @@ function makeRequest(opts: {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (opts.bearer !== null && opts.bearer !== undefined) {
     headers["Authorization"] = `Bearer ${opts.bearer}`;
+  }
+  if (opts.sessionJwt !== null && opts.sessionJwt !== undefined) {
+    headers["X-MCP-Session"] = opts.sessionJwt;
   }
   if (opts.origin !== null && opts.origin !== undefined) {
     headers["Origin"] = opts.origin;
@@ -96,11 +106,7 @@ describe("POST — transport guards", () => {
     expect(res.status).toBe(401); // got past TLS guard, failed at auth
   });
 
-  // Regression: when Next.js runs inside a container or behind a proxy,
-  // request.url reflects the *internal* bind address (e.g. 0.0.0.0). The
-  // transport guard must consult the forwarded host/proto headers — what
-  // the client actually connected to — not the URL Next reconstructed.
-  it("allows containerized request when X-Forwarded-Host points to localhost", async () => {
+  it("rejects spoofed X-Forwarded-Host on plain HTTP", async () => {
     resolveMock.mockResolvedValue(null);
     const res = await POST(
       makeRequest({
@@ -110,7 +116,7 @@ describe("POST — transport guards", () => {
         body: { jsonrpc: "2.0", id: 1, method: "initialize" },
       }),
     );
-    expect(res.status).toBe(401); // past transport guard, fails at auth
+    expect(res.status).toBe(403);
   });
 
   it("allows containerized request when X-Forwarded-Proto is https", async () => {
@@ -173,7 +179,6 @@ describe("POST — transport guards", () => {
         makeRequest({
           url: "http://portal:3000/api/mcp/v1",
           bearer: "dpfmcp_X",
-          forwardedHost: "portal:3000",
           body: { jsonrpc: "2.0", id: 1, method: "initialize" },
         }),
       );
@@ -186,7 +191,6 @@ describe("POST — transport guards", () => {
         makeRequest({
           url: "http://other-internal:3000/api/mcp/v1",
           bearer: "dpfmcp_X",
-          forwardedHost: "other-internal:3000",
           body: { jsonrpc: "2.0", id: 1, method: "initialize" },
         }),
       );
@@ -200,11 +204,23 @@ describe("POST — transport guards", () => {
         makeRequest({
           url: "http://portal:3000/api/mcp/v1",
           bearer: "dpfmcp_X",
-          forwardedHost: "portal:3000",
           body: { jsonrpc: "2.0", id: 1, method: "initialize" },
         }),
       );
       expect(res.status).toBe(401);
+    });
+
+    it("does not use X-Forwarded-Host to satisfy MCP_INSECURE_INTERNAL_HOSTS", async () => {
+      process.env.MCP_INSECURE_INTERNAL_HOSTS = "portal";
+      const res = await POST(
+        makeRequest({
+          url: "http://evil.example.com/api/mcp/v1",
+          bearer: "dpfmcp_X",
+          forwardedHost: "portal:3000",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(403);
     });
   });
 
@@ -233,7 +249,7 @@ describe("POST — transport guards", () => {
 });
 
 describe("POST — auth", () => {
-  it("returns 401 with WWW-Authenticate when Authorization header missing", async () => {
+  it("returns 401 with WWW-Authenticate when neither Authorization nor X-MCP-Session is present", async () => {
     const res = await POST(
       makeRequest({
         bearer: null,
@@ -254,6 +270,119 @@ describe("POST — auth", () => {
     );
     expect(res.status).toBe(401);
     expect(res.headers.get("WWW-Authenticate")).toContain("invalid_token");
+  });
+
+  // X-MCP-Session JWT path — used by the Claude CLI execution adapter to
+  // authenticate per-call without consuming a persistent dpfmcp_* PAT slot.
+  describe("X-MCP-Session JWT", () => {
+    it("returns 401 when session JWT verification fails", async () => {
+      verifySessionMock.mockResolvedValue(null);
+      const res = await POST(
+        makeRequest({
+          bearer: null,
+          sessionJwt: "eyJ.invalid.jwt",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(401);
+      expect(res.headers.get("WWW-Authenticate")).toMatch(/invalid or expired MCP session/);
+    });
+
+    it("accepts a valid session JWT and reaches initialize", async () => {
+      verifySessionMock.mockResolvedValue({
+        userId: "u1",
+        agentId: "build-specialist",
+        threadId: "thread-abc",
+        routeContext: "/build",
+        scopes: ["backlog_read", "build_plan_write"],
+        capability: "write",
+      });
+      const res = await POST(
+        makeRequest({
+          bearer: null,
+          sessionJwt: "eyJ.valid.jwt",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result?.serverInfo?.name).toBe("dpf-platform");
+    });
+
+    it("session JWT wins over PAT bearer when both are present", async () => {
+      // Session JWT is narrowly scoped per-call. If both headers arrive,
+      // we prefer the session so a stale operator PAT in the same shell
+      // can't widen the cli-adapter's effective scope.
+      verifySessionMock.mockResolvedValue({
+        userId: "u-session",
+        agentId: "build-specialist",
+        threadId: null,
+        routeContext: null,
+        scopes: ["backlog_read"],
+        capability: "read",
+      });
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_should_be_ignored",
+          sessionJwt: "eyJ.valid.jwt",
+          body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "query_backlog", arguments: { limit: 1 } } },
+        }),
+      );
+      // PAT resolver should NOT have been consulted.
+      expect(resolveMock).not.toHaveBeenCalled();
+      expect(verifySessionMock).toHaveBeenCalledWith("eyJ.valid.jwt");
+      expect(res.status).toBe(200);
+    });
+
+    it("forwards JWT threadId/routeContext into governedExecuteTool context", async () => {
+      verifySessionMock.mockResolvedValue({
+        userId: "u1",
+        agentId: "build-specialist",
+        threadId: "thread-xyz",
+        routeContext: "/build",
+        scopes: ["backlog_read"],
+        capability: "read",
+      });
+      govMock.mockResolvedValue({
+        success: true,
+        message: "ok",
+        data: { count: 0 },
+      });
+      const res = await POST(
+        makeRequest({
+          sessionJwt: "eyJ.valid.jwt",
+          body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "query_backlog", arguments: { limit: 1 } } },
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(govMock).toHaveBeenCalledTimes(1);
+      const callArgs = govMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(callArgs.userId).toBe("u1");
+      expect(callArgs.source).toBe("internal-mcp-session");
+      const ctx = callArgs.context as Record<string, unknown>;
+      expect(ctx.agentId).toBe("build-specialist");
+      expect(ctx.threadId).toBe("thread-xyz");
+      expect(ctx.routeContext).toBe("/build");
+    });
+
+    it("trims whitespace from the X-MCP-Session header value", async () => {
+      verifySessionMock.mockResolvedValue({
+        userId: "u1",
+        agentId: null,
+        threadId: null,
+        routeContext: null,
+        scopes: ["backlog_read"],
+        capability: "read",
+      });
+      const res = await POST(
+        makeRequest({
+          sessionJwt: "  eyJ.valid.jwt  ",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(verifySessionMock).toHaveBeenCalledWith("eyJ.valid.jwt");
+    });
   });
 });
 

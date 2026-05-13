@@ -152,6 +152,12 @@ describe("issueMyMcpToken", () => {
     expect(result.setupSnippets.claudeCode).toContain("Bearer dpfmcp_SECRET");
     expect(result.setupSnippets.vscode).toContain("Bearer dpfmcp_SECRET");
     expect(result.setupSnippets.codex).toContain("Bearer dpfmcp_SECRET");
+    const claudeCode = JSON.parse(result.setupSnippets.claudeCode);
+    const codex = JSON.parse(result.setupSnippets.codex);
+    const vscode = JSON.parse(result.setupSnippets.vscode);
+    expect(claudeCode.mcpServers.dpf.type).toBe("http");
+    expect(codex.mcpServers.dpf.type).toBe("http");
+    expect(vscode.servers.dpf.type).toBe("http");
   });
 });
 
