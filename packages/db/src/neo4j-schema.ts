@@ -45,6 +45,13 @@ const SCHEMA_STATEMENTS = [
   "CREATE CONSTRAINT p_slug       IF NOT EXISTS FOR (n:Portfolio)        REQUIRE n.slug      IS UNIQUE",
   "CREATE CONSTRAINT ci_ciId      IF NOT EXISTS FOR (n:InfraCI)          REQUIRE n.ciId      IS UNIQUE",
   "CREATE CONSTRAINT cf_codeFileKey IF NOT EXISTS FOR (n:CodeFile)       REQUIRE n.codeFileKey IS UNIQUE",
+  "CREATE CONSTRAINT cs_symbolKey IF NOT EXISTS FOR (n:CodeSymbol)       REQUIRE n.codeSymbolKey IS UNIQUE",
+  "CREATE CONSTRAINT cr_routeKey IF NOT EXISTS FOR (n:CodeRoute)         REQUIRE n.codeRouteKey IS UNIQUE",
+  "CREATE CONSTRAINT ct_toolKey IF NOT EXISTS FOR (n:CodeTool)           REQUIRE n.codeToolKey IS UNIQUE",
+  "CREATE CONSTRAINT pm_modelKey IF NOT EXISTS FOR (n:PrismaModel)       REQUIRE n.prismaModelKey IS UNIQUE",
+  "CREATE CONSTRAINT pts_promptKey IF NOT EXISTS FOR (n:PromptTemplateSource) REQUIRE n.promptTemplateSourceKey IS UNIQUE",
+  "CREATE CONSTRAINT tf_testFileKey IF NOT EXISTS FOR (n:TestFile)       REQUIRE n.testFileKey IS UNIQUE",
+  "CREATE CONSTRAINT em_moduleKey IF NOT EXISTS FOR (n:ExternalModule)   REQUIRE n.externalModuleKey IS UNIQUE",
   "CREATE CONSTRAINT doc_documentId IF NOT EXISTS FOR (n:Document)       REQUIRE n.documentId IS UNIQUE",
 
   // ── Existence constraints (enterprise only — skip on community) ───────────
@@ -58,6 +65,13 @@ const SCHEMA_STATEMENTS = [
   "CREATE INDEX ci_status IF NOT EXISTS FOR (n:InfraCI)       ON (n.status)",
   "CREATE INDEX cf_graphKey IF NOT EXISTS FOR (n:CodeFile)    ON (n.graphKey)",
   "CREATE INDEX cf_path     IF NOT EXISTS FOR (n:CodeFile)    ON (n.path)",
+  "CREATE INDEX cs_graphKey IF NOT EXISTS FOR (n:CodeSymbol)  ON (n.graphKey)",
+  "CREATE INDEX cr_graphKey IF NOT EXISTS FOR (n:CodeRoute)   ON (n.graphKey)",
+  "CREATE INDEX ct_graphKey IF NOT EXISTS FOR (n:CodeTool)    ON (n.graphKey)",
+  "CREATE INDEX pm_graphKey IF NOT EXISTS FOR (n:PrismaModel) ON (n.graphKey)",
+  "CREATE INDEX pts_graphKey IF NOT EXISTS FOR (n:PromptTemplateSource) ON (n.graphKey)",
+  "CREATE INDEX tf_graphKey IF NOT EXISTS FOR (n:TestFile)    ON (n.graphKey)",
+  "CREATE INDEX em_graphKey IF NOT EXISTS FOR (n:ExternalModule) ON (n.graphKey)",
   "CREATE INDEX doc_state   IF NOT EXISTS FOR (n:Document)    ON (n.currentState)",
   "CREATE INDEX doc_kind    IF NOT EXISTS FOR (n:Document)    ON (n.documentKind)",
 

@@ -12,6 +12,7 @@ type CodeGraphPrisma = {
   codeGraphIndexState: {
     findUnique(args: { where: { graphKey: string } }): Promise<CodeGraphIndexStateRecord | null>;
     upsert(args: Record<string, unknown>): Promise<unknown>;
+    update(args: Record<string, unknown>): Promise<unknown>;
   };
   codeGraphFileHash: {
     upsert(args: Record<string, unknown>): Promise<unknown>;
@@ -166,4 +167,25 @@ export async function deleteCodeGraphFileHash(graphKey: string, filePath: string
 
 export async function countCodeGraphFileHashes(graphKey: string): Promise<number> {
   return codeGraphPrisma.codeGraphFileHash.count({ where: { graphKey } });
+}
+
+export async function recordExtractionWarning(input: {
+  graphKey: string;
+  filePath: string;
+  extractor: string;
+  message: string;
+  observedAt: Date;
+}): Promise<void> {
+  await codeGraphPrisma.codeGraphIndexState.update({
+    where: { graphKey: input.graphKey },
+    data: {
+      lastError: [
+        "Code graph extractor warning",
+        input.extractor,
+        input.filePath,
+        input.message,
+        input.observedAt.toISOString(),
+      ].join(": "),
+    },
+  });
 }
