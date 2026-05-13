@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { FileText } from "lucide-react";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
@@ -31,6 +33,10 @@ const PARAM_LABELS: Record<string, string> = {
 
 // Keys to hide from proposal display (internal system values)
 const HIDDEN_PARAMS = new Set(["buildId", "digitalProductId", "featureBrief"]);
+
+function extractManagedDocumentIds(content: string): string[] {
+  return [...new Set(content.match(/\bDOC-[A-Z0-9]{8}\b/g) ?? [])].slice(0, 4);
+}
 
 function formatProposalParams(
   actionType: string,
@@ -370,6 +376,7 @@ export function AgentMessageBubble({
   }
 
   const isAssistantError = !isUser && looksLikeAgentError(message.content);
+  const managedDocumentIds = isUser ? [] : extractManagedDocumentIds(message.content);
 
   return (
     <div
@@ -434,6 +441,31 @@ export function AgentMessageBubble({
               </div>
             )}
             <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
+            {managedDocumentIds.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                {managedDocumentIds.map((documentId) => (
+                  <Link
+                    key={documentId}
+                    href={`/workspace/documents/${encodeURIComponent(documentId)}`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      border: "1px solid var(--dpf-border)",
+                      borderRadius: 6,
+                      color: "var(--dpf-text)",
+                      fontSize: 11,
+                      lineHeight: 1,
+                      padding: "5px 7px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <FileText size={12} aria-hidden="true" />
+                    {documentId}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {message.attachments && message.attachments.length > 0 && (

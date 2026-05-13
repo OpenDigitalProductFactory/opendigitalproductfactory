@@ -18,4 +18,11 @@ describe("workspace tile derivation", () => {
     expect(hr000.some((t) => t.key === "admin")).toBe(true);
     expect(hr300.some((t) => t.key === "admin")).toBe(false);
   });
+
+  it("surfaces the document library from Workspace for platform operators", () => {
+    const tiles = getWorkspaceTiles({ platformRole: "HR-000", isSuperuser: false });
+    expect(tiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "documents", route: "/workspace/documents" }),
+    ]));
+  });
 });

@@ -84,6 +84,8 @@ export {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
   syncIT4ITLabels,
+  syncDocumentNode,
+  syncDocumentReference,
 } from "./neo4j-sync";
 export {
   buildDiscoveredKey,
