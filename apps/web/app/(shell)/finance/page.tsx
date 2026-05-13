@@ -187,17 +187,17 @@ export default async function FinancePage() {
     <div>
       {/* Setup prompt banner */}
       {!setupStatus.isConfigured && (
-        <div className="mb-6 p-4 rounded-lg border border-[#fbbf24] bg-[#fbbf2410]">
+        <div className="mb-6 rounded-lg border border-[color-mix(in_srgb,var(--dpf-warning)_35%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,transparent)] p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-[#fbbf24]">Complete your financial setup</p>
+              <p className="text-sm font-medium text-[var(--dpf-warning)]">Complete your financial setup</p>
               <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
                 Set up your finances based on your business type to get started with invoicing, expenses, and reporting.
               </p>
             </div>
             <Link
-              href="/finance/settings"
-              className="px-3 py-1.5 text-xs font-medium rounded bg-[#fbbf24] text-black hover:bg-[#f59e0b] transition-colors shrink-0"
+              href="/finance/settings/setup"
+              className="px-3 py-1.5 text-xs font-medium rounded bg-[var(--dpf-warning)] text-[var(--dpf-bg)] hover:opacity-90 transition-opacity shrink-0"
             >
               Set Up Now
             </Link>

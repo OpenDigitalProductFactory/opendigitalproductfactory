@@ -22,7 +22,20 @@ export type LintFindingKind =
   | "missing-xref"
   | "dangling-xref"
   | "kernel-drift"
-  | "stance-extraction-needed";
+  | "stance-extraction-needed"
+  // ─── Principle-only finding kinds (Phase 1 of principles-as-wiki-kind) ───
+  | "principle-missing-tier"
+  | "principle-missing-applies-to"
+  | "principle-missing-direction"
+  | "principle-missing-vector"
+  | "principle-vector-dimension-mismatch"
+  | "principle-unknown-dimension"
+  | "principle-tier-weight-mismatch"
+  | "principle-commandment-cap-exceeded"
+  | "principle-public-missing-rationale"
+  | "principle-public-unsafe-marker"
+  | "principle-duplicate"
+  | "principle-contradiction-review";
 
 /** Mirrors the `WikiLintFinding.severity` enum. */
 export type LintSeverity = "info" | "warn" | "error";

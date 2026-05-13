@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { FinancialSetupStep } from "./FinancialSetupStep";
 import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-offer";
+import { financeProfileSlugFromCategory } from "@/lib/finance/setup-profile";
 import { INDUSTRY_OPTIONS } from "@/lib/storefront/industries";
 
 type Archetype = {
@@ -30,23 +31,6 @@ type SetupWizardProps = {
   /** Stakeholder label, e.g. "Homeowners", "Clients" */
   stakeholderLabel?: string | null;
 };
-
-// Map storefront archetype category to finance profile slug
-function financeSlugFromCategory(category: string): string {
-  const map: Record<string, string> = {
-    "healthcare-wellness": "healthcare_wellness",
-    "beauty-personal-care": "beauty_personal",
-    "trades-maintenance": "trades_construction",
-    "professional-services": "professional_services",
-    "education-training": "education_training",
-    "pet-services": "pet_services",
-    "food-hospitality": "food_hospitality",
-    "retail-goods": "retail",
-    "fitness-recreation": "fitness_recreation",
-    "nonprofit-community": "nonprofit",
-  };
-  return map[category] ?? "professional_services";
-}
 
 // Canonical 11-industry list comes from @/lib/storefront/industries (INDUSTRY_OPTIONS).
 // Custom archetypes must pick one of these; the API enforces it.
@@ -467,7 +451,7 @@ export function SetupWizard({
   if (step === 3) {
     return (
       <FinancialSetupStep
-        archetypeSlug={financeSlugFromCategory(selected?.category ?? "")}
+        archetypeSlug={financeProfileSlugFromCategory(selected?.category)}
         archetypeName={selected?.name ?? "your business"}
         suggestedCurrency={suggestedCurrency ?? null}
         onComplete={async () => {
