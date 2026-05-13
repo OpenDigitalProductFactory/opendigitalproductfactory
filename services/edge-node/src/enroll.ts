@@ -6,6 +6,7 @@
 // control back to the heartbeat loop.
 
 import type { AuthorityApiClient } from "./api-client";
+import { collectHostNetworkSummary } from "./collectors/host-network";
 import type { EdgeNodeConfig } from "./config";
 import { saveState, type EdgeNodeState } from "./state";
 
@@ -36,6 +37,11 @@ export async function runEnrollment(
     `Enrolling Edge Node "${config.edgeNodeName}" against ${config.authorityUrl}`,
   );
 
+  // Standardized host fingerprint per T2.4 — admin UI reads
+  // metadata.host.{hostname,ipAddresses}. Operators identify the node
+  // by its LAN address without SQL'ing the metadata blob.
+  const host = collectHostNetworkSummary();
+
   const result = await api.enroll(config.bootstrapToken, {
     displayName: config.edgeNodeName,
     platform: config.platform,
@@ -43,7 +49,14 @@ export async function runEnrollment(
     version: config.version,
     advertisedCapabilities: [...PHASE_0_CAPABILITIES],
     metadata: {
+      // hostname kept at top-level for backward compat with anything
+      // reading EdgeNode.metadata.hostname today; the canonical T2.4
+      // shape is the `host` sub-object below.
       hostname: config.edgeNodeName,
+      host: {
+        hostname: host.hostname,
+        ipAddresses: host.ipAddresses,
+      },
     },
   });
 

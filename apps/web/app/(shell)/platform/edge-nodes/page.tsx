@@ -41,7 +41,43 @@ type EdgeNodeRow = {
   revocationReason: string | null;
   displayName: string;
   capabilities: string[];
+  /**
+   * Host-network fingerprint pulled from EdgeNode.metadata.host. The
+   * Edge Node submits this at enrollment per T2.4. May be null if the
+   * node enrolled before T2.4 shipped, or if no real LAN address was
+   * available at enroll time.
+   */
+  hostHostname: string | null;
+  hostIpAddresses: string[] | null;
 };
+
+/**
+ * Narrowly extract the `host` sub-object from an EdgeNode.metadata
+ * JSON blob, tolerating shape drift. Returns nulls when the shape
+ * doesn't match — admin UI renders an "—" placeholder, which is
+ * correct UX for nodes that enrolled pre-T2.4.
+ */
+function readHostMetadata(metadata: unknown): {
+  hostname: string | null;
+  ipAddresses: string[] | null;
+} {
+  if (typeof metadata !== "object" || metadata === null) {
+    return { hostname: null, ipAddresses: null };
+  }
+  const host = (metadata as { host?: unknown }).host;
+  if (typeof host !== "object" || host === null) {
+    return { hostname: null, ipAddresses: null };
+  }
+  const hostname = (host as { hostname?: unknown }).hostname;
+  const ipAddresses = (host as { ipAddresses?: unknown }).ipAddresses;
+  return {
+    hostname: typeof hostname === "string" ? hostname : null,
+    ipAddresses:
+      Array.isArray(ipAddresses)
+        ? ipAddresses.filter((x): x is string => typeof x === "string")
+        : null,
+  };
+}
 
 type BootstrapTokenRow = {
   id: string;
@@ -92,26 +128,31 @@ export default async function EdgeNodesAdminPage() {
     },
   });
 
-  const nodeRows: EdgeNodeRow[] = nodes.map((n) => ({
-    id: n.id,
-    nodeId: n.nodeId,
-    platform: n.platform,
-    installMode: n.installMode,
-    version: n.version,
-    status: n.status,
-    trustState: n.trustState,
-    lastSeenAt: n.lastSeenAt?.toISOString() ?? null,
-    enrolledAt: n.enrolledAt?.toISOString() ?? null,
-    approvedAt: n.approvedAt?.toISOString() ?? null,
-    quarantinedAt: n.quarantinedAt?.toISOString() ?? null,
-    quarantineReason: n.quarantineReason,
-    revokedAt: n.revokedAt?.toISOString() ?? null,
-    revocationReason: n.revocationReason,
-    displayName: n.principal.displayName,
-    capabilities: Array.isArray(n.capabilities)
-      ? (n.capabilities as unknown[]).filter((c): c is string => typeof c === "string")
-      : [],
-  }));
+  const nodeRows: EdgeNodeRow[] = nodes.map((n) => {
+    const hostMetadata = readHostMetadata(n.metadata);
+    return {
+      id: n.id,
+      nodeId: n.nodeId,
+      platform: n.platform,
+      installMode: n.installMode,
+      version: n.version,
+      status: n.status,
+      trustState: n.trustState,
+      lastSeenAt: n.lastSeenAt?.toISOString() ?? null,
+      enrolledAt: n.enrolledAt?.toISOString() ?? null,
+      approvedAt: n.approvedAt?.toISOString() ?? null,
+      quarantinedAt: n.quarantinedAt?.toISOString() ?? null,
+      quarantineReason: n.quarantineReason,
+      revokedAt: n.revokedAt?.toISOString() ?? null,
+      revocationReason: n.revocationReason,
+      displayName: n.principal.displayName,
+      capabilities: Array.isArray(n.capabilities)
+        ? (n.capabilities as unknown[]).filter((c): c is string => typeof c === "string")
+        : [],
+      hostHostname: hostMetadata.hostname,
+      hostIpAddresses: hostMetadata.ipAddresses,
+    };
+  });
 
   const tokenRows: BootstrapTokenRow[] = bootstrapTokens.map((t) => ({
     id: t.id,
