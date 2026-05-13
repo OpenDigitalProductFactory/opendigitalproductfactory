@@ -11,13 +11,16 @@ import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
 import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
+import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
+import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
@@ -86,6 +89,7 @@ export function BuildStudio({
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
+  const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
     const [fresh, nextFlow] = await Promise.all([
       getFeatureBuild(buildId),
@@ -119,6 +123,18 @@ export function BuildStudio({
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [activeBuild?.buildId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCodeGraphFreshnessAction()
+      .then((freshness) => {
+        if (!cancelled) setCodeGraphFreshness(freshness);
+      })
+      .catch(() => {
+        if (!cancelled) setCodeGraphFreshness(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const detail = activeBuild?.buildId ?? null;
@@ -564,6 +580,9 @@ export function BuildStudio({
                     className={getBuildStudioGraphPanelClassName()}
                     data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                   >
+                    <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                      <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
+                    </div>
                     <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
                       Select any stage or task to inspect what happened, related artifacts, and the next approval gate.
                     </div>

@@ -160,6 +160,21 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/class=\"truncate\">dpf\/fb8783b9\/fix-build-studio-header-content-overlap-in-workflo/);
   });
 
+  it("renders code intelligence status in the workflow view", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild()]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("code-intelligence-status-card");
+    expect(html).toContain("Loading graph status...");
+  });
+
   it("renders a studio approval control for backlog-linked builds that are missing start approval", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
