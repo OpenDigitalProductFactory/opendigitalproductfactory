@@ -526,6 +526,8 @@ When generating or reviewing UI code, enforce these rules:
       "search_project_files",
       "list_project_directory",
       "propose_file_change",
+      "get_code_graph_freshness",
+      "inspect_build_code_impact",
       "wiki_query",
       "search_knowledge",
       "search_knowledge_base",

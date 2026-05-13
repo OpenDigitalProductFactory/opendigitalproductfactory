@@ -55,9 +55,15 @@ describe("listAvailableMcpScopes", () => {
       tool_a: ["backlog_read", "spec_plan_read"],
       tool_b: ["backlog_write"],
       tool_c: ["backlog_read"], // duplicate
+      tool_d: ["code_graph_read"],
     });
     const result = await listAvailableMcpScopes();
-    expect(result.scopes).toEqual(["backlog_read", "backlog_write", "spec_plan_read"]);
+    expect(result.scopes).toEqual([
+      "backlog_read",
+      "backlog_write",
+      "code_graph_read",
+      "spec_plan_read",
+    ]);
   });
 });
 

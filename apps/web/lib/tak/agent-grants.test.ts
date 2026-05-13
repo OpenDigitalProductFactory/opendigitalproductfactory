@@ -389,4 +389,14 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("search_public_web", financeGrants ?? [])).toBe(true);
     expect(isToolAllowedByGrants("fetch_public_website", financeGrants ?? [])).toBe(true);
   });
+
+  it("lets the build specialist use the read-only code graph tools", () => {
+    const bySlug = getAgentToolGrants("build-specialist");
+    const byRegistryId = getAgentToolGrants("AGT-WS-BUILD");
+
+    expect(bySlug).toEqual(expect.arrayContaining(["code_graph_read"]));
+    expect(byRegistryId).toEqual(expect.arrayContaining(["code_graph_read"]));
+    expect(isToolAllowedByGrants("get_code_graph_freshness", bySlug ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("inspect_build_code_impact", bySlug ?? [])).toBe(true);
+  });
 });
