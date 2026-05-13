@@ -1115,6 +1115,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
         summary: { type: "string", description: "2-3 sentence plain-language summary of what was accomplished in this phase" },
         decisionsMade: { type: "array", items: { type: "string" }, description: "Key decisions made and why" },
         openIssues: { type: "array", items: { type: "string" }, description: "Unresolved issues or risks carried to next phase" },
@@ -1134,6 +1135,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
         field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update — required" },
         value: { type: "object", description: "JSON value to store — required, do not omit. Shape varies by field; for designDoc include summary/files/approach, for buildPlan include tasks array with per-task acceptance criteria." },
       },
@@ -1147,7 +1149,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "reviewDesignDoc",
     description: "Submit the design document for AI review. Returns pass/fail with issues.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
@@ -1156,7 +1163,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "reviewBuildPlan",
     description: "Submit the implementation plan for AI review. Returns pass/fail with issues.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
@@ -3064,10 +3076,51 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
-/** Resolve the active (non-complete, non-failed) FeatureBuild for the current user. */
-async function resolveActiveBuildId(userId: string): Promise<string | null> {
+/**
+ * Phases that exclude a FeatureBuild from "active" auto-resolution.
+ * `abandoned` is included because abandoned builds from prior runs would
+ * otherwise shadow the freshly promoted build (BI-E9CD1B92, 2026-05-13).
+ */
+const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
+
+/**
+ * Pull a well-formed `buildId` hint out of a tool's params bag.
+ * Returns null when the hint is missing, non-string, or doesn't have the
+ * `FB-` prefix that all real FeatureBuild IDs carry.
+ */
+function extractBuildIdHint(params: Record<string, unknown>): string | null {
+  const v = params["buildId"];
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  return trimmed.startsWith("FB-") ? trimmed : null;
+}
+
+/**
+ * Resolve the active FeatureBuild for the current user.
+ *
+ * When `buildIdHint` is supplied AND it resolves to an existing build the
+ * caller is allowed to act on, that hint wins — even if the user has a more
+ * recently updated build. This is how explicit `buildId` arguments from MCP
+ * tool calls reach the per-tool handlers without being silently overridden
+ * (the bug behind FB-1D69766D returning FB-72EB9C06's review).
+ *
+ * Fallback: most-recently-updated non-terminal build created by the user.
+ */
+async function resolveActiveBuildId(
+  userId: string,
+  buildIdHint?: string | null,
+): Promise<string | null> {
+  if (buildIdHint && buildIdHint.startsWith("FB-")) {
+    const hinted = await prisma.featureBuild.findUnique({
+      where: { buildId: buildIdHint },
+      select: { buildId: true, createdById: true },
+    });
+    // Access model today is owner-only — see getFeatureBuildForContext for the
+    // matching check. If a future grant model lands, expand this predicate.
+    if (hinted && hinted.createdById === userId) return hinted.buildId;
+  }
   const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
     orderBy: { updatedAt: "desc" },
     select: { buildId: true },
   });
@@ -4541,17 +4594,8 @@ export async function executeTool(
     }
 
     case "update_feature_brief": {
-      // Auto-resolve buildId if the LLM passed a placeholder or invalid value
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        buildId = latestBuild.buildId;
-      }
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const { updateFeatureBrief } = await import("@/lib/actions/build");
       const brief = {
         title: String(params["title"] ?? ""),
@@ -4577,16 +4621,8 @@ export async function executeTool(
     }
 
     case "suggest_taxonomy_placement": {
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true, brief: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        buildId = latestBuild.buildId;
-      }
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
         select: { brief: true },
@@ -4623,16 +4659,8 @@ export async function executeTool(
 
     case "confirm_taxonomy_placement": {
       try {
-        let buildId = String(params["buildId"] ?? "");
-        if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-          const latestBuild = await prisma.featureBuild.findFirst({
-            where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-            orderBy: { updatedAt: "desc" },
-            select: { buildId: true },
-          });
-          if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-          buildId = latestBuild.buildId;
-        }
+        const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+        if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
         const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
         const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
         // Validate proposeNew structure before passing to Prisma.
@@ -4668,24 +4696,19 @@ export async function executeTool(
     }
 
     case "register_digital_product_from_build": {
-      // Auto-resolve buildId if the LLM passed a placeholder
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true, diffPatch: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        // Pre-flight: deploy_feature must have run first to extract the diff
-        if (!latestBuild.diffPatch) {
-          return {
-            success: false,
-            error: "deploy_feature must be called first",
-            message: "The sandbox diff has not been extracted yet. Call deploy_feature first to extract the diff, then call register_digital_product_from_build.",
-          };
-        }
-        buildId = latestBuild.buildId;
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      // Pre-flight: deploy_feature must have run first to extract the diff.
+      const diffCheck = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { diffPatch: true },
+      });
+      if (!diffCheck?.diffPatch) {
+        return {
+          success: false,
+          error: "deploy_feature must be called first",
+          message: "The sandbox diff has not been extracted yet. Call deploy_feature first to extract the diff, then call register_digital_product_from_build.",
+        };
       }
       const { shipBuild } = await import("@/lib/actions/build");
       try {
@@ -4712,17 +4735,8 @@ export async function executeTool(
     }
 
     case "create_build_epic": {
-      // Auto-resolve buildId and digitalProductId from the build record
-      let epicBuildId = String(params["buildId"] ?? "");
-      if (!epicBuildId || epicBuildId.startsWith("CURRENT") || !epicBuildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        epicBuildId = latestBuild.buildId;
-      }
+      const epicBuildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!epicBuildId) return { success: false, error: "No active build", message: "No active build found" };
       // Auto-resolve digitalProductId and portfolioSlug from the build's linked product
       const epicBuild = await prisma.featureBuild.findUnique({
         where: { buildId: epicBuildId },
@@ -4760,13 +4774,15 @@ export async function executeTool(
 
     case "search_portfolio_context": {
       const { searchPortfolioContext } = await import("@/lib/portfolio-search");
+      const activeBuildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       let portfolioId: string | null = null;
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
-        select: { portfolioId: true },
-      });
-      portfolioId = latestBuild?.portfolioId ?? null;
+      if (activeBuildId) {
+        const build = await prisma.featureBuild.findUnique({
+          where: { buildId: activeBuildId },
+          select: { portfolioId: true },
+        });
+        portfolioId = build?.portfolioId ?? null;
+      }
       const results = await searchPortfolioContext(String(params["query"] ?? ""), portfolioId);
       const totalMatches = results.taxonomyMatches.length + results.productMatches.length + results.buildMatches.length + results.backlogMatches.length;
       return { success: true, message: `Found ${totalMatches} related item${totalMatches !== 1 ? "s" : ""}.`, data: results as unknown as Record<string, unknown> };
@@ -4869,10 +4885,10 @@ export async function executeTool(
     }
 
     case "save_build_notes": {
-      // Auto-resolve the active build and merge notes into its plan field
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const latestBuild = await prisma.featureBuild.findUnique({
+        where: { buildId },
         select: { buildId: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
@@ -4906,9 +4922,10 @@ export async function executeTool(
     }
 
     case "save_phase_handoff": {
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const latestBuild = await prisma.featureBuild.findUnique({
+        where: { buildId },
         select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
@@ -5012,7 +5029,7 @@ export async function executeTool(
     // ─── Build Studio Lifecycle Tool Handlers (EP-SELF-DEV-002) ─────────────
 
     case "saveBuildEvidence": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build found.", message: "No active build." };
       const field = String(params.field ?? "");
       const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet", "scoutFindings"];
@@ -5211,7 +5228,7 @@ export async function executeTool(
     }
 
     case "reviewDesignDoc": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let phaseGateBlocker: string | null = null;
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
@@ -5490,7 +5507,7 @@ export async function executeTool(
     }
 
     case "reviewBuildPlan": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
@@ -5648,7 +5665,7 @@ export async function executeTool(
     }
 
     case "inspect_build_code_impact": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) {
         return { success: false, error: "No active build.", message: "No active build." };
       }
@@ -5796,7 +5813,7 @@ export async function executeTool(
     }
 
     case "start_build": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
@@ -5838,7 +5855,7 @@ export async function executeTool(
 
 
     case "run_sandbox_tests": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const { isSandboxAvailable: rstAvail } = await import("@/lib/integrate/sandbox/build-branch");
@@ -6052,7 +6069,7 @@ export async function executeTool(
     case "search_sandbox":
     case "list_sandbox_files":
     case "run_sandbox_command": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       // Simple availability check — no slot management, no pool acquisition.
@@ -6309,7 +6326,7 @@ export async function executeTool(
     }
 
     case "describe_model": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const modelName = String(params.model_name ?? "");
@@ -6358,7 +6375,7 @@ export async function executeTool(
     }
 
     case "validate_schema": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       // Simple availability check — no slot management
@@ -6404,10 +6421,7 @@ export async function executeTool(
     }
 
     case "deploy_feature": {
-      const explicitBuildId = typeof params.buildId === "string" && params.buildId.startsWith("FB-")
-        ? params.buildId
-        : null;
-      const buildId = explicitBuildId ?? await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
@@ -6591,7 +6605,7 @@ export async function executeTool(
     // ─── Portal PR Creation & Merge ────────────────────────────────────────
 
     case "create_portal_pr": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const build = await prisma.featureBuild.findUnique({
@@ -7361,7 +7375,7 @@ export async function executeTool(
     // ─── Hive Mind Contribution ──────────────────────────────────────────────
 
     case "assess_contribution": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const build = await prisma.featureBuild.findUnique({
@@ -7491,10 +7505,7 @@ export async function executeTool(
     }
 
     case "contribute_to_hive": {
-      const explicitBuildId = typeof params.buildId === "string" && params.buildId.startsWith("FB-")
-        ? params.buildId
-        : null;
-      const buildId = explicitBuildId ?? await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const devConfig = await prisma.platformDevConfig.findUnique({
@@ -7886,7 +7897,7 @@ export async function executeTool(
     }
 
     case "run_ux_test": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true } });
       if (!build?.sandboxPort || !build.sandboxId || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
