@@ -86,6 +86,6 @@ describe("AgentPanelHeader", () => {
     );
 
     expect(html).toContain("Act");
-    expect(html).not.toContain("External Off");
+    expect(html).toContain("External Off");
   });
 });
