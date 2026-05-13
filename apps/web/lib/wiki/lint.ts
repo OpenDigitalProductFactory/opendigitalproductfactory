@@ -25,6 +25,8 @@ import {
   runPrincipleDetectors,
   type LintPrincipleWikiPage,
 } from "./principle-lint-detectors";
+import { runPrincipleSimilarityDetectors } from "./principle-similarity";
+import { generateEmbedding } from "@/lib/inference/embedding";
 
 // ─── Input ──────────────────────────────────────────────────────────────────
 
@@ -277,6 +279,23 @@ export async function persistFindings(
 export async function runWikiLint(input: RunWikiLintInput): Promise<RunWikiLintResult> {
   const snap = await fetchWikiSnapshot(input.prisma, input.organizationId);
 
+  // Generate direction embeddings for similarity detectors. Silent-
+  // degradation: if embedding generation fails for any page (Ollama down,
+  // empty direction), skip that page — the similarity detectors will
+  // naturally produce zero findings for missing embeddings and the rest of
+  // the lint pass still runs.
+  const embeddings = new Map<string, number[]>();
+  for (const page of snap.principlePages) {
+    if (page.pageKind !== "principle") continue;
+    if (!page.principleDirection) continue;
+    try {
+      const vec = await generateEmbedding(page.principleDirection);
+      if (vec) embeddings.set(page.id, vec);
+    } catch {
+      // Treat as missing — similarity detectors handle absence
+    }
+  }
+
   const findings = [
     ...runDetectors({
       pages: snap.pages,
@@ -287,6 +306,10 @@ export async function runWikiLint(input: RunWikiLintInput): Promise<RunWikiLintR
       staleThresholdDays: input.staleThresholdDays,
     }),
     ...runPrincipleDetectors({ pages: snap.principlePages }),
+    ...runPrincipleSimilarityDetectors({
+      pages: snap.principlePages,
+      embeddings,
+    }),
   ];
 
   const persisted = await persistFindings(input.prisma, input.organizationId, findings);
