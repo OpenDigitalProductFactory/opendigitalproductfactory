@@ -229,6 +229,110 @@ describe("storeWikiPage", () => {
   });
 });
 
+describe("searchWikiPages: principle filters", () => {
+  function makeQdrantResult(payload: Record<string, unknown>, score = 0.8) {
+    return { id: 1, score, payload };
+  }
+
+  it("translates principleTier filter into a Qdrant payload-key match clause", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+
+    await searchWikiPages({
+      query: "evidence over inference",
+      organizationId: null,
+      pageKind: "principle",
+      principleTier: "commandment",
+    });
+
+    const filter = searchSimilar.mock.calls[0][2] as Record<string, unknown>;
+    expect(filter).toMatchObject({
+      must: expect.arrayContaining([
+        { key: "principleTier", match: { value: "commandment" } },
+      ]),
+    });
+  });
+
+  it("translates principleAppliesTo filter into an array-containment match clause", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+
+    await searchWikiPages({
+      query: "long-term maintainability",
+      organizationId: null,
+      pageKind: "principle",
+      principleAppliesTo: "external_coding_agent",
+    });
+
+    const filter = searchSimilar.mock.calls[0][2] as Record<string, unknown>;
+    expect(filter).toMatchObject({
+      must: expect.arrayContaining([
+        {
+          key: "principleAppliesTo",
+          match: { value: "external_coding_agent" },
+        },
+      ]),
+    });
+  });
+
+  it("translates principlePublic=true filter into a boolean match clause", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+
+    await searchWikiPages({
+      query: "principles",
+      organizationId: null,
+      pageKind: "principle",
+      principlePublic: true,
+    });
+
+    const filter = searchSimilar.mock.calls[0][2] as Record<string, unknown>;
+    expect(filter).toMatchObject({
+      must: expect.arrayContaining([
+        { key: "principlePublic", match: { value: true } },
+      ]),
+    });
+  });
+
+  it("combines all three principle filters when supplied together", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+
+    await searchWikiPages({
+      query: "commandments for external agents",
+      organizationId: null,
+      pageKind: "principle",
+      principleTier: "commandment",
+      principleAppliesTo: "external_coding_agent",
+      principlePublic: true,
+    });
+
+    const filter = searchSimilar.mock.calls[0][2] as Record<string, unknown>;
+    const must = filter.must as Array<Record<string, unknown>>;
+    const keys = must.map((c) => c.key);
+    expect(keys).toContain("principleTier");
+    expect(keys).toContain("principleAppliesTo");
+    expect(keys).toContain("principlePublic");
+  });
+
+  it("omits principle filter clauses when none are supplied (backwards compat)", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+    searchSimilar.mockResolvedValueOnce([]);
+
+    await searchWikiPages({
+      query: "any wiki page",
+      organizationId: null,
+    });
+
+    const filter = searchSimilar.mock.calls[0][2] as Record<string, unknown>;
+    const must = filter.must as Array<Record<string, unknown>>;
+    const keys = must.map((c) => c.key);
+    expect(keys).not.toContain("principleTier");
+    expect(keys).not.toContain("principleAppliesTo");
+    expect(keys).not.toContain("principlePublic");
+  });
+});
+
 describe("deleteWikiPageVector", () => {
   it("removes the point by entityId filter", async () => {
     await deleteWikiPageVector("wp_kernel_1");
