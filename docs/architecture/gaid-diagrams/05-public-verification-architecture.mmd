@@ -1,0 +1,25 @@
+flowchart TB
+    PRIV["Private GAID Subject<br/>directory-bound enterprise identity"]
+    MAP["Governed Public Mapping"]
+    PUB["Public GAID Subject<br/>issuer namespace"]
+    AIDOC["Signed AIDoc<br/>status, badges, verifier material"]
+    ISSUER["Accredited Issuer<br/>keys, policy, trust status"]
+    LOG["Transparency and Status Services"]
+    VER["Relying Party or Verifier"]
+
+    PRIV --> MAP --> PUB
+    ISSUER --> PUB
+    PUB --> AIDOC
+    ISSUER --> AIDOC
+    AIDOC --> LOG
+    VER --> PUB
+    VER --> AIDOC
+    VER --> LOG
+
+    style PRIV fill:#e0e7ff,stroke:#4338ca,color:#0f172a,stroke-width:1.5px
+    style MAP fill:#fef3c7,stroke:#92400e,color:#0f172a,stroke-width:1.5px
+    style PUB fill:#dcfce7,stroke:#166534,color:#0f172a,stroke-width:1.5px
+    style AIDOC fill:#dbeafe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style ISSUER fill:#bfdbfe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style LOG fill:#fee2e2,stroke:#b91c1c,color:#0f172a,stroke-width:1.5px
+    style VER fill:#f8fafc,stroke:#334155,color:#0f172a,stroke-width:1.5px
