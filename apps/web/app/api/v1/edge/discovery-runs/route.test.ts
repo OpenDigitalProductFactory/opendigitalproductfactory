@@ -674,7 +674,7 @@ describe("POST /api/v1/edge/discovery-runs — rate limit (4/min)", () => {
   it("allows up to 4 submissions within a minute", async () => {
     for (let i = 0; i < 4; i++) {
       const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
-      expect(res.status).toBe(202);
+      expect(res.status).toBe(201);
     }
   });
 

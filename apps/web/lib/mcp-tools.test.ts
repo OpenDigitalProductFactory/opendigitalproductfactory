@@ -30,6 +30,17 @@ describe("mcp tools", () => {
     expect(tools.some((tool) => tool.name === "analyze_public_website_branding")).toBe(true);
   });
 
+  it("exposes official-source research tools to the finance agent when External Access is on", async () => {
+    const tools = await getAvailableTools(adminUser, {
+      externalAccessEnabled: true,
+      agentId: "finance-agent",
+    });
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toContain("search_public_web");
+    expect(toolNames).toContain("fetch_public_website");
+  });
+
   it("makes public web search available during Build Studio ideation", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: true });
     const tool = tools.find((t) => t.name === "search_public_web");
