@@ -5,6 +5,7 @@ const COLLECTIONS = {
   AGENT_MEMORY: "agent-memory",
   PLATFORM_KNOWLEDGE: "platform-knowledge",
   WIKI_PAGES: "wiki-pages",
+  DOCUMENTS: "documents",
 } as const;
 
 export { COLLECTIONS as QDRANT_COLLECTIONS };
@@ -102,6 +103,31 @@ export async function ensureCollections(): Promise<void> {
     ]) {
       await qdrantFetch(
         `/collections/${COLLECTIONS.WIKI_PAGES}/index`,
+        { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
+      ).catch(() => {});
+    }
+  }
+
+  if (!names.has(COLLECTIONS.DOCUMENTS)) {
+    await qdrantFetch(`/collections/${COLLECTIONS.DOCUMENTS}`, {
+      method: "PUT",
+      body: {
+        vectors: { size: 768, distance: "Cosine" },
+      },
+    });
+    for (const field of [
+      "entityType",
+      "documentId",
+      "documentVersionId",
+      "organizationId",
+      "documentKind",
+      "currentState",
+      "contentFormat",
+      "tags",
+      "ownerPrincipalId",
+    ]) {
+      await qdrantFetch(
+        `/collections/${COLLECTIONS.DOCUMENTS}/index`,
         { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
       ).catch(() => {});
     }
@@ -239,6 +265,17 @@ export async function ensurePayloadIndexes(): Promise<void> {
     "kernelVersion",
     "kernelPageId",
   ];
+  const documentKeywordFields = [
+    "entityType",
+    "documentId",
+    "documentVersionId",
+    "organizationId",
+    "documentKind",
+    "currentState",
+    "contentFormat",
+    "tags",
+    "ownerPrincipalId",
+  ];
 
   for (const field of platformKnowledgeKeywordFields) {
     await qdrantFetch(
@@ -259,6 +296,13 @@ export async function ensurePayloadIndexes(): Promise<void> {
       `/collections/${COLLECTIONS.WIKI_PAGES}/index`,
       { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
     ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for wiki-pages.", field, err); });
+  }
+
+  for (const field of documentKeywordFields) {
+    await qdrantFetch(
+      `/collections/${COLLECTIONS.DOCUMENTS}/index`,
+      { method: "PUT", body: { field_name: field, field_schema: "keyword" } },
+    ).catch((err) => { console.warn("ensurePayloadIndexes: failed to create index for documents.", field, err); });
   }
 }
 

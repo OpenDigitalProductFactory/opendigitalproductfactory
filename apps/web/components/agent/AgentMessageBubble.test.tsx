@@ -87,4 +87,24 @@ describe("AgentMessageBubble", () => {
     expect(html).toContain("Not sent");
     expect(html).toContain("Retry");
   });
+
+  it("renders managed document chips for assistant messages with stable document ids", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-5",
+          role: "assistant",
+          content: "Saved document DOC-ABC12345 v1: /workspace/documents/DOC-ABC12345.",
+          agentId: "policy-coworker",
+          routeContext: "/workspace",
+          createdAt: "2026-03-14T12:00:00.000Z",
+        }}
+        showAgentLabel={true}
+        agentName="Policy"
+      />,
+    );
+
+    expect(html).toContain("/workspace/documents/DOC-ABC12345");
+    expect(html).toContain("DOC-ABC12345");
+  });
 });
