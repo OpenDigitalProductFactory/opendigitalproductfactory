@@ -722,3 +722,153 @@ describe("POST /api/v1/edge/discovery-runs — rate limit (4/min)", () => {
     expect(body.error).toBe("rate_limited");
   });
 });
+
+describe("POST /api/v1/edge/discovery-runs — payload size caps", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("rejects 413 when Content-Length declares > 5 MB (early rejection, no buffering)", async () => {
+    const req = new Request("http://test/api/v1/edge/discovery-runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer x",
+        "Content-Length": String(6 * 1024 * 1024),
+      },
+      body: "{}",
+    }) as unknown as NextRequest;
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.error).toBe("payload_too_large");
+  });
+
+  it("writes a payload_too_large audit on Content-Length rejection (stage=content-length)", async () => {
+    const req = new Request("http://test/api/v1/edge/discovery-runs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer x",
+        "Content-Length": String(10 * 1024 * 1024),
+      },
+      body: "{}",
+    }) as unknown as NextRequest;
+    await POST(req);
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(413);
+    expect((row.result as { error: string }).error).toBe("payload_too_large");
+    const summary = (row.parameters as {
+      summary: { declaredBytes: number; capBytes: number; stage: string };
+    }).summary;
+    expect(summary.declaredBytes).toBe(10 * 1024 * 1024);
+    expect(summary.capBytes).toBe(5 * 1024 * 1024);
+    expect(summary.stage).toBe("content-length");
+  });
+
+  it("rejects 413 when actual body bytes exceed 5 MB (buffered stage)", async () => {
+    // Construct a body that's actually > 5 MB without declaring an
+    // honest Content-Length. The "warnings" array can carry padding
+    // because Zod allows arbitrary strings there.
+    const padding = "x".repeat(1024); // 1 KB per entry
+    const big = {
+      ...VALID_BODY,
+      // 6 MB of warnings: 6144 entries × 1 KB each + JSON framing.
+      warnings: Array.from({ length: 6144 }, () => padding),
+    };
+    const res = await POST(makeReq(big, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.error).toBe("payload_too_large");
+  });
+
+  it("writes a payload_too_large audit on buffered rejection (stage=buffered)", async () => {
+    const padding = "x".repeat(1024);
+    const big = {
+      ...VALID_BODY,
+      warnings: Array.from({ length: 6144 }, () => padding),
+    };
+    await POST(makeReq(big, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    const summary = (row.parameters as {
+      summary: { actualBytes: number; capBytes: number; stage: string };
+    }).summary;
+    expect(summary.actualBytes).toBeGreaterThan(5 * 1024 * 1024);
+    expect(summary.capBytes).toBe(5 * 1024 * 1024);
+    expect(summary.stage).toBe("buffered");
+  });
+
+  it("rejects 413 raw_data_too_large when a single item's rawData > 64 KB", async () => {
+    const bigRawDataItem = {
+      observedKey: "host:bloat",
+      itemType: "host",
+      name: "bloat",
+      // 70 KB rawData blob.
+      rawData: { blob: "y".repeat(70 * 1024) },
+    };
+    const body = {
+      ...VALID_BODY,
+      items: [...(VALID_BODY.items as unknown[]), bigRawDataItem],
+    };
+    const res = await POST(makeReq(body, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(413);
+    const responseBody = await res.json();
+    expect(responseBody.error).toBe("raw_data_too_large");
+    expect(responseBody.itemIndex).toBe(1);
+    expect(responseBody.itemObservedKey).toBe("host:bloat");
+  });
+
+  it("writes a raw_data_too_large audit with the offending item index", async () => {
+    const bigRawDataItem = {
+      observedKey: "host:bloat",
+      itemType: "host",
+      name: "bloat",
+      rawData: { blob: "y".repeat(70 * 1024) },
+    };
+    const body = {
+      ...VALID_BODY,
+      items: [...(VALID_BODY.items as unknown[]), bigRawDataItem],
+    };
+    await POST(makeReq(body, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(413);
+    expect((row.result as { error: string }).error).toBe("raw_data_too_large");
+    const summary = (row.parameters as {
+      summary: {
+        itemIndex: number;
+        itemObservedKey: string;
+        rawDataBytes: number;
+        capBytes: number;
+      };
+    }).summary;
+    expect(summary.itemIndex).toBe(1);
+    expect(summary.itemObservedKey).toBe("host:bloat");
+    expect(summary.rawDataBytes).toBeGreaterThan(64 * 1024);
+    expect(summary.capBytes).toBe(64 * 1024);
+  });
+
+  it("accepts items with rawData just under the 64 KB cap", async () => {
+    const okItem = {
+      observedKey: "host:medium",
+      itemType: "host",
+      name: "medium",
+      rawData: { blob: "y".repeat(50 * 1024) }, // 50 KB — under
+    };
+    const body = { ...VALID_BODY, items: [okItem] };
+    const res = await POST(makeReq(body, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(201);
+  });
+
+  it("rawData cap fires BEFORE the idempotency lookup — oversized payloads never touch the DB", async () => {
+    const bigRawDataItem = {
+      observedKey: "host:bloat",
+      itemType: "host",
+      name: "bloat",
+      rawData: { blob: "y".repeat(70 * 1024) },
+    };
+    const body = {
+      ...VALID_BODY,
+      items: [...(VALID_BODY.items as unknown[]), bigRawDataItem],
+    };
+    await POST(makeReq(body, { Authorization: "Bearer x" }));
+    expect(mockDiscoveryRunFindUnique).not.toHaveBeenCalled();
+  });
+});
