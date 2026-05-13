@@ -12,7 +12,7 @@ export interface CoworkerSkill {
   label: string;
   description: string;
   capability: string | null;
-  prompt: string;            // extracted from skillMdContent body
+  prompt: string;            // compiled from the full skillMdContent body
   category: string;
   tags: string[];
   riskBand: string;
@@ -27,38 +27,36 @@ export interface CoworkerSkill {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Extract the first-level prompt from a SKILL.md body.
- * Returns the first paragraph after the frontmatter heading,
- * or the description if no body content is available.
- */
-function extractPromptFromBody(skillMdContent: string, description: string): string {
-  // Strip frontmatter
-  const match = skillMdContent.match(/^---[\s\S]*?---\n([\s\S]*)$/);
-  const body = match ? match[1].trim() : "";
+type SkillPromptInput = {
+  skillId: string;
+  description: string;
+  skillMdContent: string;
+  taskType: string;
+  allowedTools: string[];
+};
 
-  if (!body) return description;
+function extractSkillBody(skillMdContent: string): string {
+  const normalized = skillMdContent.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+  return (match ? match[1] : normalized).trim();
+}
 
-  // Find the first non-heading, non-empty line(s) as the prompt
-  const lines = body.split("\n");
-  let prompt = "";
-  let foundHeading = false;
+function compileSkillInvocationPrompt(input: SkillPromptInput): string {
+  const body = extractSkillBody(input.skillMdContent);
+  const instructions = body || input.description;
+  const prefix = input.taskType === "conversation" && input.allowedTools.length === 0
+    ? ["This is a CONVERSATION request, not a tool request.", ""]
+    : [];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("#")) {
-      if (foundHeading) break; // Stop at second heading
-      foundHeading = true;
-      continue;
-    }
-    if (trimmed === "") {
-      if (prompt) break; // Stop at first blank line after content
-      continue;
-    }
-    prompt += (prompt ? " " : "") + trimmed;
-  }
-
-  return prompt || description;
+  return [
+    ...prefix,
+    `Use the \`${input.skillId}\` skill.`,
+    "",
+    `Skill description: ${input.description}`,
+    "",
+    "Skill instructions:",
+    instructions,
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +88,13 @@ export async function getSkillsForAgent(agentId: string): Promise<CoworkerSkill[
       label: row.skill.name,
       description: row.skill.description,
       capability: row.skill.capability,
-      prompt: extractPromptFromBody(row.skill.skillMdContent, row.skill.description),
+      prompt: compileSkillInvocationPrompt({
+        skillId: row.skill.skillId,
+        description: row.skill.description,
+        skillMdContent: row.skill.skillMdContent,
+        taskType: row.skill.taskType,
+        allowedTools: row.skill.allowedTools,
+      }),
       category: row.skill.category,
       tags: row.skill.tags,
       riskBand: row.skill.riskBand,
