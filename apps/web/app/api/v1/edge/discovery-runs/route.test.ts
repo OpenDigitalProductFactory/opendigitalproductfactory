@@ -35,6 +35,7 @@ const DEFAULT_PERSIST_SUMMARY = {
 
 import { POST } from "./route";
 import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
+import { _resetEdgeRateLimits } from "@/lib/edge-node/rate-limit";
 
 const AUTHED = {
   ok: true as const,
@@ -100,10 +101,14 @@ beforeEach(() => {
     auditCalls.push(data);
     return { id: "audit_discovery_test" };
   });
+  // Rate-limit state is process-global; reset between tests so a burst
+  // from one test doesn't leak into the next.
+  _resetEdgeRateLimits();
 });
 
 afterEach(() => {
   setToolExecutionCreateOverride(null);
+  _resetEdgeRateLimits();
 });
 
 describe("POST /api/v1/edge/discovery-runs — auth gate", () => {
@@ -660,5 +665,60 @@ describe("POST /api/v1/edge/discovery-runs — audit", () => {
     const serialized = JSON.stringify(auditCalls[0]);
     expect(serialized).not.toContain(SECRET);
     expect(serialized).not.toContain("DISCOVERYSUBMITSECRET");
+  });
+});
+
+describe("POST /api/v1/edge/discovery-runs — rate limit (4/min)", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  it("allows up to 4 submissions within a minute", async () => {
+    for (let i = 0; i < 4; i++) {
+      const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+      expect(res.status).toBe(202);
+    }
+  });
+
+  it("rejects the 5th submission with 429 + Retry-After header", async () => {
+    for (let i = 0; i < 4; i++) {
+      await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    }
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toMatch(/^\d+$/);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
+    expect(body.retryAfter).toBeGreaterThan(0);
+  });
+
+  it("writes a rate_limited audit row at 429 with the 4/min+60/hour ceiling", async () => {
+    for (let i = 0; i < 4; i++) {
+      await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    }
+    auditCalls.length = 0;
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(429);
+    expect((row.result as { error: string }).error).toBe("rate_limited");
+    const summary = (row.parameters as {
+      summary: { retryAfter: number; ceiling: string };
+    }).summary;
+    expect(summary.ceiling).toBe("4/min+60/hour");
+  });
+
+  it("rate limit fires BEFORE body parsing — misbehaving nodes can't burn CPU on JSON parse retry storms", async () => {
+    // Burn the bucket via 4 valid submissions, then send a malformed
+    // body 100 times. The route should not parse them; the bucket
+    // check should reject first.
+    for (let i = 0; i < 4; i++) {
+      await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    }
+    // Send malformed JSON; would normally produce 400 invalid_json,
+    // but the 429 should fire first.
+    const res = await POST(
+      makeReq("not json", { Authorization: "Bearer x" }, true),
+    );
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
   });
 });
