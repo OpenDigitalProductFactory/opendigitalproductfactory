@@ -39,18 +39,13 @@ type WikiPageSourceClient = Pick<WikiStoreClient, "wikiPageSource">;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** Page kinds defined in docs/founder-kernel/SCHEMA.md and EP-WIKI-001 §4. */
-export type WikiPageKind =
-  | "entity"
-  | "summary"
-  | "decision"
-  | "runbook"
-  | "index"
-  | "stance"
-  | "heuristic";
-
-/** Status lifecycle defined in EP-WIKI-001 §4. */
-export type WikiPageStatus = "draft" | "published" | "review-needed" | "archived";
+// Page kinds and statuses live in wiki-taxonomy.ts (the single source of
+// truth used by seed, lint, MCP schemas, retrieval, and UI). Imported for
+// local use in this file's input types AND re-exported so existing callers
+// importing from wiki-store keep working.
+import type { WikiPageKind, WikiPageStatus } from "./wiki-taxonomy";
+export { WIKI_PAGE_KINDS, WIKI_PAGE_STATUSES } from "./wiki-taxonomy";
+export type { WikiPageKind, WikiPageStatus };
 
 /** Revision provenance defined in EP-WIKI-001 §4. */
 export type WikiRevisionChangeKind = "ingest" | "manual" | "lint-fix" | "kernel-merge";

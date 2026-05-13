@@ -1,11 +1,43 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  WIKI_PAGE_KINDS,
+  WIKI_PAGE_STATUSES,
   appendRevision,
   attachSource,
   getWikiPage,
   linkPages,
   upsertWikiPage,
 } from "./wiki-store";
+
+describe("wiki-store re-exports from wiki-taxonomy", () => {
+  it("re-exports WIKI_PAGE_KINDS including the principle kind", () => {
+    expect(WIKI_PAGE_KINDS).toContain("principle");
+    expect(WIKI_PAGE_KINDS).toHaveLength(8);
+  });
+
+  it("preserves the seven pre-existing kinds", () => {
+    expect(WIKI_PAGE_KINDS).toEqual(
+      expect.arrayContaining([
+        "entity",
+        "summary",
+        "decision",
+        "runbook",
+        "index",
+        "stance",
+        "heuristic",
+      ]),
+    );
+  });
+
+  it("re-exports WIKI_PAGE_STATUSES for callers using the wiki-store entry point", () => {
+    expect(WIKI_PAGE_STATUSES).toEqual([
+      "draft",
+      "published",
+      "review-needed",
+      "archived",
+    ]);
+  });
+});
 
 function makeWikiPageMocks() {
   const findFirst = vi.fn();
