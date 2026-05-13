@@ -71,6 +71,6 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
     expectedAgentId: "finance-agent",
     expectedLabel: "Finance Specialist",
     requiredDomainTools: [],
-    qaIds: ["FIN-09", "FIN-12"],
+    qaIds: ["FIN-09", "FIN-12", "AI-17"],
   },
 ];

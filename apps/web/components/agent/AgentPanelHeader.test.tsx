@@ -88,4 +88,19 @@ describe("AgentPanelHeader", () => {
     expect(html).toContain("Act");
     expect(html).toContain("External Off");
   });
+
+  it("labels the privileged dev control as diagnostics and points code changes to Build Studio", () => {
+    const html = renderToStaticMarkup(
+      <AgentPanelHeader
+        {...baseProps}
+        canUseDev
+        devMode={false}
+        onToggleDev={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Diagnostics");
+    expect(html).toContain("Use Build Studio for code-changing work");
+    expect(html).not.toContain(">Dev<");
+  });
 });
