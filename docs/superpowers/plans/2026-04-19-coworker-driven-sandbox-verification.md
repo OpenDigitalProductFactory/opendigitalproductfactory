@@ -711,3 +711,29 @@ Deferred until browser-use is rebuildable. The automated boundary tests
 (Chunks 1.1, 2.1, 3.4, 8.1) cover the seams; the live walkthrough
 validates the full stack end-to-end. Recommend running it immediately
 after the Dockerfile fix lands.
+
+## Failure-mode contract: enqueue path
+
+The Inngest function itself already has a graceful-degrade path inside
+`run-tests` (returns one synthetic failed step when browser-use is
+unreachable). The **enqueue** path needed the same contract — without
+it, an inngest container crash leaves `uxVerificationStatus` permanently
+`null` and the review→ship gate denies for the silent reason
+"UX verification has not run yet."
+
+As of the 2026-05-13 BI-E9CD1B92 lifecycle incident,
+`queueBuildReviewVerification` now mirrors the function's degrade
+pattern: if `inngest.send()` throws, the trigger persists one synthetic
+`UxTestStep` (`step: "Queue verification job"`,
+`error: "Inngest queue unavailable: <msg>"`) via
+`saveBuildArtifactRevisionWithDb`, flips `uxVerificationStatus` to
+`failed`, and emits `verification:complete { status: "failed" }` on the
+agent event bus. Result: the gate denies for a *legible* reason that
+surfaces in the Review panel, and `requeueBuildReviewVerification` is
+the retry path after infra is restored.
+
+Compose-level companion change: the `inngest` service gained
+`restart: unless-stopped` (matching `redis`, `postgres`, `portal`) so a
+single crash no longer leaves the queue permanently dead. The earlier
+`INNGEST_SERVE_HOST` env var was also renamed to
+`INNGEST_SERVE_ORIGIN` to clear the SDK deprecation warning.
