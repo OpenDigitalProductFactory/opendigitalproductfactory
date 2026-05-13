@@ -1,7 +1,7 @@
 ---
 title: Persistent product teams replace project teams; rolling investment replaces annual budgets
 pageKind: stance
-status: draft
+status: published
 abstract: Projects are time-bound and optimise for delivery deadlines rather than long-term sustainability. The fix is teams that persist with the product and money that flows where outcomes accrue.
 sources:
   - articles/why-product-centric-approach-needed

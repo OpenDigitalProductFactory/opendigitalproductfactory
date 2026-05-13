@@ -1,7 +1,7 @@
 ---
 title: Value Stream
 pageKind: entity
-status: draft
+status: published
 abstract: One of seven cross-cutting flows in IT4IT v3 — Evaluate, Explore, Integrate, Deploy, Release, Operate, Consume. The seam where ITIL, DevOps, SAFe, and TOGAF plug into the Digital Product spine.
 sources:
   - frameworks/it4it-v3
@@ -41,4 +41,4 @@ A new analytics application proposal moves Evaluate → Explore → Integrate �
 
 - Stance: `[[stances/it4it-is-substrate]]`
 - Entity: `[[entities/it4it]]`
-- Raw source: `[[raw-sources/frameworks/it4it-v3]]`
+- Raw source: `[raw-sources/frameworks/it4it-v3](../../raw-sources/frameworks/it4it-v3.md)`

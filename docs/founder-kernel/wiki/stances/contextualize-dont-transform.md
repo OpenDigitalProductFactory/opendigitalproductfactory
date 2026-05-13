@@ -1,7 +1,7 @@
 ---
 title: Contextualize, don't transform — map first, evolve second
 pageKind: stance
-status: draft
+status: published
 abstract: Standards adoption that frames itself as transformation gets rejected. Frame it as contextualization — "how is our operating model the same or different from the standard?" — and adoption follows.
 sources:
   - articles/open-group-2017-managing-business-of-it
@@ -44,4 +44,4 @@ The same framing applies to every cross-framework adoption I&#39;ve led since.
 
 - Stance: `[[stances/it4it-is-substrate]]` — the standard most often being contextualized.
 - Entity: `[[entities/it4it]]`
-- Raw source: `[[raw-sources/articles/open-group-2017-managing-business-of-it]]`
+- Raw source: `[raw-sources/articles/open-group-2017-managing-business-of-it](../../raw-sources/articles/open-group-2017-managing-business-of-it.md)`
