@@ -1,7 +1,7 @@
 ---
 title: IT4IT
 pageKind: entity
-status: draft
+status: published
 abstract: The Open Group's reference architecture for managing the business of IT — a hub of seven value streams that integrate ITIL, COBIT, TOGAF, DevOps, and SAFe.
 sources:
   - frameworks/it4it-v3
@@ -37,4 +37,4 @@ A new application proposal moves through Evaluate (does it fit the portfolio str
 
 - Stance: `[[stances/it4it-is-substrate]]`
 - Heuristic: `[[heuristics/pitch-simple-adjust-per-audience]]` — how to introduce IT4IT to executives.
-- Raw source: `[[raw-sources/frameworks/it4it-v3]]`
+- Raw source: `[raw-sources/frameworks/it4it-v3](../../raw-sources/frameworks/it4it-v3.md)`

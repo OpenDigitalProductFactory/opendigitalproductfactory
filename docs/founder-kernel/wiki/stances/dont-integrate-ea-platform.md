@@ -1,7 +1,7 @@
 ---
 title: Don't integrate a third-party EA platform with ServiceNow — consolidate on one data model
 pageKind: stance
-status: draft
+status: published
 abstract: EA-platform-to-CMDB integrations go through Independent → Honeymoon → Ugly Reckoning. Pick one platform and one canonical data model (CSDM). The cost of consolidation is far less than the cost of the integration failing slowly.
 sources:
   - articles/think-twice-ea-platform-servicenow
@@ -46,4 +46,4 @@ The alternative is consolidation. Pick one platform and accept that you&#39;ll l
 - Stance: `[[stances/trust-the-cmdb-or-rebuild-it]]` — why consolidation only works if the CMDB is trustworthy.
 - Entity: `[[entities/csdm]]`
 - Entity: `[[entities/portfolio]]`
-- Related: `[[raw-sources/articles/sibling-portfolios]]` — the APM/SPM unification case study.
+- Related: `[raw-sources/articles/sibling-portfolios](../../raw-sources/articles/sibling-portfolios.md)` — the APM/SPM unification case study.
