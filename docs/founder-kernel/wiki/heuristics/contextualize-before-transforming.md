@@ -1,7 +1,7 @@
 ---
 title: Contextualize before transforming
 pageKind: heuristic
-status: draft
+status: published
 abstract: When adopting a standard, first map the existing operating model onto the standard's structure. Adoption follows mapping; transformation follows adoption.
 sources:
   - articles/open-group-2017-managing-business-of-it

@@ -1,7 +1,7 @@
 ---
 title: Trust the CMDB or rebuild it on the three pillars
 pageKind: stance
-status: draft
+status: published
 abstract: Most organisations have a CMDB; very few actually trust it. Trust is built through Ingestion (auto-populate), Insight (actually use the data), and Governance & Health (people and process). If any pillar is missing, the CMDB is lying to you.
 sources:
   - frameworks/csdm
@@ -47,4 +47,4 @@ The ROI conversation that lands with executives is tool consolidation: organisat
 
 - Entity: `[[entities/csdm]]`
 - Stance: `[[stances/dont-integrate-ea-platform]]` — why one trusted CMDB beats two integrated ones.
-- Raw source: `[[raw-sources/frameworks/csdm]]`
+- Raw source: `[raw-sources/frameworks/csdm](../../raw-sources/frameworks/csdm.md)`

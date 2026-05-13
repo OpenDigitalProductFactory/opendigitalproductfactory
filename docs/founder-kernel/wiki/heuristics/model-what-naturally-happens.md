@@ -1,7 +1,7 @@
 ---
 title: Model what naturally happens — don't build a data lake
 pageKind: heuristic
-status: draft
+status: published
 abstract: A canonical data model that connects the relationships that already exist beats a federated data lake that aggregates everything centrally.
 sources:
   - frameworks/csdm

@@ -1,7 +1,7 @@
 ---
 title: Find at least one champion
 pageKind: heuristic
-status: draft
+status: published
 abstract: Standards adoption stalls without an internal evangelist. Hand out the physical reference book in executive sessions and watch who engages — those become the champions.
 sources:
   - articles/open-group-2017-managing-business-of-it

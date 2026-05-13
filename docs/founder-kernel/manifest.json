@@ -1,9 +1,9 @@
 {
-  "kernelVersion": "0.2.0-draft",
+  "kernelVersion": "0.2.0",
   "schemaVersion": "0.2.0",
   "pageCount": 19,
   "sourceCount": 10,
   "embeddingModel": null,
   "builtAt": null,
-  "description": "DPF Founder Kernel — Mark Bodman's research, articles, and platform thinking, captured as a Karpathy-style wiki. The 0.2.0-draft cut was synthesised from Mark's public corpus (LinkedIn long-form, Open Group W205 + IT4IT v3 + DPROM, BriefingsDirect, Architecture & Governance Magazine, ServiceNow community blogs, CSDM v5). Every page ships status:draft pending Mark's review. Schema 0.2.0 adds the `principle` page kind (tier + decision vector + applies-to + public-classification metadata) — see ../superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md and ./SCHEMA.md `principle` section."
+  "description": "DPF Founder Kernel — Mark Bodman's research, articles, and platform thinking, captured as a Karpathy-style wiki. The 0.2.0 cut was synthesised from Mark's public corpus (LinkedIn long-form, Open Group W205 + IT4IT v3 + DPROM, BriefingsDirect, Architecture & Governance Magazine, ServiceNow community blogs, CSDM v5) and published on Mark's behalf for agent retrieval. Schema 0.2.0 adds the `principle` page kind (tier + decision vector + applies-to + public-classification metadata) — see ../superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md and ./SCHEMA.md `principle` section."
 }
