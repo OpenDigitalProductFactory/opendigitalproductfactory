@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockDiscoveryRunFindUnique } = vi.hoisted(() => ({
+const { mockResolveAuth, mockDiscoveryRunFindUnique, mockPersistSubmittedDiscoveryRun } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockDiscoveryRunFindUnique: vi.fn(),
+  mockPersistSubmittedDiscoveryRun: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/edge-node-token", () => ({
@@ -15,7 +16,22 @@ vi.mock("@dpf/db", () => ({
       findUnique: mockDiscoveryRunFindUnique,
     },
   },
+  persistSubmittedDiscoveryRun: mockPersistSubmittedDiscoveryRun,
 }));
+
+// Default persistence summary used when persistSubmittedDiscoveryRun isn't
+// overridden per-test. Mirrors the DiscoveryPersistenceSummary type from
+// @dpf/db's discovery-sync.ts.
+const DEFAULT_PERSIST_SUMMARY = {
+  runId: "run_db_new_1",
+  createdEntities: 1,
+  updatedEntities: 0,
+  staleEntities: 0,
+  createdRelationships: 0,
+  updatedRelationships: 0,
+  staleRelationships: 0,
+  createdIssues: 0,
+};
 
 import { POST } from "./route";
 import { setToolExecutionCreateOverride } from "@/lib/edge-node/audit";
@@ -74,9 +90,12 @@ const auditCalls: Array<Record<string, unknown>> = [];
 beforeEach(() => {
   vi.resetAllMocks();
   // Default: no prior run exists, so the idempotency lookup returns null
-  // and the route falls through to the 202 stub branch. Tests that need
+  // and the route falls through to persist a new run. Tests that need
   // the idempotent-replay path override this per-test.
   mockDiscoveryRunFindUnique.mockResolvedValue(null);
+  // Default: persistence succeeds with a synthetic summary. Tests that
+  // need failure behavior override this per-test.
+  mockPersistSubmittedDiscoveryRun.mockResolvedValue(DEFAULT_PERSIST_SUMMARY);
   auditCalls.length = 0;
   setToolExecutionCreateOverride(async (data) => {
     auditCalls.push(data);
@@ -185,19 +204,30 @@ describe("POST /api/v1/edge/discovery-runs — body validation", () => {
   });
 });
 
-describe("POST /api/v1/edge/discovery-runs — happy path (A4 not yet wired)", () => {
+describe("POST /api/v1/edge/discovery-runs — happy path (persists)", () => {
   beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
 
-  it("returns 202 with persistencePending:true (stub state)", async () => {
+  it("returns 201 with the persistence summary on first-time submission", async () => {
     const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.accepted).toBe(true);
-    expect(body.persistencePending).toBe(true);
+    expect(body.runId).toBe("run_db_new_1");
     expect(body.runKey).toBe("run_a1b2c3");
     expect(body.itemCount).toBe(1);
     expect(body.relationshipCount).toBe(0);
+    expect(body.persisted).toEqual({
+      createdEntities: 1,
+      updatedEntities: 0,
+      staleEntities: 0,
+      createdRelationships: 0,
+      updatedRelationships: 0,
+      staleRelationships: 0,
+      createdIssues: 0,
+    });
+    // Old 202-stub field must NOT appear on the persisted response.
+    expect(body.persistencePending).toBeUndefined();
   });
 
   it("counts items + relationships from the parsed envelope", async () => {
@@ -226,10 +256,148 @@ describe("POST /api/v1/edge/discovery-runs — happy path (A4 not yet wired)", (
         { Authorization: "Bearer x" },
       ),
     );
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.itemCount).toBe(2);
     expect(body.relationshipCount).toBe(1);
+  });
+
+  it("calls persistSubmittedDiscoveryRun with the correctly-mapped CollectorOutput shape", async () => {
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(mockPersistSubmittedDiscoveryRun).toHaveBeenCalledOnce();
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.edgeNodeId).toBe("edgenode_cuid_1");
+    expect(input.nodeId).toBe("edge_abc");
+    expect(input.runKey).toBe("run_a1b2c3");
+    expect(input.submittedOutput.items).toEqual([
+      {
+        sourceKind: "edge_node",
+        itemType: "host",
+        name: "edge-test",
+        externalRef: "host:linux:abcdef",
+        attributes: { kernel: "6.5.0" },
+      },
+    ]);
+    expect(input.submittedOutput.relationships).toEqual([]);
+    expect(input.submittedOutput.warnings).toEqual([]);
+  });
+
+  it("maps wire `rawData` to attributes and `observedKey` to externalRef per item", async () => {
+    await POST(
+      makeReq(
+        {
+          ...VALID_BODY,
+          items: [
+            {
+              observedKey: "container:abc123",
+              itemType: "container",
+              name: "nginx",
+              sourcePath: "/var/run/docker.sock",
+              confidence: 0.92,
+              rawData: { image: "nginx:1.27", ports: ["80/tcp"] },
+            },
+          ],
+        },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.submittedOutput.items[0]).toEqual({
+      sourceKind: "edge_node",
+      itemType: "container",
+      name: "nginx",
+      externalRef: "container:abc123",
+      sourcePath: "/var/run/docker.sock",
+      confidence: 0.92,
+      attributes: { image: "nginx:1.27", ports: ["80/tcp"] },
+    });
+  });
+
+  it("maps relationships via fromObservedKey / toObservedKey → fromExternalRef / toExternalRef", async () => {
+    await POST(
+      makeReq(
+        {
+          ...VALID_BODY,
+          relationships: [
+            {
+              fromObservedKey: "host:a",
+              toObservedKey: "host:b",
+              relationshipType: "peers_with",
+              rawData: { latencyMs: 3 },
+            },
+          ],
+        },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.submittedOutput.relationships[0]).toEqual({
+      sourceKind: "edge_node",
+      relationshipType: "peers_with",
+      fromExternalRef: "host:a",
+      toExternalRef: "host:b",
+      attributes: { latencyMs: 3 },
+    });
+  });
+
+  it("forwards envelope `warnings` to the CollectorOutput", async () => {
+    await POST(
+      makeReq(
+        { ...VALID_BODY, warnings: ["nmap output truncated"] },
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const [, input] = mockPersistSubmittedDiscoveryRun.mock.calls[0]!;
+    expect(input.submittedOutput.warnings).toEqual(["nmap output truncated"]);
+  });
+
+  it("returns 500 persistence_failed when persistSubmittedDiscoveryRun throws", async () => {
+    mockPersistSubmittedDiscoveryRun.mockRejectedValue(
+      new Error("Postgres connection refused"),
+    );
+    const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("persistence_failed");
+    // The audit row captures the underlying error; the client response
+    // does not leak it.
+    expect(JSON.stringify(body)).not.toContain("Postgres connection refused");
+  });
+
+  it("writes a persistence_failed audit row on 500 carrying the redacted error", async () => {
+    mockPersistSubmittedDiscoveryRun.mockRejectedValue(
+      new Error("Postgres connection refused"),
+    );
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect((row.result as { status: number }).status).toBe(500);
+    expect((row.result as { error: string }).error).toBe("persistence_failed");
+    const summary = row.parameters as { summary: { errorMessage: string } };
+    expect(summary.summary.errorMessage).toBe("Postgres connection refused");
+  });
+
+  it("writes a 201 success audit row with persistence counters", async () => {
+    mockPersistSubmittedDiscoveryRun.mockResolvedValue({
+      ...DEFAULT_PERSIST_SUMMARY,
+      runId: "run_db_42",
+      createdEntities: 3,
+      createdRelationships: 2,
+    });
+    await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
+    const row = auditCalls[0]!;
+    expect(row.success).toBe(true);
+    expect((row.result as { status: number }).status).toBe(201);
+    const summary = (row.parameters as {
+      summary: {
+        runId: string;
+        createdEntities: number;
+        createdRelationships: number;
+      };
+    }).summary;
+    expect(summary.runId).toBe("run_db_42");
+    expect(summary.createdEntities).toBe(3);
+    expect(summary.createdRelationships).toBe(2);
   });
 });
 
@@ -274,7 +442,8 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
         { Authorization: "Bearer x" },
       ),
     );
-    expect(res.status).toBe(202);
+    // 201 now that persistence is wired (was 202 stub before this PR).
+    expect(res.status).toBe(201);
   });
 
   it("writes a stale_observation audit row at 400 (with skew + observedAt in summary)", async () => {
@@ -339,13 +508,16 @@ describe("POST /api/v1/edge/discovery-runs — (edgeNodeId, runKey) idempotency"
     });
   });
 
-  it("falls through to 202 stub when no prior run exists for (edgeNodeId, runKey)", async () => {
+  it("falls through to persist a new run when no prior exists for (edgeNodeId, runKey)", async () => {
     mockDiscoveryRunFindUnique.mockResolvedValue(null);
     const res = await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.idempotentReplay).toBeUndefined();
-    expect(body.persistencePending).toBe(true);
+    expect(body.persisted).toBeDefined();
+    expect(body.runId).toBe("run_db_new_1");
+    // The pre-#513-merge stub field must not appear on persisted responses.
+    expect(body.persistencePending).toBeUndefined();
   });
 
   it("preserves null completedAt for an in-flight prior run", async () => {
@@ -431,30 +603,33 @@ describe("POST /api/v1/edge/discovery-runs — audit", () => {
     expect((row.parameters as { edgeNodeId: string }).edgeNodeId).toBe("edgenode_cuid_1");
   });
 
-  it("writes a success audit row on 202 with envelope summary fields", async () => {
+  it("writes a success audit row on 201 with envelope summary fields", async () => {
     mockResolveAuth.mockResolvedValue(AUTHED);
     await POST(makeReq(VALID_BODY, { Authorization: "Bearer x" }));
     const row = auditCalls[0]!;
     expect(row.success).toBe(true);
-    expect((row.result as { status: number }).status).toBe(202);
+    expect((row.result as { status: number }).status).toBe(201);
     const summary = (row.parameters as {
       summary: {
         runKey: string;
+        runId: string;
         agentMode: string;
         agentVersion: string;
         itemCount: number;
         relationshipCount: number;
         capabilityCount: number;
-        persistencePending: boolean;
+        createdEntities: number;
       };
     }).summary;
     expect(summary.runKey).toBe("run_a1b2c3");
+    expect(summary.runId).toBe("run_db_new_1");
     expect(summary.agentMode).toBe("container-host");
     expect(summary.agentVersion).toBe("0.1.0");
     expect(summary.itemCount).toBe(1);
     expect(summary.relationshipCount).toBe(0);
     expect(summary.capabilityCount).toBe(1);
-    expect(summary.persistencePending).toBe(true);
+    // Persistence counters now in the audit summary (was persistencePending:true before this PR).
+    expect(summary.createdEntities).toBe(1);
   });
 
   it("audit summary tracks larger envelopes correctly", async () => {

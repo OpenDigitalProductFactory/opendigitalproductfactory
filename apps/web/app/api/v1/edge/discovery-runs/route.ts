@@ -1,17 +1,12 @@
 // POST /api/v1/edge/discovery-runs
 //
 // Edge Node submits a prepared discovery-run envelope. The Authority
-// validates auth + envelope shape, runs the idempotency check from
-// the spec's REST ingestion controls, and forwards to
-// `persistSubmittedDiscoveryRun` for normalization + persistence.
-//
-// Phase 0 status: this route now enforces (edgeNodeId, runKey)
-// idempotency and the freshness window on observedAt. The actual
-// persistence wiring (calling persistSubmittedDiscoveryRun with the
-// normalized envelope) is still pending — the route returns 202
-// Accepted with `{ persistencePending: true }` after the gates pass,
-// so the Edge Node can retry later or the test harness can validate
-// the contract is wired.
+// runs (in order) auth → body schema → freshness window →
+// (edgeNodeId, runKey) idempotency lookup → persist via
+// `persistSubmittedDiscoveryRun` (normalize + dedupe + Postgres
+// upsert + Neo4j projection). Returns 201 with the persistence
+// summary on first-time submission, 200 with the prior snapshot on
+// idempotent replay, or 4xx/5xx with an audit-logged failure.
 //
 // Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
 //   § Ingestion contract: submit observations, don't trigger sweeps
@@ -20,7 +15,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { prisma } from "@dpf/db";
+import { persistSubmittedDiscoveryRun, prisma } from "@dpf/db";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
@@ -260,11 +255,79 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // })`. Until the persistence pipeline is fully wired (it needs the
-  // normalize → infer → persist chain hooked up against the route's
-  // input shape), the route accepts the envelope, exercises the
-  // idempotency + freshness gates, audits, and returns 202 so the
-  // contract is testable end-to-end.
+  // Persistence pipeline: map the wire envelope to the CollectorOutput
+  // shape that persistSubmittedDiscoveryRun consumes, then normalize +
+  // dedupe + write to Postgres + project to Neo4j. The submitted
+  // observations are tagged sourceKind="edge_node" so admins can
+  // distinguish them from portal-resident collector output.
+  const submittedOutput = {
+    items: parsed.data.items.map((it) => ({
+      sourceKind: "edge_node" as const,
+      itemType: it.itemType,
+      name: it.name,
+      externalRef: it.observedKey,
+      ...(it.sourcePath != null ? { sourcePath: it.sourcePath } : {}),
+      ...(it.confidence !== undefined ? { confidence: it.confidence } : {}),
+      attributes: it.rawData,
+    })),
+    relationships: (parsed.data.relationships ?? []).map((r) => ({
+      sourceKind: "edge_node" as const,
+      relationshipType: r.relationshipType,
+      fromExternalRef: r.fromObservedKey,
+      toExternalRef: r.toObservedKey,
+      attributes: r.rawData ?? {},
+    })),
+    warnings: parsed.data.warnings ?? [],
+  };
+
+  let summary;
+  try {
+    // `prisma as never` matches the established pattern at the bootstrap
+    // ingestion sites (apps/web/app/(shell)/layout.tsx,
+    // apps/web/app/api/v1/discovery/sweep/route.ts). The real prisma
+    // client is structurally compatible with the DiscoverySyncClient
+    // surface; the strict types don't match at compile time.
+    summary = await persistSubmittedDiscoveryRun(prisma as never, {
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      runKey: parsed.data.runKey,
+      submittedOutput,
+    });
+  } catch (err) {
+    // Persistence failures: audit at 500 with the redacted error.
+    // Client gets a generic message so internal failure modes don't
+    // leak (the audit row carries the detail for operator review).
+    const errMsg = err instanceof Error ? err.message : "unknown persistence error";
+    await writeEdgeNodeAudit({
+      route: "edge.discovery_runs.submit",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 500,
+      success: false,
+      error: "persistence_failed",
+      summary: {
+        runKey: parsed.data.runKey,
+        agentMode: parsed.data.agentMode,
+        agentVersion: parsed.data.agentVersion,
+        itemCount: parsed.data.items.length,
+        relationshipCount: parsed.data.relationships?.length ?? 0,
+        // The audit row keeps the detail; the client response masks it.
+        errorMessage: errMsg,
+      },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "persistence_failed",
+        message: "submission accepted but persistence failed; operator audit captured the detail",
+      },
+      { status: 500 },
+    );
+  }
+
   await writeEdgeNodeAudit({
     route: "edge.discovery_runs.submit",
     routeContext: ROUTE_CONTEXT,
@@ -272,29 +335,42 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     edgeNodeId: authResult.edgeNodeRowId,
     nodeId: authResult.nodeId,
     principalId: null,
-    status: 202,
+    status: 201,
     success: true,
     summary: {
       runKey: parsed.data.runKey,
+      runId: summary.runId,
       agentMode: parsed.data.agentMode,
       agentVersion: parsed.data.agentVersion,
       itemCount: parsed.data.items.length,
       relationshipCount: parsed.data.relationships?.length ?? 0,
       capabilityCount: parsed.data.capabilities.length,
-      persistencePending: true,
+      createdEntities: summary.createdEntities,
+      updatedEntities: summary.updatedEntities,
+      createdRelationships: summary.createdRelationships,
+      updatedRelationships: summary.updatedRelationships,
+      createdIssues: summary.createdIssues,
     },
   });
   return NextResponse.json(
     {
       ok: true,
       accepted: true,
+      runId: summary.runId,
       runKey: parsed.data.runKey,
       itemCount: parsed.data.items.length,
       relationshipCount: parsed.data.relationships?.length ?? 0,
-      persistencePending: true,
-      note: "envelope validated, auth/freshness/idempotency gates passed; full persistence pipeline wiring is a follow-up",
+      persisted: {
+        createdEntities: summary.createdEntities,
+        updatedEntities: summary.updatedEntities,
+        staleEntities: summary.staleEntities,
+        createdRelationships: summary.createdRelationships,
+        updatedRelationships: summary.updatedRelationships,
+        staleRelationships: summary.staleRelationships,
+        createdIssues: summary.createdIssues,
+      },
     },
-    { status: 202 },
+    { status: 201 },
   );
 }
 
