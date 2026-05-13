@@ -2206,15 +2206,29 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── EP-WIKI-001 Phase 3b2: Wiki Query ──────────────────────────────────────
   {
     name: "wiki_query",
-    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, and a content preview. Prefer this over web speculation.",
+    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, principle, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, what governance principles apply, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, content preview, and (for principle pages) tier + applies-to + dimensions + public-classification metadata. Prefer this over web speculation.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string", description: "What to search for. Natural language; the wiki is embedded for semantic similarity." },
         pageKind: {
           type: "string",
-          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic"],
-          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'entity' for definitions; 'decision' for DEC-* records.",
+          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic", "principle"],
+          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'principle' for governance rules with tier and applies-to; 'entity' for definitions; 'decision' for DEC-* records.",
+        },
+        tier: {
+          type: "string",
+          enum: ["commandment", "core", "contextual"],
+          description: "When pageKind=principle: filter to one tier. Commandment = non-negotiable doctrine; core = strong defaults; contextual = narrow operational rules.",
+        },
+        appliesTo: {
+          type: "string",
+          enum: ["in_platform_coworker", "external_coding_agent", "human"],
+          description: "When pageKind=principle: filter to principles that apply to this population.",
+        },
+        publicOnly: {
+          type: "boolean",
+          description: "When pageKind=principle: only return principles classified as public (safe to surface to customers / contributors).",
         },
         limit: { type: "number", description: "Max results (default 5)." },
       },
@@ -8907,20 +8921,39 @@ export async function executeTool(
       const org = await prisma.organization
         .findFirst({ select: { id: true } })
         .catch(() => null);
-      const results = await searchWikiPages({
+      // Translate the ergonomic public schema fields (tier, appliesTo,
+      // publicOnly) into canonical principle filter args. The public MCP
+      // surface uses the short names so authors don't have to remember
+      // "principleTier" / "principleAppliesTo" / "principlePublic"; the
+      // canonical names live at the storage and retrieval layer per the
+      // chief-architect review applied to the implementation plan.
+      const searchArgs: Parameters<typeof searchWikiPages>[0] = {
         query: String(params["query"] ?? ""),
         organizationId: org?.id ?? null,
         pageKind: typeof params["pageKind"] === "string" ? params["pageKind"] : undefined,
         limit: typeof params["limit"] === "number" ? params["limit"] : 5,
-      });
+      };
+      if (typeof params["tier"] === "string") {
+        searchArgs.principleTier = params["tier"];
+      }
+      if (typeof params["appliesTo"] === "string") {
+        searchArgs.principleAppliesTo = params["appliesTo"];
+      }
+      if (typeof params["publicOnly"] === "boolean") {
+        searchArgs.principlePublic = params["publicOnly"];
+      }
+      const results = await searchWikiPages(searchArgs);
       if (results.length === 0) {
         return { success: true, message: "No matching wiki pages found.", data: { results: [] } };
       }
       const summary = results
-        .map(
-          (r) =>
-            `${r.slug} (${r.pageKind}, ${r.source}) — ${r.title} (${Math.round(r.score * 100)}% match)`,
-        )
+        .map((r) => {
+          const tierFragment =
+            r.pageKind === "principle" && r.principleTier
+              ? `, ${r.principleTier}`
+              : "";
+          return `${r.slug} (${r.pageKind}, ${r.source}${tierFragment}) — ${r.title} (${Math.round(r.score * 100)}% match)`;
+        })
         .join("\n");
       return { success: true, message: summary, data: { results } };
     }
