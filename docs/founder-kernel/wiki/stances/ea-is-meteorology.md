@@ -1,7 +1,7 @@
 ---
 title: EA is meteorology — provide forecasts, not raw models
 pageKind: stance
-status: draft
+status: published
 abstract: Architects should be like meteorologists — produce forecasts and recommended actions, not exposed models. The deliverable to leadership is the guidance, not the diagram.
 sources:
   - articles/possible-futures-enterprise-architecture
@@ -47,4 +47,4 @@ This is also the philosophical frame behind DPF&#39;s wiki kernel. The platform 
 ## See also
 
 - Parent context: `[[entities/it4it]]` provides the substrate; this stance is about how to deploy the substrate to leadership.
-- Raw source: `[[raw-sources/articles/possible-futures-enterprise-architecture]]`
+- Raw source: `[raw-sources/articles/possible-futures-enterprise-architecture](../../raw-sources/articles/possible-futures-enterprise-architecture.md)`

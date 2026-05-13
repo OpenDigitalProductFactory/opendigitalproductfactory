@@ -1,7 +1,7 @@
 ---
 title: Pitch simple, adjust per audience
 pageKind: heuristic
-status: draft
+status: published
 abstract: Lead with the simplest framing the audience can ingest. Adjust language per audience — "framework for managing IT," "operating model," "reference architecture." Never lead with the model itself.
 sources:
   - articles/open-group-2017-managing-business-of-it
