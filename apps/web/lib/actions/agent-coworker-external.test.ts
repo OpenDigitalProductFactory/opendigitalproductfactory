@@ -148,6 +148,7 @@ vi.mock("@dpf/db", () => ({
 import { auth } from "@/lib/auth";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { routeAndCall } from "@/lib/routed-inference";
+import { classifyTask } from "@/lib/task-classifier";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { prisma } from "@dpf/db";
@@ -156,6 +157,7 @@ import { sendMessage } from "./agent-coworker";
 const mockAuth = auth as ReturnType<typeof vi.fn>;
 const mockResolveAgentForRoute = resolveAgentForRouteWithPrompts as ReturnType<typeof vi.fn>;
 const mockRouteAndCall = routeAndCall as ReturnType<typeof vi.fn>;
+const mockClassifyTask = classifyTask as ReturnType<typeof vi.fn>;
 const mockGetAvailableTools = getAvailableTools as ReturnType<typeof vi.fn>;
 const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
@@ -197,6 +199,13 @@ describe("agent coworker external access", () => {
     });
     mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
     mockPrisma.toolExecution.create.mockResolvedValue({});
+    mockClassifyTask.mockReturnValue({
+      taskType: "conversation",
+      confidence: 0.8,
+      requiresCodeExecution: false,
+      requiresWebSearch: false,
+      requiresComputerUse: false,
+    });
     mockGovernedExecuteTool.mockImplementation(async () => {
       return {
         success: true,
@@ -255,6 +264,128 @@ describe("agent coworker external access", () => {
         isSuperuser: false,
       },
       expect.objectContaining({ externalAccessEnabled: true }),
+    );
+  });
+
+  it("adds shared External Access request guidance and audit when web tools are withheld", async () => {
+    mockClassifyTask.mockReturnValue({
+      taskType: "web-search",
+      confidence: 0.8,
+      requiresWebSearch: true,
+      requiresCodeExecution: false,
+      requiresComputerUse: false,
+    });
+    mockGetAvailableTools.mockImplementation((_userContext, options) =>
+      options?.externalAccessEnabled
+        ? [
+            {
+              name: "search_public_web",
+              description: "Search the public web",
+              inputSchema: {},
+              requiredCapability: null,
+              requiresExternalAccess: true,
+              executionMode: "immediate",
+              sideEffect: false,
+            },
+            {
+              name: "fetch_public_website",
+              description: "Fetch a public website",
+              inputSchema: {},
+              requiredCapability: null,
+              requiresExternalAccess: true,
+              executionMode: "immediate",
+              sideEffect: false,
+            },
+          ]
+        : [],
+    );
+    mockRouteAndCall.mockResolvedValue({
+      content: "External Access is off. Enable it so I can verify official sources.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "Look up current sales tax authority guidance.",
+      routeContext: "/finance",
+      externalAccessEnabled: false,
+    });
+
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("EXTERNAL ACCESS DISABLED");
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("search_public_web");
+    expect(mockRouteAndCall.mock.calls[0][1]).toContain("ask the employee to enable External Access");
+    expect(mockPrisma.toolExecution.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolName: "external_access_permission_request",
+          executionMode: "permission",
+          routeContext: "/finance",
+          success: true,
+          parameters: expect.objectContaining({
+            requestedTools: ["search_public_web", "fetch_public_website"],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("audits External Access approval when a web task continues with access enabled", async () => {
+    mockClassifyTask.mockReturnValue({
+      taskType: "web-search",
+      confidence: 0.8,
+      requiresWebSearch: true,
+      requiresCodeExecution: false,
+      requiresComputerUse: false,
+    });
+    mockGetAvailableTools.mockReturnValue([
+      {
+        name: "search_public_web",
+        description: "Search the public web",
+        inputSchema: {},
+        requiredCapability: null,
+        requiresExternalAccess: true,
+        executionMode: "immediate",
+        sideEffect: false,
+      },
+    ]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "I checked official sources.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "External Access is enabled. Continue the tax authority research.",
+      routeContext: "/finance",
+      externalAccessEnabled: true,
+    });
+
+    expect(mockPrisma.toolExecution.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolName: "external_access_permission_approval",
+          executionMode: "permission",
+          routeContext: "/finance",
+          success: true,
+          parameters: expect.objectContaining({
+            requestedTools: ["search_public_web"],
+          }),
+        }),
+      }),
     );
   });
 

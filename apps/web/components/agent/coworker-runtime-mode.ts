@@ -30,7 +30,6 @@ export function resolveCoworkerRuntimeMode(input: Input): Output {
 
   return {
     coworkerMode: input.coworkerMode,
-    externalAccessEnabled:
-      input.coworkerMode === "act" ? true : input.externalAccessEnabled,
+    externalAccessEnabled: input.externalAccessEnabled,
   };
 }
