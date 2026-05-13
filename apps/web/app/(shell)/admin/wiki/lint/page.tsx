@@ -9,6 +9,7 @@ import {
   LintFindingCard,
   type LintFindingRow,
 } from "@/components/wiki/LintFindingCard";
+import { PRINCIPLE_FINDING_KIND_OPTIONS } from "@/lib/wiki/principle-finding-kinds";
 
 export const dynamic = "force-dynamic";
 
@@ -216,6 +217,43 @@ function FilterBar({
                   ? "bg-[var(--dpf-surface-2)] border-[var(--dpf-accent)] text-[var(--dpf-text)]"
                   : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)]"
               }`}
+            >
+              {opt.label}
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* ─── Principle finding-kind chip group ──────────────────────────── */}
+      <div className="flex gap-1 flex-wrap items-center w-full">
+        <span className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mr-1">
+          Principles:
+        </span>
+        <Link
+          key="principle-all"
+          href={hrefWith({ kind: undefined })}
+          className={`px-2 py-1 rounded border ${
+            kindFilter === ""
+              ? "bg-[var(--dpf-surface-2)] border-[var(--dpf-accent)] text-[var(--dpf-text)]"
+              : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)]"
+          }`}
+        >
+          All kinds
+        </Link>
+        {PRINCIPLE_FINDING_KIND_OPTIONS.map((opt) => {
+          const active = opt.value === kindFilter;
+          return (
+            <Link
+              key={opt.value}
+              href={hrefWith({ kind: opt.value })}
+              className={`px-2 py-1 rounded border whitespace-nowrap ${
+                active
+                  ? "bg-[var(--dpf-surface-2)] border-[var(--dpf-accent)] text-[var(--dpf-text)]"
+                  : opt.blocking
+                    ? "border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                    : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)]"
+              }`}
+              title={opt.value}
             >
               {opt.label}
             </Link>
