@@ -1,4 +1,4 @@
-# Principles as a Wiki Kind — Implementation Plan
+# Principles as a Wiki Kind - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Each phase is a separate PR; do not bundle phases.
 
@@ -8,7 +8,8 @@
 | **Spec PR** | [#518](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/518) |
 | **Status** | Phase 0 not started |
 | **Created** | 2026-05-12 |
-| **Branch base for all phases** | `origin/main` (this branch was created off `main` after PR #489 landed; rebase before starting if your local main is older) |
+| **Chief architect review** | Updated 2026-05-12 after repo and live-MCP verification |
+| **Branch base for all phases** | `origin/main`, after Phase -1 verifies whether PR #489 / Principle 9 is present on the implementation base |
 
 **Goal:** Add `principle` as a first-class `WikiPage.pageKind` with tiered taxonomy, explicit signed decision vectors, advisory decision-support tooling, retrieval integration for in-platform coworkers and external MCP agents, and kernel-markdown-driven public docs.
 
@@ -18,7 +19,7 @@
 
 ---
 
-## Build Gate (per `AGENTS.md §5`, applied at the end of every phase)
+## Build Gate (per `AGENTS.md` section 5, applied at the end of every phase)
 
 All four must pass before opening the phase PR:
 
@@ -27,7 +28,7 @@ All four must pass before opening the phase PR:
 3. UX verification — exercise affected portal paths against the running Docker stack (Phase 0 onward whenever UI changes ship).
 4. Migration applies cleanly on a fresh DB — Phase 0 only (later phases are additive constants/lint/MCP/content).
 
-Plus: `git commit -s` on every commit (DCO), positional path args to scope staging (`git add -- <path>`), branch from `origin/main`, run `pnpm --filter web exec vitest run` for the full web suite before pushing (per `feedback_run_full_tests_before_push.md`).
+Plus: `git commit -s` on every commit (DCO), positional path args to scope staging (`git add -- <path>`), branch from `origin/main`, run `git branch --show-current` before committing and abort if on `main` or detached, use pinned `pnpm --filter ...` commands rather than `npx`, and run `pnpm --filter web exec vitest run` for the full web suite before pushing (per `feedback_run_full_tests_before_push.md`).
 
 ---
 
@@ -35,13 +36,48 @@ Plus: `git commit -s` on every commit (DCO), positional path args to scope stagi
 
 20 percent of every phase is reserved for cleanup, deletions, and consistency fixes per `feedback_zero_technical_debt.md`. If a phase implementation surfaces dead constants, duplicated string literals, or stale comments, that work lands inside the same PR — not deferred. Each phase PR description must name what was retired.
 
+This is not optional polish. For this plan the first refactor budget is already allocated: centralize wiki kind/status/principle constants, add the missing kernel-slug uniqueness guard, and remove duplicated principle payload names before any retrieval or decision logic lands.
+
+---
+
+## Chief Architect Corrections
+
+This plan was reviewed against the target worktree and the live DPF MCP planning surface. The following corrections are now part of the implementation contract:
+
+1. **Run Phase -1 before implementation.** Live `search_specs_and_plans` returned no indexed match for this exact principles/wiki work, while open epic `EP-TAK-3F9A21` still owns governed memory, MCP, and observability alignment. Implementers must record whether this work is linked under that epic or whether a new backlog item is needed before Phase 0 starts.
+2. **Do not trust stale branch assumptions.** The target checkout currently contains Principle 9 and the capacity-continuity spec, even though the design document still describes an older eight-principle branch-local state. Phase -1 reconciles that mismatch and updates the spec/plan pair before content seeding.
+3. **Fix the nullable kernel slug uniqueness gap in Phase 0.** `@@unique([organizationId, slug])` does not protect kernel rows where `organizationId IS NULL`. Add a hand-written partial unique index for kernel `WikiPage.slug` in the same schema phase that adds principle fields.
+4. **Use canonical payload names.** Qdrant and MCP metadata use `principleTier`, `principleAppliesTo`, `principleDimensions`, and `principlePublic`. Do not introduce short aliases such as `tier` / `appliesTo` in runtime payloads, and do not add a separate `principleOnly` or `isPrinciple` flag when `pageKind === "principle"` already carries that meaning.
+5. **Keep local memory out of PR scope.** Reviewed memory can inform candidate principles, but private local memory files are not repo artifacts, are not edited by this plan, and are never bulk-imported. Any promoted principle must be rewritten as product-safe kernel content with public/internal classification.
+6. **Treat UI as architecture.** `/wiki?kind=principle`, principle detail pages, admin lint, and decision-ledger rendering must be theme-aware, compact, filterable, and verified in the running portal. Hidden metadata is not a usable governance layer.
+
 ---
 
 ## Cross-Phase Constants (one source of truth)
 
-The following constants live in `packages/db/src/wiki-principles.ts` (created in Phase 0, task 1) and are imported by every consumer in later phases. Never duplicate these.
+The following constants live in `packages/db/src/wiki-taxonomy.ts` (created in Phase 0, task 1) and are imported by seed, lint, MCP schemas, retrieval, and UI. `wiki-store.ts` imports and re-exports these types for compatibility. Never duplicate these string arrays.
 
 ```typescript
+export const WIKI_PAGE_KINDS = [
+  "entity",
+  "summary",
+  "decision",
+  "runbook",
+  "index",
+  "stance",
+  "heuristic",
+  "principle",
+] as const;
+export type WikiPageKind = (typeof WIKI_PAGE_KINDS)[number];
+
+export const WIKI_PAGE_STATUSES = [
+  "draft",
+  "published",
+  "review-needed",
+  "archived",
+] as const;
+export type WikiPageStatus = (typeof WIKI_PAGE_STATUSES)[number];
+
 export const PRINCIPLE_TIERS = ["commandment", "core", "contextual"] as const;
 export type PrincipleTier = (typeof PRINCIPLE_TIERS)[number];
 
@@ -86,11 +122,28 @@ export const PRINCIPLE_DECIDE_DEFAULTS = {
 } as const;
 ```
 
-Reverse-mappings (e.g., dimension index, tier-from-string validator) are added to the same module as needed.
+Reverse-mappings (e.g., dimension index, `isWikiPageKind`, `isPrincipleTier`, `isPrincipleAppliesTo`, `isPrincipleDimension`) are added to the same module as needed.
 
 ---
 
-## Phase 0 — Schema, Constants, and Authoring Contract
+## Phase -1 - Implementation Preflight and Backlog Alignment
+
+**Branch:** same branch as the phase being prepared.
+
+**Objective:** Make sure the implementation base, spec, plan, backlog, and repo truth agree before code changes begin.
+
+- [ ] **Read `AGENTS.md` in the target worktree** and confirm the active branch is not `main` or detached.
+- [ ] **Check worktree state:** `git status --short`. If unrelated changes exist, list them in the PR notes and avoid touching them.
+- [ ] **Query live planning state through DPF MCP:** `search_specs_and_plans` for `principles wiki kind principle_decide`, `list_epics` for open epics, and recommended work under `EP-TAK-3F9A21`. Record the result in the first PR description.
+- [ ] **Reconcile Principle 9 state:** verify whether `docs/architecture/ai-coworker-development-principles.md` contains Principle 9 and whether `docs/superpowers/specs/2026-05-12-ai-capacity-continuity-design.md` exists. If the spec still says "eight branch-local principles" on a branch where nine exist, correct the spec before Phase 3 content seeding.
+- [ ] **Re-check current code anchors:** `WikiPageKind` in `packages/db/src/wiki-store.ts`, `WikiPage` in `schema.prisma`, `searchWikiPages` in `apps/web/lib/wiki/embeddings.ts`, `wiki_query` in `apps/web/lib/mcp-tools.ts`, and external MCP gating in `apps/web/app/api/mcp/v1/route.ts`.
+- [ ] **Decide backlog linkage:** attach the PR to an existing TAK/GAID governed-memory/MCP backlog item if appropriate, or create a narrow new backlog item through MCP. Do not leave the work orphaned from live planning state.
+
+**Exit criteria:** the plan, design spec, target branch, and live backlog reference the same implementation base and principle count.
+
+---
+
+## Phase 0 - Schema, Constants, and Authoring Contract
 
 **Branch:** `feat/principles-batch-0-schema`
 
@@ -98,8 +151,8 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 
 **Files to create:**
 
-- `packages/db/src/wiki-principles.ts`
-- `packages/db/src/wiki-principles.test.ts`
+- `packages/db/src/wiki-taxonomy.ts`
+- `packages/db/src/wiki-taxonomy.test.ts`
 - `packages/db/prisma/migrations/<timestamp>_add_principle_fields_to_wikipage/migration.sql`
 - `docs/founder-kernel/wiki/principles/.gitkeep`
 - `docs/founder-kernel/_templates/principle.template.md`
@@ -107,11 +160,11 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 **Files to modify:**
 
 - `packages/db/prisma/schema.prisma` (extend `WikiPage` model)
-- `packages/db/src/wiki-store.ts` (extend `WikiPageKind` union, principle-aware CRUD)
+- `packages/db/src/wiki-store.ts` (import/re-export taxonomy types, principle-aware CRUD)
 - `packages/db/src/wiki-store.test.ts` (principle CRUD fixtures)
 - `packages/db/src/seed-wiki-kernel.ts` (frontmatter parsing for principle fields)
 - `packages/db/src/seed-wiki-kernel.test.ts` (principle seeding fixtures)
-- `apps/web/lib/wiki/embeddings.ts` (Qdrant payload extension — include `tier`, `appliesTo`, `principleOnly` marker)
+- `apps/web/lib/wiki/embeddings.ts` (Qdrant payload extension - include canonical `principleTier`, `principleAppliesTo`, `principleDimensions`, and `principlePublic` only for principle pages)
 - `apps/web/lib/wiki/embeddings.test.ts`
 - `apps/web/components/wiki/WikiPageKindBadge.tsx` (render `principle` label)
 - `apps/web/components/wiki/WikiPageList.tsx` (group/sort principles by tier when filtered)
@@ -120,34 +173,34 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 - `docs/founder-kernel/AUTHORING.md` (principle authoring rules + folder convention)
 - `docs/founder-kernel/manifest.json` (bump schema version)
 
-### Task 0.1: Author the constants module
+### Task 0.1: Author the taxonomy constants module
 
 **Files:**
-- Create: `packages/db/src/wiki-principles.ts`
-- Test: `packages/db/src/wiki-principles.test.ts`
+- Create: `packages/db/src/wiki-taxonomy.ts`
+- Test: `packages/db/src/wiki-taxonomy.test.ts`
 
-- [ ] **Write failing test:** assertions for `PRINCIPLE_TIERS` length, `PRINCIPLE_DIMENSIONS` matches the spec §10 list verbatim, `PRINCIPLE_TIER_DEFAULT_WEIGHT.commandment === 1.0`, type-narrowing helpers `isPrincipleTier(x)` / `isPrincipleAppliesTo(x)` / `isPrincipleDimension(x)` work for valid and invalid inputs.
-- [ ] **Run test, verify it fails:** `pnpm --filter @dpf/db exec vitest run src/wiki-principles.test.ts` — expect "no module found" or assertion failure.
-- [ ] **Implement the module** with the constants block under "Cross-Phase Constants" above, plus the three `is*` type-narrowing predicates. No external dependencies.
+- [ ] **Write failing test:** assertions for `WIKI_PAGE_KINDS` including `principle` and preserving the existing seven values, `WIKI_PAGE_STATUSES`, `PRINCIPLE_TIERS` length, `PRINCIPLE_DIMENSIONS` matches the spec section 10 list verbatim, `PRINCIPLE_TIER_DEFAULT_WEIGHT.commandment === 1.0`, and type-narrowing helpers `isWikiPageKind(x)` / `isPrincipleTier(x)` / `isPrincipleAppliesTo(x)` / `isPrincipleDimension(x)` work for valid and invalid inputs.
+- [ ] **Run test, verify it fails:** `pnpm --filter @dpf/db exec vitest run src/wiki-taxonomy.test.ts` - expect "no module found" or assertion failure.
+- [ ] **Implement the module** with the constants block under "Cross-Phase Constants" above, plus the type-narrowing predicates. No external dependencies.
 - [ ] **Run test, verify it passes:** same command.
-- [ ] **Commit:** `feat(db): add wiki-principles constants module` with DCO sign-off.
+- [ ] **Commit:** `feat(db): add wiki taxonomy constants module` with DCO sign-off.
 
 ### Task 0.2: Extend `WikiPageKind` type union
 
 **Files:**
-- Modify: `packages/db/src/wiki-store.ts:43` (the `WikiPageKind` declaration)
+- Modify: `packages/db/src/wiki-store.ts:43` (replace the local `WikiPageKind` declaration with imports/re-exports from `wiki-taxonomy.ts`)
 - Modify: `packages/db/src/wiki-store.test.ts`
 
 - [ ] **Write failing test:** `expect(WIKI_PAGE_KINDS).toContain("principle")` and `expect(WIKI_PAGE_KINDS).toHaveLength(8)`. Also test that the existing seven kinds are unchanged.
 - [ ] **Run test, verify it fails.**
-- [ ] **Modify `wiki-store.ts`** to add `"principle"` to the `WikiPageKind` union (or its array constant). Re-export from the same module index.
+- [ ] **Modify `wiki-store.ts`** to import `WikiPageKind` and `WikiPageStatus` from `wiki-taxonomy.ts` and re-export them for existing callers. This is the Phase 0 refactor-budget cleanup that prevents a second enum source from appearing.
 - [ ] **Run test, verify it passes.**
 - [ ] **Commit:** `feat(db): add principle to WikiPageKind union`.
 
 ### Task 0.3: Add Prisma schema fields and migration
 
 **Files:**
-- Modify: `packages/db/prisma/schema.prisma:6500` (the `WikiPage` model)
+- Modify: `packages/db/prisma/schema.prisma` (the `WikiPage` model)
 - Create: `packages/db/prisma/migrations/<timestamp>_add_principle_fields_to_wikipage/migration.sql`
 
 - [ ] **Write failing test in `packages/db/src/wiki-store.test.ts`:** create a `WikiPage` with `pageKind: "principle"`, `principleTier: "commandment"`, `principleDirection: "..."`, `principleDimensionVector: { long_term_maintainability: 1.0 }`, `principleDimensions: ["long_term_maintainability"]`, `principleAppliesTo: ["external_coding_agent"]`. Assert all fields round-trip from DB.
@@ -170,6 +223,15 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 ```
 
 - [ ] **Generate migration:** `pnpm --filter @dpf/db exec prisma migrate dev --name add-principle-fields-to-wikipage --create-only`. Inspect the generated SQL — should be additive `ALTER TABLE WikiPage ADD COLUMN ...` only, no destructive changes.
+- [ ] **Add the kernel slug uniqueness guard in the same migration:** hand-edit the migration to create a partial unique index for kernel rows, because `@@unique([organizationId, slug])` does not prevent duplicate `slug` values when `organizationId IS NULL`.
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS "WikiPage_kernel_slug_key"
+  ON "WikiPage"("slug")
+  WHERE "organizationId" IS NULL;
+```
+
+- [ ] **Add a regression test** that proves two kernel rows with the same slug cannot both be inserted, while an org overlay with the same slug remains legal. This closes a wiki-platform correctness gap discovered during review; it is not principle-specific.
 - [ ] **Apply migration:** `pnpm --filter @dpf/db exec prisma migrate dev`.
 - [ ] **Regenerate Prisma client:** `pnpm --filter @dpf/db exec prisma generate`.
 - [ ] **Run test, verify it passes.**
@@ -193,26 +255,26 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 **Files:**
 - Modify: `packages/db/src/seed-wiki-kernel.ts`
 - Modify: `packages/db/src/seed-wiki-kernel.test.ts`
-- Create (fixture): `packages/db/src/__fixtures__/principle-architecture-over-shortcuts.md`
 
-- [ ] **Write fixture markdown file** matching the principle template (frontmatter has `kind: principle`, `tier: commandment`, `direction:`, `dimensionVector:` block, `appliesTo:` list, `public: false`).
+- [ ] **Refactor for testability if needed:** keep the production default pointed at `docs/founder-kernel`, but allow seed parsing tests to pass a temporary kernel directory or fixture string. Do not create a new ad hoc `__fixtures__` convention unless the package already establishes it.
+- [ ] **Write fixture markdown** matching the principle template (frontmatter has `pageKind: principle`, `principleTier: commandment`, `principleDirection:`, `principleDimensionVector:` block, `principleAppliesTo:` list, `principlePublic: false`). Do not introduce new short aliases. If legacy authoring docs already contain shorter aliases (`tier`, `direction`, `dimensionVector`, `appliesTo`, `public`), map them explicitly to these canonical DB fields in one parser function and test both forms as compatibility only.
 - [ ] **Write failing test:** `seedWikiKernel` reads the fixture, calls `upsertWikiPage`, the resulting row has the correct `principleTier`, `principleDirection`, `principleDimensionVector` (parsed JSON), `principleDimensions` (derived from vector keys), `principleAppliesTo`.
 - [ ] **Run test, verify it fails.**
-- [ ] **Extend the seed walker** to handle the `principle` kind: parse the new frontmatter keys, validate dimension keys against `PRINCIPLE_DIMENSIONS`, validate `tier` and `appliesTo` against their constants, derive `principleDimensions` from `Object.keys(dimensionVector)`, refuse to seed (throw with a clear message) if a dimension is unknown — per `feedback_check_tool_signals.md`, a silent skip on bad frontmatter is the failure mode to avoid.
+- [ ] **Extend the seed walker** to handle the `principle` kind: parse the new frontmatter keys, validate dimension keys against `PRINCIPLE_DIMENSIONS`, validate `principleTier` and `principleAppliesTo` against their constants, derive `principleDimensions` from `Object.keys(principleDimensionVector)`, refuse to seed (throw with a clear message) if a dimension is unknown - per `feedback_check_tool_signals.md`, a silent skip on bad frontmatter is the failure mode to avoid.
 - [ ] **Run test, verify it passes.**
-- [ ] **Add a second test for unknown-dimension rejection:** fixture with `dimensionVector.fictional_axis: 1.0`. Seeder must throw an error mentioning `fictional_axis` and the allowed dimensions list.
+- [ ] **Add a second test for unknown-dimension rejection:** fixture with `principleDimensionVector.fictional_axis: 1.0`. Seeder must throw an error mentioning `fictional_axis` and the allowed dimensions list.
 - [ ] **Run test, verify it passes.**
 - [ ] **Commit:** `feat(db): parse principle frontmatter in seedWikiKernel`.
 
 ### Task 0.6: Qdrant payload extension
 
 **Files:**
-- Modify: `apps/web/lib/wiki/embeddings.ts:56` (the `searchWikiPages` signature stays — only the payload write path changes for principles)
+- Modify: `apps/web/lib/wiki/embeddings.ts` (the `searchWikiPages` signature stays in Phase 0 - only the payload write path changes for principles)
 - Modify: `apps/web/lib/wiki/embeddings.test.ts`
 
-- [ ] **Write failing test:** when a principle page is upserted to Qdrant, its payload includes `tier` and `appliesTo`. Non-principle pages do NOT carry `tier` or `appliesTo` keys at all (absence, not `false` or `null`) — this avoids a backfill of every existing Qdrant payload and keeps the write path purely additive.
+- [ ] **Write failing test:** when a principle page is upserted to Qdrant, its payload includes `principleTier`, `principleAppliesTo`, `principleDimensions`, and `principlePublic`. Non-principle pages do NOT carry those keys at all (absence, not `false` or `null`) - this avoids a backfill of every existing Qdrant payload and keeps the write path purely additive.
 - [ ] **Run test, verify it fails.**
-- [ ] **Modify the Qdrant write helper** in `embeddings.ts` to include `tier` and `appliesTo` only when `pageKind === "principle"`. Other page kinds have their existing payload unchanged. No `isPrinciple` flag — filters check for `pageKind === "principle"` directly.
+- [ ] **Modify the Qdrant write helper** in `embeddings.ts` to include the canonical `principle*` payload keys only when `pageKind === "principle"`. Other page kinds have their existing payload unchanged. No `isPrinciple` or `principleOnly` flag - filters check for `pageKind === "principle"` directly.
 - [ ] **Run test, verify it passes.**
 - [ ] **Commit:** `feat(wiki): add principle-only Qdrant payload keys`.
 
@@ -222,7 +284,7 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 - Modify: `apps/web/components/wiki/WikiPageKindBadge.tsx`
 - Modify (or create): adjacent `.test.tsx`
 
-- [ ] **Write failing test:** rendering with `kind="principle"` produces a badge labeled "Principle" using DPF theme tokens (`bg-[var(--dpf-surface-2)]`, `text-[var(--dpf-text)]`, `border-[var(--dpf-border)]`) — no hardcoded colors per `AGENTS.md §12`.
+- [ ] **Write failing test:** rendering with `pageKind="principle"` produces a badge labeled "Principle" using the existing badge density and DPF theme tokens (`bg-[var(--dpf-surface-2)]`, `text-[var(--dpf-muted)]` or another approved token consistent with nearby badges, `border-[var(--dpf-border)]`) - no hardcoded colors per `AGENTS.md` section 12.
 - [ ] **Run test, verify it fails.**
 - [ ] **Implement** the badge case for `principle`. Keep the props API unchanged.
 - [ ] **Run test, verify it passes.**
@@ -234,7 +296,7 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 - Modify: `apps/web/components/wiki/WikiPageList.tsx`
 - Modify (or create): adjacent `.test.tsx`
 
-- [ ] **Write failing test:** when the `kind="principle"` filter is applied, results are grouped by tier in the order Commandments → Core → Contextual, each group labeled with the tier name.
+- [ ] **Write failing test:** when the `kind="principle"` filter is applied, results are grouped by tier in the order Commandments, Core, Contextual, each group labeled with the tier name.
 - [ ] **Run test, verify it fails.**
 - [ ] **Implement** the grouping logic in `WikiPageList`. Use only theme tokens; long titles must wrap without resizing adjacent rows (per spec §13.1).
 - [ ] **Run test, verify it passes.**
@@ -274,7 +336,7 @@ Reverse-mappings (e.g., dimension index, tier-from-string validator) are added t
 Run on the principles-spec worktree before opening the PR:
 
 ```powershell
-pnpm --filter @dpf/db exec vitest run src/wiki-store.test.ts src/seed-wiki-kernel.test.ts src/wiki-principles.test.ts
+pnpm --filter @dpf/db exec vitest run src/wiki-store.test.ts src/seed-wiki-kernel.test.ts src/wiki-taxonomy.test.ts
 pnpm --filter web exec vitest run lib/wiki/embeddings.test.ts components/wiki
 pnpm --filter web typecheck
 pnpm --filter web build
@@ -326,7 +388,7 @@ pnpm --filter @dpf/db exec prisma migrate status
 
 - [ ] **Write failing test:** a principle page with `principleTier = null` produces a finding with `findingKind = "principle-missing-tier"`, `severity = "error"`, `blocksPublish = true`.
 - [ ] **Run test, verify it fails.**
-- [ ] **Implement** the detector with shared types pulled from `wiki-principles.ts` constants.
+- [ ] **Implement** the detector with shared types pulled from `wiki-taxonomy.ts` constants.
 - [ ] **Run test, verify it passes.**
 - [ ] **Commit:** `feat(wiki-lint): principle-missing-tier detector`.
 
@@ -485,7 +547,7 @@ pnpm --filter web build
 
 **Files to modify:**
 
-- `apps/web/lib/wiki/embeddings.ts:56` (extend `searchWikiPages` with `tier`, `appliesTo` payload filters)
+- `apps/web/lib/wiki/embeddings.ts:56` (extend `searchWikiPages` with `principleTier`, `principleAppliesTo`, and `principlePublic` payload filters)
 - `apps/web/lib/wiki/embeddings.test.ts`
 - `apps/web/lib/wiki/recall.ts:70` (orchestrate the new principle-recall alongside the existing single-search path; principle recall is in addition to existing recall, not a replacement)
 - `apps/web/lib/wiki/recall.test.ts`
@@ -494,17 +556,17 @@ pnpm --filter web build
 - `apps/web/lib/tak/agent-grants.ts:67` (map `principle_decide` to `registry_read`)
 - `apps/web/app/api/mcp/v1/route.ts:167` (no code change expected; verify tools/list exposes the new tools for `registry_read` tokens via test)
 
-### Task 2.1: Extend `searchWikiPages` with `tier` and `appliesTo` filters
+### Task 2.1: Extend `searchWikiPages` with canonical principle filters
 
 **Files:**
 - Modify: `apps/web/lib/wiki/embeddings.ts`
 - Modify: `apps/web/lib/wiki/embeddings.test.ts`
 
-- [ ] **Write failing test:** `searchWikiPages({ query, pageKind: "principle", tier: "commandment", appliesTo: "external_coding_agent" })` returns only matching principles; `appliesTo` filter respects array containment.
+- [ ] **Write failing test:** `searchWikiPages({ query, pageKind: "principle", principleTier: "commandment", principleAppliesTo: "external_coding_agent", principlePublic: true })` returns only matching principles; `principleAppliesTo` filter respects array containment.
 - [ ] **Run test, verify it fails.**
-- [ ] **Extend** `searchWikiPages` to accept optional `tier` and `appliesTo` filter args. Translate to Qdrant filter clauses against the payload keys added in Phase 0 (Task 0.6). Keep the existing API stable — both args are optional.
+- [ ] **Extend** `searchWikiPages` to accept optional `principleTier`, `principleAppliesTo`, and `principlePublic` filter args. Translate to Qdrant filter clauses against the canonical payload keys added in Phase 0 (Task 0.6). Keep the existing API stable - all args are optional.
 - [ ] **Run test, verify it passes.**
-- [ ] **Commit:** `feat(wiki): tier and appliesTo filters in searchWikiPages`.
+- [ ] **Commit:** `feat(wiki): principle filters in searchWikiPages`.
 
 ### Task 2.2: Implement `recallPrincipleContext`
 
@@ -516,11 +578,11 @@ The spec §12.1 contract: always inject in-scope commandments (cap 10) from Post
 
 - [ ] **Write failing test for the commandment branch:** when Postgres holds 3 published commandments matching `appliesTo`, `recallPrincipleContext` returns all 3 even if Qdrant is unreachable. Stub Qdrant to throw; commandments still come back.
 - [ ] **Run test, verify it fails.**
-- [ ] **Implement** the Postgres-first branch using `listPrinciplesByTier("commandment")` from Task 0.4. Filter by `appliesTo` array containment via the helper.
+- [ ] **Implement** the Postgres-first branch using `listPrinciplesByTier("commandment")` from Task 0.4. Filter by `principleAppliesTo` array containment via the helper.
 - [ ] **Run test, verify it passes.**
 - [ ] **Write failing test for the Qdrant-relevance branch:** seed 6 core principles, query with a context string that semantically matches 2 of them above the relevance threshold, assert top-2 returned.
 - [ ] **Run test, verify it fails.**
-- [ ] **Implement** the Qdrant relevance branch using `searchWikiPages` with `pageKind: "principle"`, `tier: "core"`, top-K=5.
+- [ ] **Implement** the Qdrant relevance branch using `searchWikiPages` with `pageKind: "principle"`, `principleTier: "core"`, top-K=5.
 - [ ] **Run test, verify it passes.**
 - [ ] **Write failing test for the contextual threshold:** seed 3 contextual principles, query with a string that matches one above 0.75 and two below; assert only the above-threshold one is returned.
 - [ ] **Run test, verify it fails.**
@@ -551,9 +613,9 @@ The spec §12.1 contract: always inject in-scope commandments (cap 10) from Post
 - Modify: `apps/web/lib/mcp-tools.ts:8431` (handler)
 - Create: `apps/web/lib/mcp-tools-wiki-query.test.ts`
 
-- [ ] **Write failing test:** `wiki_query` called with `{ query, pageKind: "principle", tier: "commandment", appliesTo: "external_coding_agent", publicOnly: true, limit: 5 }` returns matching principle pages with full principle metadata (tier, direction, dimensions, appliesTo, public state) in the structured content.
+- [ ] **Write failing test:** `wiki_query` called with `{ query, pageKind: "principle", tier: "commandment", appliesTo: "external_coding_agent", publicOnly: true, limit: 5 }` returns matching principle pages with full principle metadata (`principleTier`, `principleDirection`, `principleDimensions`, `principleAppliesTo`, `principlePublic`) in the structured content.
 - [ ] **Run test, verify it fails.**
-- [ ] **Extend** the input schema with the new optional fields (`tier`, `appliesTo`, `publicOnly`). Update the handler to forward them to `searchWikiPages`. For `pageKind: "principle"`, the response shape includes principle metadata; for other kinds, the shape is unchanged.
+- [ ] **Extend** the public MCP input schema with the ergonomic optional fields (`tier`, `appliesTo`, `publicOnly`). Update the handler to translate them to `searchWikiPages` canonical args (`principleTier`, `principleAppliesTo`, `principlePublic`). For `pageKind: "principle"`, the response shape includes canonical principle metadata; for other kinds, the shape is unchanged.
 - [ ] **Run test, verify it passes.**
 - [ ] **Write failing test for backwards compat:** existing `wiki_query` calls without the new fields return the same shape they did before Phase 2.
 - [ ] **Run test, verify it passes.**
@@ -567,7 +629,7 @@ The spec §12.1 contract: always inject in-scope commandments (cap 10) from Post
 
 The math contract is in spec §11.2 and the worked example is in §11.4.
 
-- [ ] **Write failing test:** given a principle with `dimensionVector = { long_term_maintainability: 1.0, schema_grounding: 0.8, speed_to_value: -0.4 }` and an option with `features = { long_term_maintainability: 0.9, schema_grounding: 0.8, speed_to_value: 0.3 }`, alignment = `((0.9*1.0) + (0.8*0.8) + (0.3*-0.4)) / (|1.0|+|0.8|+|-0.4|) = 1.42 / 2.2 ≈ 0.645`.
+- [ ] **Write failing test:** given a principle with `principleDimensionVector = { long_term_maintainability: 1.0, schema_grounding: 0.8, speed_to_value: -0.4 }` and an option with `features = { long_term_maintainability: 0.9, schema_grounding: 0.8, speed_to_value: 0.3 }`, alignment = `((0.9*1.0) + (0.8*0.8) + (0.3*-0.4)) / (|1.0|+|0.8|+|-0.4|) = 1.42 / 2.2 ≈ 0.645`.
 - [ ] **Run test, verify it fails.**
 - [ ] **Implement** `computeStructuredAlignment(option, principle)` returning the normalized dot product. Skip missing dimensions (treat as 0 on the option side) but track which dimensions were present so the caller can surface coverage warnings.
 - [ ] **Run test, verify it passes.**
@@ -579,7 +641,7 @@ The math contract is in spec §11.2 and the worked example is in §11.4.
 - Modify: `apps/web/lib/wiki/principle-decide.ts`
 - Modify: `apps/web/lib/wiki/principle-decide.test.ts`
 
-- [ ] **Write failing test:** a principle with empty `dimensionVector` and a query option falls back to embedding cosine. Use a deterministic stub embedding model so the test is reproducible.
+- [ ] **Write failing test:** a principle with empty `principleDimensionVector` and a query option falls back to embedding cosine. Use a deterministic stub embedding model so the test is reproducible.
 - [ ] **Run test, verify it fails.**
 - [ ] **Implement** `computeSemanticAlignment(option, principle)` using the existing embedding helper. Mark the contribution as `mode: "semantic"`.
 - [ ] **Run test, verify it passes.**
@@ -674,7 +736,7 @@ pnpm --filter web build
 **UX verification:** open a coworker chat, ask a decision-shaped question, confirm the system prompt includes the `## Governance Principles` block from Task 2.2. Call `principle_decide` via the in-portal MCP debugger with two synthetic options and verify the contribution ledger renders end-to-end.
 
 **Exit criteria:**
-- `searchWikiPages` accepts `tier` and `appliesTo`.
+- `searchWikiPages` accepts canonical `principleTier`, `principleAppliesTo`, and `principlePublic` filters.
 - `recallPrincipleContext` returns Postgres-first commandments + Qdrant relevance for core/contextual.
 - `wiki_query` MCP accepts the new filters; metadata returned for principles.
 - `principle_decide` returns a ledger with structured-vs-semantic flags, tie-margin handling, commandment-conflict flag, coverage flag.
@@ -684,11 +746,11 @@ pnpm --filter web build
 
 ---
 
-## Phase 3 — Seed the First Principle Set
+## Phase 3 - Seed the First Principle Set
 
 **Branch:** `doc/principles-batch-3-seed-first-set`
 
-**Objective:** Author and seed the first kernel principles. Scope depends on whether the spec branch has been rebased onto PR #489. If yes, seed Principles 1–9 plus the proposed Proactivity principle. If no, seed only the 8 branch-local principles from `docs/architecture/ai-coworker-development-principles.md`.
+**Objective:** Author and seed the first kernel principles. Phase -1 determines the exact count on the implementation base. In the reviewed target checkout, Principle 9 and the capacity-continuity spec are already present, so the expected scope is Principles 1-9. The proposed Proactive Engagement principle is not seeded unless the founder explicitly approves canonical text before this phase starts.
 
 **Pre-check:** before starting, grep the local copy of the AI principles doc for Principle 9 content:
 
@@ -696,7 +758,7 @@ pnpm --filter web build
 Select-String -Path "docs/architecture/ai-coworker-development-principles.md" -Pattern "Principle 9" -Quiet
 ```
 
-If the result is `True`, the branch has PR #489's content — scope to 9+1 principles. If `False`, scope to the 8 branch-local principles. Do NOT rely on commit-message grep; PR #489's commit subject is not guaranteed to contain the string "capacity continuity" and could produce a false negative.
+If the result is `True`, scope to Principles 1-9. If `False`, scope to the branch-local principles that exist in the file and update the design spec's current-state table before seeding. Do NOT rely on commit-message grep; PR #489's commit subject is not guaranteed to contain the string "capacity continuity" and could produce a false negative.
 
 **Files to create:**
 
@@ -721,19 +783,19 @@ If the result is `True`, the branch has PR #489's content — scope to 9+1 princ
 
 - [ ] **Read** `docs/architecture/ai-coworker-development-principles.md` lines 18–40 for the canonical text.
 - [ ] **Write** the kernel page at `docs/founder-kernel/wiki/principles/specialization-over-generalization.md` with frontmatter:
-  - `kind: principle`
+  - `pageKind: principle`
   - `slug: specialization-over-generalization`
   - `title: Specialization Over Generalization`
-  - `tier: core` (proposed default — finalize during PR review)
-  - `direction: Prefer specialist agents with focused tool sets over generalists with broad surfaces.`
-  - `dimensionVector: { reusability: 0.6, blast_radius: 0.4, human_cognitive_load: -0.3 }` (proposed — finalize during PR review)
-  - `appliesTo: [in_platform_coworker]`
-  - `public: true`
-  - `publicRationale: Documents DPF's agentic architecture posture for adopters and contributors.`
+  - `principleTier: core` (proposed default - finalize during PR review)
+  - `principleDirection: Prefer specialist agents with focused tool sets over generalists with broad surfaces.`
+  - `principleDimensionVector: { reusability: 0.6, blast_radius: 0.4, human_cognitive_load: -0.3 }` (proposed - finalize during PR review)
+  - `principleAppliesTo: [in_platform_coworker]`
+  - `principlePublic: true`
+  - `principlePublicRationale: Documents DPF's agentic architecture posture for adopters and contributors.`
 - [ ] **Author the body** using the required-sections contract from spec §7.2. Source-cite the architecture principles doc itself plus any external research cited in the original (likely Anthropic's "Building Effective Agents" or similar).
 - [ ] **Create RawSource markdown** at `docs/founder-kernel/raw-sources/anthropic-building-effective-agents.md` if not already present, with locator + abstract.
-- [ ] **Run seed** locally: `pnpm --filter @dpf/db exec tsx scripts/seed-wiki-kernel.ts` (or whatever the documented entry point is — confirm via `AUTHORING.md`).
-- [ ] **Run lint:** `pnpm --filter web exec tsx scripts/wiki-lint.ts` — expect zero principle-related findings on this page.
+- [ ] **Run seed** locally through the package script: `pnpm --filter @dpf/db seed`. Confirm `AUTHORING.md` names the same entry point after Phase 0 updates.
+- [ ] **Run lint tests and portal lint check:** `pnpm --filter web exec vitest run lib/wiki/lint`, then open `/admin/wiki/lint` in the rebuilt portal and expect zero principle-related findings on this page.
 - [ ] **Commit:** `doc(principles): author Principle 1 — Specialization Over Generalization`.
 
 ### Task 3.2 through Task 3.8 — repeat the same shape for Principles 2–8
@@ -741,7 +803,7 @@ If the result is `True`, the branch has PR #489's content — scope to 9+1 princ
 For each of the remaining branch-local principles:
 
 - Source markdown from `docs/architecture/ai-coworker-development-principles.md` at the documented line ranges
-- Author kernel page with proposed tier + direction + dimensionVector + appliesTo
+- Author kernel page with proposed `principleTier` + `principleDirection` + `principleDimensionVector` + `principleAppliesTo`
 - Create or cite RawSources as needed
 - Run seed
 - Run lint
@@ -762,12 +824,12 @@ Per-principle proposed tier (subject to PR review):
 Only if the Phase 3 pre-check (`Select-String` for "Principle 9" in `docs/architecture/ai-coworker-development-principles.md`) returned `True`.
 
 - [ ] **Source** the canonical text from the rebased copy of `docs/architecture/ai-coworker-development-principles.md`.
-- [ ] **Author** the kernel page with `tier: core`, `dimensionVector: { capacity_utilization: 1.0, governance_compliance: 0.7, human_cognitive_load: -0.2 }`, `appliesTo: [in_platform_coworker, external_coding_agent]`, `public: true`.
+- [ ] **Author** the kernel page with `principleTier: core`, `principleDimensionVector: { capacity_utilization: 1.0, governance_compliance: 0.7, human_cognitive_load: -0.2 }`, `principleAppliesTo: [in_platform_coworker, external_coding_agent]`, `principlePublic: true`.
 - [ ] **Commit:** `doc(principles): author Principle 9 — Responsible Capacity Utilization`.
 
 ### Task 3.10 (conditional): Proactive Engagement principle
 
-If the founder approves the Proactive Engagement principle (currently a conversation artifact, not committed text yet), author it the same way with `tier: core`, `dimensionVector: { human_cognitive_load: -0.5, evidence_density: 0.5, blast_radius: 0.3 }`, `appliesTo: [in_platform_coworker, external_coding_agent]`. Otherwise defer this principle to Phase 5 or a later iteration.
+If the founder approves the Proactive Engagement principle (currently a conversation artifact, not committed text yet), author it the same way with `principleTier: core`, `principleDimensionVector: { human_cognitive_load: -0.5, evidence_density: 0.5, blast_radius: 0.3 }`, `principleAppliesTo: [in_platform_coworker, external_coding_agent]`. Otherwise defer this principle to Phase 5 or a later iteration.
 
 ### Task 3.11: Convert `ai-coworker-development-principles.md` into a stub
 
@@ -793,8 +855,8 @@ pnpm --filter @dpf/db exec vitest run src/seed-wiki-kernel.test.ts
 pnpm --filter web exec vitest run lib/wiki/lint lib/wiki/recall.test.ts lib/wiki/principle-recall.test.ts
 pnpm --filter web typecheck
 pnpm --filter web build
-pnpm --filter @dpf/db exec tsx scripts/seed-wiki-kernel.ts        # local seed run
-pnpm --filter web exec tsx scripts/wiki-lint.ts                    # local lint pass
+pnpm --filter @dpf/db seed                                        # local seed run
+pnpm --filter web exec vitest run lib/wiki/lint                   # local lint test pass
 ```
 
 **UX verification:** in a freshly-rebuilt portal stack, navigate to `/wiki?kind=principle`, confirm all seeded principles appear grouped by tier. Open each detail page, confirm metadata + body render. Open `/admin/wiki/lint`, confirm zero principle findings.
@@ -864,8 +926,8 @@ pnpm --filter @dpf/db exec vitest run src/seed-wiki-kernel.test.ts
 pnpm --filter web exec vitest run lib/wiki/lint
 pnpm --filter web typecheck
 pnpm --filter web build
-pnpm --filter @dpf/db exec tsx scripts/seed-wiki-kernel.ts
-pnpm --filter web exec tsx scripts/wiki-lint.ts
+pnpm --filter @dpf/db seed
+pnpm --filter web exec vitest run lib/wiki/lint
 ```
 
 **UX verification:** confirm `AGENTS.md` still reads end-to-end as a working agent guide (no broken pointer-only sections that leave a coding agent without operational instructions).
@@ -889,11 +951,12 @@ pnpm --filter web exec tsx scripts/wiki-lint.ts
 
 - `docs/founder-kernel/wiki/principles/*.md` (new pages)
 - `docs/founder-kernel/manifest.json`
-- `~/.claude/projects/D--DPF/memory/MEMORY.md` and individual `feedback_*.md` / `project_*.md` files — entries that have been promoted should either be deleted (if the kernel page fully supersedes them) or kept with a pointer note. Memory cleanup is out of scope for the PR; it happens after the PR merges, on the founder's local environment.
+
+**Files explicitly not modified by this PR:** local/private memory stores. Entries that inspire a kernel principle may be cleaned up later by the founder or the memory owner, but this repository plan never edits local memory paths and never asks an implementation agent to bulk-read a private memory corpus.
 
 ### Task 5.1: Author the memory promotion inventory
 
-- [ ] **Read** every `feedback_*.md` and `project_*.md` in `~/.claude/projects/D--DPF/memory/`. The 2026-05-12 audit identified ~42 candidates split across commandment / core / contextual / stay-in-memory.
+- [ ] **Start from a reviewed inventory, not a private-path crawl.** Use memory-derived candidate summaries only when the founder provides them in the thread or when an approved memory-export artifact already exists in the repo. If no reviewed inventory exists, stop and create `docs/superpowers/audits/2026-05-12-memory-principle-inventory.md` from the visible discussion and repo evidence; do not require access to a specific local memory path.
 - [ ] **For each candidate**, judge: durable governance (promote) or operational/situational (keep in memory). Use the spec §8 tier criteria and the audit's headcount budget (commandment ≤10, core ~25, contextual unbounded).
 - [ ] **Commit** the inventory as `docs/superpowers/audits/2026-05-12-memory-principle-inventory.md` for review.
 - [ ] **Commit:** `doc(audit): memory principle inventory for Batch 5`.
@@ -911,7 +974,7 @@ Each sub-batch follows the same shape:
 For each approved candidate:
 
 - [ ] **Author** the kernel page with a rewritten principle body — do not paste the memory entry verbatim. The memory entry was written for the founder; the kernel page is for product readers.
-- [ ] **Source-cite** the memory entry's rationale via a public-safe `RawSource`. If the rationale was a private incident, generalize it: "platform incident in early 2026" rather than naming the dated debugging session.
+- [ ] **Source-cite** the rationale via a public-safe or internal-safe `RawSource`. If the rationale came from a private incident, generalize it: "platform incident in early 2026" rather than naming the dated debugging session, local path, or private memory file.
 - [ ] **Run public-safety lint** (Phase 1, Task 1.7) — any local path, memory filename, or internal marker blocks the commit.
 - [ ] **Commit per principle:** `doc(principles): promote <name> from memory`.
 
@@ -927,8 +990,8 @@ pnpm --filter @dpf/db exec vitest run src/seed-wiki-kernel.test.ts
 pnpm --filter web exec vitest run lib/wiki/lint
 pnpm --filter web typecheck
 pnpm --filter web build
-pnpm --filter @dpf/db exec tsx scripts/seed-wiki-kernel.ts
-pnpm --filter web exec tsx scripts/wiki-lint.ts
+pnpm --filter @dpf/db seed
+pnpm --filter web exec vitest run lib/wiki/lint
 ```
 
 **Manual audit:** read every newly-promoted kernel page front to back. Any sentence that reads like local environment, founder-specific, or branch-specific commentary should be rewritten before the PR opens.
@@ -951,22 +1014,22 @@ pnpm --filter web exec tsx scripts/wiki-lint.ts
 
 **Files to create:**
 
-- `scripts/generate-public-principles.ts` (or `scripts/generate-public-principles.mjs` if no TS runtime is wired into the script pipeline)
-- `scripts/generate-public-principles.test.ts`
+- `scripts/generate-public-principles.mjs`
+- `scripts/generate-public-principles.test.mjs`
 - `docs/principles.md` (the generated output, committed to git so the Jekyll build serves it)
 
 **Files to modify:**
 
 - `docs/_config.yml` (add the new page to navigation if the site uses a manifest; otherwise rely on the default `defaults` block)
 - `docs/index.html` and `docs/README.md` (add a link to `/principles/` so visitors can find it)
-- `package.json` at the workspace root (script entry, e.g., `"docs:principles": "tsx scripts/generate-public-principles.ts"`)
+- `package.json` at the workspace root (script entry, e.g., `"docs:principles": "node scripts/generate-public-principles.mjs"` and `"test:docs:principles": "node --test scripts/generate-public-principles.test.mjs"`)
 
 ### Task 6.1: Generation script
 
 **Files:**
-- Create: `scripts/generate-public-principles.ts`
+- Create: `scripts/generate-public-principles.mjs`
 
-The script reads every markdown file under `docs/founder-kernel/wiki/principles/`, filters to those whose frontmatter has `public: true`, groups by tier (commandment / core / contextual), and emits a single `docs/principles.md` with:
+The script reads every markdown file under `docs/founder-kernel/wiki/principles/`, filters to those whose frontmatter has `principlePublic: true`, groups by `principleTier` (commandment / core / contextual), and emits a single `docs/principles.md` with:
 
 - Jekyll front matter
 - An intro paragraph explaining what DPF principles are
@@ -974,17 +1037,17 @@ The script reads every markdown file under `docs/founder-kernel/wiki/principles/
 - For each principle: title, direction (as hero), rule, why, applies-to chips (as plain text since Jekyll renders to HTML), how-to-apply
 - Source citations at the bottom (only the public-safe locators)
 
-- [ ] **Write failing test** for the script with a small fixture directory: input is three principle markdown files (one per tier, all `public: true`), expected output is a single deterministic `principles.md` matching a stored snapshot.
+- [ ] **Write failing test** for the script with a small fixture directory: input is three principle markdown files (one per tier, all `principlePublic: true`), expected output is a single deterministic `principles.md` matching a stored snapshot.
 - [ ] **Run test, verify it fails.**
-- [ ] **Implement** the script. Use a simple frontmatter parser (`gray-matter` is already in the workspace per EP-WIKI-001). No fancy templating; print straight to markdown.
+- [ ] **Implement** the script with a small local YAML-frontmatter parser compatible with the subset already documented in `AUTHORING.md` (top-level scalars, inline arrays, block lists, and safe skipping of nested maps the generator does not need). Do not add a new root dependency and do not rely on root-level `tsx`.
 - [ ] **Run test, verify it passes.**
-- [ ] **Run the script** against the real kernel: `pnpm tsx scripts/generate-public-principles.ts`. Commit the resulting `docs/principles.md`.
+- [ ] **Run the script** against the real kernel: `pnpm docs:principles`. Commit the resulting `docs/principles.md`.
 - [ ] **Commit:** `feat(docs): generate public principles markdown from kernel`.
 
 ### Task 6.2: Snapshot drift detection
 
 **Files:**
-- Modify: `scripts/generate-public-principles.test.ts`
+- Modify: `scripts/generate-public-principles.test.mjs`
 
 - [ ] **Write a CI-friendly test** that runs the generator against the real `docs/founder-kernel/wiki/principles/` and asserts the produced output exactly matches the committed `docs/principles.md`. If anyone edits a kernel principle without re-running the script, this test fails — caught before merge.
 - [ ] **Run test, verify it passes** (committed output matches).
@@ -1013,8 +1076,8 @@ The script reads every markdown file under `docs/founder-kernel/wiki/principles/
 ### Phase 6 Verification
 
 ```powershell
-pnpm tsx scripts/generate-public-principles.ts
-pnpm exec vitest run scripts/generate-public-principles.test.ts
+pnpm docs:principles
+pnpm test:docs:principles
 pnpm --filter web typecheck
 pnpm --filter web build
 ```
@@ -1023,7 +1086,7 @@ pnpm --filter web build
 
 **Exit criteria:**
 - `docs/principles.md` exists, is generated by the script, and matches the snapshot.
-- Only `public: true` kernel principles appear on the public site.
+- Only `principlePublic: true` kernel principles appear on the public site.
 - Navigation links exist from `index.html` and `README.md`.
 - Snapshot drift test is in CI.
 
@@ -1047,7 +1110,7 @@ After Phase 6 merges, run a final consolidation pass:
 
 | Risk | When it surfaces | Response |
 |------|------------------|----------|
-| Phase 2 retrieval is slow against Qdrant | During Phase 2 UX verification | Profile `searchWikiPages` — index the new payload keys (`tier`, `appliesTo`) if missing. Don't optimize prematurely; if latency is fine, ship. |
+| Phase 2 retrieval is slow against Qdrant | During Phase 2 UX verification | Profile `searchWikiPages` - index the new canonical payload keys (`principleTier`, `principleAppliesTo`, `principlePublic`) if missing. Do not optimize prematurely; if latency is fine, ship. |
 | Phase 3 lint surfaces a contradiction between two seeded principles | During Phase 3 verification | Expected and healthy. `principle-contradiction-review` is `warn`, not `error`. Add a reviewer note explaining the intentional tension; do not silence the detector. |
 | Phase 4 `AGENTS.md` becomes harder to read after pointers replace prose | During Phase 4 verification | Restore the original prose with a pointer paragraph appended ("This rule has been promoted to the kernel as `<name>` — see the kernel page for the canonical version and source citations.") rather than full replacement. Keep readability. |
 | Phase 5 public-safety lint blocks every promoted memory entry | During Phase 5 verification | Slow down. The blocks are correct — memory was authored for the founder. Rewrite each entry in product-facing language and re-run. Do not loosen the lint. |
@@ -1058,7 +1121,7 @@ After Phase 6 merges, run a final consolidation pass:
 
 ## Out of Scope (deferred to follow-up specs)
 
-- Dimension registry curation tooling (TBD spec) — see spec §18 question 2.
+- Dimension registry curation tooling - deferred until Phase 2 proves which dimensions are actually used by seeded principles and decision ledgers.
 - Org-overlay principles UX (`/wiki?kind=principle&org=<id>`) — spec §18 question 4 recommends yes inside the portal; treat as a Phase 6+1 enhancement.
 - `principle_decide` evidence recording for downstream workflows — spec §18 question 6 recommends not in V1.
 - Commandment recall caching layer (if relevant under load) — optimize only if Phase 2 verification shows it's needed.
