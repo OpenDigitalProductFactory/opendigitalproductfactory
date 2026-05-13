@@ -235,7 +235,7 @@
         "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap (docs/superpowers/plans/2026-05-09-macos-linux-native-support.md). Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
       },
       "problemMatcher": [],
-      "detail": "Pull latest main, bump minor version (v0.85.0 -> v0.86.0), tag and push (Windows; Mac/Linux equivalent in Phase 8)"
+      "detail": "Fetch origin/main, bump minor version (v0.85.0 -> v0.86.0), tag that commit and push the tag (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Release Patch",
@@ -252,7 +252,7 @@
         "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap. Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
       },
       "problemMatcher": [],
-      "detail": "Pull latest main, bump patch version (v0.85.0 -> v0.85.1), tag and push (Windows; Mac/Linux equivalent in Phase 8)"
+      "detail": "Fetch origin/main, bump patch version (v0.85.0 -> v0.85.1), tag that commit and push the tag (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Release Major",
@@ -269,7 +269,7 @@
         "args": ["-lc", "echo 'DPF release scripts are Windows-only today. The macOS/Linux dpf-release.sh is sequenced for Phase 8 of the installer-parity roadmap. Until then, run: git tag vX.Y.Z && git push origin vX.Y.Z' && exit 1"]
       },
       "problemMatcher": [],
-      "detail": "Pull latest main, bump major version (v0.85.0 -> v1.0.0), tag and push (Windows; Mac/Linux equivalent in Phase 8)"
+      "detail": "Fetch origin/main, bump major version (v0.85.0 -> v1.0.0), tag that commit and push the tag (Windows; Mac/Linux equivalent in Phase 8)"
     },
     {
       "label": "DPF: Clean Reinstall from Git (WIPES ALL DATA)",
