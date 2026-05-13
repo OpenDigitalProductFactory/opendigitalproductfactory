@@ -1,6 +1,7 @@
 export * from "./constants";
 export * from "./extractors";
 export * from "./git-snapshot";
+export * from "./graph-queries";
 export * from "./hash";
 export * from "./path-filter";
 export * from "./reconcile";

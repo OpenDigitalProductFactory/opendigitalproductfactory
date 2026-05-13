@@ -369,6 +369,9 @@ describe("getToolGrantMapping reflects all entries", () => {
     const mapping = getToolGrantMapping();
     expect(mapping["get_code_graph_freshness"]).toEqual(["code_graph_read"]);
     expect(mapping["inspect_build_code_impact"]).toEqual(["code_graph_read"]);
+    expect(mapping["search_code_graph"]).toEqual(["code_graph_read"]);
+    expect(mapping["trace_code_surface"]).toEqual(["code_graph_read"]);
+    expect(mapping["find_related_tests"]).toEqual(["code_graph_read"]);
   });
 });
 
@@ -398,5 +401,8 @@ describe("agent registry grant lookup", () => {
     expect(byRegistryId).toEqual(expect.arrayContaining(["code_graph_read"]));
     expect(isToolAllowedByGrants("get_code_graph_freshness", bySlug ?? [])).toBe(true);
     expect(isToolAllowedByGrants("inspect_build_code_impact", bySlug ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("search_code_graph", bySlug ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("trace_code_surface", bySlug ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("find_related_tests", bySlug ?? [])).toBe(true);
   });
 });
