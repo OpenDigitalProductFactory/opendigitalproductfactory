@@ -48,6 +48,9 @@ const BLOCKED_PATTERNS = [
   /^\.git$/,
   /[\\/]node_modules[\\/]/,
   /^node_modules[\\/]/,
+  /[\\/]\.pnpm-store[\\/]/,
+  /^\.pnpm-store[\\/]/,
+  /^packages[\\/]db[\\/]generated(?:[\\/]|$)/,
 ];
 
 export function isPathAllowed(filePath: string): boolean {
@@ -132,10 +135,10 @@ export async function searchProjectFiles(
 ): Promise<{ results: Array<{ path: string; line: number; text: string }> } | { error: string }> {
   if (!isDevInstance()) return { error: DEV_ONLY_ERROR };
   const max = options?.maxResults ?? 20;
+  const projectRoot = getProjectRoot();
 
   try {
     const { execSync } = lazyChildProcess();
-    const projectRoot = getProjectRoot();
     const globArg = options?.glob ? `-- "${options.glob}"` : "";
     const output = execSync(
       `git grep -n --max-count=${max} ${JSON.stringify(query)} HEAD ${globArg}`.trim(),
@@ -148,7 +151,9 @@ export async function searchProjectFiles(
     );
 
     const results: Array<{ path: string; line: number; text: string }> = [];
-    for (const line of output.split("\n").slice(0, max)) {
+    for (const rawLine of output.split("\n")) {
+      if (results.length >= max) break;
+      const line = rawLine.replace(/\r$/, "");
       const match = line.match(/^(?:HEAD:)?(.+?):(\d+):(.*)$/);
       if (match) {
         const [, path, lineNum, text] = match;
@@ -160,8 +165,76 @@ export async function searchProjectFiles(
 
     return { results };
   } catch {
-    return { results: [] };
+    return fallbackSearchProjectFiles(projectRoot, query, options);
   }
+}
+
+function globMatches(filePath: string, glob?: string): boolean {
+  if (!glob) return true;
+  const normalized = glob.replace(/\\/g, "/");
+  if (normalized.startsWith("*.")) return filePath.endsWith(normalized.slice(1));
+  if (normalized.startsWith("**/*.")) return filePath.endsWith(normalized.slice(4));
+  return filePath === normalized || filePath.endsWith(`/${normalized}`);
+}
+
+function makeLineMatcher(query: string): (line: string) => boolean {
+  try {
+    const pattern = new RegExp(query);
+    return (line) => pattern.test(line);
+  } catch {
+    return (line) => line.includes(query);
+  }
+}
+
+function fallbackSearchProjectFiles(
+  projectRoot: string,
+  query: string,
+  options?: { glob?: string; maxResults?: number },
+): { results: Array<{ path: string; line: number; text: string }> } {
+  const fs = getFs();
+  const path = getPath();
+  const max = options?.maxResults ?? 20;
+  const matchesLine = makeLineMatcher(query);
+  const results: Array<{ path: string; line: number; text: string }> = [];
+  const skipDirs = new Set([".git", ".next", "node_modules", ".pnpm-store", "generated"]);
+
+  function visit(dir: string): void {
+    if (results.length >= max) return;
+    let entries: import("fs").Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= max) return;
+      const fullPath = path.join(dir, entry.name);
+      const relPath = path.relative(projectRoot, fullPath).replace(/\\/g, "/");
+      if (!relPath || !isPathAllowedSync(relPath)) continue;
+      if (entry.isDirectory()) {
+        if (!skipDirs.has(entry.name)) visit(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !globMatches(relPath, options?.glob)) continue;
+
+      let content: string;
+      try {
+        content = fs.readFileSync(fullPath, "utf-8");
+      } catch {
+        continue;
+      }
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length && results.length < max; i += 1) {
+        if (matchesLine(lines[i] ?? "")) {
+          results.push({ path: relPath, line: i + 1, text: (lines[i] ?? "").trim() });
+        }
+      }
+    }
+  }
+
+  visit(projectRoot);
+  return { results };
 }
 
 export async function listProjectDirectory(

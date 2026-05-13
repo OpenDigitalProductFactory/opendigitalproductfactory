@@ -52,9 +52,13 @@ There are now several important standards and de facto standards in the market. 
 
 `NIST AI RMF 1.0` is similarly valuable as a risk framing model, but it is not designed to function as a concrete cross-platform agent identity and runtime control specification.
 
-The leading open agent protocols are also important, but differently scoped. `Anthropic` introduced the `Model Context Protocol` on November 25, 2024, to standardize how AI applications connect to tools and data sources. `Google` announced the `Agent2Agent Protocol` on April 9, 2025, and later donated `A2A` to the Linux Foundation on June 23, 2025, to improve interoperability between agents. These are significant advances. They do not, however, provide a complete answer to public identity, assurance badging, issuer accreditation, or runtime governance.
+The leading open agent protocols are also important, but differently scoped. `Anthropic` introduced the `Model Context Protocol` on November 25, 2024, to standardize how AI applications connect to tools and data sources. Since then, `MCP` has added a formal authorization profile, protected-resource metadata discovery, and extension work under neutral stewardship in the `Agentic AI Foundation`. `Google` announced the `Agent2Agent Protocol` on April 9, 2025, and later donated `A2A` to the Linux Foundation on June 23, 2025, to improve interoperability between agents. These are significant advances. They do not, however, provide a complete answer to public identity, assurance badging, issuer accreditation, or runtime governance.
+
+The identity layer has also moved materially. The `OpenID Foundation` established the `AIIM` Community Group in 2025 and has since published both a white paper on identity management for agentic AI and a March 2026 response to `NIST` on AI agent security. The `W3C` launched the `Agent Identity Registry Protocol Community Group` on April 24, 2026 to work specifically on verifiable AI agent identity infrastructure, with anticipated coordination to `OpenID AIIM`. `CoSAI`, operating under `OASIS Open`, published `Agentic Identity and Access Management` in April 2026 to define how enterprises can represent, authenticate, authorize, and govern AI agents as verifiable identities. This is precisely the problem neighborhood in which `GAID` operates.
 
 The large platform vendors are converging on agent frameworks rather than on a single trust architecture. `OpenAI` expanded its `Agents SDK` on April 15, 2026 with native harness and sandbox capabilities. `OpenAI`, `Anthropic`, and others are also moving standards work into neutral governance venues, including the `Agentic AI Foundation`, which `OpenAI` announced on December 9, 2025. `Microsoft` now positions `Agent Framework` as the next generation of `Semantic Kernel` and `AutoGen`, with workflow, checkpointing, and `HITL` support. `Google` continues to develop the `Agent Development Kit` and related agent infrastructure. This shows market momentum. It does not yet establish a coherent, interoperable governance answer.
+
+The distinction is also visible in frontier-model safety programs. `OpenAI`'s `Preparedness Framework`, `Anthropic`'s `Responsible Scaling Policy`, and `Google DeepMind`'s `Frontier Safety Framework` govern model-development and deployment risks. They are important prior art and should continue to inform the field. They are not, however, substitutes for a portable runtime harness standard or a portable agent identity and receipt model.
 
 The gap can be summarized as follows:
 
@@ -82,6 +86,8 @@ There are also direct timing implications. The `CAISI` RFI on AI agent security 
 The White House has also already established AI policy as a live federal agenda. Public comment on the U.S. `AI Action Plan` opened on February 25, 2025, and the Administration published `America's AI Action Plan` on July 23, 2025. Whether one agrees with every aspect of that plan is not the main point here. The main point is that the federal policy environment is already asking for concrete, implementable approaches rather than abstract concern.
 
 Industry behavior reinforces this. `OpenAI` published its proposals for the U.S. AI Action Plan on March 13, 2025. `Anthropic` submitted its own March 2025 `OSTP` response and has continued to argue for stronger testing and evaluation approaches, including in its earlier essay on third-party testing and its later work with `CAISI` and the `UK AISI`. This is not evidence that the market has solved the problem. It is evidence that leading vendors understand the policy and assurance questions are becoming unavoidable.
+
+International and regional governance work reinforces the same conclusion. The `EU` published the `General-Purpose AI Code of Practice` on July 10, 2025 as a voluntary but practically significant route to meeting `AI Act` obligations around transparency, safety, security, and copyright. `Singapore IMDA` launched its `Model AI Governance Framework for Agentic AI` on January 22, 2026, positioning it as a first national framework focused specifically on reliable and safe deployment of agentic AI. These are not direct substitutes for `TAK` or `GAID`, but they show that the market is moving from general AI governance into concrete operational expectations for agents.
 
 The point is not that governments or frontier labs are waiting for one final regulatory answer before acting. The point is that both are operating in a fragmented environment and are now seeking more coherent structures for identity, assurance, interoperability, and runtime trust.
 
@@ -158,7 +164,95 @@ This makes `DPF` especially valuable for conformance work. It is not a blank she
 
 In other words, `DPF` is credible as a first implementation case because it shows both existing strengths and remaining work.
 
-## 8. Recommendations for Governments, Standards Bodies, and Enterprises
+## 8. A Neutral Reference Model
+
+The standards family proposed here is intentionally vendor-neutral.
+
+The reference model is not meant to mirror one product suite. It is meant to identify the minimum cooperating planes that a trustworthy agent ecosystem requires:
+
+- an identity plane
+- an assurance plane
+- a runtime control plane
+- an evidence plane
+- an interoperability plane
+- a trust and validation plane
+
+![TAK reference model](tak-diagrams/png/11-neutral-trust-model.png)
+
+This matters because the current market often presents partial control planes as if they were complete trust architectures. In practice, the runtime, identity, evidence, and validation concerns remain distinct even when a single vendor offers them in one product family.
+
+## 9. Why a Staged Adoption Model Is the Most Credible Path
+
+The phased adoption model proposed for `GAID` follows the historical pattern by which durable public identifier systems have become trusted in practice.
+
+`ISBN` is a strong precedent. The standard defines a durable global identifier, but operational scale comes through the `International ISBN Agency` and delegated national or regional agencies rather than through one undifferentiated global operator. `DNS` shows the same layered emergence: the technical standards came first, delegation and namespace operations matured afterward, and multistakeholder governance later formalized through `ICANN` and `IANA` stewardship structures. Public certificate ecosystems offer a related precedent: trust required not only certificate syntax, but also identity proofing, certificate authority obligations, audit, revocation, and public transparency.
+Sources: [International ISBN Agency](https://www.isbn-international.org/), [National ISBN Agencies](https://www.isbn-international.org/content/national-isbn-agencies), [RFC 1034](https://www.rfc-editor.org/info/rfc1034), [RFC 1035](https://www.rfc-editor.org/info/rfc1035), [RFC 1591](https://www.rfc-editor.org/info/rfc1591), [ICANN history](https://www.icann.org/en/history), [IANA about](https://www.iana.org/about.html), [CA/B Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
+
+That precedent supports a staged `GAID` path:
+
+- `Phase 1`: enterprise-private identity, inventory, `AIDoc`, badges, and receipts
+- `Phase 2`: federated or accredited cross-boundary trust
+- `Phase 3`: broader public verifier interoperability with optional decentralized portability profiles
+
+This is not a compromise. It is the most historically grounded route to adoption at scale.
+
+## 10. Public Verification Architecture Options for GAID
+
+There are several viable public-verification architectures for `GAID`.
+
+The first is a `PKI` and domain-anchored model in which accredited issuers bind public `GAID` subjects to controlled namespaces, signed identity documents, revocation services, and transparency publication. This is the strongest near-term default because enterprises, governments, and relying parties already understand the accountability model.
+
+The second is a `federated trust-list` model in which multiple recognized authorities publish issuer trust lists and verifier material. This is particularly relevant for regulated sectors, regional ecosystems, and multinational cooperation.
+
+The third is a `DID` / `VC` portability profile in which a public `GAID` can also be represented through decentralized or controlled-identifier infrastructure. This is useful for portability and selective disclosure, but it should not be treated as the only viable public-trust model. As of May 11, 2026, enterprise adoption still favors directory-native internal identity and issuer-validated public identity over ledger-first approaches.
+Sources: [DID Core](https://www.w3.org/TR/did-core/), [VC Data Model 2.0](https://www.w3.org/TR/vc-data-model/), [NIST blockchain identity white paper](https://csrc.nist.gov/publications/detail/white-paper/2020/01/14/a-taxonomic-approach-to-understanding-emerging-blockchain-idms/final), [Microsoft Entra Agent ID](https://learn.microsoft.com/en-us/entra/agent-id/agent-identities), [Microsoft Entra Verified ID standards](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-standards?country=us&culture=en-us)
+
+The preferred approach for the standard is therefore hybrid:
+
+- private enterprise identity remains directory-bound
+- public identity is issuer-accredited and verifier-friendly
+- transparency is mandatory
+- decentralized portability is optional
+
+Adjacent work in payments and commerce also supports this direction. `AP2`, the `Agent Payments Protocol`, uses verifiable mandates and cryptographic evidence to show that an agent is acting on bounded delegated payment authority. That is not the same problem as `GAID`, but it is strong prior art for signed consequential-action receipts and bounded delegated authority in high-stakes agent interactions.
+
+![GAID public verification architecture](gaid-diagrams/png/05-public-verification-architecture.png)
+
+This hybrid model offers the best balance of adoption, accountability, and future portability.
+
+## 11. DPF as an Initial Prototype and Outcome Framework
+
+`DPF` is not being offered as proof that the standards are already fully solved. It is being offered as the initial implementation prototype and proving ground.
+
+That distinction matters. The prototype is useful precisely because it already contains enough of the runtime and identity posture to make the standards concrete, while still leaving visible gaps that the standards can force into implementable shape.
+
+For `TAK`, the prototype already demonstrates:
+
+- route-scoped orchestrator and specialist patterns
+- governed tool exposure through authority intersection
+- proposal-mode approvals
+- runtime prompt assembly with hidden and immutable control blocks
+- audit logging for tool execution
+
+For `GAID`, the prototype already demonstrates:
+
+- stable internal agent registry metadata
+- model binding and tool-grant declarations
+- supervisor and `HITL` posture references
+- early `AIDoc`-like structures
+
+The standards therefore produce implementation outcomes for the prototype. Near-term `DPF` outcomes should include:
+
+- canonical private `GAID` issuance
+- an internal `AIDoc` service
+- a badge registry and evidence model
+- signed or tamper-evident consequential-action receipts
+- `LDAP` / `SCIM` / protocol profile projection
+- later public verification and issuer-facing profiles
+
+This is a crucial part of the proposal. The standards are not only theoretical artifacts. They define what a real platform should build next.
+
+## 12. Recommendations for Governments, Standards Bodies, and Enterprises
 
 The recommendations are straightforward.
 
@@ -166,6 +260,7 @@ Governments and standards bodies should:
 
 - treat runtime governance and agent identity as separate but complementary standards layers
 - build on existing work such as `MCP`, `A2A`, `VC`, `SLSA`, `Trace Context`, and `HTTP Message Signatures` rather than starting from zero
+- establish explicit liaison positions with `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, the `Agentic AI Foundation`, and the relevant `IETF` OAuth and GNAP work
 - recognize accredited issuer governance as a critical dependency for public agent identity
 - prioritize chain-of-custody, non-repudiation, and `HITL` disclosure as first-class concerns
 
@@ -182,9 +277,18 @@ Platform vendors should:
 - make badging and assurance claims machine-readable
 - support portable identity and receipt semantics across frameworks
 
+The standards themselves should also ship with companion implementation artifacts, not only prose. At minimum that means:
+
+- a `TAK` conformance assertion rubric
+- a `GAID` conformance assertion rubric
+- a reference implementation statement from the `DPF` prototype
+- a clear standards-lifecycle and liaison posture
+
+The most credible near-term disposition is liaison-first. `TAK` should align outward to `AAIF`, `NIST`, `CoSAI`, and relevant `IETF` work on authorization and proof-of-possession. `GAID` should align outward to `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, and the same `IETF` authorization and trust infrastructure work. That approach is more realistic than pretending one venue already owns the whole problem.
+
 The point is not to wait for a perfect end-state. The point is to move from ad hoc local conventions toward interoperable trust infrastructure.
 
-## 9. Conclusion
+## 13. Conclusion
 
 AI agents are now mature enough to create a standards problem and immature enough that the standards answer is still forming.
 
@@ -211,18 +315,69 @@ We propose these not as final answers to every policy or platform question, but 
 - [White House: Public Comment Invited on Artificial Intelligence Action Plan, February 25, 2025](https://www.whitehouse.gov/briefings-statements/2025/02/public-comment-invited-on-artificial-intelligence-action-plan/)
 - [White House: America's AI Action Plan, July 23, 2025](https://www.whitehouse.gov/articles/2025/07/white-house-unveils-americas-ai-action-plan/)
 - [OpenAI: OpenAI's proposals for the U.S. AI Action Plan, March 13, 2025](https://openai.com/global-affairs/openai-proposals-for-the-us-ai-action-plan/)
+- [OpenAI: Our updated Preparedness Framework, April 15, 2025](https://openai.com/index/updating-our-preparedness-framework/)
 - [OpenAI: The next evolution of the Agents SDK, April 15, 2026](https://openai.com/index/the-next-evolution-of-the-agents-sdk)
 - [OpenAI: OpenAI co-founds the Agentic AI Foundation under the Linux Foundation, December 9, 2025](https://openai.com/index/agentic-ai-foundation/)
 - [Anthropic: Introducing the Model Context Protocol, November 25, 2024](https://www.anthropic.com/news/model-context-protocol)
+- [Anthropic Responsible Scaling Policy](https://www.anthropic.com/responsible-scaling-policy)
 - [Anthropic: Third-party testing as a key ingredient of AI policy](https://www.anthropic.com/news/third-party-testing/)
 - [Anthropic: Strengthening our safeguards through collaboration with US CAISI and UK AISI, September 12, 2025](https://www.anthropic.com/news/strengthening-our-safeguards-through-collaboration-with-us-caisi-and-uk-aisi)
-- [Google Developers Blog: Announcing the Agent2Agent Protocol, April 9, 2025](https://developers.googleblog.com/es/a2a-a-new-era-of-agent-interoperability/)
+- [Linux Foundation: Agentic AI Foundation announcement, December 9, 2025](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation?hs_amp=true)
+- [AGENTS.md](https://agents.md/)
+- [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+- [OpenID Foundation AIIM Community Group](https://openid.net/cg/artificial-intelligence-identity-management-community-group/)
+- [OpenID Foundation: Identity Management for Agentic AI](https://openid.net/wp-content/uploads/2025/10/Identity-Management-for-Agentic-AI.pdf)
+- [OIDF response to NIST on AI agent security, March 6, 2026](https://openid.net/wp-content/uploads/2026/03/Attachment1_NIST-2025-0035-0001.pdf)
+- [W3C Agent Identity Registry Protocol Community Group, launched April 24, 2026](https://www.w3.org/community/agent-identity/)
+- [Google Developers Blog: Announcing the Agent2Agent Protocol, April 9, 2025](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/)
 - [Google Developers Blog: Google Cloud donates A2A to Linux Foundation, June 23, 2025](https://developers.googleblog.com/google-cloud-donates-a2a-to-linux-foundation/)
 - [Agent2Agent Protocol specification](https://google-a2a.github.io/A2A/specification/)
+- [Google DeepMind: Strengthening our Frontier Safety Framework, September 22, 2025](https://deepmind.google/discover/blog/strengthening-our-frontier-safety-framework/)
+- [CoSAI: Agentic Identity and Access Management, approved March 20, 2026](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf)
+- [OWASP Top 10 for Agentic Applications, December 9, 2025](https://genai.owasp.org/2025/12/09/owasp-top-10-for-agentic-applications-the-benchmark-for-agentic-security-in-the-age-of-autonomous-ai/)
+- [CSA MAESTRO](https://labs.cloudsecurityalliance.org/maestro/)
+- [MITRE ATLAS](https://atlas.mitre.org/)
+- [EU General-Purpose AI Code of Practice, published July 10, 2025](https://digital-strategy.ec.europa.eu/en/policies/contents-code-gpai)
+- [IMDA Model AI Governance Framework for Agentic AI, January 22, 2026](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai)
 - [Google Cloud: Agent Development Kit overview](https://cloud.google.com/agent-builder/agent-development-kit/overview)
 - [Microsoft Agent Framework Overview, updated February 20, 2026](https://learn.microsoft.com/en-us/agent-framework/overview/)
+- [Microsoft Entra Agent ID, updated May 1, 2026](https://learn.microsoft.com/en-us/entra/agent-id/agent-identities)
+- [Microsoft Entra Workload ID overview](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-overview)
+- [Microsoft Entra Verified ID supported standards, updated April 9, 2026](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-standards?country=us&culture=en-us)
+- [ServiceNow AI Control Tower product page](https://www.servicenow.com/products/ai-control-tower.html)
+- [ServiceNow launches AI Control Tower, May 6, 2025](https://newsroom.servicenow.com/press-releases/details/2025/ServiceNow-Launches-AI-Control-Tower-a-Centralized-Command-Center-to-Govern-Manage-Secure-and-Realize-Value-From-Any-AI-Agent-Model-and-Workflow/)
+- [ServiceNow expands AI Control Tower, May 5, 2026](https://newsroom.servicenow.com/press-releases/details/2026/ServiceNow-expands-AI-Control-Tower-to-discover-observe-govern-secure-and-measure-AI-deployed-across-any-system-in-the-enterprise/default.aspx)
+- [Veza introduces AI Agent Security, December 8, 2025](https://veza.com/company/press-room/veza-introduces-ai-agent-security-to-protect-and-govern-ai-agents-at-enterprise-scale/)
+- [Veza introduces Native Access Agents and Enterprise Agent Identity Control Plane, February 25, 2026](https://veza.com/company/press-room/veza-introduces-native-access-agents-to-secure-the-modern-ai-driven-enterprise-with-enterprise-agent-identity-control-plane/)
 - [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model/)
+- [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/)
 - [W3C Trace Context](https://www.w3.org/TR/trace-context/)
 - [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/info/rfc9421)
-- [SLSA Provenance v1.1](https://slsa.dev/spec/v1.1/provenance)
+- [RFC 4512 Lightweight Directory Access Protocol (LDAP): Directory Information Models](https://www.rfc-editor.org/rfc/rfc4512.html)
+- [RFC 7643 System for Cross-domain Identity Management: Core Schema](https://www.rfc-editor.org/rfc/rfc7643)
+- [RFC 7644 System for Cross-domain Identity Management: Protocol](https://www.rfc-editor.org/rfc/rfc7644)
+- [RFC 9728 OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728)
+- [RFC 9635 Grant Negotiation and Authorization Protocol (GNAP)](https://www.rfc-editor.org/rfc/rfc9635)
+- [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767)
+- [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449)
+- [RFC 9162 Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162)
+- [SCITT architecture draft -22](https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/22/)
+- [SLSA Provenance v1.2](https://slsa.dev/spec/v1.2/provenance)
+- [in-toto Attestation Framework Specification](https://github.com/in-toto/attestation/blob/main/spec/README.md)
+- [Sigstore Documentation](https://docs.sigstore.dev/)
+- [C2PA Content Credentials Technical Specification v2.2](https://spec.c2pa.org/specifications/specifications/2.2/specs/C2PA_Specification.html)
+- [C2PA Implementation Guidance](https://spec.c2pa.org/specifications/specifications/2.4/guidance/Guidance.html)
+- [AP2 Agent Payments Protocol core concepts](https://ap2-protocol.org/topics/core-concepts/)
+- [ISO/IEC 27701:2025 Privacy information management systems](https://www.iso.org/standard/85819.html)
+- [ISO/IEC 12792:2025 Transparency taxonomy of AI systems](https://www.iso.org/standard/84111.html)
+- [ISO/IEC DIS 42102 Framework for characterizing AI system methods and capabilities](https://www.iso.org/standard/86898.html)
 - [Package URL / ECMA-427](https://www.packageurl.org/)
+- [International ISBN Agency](https://www.isbn-international.org/)
+- [National ISBN Agencies](https://www.isbn-international.org/content/national-isbn-agencies)
+- [RFC 1034 Domain Names - Concepts and Facilities](https://www.rfc-editor.org/info/rfc1034)
+- [RFC 1035 Domain Names - Implementation and Specification](https://www.rfc-editor.org/info/rfc1035)
+- [RFC 1591 Domain Name System Structure and Delegation](https://www.rfc-editor.org/info/rfc1591)
+- [ICANN history](https://www.icann.org/en/history)
+- [IANA about](https://www.iana.org/about.html)
+- [CA/B Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
+- [NIST blockchain identity white paper](https://csrc.nist.gov/publications/detail/white-paper/2020/01/14/a-taxonomic-approach-to-understanding-emerging-blockchain-idms/final)

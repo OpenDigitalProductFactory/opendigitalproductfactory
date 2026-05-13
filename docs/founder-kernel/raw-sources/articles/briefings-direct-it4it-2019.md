@@ -20,11 +20,14 @@ abstract: |
 
 Primary source for the **IT4IT is the substrate, not a framework competitor** stance. Direct quote: *"a hub of many different frameworks — all designed as one architecture."*
 
-## Key claims
+## Key claims (verified verbatim against source)
 
-- IT4IT integrates ITIL, COBIT, TOGAF, DevOps, SAFe — it does not replace them.
-- "I pitch it as a framework for managing IT and leave it at that. I might also say it's an operating model."
-- The integration value of IT4IT is what gets executive buy-in, not the model itself.
+- Bodman's framing of IT4IT: *"It's a more comprehensive framework. It goes back to the nature of IT4IT being a hub of many different frameworks — and all designed as one architecture."* (verified verbatim)
+- Bodman's executive-pitch tactic: *"I pitch it as a framework for managing IT and leave it at that. I might also say it's an operating model because that's something a chief information officer (CIO) or a business person might know."* (verified verbatim)
+
+## Attribution caveat
+
+The transcript is a multi-panelist BriefingsDirect podcast. A separate point — that IT4IT helps bring ITIL and SAFe together without changing the IT organizations using them — is attributed in the transcript to **Lars Rossen** (HPE), not to Bodman. The substrate / hub-of-frameworks framing is Bodman&#39;s; the &#34;helps bring together&#34; gloss is Rossen&#39;s. Drafts that cite this transcript should keep that attribution clean.
 
 ## See also
 

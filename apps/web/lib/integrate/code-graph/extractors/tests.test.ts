@@ -23,6 +23,22 @@ describe("extractTestFileFacts", () => {
     ]));
   });
 
+  it("maps TypeScript tests importing runtime .js specifiers back to indexed .ts files", () => {
+    const result = extractTestFileFacts({
+      graphKey: "source-code",
+      filePath: "packages/db/src/seed-geographic-data.test.ts",
+      sourceText: 'import { seedCityOnce } from "./seed-geographic-data.js";',
+    });
+
+    expect(result.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "TESTED_BY",
+        toKey: "source-code:packages/db/src/seed-geographic-data.ts",
+        confidence: "exact",
+      }),
+    ]));
+  });
+
   it("falls back to filename-stem matching when imports do not identify a source file", () => {
     const result = extractTestFileFacts({
       graphKey: "source-code",

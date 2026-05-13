@@ -8,6 +8,7 @@ import {
 export function shouldIndexCodeGraphPath(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, "/");
   if (normalized.includes("/.next/") || normalized.startsWith(".next/")) return false;
+  if (normalized.includes("/packages/db/generated/") || normalized.startsWith("packages/db/generated/")) return false;
   if (normalized.includes("/node_modules/") || normalized.startsWith("node_modules/")) return false;
   if (normalized.includes("/.pnpm-store/") || normalized.startsWith(".pnpm-store/")) return false;
   return CODE_GRAPH_FILE_EXTENSIONS.has(lazyPath().extname(normalized).toLowerCase());

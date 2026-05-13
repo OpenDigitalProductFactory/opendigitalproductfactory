@@ -27,7 +27,9 @@ import {
   CODE_GRAPH_EVENT_NAME,
   CODE_GRAPH_GRAPH_KEY,
   CODE_GRAPH_JOB_ID,
+  CODE_GRAPH_PROJECTION_VERSION,
   ensureCodeGraphInitialized,
+  orderCodeGraphFilesForProjection,
   planCodeGraphRefresh,
   queueCodeGraphReconcile,
   registerCodeGraphScheduledJob,
@@ -63,6 +65,8 @@ beforeEach(() => {
 describe("planCodeGraphRefresh", () => {
   it("returns noop when the indexed head already matches HEAD", () => {
     const result = planCodeGraphRefresh({
+      indexedGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
+      currentGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
       currentHeadSha: "abc123",
       lastIndexedHeadSha: "abc123",
       changedFiles: ["apps/web/lib/integrate/change-impact.ts"],
@@ -76,6 +80,8 @@ describe("planCodeGraphRefresh", () => {
 
   it("returns incremental when HEAD changed and tracked files changed", () => {
     const result = planCodeGraphRefresh({
+      indexedGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
+      currentGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
       currentHeadSha: "def456",
       lastIndexedHeadSha: "abc123",
       changedFiles: [
@@ -95,6 +101,8 @@ describe("planCodeGraphRefresh", () => {
 
   it("returns full when there is no prior indexed head", () => {
     const result = planCodeGraphRefresh({
+      indexedGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
+      currentGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
       currentHeadSha: "def456",
       lastIndexedHeadSha: null,
       changedFiles: ["apps/web/lib/integrate/change-impact.ts"],
@@ -107,6 +115,8 @@ describe("planCodeGraphRefresh", () => {
 
   it("returns full when diff computation failed", () => {
     const result = planCodeGraphRefresh({
+      indexedGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
+      currentGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
       currentHeadSha: "def456",
       lastIndexedHeadSha: "abc123",
       changedFiles: [],
@@ -115,6 +125,36 @@ describe("planCodeGraphRefresh", () => {
     });
 
     expect(result.mode).toBe("full");
+  });
+
+  it("returns full when the stored graph projection version is stale", () => {
+    const result = planCodeGraphRefresh({
+      indexedGraphVersion: CODE_GRAPH_PROJECTION_VERSION - 1,
+      currentGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
+      currentHeadSha: "abc123",
+      lastIndexedHeadSha: "abc123",
+      changedFiles: [],
+      diffFailed: false,
+      forceFull: false,
+    });
+
+    expect(result.mode).toBe("full");
+  });
+});
+
+describe("orderCodeGraphFilesForProjection", () => {
+  it("projects source files before tests so TESTED_BY targets already exist", () => {
+    expect(orderCodeGraphFilesForProjection([
+      "packages/db/src/seed-geographic-data.test.ts",
+      "packages/db/src/seed-geographic-data.ts",
+      "apps/web/lib/example.spec.tsx",
+      "apps/web/lib/example.tsx",
+    ])).toEqual([
+      "apps/web/lib/example.tsx",
+      "packages/db/src/seed-geographic-data.ts",
+      "apps/web/lib/example.spec.tsx",
+      "packages/db/src/seed-geographic-data.test.ts",
+    ]);
   });
 });
 

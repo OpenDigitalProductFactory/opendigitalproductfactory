@@ -12,6 +12,8 @@
 
 The primary item is deliberately small enough to finish, but still requires real source discovery across seed logic, database invariants, and tests. The fallback item is better for route/API tracing if the seed item is already resolved by the time this benchmark runs.
 
+**Latest smoke benchmark:** `docs/superpowers/audits/2026-05-13-code-intelligence-benchmark-report.md`
+
 ---
 
 ## Entry Criteria

@@ -123,7 +123,7 @@ services:
       # Without this, Inngest records the app URL as localhost:3000, then
       # retries forever against itself when dispatching queued steps —
       # symptom: events publish + initialize but never execute, UI hangs.
-      INNGEST_SERVE_HOST: http://portal:3000
+      INNGEST_SERVE_ORIGIN: http://portal:3000
       # Allow plain-HTTP MCP traffic from in-bridge clients (sandbox→portal,
       # promoter→portal). The MCP route otherwise refuses non-localhost HTTP.
       # Operator-overridable via MCP_INSECURE_INTERNAL_HOSTS in .env. Bearer
@@ -536,6 +536,7 @@ services:
 
   inngest:
     image: inngest/inngest:latest
+    restart: unless-stopped
     command: "inngest start"
     ports:
       - "8288:8288"

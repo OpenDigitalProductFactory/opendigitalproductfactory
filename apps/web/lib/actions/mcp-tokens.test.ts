@@ -5,6 +5,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/auth/mcp-api-token", () => ({
+  addScopesToMcpApiToken: vi.fn(),
   issueMcpApiToken: vi.fn(),
   revokeMcpApiToken: vi.fn(),
   listMcpApiTokens: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock("@/lib/tak/agent-grants", () => ({
 
 import { auth } from "@/lib/auth";
 import {
+  addScopesToMcpApiToken,
   issueMcpApiToken,
   listMcpApiTokens,
   revokeMcpApiToken,
@@ -26,8 +28,10 @@ import {
   listAvailableMcpScopes,
   listMyMcpTokens,
   revokeMyMcpToken,
+  upgradeMyMcpTokenForCodingAgent,
 } from "./mcp-tokens";
 
+const addScopesMock = addScopesToMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const authMock = auth as unknown as ReturnType<typeof vi.fn>;
 const issueMock = issueMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const revokeMock = revokeMcpApiToken as unknown as ReturnType<typeof vi.fn>;
@@ -191,5 +195,65 @@ describe("revokeMyMcpToken", () => {
     const result = await revokeMyMcpToken({ tokenId: "tok_x", reason: "leaked" });
     expect(result.ok).toBe(true);
     expect(revokeMock).toHaveBeenCalledWith("tok_x", "leaked");
+  });
+});
+
+describe("upgradeMyMcpTokenForCodingAgent", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+
+    const result = await upgradeMyMcpTokenForCodingAgent({ tokenId: "tok_x" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(addScopesMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects tokens not owned by the caller", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([{ id: "tok_owned", name: "x", revokedAt: null, expiresAt: null }]);
+
+    const result = await upgradeMyMcpTokenForCodingAgent({ tokenId: "tok_other" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("not_found_or_not_yours");
+    expect(addScopesMock).not.toHaveBeenCalled();
+  });
+
+  it("adds the default read-only coding-agent scopes to an existing token", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([
+      {
+        id: "tok_x",
+        name: "Mark laptop",
+        scopes: ["backlog_read"],
+        revokedAt: null,
+        expiresAt: null,
+      },
+    ]);
+    addScopesMock.mockResolvedValue({
+      ok: true,
+      scopes: [
+        "backlog_read",
+        "architecture_read",
+        "code_graph_read",
+        "file_read",
+        "spec_plan_read",
+      ],
+      addedScopes: ["architecture_read", "code_graph_read", "file_read", "spec_plan_read"],
+    });
+
+    const result = await upgradeMyMcpTokenForCodingAgent({ tokenId: "tok_x" });
+
+    expect(result.ok).toBe(true);
+    expect(addScopesMock).toHaveBeenCalledWith("tok_x", [
+      "architecture_read",
+      "backlog_read",
+      "code_graph_read",
+      "file_read",
+      "spec_plan_read",
+    ]);
   });
 });

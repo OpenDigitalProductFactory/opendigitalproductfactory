@@ -68,12 +68,20 @@ describe("searchCodeGraph", () => {
       },
     ]);
     expect(runCypher).toHaveBeenCalledWith(
-      expect.stringContaining("toLower(coalesce(n.name, '')) CONTAINS $query"),
+      expect.stringContaining("LIMIT 5"),
       expect.objectContaining({
         graphKey: CODE_GRAPH_GRAPH_KEY,
         query: "code graph",
-        limit: 5,
       }),
+    );
+  });
+
+  it("uses a bounded integer literal for Neo4j LIMIT clauses", async () => {
+    await searchCodeGraph({ query: "code graph", limit: 10.9 });
+
+    expect(runCypher).toHaveBeenCalledWith(
+      expect.stringContaining("LIMIT 10"),
+      expect.not.objectContaining({ limit: expect.anything() }),
     );
   });
 
@@ -182,11 +190,23 @@ describe("findRelatedTests", () => {
       },
     ]);
     expect(runCypher).toHaveBeenCalledWith(
-      expect.stringContaining("MATCH (test:TestFile {graphKey: $graphKey})-[r:TESTED_BY]->(source:CodeFile"),
+      expect.stringContaining("LIMIT 25"),
       expect.objectContaining({
         graphKey: CODE_GRAPH_GRAPH_KEY,
         filePath: "apps/web/lib/integrate/code-graph/graph-queries.ts",
       }),
+    );
+  });
+
+  it("uses a bounded integer literal when finding tests", async () => {
+    await findRelatedTests({
+      filePath: "apps/web/lib/integrate/code-graph/graph-queries.ts",
+      limit: 99.1,
+    });
+
+    expect(runCypher).toHaveBeenCalledWith(
+      expect.stringContaining("LIMIT 50"),
+      expect.not.objectContaining({ limit: expect.anything() }),
     );
   });
 });

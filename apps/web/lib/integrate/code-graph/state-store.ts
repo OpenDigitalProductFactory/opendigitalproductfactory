@@ -1,7 +1,9 @@
 import { prisma } from "@dpf/db";
+import { CODE_GRAPH_PROJECTION_VERSION } from "./constants";
 
 export type CodeGraphIndexStateRecord = {
   graphKey: string;
+  graphVersion?: number | null;
   indexStatus?: string | null;
   indexedFileCount?: number | null;
   lastIndexedHeadSha: string | null;
@@ -16,12 +18,29 @@ type CodeGraphPrisma = {
   };
   codeGraphFileHash: {
     upsert(args: Record<string, unknown>): Promise<unknown>;
+    createMany(args: Record<string, unknown>): Promise<unknown>;
     deleteMany(args: Record<string, unknown>): Promise<unknown>;
     count(args: { where: { graphKey: string } }): Promise<number>;
   };
 };
 
 const codeGraphPrisma = prisma as unknown as CodeGraphPrisma;
+const CODE_GRAPH_FILE_HASH_BATCH_SIZE = 500;
+
+type CodeGraphFileHashWrite = {
+  graphKey: string;
+  filePath: string;
+  checksum: string;
+  indexedAt: Date;
+};
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
+}
 
 export async function findCodeGraphIndexState(graphKey: string): Promise<CodeGraphIndexStateRecord | null> {
   return codeGraphPrisma.codeGraphIndexState.findUnique({ where: { graphKey } });
@@ -42,7 +61,7 @@ export async function markCodeGraphIndexing(
     where: { graphKey },
     create: {
       graphKey,
-      graphVersion: 1,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "updating",
       lastIndexedBranch: input.branch,
@@ -52,6 +71,7 @@ export async function markCodeGraphIndexing(
       lastError: null,
     },
     update: {
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "updating",
       lastIndexedBranch: input.branch,
@@ -77,7 +97,7 @@ export async function markCodeGraphReady(
     where: { graphKey },
     create: {
       graphKey,
-      graphVersion: 1,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "ready",
       lastIndexedAt: input.observedAt,
@@ -89,6 +109,7 @@ export async function markCodeGraphReady(
       lastError: null,
     },
     update: {
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "ready",
       lastIndexedAt: input.observedAt,
@@ -118,7 +139,7 @@ export async function markCodeGraphFailed(
     where: { graphKey },
     create: {
       graphKey,
-      graphVersion: 1,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "failed",
       lastIndexedBranch: input.branch,
@@ -128,6 +149,7 @@ export async function markCodeGraphFailed(
       lastError,
     },
     update: {
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
       workspaceRoot: input.workspaceRoot,
       indexStatus: "failed",
       lastIndexedBranch: input.branch,
@@ -161,8 +183,28 @@ export async function upsertCodeGraphFileHash(input: {
   });
 }
 
+export async function insertCodeGraphFileHashes(inputs: CodeGraphFileHashWrite[]): Promise<void> {
+  for (const batch of chunks(inputs, CODE_GRAPH_FILE_HASH_BATCH_SIZE)) {
+    if (batch.length === 0) continue;
+    await codeGraphPrisma.codeGraphFileHash.createMany({
+      data: batch.map((input) => ({
+        graphKey: input.graphKey,
+        filePath: input.filePath,
+        checksum: input.checksum,
+        authority: "git",
+        lastIndexedAt: input.indexedAt,
+      })),
+      skipDuplicates: true,
+    });
+  }
+}
+
 export async function deleteCodeGraphFileHash(graphKey: string, filePath: string): Promise<void> {
   await codeGraphPrisma.codeGraphFileHash.deleteMany({ where: { graphKey, filePath } });
+}
+
+export async function clearCodeGraphFileHashes(graphKey: string): Promise<void> {
+  await codeGraphPrisma.codeGraphFileHash.deleteMany({ where: { graphKey } });
 }
 
 export async function countCodeGraphFileHashes(graphKey: string): Promise<number> {
