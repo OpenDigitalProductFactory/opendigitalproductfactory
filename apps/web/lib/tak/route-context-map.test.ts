@@ -230,4 +230,14 @@ describe("ROUTE_CONTEXT_MAP /build operator-contract tooling", () => {
       expect(buildRoute!.domainTools).toContain(tool);
     }
   });
+
+  it("exposes code graph tools for build impact research", () => {
+    const buildRoute = ROUTE_CONTEXT_MAP["/build"];
+
+    expect(buildRoute!.domainTools).toContain("get_code_graph_freshness");
+    expect(buildRoute!.domainTools).toContain("inspect_build_code_impact");
+    expect(buildRoute!.domainTools).toContain("search_code_graph");
+    expect(buildRoute!.domainTools).toContain("trace_code_surface");
+    expect(buildRoute!.domainTools).toContain("find_related_tests");
+  });
 });

@@ -586,6 +586,21 @@ function formatReviewGateSection(ctx: BuildContext): string[] {
   return lines;
 }
 
+function formatCodeIntelligenceSection(phase: BuildPhase): string[] {
+  if (!["plan", "build", "review", "ship"].includes(phase)) return [];
+
+  return [
+    "",
+    "--- Code Intelligence ---",
+    "CODE INTELLIGENCE:",
+    "- At the start of Plan, Review, and Ready to Ship, call get_code_graph_freshness.",
+    "- For source discovery, prefer search_code_graph or trace_code_surface when the graph is ready, then confirm exact code with read_project_file.",
+    "- For verification targeting, call find_related_tests for changed source files, then run the relevant tests.",
+    "- If graph freshness is missing, stale, or file-only, say that explicitly and fall back to search_project_files plus read_project_file.",
+    "- Do not claim symbol-level blast radius unless trace_code_surface returns structural edges with source paths.",
+  ];
+}
+
 export async function getBuildContextSection(ctx: BuildContext): Promise<string> {
   const lines: string[] = [
     "",
@@ -666,6 +681,7 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
   }
 
   lines.push(...formatReviewGateSection(ctx));
+  lines.push(...formatCodeIntelligenceSection(ctx.phase));
 
   if (ctx.plan && Object.keys(ctx.plan).length > 0) {
     lines.push("");

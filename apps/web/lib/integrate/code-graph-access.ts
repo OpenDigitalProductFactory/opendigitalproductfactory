@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { CODE_GRAPH_GRAPH_KEY } from "./code-graph-refresh";
+import { CODE_GRAPH_GRAPH_KEY } from "./code-graph/constants";
 
 export type CodeGraphFreshness = {
   graphKey: string;

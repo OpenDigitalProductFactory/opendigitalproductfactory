@@ -209,6 +209,27 @@ export type ToolResult = {
   data?: Record<string, unknown>;
 };
 
+function codeGraphReadToolResult(
+  result: Record<string, unknown> & { available?: unknown; summary?: unknown },
+): ToolResult {
+  const message = typeof result.summary === "string" && result.summary.trim()
+    ? result.summary
+    : "Code graph query completed.";
+  if (result.available === false) {
+    return {
+      success: false,
+      error: "Code graph unavailable",
+      message,
+      data: result,
+    };
+  }
+  return {
+    success: true,
+    message,
+    data: result,
+  };
+}
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -840,6 +861,58 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["review", "ship"],
+  },
+  {
+    name: "search_code_graph",
+    description: "Search the committed source-code graph for files, exported symbols, routes, tools, Prisma models, prompt sources, tests, and external modules.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Name or path text to search for in the code graph." },
+        limit: { type: "number", description: "Maximum number of results to return. Defaults to 10; maximum 50." },
+        graphKey: { type: "string", description: "Optional graph key. Defaults to the platform source graph." },
+      },
+      required: ["query"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
+    name: "trace_code_surface",
+    description: "Trace one route, MCP tool, or Prisma model to its graph-backed implementation files and related tests. Pass exactly one of route, tool, or model.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        route: { type: "string", description: "Next.js route to trace, for example /build." },
+        tool: { type: "string", description: "MCP tool name to trace, for example create_backlog_item." },
+        model: { type: "string", description: "Prisma model name to trace, for example BacklogItem." },
+        graphKey: { type: "string", description: "Optional graph key. Defaults to the platform source graph." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
+    name: "find_related_tests",
+    description: "Find graph-linked tests for a source file path.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Repository-relative source file path." },
+        limit: { type: "number", description: "Maximum number of tests to return. Defaults to 25; maximum 50." },
+        graphKey: { type: "string", description: "Optional graph key. Defaults to the platform source graph." },
+      },
+      required: ["filePath"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["build", "review", "ship"],
   },
   {
     name: "update_feature_brief",
@@ -5602,6 +5675,46 @@ export async function executeTool(
           report,
         },
       };
+    }
+
+    case "search_code_graph": {
+      const { searchCodeGraph } = await import("@/lib/integrate/code-graph/graph-queries");
+      const result = await searchCodeGraph({
+        query: String(params["query"] ?? ""),
+        graphKey: optionalString(params["graphKey"]) ?? undefined,
+        limit: typeof params["limit"] === "number" ? params["limit"] : undefined,
+      });
+      return codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
+        available?: unknown;
+        summary?: unknown;
+      });
+    }
+
+    case "trace_code_surface": {
+      const { traceCodeSurface } = await import("@/lib/integrate/code-graph/graph-queries");
+      const result = await traceCodeSurface({
+        route: optionalString(params["route"]) ?? undefined,
+        tool: optionalString(params["tool"]) ?? undefined,
+        model: optionalString(params["model"]) ?? undefined,
+        graphKey: optionalString(params["graphKey"]) ?? undefined,
+      });
+      return codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
+        available?: unknown;
+        summary?: unknown;
+      });
+    }
+
+    case "find_related_tests": {
+      const { findRelatedTests } = await import("@/lib/integrate/code-graph/graph-queries");
+      const result = await findRelatedTests({
+        filePath: String(params["filePath"] ?? ""),
+        graphKey: optionalString(params["graphKey"]) ?? undefined,
+        limit: typeof params["limit"] === "number" ? params["limit"] : undefined,
+      });
+      return codeGraphReadToolResult(result as unknown as Record<string, unknown> & {
+        available?: unknown;
+        summary?: unknown;
+      });
     }
 
     case "check_sandbox": {

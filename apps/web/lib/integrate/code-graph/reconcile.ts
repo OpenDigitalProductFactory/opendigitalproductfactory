@@ -1,0 +1,177 @@
+import { prisma } from "@dpf/db";
+
+import { CODE_GRAPH_GRAPH_KEY } from "./constants";
+import {
+  getChangedFiles,
+  getCurrentBranch,
+  getCurrentHeadSha,
+  getGitRoot,
+  isWorkspaceDirty,
+  listTrackedFiles,
+} from "./git-snapshot";
+import {
+  clearCodeGraph,
+  ensureCodeGraphNeo4jSchema,
+  syncTrackedFile,
+} from "./neo4j-projection";
+import {
+  countCodeGraphFileHashes,
+  findCodeGraphIndexState,
+  markCodeGraphFailed,
+  markCodeGraphIndexing,
+  markCodeGraphReady,
+} from "./state-store";
+
+export type CodeGraphRefreshMode = "noop" | "incremental" | "full";
+
+export type CodeGraphRefreshPlan = {
+  mode: CodeGraphRefreshMode;
+  changedFiles: string[];
+};
+
+export type ReconcileCodeGraphInput = {
+  reason: "git-commit" | "git-backup" | "scheduled" | "manual";
+  graphKey?: string;
+  forceFull?: boolean;
+};
+
+export type ReconcileCodeGraphResult = {
+  mode: CodeGraphRefreshMode;
+  graphKey: string;
+  headSha: string | null;
+  branch: string | null;
+  workspaceDirty: boolean;
+  changedFiles: string[];
+};
+
+export function planCodeGraphRefresh(input: {
+  currentHeadSha: string | null;
+  lastIndexedHeadSha: string | null;
+  changedFiles: string[];
+  diffFailed: boolean;
+  forceFull: boolean;
+}): CodeGraphRefreshPlan {
+  if (input.forceFull || !input.lastIndexedHeadSha || !input.currentHeadSha || input.diffFailed) {
+    return { mode: "full", changedFiles: [] };
+  }
+
+  if (input.currentHeadSha === input.lastIndexedHeadSha) {
+    return { mode: "noop", changedFiles: [] };
+  }
+
+  return {
+    mode: "incremental",
+    changedFiles: input.changedFiles,
+  };
+}
+
+export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promise<ReconcileCodeGraphResult> {
+  const graphKey = input.graphKey ?? CODE_GRAPH_GRAPH_KEY;
+  const gitRoot = getGitRoot();
+  const observedAt = new Date();
+  let state = await findCodeGraphIndexState(graphKey);
+  let headSha: string | null = null;
+  let branch: string | null = null;
+  let workspaceDirty = false;
+
+  const lockRows = await prisma.$queryRaw<Array<{ locked: boolean }>>`
+    SELECT pg_try_advisory_lock(hashtext(${`code-graph:${graphKey}`})) AS locked
+  `;
+  if (!lockRows[0]?.locked) {
+    return {
+      mode: "noop",
+      graphKey,
+      headSha: null,
+      branch: null,
+      workspaceDirty: false,
+      changedFiles: [],
+    };
+  }
+
+  try {
+    [state, headSha, branch, workspaceDirty] = await Promise.all([
+      findCodeGraphIndexState(graphKey),
+      getCurrentHeadSha(gitRoot),
+      getCurrentBranch(gitRoot),
+      isWorkspaceDirty(gitRoot),
+    ]);
+
+    await markCodeGraphIndexing(graphKey, {
+      workspaceRoot: gitRoot,
+      headSha,
+      branch,
+      previousHeadSha: state?.lastIndexedHeadSha ?? null,
+      workspaceDirty,
+      observedAt,
+    });
+
+    let changedFiles: string[] = [];
+    let diffFailed = false;
+    if (state?.lastIndexedHeadSha && headSha && state.lastIndexedHeadSha !== headSha && !input.forceFull) {
+      try {
+        changedFiles = await getChangedFiles(gitRoot, state.lastIndexedHeadSha, headSha);
+      } catch {
+        diffFailed = true;
+      }
+    }
+
+    const plan = planCodeGraphRefresh({
+      currentHeadSha: headSha,
+      lastIndexedHeadSha: state?.lastIndexedHeadSha ?? null,
+      changedFiles,
+      diffFailed,
+      forceFull: input.forceFull ?? false,
+    });
+
+    const files = plan.mode === "full" ? await listTrackedFiles(gitRoot) : plan.changedFiles;
+    await ensureCodeGraphNeo4jSchema();
+    if (plan.mode === "full") {
+      await clearCodeGraph(graphKey);
+    }
+    for (const filePath of files) {
+      await syncTrackedFile(graphKey, gitRoot, filePath);
+    }
+    const indexedFileCount = await countCodeGraphFileHashes(graphKey);
+    await markCodeGraphReady(graphKey, {
+      workspaceRoot: gitRoot,
+      headSha,
+      branch,
+      workspaceDirty,
+      observedAt,
+      indexedFileCount,
+    });
+    return { mode: plan.mode, graphKey, headSha, branch, workspaceDirty, changedFiles: files };
+  } catch (error) {
+    await markCodeGraphFailed(graphKey, {
+      workspaceRoot: gitRoot,
+      previousHeadSha: state?.lastIndexedHeadSha ?? null,
+      branch,
+      workspaceDirty,
+      observedAt,
+      error,
+    });
+    throw error;
+  } finally {
+    await prisma.$executeRaw`
+      SELECT pg_advisory_unlock(hashtext(${`code-graph:${graphKey}`}))
+    `;
+  }
+}
+
+export async function ensureCodeGraphInitialized(input: {
+  reconcile?: (input: ReconcileCodeGraphInput) => Promise<unknown>;
+} = {}): Promise<void> {
+  const existingState = await findCodeGraphIndexState(CODE_GRAPH_GRAPH_KEY);
+  const needsBootstrap =
+    !existingState ||
+    (existingState.indexStatus === "failed" && !existingState.lastIndexedHeadSha && !existingState.lastIndexedAt);
+
+  if (!needsBootstrap) return;
+
+  const reconcile = input.reconcile ?? reconcileCodeGraph;
+  await reconcile({
+    reason: "manual",
+    graphKey: CODE_GRAPH_GRAPH_KEY,
+    forceFull: true,
+  });
+}

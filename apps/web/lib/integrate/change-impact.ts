@@ -8,6 +8,7 @@
 import { prisma } from "@dpf/db";
 import type { CodeGraphCoverageSummary } from "./code-graph-access";
 import { summarizeCodeGraphCoverage } from "./code-graph-access";
+import { findRelatedTests } from "./code-graph/graph-queries";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,10 @@ export interface ImpactedRole {
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type RollbackComplexity = "simple" | "complex";
 
+export type ChangeImpactCodeGraphSummary = CodeGraphCoverageSummary & {
+  relatedTests?: string[];
+};
+
 export interface ChangeImpactReport {
   routes: {
     new: RouteChange[];
@@ -50,7 +55,7 @@ export interface ChangeImpactReport {
   riskLevel: RiskLevel;
   rollbackComplexity: RollbackComplexity;
   summary: string;
-  codeGraph?: CodeGraphCoverageSummary;
+  codeGraph?: ChangeImpactCodeGraphSummary;
 }
 
 // ─── Diff Parsing ───────────────────────────────────────────────────────────
@@ -251,6 +256,22 @@ function assessRollbackComplexity(schemaChanges: SchemaChange[]): RollbackComple
   return "simple";
 }
 
+async function findGraphRelatedTestPaths(
+  coverage: CodeGraphCoverageSummary,
+): Promise<string[]> {
+  if (!coverage.available || coverage.indexStatus === "failed") return [];
+
+  const relatedTests = new Set<string>();
+  for (const filePath of coverage.indexedFiles) {
+    const result = await findRelatedTests({ filePath });
+    if (!result.available) continue;
+    for (const test of result.tests) {
+      relatedTests.add(test.path);
+    }
+  }
+  return [...relatedTests].sort();
+}
+
 // ─── Main Entry Point ───────────────────────────────────────────────────────
 
 /**
@@ -289,7 +310,11 @@ export async function analyzeChangeImpact(diff: string): Promise<ChangeImpactRep
     modified: routeChanges.modified,
     deleted: routeChanges.deleted,
   });
-  const codeGraph = await summarizeCodeGraphCoverage(changedFilePaths);
+  const graphCoverage = await summarizeCodeGraphCoverage(changedFilePaths);
+  const codeGraph: ChangeImpactCodeGraphSummary = {
+    ...graphCoverage,
+    relatedTests: await findGraphRelatedTestPaths(graphCoverage),
+  };
 
   const riskLevel = assessRisk({ routes: routeChanges, schemaChanges });
   const rollbackComplexity = assessRollbackComplexity(schemaChanges);
@@ -377,6 +402,9 @@ export function formatImpactForChat(report: ChangeImpactReport): string {
     lines.push(`- Code graph: ${report.codeGraph.indexStatus} | ${report.codeGraph.summary}`);
     if (report.codeGraph.warnings.length > 0) {
       lines.push(`- Code graph warnings: ${report.codeGraph.warnings.join(" ")}`);
+    }
+    if (report.codeGraph.relatedTests && report.codeGraph.relatedTests.length > 0) {
+      lines.push(`- Related tests: ${report.codeGraph.relatedTests.join(", ")}`);
     }
   }
 

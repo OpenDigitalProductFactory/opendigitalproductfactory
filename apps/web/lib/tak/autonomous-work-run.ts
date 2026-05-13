@@ -184,6 +184,7 @@ export async function executeAutonomousAgenticLoop(input: {
   buildPhase?: string | null;
   featureBuildId?: string | null;
   modelRequirements?: Record<string, unknown>;
+  apiTokenId?: string | null;
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -199,6 +200,7 @@ export async function executeAutonomousAgenticLoop(input: {
     agentId: input.agentId,
     threadId: input.threadId,
     taskRunId: input.taskRunId,
+    apiTokenId: input.apiTokenId,
     taskType: input.taskType,
     agentDisplayName: input.agentDisplayName,
     buildPhase: input.buildPhase,
@@ -217,6 +219,7 @@ export async function executeAutonomousWorkTool(input: {
   agentId: string;
   threadId: string;
   taskRunId: string;
+  apiTokenId?: string | null;
 }): Promise<ToolResult> {
   const { governedExecuteTool } = await import("@/lib/mcp-governed-execute");
 
@@ -231,6 +234,7 @@ export async function executeAutonomousWorkTool(input: {
       agentId: input.agentId,
       threadId: input.threadId,
       taskRunId: input.taskRunId,
+      apiTokenId: input.apiTokenId ?? undefined,
     },
   });
 }

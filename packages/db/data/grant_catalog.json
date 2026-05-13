@@ -221,7 +221,10 @@
       "sensitivity": "internal",
       "honored_by_tools": [
         "get_code_graph_freshness",
-        "inspect_build_code_impact"
+        "inspect_build_code_impact",
+        "search_code_graph",
+        "trace_code_surface",
+        "find_related_tests"
       ],
       "implies": []
     },

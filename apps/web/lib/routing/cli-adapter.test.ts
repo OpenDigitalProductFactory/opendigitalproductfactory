@@ -66,7 +66,11 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   }),
 }));
 
-import { cliAdapter, CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE } from "./cli-adapter";
+import {
+  cliAdapter,
+  CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE,
+  extractMentionedPlatformToolNames,
+} from "./cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";
@@ -129,6 +133,19 @@ describe("cliAdapter", () => {
 
   it("has type 'claude-cli'", () => {
     expect(cliAdapter.type).toBe("claude-cli");
+  });
+
+  it("recognizes code graph tool mentions in CLI trace output", () => {
+    expect(
+      extractMentionedPlatformToolNames(
+        "Call get_code_graph_freshness, search_code_graph, trace_code_surface, and find_related_tests before review.",
+      ),
+    ).toEqual([
+      "get_code_graph_freshness",
+      "search_code_graph",
+      "trace_code_surface",
+      "find_related_tests",
+    ]);
   });
 
   it("resolves auth via getProviderBearerToken for anthropic-sub", async () => {

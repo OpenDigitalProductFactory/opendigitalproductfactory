@@ -57,6 +57,9 @@ describe("mcp tools", () => {
     expect(toolNames).toContain("create_build_epic");
     expect(toolNames).toContain("get_code_graph_freshness");
     expect(toolNames).toContain("inspect_build_code_impact");
+    expect(toolNames).toContain("search_code_graph");
+    expect(toolNames).toContain("trace_code_surface");
+    expect(toolNames).toContain("find_related_tests");
   });
 
   it("update_feature_brief requires view_platform capability", async () => {
