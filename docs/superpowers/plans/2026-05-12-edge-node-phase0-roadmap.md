@@ -1,7 +1,44 @@
 # DPF Edge Node — Phase 0 Roadmap
 
-> **Status:** in-flight planning. This roadmap depends on the spec
-> being implementation-ready
+> **Status (2026-05-12):** in flight, ~80% of slices on `main`.
+> Authority-side gates (A1, A2, A4, A7, A8, A9, A10) are landed and
+> the spec's REST ingestion controls table reads "Implemented" for
+> every Phase 0 gate (see § "Implementation status" in the spec).
+> The two remaining slices are Edge-Node-side: **A5** (the sweep
+> + submission loop wiring the heartbeat loop has been awaiting)
+> and **A6** (the `docker-compose.edge.yml` operator overlay).
+> Until A5 lands, the Edge Node enrolls and heartbeats but does
+> not actually submit discovery runs — the end-to-end demo at the
+> top of this doc cannot pass yet.
+>
+> ## Slice status table
+>
+> | Slice | What | Status | PR(s) |
+> |---|---|---|---|
+> | A1 | Prisma schema + PrincipalAlias linkage | **Implemented** | #495 (initial), #500 (Principal convergence retrofit) |
+> | A2 | Authority API endpoints (enroll + heartbeat + ingestion) + auth middleware | **Implemented** | #498 |
+> | A3 | Edge Node service skeleton (enroll + heartbeat loops) | **Implemented** | #501 |
+> | A4 | `persistSubmittedDiscoveryRun` extraction | **Implemented** | #499 |
+> | A5 | Edge Node sweep + submission wiring | **Pending** | — |
+> | A6 | `docker-compose.edge.yml` operator overlay | **Pending** | — |
+> | A7 | Portal Admin UI (Edge Nodes settings page) | **Implemented** | #527 |
+> | A8 | Failure audit to `ToolExecution` | **Implemented** | #517 |
+> | A9 | Unit + integration test sweep | **Implemented** | #508 (route contracts), #513 (idempotency), #521 (persistence wiring), #522 (rate limit tests), #523 (payload-cap tests) |
+> | A10 | Local integration smoke + verification runbook entry | **Implemented** | #528 |
+>
+> Other Phase 0 follow-ups landed alongside the slice plan:
+> - #509 / #515 — heavy security review repair (two passes)
+> - #513 — `(edgeNodeId, runKey)` composite idempotency
+> - #517 — failure audit (A8 scope)
+> - #521 — discovery-runs route now calls `persistSubmittedDiscoveryRun`
+> - #522 — per-node rate limits
+> - #523 — payload size caps (5 MB body + 64 KB per-item rawData)
+> - #527 — Admin > Edge Nodes UI (A7 scope)
+> - #528 — end-to-end lifecycle verification script (A10 scope)
+>
+> Original framing (kept for historical context):
+>
+> This roadmap depends on the spec
 > ([`docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md`](../specs/2026-05-09-dpf-edge-node-design.md)
 > — see PR landing the R&B pass + open-question resolutions).
 > Implementation PRs do not land on `main` until heavy security
