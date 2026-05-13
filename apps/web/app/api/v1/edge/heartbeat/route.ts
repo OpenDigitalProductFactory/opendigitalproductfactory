@@ -19,6 +19,7 @@ import {
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
 import { recordHeartbeat } from "@/lib/edge-node/enrollment";
+import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
 
 const ROUTE_CONTEXT = "/api/v1/edge/heartbeat";
 
@@ -59,6 +60,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       { ok: false, error: authResult.error, message: authResult.message },
       { status },
+    );
+  }
+
+  // Per-node rate limit: 12/min per the spec § REST ingestion controls.
+  // Fires AFTER auth so we can attribute to a specific Edge Node.
+  const rateLimit = checkEdgeRateLimit(
+    "edge.heartbeat",
+    authResult.edgeNodeRowId,
+  );
+  if (!rateLimit.allowed) {
+    await writeEdgeNodeAudit({
+      route: "edge.heartbeat",
+      routeContext: ROUTE_CONTEXT,
+      startedAt,
+      edgeNodeId: authResult.edgeNodeRowId,
+      nodeId: authResult.nodeId,
+      principalId: null,
+      status: 429,
+      success: false,
+      error: "rate_limited",
+      summary: { retryAfter: rateLimit.retryAfter, ceiling: "12/min" },
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: rateLimit.retryAfter,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfter ?? 60) },
+      },
     );
   }
 
