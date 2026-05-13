@@ -24,6 +24,7 @@ export {
   linkPages,
   attachSource,
   getWikiPage,
+  listPrinciplesByTier,
   type WikiStoreClient,
   type WikiPageKind,
   type WikiPageStatus,
