@@ -1,7 +1,7 @@
 ---
 title: Founder Kernel
 pageKind: index
-status: draft
+status: published
 abstract: Top-level index for the founder kernel — stances, heuristics, entities, and the raw sources that back them.
 ---
 
@@ -9,7 +9,24 @@ abstract: Top-level index for the founder kernel — stances, heuristics, entiti
 
 The founder kernel is the wisdom layer that ships with DPF. It answers the question every user eventually asks: **&#34;what would Mark do?&#34;** Pages here are not summaries of external material; they are the platform&#39;s stance, organised by kind.
 
-This first cut was researched and drafted from Mark&#39;s public corpus (LinkedIn long-form articles, Open Group publications including the W205 *Shift to Digital Product* white paper, BriefingsDirect interviews, Architecture &amp; Governance Magazine, ServiceNow community blogs, IT4IT v3 contributions, DPROM, and CSDM v5 materials). Every page is **`status: draft`** — Mark reviews, edits, and flips to `published` what survives.
+This first cut was researched and drafted from Mark&#39;s public corpus (LinkedIn long-form articles, Open Group publications including the W205 *Shift to Digital Product* white paper, BriefingsDirect interviews, Architecture &amp; Governance Magazine, ServiceNow community blogs, IT4IT v3 contributions, DPROM, and CSDM v5 materials). Mark published the kernel after review.
+
+## Source verification status
+
+The kernel was cross-referenced against its cited sources in a separate audit. Status per source:
+
+| Source | Verification |
+|---|---|
+| [Possible Futures for EA (A&amp;G Magazine)](../raw-sources/articles/possible-futures-enterprise-architecture.md) | ✓ All quoted claims verified verbatim. |
+| [Open Group 2017 blog interview](../raw-sources/articles/open-group-2017-managing-business-of-it.md) | ✓ All quoted claims verified verbatim. |
+| [W205 *Shift to Digital Product* paper](../raw-sources/papers/shift-to-digital-product-w205.md) | ✓ Authorship, date, thesis, and Service Model → Digital Product Backbone reframe all verified against The Open Group&#39;s published metadata. |
+| [BriefingsDirect 2019 transcript](../raw-sources/articles/briefings-direct-it4it-2019.md) | ⚠ Bodman&#39;s &#34;hub of frameworks&#34; and &#34;framework for managing IT&#34; quotes verified verbatim. **Attribution caveat:** a separate &#34;helps bring ITIL and SAFe together&#34; gloss in the same transcript is from Lars Rossen, not Bodman — drafts citing this source should keep attribution clean. |
+| [Sibling Portfolios (ServiceNow community)](../raw-sources/articles/sibling-portfolios.md) | ⚠ Position verified. **Two attribution caveats:** the article does not use the term &#34;DPM&#34; (that branding is from a 2022 LinkedIn post), and the &#34;DevOps at enterprise level&#34; quote earlier drafts associated with this article isn&#39;t actually in it (it&#39;s from the 2022 DPM overview post). |
+| LinkedIn Pulse: [Why Product-Centric Approach](../raw-sources/articles/why-product-centric-approach-needed.md) | ⊘ **Unverified.** LinkedIn returned HTTP 503 to the audit (auth-wall). The Digital Product definition quote and the &#34;Projects are time-bound&#34; quote that the stance pages rest on are taken from the research agent&#39;s prior ingestion via search snippets; not independently verified by this audit. Mark should spot-check before high-stakes use. |
+| LinkedIn Pulse: [Why Product-Centricity Critical](../raw-sources/articles/why-product-centricity-critical.md) | ⊘ Same as above — auth-wall blocked verification. |
+| LinkedIn Pulse: [Think Twice](../raw-sources/articles/think-twice-ea-platform-servicenow.md) | ⊘ Auth-wall blocked verification. The &#34;Ugly Reckoning Phase&#34; phasing and the camera analogy that `stances/dont-integrate-ea-platform` rests on need a personal spot-check. |
+| [IT4IT v3 framework](../raw-sources/frameworks/it4it-v3.md) | ✓ Public-facing standard metadata verified. |
+| [CSDM framework](../raw-sources/frameworks/csdm.md) | ✓ Public-facing product documentation verified. |
 
 ## Stances — Mark&#39;s positions
 
