@@ -23,6 +23,11 @@ vi.mock("@/lib/inference/ai-provider-internals", () => ({
   getProviderBearerToken: (...args: unknown[]) => mockGetProviderBearerToken(...args),
 }));
 
+const mockCreateMcpSessionToken = vi.fn();
+vi.mock("@/lib/mcp/session-token", () => ({
+  createMcpSessionToken: (...args: unknown[]) => mockCreateMcpSessionToken(...args),
+}));
+
 vi.mock("./execution-adapter-registry", () => ({
   registerExecutionAdapter: vi.fn(),
 }));
@@ -286,5 +291,219 @@ describe("cliAdapter", () => {
     const execCalls = mockExecAsync.mock.calls.map(c => c[0] as string);
     const cleanupCall = execCalls.find(c => c.includes("rm -f"));
     expect(cleanupCall).toBeDefined();
+  });
+
+  // ── Native-MCP mode ────────────────────────────────────────────────────────
+  // When the agentic loop populates `mcpSession` AND the call has tools, the
+  // adapter mints a per-call JWT, writes an mcp-config.json, and tells the CLI
+  // to mount /api/mcp/v1 via --mcp-config. Tools no longer get described in
+  // text; the CLI surfaces them as native mcp__dpf__* tool_use definitions and
+  // dispatches them through the MCP server. This is the post-#516 architecture.
+  describe("native-MCP mode", () => {
+    function makeMcpRequest(): AdapterRequest {
+      return makeRequest({
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "query_backlog",
+              description: "Query the backlog",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+          {
+            type: "function",
+            function: {
+              name: "create_backlog_item",
+              description: "Create a backlog item",
+              parameters: { type: "object", properties: { title: { type: "string" } } },
+            },
+          },
+        ],
+        mcpSession: {
+          userId: "user-1",
+          agentId: "build-specialist",
+          threadId: "thread-abc",
+          routeContext: "/build",
+        },
+      });
+    }
+
+    it("mints a session JWT and writes an mcp-config when mcpSession + tools present", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      await cliAdapter.execute(makeMcpRequest());
+
+      expect(mockCreateMcpSessionToken).toHaveBeenCalledTimes(1);
+      const mintArgs = mockCreateMcpSessionToken.mock.calls[0]![0] as Record<string, unknown>;
+      expect(mintArgs.userId).toBe("user-1");
+      expect(mintArgs.agentId).toBe("build-specialist");
+      expect(mintArgs.threadId).toBe("thread-abc");
+      expect(mintArgs.routeContext).toBe("/build");
+      expect(mintArgs.capability).toBe("write"); // create_backlog_item is side-effecting
+      expect(mintArgs.scopes).toContain("backlog_read");
+      expect(mintArgs.scopes).toContain("backlog_write");
+
+      // mcp-config file write
+      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+      const mcpWrite = execCalls.find((c) => c.includes("cli-mcp-"));
+      expect(mcpWrite).toBeDefined();
+      // The chmod 600 protects the JWT on disk during the call
+      expect(mcpWrite).toContain("chmod 600");
+    });
+
+    it("includes --mcp-config + --strict-mcp-config in the runner script", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      await cliAdapter.execute(makeMcpRequest());
+
+      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+      const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
+      const m = runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/);
+      const decoded = Buffer.from(m![1]!, "base64").toString("utf-8");
+
+      expect(decoded).toContain("--mcp-config");
+      expect(decoded).toContain("--strict-mcp-config");
+      // Native-tool shadowing backstop is still in place
+      expect(decoded).toContain("--disallowedTools");
+      expect(decoded).toContain(CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE);
+    });
+
+    it("does NOT inject the text-described tool list into the system prompt", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      await cliAdapter.execute(makeMcpRequest());
+
+      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+      const systemWrite = execCalls.find((c) => c.includes("cli-system-"));
+      const m = systemWrite!.match(/echo '([A-Za-z0-9+/=]+)'/);
+      const sys = Buffer.from(m![1]!, "base64").toString("utf-8");
+
+      // Tool descriptions and the structured-JSON wire-format contract must
+      // be absent — the CLI advertises tools via MCP discovery.
+      expect(sys).not.toContain("To invoke a tool");
+      expect(sys).not.toContain("query_backlog: Query the backlog");
+    });
+
+    it("falls back to legacy text-tool mode when JWT minting fails", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockRejectedValue(new Error("AUTH_SECRET missing"));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      await cliAdapter.execute(makeMcpRequest());
+
+      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+      const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
+      const decoded = Buffer.from(runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/)![1]!, "base64").toString("utf-8");
+      expect(decoded).not.toContain("--mcp-config");
+      expect(decoded).toContain("--disallowedTools"); // legacy path still suppresses native tools
+
+      const systemWrite = execCalls.find((c) => c.includes("cli-system-"));
+      const sys = Buffer.from(systemWrite!.match(/echo '([A-Za-z0-9+/=]+)'/)![1]!, "base64").toString("utf-8");
+      // Legacy text-tool injection is back when the mint fails
+      expect(sys).toContain("To invoke a tool");
+    });
+
+    it("falls back to legacy mode when mcpSession is absent", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      // Same tools as makeMcpRequest, but no mcpSession — eval runner / non-coworker case.
+      await cliAdapter.execute(
+        makeRequest({
+          tools: [
+            {
+              type: "function",
+              function: { name: "query_backlog", description: "Q", parameters: {} },
+            },
+          ],
+        }),
+      );
+
+      expect(mockCreateMcpSessionToken).not.toHaveBeenCalled();
+      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+      const runnerWrite = execCalls.find((c) => c.includes("cli-run-"));
+      expect(runnerWrite).toBeDefined();
+      const decoded = Buffer.from(runnerWrite!.match(/echo '([A-Za-z0-9+/=]+)'/)![1]!, "base64").toString("utf-8");
+      expect(decoded).not.toContain("--mcp-config");
+    });
+
+    it("derives capability=read when no tools require write grants", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      await cliAdapter.execute(
+        makeRequest({
+          tools: [
+            {
+              type: "function",
+              function: { name: "query_backlog", description: "Q", parameters: {} },
+            },
+            {
+              type: "function",
+              function: { name: "list_epics", description: "E", parameters: {} },
+            },
+          ],
+          mcpSession: { userId: "user-1", agentId: "x", threadId: "y", routeContext: "/" },
+        }),
+      );
+
+      const mintArgs = mockCreateMcpSessionToken.mock.calls[0]![0] as Record<string, unknown>;
+      expect(mintArgs.capability).toBe("read");
+      expect(mintArgs.scopes).toEqual(expect.arrayContaining(["backlog_read"]));
+    });
+
+    it("cleanup includes the mcp-config file", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+
+      await cliAdapter.execute(makeMcpRequest());
+
+      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
+      const cleanup = execCalls.find((c) => c.includes("rm -f"));
+      expect(cleanup).toContain("cli-mcp-");
+    });
+
+    it("strips mcp__dpf__* tool_use blocks the CLI surfaces (Phase 6 double-dispatch protection)", async () => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
+      mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
+
+      // Hypothetical case: CLI dispatched mcp__dpf__query_backlog internally
+      // but also leaves an unresolved tool_use block in the output. The
+      // adapter must NOT pass that to the agentic loop or it would re-execute.
+      const cliOutput = JSON.stringify({
+        result: "Found 64 open items.",
+        content: [
+          { type: "text", text: "Done" },
+          {
+            type: "tool_use",
+            id: "tool_999",
+            name: "mcp__dpf__query_backlog",
+            input: { limit: 5 },
+          },
+          // A non-MCP tool_use should still pass through (legacy callers still
+          // rely on this — e.g. nudge prompts asking the model to make ONE call).
+          {
+            type: "tool_use",
+            id: "tool_1000",
+            name: "save_build_notes",
+            input: { notes: "x" },
+          },
+        ],
+        usage: {},
+      });
+      mockSpawn.mockReturnValue(createMockProcess(cliOutput));
+
+      const result = await cliAdapter.execute(makeMcpRequest());
+      expect(result.toolCalls.map((tc) => tc.name)).toEqual(["save_build_notes"]);
+    });
   });
 });

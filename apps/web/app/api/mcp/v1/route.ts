@@ -14,11 +14,23 @@
 // discovery don't fail mysteriously.
 
 import { resolveMcpApiToken, type ResolvedMcpToken } from "@/lib/auth/mcp-api-token";
+import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+
+/** Resolved auth — either a persistent PAT or a short-lived internal session.
+ * The route-side handlers consume this single shape; the only difference is
+ * what `threadId`/`routeContext` populate audit rows with. */
+type ResolvedAuth = ResolvedMcpToken & {
+  threadId?: string | null;
+  routeContext?: string | null;
+  /** Where the auth came from — populates `ToolExecution.executionMode` so we can
+   *  tell internal cli-adapter calls from external coding-agent calls. */
+  source: "pat" | "session-jwt";
+};
 
 const PROTOCOL_VERSION = "2025-11-25";
 const SERVER_NAME = "dpf-platform";
@@ -236,7 +248,7 @@ async function handleInitialize(id: JsonRpcId): Promise<Response> {
 
 async function handleToolsList(
   id: JsonRpcId,
-  token: ResolvedMcpToken,
+  token: ResolvedAuth,
 ): Promise<Response> {
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
@@ -248,7 +260,7 @@ async function handleToolsList(
 
 async function handleToolsCall(
   id: JsonRpcId,
-  token: ResolvedMcpToken,
+  token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
@@ -306,8 +318,10 @@ async function handleToolsCall(
     context: {
       agentId: token.agentId ?? undefined,
       apiTokenId: token.tokenId,
+      threadId: token.threadId ?? undefined,
+      routeContext: token.routeContext ?? undefined,
     },
-    source: "external-jsonrpc",
+    source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
 
   // Convert ToolResult into MCP tools/call response shape:
@@ -352,15 +366,43 @@ export async function POST(request: Request): Promise<Response> {
     return forbiddenResponse(`Origin ${origin} not allowed`, origin);
   }
 
-  // Auth
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-    return unauthorizedResponse("missing Bearer token");
-  }
-  const plaintext = authHeader.slice("bearer ".length).trim();
-  const token = await resolveMcpApiToken(plaintext);
-  if (!token) {
-    return unauthorizedResponse("invalid or expired token");
+  // Auth — two paths:
+  //   X-MCP-Session: <jwt>      — short-lived internal session (Claude CLI
+  //                                adapter, future internal callers). JWT
+  //                                carries userId/agentId/threadId/scopes.
+  //   Authorization: Bearer ... — persistent dpfmcp_* PAT for external
+  //                                coding agents (Mark's laptop, VS Code).
+  // Session JWT wins when both are present so the adapter's narrow per-call
+  // scope cannot accidentally be widened by a stale operator PAT in the same
+  // sandbox shell environment.
+  const sessionHeader = request.headers.get("x-mcp-session");
+  let token: ResolvedAuth;
+  if (sessionHeader) {
+    const session = await verifyMcpSessionToken(sessionHeader.trim());
+    if (!session) {
+      return unauthorizedResponse("invalid or expired MCP session");
+    }
+    token = {
+      tokenId: `session:${session.userId}:${session.agentId ?? "no-agent"}`,
+      userId: session.userId,
+      agentId: session.agentId ?? null,
+      scopes: session.scopes,
+      capability: session.capability,
+      threadId: session.threadId ?? null,
+      routeContext: session.routeContext ?? null,
+      source: "session-jwt",
+    };
+  } else {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+      return unauthorizedResponse("missing Bearer token or X-MCP-Session header");
+    }
+    const plaintext = authHeader.slice("bearer ".length).trim();
+    const pat = await resolveMcpApiToken(plaintext);
+    if (!pat) {
+      return unauthorizedResponse("invalid or expired token");
+    }
+    token = { ...pat, source: "pat" };
   }
 
   // Parse JSON-RPC envelope

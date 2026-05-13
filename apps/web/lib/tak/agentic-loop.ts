@@ -665,6 +665,13 @@ export async function runAgenticLoop(params: {
     minimumCapabilities,
     agentMinimumContextTokens,
     agentId,
+    // mcpSession is forwarded through callWithFallbackChain → callProvider →
+    // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
+    // short-lived JWT for `--mcp-config`, exposing platform tools as native
+    // `mcp__dpf__*` tools instead of text-described prompt content. Other
+    // adapters ignore the field. The agentic loop is the only place with
+    // both userId and threadId in scope, so it is the natural source.
+    mcpSession: { userId, agentId, threadId, routeContext },
   };
 
   let messages = [...chatHistory];
