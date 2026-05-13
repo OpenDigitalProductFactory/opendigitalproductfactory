@@ -12,9 +12,23 @@ vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: vi.fn(),
 }));
 
+vi.mock("@/lib/tak/autonomous-work-run", () => ({
+  createAutonomousWorkRun: vi.fn(),
+  executeAutonomousAgenticLoop: vi.fn(),
+  resolveAutonomousWorkAgent: vi.fn(),
+  resolveAutonomousWorkTools: vi.fn(),
+}));
+
+vi.mock("@/lib/tak/task-records", () => ({
+  createTaskMessage: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
+    taskRun: { findFirst: vi.fn(), update: vi.fn() },
+    agentThread: { upsert: vi.fn() },
+    taskMessage: { create: vi.fn() },
   },
 }));
 
@@ -22,12 +36,27 @@ import { prisma } from "@dpf/db";
 import { resolveMcpApiToken } from "@/lib/auth/mcp-api-token";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import {
+  createAutonomousWorkRun,
+  executeAutonomousAgenticLoop,
+  resolveAutonomousWorkAgent,
+  resolveAutonomousWorkTools,
+} from "@/lib/tak/autonomous-work-run";
+import { createTaskMessage } from "@/lib/tak/task-records";
 import { GET, POST } from "./route";
 
 const resolveMock = resolveMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const verifySessionMock = verifyMcpSessionToken as unknown as ReturnType<typeof vi.fn>;
 const govMock = governedExecuteTool as unknown as ReturnType<typeof vi.fn>;
 const userMock = prisma.user.findUnique as unknown as ReturnType<typeof vi.fn>;
+const taskRunFindFirstMock = prisma.taskRun.findFirst as unknown as ReturnType<typeof vi.fn>;
+const taskRunUpdateMock = prisma.taskRun.update as unknown as ReturnType<typeof vi.fn>;
+const agentThreadUpsertMock = prisma.agentThread.upsert as unknown as ReturnType<typeof vi.fn>;
+const createRunMock = createAutonomousWorkRun as unknown as ReturnType<typeof vi.fn>;
+const executeLoopMock = executeAutonomousAgenticLoop as unknown as ReturnType<typeof vi.fn>;
+const resolveAgentMock = resolveAutonomousWorkAgent as unknown as ReturnType<typeof vi.fn>;
+const resolveToolsMock = resolveAutonomousWorkTools as unknown as ReturnType<typeof vi.fn>;
+const createTaskMessageMock = createTaskMessage as unknown as ReturnType<typeof vi.fn>;
 
 function makeRequest(opts: {
   url?: string;
@@ -66,6 +95,19 @@ beforeEach(() => {
     isSuperuser: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
+  taskRunFindFirstMock.mockResolvedValue(null);
+  taskRunUpdateMock.mockResolvedValue({} as never);
+  agentThreadUpsertMock.mockResolvedValue({ id: "thread-remote-1" } as never);
+  createRunMock.mockResolvedValue({ id: "task-row-1", taskRunId: "TR-MCP-12345678", contextId: "thread-remote-1" } as never);
+  resolveAgentMock.mockResolvedValue({
+    agentId: "AGT-REMOTE",
+    systemPrompt: "You are a governed autonomous coworker.",
+    sensitivity: "internal",
+    displayName: "Remote Coworker",
+  } as never);
+  resolveToolsMock.mockResolvedValue({ tools: [], toolsForProvider: [] } as never);
+  executeLoopMock.mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+  createTaskMessageMock.mockResolvedValue(undefined as never);
 });
 
 afterEach(() => {
@@ -715,5 +757,214 @@ describe("POST — ping", () => {
     );
     const body = await res.json();
     expect(body.result).toEqual({});
+  });
+});
+
+describe("POST — tasks/submit", () => {
+  it("returns invalid_params when idempotencyKey or riskClass is missing", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_x",
+      userId: "u1",
+      agentId: "AGT-REMOTE",
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: {
+          jsonrpc: "2.0",
+          id: 11,
+          method: "tasks/submit",
+          params: {
+            agentId: "AGT-REMOTE",
+            routeContext: "/platform/tools/discovery",
+            objective: "Investigate discovery backlog.",
+            prompt: "Summarize discovery backlog.",
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.error.code).toBe(-32602);
+    expect(createRunMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects write-risk submissions from read-only tokens before creating a TaskRun", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_read",
+      userId: "u1",
+      agentId: "AGT-REMOTE",
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: {
+          jsonrpc: "2.0",
+          id: 12,
+          method: "tasks/submit",
+          params: {
+            agentId: "AGT-REMOTE",
+            routeContext: "/platform/tools/discovery",
+            objective: "Prepare a backlog update.",
+            prompt: "Create a backlog item if needed.",
+            idempotencyKey: "remote-read-denied-1",
+            riskClass: "bounded-write",
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toMatch(/read-only/i);
+    expect(createRunMock).not.toHaveBeenCalled();
+    expect(executeLoopMock).not.toHaveBeenCalled();
+  });
+
+  it("replays an existing TaskRun for the same idempotencyKey without re-running the coworker", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_write",
+      userId: "u1",
+      agentId: "AGT-REMOTE",
+      scopes: ["backlog_read", "backlog_write"],
+      capability: "write",
+    });
+    taskRunFindFirstMock.mockResolvedValue({
+      taskRunId: "TR-MCP-OLD",
+      status: "completed",
+      progressPayload: { summary: "Already done." },
+      a2aMetadata: { idempotencyKey: "remote-replay-1", riskClass: "read" },
+    } as never);
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: {
+          jsonrpc: "2.0",
+          id: 13,
+          method: "tasks/submit",
+          params: {
+            agentId: "AGT-REMOTE",
+            routeContext: "/platform/tools/discovery",
+            objective: "Summarize current state.",
+            prompt: "Summarize current state.",
+            idempotencyKey: "remote-replay-1",
+            riskClass: "read",
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.taskRunId).toBe("TR-MCP-OLD");
+    expect(body.result.idempotentReplay).toBe(true);
+    expect(createRunMock).not.toHaveBeenCalled();
+    expect(executeLoopMock).not.toHaveBeenCalled();
+  });
+
+  it("creates an external-mcp TaskRun and executes read tasks with token attribution", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_read",
+      userId: "u1",
+      agentId: "AGT-REMOTE",
+      scopes: ["backlog_read"],
+      capability: "read",
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: {
+          jsonrpc: "2.0",
+          id: 14,
+          method: "tasks/submit",
+          params: {
+            agentId: "AGT-REMOTE",
+            routeContext: "/platform/tools/discovery",
+            title: "Remote discovery summary",
+            objective: "Summarize discovery backlog.",
+            prompt: "Summarize discovery backlog and cite what you used.",
+            idempotencyKey: "remote-read-1",
+            riskClass: "read",
+          },
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(createRunMock).toHaveBeenCalledWith(expect.objectContaining({
+      trigger: "external-mcp",
+      userId: "u1",
+      agentId: "AGT-REMOTE",
+      routeContext: "/platform/tools/discovery",
+      sourceRef: { kind: "mcp-token", id: "tok_read" },
+      metadata: expect.objectContaining({
+        idempotencyKey: "remote-read-1",
+        riskClass: "read",
+        apiTokenId: "tok_read",
+      }),
+    }));
+    expect(resolveToolsMock).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "advise",
+      externalAccessEnabled: true,
+    }));
+    expect(executeLoopMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskRunId: "TR-MCP-12345678",
+      apiTokenId: "tok_read",
+      chatHistory: [{ role: "user", content: "Summarize discovery backlog and cite what you used." }],
+    }));
+    expect(taskRunUpdateMock).toHaveBeenCalledWith(expect.objectContaining({
+      where: { taskRunId: "TR-MCP-12345678" },
+      data: expect.objectContaining({ status: "completed" }),
+    }));
+    const body = await res.json();
+    expect(body.result.taskRunId).toBe("TR-MCP-12345678");
+    expect(body.result.idempotentReplay).toBe(false);
+    expect(body.result.requiresApproval).toBe(false);
+  });
+
+  it("pauses high-risk submissions before executing tools", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_write",
+      userId: "u1",
+      agentId: "AGT-REMOTE",
+      scopes: ["backlog_read", "backlog_write"],
+      capability: "write",
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: {
+          jsonrpc: "2.0",
+          id: 15,
+          method: "tasks/submit",
+          params: {
+            agentId: "AGT-REMOTE",
+            routeContext: "/platform/tools/discovery",
+            objective: "Make broad production changes.",
+            prompt: "Make broad production changes.",
+            idempotencyKey: "remote-high-risk-1",
+            riskClass: "high-risk",
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.taskRunId).toBe("TR-MCP-12345678");
+    expect(body.result.requiresApproval).toBe(true);
+    expect(body.result.status).toBe("input-required");
+    expect(taskRunUpdateMock).toHaveBeenCalledWith(expect.objectContaining({
+      where: { taskRunId: "TR-MCP-12345678" },
+      data: expect.objectContaining({ status: "input-required" }),
+    }));
+    expect(executeLoopMock).not.toHaveBeenCalled();
   });
 });

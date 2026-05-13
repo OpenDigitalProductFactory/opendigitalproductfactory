@@ -6,6 +6,7 @@ import {
   attachSource,
   getWikiPage,
   linkPages,
+  listPrinciplesByTier,
   upsertWikiPage,
 } from "./wiki-store";
 
@@ -184,8 +185,9 @@ function makeWikiPageMocks() {
   const create = vi.fn();
   const update = vi.fn();
   const findUnique = vi.fn();
-  const db = { wikiPage: { findFirst, create, update, findUnique } };
-  return { db, findFirst, create, update, findUnique };
+  const findMany = vi.fn();
+  const db = { wikiPage: { findFirst, create, update, findUnique, findMany } };
+  return { db, findFirst, create, update, findUnique, findMany };
 }
 
 describe("wiki store helpers", () => {
@@ -355,5 +357,116 @@ describe("wiki store helpers", () => {
     expect(findFirst).toHaveBeenCalledWith({
       where: { organizationId: null, slug: "entities/digital-product" },
     });
+  });
+});
+
+describe("listPrinciplesByTier", () => {
+  function makeListMocks() {
+    const findMany = vi.fn();
+    const db = { wikiPage: { findMany } };
+    return { db, findMany };
+  }
+
+  it("queries published kernel principle pages matching the tier", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([
+      { id: "wp1", slug: "principles/p1", title: "P1" },
+    ]);
+
+    await listPrinciplesByTier(db, { tier: "commandment" });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          pageKind: "principle",
+          status: "published",
+          principleTier: "commandment",
+        }),
+      }),
+    );
+  });
+
+  it("filters by appliesTo using array containment (has)", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, {
+      tier: "commandment",
+      appliesTo: "external_coding_agent",
+    });
+
+    const arg = findMany.mock.calls[0][0] as {
+      where: { principleAppliesTo: { has: string } };
+    };
+    expect(arg.where.principleAppliesTo).toEqual({
+      has: "external_coding_agent",
+    });
+  });
+
+  it("scopes to kernel rows when organizationId is null", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, {
+      tier: "commandment",
+      organizationId: null,
+    });
+
+    const arg = findMany.mock.calls[0][0] as {
+      where: { organizationId: null };
+    };
+    expect(arg.where.organizationId).toBeNull();
+  });
+
+  it("includes both kernel and org rows when an organizationId is supplied", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, {
+      tier: "core",
+      organizationId: "org_acme",
+    });
+
+    const arg = findMany.mock.calls[0][0] as {
+      where: { OR: Array<{ organizationId: string | null }> };
+    };
+    expect(arg.where.OR).toEqual([
+      { organizationId: "org_acme" },
+      { organizationId: null },
+    ]);
+  });
+
+  it("respects an optional limit (default 50)", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, { tier: "commandment", limit: 10 });
+    const arg = findMany.mock.calls[0][0] as { take: number };
+    expect(arg.take).toBe(10);
+
+    await listPrinciplesByTier(db, { tier: "commandment" });
+    const arg2 = findMany.mock.calls[1][0] as { take: number };
+    expect(arg2.take).toBe(50);
+  });
+
+  it("orders results by lastReviewedAt desc then title asc for stable listing", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, { tier: "commandment" });
+    const arg = findMany.mock.calls[0][0] as {
+      orderBy: Array<Record<string, "asc" | "desc">>;
+    };
+    expect(arg.orderBy).toEqual([
+      { lastReviewedAt: "desc" },
+      { title: "asc" },
+    ]);
+  });
+
+  it("rejects unknown tier values with a clear error", async () => {
+    const { db } = makeListMocks();
+    await expect(
+      listPrinciplesByTier(db, { tier: "imaginary" as never }),
+    ).rejects.toThrow(/tier/);
   });
 });
