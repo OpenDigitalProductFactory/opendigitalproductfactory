@@ -330,6 +330,7 @@ export async function searchCodeGraph(input: {
     };
   }
 
+  const limit = normalizeLimit(input.limit, 10);
   const rows = await runCypher<RawSearchRow>(
     [
       "MATCH (n)",
@@ -350,13 +351,12 @@ export async function searchCodeGraph(input: {
       "  WHEN toLower(coalesce(n.path, '')) = $query THEN 1",
       "  ELSE 2",
       "END, path ASC, name ASC",
-      "LIMIT toInteger($limit)",
+      `LIMIT ${limit}`,
     ].join("\n"),
     {
       graphKey,
       query,
       nodeLabels: SEARCH_NODE_LABELS,
-      limit: normalizeLimit(input.limit, 10),
     },
   );
 
@@ -431,6 +431,7 @@ export async function findRelatedTests(input: {
     };
   }
 
+  const limit = normalizeLimit(input.limit, 25);
   const rows = await runCypher<RawRelatedTestRow>(
     [
       "MATCH (test:TestFile {graphKey: $graphKey})-[r:TESTED_BY]->(source:CodeFile {graphKey: $graphKey, path: $filePath})",
@@ -440,12 +441,11 @@ export async function findRelatedTests(input: {
       "       r.startLine AS startLine,",
       "       r.endLine AS endLine",
       "ORDER BY confidence ASC, path ASC",
-      "LIMIT toInteger($limit)",
+      `LIMIT ${limit}`,
     ].join("\n"),
     {
       graphKey,
       filePath,
-      limit: normalizeLimit(input.limit, 25),
     },
   );
 

@@ -13,6 +13,7 @@ import {
   clearCodeGraph,
   ensureCodeGraphNeo4jSchema,
   syncTrackedFile,
+  syncTrackedFilesFull,
 } from "./neo4j-projection";
 import {
   clearCodeGraphFileHashes,
@@ -154,9 +155,11 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     if (plan.mode === "full") {
       await clearCodeGraph(graphKey);
       await clearCodeGraphFileHashes(graphKey);
-    }
-    for (const filePath of files) {
-      await syncTrackedFile(graphKey, gitRoot, filePath);
+      await syncTrackedFilesFull(graphKey, gitRoot, files);
+    } else {
+      for (const filePath of files) {
+        await syncTrackedFile(graphKey, gitRoot, filePath);
+      }
     }
     const indexedFileCount = await countCodeGraphFileHashes(graphKey);
     await markCodeGraphReady(graphKey, {

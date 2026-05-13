@@ -17,6 +17,7 @@ vi.mock("@dpf/db", () => ({
     },
     codeGraphFileHash: {
       upsert: vi.fn(),
+      createMany: vi.fn(),
       deleteMany: vi.fn(),
       count: vi.fn(),
     },
@@ -72,6 +73,7 @@ beforeEach(() => {
   vi.mocked(prisma.$executeRaw).mockResolvedValue(1 as never);
   vi.mocked(prisma.codeGraphFileHash.count).mockResolvedValue(1);
   vi.mocked(prisma.codeGraphFileHash.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.codeGraphFileHash.createMany).mockResolvedValue({ count: 1 } as never);
   vi.mocked(prisma.codeGraphFileHash.deleteMany).mockResolvedValue({ count: 1 } as never);
   vi.mocked(prisma.codeGraphIndexState.upsert).mockResolvedValue({} as never);
   vi.mocked(prisma.codeGraphIndexState.update).mockResolvedValue({} as never);
@@ -117,6 +119,9 @@ describe("reconcileCodeGraph", () => {
       expect.stringContaining("MATCH (n {graphKey: $graphKey})"),
       expect.objectContaining({ graphKey: CODE_GRAPH_GRAPH_KEY }),
     );
+    const cypherStatements = mockRunCypher.mock.calls.map(([statement]) => String(statement));
+    expect(cypherStatements.some((statement) => statement.includes("MATCH ()-[r {graphKey: $graphKey, filePath: $filePath}]-()"))).toBe(false);
+    expect(cypherStatements.some((statement) => statement.includes("MATCH (n {graphKey: $graphKey, path: $filePath})"))).toBe(false);
     expect(prisma.codeGraphFileHash.deleteMany).toHaveBeenCalledWith({
       where: { graphKey: CODE_GRAPH_GRAPH_KEY },
     });
@@ -125,6 +130,96 @@ describe("reconcileCodeGraph", () => {
         where: { graphKey: CODE_GRAPH_GRAPH_KEY },
       }),
     );
+  });
+
+  it("batches structural projection by node label and relationship kind", async () => {
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
+
+    mockExec.mockImplementation(async (command: string) => {
+      if (command === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
+      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (command.startsWith("git ls-files -- ")) {
+        return {
+          stdout: "apps/web/lib/integrate/multi-symbol.ts\n",
+          stderr: "",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    mockReadFile.mockResolvedValue([
+      "export function firstSymbol() { return true; }",
+      "export function secondSymbol() { return false; }",
+    ].join("\n"));
+
+    await reconcileCodeGraph({ reason: "scheduled" });
+
+    const symbolProjectionCalls = mockRunCypher.mock.calls.filter(([statement]) => (
+      String(statement).includes("UNWIND $facts AS fact") &&
+      String(statement).includes("MERGE (n:CodeSymbol")
+    ));
+    expect(symbolProjectionCalls).toHaveLength(1);
+    expect(symbolProjectionCalls[0]?.[1]).toEqual(expect.objectContaining({
+      facts: expect.arrayContaining([
+        expect.objectContaining({ name: "firstSymbol" }),
+        expect.objectContaining({ name: "secondSymbol" }),
+      ]),
+    }));
+
+    const definesProjectionCalls = mockRunCypher.mock.calls.filter(([statement]) => (
+      String(statement).includes("UNWIND $facts AS fact") &&
+      String(statement).includes("MERGE (from)-[r:DEFINES")
+    ));
+    expect(definesProjectionCalls).toHaveLength(1);
+    expect(String(definesProjectionCalls[0]?.[0])).toContain("MATCH (from:CodeFile {codeFileKey: fact.fromKey})");
+    expect(String(definesProjectionCalls[0]?.[0])).toContain("MATCH (to:CodeSymbol {codeSymbolKey: fact.toKey})");
+    expect(definesProjectionCalls[0]?.[1]).toEqual(expect.objectContaining({
+      facts: expect.arrayContaining([
+        expect.objectContaining({ confidence: "exact" }),
+      ]),
+    }));
+    expect(mockRunCypher.mock.calls.some(([statement]) => String(statement).includes("WHERE any(key IN keys(from)"))).toBe(false);
+  });
+
+  it("batches CodeFile projection during full rebuilds", async () => {
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue(null);
+
+    mockExec.mockImplementation(async (command: string) => {
+      if (command === "git rev-parse HEAD") return { stdout: "head-1\n", stderr: "" };
+      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (command === "git status --porcelain") return { stdout: "", stderr: "" };
+      if (command.startsWith("git ls-files -- ")) {
+        return {
+          stdout: "apps/web/lib/one.ts\napps/web/lib/two.ts\n",
+          stderr: "",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    mockReadFile.mockResolvedValue("export function example() { return true; }");
+
+    await reconcileCodeGraph({ reason: "scheduled" });
+
+    const codeFileProjectionCalls = mockRunCypher.mock.calls.filter(([statement]) => (
+      String(statement).includes("UNWIND $files AS file") &&
+      String(statement).includes("MERGE (f:CodeFile")
+    ));
+    expect(codeFileProjectionCalls).toHaveLength(1);
+    expect(codeFileProjectionCalls[0]?.[1]).toEqual(expect.objectContaining({
+      files: expect.arrayContaining([
+        expect.objectContaining({ filePath: "apps/web/lib/one.ts" }),
+        expect.objectContaining({ filePath: "apps/web/lib/two.ts" }),
+      ]),
+    }));
+    expect(prisma.codeGraphFileHash.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.arrayContaining([
+        expect.objectContaining({ filePath: "apps/web/lib/one.ts" }),
+        expect.objectContaining({ filePath: "apps/web/lib/two.ts" }),
+      ]),
+    }));
+    expect(prisma.codeGraphFileHash.upsert).not.toHaveBeenCalled();
   });
 
   it("performs an incremental reconcile when HEAD changes", async () => {
