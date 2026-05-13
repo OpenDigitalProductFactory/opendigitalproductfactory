@@ -17,13 +17,19 @@ abstract: |
 
 ## Why it's cited
 
-Backs the position that **portfolios are siblings; they live in one house** — an operational corollary of the EA-consolidation stance. Names the DevOps-at-enterprise-level argument: "Digital Portfolio Management brings together Business Applications from the Dev world and Services from the Ops world to make DevOps work at an enterprise level."
+Backs the position that **portfolios are siblings; they live in one house** — an operational corollary of the EA-consolidation stance.
 
-## Key claims
+## Key claims (verified verbatim against source)
 
-- APM and SPM are siblings, not competitors — both are facets of the same Digital Product.
-- Separating them across tools creates structural pain that integration cannot fix.
-- DPM unifies them on the CSDM data spine.
+- The article's title is the position itself: *"Application Portfolio and Services Portfolio are 'Sibling' Portfolios That Should Live in the Same House."*
+- Bodman + Thigpen on the platform argument: *"It didn't take much for me to see the benefits of managing both portfolios on a single platform."*
+- The structural argument is framed via a shared CMDB, not via a single management product: *"Having the portfolios within a single source CMDB adds dimensions that cross the planning domain, architecture domain, service domain, and operational domain."*
+- Why integration alone doesn't fix it: *"When managing them in silos, you sometimes need to use the scream test… Being part of a shared CMDB provides that high fidelity 'map' of dependencies — no need to try and marry these key portfolios from multiple systems."*
+
+## Attribution caveats
+
+- This article does **not** use the term &#34;Digital Portfolio Management&#34; or &#34;DPM.&#34; The DPM framing comes from a later 2022 LinkedIn post announcing the merged product. Don&#39;t cite this article as the source for &#34;DPM.&#34;
+- The article does **not** include the &#34;DevOps work at an enterprise level&#34; quote that earlier drafts attributed to it. That phrasing is from the 2022 DPM overview LinkedIn post, not this community blog. Pages quoting it should cite the 2022 post instead.
 
 ## See also
 
