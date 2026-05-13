@@ -88,6 +88,7 @@ export const FINANCE_FAMILIES: FinanceFamily[] = [
     subItems: [
       { label: "Configuration Hub", href: "/finance/configuration" },
       { label: "Settings", href: "/finance/settings" },
+      { label: "Finance Setup", href: "/finance/settings/setup" },
       { label: "Currency", href: "/finance/settings/currency" },
       { label: "Dunning", href: "/finance/settings/dunning" },
       { label: "Tax Remittance", href: "/finance/settings/tax" },

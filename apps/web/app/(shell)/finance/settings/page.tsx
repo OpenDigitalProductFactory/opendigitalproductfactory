@@ -92,7 +92,7 @@ export default async function FinancialSettingsPage() {
                   Not configured
                 </span>
                 <Link
-                  href="/finance/settings"
+                  href="/finance/settings/setup"
                   className="text-[10px] text-[var(--dpf-accent)] hover:underline"
                 >
                   Run Setup →
@@ -306,7 +306,7 @@ export default async function FinancialSettingsPage() {
             </p>
           </div>
           <Link
-            href="/finance/settings"
+            href="/finance/settings/setup"
             className="px-3 py-1.5 text-xs font-medium rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] hover:border-[var(--dpf-text)] transition-colors shrink-0"
           >
             Setup Wizard →

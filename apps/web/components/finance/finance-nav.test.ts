@@ -36,6 +36,7 @@ describe("finance-nav", () => {
 
   it("maps configuration routes to the Configuration family", () => {
     expect(getFinanceFamily("/finance/settings").key).toBe("configuration");
+    expect(getFinanceFamily("/finance/settings/setup").key).toBe("configuration");
     expect(getFinanceFamily("/finance/settings/currency").key).toBe("configuration");
     expect(getFinanceFamily("/finance/settings/dunning").key).toBe("configuration");
     expect(getFinanceFamily("/finance/settings/tax").key).toBe("configuration");
@@ -47,6 +48,12 @@ describe("finance-nav", () => {
     const configuration = FINANCE_FAMILIES.find((family) => family.key === "configuration");
     expect(configuration?.subItems.map((item) => item.label)).toContain("Tax Remittance");
     expect(configuration?.subItems.map((item) => item.href)).toContain("/finance/settings/tax");
+  });
+
+  it("includes Finance Setup in the configuration sub-navigation", () => {
+    const configuration = FINANCE_FAMILIES.find((family) => family.key === "configuration");
+    expect(configuration?.subItems.map((item) => item.label)).toContain("Finance Setup");
+    expect(configuration?.subItems.map((item) => item.href)).toContain("/finance/settings/setup");
   });
 
   it("keeps the finance root in the Overview family", () => {
