@@ -12,8 +12,13 @@ vi.mock("./code-graph-access", () => ({
   summarizeCodeGraphCoverage: vi.fn(),
 }));
 
+vi.mock("./code-graph/graph-queries", () => ({
+  findRelatedTests: vi.fn(),
+}));
+
 import { prisma } from "@dpf/db";
 import { summarizeCodeGraphCoverage } from "./code-graph-access";
+import { findRelatedTests } from "./code-graph/graph-queries";
 import { analyzeChangeImpact, formatImpactForChat } from "./change-impact";
 
 beforeEach(() => {
@@ -21,6 +26,15 @@ beforeEach(() => {
   vi.mocked(prisma.platformRole.findMany).mockResolvedValue([
     { roleId: "HR-100", name: "Manager" },
   ] as never);
+  vi.mocked(findRelatedTests).mockResolvedValue({
+    graphKey: "source-code",
+    available: true,
+    indexStatus: "ready",
+    warnings: [],
+    summary: "No related tests are linked.",
+    filePath: "apps/web/app/complaints/page.tsx",
+    tests: [],
+  });
 });
 
 describe("analyzeChangeImpact", () => {
@@ -56,6 +70,49 @@ describe("analyzeChangeImpact", () => {
     expect(result.codeGraph?.unindexedFiles).toEqual(["packages/db/prisma/schema.prisma"]);
     expect(result.summary).toContain("Code graph covers 1/2 changed files");
   });
+
+  it("adds graph-linked related tests to the impact report", async () => {
+    vi.mocked(summarizeCodeGraphCoverage).mockResolvedValue({
+      graphKey: "source-code",
+      available: true,
+      indexStatus: "ready",
+      indexedFiles: ["apps/web/lib/integrate/change-impact.ts"],
+      unindexedFiles: [],
+      warnings: [],
+      summary: "Code graph covers 1/1 changed files at the current indexed commit.",
+    });
+    vi.mocked(findRelatedTests).mockResolvedValue({
+      graphKey: "source-code",
+      available: true,
+      indexStatus: "ready",
+      warnings: [],
+      summary: "Found 1 related test for apps/web/lib/integrate/change-impact.ts.",
+      filePath: "apps/web/lib/integrate/change-impact.ts",
+      tests: [{
+        path: "apps/web/lib/integrate/change-impact.test.ts",
+        name: "change-impact.test.ts",
+        confidence: "exact",
+        startLine: 4,
+        endLine: 4,
+      }],
+    });
+
+    const result = await analyzeChangeImpact([
+      "diff --git a/apps/web/lib/integrate/change-impact.ts b/apps/web/lib/integrate/change-impact.ts",
+      "--- a/apps/web/lib/integrate/change-impact.ts",
+      "+++ b/apps/web/lib/integrate/change-impact.ts",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+    ].join("\n"));
+
+    expect(findRelatedTests).toHaveBeenCalledWith({
+      filePath: "apps/web/lib/integrate/change-impact.ts",
+    });
+    expect(result.codeGraph).toEqual(expect.objectContaining({
+      relatedTests: ["apps/web/lib/integrate/change-impact.test.ts"],
+    }));
+  });
 });
 
 describe("formatImpactForChat", () => {
@@ -82,11 +139,13 @@ describe("formatImpactForChat", () => {
         unindexedFiles: ["packages/db/prisma/schema.prisma"],
         warnings: ["Uncommitted local changes may not be reflected in graph-backed analysis."],
         summary: "Code graph covers 1/2 changed files at the current indexed commit.",
+        relatedTests: ["apps/web/lib/integrate/change-impact.test.ts"],
       },
     });
 
     expect(chat).toContain("Code graph");
     expect(chat).toContain("1/2 changed files");
     expect(chat).toContain("Uncommitted local changes");
+    expect(chat).toContain("change-impact.test.ts");
   });
 });

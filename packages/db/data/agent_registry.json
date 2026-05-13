@@ -2526,6 +2526,7 @@
         "tool_grants": [
           "backlog_read",
           "backlog_write",
+          "code_graph_read",
           "file_read",
           "iac_execute",
           "registry_read",

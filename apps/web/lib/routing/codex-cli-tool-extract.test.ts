@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { extractToolCalls } from "./codex-cli-adapter";
+import {
+  extractMentionedPlatformToolNames,
+  extractToolCalls,
+} from "./codex-cli-adapter";
 
 describe("codex-cli-adapter extractToolCalls — variant handling", () => {
   it("parses the canonical tool_use shape", () => {
@@ -57,5 +60,18 @@ Trailing chatter.`;
   it("rejects objects with type set to something other than tool_use", () => {
     const text = `{"type":"text","name":"not_a_tool","input":{}}`;
     expect(extractToolCalls(text)).toEqual([]);
+  });
+
+  it("recognizes code graph tool mentions in Codex CLI trace output", () => {
+    expect(
+      extractMentionedPlatformToolNames(
+        "Use inspect_build_code_impact, search_code_graph, trace_code_surface, and find_related_tests.",
+      ),
+    ).toEqual([
+      "inspect_build_code_impact",
+      "search_code_graph",
+      "trace_code_surface",
+      "find_related_tests",
+    ]);
   });
 });

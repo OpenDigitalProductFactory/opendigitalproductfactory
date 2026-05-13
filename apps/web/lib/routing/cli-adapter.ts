@@ -135,6 +135,12 @@ interface CliStreamEvent {
  */
 const MCP_TOOL_NAME_PREFIX = "mcp__dpf__";
 
+export const TOOL_TRACE_KEYWORD_PATTERN = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|get_code_graph_freshness|inspect_build_code_impact|search_code_graph|trace_code_surface|find_related_tests|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
+
+export function extractMentionedPlatformToolNames(text: string): string[] {
+  return Array.from(new Set(text.match(TOOL_TRACE_KEYWORD_PATTERN) ?? []));
+}
+
 /**
  * Parse Claude CLI `--output-format stream-json` output into AdapterResult.
  *
@@ -593,8 +599,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
       // ── Durable tool-call extraction trace (mirrors codex-cli-adapter) ──
       // See note there. Kept on until tool dispatch is 100% reliable.
-      const toolKeywordPattern = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
-      const mentionedNames = Array.from(new Set(parsed.text.match(toolKeywordPattern) ?? []));
+      const mentionedNames = extractMentionedPlatformToolNames(parsed.text);
       const extractedNames = parsed.toolCalls.map((c) => c.name);
       console.log(
         `[tool-trace] adapter=claude-cli extracted=${parsed.toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)}`,

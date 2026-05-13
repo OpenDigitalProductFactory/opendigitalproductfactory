@@ -8,6 +8,7 @@ import {
   listMyMcpTokens,
   revokeMyMcpToken,
 } from "@/lib/actions/mcp-tokens";
+import { defaultMcpTokenScopes } from "@/lib/mcp-token-scopes";
 
 export interface McpTokenManagerProps {
   contributionModelConfigured: boolean;
@@ -48,7 +49,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   // Form state
   const [formName, setFormName] = useState("");
   const [formCapability, setFormCapability] = useState<"read" | "write">("read");
-  const [formScopes, setFormScopes] = useState<Set<string>>(new Set(["backlog_read"]));
+  const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
 
   useEffect(() => {
@@ -60,7 +61,11 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       ]);
       if (cancelled) return;
       if (tokensResult.ok) setTokens(tokensResult.tokens);
-      setScopes(scopesResult.scopes);
+      const availableScopes = scopesResult.scopes;
+      setScopes(availableScopes);
+      setFormScopes((current) =>
+        current.size > 0 ? current : new Set(defaultMcpTokenScopes(availableScopes)),
+      );
     })();
     return () => {
       cancelled = true;
@@ -77,7 +82,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   function openForm() {
     setFormName("");
     setFormCapability("read");
-    setFormScopes(new Set(["backlog_read"]));
+    setFormScopes(new Set(defaultMcpTokenScopes(scopes)));
     setFormExpires("90");
     setView({ kind: "form", error: null });
   }

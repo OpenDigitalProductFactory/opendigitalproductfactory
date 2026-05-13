@@ -142,6 +142,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Code graph (file-level coverage today; symbol-level deferred)
   get_code_graph_freshness: ["code_graph_read"],
   inspect_build_code_impact: ["code_graph_read"],
+  search_code_graph: ["code_graph_read"],
+  trace_code_surface: ["code_graph_read"],
+  find_related_tests: ["code_graph_read"],
 
   // Provider management
   add_provider: ["agent_control_read"],

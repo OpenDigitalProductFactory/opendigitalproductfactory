@@ -98,6 +98,22 @@ describe("getBuildContextSection", () => {
     expect(section).toContain("ideate");
     expect(section).toContain("My Feature");
   });
+  it("tells Build Studio agents to use code graph tools when available", async () => {
+    const section = await getBuildContextSection({
+      buildId: "FB-GRAPH",
+      phase: "plan",
+      title: "Graph adoption",
+      brief: null,
+      plan: null,
+      portfolioId: null,
+    });
+
+    expect(section).toContain("get_code_graph_freshness");
+    expect(section).toContain("search_code_graph");
+    expect(section).toContain("trace_code_surface");
+    expect(section).toContain("find_related_tests");
+    expect(section).toContain("If graph freshness is missing, stale, or file-only");
+  });
   it("includes brief summary when present", async () => {
     const brief: FeatureBrief = {
       title: "Feedback Form",
