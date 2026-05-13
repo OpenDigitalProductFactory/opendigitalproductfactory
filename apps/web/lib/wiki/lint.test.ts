@@ -241,4 +241,48 @@ describe("runWikiLint", () => {
       where: { organizationId: "org_acme", status: "open" },
     });
   });
+
+  it("emits principle-only findings when a principle page is in the snapshot", async () => {
+    // A principle page with no tier and no applies-to. Per Phase 1
+    // detectors that should produce principle-missing-tier AND
+    // principle-missing-applies-to findings at error severity.
+    const principleDraft: Record<string, unknown> = {
+      id: "wp_principle_draft",
+      slug: "principles/draft",
+      title: "Draft Principle",
+      body: "## Rule\n\nTBD",
+      pageKind: "principle",
+      status: "draft",
+      isKernel: true,
+      kernelVersion: "0.2.0",
+      organizationId: null,
+      kernelPageId: null,
+      derivedFromKernelVersion: null,
+      principleTier: null,
+      principleDirection: null,
+      principleWeight: null,
+      principleWeightRationale: null,
+      principleDimensionVector: null,
+      principleDimensions: [],
+      principleAppliesTo: [],
+      principlePublic: false,
+      principlePublicRationale: null,
+    };
+    const prisma = makePrismaMock({
+      pages: [principleDraft],
+      existingFindings: [],
+    });
+
+    await runWikiLint({
+      organizationId: null,
+      prisma,
+      currentKernelVersion: "0.2.0",
+    });
+
+    const createdKinds = prisma.__findingsCreated.mock.calls.map(
+      (c) => (c[0] as { data: { findingKind: string } }).data.findingKind,
+    );
+    expect(createdKinds).toContain("principle-missing-tier");
+    expect(createdKinds).toContain("principle-missing-applies-to");
+  });
 });
