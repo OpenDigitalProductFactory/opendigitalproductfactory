@@ -8,7 +8,7 @@ taskType: action
 triggerPattern: "report issue|bug report|feedback|broken|problem|not working|wrong|file issue"
 userInvocable: true
 agentInvocable: false
-allowedTools: [create_backlog_item]
+allowedTools: []
 composesFrom: []
 contextRequirements: []
 riskBand: low

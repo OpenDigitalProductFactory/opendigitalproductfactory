@@ -8,7 +8,7 @@ taskType: analysis
 triggerPattern: "evaluate page|audit page|accessibility audit|ux review|usability review|contrast|a11y"
 userInvocable: true
 agentInvocable: true
-allowedTools: [read_project_file, search_project_files, evaluate_page, create_backlog_item]
+allowedTools: []
 composesFrom: []
 contextRequirements: []
 riskBand: low

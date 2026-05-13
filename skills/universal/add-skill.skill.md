@@ -8,7 +8,7 @@ taskType: code_generation
 triggerPattern: "add skill|new skill|create skill|custom action|add button|quick action"
 userInvocable: true
 agentInvocable: true
-allowedTools: [read_project_file, search_project_files, propose_file_change]
+allowedTools: []
 composesFrom: []
 contextRequirements: []
 riskBand: low

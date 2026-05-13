@@ -8,7 +8,7 @@ taskType: action
 triggerPattern: "do it|do this|just do it|primary action|handle this|take action"
 userInvocable: true
 agentInvocable: true
-allowedTools: [create_backlog_item, update_backlog_item_status]
+allowedTools: []
 composesFrom: []
 contextRequirements: []
 riskBand: medium
