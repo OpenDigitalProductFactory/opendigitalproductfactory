@@ -39,6 +39,9 @@ Flags:
                   overlay). Default if install-state.json records release
                   mode; otherwise dev.
   --dev           Force dev mode (build images locally).
+  --no-edge       Skip bringing up the Edge Node container. Default is
+                  to include it (matches install-dpf.sh's default
+                  bundling). Honors DPF_INCLUDE_EDGE=0 from the env.
   --no-browser    Don't try to open the portal in a browser after start.
   --dry-run       Print the planned compose command without running it.
   -h, --help      Show this help.
@@ -56,6 +59,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --release)     DPF_MODE="release" ;;
     --dev)         DPF_MODE="dev" ;;
+    --no-edge)     DPF_INCLUDE_EDGE=0 ;;
     --no-browser)  DPF_NO_BROWSER=1 ;;
     --dry-run)     DPF_DRY_RUN=1 ;;
     -h|--help)     usage; exit 0 ;;
@@ -67,6 +71,11 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# Export so dpf_compose_files picks it up. The compose helper defaults
+# to including the edge overlay; --no-edge or a pre-set
+# DPF_INCLUDE_EDGE=0 in the environment turns it off.
+export DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"
 
 cd "$REPO_ROOT"
 dpf_platform

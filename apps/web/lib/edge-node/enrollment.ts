@@ -61,6 +61,25 @@ export type IssueBootstrapInput = {
    * not here.
    */
   scope?: string;
+  /**
+   * If true, persist `autoApprove=true` on the BootstrapToken row.
+   * When the Edge Node consumes this token at enrollment, the new
+   * EdgeNode lands directly in `trustState=trusted` instead of
+   * `pending` — per spec § Approval policy.
+   *
+   * Intended for two paths:
+   *   1. Installer auto-issuance for the DPF host's own Edge Node
+   *      (single-host install — the operator running install-dpf.sh
+   *      has already proven host access; the Approve click would be
+   *      ceremonial).
+   *   2. Operator bulk-onboarding via Admin > Platform Development
+   *      where the operator wants to skip the per-node approval.
+   *
+   * Defaults to false. Paste-provisioned tokens for remote nodes
+   * should always be false (the Approve click is the friction that
+   * makes remote enrollment opt-in).
+   */
+  autoApprove?: boolean;
 };
 
 export type IssueBootstrapResult = {
@@ -92,6 +111,7 @@ export async function issueBootstrapToken(
       scope: input.scope ?? "edge:enroll",
       issuedByPrincipalId: input.issuedByPrincipalId,
       expiresAt,
+      autoApprove: input.autoApprove === true,
     },
   });
 
@@ -123,9 +143,16 @@ export type EnrollInput = {
   /** Free-form metadata — hostname, tags, OS details. */
   metadata?: Record<string, unknown>;
   /**
-   * Whether this enrollment should auto-approve per spec § Approval
-   * policy. Default false (operator approval required); installer-
-   * issued local-host enrollments pass true.
+   * Force-override the token's `autoApprove` flag. Optional —
+   * when omitted, the BootstrapToken row's persisted `autoApprove`
+   * column is the source of truth per spec § Approval policy.
+   *
+   * Callers should leave this undefined in normal operation. The
+   * route layer hardcoded `false` historically and is being moved
+   * to undefined as part of installer-bundled-Edge-Node work; the
+   * field is retained as an override for tests and for future
+   * paths that need to demote an auto-approve token without
+   * re-issuing it.
    */
   autoApprove?: boolean;
 };
@@ -244,8 +271,15 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
 
   const nodeId = `edge_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
   const nodeToken = generateNodeToken();
-  const trustState = input.autoApprove ? "trusted" : "pending";
-  const status = input.autoApprove ? "active" : "pending";
+  // Effective auto-approve: explicit override wins; otherwise the
+  // token's persisted flag drives. This lets the route layer stop
+  // hardcoding `false` and trust the issuance contract — paste-
+  // provisioned tokens default to autoApprove=false on the row,
+  // installer-issued ones default to true.
+  const effectiveAutoApprove =
+    input.autoApprove !== undefined ? input.autoApprove : tokenRow.autoApprove;
+  const trustState = effectiveAutoApprove ? "trusted" : "pending";
+  const status = effectiveAutoApprove ? "active" : "pending";
   const now = new Date();
 
   // Atomic transaction: consume the bootstrap token + create the
@@ -313,7 +347,7 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
         tokenPrefix: nodeToken.prefix,
         tokenRotatedAt: now,
         enrolledAt: now,
-        ...(input.autoApprove
+        ...(effectiveAutoApprove
           ? { approvedAt: now, approvedByPrincipalId: tokenRow.issuedByPrincipalId }
           : {}),
       },
@@ -329,7 +363,7 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
     //    for auto-approved nodes; `disabled` for pending nodes (they
     //    can heartbeat but Authority does not yet accept their
     //    submissions).
-    const mode = input.autoApprove ? "enabled" : "disabled";
+    const mode = effectiveAutoApprove ? "enabled" : "disabled";
     for (const capability of acceptedCapabilities) {
       await tx.edgeNodeCapability.create({
         data: {
