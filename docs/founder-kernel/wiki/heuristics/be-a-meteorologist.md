@@ -1,7 +1,7 @@
 ---
 title: Be a meteorologist — produce forecasts, not raw models
 pageKind: heuristic
-status: draft
+status: published
 abstract: Architects deliver forecasts and recommended actions to leadership, not exposed models. The deliverable is the guidance, not the diagram.
 sources:
   - articles/possible-futures-enterprise-architecture
@@ -32,4 +32,4 @@ This is also the philosophical core of the platform&#39;s wiki kernel: the "what
 ## See also
 
 - Parent stance: `[[stances/ea-is-meteorology]]`
-- Raw source: `[[raw-sources/articles/possible-futures-enterprise-architecture]]`
+- Raw source: `[raw-sources/articles/possible-futures-enterprise-architecture](../../raw-sources/articles/possible-futures-enterprise-architecture.md)`
