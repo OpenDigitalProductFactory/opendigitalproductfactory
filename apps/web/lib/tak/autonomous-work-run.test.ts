@@ -260,6 +260,34 @@ describe("createAutonomousWorkRun", () => {
     );
   });
 
+  it("forwards MCP token identity into the agentic loop", async () => {
+    const agentic = await import("@/lib/tak/agentic-loop");
+    vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
+
+    const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
+
+    await executeAutonomousAgenticLoop({
+      systemPrompt: "You are helpful.",
+      chatHistory: [{ role: "user", content: "Run it." }],
+      sensitivity: "internal",
+      tools: [],
+      toolsForProvider: [],
+      userId: "user-1",
+      routeContext: "/platform/tools/discovery",
+      agentId: "inventory-specialist",
+      threadId: "thread-1",
+      taskRunId: "TR-MCP-ABCDEF12",
+      apiTokenId: "tok_remote",
+    });
+
+    expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: "TR-MCP-ABCDEF12",
+        apiTokenId: "tok_remote",
+      }),
+    );
+  });
+
   it("executes a single governed tool with TaskRun attribution", async () => {
     const governed = await import("@/lib/mcp-governed-execute");
     vi.mocked(governed.governedExecuteTool).mockResolvedValue({ success: true, message: "ok" } as never);

@@ -614,6 +614,11 @@ export async function runAgenticLoop(params: {
    * records the same TaskRun id in ToolExecution audit rows.
    */
   taskRunId?: string | null;
+  /**
+   * External MCP token that submitted this loop. When set, each governed tool
+   * call records the same token id in ToolExecution audit rows.
+   */
+  apiTokenId?: string | null;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -631,6 +636,7 @@ export async function runAgenticLoop(params: {
     requireTools,
     agentDisplayName,
     taskRunId,
+    apiTokenId,
   } = params;
 
   const userContext = await resolveUserContext(userId);
@@ -1293,7 +1299,13 @@ export async function runAgenticLoop(params: {
           rawParams: tc.arguments,
           userId,
           userContext,
-          context: { routeContext, agentId, threadId, taskRunId: taskRunId ?? undefined },
+          context: {
+            routeContext,
+            agentId,
+            threadId,
+            taskRunId: taskRunId ?? undefined,
+            apiTokenId: apiTokenId ?? undefined,
+          },
           source: "agentic-loop",
         });
       } catch (err) {

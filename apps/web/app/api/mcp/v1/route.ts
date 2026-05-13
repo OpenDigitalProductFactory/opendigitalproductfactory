@@ -17,6 +17,7 @@ import { resolveMcpApiToken, type ResolvedMcpToken } from "@/lib/auth/mcp-api-to
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
+import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -229,6 +230,28 @@ function annotateTool(tool: ToolDefinition) {
       openWorldHint: ann.openWorldHint,
     },
   };
+}
+
+async function handleTasksSubmit(
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  params: Record<string, unknown> | undefined,
+): Promise<Response> {
+  const userContext = await loadUserContext(token.userId);
+  const outcome = await submitRemoteCoworkerTask({
+    token: {
+      tokenId: token.tokenId,
+      userId: token.userId,
+      capability: token.capability,
+      source: token.source,
+    },
+    userContext,
+    params,
+  });
+  if (outcome.kind === "invalid_params") {
+    return jsonRpcError(id, JSONRPC_INVALID_PARAMS, outcome.message);
+  }
+  return jsonRpcOk(id, outcome.result);
 }
 
 async function handleInitialize(id: JsonRpcId): Promise<Response> {
@@ -445,6 +468,12 @@ export async function POST(request: Request): Promise<Response> {
           return new Response(null, { status: 202 });
         }
         return await handleToolsCall(body.id ?? null, token, body.params);
+
+      case "tasks/submit":
+        if (isNotification) {
+          return new Response(null, { status: 202 });
+        }
+        return await handleTasksSubmit(body.id ?? null, token, body.params);
 
       case "ping":
         if (isNotification) {
