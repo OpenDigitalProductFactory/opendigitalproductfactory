@@ -77,6 +77,114 @@ describe("storeWikiPage", () => {
     );
   });
 
+  it("includes canonical principle metadata in the payload when pageKind is principle", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+
+    await storeWikiPage({
+      pageId: "wp_principle_1",
+      slug: "principles/architecture-over-shortcuts",
+      title: "Architecture Over Shortcuts",
+      body: "## Rule\n\nPrefer long-term maintainability.",
+      abstract: "One-line direction.",
+      pageKind: "principle",
+      status: "published",
+      isKernel: true,
+      kernelVersion: "0.2.0",
+      organizationId: null,
+      kernelPageId: null,
+      principleTier: "commandment",
+      principleAppliesTo: [
+        "in_platform_coworker",
+        "external_coding_agent",
+      ],
+      principleDimensions: [
+        "long_term_maintainability",
+        "schema_grounding",
+        "speed_to_value",
+      ],
+      principlePublic: true,
+    });
+
+    expect(upsertVectors).toHaveBeenCalledWith(
+      "wiki-pages",
+      [
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            pageKind: "principle",
+            principleTier: "commandment",
+            principleAppliesTo: [
+              "in_platform_coworker",
+              "external_coding_agent",
+            ],
+            principleDimensions: [
+              "long_term_maintainability",
+              "schema_grounding",
+              "speed_to_value",
+            ],
+            principlePublic: true,
+          }),
+        }),
+      ],
+    );
+  });
+
+  it("does NOT include principle keys when pageKind is not principle (absence is the marker)", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+
+    await storeWikiPage({
+      pageId: "wp_entity_1",
+      slug: "entities/edge-node",
+      title: "Edge Node",
+      body: "An edge node is the customer-owned compute appliance...",
+      abstract: null,
+      pageKind: "entity",
+      status: "published",
+      isKernel: true,
+      kernelVersion: "0.2.0",
+      organizationId: null,
+      kernelPageId: null,
+    });
+
+    const call = upsertVectors.mock.calls[0] as unknown as [
+      string,
+      Array<{ payload: Record<string, unknown> }>,
+    ];
+    const payload = call[1][0].payload;
+    expect(payload).not.toHaveProperty("principleTier");
+    expect(payload).not.toHaveProperty("principleAppliesTo");
+    expect(payload).not.toHaveProperty("principleDimensions");
+    expect(payload).not.toHaveProperty("principlePublic");
+  });
+
+  it("does NOT include principle keys when pageKind is principle but caller omitted them (incomplete drafts)", async () => {
+    generateEmbedding.mockResolvedValueOnce(stub(768));
+
+    await storeWikiPage({
+      pageId: "wp_principle_draft",
+      slug: "principles/draft",
+      title: "Draft",
+      body: "TBD",
+      abstract: null,
+      pageKind: "principle",
+      status: "draft",
+      isKernel: true,
+      kernelVersion: null,
+      organizationId: null,
+      kernelPageId: null,
+    });
+
+    const call = upsertVectors.mock.calls[0] as unknown as [
+      string,
+      Array<{ payload: Record<string, unknown> }>,
+    ];
+    const payload = call[1][0].payload;
+    expect(payload.pageKind).toBe("principle");
+    expect(payload).not.toHaveProperty("principleTier");
+    expect(payload).not.toHaveProperty("principleAppliesTo");
+    expect(payload).not.toHaveProperty("principleDimensions");
+    expect(payload).not.toHaveProperty("principlePublic");
+  });
+
   it("returns false silently when the embedding model is unavailable", async () => {
     generateEmbedding.mockResolvedValueOnce(null);
 

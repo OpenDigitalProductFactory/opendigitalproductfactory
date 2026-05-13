@@ -36,6 +36,19 @@ export type StoreWikiPageInput = {
   kernelVersion: string | null;
   organizationId: string | null;
   kernelPageId: string | null;
+  // ─── Principle-only payload fields ────────────────────────────────────────
+  // Only meaningful when `pageKind === "principle"`. Used by Phase 2 retrieval
+  // filters (`recallPrincipleContext`, `wiki_query` tier/appliesTo). Stored
+  // as canonical key names (no short aliases) per the chief-architect review
+  // applied to docs/superpowers/plans/2026-05-12-principles-as-wiki-kind.md.
+  // The dimension VECTOR (signed weights) lives in Postgres only — it's
+  // decision-time data, not a retrieval filter axis. The dimension KEY LIST
+  // surfaces in Qdrant so filters can scope retrieval to principles that
+  // care about a given axis.
+  principleTier?: string | null;
+  principleAppliesTo?: string[];
+  principleDimensions?: string[];
+  principlePublic?: boolean;
 };
 
 export type WikiSearchResult = {
@@ -82,27 +95,51 @@ export async function storeWikiPage(input: StoreWikiPageInput): Promise<boolean>
   const vector = await generateEmbedding(truncated);
   if (!vector) return false;
 
+  // Build the base payload first, then conditionally add principle-only
+  // keys when the caller supplied them. Absence is the marker that a
+  // payload does not carry principle metadata; we never write
+  // `principleTier: null` or empty arrays for non-principle pages because
+  // that would force a backfill of every existing Qdrant payload and
+  // muddle filter semantics. See spec section 5.5 and the chief-architect
+  // review applied to the implementation plan.
+  const payload: Record<string, unknown> = {
+    entityType: ENTITY_TYPE,
+    entityId: input.pageId,
+    slug: input.slug,
+    title: input.title,
+    contentPreview: input.body.slice(0, 500),
+    pageKind: input.pageKind,
+    status: input.status,
+    isKernel: input.isKernel,
+    // Qdrant payload null vs missing matters for keyword filters:
+    // kernel rows have organizationId = null, which the filter
+    // builder represents as `match: { value: null }`.
+    organizationId: input.organizationId,
+    kernelVersion: input.kernelVersion,
+    kernelPageId: input.kernelPageId,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (input.pageKind === "principle") {
+    if (input.principleTier !== undefined && input.principleTier !== null) {
+      payload.principleTier = input.principleTier;
+    }
+    if (input.principleAppliesTo !== undefined) {
+      payload.principleAppliesTo = input.principleAppliesTo;
+    }
+    if (input.principleDimensions !== undefined) {
+      payload.principleDimensions = input.principleDimensions;
+    }
+    if (input.principlePublic !== undefined) {
+      payload.principlePublic = input.principlePublic;
+    }
+  }
+
   await upsertVectors(QDRANT_COLLECTIONS.WIKI_PAGES, [
     {
       id: `wiki-page-${input.pageId}`,
       vector,
-      payload: {
-        entityType: ENTITY_TYPE,
-        entityId: input.pageId,
-        slug: input.slug,
-        title: input.title,
-        contentPreview: input.body.slice(0, 500),
-        pageKind: input.pageKind,
-        status: input.status,
-        isKernel: input.isKernel,
-        // Qdrant payload null vs missing matters for keyword filters:
-        // kernel rows have organizationId = null, which the filter
-        // builder represents as `match: { value: null }`.
-        organizationId: input.organizationId,
-        kernelVersion: input.kernelVersion,
-        kernelPageId: input.kernelPageId,
-        timestamp: new Date().toISOString(),
-      },
+      payload,
     },
   ]);
   return true;
