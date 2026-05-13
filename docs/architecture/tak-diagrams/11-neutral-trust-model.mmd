@@ -1,0 +1,33 @@
+flowchart TB
+    H["Human and Organizational Authority"]
+    I["Identity and Governance Context<br/>roles, policy, approvals, badges"]
+    UX["Interaction Surfaces<br/>chat, app, API, workflow"]
+    O["Coordinator Agents"]
+    S["Specialist Agents"]
+    K["TAK Control Plane<br/>permission intersection<br/>immutable directives<br/>HITL, queueing, audit"]
+    M["Context and Memory<br/>retrieval, memory, policy context"]
+    P["Protocols and Tool Surfaces<br/>MCP, A2A, HTTP, tools, connectors"]
+    E["Evidence and Receipts<br/>logs, traces, receipts, provenance"]
+
+    H --> I
+    H --> UX
+    I --> K
+    UX --> O
+    O --> S
+    O --> K
+    S --> K
+    M --> O
+    M --> S
+    K --> P
+    K --> E
+    E --> H
+
+    style H fill:#dbeafe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style I fill:#e0f2fe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style UX fill:#f8fafc,stroke:#334155,color:#0f172a,stroke-width:1.5px
+    style O fill:#dcfce7,stroke:#166534,color:#0f172a,stroke-width:1.5px
+    style S fill:#dcfce7,stroke:#166534,color:#0f172a,stroke-width:1.5px
+    style K fill:#bfdbfe,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    style M fill:#fef3c7,stroke:#92400e,color:#0f172a,stroke-width:1.5px
+    style P fill:#e9d5ff,stroke:#6b21a8,color:#0f172a,stroke-width:1.5px
+    style E fill:#fee2e2,stroke:#b91c1c,color:#0f172a,stroke-width:1.5px

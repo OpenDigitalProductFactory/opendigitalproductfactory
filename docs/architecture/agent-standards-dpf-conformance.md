@@ -13,6 +13,13 @@ Status values:
 
 This is a first-pass conformance view. It is intended to show where `DPF` already demonstrates relevant controls and where additional work would be required to claim higher-assurance conformance.
 
+For the purposes of this document, `DPF` is treated as the initial implementation prototype for the standards family, not as a claim of full present-day conformance.
+
+The companion verification rubrics intended to make future conformance claims repeatable are:
+
+- `docs/architecture/tak-conformance-tests.md`
+- `docs/architecture/gaid-conformance-tests.md`
+
 ## TAK Conformance
 
 | Control Area | Status | Evidence Path | Notes | Recommended Next Step |
@@ -58,6 +65,18 @@ This is a first-pass conformance view. It is intended to show where `DPF` alread
 - Add parent-child traceability for delegation and multi-agent workflows.
 - Publish first-generation badges for capability, governance, data sensitivity, and fit-for-purpose.
 - Add `GAID` public/private namespace handling and status management.
+
+### Prototype Outcomes
+
+The most important prototype outcomes implied by the current standards refresh are:
+
+- canonical private `GAID` issuance for every materially distinct agent subject
+- an internal `AIDoc` service derived from the current registry and runtime state
+- owner, sponsor, responsible-team, directory-binding, entitlement-scope, and blast-radius identity fields
+- an internal badge registry with applicability scope, evidence references, and assurance levels
+- signed or tamper-evident receipts for consequential actions
+- protocol and directory projection profiles for `LDAP`, `SCIM`, `MCP`, and `A2A`
+- a phased path from private enterprise `GAID` toward federated and public verification profiles
 
 ### Submission-Ready Future Work
 
