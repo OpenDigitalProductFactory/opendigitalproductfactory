@@ -402,9 +402,18 @@ describe("POST /api/v1/edge/discovery-runs — happy path (persists)", () => {
 });
 
 describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
-  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+  beforeEach(() => {
+    mockResolveAuth.mockResolvedValue(AUTHED);
+    // Reset env between tests so per-test overrides don't bleed.
+    delete process.env.DPF_EDGE_FRESHNESS_PAST_SEC;
+    delete process.env.DPF_EDGE_FRESHNESS_FUTURE_SEC;
+  });
+  afterEach(() => {
+    delete process.env.DPF_EDGE_FRESHNESS_PAST_SEC;
+    delete process.env.DPF_EDGE_FRESHNESS_FUTURE_SEC;
+  });
 
-  it("returns 400 stale_observation when observedAt is > 24h in the past", async () => {
+  it("returns 400 stale_observation when observedAt is > 24h in the past (default past bound)", async () => {
     const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     const res = await POST(
       makeReq(
@@ -415,13 +424,14 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("stale_observation");
+    expect(body.message).toMatch(/before server time/i);
     // Freshness gate must fire BEFORE the idempotency lookup so stale
     // submissions never hit the DB.
     expect(mockDiscoveryRunFindUnique).not.toHaveBeenCalled();
   });
 
-  it("returns 400 stale_observation when observedAt is > 24h in the future (clock skew)", async () => {
-    const future = new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString();
+  it("returns 400 stale_observation when observedAt is > 5min in the future (default future bound, NTP-tightened)", async () => {
+    const future = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min ahead
     const res = await POST(
       makeReq(
         makeValidBody({ observedAt: future }),
@@ -431,10 +441,13 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("stale_observation");
+    // The error message should hint at NTP because forward-skew is
+    // almost always a clock-sync problem on the Edge Node side.
+    expect(body.message).toMatch(/ahead of server time|NTP/i);
   });
 
-  it("accepts observedAt at the recent edge of the window", async () => {
-    // 23h ago — comfortably inside the 24h window.
+  it("accepts observedAt at the recent past edge of the default window (23h ago)", async () => {
+    // 23h ago — comfortably inside the 24h past bound.
     const recent = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString();
     const res = await POST(
       makeReq(
@@ -442,11 +455,63 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
         { Authorization: "Bearer x" },
       ),
     );
-    // 201 now that persistence is wired (was 202 stub before this PR).
     expect(res.status).toBe(201);
   });
 
-  it("writes a stale_observation audit row at 400 (with skew + observedAt in summary)", async () => {
+  it("accepts observedAt 1min in the future (inside default 5min forward bound)", async () => {
+    const slightlyAhead = new Date(Date.now() + 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: slightlyAhead }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("honors DPF_EDGE_FRESHNESS_PAST_SEC to tighten the past window", async () => {
+    process.env.DPF_EDGE_FRESHNESS_PAST_SEC = "3600"; // 1 hour
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: twoHoursAgo }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("stale_observation");
+  });
+
+  it("honors DPF_EDGE_FRESHNESS_FUTURE_SEC to widen the future window", async () => {
+    process.env.DPF_EDGE_FRESHNESS_FUTURE_SEC = "3600"; // 1 hour
+    const halfHourAhead = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: halfHourAhead }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("ignores invalid env values and falls back to defaults", async () => {
+    // Garbage env values should not crash the route or accept all
+    // requests — they should fall back to the safe defaults.
+    process.env.DPF_EDGE_FRESHNESS_PAST_SEC = "not-a-number";
+    process.env.DPF_EDGE_FRESHNESS_FUTURE_SEC = "-500";
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    const res = await POST(
+      makeReq(
+        makeValidBody({ observedAt: stale }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    // Default past bound (24h) still applies; 25h ago is rejected.
+    expect(res.status).toBe(400);
+  });
+
+  it("writes a stale_observation audit row with signed deltaMs + direction + window bounds", async () => {
     const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     await POST(
       makeReq(
@@ -458,10 +523,41 @@ describe("POST /api/v1/edge/discovery-runs — freshness window", () => {
     expect((row.result as { error: string }).error).toBe("stale_observation");
     expect((row.result as { status: number }).status).toBe(400);
     const summary = (row.parameters as {
-      summary: { skewMs: number; observedAt: string };
+      summary: {
+        skewMs: number;
+        deltaMs: number;
+        direction: "past" | "future";
+        observedAt: string;
+        pastWindowSec: number;
+        futureWindowSec: number;
+      };
     }).summary;
+    // skewMs preserved for backward compat with existing audit consumers.
     expect(summary.skewMs).toBeGreaterThan(24 * 60 * 60 * 1000);
+    // Signed delta tells us direction unambiguously.
+    expect(summary.deltaMs).toBeLessThan(0);
+    expect(summary.direction).toBe("past");
     expect(summary.observedAt).toBe(stale);
+    // Windows surfaced so operators reading audit rows can see what
+    // bounds were in force at the time of rejection.
+    expect(summary.pastWindowSec).toBe(24 * 60 * 60);
+    expect(summary.futureWindowSec).toBe(5 * 60);
+  });
+
+  it("writes direction=future + signed deltaMs > 0 for forward-skew rejections", async () => {
+    const future = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    await POST(
+      makeReq(
+        makeValidBody({ observedAt: future }),
+        { Authorization: "Bearer x" },
+      ),
+    );
+    const row = auditCalls[0]!;
+    const summary = (row.parameters as {
+      summary: { deltaMs: number; direction: "past" | "future" };
+    }).summary;
+    expect(summary.deltaMs).toBeGreaterThan(0);
+    expect(summary.direction).toBe("future");
   });
 });
 
