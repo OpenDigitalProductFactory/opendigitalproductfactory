@@ -139,6 +139,15 @@ export interface RouteAndCallOptions {
    * and explain its limited state — rather than becoming a generic assistant.
    */
   agentDisplayName?: string;
+  /**
+   * Caller context for adapters that need to mint MCP credentials. When the
+   * Claude CLI execution adapter is the selected endpoint and `mcpSession` is
+   * present, the adapter mounts `/api/mcp/v1` via `--mcp-config` using a
+   * short-lived JWT issued for this user/agent/thread. Absent for non-coworker
+   * inference (eval runners, background jobs without an attributable owner) —
+   * the cli-adapter then falls back to the legacy text-described tool path.
+   */
+  mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession;
 }
 
 // ─── Main function ──────────────────────────────────────────────────────────
@@ -416,6 +425,7 @@ export async function routeAndCall(
       toolsStripped ? undefined : options?.tools,
       decision.executionPlan,
       options?.previousResponseId,
+      options?.mcpSession,
     );
 
     // If the adapter returned an operation ID (async adapter), create tracking record
@@ -481,6 +491,7 @@ export async function routeAndCall(
     toolsStripped ? undefined : options?.tools,
     decision.executionPlan,
     options?.previousResponseId,
+    options?.mcpSession,
   );
 
   // 5c. Local-fallback signal.

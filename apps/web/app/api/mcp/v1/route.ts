@@ -14,11 +14,23 @@
 // discovery don't fail mysteriously.
 
 import { resolveMcpApiToken, type ResolvedMcpToken } from "@/lib/auth/mcp-api-token";
+import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+
+/** Resolved auth — either a persistent PAT or a short-lived internal session.
+ * The route-side handlers consume this single shape; the only difference is
+ * what `threadId`/`routeContext` populate audit rows with. */
+type ResolvedAuth = ResolvedMcpToken & {
+  threadId?: string | null;
+  routeContext?: string | null;
+  /** Where the auth came from — populates `ToolExecution.executionMode` so we can
+   *  tell internal cli-adapter calls from external coding-agent calls. */
+  source: "pat" | "session-jwt";
+};
 
 const PROTOCOL_VERSION = "2025-11-25";
 const SERVER_NAME = "dpf-platform";
@@ -131,8 +143,10 @@ function isOriginAllowed(origin: string | null): boolean {
 //
 // When the portal runs behind a proxy or inside a container, `request.url`
 // reflects the *internal* bind address (e.g. 0.0.0.0) and protocol, not what
-// the client actually connected to. We must consult X-Forwarded-Proto and
-// X-Forwarded-Host (or the Host header) to know the client's view.
+// the client actually connected to. We trust X-Forwarded-Proto only for the
+// proxy's TLS termination signal. Host authorization for plain HTTP must use
+// the actual Host/request URL because X-Forwarded-Host is caller-controlled in
+// direct CLI/container traffic.
 //
 // MCP_INSECURE_INTERNAL_HOSTS — comma-separated hostnames that are trusted
 // to call the MCP transport over plain HTTP. Required for sandbox→portal
@@ -146,9 +160,8 @@ function isTransportAllowed(request: Request): boolean {
   const proto = (xfProto?.split(",")[0]?.trim() || url.protocol.replace(/:$/, "")).toLowerCase();
   if (proto === "https") return true;
 
-  const xfHost = request.headers.get("x-forwarded-host");
   const hostHeader = request.headers.get("host");
-  const rawHost = (xfHost?.split(",")[0]?.trim() || hostHeader || url.host).toLowerCase();
+  const rawHost = (hostHeader || url.host).toLowerCase();
   // Strip port; bracketed IPv6 retains brackets after URL.host parsing.
   const hostname = rawHost.replace(/^\[(.+)\]:?\d*$/, "$1").replace(/:\d+$/, "");
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
@@ -235,7 +248,7 @@ async function handleInitialize(id: JsonRpcId): Promise<Response> {
 
 async function handleToolsList(
   id: JsonRpcId,
-  token: ResolvedMcpToken,
+  token: ResolvedAuth,
 ): Promise<Response> {
   const userContext = await loadUserContext(token.userId);
   const grantMap = getToolGrantMapping();
@@ -247,7 +260,7 @@ async function handleToolsList(
 
 async function handleToolsCall(
   id: JsonRpcId,
-  token: ResolvedMcpToken,
+  token: ResolvedAuth,
   params: Record<string, unknown> | undefined,
 ): Promise<Response> {
   if (!params || typeof params["name"] !== "string") {
@@ -305,8 +318,10 @@ async function handleToolsCall(
     context: {
       agentId: token.agentId ?? undefined,
       apiTokenId: token.tokenId,
+      threadId: token.threadId ?? undefined,
+      routeContext: token.routeContext ?? undefined,
     },
-    source: "external-jsonrpc",
+    source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
 
   // Convert ToolResult into MCP tools/call response shape:
@@ -351,15 +366,43 @@ export async function POST(request: Request): Promise<Response> {
     return forbiddenResponse(`Origin ${origin} not allowed`, origin);
   }
 
-  // Auth
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-    return unauthorizedResponse("missing Bearer token");
-  }
-  const plaintext = authHeader.slice("bearer ".length).trim();
-  const token = await resolveMcpApiToken(plaintext);
-  if (!token) {
-    return unauthorizedResponse("invalid or expired token");
+  // Auth — two paths:
+  //   X-MCP-Session: <jwt>      — short-lived internal session (Claude CLI
+  //                                adapter, future internal callers). JWT
+  //                                carries userId/agentId/threadId/scopes.
+  //   Authorization: Bearer ... — persistent dpfmcp_* PAT for external
+  //                                coding agents (Mark's laptop, VS Code).
+  // Session JWT wins when both are present so the adapter's narrow per-call
+  // scope cannot accidentally be widened by a stale operator PAT in the same
+  // sandbox shell environment.
+  const sessionHeader = request.headers.get("x-mcp-session");
+  let token: ResolvedAuth;
+  if (sessionHeader) {
+    const session = await verifyMcpSessionToken(sessionHeader.trim());
+    if (!session) {
+      return unauthorizedResponse("invalid or expired MCP session");
+    }
+    token = {
+      tokenId: `session:${session.userId}:${session.agentId ?? "no-agent"}`,
+      userId: session.userId,
+      agentId: session.agentId ?? null,
+      scopes: session.scopes,
+      capability: session.capability,
+      threadId: session.threadId ?? null,
+      routeContext: session.routeContext ?? null,
+      source: "session-jwt",
+    };
+  } else {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+      return unauthorizedResponse("missing Bearer token or X-MCP-Session header");
+    }
+    const plaintext = authHeader.slice("bearer ".length).trim();
+    const pat = await resolveMcpApiToken(plaintext);
+    if (!pat) {
+      return unauthorizedResponse("invalid or expired token");
+    }
+    token = { ...pat, source: "pat" };
   }
 
   // Parse JSON-RPC envelope
