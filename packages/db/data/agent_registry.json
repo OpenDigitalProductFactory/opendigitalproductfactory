@@ -1965,7 +1965,8 @@
           "budget_read",
           "chargeback_write",
           "financial_report_create",
-          "spec_plan_read"
+          "spec_plan_read",
+          "web_search"
         ],
         "memory": {
           "type": "none",
