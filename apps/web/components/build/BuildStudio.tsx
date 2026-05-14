@@ -2,7 +2,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { GitBranch } from "lucide-react";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -326,6 +328,15 @@ export function BuildStudio({
 
         {/* Left: Build List */}
         <div className={getBuildStudioSidebarClassName(sidebarOpen)}>
+          <div className="border-b border-[var(--dpf-border)] p-3">
+            <Link
+              href="/build/work"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            >
+              <GitBranch className="h-4 w-4" aria-hidden="true" />
+              <span>Work Control</span>
+            </Link>
+          </div>
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
               <div className="px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
