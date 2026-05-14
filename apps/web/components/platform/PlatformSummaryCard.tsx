@@ -5,6 +5,7 @@ import type { DataSourceProvenance } from "@/lib/surface-data-provenance";
 type Metric = {
   label: string;
   value: string | number;
+  note?: string;
   provenance?: DataSourceProvenance;
 };
 
@@ -50,6 +51,11 @@ export function PlatformSummaryCard({
               <p className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">
                 {metric.value}
               </p>
+              {metric.note && (
+                <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                  {metric.note}
+                </p>
+              )}
               {metric.provenance && (
                 <div className="mt-2">
                   <DataSourceBadge compact provenance={metric.provenance} />

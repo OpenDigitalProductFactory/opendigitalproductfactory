@@ -40,15 +40,15 @@ function extractFilePaths(diff: string): string[] {
 }
 
 function extractAddedLinesForFile(diff: string, filePath: string): string[] {
-  const escaped = filePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const fileRegex = new RegExp(
-    `^diff --git a/${escaped} b/.+\\n[\\s\\S]*?(?=^diff --git|$)`,
-    "m",
-  );
-  const match = fileRegex.exec(diff);
-  if (!match) return [];
+  // Split the diff on file-block boundaries so we can isolate one file's hunk
+  // without relying on a multiline regex (the previous `^...(?=^diff --git|$)/m`
+  // version stopped at the first newline because `$` matches end-of-line under /m).
+  const blocks = diff.split(/^(?=diff --git )/m);
+  const header = `diff --git a/${filePath} `;
+  const target = blocks.find((b) => b.startsWith(header));
+  if (!target) return [];
 
-  return match[0]
+  return target
     .split("\n")
     .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
     .map((line) => line.slice(1));
