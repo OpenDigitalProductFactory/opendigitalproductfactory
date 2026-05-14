@@ -27,6 +27,7 @@ export function classifyRoute(pathname: string): RouteClass {
   if (pathname === "/login") return RouteClass.EmployeeAuth;
   if (
     pathname === "/" ||
+    pathname === "/setup" ||
     pathname === "/welcome" ||
     pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/reset-password") ||
