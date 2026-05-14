@@ -2,7 +2,7 @@
 
 **The platform that builds itself.**
 
-An open-source, AI-native digital product management platform that gives any organization — from a 5-person startup to a regulated enterprise — the same capabilities that only the largest tech companies have today. Built-in AI agents don't just answer questions: they manage your portfolio, model your architecture, execute your backlog, and eventually write the features you need — all with human approval at every step.
+An open-source, AI-native digital product management platform that gives any organization — from a 5-person startup to a regulated enterprise — the same capabilities that only the largest tech companies have today. Built-in AI agents don't just answer questions: they manage your portfolio, model your architecture, execute your backlog, and draft platform changes in a governed sandbox — all with human approval at every step.
 
 No vendor lock-in. No consultants. No million-dollar license. One installer to run. Your AI workforce starts working immediately.
 
@@ -41,7 +41,7 @@ Because it's open source and self-contained — runs entirely on your hardware, 
 
 ### The Vision: A Self-Evolving Platform
 
-Today the platform manages your digital products. Tomorrow it writes new features you need — in a governed, reviewable way, no developer required on the hot path. A sandbox holds each change. Humans review the design and user experience. Approved changes deploy automatically. The platform grows from within, on your hardware, on your terms.
+Today the platform manages your digital products and gives you Build Studio for governed platform extension. A sandbox holds each change. Humans review the design, code impact, and user experience. Approved changes move through the portal's promotion and contribution paths. The platform grows from within, on your hardware, on your terms.
 
 > **Hive Mind (opt-in):** Each installation is a node. You can share what you develop with the community, pull in what other installations have built, and let the platform grow through humans and agents working together. Sharing is always opt-in.
 
@@ -171,12 +171,14 @@ If you want to contribute to the codebase rather than just run it:
 
 | Area | What It Does |
 | ---- | ------------ |
-| **Portfolio Management** | 4-portfolio hierarchy with a 481-node DPPM taxonomy, health metrics, budget tracking, agent assignments |
-| **EA Modeler** | Enterprise architecture canvas with ArchiMate 4 notation — implementable models, not whiteboards |
-| **Inventory** | Digital product lifecycle management (plan → design → build → production → retirement) with portfolio attribution |
-| **Backlog & Ops** | Epic grouping, portfolio and product backlog items, priority management — the platform manages its own backlog too |
-| **Employees & Roles** | 6 IT4IT human roles (HR-000 through HR-500) with HITL tier assignments, SLA tracking, and delegation grants |
-| **Platform Admin** | Branding, user management, credential encryption, governance controls |
+| **Portfolio, Product, and EA Operations** | Portfolio hierarchy, digital-product lifecycle, architecture modeling, inventory, health signals, and backlog execution. |
+| **Build Studio** | Five-phase feature development pipeline with sandbox builds, code intelligence, impact reports, review evidence, and governed promotion. |
+| **AI Workforce Operations** | Context-aware coworker panel, specialist agents, model routing, provider cost/authority posture, operations map, capacity continuity, and capability-needs review. |
+| **Wiki and Managed Documents** | Platform wiki, founder-kernel knowledge, principles, linting, managed document lifecycle, versions, references, and publication state. |
+| **Compliance and Finance** | Regulations, controls, evidence, licensing readiness, tax/remittance settings, payment controls, and audit trails. |
+| **Storefront, Customers, and Integrations** | Storefront setup, customer context, marketing surfaces, native Google integrations, connector posture, and MCP-accessible workflows. |
+| **Edge Node and Discovery** | Host-resident Edge Node enrollment, trust review, heartbeat freshness, local discovery intake, and multi-host/air-gapped runbooks. |
+| **Platform Admin** | Branding, identity, roles, tool grants, provider credentials, governance controls, prompts, and operational audit surfaces. |
 
 ### AI Workforce
 
@@ -184,24 +186,23 @@ This isn't a chatbot bolted onto a dashboard. AI is a core architectural layer.
 
 | Capability | Description |
 | ---------- | ----------- |
-| **AI Coworker Panel** | Floating, semi-transparent assistant on every screen. Context-aware. |
-| **9 Specialist Agents** | Portfolio Advisor, EA Architect, Ops Coordinator, Platform Engineer, and more — each with domain expertise and role-specific skills |
-| **Skills Dropdown** | Each agent offers context-relevant actions filtered by your role. |
-| **20+ Provider Registry** | Anthropic, OpenAI, Azure, Gemini, Groq, Together, DeepSeek, xAI, Mistral, and more |
-| **Automatic Failover** | Priority-ranked providers. Local AI is always the safety net. |
-| **Weekly Optimization** | Scheduled job ranks providers by capability tier and cost. |
-| **Token Spend Tracking** | Per-provider, per-agent cost monitoring. |
-| **Local-First AI** | Runs via Docker Model Runner out of the box. No API keys needed. No data leaves your machine. |
+| **Context-Aware Coworker Panel** | The assistant understands the current route and works through route-specific tools, prompts, and permissions. |
+| **Specialist Agents and Skills** | Coworkers carry domain-specific skills for portfolio, architecture, operations, compliance, storefront, documentation, Build Studio, and platform engineering work. |
+| **Governed Tools and MCP** | In-product coworkers and external MCP clients call the same governed tool surface with grants, audit logging, and side-effect controls. |
+| **Provider Registry and Routing** | Local-first inference, external provider configuration, model discovery, routing lifecycle, sensitivity clearance, cost posture, and failover. |
+| **Operations Map and Capacity Continuity** | Operator views for workforce posture plus scheduled or capacity-backed work that must leave durable evidence. |
+| **Capability Needs Review** | Coworkers can surface missing tools, prompts, permissions, or product gaps so improvements enter a governed backlog path. |
+| **Build Studio Coworkers** | The build-specialist flow drafts designs, plans, code changes, verification output, review summaries, and promotion evidence. |
 
 ### Governance & Compliance
 
 Built for regulated industries from day one — not retrofitted.
 
-- **Human-in-the-Loop (HITL)** — AI agents propose actions; humans approve before execution. Non-negotiable.
+- **Human-in-the-Loop (HITL)** — AI agents propose actions; humans approve before execution.
 - **Audit Trail** — every governance decision records who approved, when, and what. Queryable. Exportable.
-- **Role-Based Access** — 18 capabilities across 6 roles.
-- **Credential Encryption** — AES-256-GCM for all provider secrets at rest.
-- **EA Governance** — architecture models go through draft → submitted → approved workflows.
+- **Role-Based Access and Tool Grants** — route access, platform roles, coworker grants, and tool execution authority are enforced together.
+- **Credential Encryption** — AES-256-GCM for provider secrets and sensitive integration credentials at rest.
+- **EA Governance and Evidence** — architecture models, Build Studio phase artifacts, compliance evidence, and licensing readiness stay reviewable.
 
 ---
 
@@ -215,18 +216,18 @@ The platform has two deployment models and one shared architectural core:
 
 For the full runtime picture — deployment diagrams, hardware tiers, the Docker Compose breakdown, and the monitoring stack — see [docs/architecture/platform-overview.md](docs/architecture/platform-overview.md).
 
-### Deployment architecture (in active design)
+### Deployment architecture
 
-The deployment architecture is being formalized so that Windows, macOS, native Linux, customer-cloud, and TAPPaaS all wrap the same canonical contracts. The architectural specs are in `docs/superpowers/specs/`:
+The deployment architecture keeps Windows, macOS, native Linux, customer-cloud, and TAPPaaS aligned to the same canonical contracts while each target carries its own maturity level. The current ownership map is in `docs/superpowers/specs/`:
 
 - [Deployment Contracts](docs/superpowers/specs/2026-05-09-deployment-contracts.md) — 10 canonical contracts every deployment target wraps (release artifacts, runtime config, lifecycle, identity, edge, build execution, observability, secrets, LLM/agent routing, client/API surfaces).
 - [Cloud Deployment Design](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md) — substrates (Single VM, Managed container service, Managed Kubernetes) and packaging targets (TAPPaaS module, marketplace image, Helm chart, Terraform modules).
-- [DPF Edge Node](docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md) — host-resident trust + connectivity component for discovery, MCP/A2A gateway, identity broker.
+- [DPF Edge Node](docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md) — host-resident trust + connectivity component for discovery, MCP/A2A gateway, and identity brokering.
 - [Build Execution Provider](docs/superpowers/specs/2026-05-09-build-execution-provider-design.md) — sandbox lifecycle abstraction so Build Studio runs on substrates beyond local Docker.
 - [Mac/Linux Installer-Parity Roadmap](docs/superpowers/plans/2026-05-09-macos-linux-native-support.md) — 10-phase implementation plan for native macOS (Apple Silicon) + native Linux installs.
 - [Branch Plan: Architecture + Documentation Rollout](docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md) — umbrella plan tracking the implementation epics and public-doc updates that follow these specs.
 
-Each spec is a research stub awaiting Research & Benchmarking per AGENTS.md §10. The Windows installer remains the GA install surface today; multi-platform implementation is sequenced through the roadmap above.
+Windows remains the GA install surface today. macOS Apple Silicon and native Linux installers are code-complete on `main` and in early access pending more community verification reports. Cloud and TAPPaaS packaging remain design tracks.
 
 The platform's AI governance layer is now documented as a standards family:
 
@@ -243,30 +244,37 @@ Publication outputs are generated from the Markdown sources of truth:
 
 ---
 
-## Roadmap
+## Current Capability Posture
 
-### What's working now
+### Working now
 
-| Epic | Description |
+| Area | Description |
 | ---- | ----------- |
-| Portal Foundation | Shell, 8 route areas, workspace tiles, portfolio tree with health and budget metrics |
-| Backlog & Epics | Backlog CRUD, epic grouping, ops panel, DPF self-registration |
-| EA Modeling | ArchiMate 4 canvas, viewpoints, relationship rules, structured value streams |
-| AI Provider Registry | 17 providers, credential management, model discovery, profiling, cost tracking |
-| AI Coworker | Live LLM conversations, automatic failover, context-aware skills dropdown |
-| Docker Deployment | Zero-prerequisites Windows installer (GA — production usage). Code-complete macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)) installers in **early access** — static CI gates green, [community verification reports](docs/install/verification-runbook.md) wanted to graduate to GA. Multi-arch GHCR images. Lifecycle scripts on all three platforms. |
+| Product operations | Portfolios, digital products, architecture, inventory, backlog, operations, and storefront management. |
+| AI workforce | Context-aware coworker panel, specialist skills, model routing, provider registry, operations map, capacity continuity, and capability-needs review. |
+| Build Studio | Governed five-phase build flow, sandbox execution, code intelligence, review evidence, and promotion/contribution workflow. |
+| Governance | TAK/GAID standards family, HITL, audit trail, tool grants, credential encryption, and route-aware authority checks. |
+| Knowledge and documents | Platform wiki, principles/founder-kernel knowledge, wiki linting, managed documents, versions, references, and lifecycle state. |
+| Compliance and finance | Regulations, controls, evidence, licensing readiness, tax/remittance setup, payment controls, and reporting. |
+| Edge Node | Single-host bundled Edge Node, admin trust/freshness surface, collector runbooks, and multi-host/air-gapped verification guides. |
+| Windows installer | Zero-prerequisites Windows installer with production usage, Docker Desktop/WSL2 setup, lifecycle commands, and generated credentials. |
 
-### What's coming
+### Early access
 
-| Epic | Description |
+| Area | Description |
 | ---- | ----------- |
-| **Agent Task Execution** | Agents propose real actions (create backlog items, modify products, update EA models). Humans approve. Every action audit-logged. |
-| **Platform Self-Development** | Agents write new features in a sandboxed environment. Humans review diffs and approve. The platform extends itself. |
-| **AI-Guided Setup Wizard** | On first install, the AI coworker walks you through company setup conversationally — no forms, just a conversation. |
-| **In-App PR Workflow** | Submit customizations back to the community directly from the platform UI. |
-| **Web-Hosted SaaS** | Customer-cloud deployment via Terraform on AWS / GCP / Azure — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). DPF stays single-tenant; "SaaS" here means "customer hosts on rented compute," not multi-tenant. |
-| **Mac & Linux Installers** | Code-complete and merged on `main` for native macOS Apple Silicon ([guide](docs/install/macos.md)) and native Linux ([guide](docs/install/linux.md)). Currently **early access** — please try it on your hardware and [tell us how it went](docs/install/verification-runbook.md). A handful of community verification reports per platform is what we need to graduate to GA. |
-| **TAPPaaS Module** | Self-hosted private-platform packaging via [TAPPaaS](https://tappaas.org/) — design in progress, see the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). |
+| macOS Apple Silicon installer | Code-complete and merged on `main`; static CI gates are green. Community verification reports are needed before GA. See [docs/install/macos.md](docs/install/macos.md). |
+| Native Linux installer | Code-complete and merged on `main`; Ubuntu CI exercises the full stack. More distro and hardware reports are needed before GA. See [docs/install/linux.md](docs/install/linux.md). |
+| Edge Node beyond single-host | Multi-host LAN and air-gapped runbooks exist, with verification templates and operator approval ceremonies. Native host binaries and mTLS hardening remain follow-on work. |
+
+### In design
+
+| Area | Description |
+| ---- | ----------- |
+| Customer-cloud deployment | Single-tenant customer-hosted deployment on cloud compute, not multi-tenant SaaS. See the [cloud deployment spec](docs/superpowers/specs/2026-05-09-cloud-deployment-design.md). |
+| TAPPaaS module | Self-hosted private-platform packaging via [TAPPaaS](https://tappaas.org/), tracked by the cloud deployment design. |
+| Zero-click provider and MCP onboarding polish | Reduces manual setup friction for provider and external-tool registration while preserving the same governance gates. |
+| Conversational setup depth | The AI-guided setup path continues to move toward more context-aware onboarding and fewer rigid setup forms. |
 
 ---
 

@@ -2,8 +2,8 @@
 title: "Compliance"
 area: compliance
 order: 1
-lastUpdated: 2026-03-21
-updatedBy: Claude (COO)
+lastUpdated: 2026-05-14
+updatedBy: Codex
 ---
 
 ## Overview
@@ -17,6 +17,7 @@ The Compliance area manages your organization's regulatory posture end-to-end. F
 - **Controls** — The policies, procedures, and technical measures your organization has in place to satisfy obligations. Evidence is collected against controls.
 - **Posture Score** — A calculated score reflecting how well your controls currently satisfy your active obligations. It combines coverage, evidence freshness, and outstanding issues.
 - **Gap Assessment** — An analysis of which obligations are not yet covered by sufficient controls or evidence. The starting point for a remediation plan.
+- **Licensing Readiness** — A workspace for business licenses, permits, postings, fees, credentials, authority layers, and unresolved readiness questions.
 
 ## What You Can Do
 
@@ -26,3 +27,4 @@ The Compliance area manages your organization's regulatory posture end-to-end. F
 - Run a gap assessment and create corrective actions for identified gaps
 - Manage risk assessments, incidents, audits, and regulatory submissions
 - Maintain your policy library and link policies to the obligations they address
+- Track [licensing readiness](licensing-readiness) before starting, expanding, or changing regulated activity

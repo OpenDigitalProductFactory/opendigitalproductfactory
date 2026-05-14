@@ -6,7 +6,7 @@ Thanks for wanting to contribute. This project is built to grow through communit
 
 1. Fork the repo, branch from `main`, and keep the change focused on one concern.
 2. Run the local verification checklist (below) before opening a PR.
-3. Open a PR against `main` with a clear summary and test plan.
+3. Commit with a DCO sign-off, then open a PR against `main` with a clear summary and test plan.
 4. CI gates typecheck, unit tests, and a production build. Keep them green.
 5. A maintainer reviews and merges once the checks pass.
 
@@ -85,7 +85,7 @@ pnpm test:e2e:demo      # Sandbox-preview demo profile
 ## Pull request expectations
 
 - **Scope:** one concern per PR. Refactors that ride along with a feature change are fine only if they're genuinely entangled.
-- **Commits:** write them in imperative mood (`add`, `fix`, `move`, `remove`). Conventional-commit prefixes (`feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`) are used across the existing history.
+- **Commits:** write them in imperative mood (`add`, `fix`, `move`, `remove`). Conventional-commit prefixes (`feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`) are used across the existing history. Every commit must include a DCO `Signed-off-by:` trailer; use `git commit -s`.
 - **Tests:** new features need Vitest coverage. Bug fixes need a regression test that fails before the fix and passes after.
 - **Docs:** if you change behavior, update the doc that describes it. Most user-facing docs live under [docs/user-guide/](docs/user-guide/).
 - **Migrations:** new Prisma migrations are committed alongside the schema change. Do not edit migrations that are already on `main`.
@@ -128,8 +128,6 @@ The setup below applies to anyone whose contributions originate from a running i
 5. If you have 2FA enabled, GitHub handles the challenge inline.
 6. The platform polls in the background; when authorization completes, the form shows "Connected as @username".
 
-<!-- TODO(maintainer): add screenshot of Connect GitHub card; capture during a portal smoke test -->
-
 Notes:
 
 - Token has no expiry. Revocable any time at github.com/settings/applications.
@@ -147,8 +145,6 @@ Notes:
 4. Generate. Copy the token (starts with `github_pat_`).
 5. In Admin > Platform Development, expand the **Advanced** disclosure.
 6. Paste into the **Fine-grained PAT** field. Save.
-
-<!-- TODO(maintainer): add screenshot of GitHub PAT settings + Advanced disclosure -->
 
 The platform reads the expiry from the GitHub probe response and surfaces an admin banner at 30/14/7 days remaining. Reconnect via Tier 1 or rotate the PAT before it expires.
 
