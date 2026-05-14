@@ -80,12 +80,28 @@ index 4444444..5555555 100644
 });
 
 describe("runPrePRGates — dependency-audit gate", () => {
-  it("flags a new dependency added to package.json", () => {
-    // Regression for the same extractAddedLinesForFile bug: dependency adds
-    // were being missed because the file's added lines were never extracted.
-    // Uses a last-position add (no trailing comma) so the existing dep-line
-    // regex (which requires `"$`) actually matches — the helper-bug fix alone
-    // is what's being asserted here.
+  it("flags a new dependency added mid-block (trailing comma)", () => {
+    // Mid-block adds have a trailing comma. The previous regex anchored on `"$`,
+    // so it missed every dep entry that wasn't the last in its block — i.e. most
+    // adds in practice. This is the real case the gate needs to catch.
+    const diff = `diff --git a/package.json b/package.json
+index aaaaaaa..bbbbbbb 100644
+--- a/package.json
++++ b/package.json
+@@ -10,4 +10,5 @@
+     "react": "^18.2.0",
++    "lodash": "^4.17.21",
+     "next": "^14.0.0",
+     "zod": "^3.22.0"
+   },
+`;
+    const result = runPrePRGates(diff);
+    const depGate = result.gates.find((g) => g.gate === "dependency-audit");
+    expect(depGate?.verdict).toBe("warn");
+    expect(depGate?.findings.some((f) => /lodash@\^4\.17\.21/.test(f))).toBe(true);
+  });
+
+  it("flags a new dependency added at the end of a block (no trailing comma)", () => {
     const diff = `diff --git a/package.json b/package.json
 index aaaaaaa..bbbbbbb 100644
 --- a/package.json
@@ -102,6 +118,68 @@ index aaaaaaa..bbbbbbb 100644
     const depGate = result.gates.find((g) => g.gate === "dependency-audit");
     expect(depGate?.verdict).toBe("warn");
     expect(depGate?.findings.some((f) => /lodash@\^4\.17\.21/.test(f))).toBe(true);
+    // zod's reformat (added a trailing comma) is not a new dep — must not warn.
+    expect(depGate?.findings.some((f) => /zod/.test(f))).toBe(false);
+  });
+
+  it("does not warn on a version bump (paired - and + for the same key)", () => {
+    // A bump line looks identical to a new add in isolation. The gate must
+    // pair the `-` and `+` for the same key and treat that as a bump, not a
+    // new dependency.
+    const diff = `diff --git a/package.json b/package.json
+index aaaaaaa..bbbbbbb 100644
+--- a/package.json
++++ b/package.json
+@@ -10,5 +10,5 @@
+     "react": "^18.2.0",
+-    "next": "^14.0.0",
++    "next": "^14.1.0",
+     "zod": "^3.22.0"
+   },
+`;
+    const result = runPrePRGates(diff);
+    const depGate = result.gates.find((g) => g.gate === "dependency-audit");
+    expect(depGate?.verdict).toBe("pass");
+    expect(depGate?.findings).toHaveLength(0);
+  });
+
+  it("treats a name change as a new add (different key on the + side)", () => {
+    // A renamed dep removes one key and adds a different key — the new key
+    // has no matching `-` line, so it should be flagged as a new dependency.
+    const diff = `diff --git a/package.json b/package.json
+index aaaaaaa..bbbbbbb 100644
+--- a/package.json
++++ b/package.json
+@@ -10,5 +10,5 @@
+     "react": "^18.2.0",
+-    "moment": "^2.29.0",
++    "dayjs": "^1.11.0",
+     "zod": "^3.22.0"
+   },
+`;
+    const result = runPrePRGates(diff);
+    const depGate = result.gates.find((g) => g.gate === "dependency-audit");
+    expect(depGate?.verdict).toBe("warn");
+    expect(depGate?.findings.some((f) => /dayjs@\^1\.11\.0/.test(f))).toBe(true);
+    expect(depGate?.findings.some((f) => /moment/.test(f))).toBe(false);
+  });
+
+  it("passes when a dependency is only removed", () => {
+    const diff = `diff --git a/package.json b/package.json
+index aaaaaaa..bbbbbbb 100644
+--- a/package.json
++++ b/package.json
+@@ -10,5 +10,4 @@
+     "react": "^18.2.0",
+-    "lodash": "^4.17.21",
+     "next": "^14.0.0",
+     "zod": "^3.22.0"
+   },
+`;
+    const result = runPrePRGates(diff);
+    const depGate = result.gates.find((g) => g.gate === "dependency-audit");
+    expect(depGate?.verdict).toBe("pass");
+    expect(depGate?.findings).toHaveLength(0);
   });
 
   it("passes when no package.json files are in the diff", () => {
