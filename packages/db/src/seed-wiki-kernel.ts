@@ -513,6 +513,31 @@ export type SeedWikiKernelResult = {
  * (Phase 5 not done), returns `{ emptyKernel: true }` without error.
  */
 export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKernelResult> {
+  // Probe the kernel directory BEFORE calling readManifest(). If the
+  // founder-kernel content isn't present in the image at all (e.g. the
+  // Dockerfile is missing `COPY docs/founder-kernel/`), readManifest()
+  // would throw ENOENT and the docker-entrypoint's
+  // `|| echo "WARN Seed had warnings"` would swallow the failure — the
+  // operator then sees a non-fatal warning and a permanently empty
+  // /wiki page. Surfacing this as a typed, actionable warning makes the
+  // packaging gap visible the moment it happens.
+  if (!existsSync(KERNEL_DIR)) {
+    console.warn(
+      `[seedWikiKernel] founder-kernel directory not present at ${KERNEL_DIR}. ` +
+        `The container image is missing 'COPY docs/founder-kernel/' — wiki pages will be empty until the image is rebuilt with that COPY. ` +
+        `Returning an empty-kernel result; no rows seeded.`,
+    );
+    return {
+      kernelVersion: "0.0.0",
+      sourceCount: 0,
+      pageCount: 0,
+      orphanLinks: [],
+      emptyKernel: true,
+      qdrantPointsSeeded: 0,
+      embeddingsSidecarPresent: false,
+    };
+  }
+
   const manifest = readManifest();
   const sourcesDir = join(KERNEL_DIR, "raw-sources");
   const wikiDir = join(KERNEL_DIR, "wiki");
