@@ -3,8 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { AlertTriangle, ExternalLink, LoaderCircle, Play } from "lucide-react";
 import { deleteBacklogItem, escalateBacklogItemUpstream } from "@/lib/actions/backlog";
-import { BACKLOG_STATUS_COLOURS, type BacklogItemWithRelations } from "@/lib/backlog";
+import { startBacklogBuild } from "@/lib/actions/backlog-build";
+import { type BacklogItemWithRelations } from "@/lib/backlog";
+import { resolveBacklogBuildActionState } from "@/lib/backlog-build-action-state";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 
 type Props = {
@@ -18,6 +21,7 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [escalateMessage, setEscalateMessage] = useState<string | null>(null);
+  const [buildMessage, setBuildMessage] = useState<string | null>(null);
 
   function handleDelete() {
     startTransition(async () => {
@@ -41,14 +45,28 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
     });
   }
 
-  const statusColour = BACKLOG_STATUS_COLOURS[item.status] ?? "#8888a0";
+  function handleStartBuild() {
+    setBuildMessage(null);
+    startTransition(async () => {
+      const result = await startBacklogBuild(item.itemId);
+      if (result.status === "created" || result.status === "existing") {
+        setBuildMessage(result.status === "created" ? "build draft created" : "opening active build");
+        router.push(result.href);
+        router.refresh();
+      } else if (result.status === "blocked") {
+        setBuildMessage(`blocked: ${result.error}`);
+      }
+    });
+  }
+
+  const buildAction = resolveBacklogBuildActionState(item);
 
   return (
     <div
       id={`backlog-item-${item.itemId}`}
       aria-current={focused ? "true" : undefined}
       className={[
-        "flex scroll-mt-24 items-start gap-3 rounded-lg border p-3",
+        "flex scroll-mt-24 flex-wrap items-start gap-3 rounded-lg border p-3",
         focused
           ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)]"
           : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]",
@@ -98,8 +116,10 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
 
       {/* Status badge */}
       <span
-        className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded"
-        style={{ backgroundColor: `${statusColour}22`, color: statusColour }}
+        className={[
+          "shrink-0 rounded border px-2 py-0.5 text-[10px] font-semibold",
+          statusBadgeClassName(item.status),
+        ].join(" ")}
       >
         {item.status}
       </span>
@@ -111,7 +131,7 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
             <button
               onClick={handleDelete}
               disabled={isPending}
-              className="text-[10px] text-red-400 hover:text-red-300 px-1"
+              className="text-[10px] text-[var(--dpf-error)] hover:opacity-80 px-1"
             >
               {isPending ? "…" : "confirm"}
             </button>
@@ -131,6 +151,11 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
             >
               edit
             </button>
+            <BacklogBuildActionButton
+              action={buildAction}
+              isPending={isPending}
+              onStart={handleStartBuild}
+            />
             {item.upstreamIssueNumber == null && (
               <button
                 onClick={handleEscalate}
@@ -144,7 +169,7 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
             )}
             <button
               onClick={() => setConfirmDelete(true)}
-              className="text-[10px] text-[var(--dpf-muted)] hover:text-red-400 px-1"
+              className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] px-1"
               aria-label="Delete"
             >
               del
@@ -155,6 +180,69 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
       {escalateMessage && (
         <p className="w-full text-[10px] text-[var(--dpf-muted)] mt-1">{escalateMessage}</p>
       )}
+      {buildMessage && (
+        <p className="w-full text-[10px] text-[var(--dpf-muted)] mt-1">{buildMessage}</p>
+      )}
     </div>
   );
+}
+
+function BacklogBuildActionButton({
+  action,
+  isPending,
+  onStart,
+}: {
+  action: ReturnType<typeof resolveBacklogBuildActionState>;
+  isPending: boolean;
+  onStart: () => void;
+}) {
+  if (action.kind === "start") {
+    return (
+      <button
+        onClick={onStart}
+        disabled={isPending}
+        className="inline-flex items-center gap-1 rounded border border-[var(--dpf-accent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Start Build Studio draft"
+      >
+        {isPending ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+        <span>{isPending ? "Starting" : action.label}</span>
+      </button>
+    );
+  }
+
+  if (action.kind === "resume" || action.kind === "open") {
+    return (
+      <Link
+        href={action.href}
+        className="inline-flex items-center gap-1 rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)]"
+        aria-label={`${action.label} in Build Studio`}
+      >
+        <ExternalLink className="h-3 w-3" />
+        <span>{action.label}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex cursor-help items-center gap-1 rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]"
+      title={action.reason}
+      aria-label={`${action.label}: ${action.reason}`}
+    >
+      <AlertTriangle className="h-3 w-3" />
+      <span>{action.label}</span>
+    </span>
+  );
+}
+
+function statusBadgeClassName(status: string): string {
+  const classes: Record<string, string> = {
+    triaging: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+    open: "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]",
+    "in-progress": "border-[var(--dpf-warning)]/30 bg-[var(--dpf-warning)]/10 text-[var(--dpf-warning)]",
+    done: "border-[var(--dpf-success)]/30 bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]",
+    deferred: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+  };
+
+  return classes[status] ?? classes.deferred;
 }

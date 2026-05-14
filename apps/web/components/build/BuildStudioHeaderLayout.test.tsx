@@ -145,6 +145,25 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/class=\"mt-1 flex flex-wrap items-center gap-2 text-xs text-\[var\(--dpf-muted\)\]\"/);
   });
 
+  it("opens the build requested by the buildId deep link", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[
+          makeBuild({ buildId: "FB-FIRST", title: "First build" }),
+          makeBuild({ buildId: "FB-SECOND", title: "Backlog launched build" }),
+        ]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+        initialBuildId="FB-SECOND"
+      />,
+    );
+
+    expect(html).toContain("Backlog launched build");
+    expect(html).not.toContain("First build</h2>");
+  });
+
   it("renders the submission branch badge in a truncating wrapper instead of an unconstrained inline chip", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
