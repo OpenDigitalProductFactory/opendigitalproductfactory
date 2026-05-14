@@ -35,6 +35,8 @@ Tier-weighted rules that contribute to decision aggregation across every matchin
 - `[[principles/trust-the-data-spine]]` — core. Prefer a trusted, auto-populated data spine over reasoning on a model nobody trusts.
 - `[[principles/one-data-model]]` — core. Prefer one canonical data model over two integrated systems of record over the same entities.
 - `[[principles/contextualize-before-transforming]]` — core. Map the existing operating model against a new standard before changing the operating model.
+- `[[principles/do-the-work-dont-task-the-operator]]` — **commandment** (binds agents only). If the sandbox can do the task, the agent does it. Operator tasking is for HITL gates, judgment, irreversibility, or genuinely-impossible work — never for friction the agent could have absorbed.
+- `[[principles/test-in-the-portal-build]]` — **commandment** (binds agents only). Unit tests against mocked dependencies prove code shape; only a portal build exercising migrations, seed, build artifacts, and the rendered route proves the platform works.
 
 ## Stances — Mark&#39;s positions
 
