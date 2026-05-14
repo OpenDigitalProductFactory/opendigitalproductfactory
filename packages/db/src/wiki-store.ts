@@ -31,12 +31,20 @@ export type WikiStoreClient = {
   wikiPageSource: {
     upsert: PrismaWriteAction;
   };
+  rawSource: {
+    upsert: PrismaWriteAction;
+  };
+  wikiIngestEvent: {
+    create: PrismaWriteAction;
+  };
 };
 
 type WikiPageUpsertClient = Pick<WikiStoreClient, "wikiPage">;
 type WikiRevisionClient = Pick<WikiStoreClient, "wikiPageRevision">;
 type WikiPageLinkClient = Pick<WikiStoreClient, "wikiPageLink">;
 type WikiPageSourceClient = Pick<WikiStoreClient, "wikiPageSource">;
+type RawSourceClient = Pick<WikiStoreClient, "rawSource">;
+type WikiIngestEventClient = Pick<WikiStoreClient, "wikiIngestEvent">;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -328,6 +336,143 @@ export async function getWikiPage(
     where: {
       organizationId: args.organizationId,
       slug: args.slug,
+    },
+  });
+}
+
+// ─── Raw source ingest ──────────────────────────────────────────────────────
+
+/**
+ * Source types accepted by `RawSource.sourceType`. Mirrors the enum-shaped
+ * convention documented in EP-WIKI-001 §4 and the founder-kernel folder
+ * layout (`raw-sources/{papers,articles,specs,frameworks}` plus the
+ * `external-url` catch-all for ad-hoc URL fetches).
+ */
+export const RAW_SOURCE_TYPES = [
+  "paper",
+  "article",
+  "spec",
+  "doc",
+  "framework",
+  "external-url",
+] as const;
+export type RawSourceType = (typeof RAW_SOURCE_TYPES)[number];
+
+export function isRawSourceType(value: unknown): value is RawSourceType {
+  return (
+    typeof value === "string" &&
+    (RAW_SOURCE_TYPES as readonly string[]).includes(value)
+  );
+}
+
+export type UpsertRawSourceInput = {
+  /**
+   * Stable, idempotent key for the source. The seed pipeline uses the slug
+   * (e.g. `articles/sibling-portfolios`); ad-hoc URL ingests should use the
+   * canonical URL.
+   */
+  sourceKey: string;
+  sourceType: RawSourceType;
+  title: string;
+  authors?: string[];
+  publishedAt?: Date | null;
+  url?: string | null;
+  doi?: string | null;
+  /** Free-form structured pointer for sources without a URL (e.g. internal locator). */
+  locator?: Record<string, unknown> | null;
+  abstract?: string | null;
+  excerpt?: string | null;
+  fullTextPath?: string | null;
+  license?: string | null;
+  retrievedAt?: Date | null;
+  /** Kernel rows leave organizationId undefined; org overlay rows set it. */
+  organizationId?: string | null;
+  isKernel?: boolean;
+};
+
+/**
+ * Idempotent upsert keyed on `sourceKey @unique`. Re-ingesting the same
+ * source updates mutable fields (title, abstract, excerpt, retrievedAt)
+ * without rotating the row id — this preserves every `WikiPageSource`
+ * citation pointed at it.
+ *
+ * `sourceKey` is intentionally a single-column unique (unlike WikiPage's
+ * compound nullable key), so Prisma's `upsert` works directly here.
+ */
+export async function upsertRawSource(
+  db: RawSourceClient,
+  input: UpsertRawSourceInput,
+): Promise<unknown> {
+  const data = {
+    sourceKey: input.sourceKey,
+    sourceType: input.sourceType,
+    title: input.title,
+    authors: input.authors ?? [],
+    publishedAt: input.publishedAt ?? null,
+    url: input.url ?? null,
+    doi: input.doi ?? null,
+    locator: input.locator ?? undefined,
+    abstract: input.abstract ?? null,
+    excerpt: input.excerpt ?? null,
+    fullTextPath: input.fullTextPath ?? null,
+    license: input.license ?? null,
+    retrievedAt: input.retrievedAt ?? null,
+    organizationId: input.organizationId ?? null,
+    isKernel: input.isKernel ?? false,
+  };
+
+  return db.rawSource.upsert({
+    where: { sourceKey: input.sourceKey },
+    create: data,
+    update: {
+      sourceType: data.sourceType,
+      title: data.title,
+      authors: data.authors,
+      publishedAt: data.publishedAt,
+      url: data.url,
+      doi: data.doi,
+      locator: data.locator,
+      abstract: data.abstract,
+      excerpt: data.excerpt,
+      fullTextPath: data.fullTextPath,
+      license: data.license,
+      retrievedAt: data.retrievedAt,
+      organizationId: data.organizationId,
+      isKernel: data.isKernel,
+    },
+  });
+}
+
+export type RecordIngestEventInput = {
+  sourceId: string;
+  organizationId?: string | null;
+  /** Wiki page ids touched by this ingest run; empty when only the source was upserted. */
+  touchedPageIds?: string[];
+  agentId?: string | null;
+  userId?: string | null;
+  /** Kernel version active at ingest time; null for org-only ingests. */
+  kernelVersion?: string | null;
+};
+
+/**
+ * Append-only audit row. Each invocation produces one event; the table is
+ * the durable record of "who ingested what, when, and which pages it
+ * touched". Pages-touched stays empty for Phase 2.1 source-only ingests
+ * and gets populated by Phase 2.3 once the LLM proposal/commit path is
+ * wired in.
+ */
+export async function recordIngestEvent(
+  db: WikiIngestEventClient,
+  input: RecordIngestEventInput,
+): Promise<unknown> {
+  return db.wikiIngestEvent.create({
+    data: {
+      sourceId: input.sourceId,
+      organizationId: input.organizationId ?? null,
+      touchedPageIds: input.touchedPageIds ?? [],
+      agentId: input.agentId ?? null,
+      userId: input.userId ?? null,
+      kernelVersion: input.kernelVersion ?? null,
     },
   });
 }

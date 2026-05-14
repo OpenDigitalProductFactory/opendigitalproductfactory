@@ -16,7 +16,9 @@
     "./location-normalize": "./src/location-normalize.ts",
     "./seed-deliberation": "./src/seed-deliberation.ts",
     "./edge-node-types": "./src/edge-node-types.ts",
-    "./wiki-taxonomy": "./src/wiki-taxonomy.ts"
+    "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
+    "./wiki-store": "./src/wiki-store.ts",
+    "./wiki-frontmatter": "./src/wiki-frontmatter.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",

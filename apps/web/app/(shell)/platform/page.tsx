@@ -3,16 +3,16 @@ import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 import { getProposalStats } from "@/lib/evaluate/proposal-data";
 import { getToolExecutionStats } from "@/lib/tool-execution-data";
+import { buildAuthoritySummaryMetrics, getPlatformAuthoritySummary } from "@/lib/platform-authority-summary";
 
 export default async function PlatformPage() {
-  const now = new Date();
   const [
     agentCount,
     activeProviderCount,
     catalogCount,
     activeServiceCount,
     enabledToolCount,
-    activeGrantCount,
+    authoritySummary,
     toolStats,
     proposalStats,
     userCount,
@@ -24,18 +24,14 @@ export default async function PlatformPage() {
     prisma.mcpIntegration.count({ where: { status: "active" } }),
     prisma.mcpServer.count({ where: { status: "active" } }),
     prisma.mcpServerTool.count({ where: { isEnabled: true } }),
-    prisma.delegationGrant.count({
-      where: {
-        status: "active",
-        expiresAt: { gt: now },
-      },
-    }),
+    getPlatformAuthoritySummary(),
     getToolExecutionStats(),
     getProposalStats(),
     prisma.user.count(),
     prisma.platformRole.count(),
     prisma.platformCapability.count(),
   ]);
+  const authorityMetrics = buildAuthoritySummaryMetrics(authoritySummary);
 
   return (
     <div className="space-y-6">
@@ -71,12 +67,12 @@ export default async function PlatformPage() {
         />
         <PlatformSummaryCard
           title="Governance & Audit"
-          description="Review proposals, execution evidence, and temporary authority grants."
+          description="Review proposals, execution evidence, temporary delegations, and standing tool grants."
           href="/platform/audit"
           accent="var(--dpf-warning)"
           metrics={[
-            { label: "Active grants", value: activeGrantCount },
-            { label: "Executions", value: toolStats.total },
+            authorityMetrics[0],
+            authorityMetrics[1],
           ]}
         />
         <PlatformSummaryCard
