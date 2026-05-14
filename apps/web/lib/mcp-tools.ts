@@ -2218,15 +2218,29 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── EP-WIKI-001 Phase 3b2: Wiki Query ──────────────────────────────────────
   {
     name: "wiki_query",
-    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, and a content preview. Prefer this over web speculation.",
+    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, principle, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, what governance principles apply, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, content preview, and (for principle pages) tier + applies-to + dimensions + public-classification metadata. Prefer this over web speculation.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string", description: "What to search for. Natural language; the wiki is embedded for semantic similarity." },
         pageKind: {
           type: "string",
-          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic"],
-          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'entity' for definitions; 'decision' for DEC-* records.",
+          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic", "principle"],
+          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'principle' for governance rules with tier and applies-to; 'entity' for definitions; 'decision' for DEC-* records.",
+        },
+        tier: {
+          type: "string",
+          enum: ["commandment", "core", "contextual"],
+          description: "When pageKind=principle: filter to one tier. Commandment = non-negotiable doctrine; core = strong defaults; contextual = narrow operational rules.",
+        },
+        appliesTo: {
+          type: "string",
+          enum: ["in_platform_coworker", "external_coding_agent", "human"],
+          description: "When pageKind=principle: filter to principles that apply to this population.",
+        },
+        publicOnly: {
+          type: "boolean",
+          description: "When pageKind=principle: only return principles classified as public (safe to surface to customers / contributors).",
         },
         limit: { type: "number", description: "Max results (default 5)." },
       },
@@ -2235,6 +2249,63 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
+  },
+  // ─── Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support ──
+  {
+    name: "principle_decide",
+    description:
+      "Advisory only. Score a set of options against the governance principles in scope for the calling population, and return a recommendation plus a per-principle contribution ledger. Uses commandments from Postgres (always included) and relevant core/contextual principles from semantic search. Does not execute the recommended option; the caller retains authority. Use when you have two or more options and want to surface which governance principles pull which way.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        context: {
+          type: "string",
+          description:
+            "A short description of the decision being made. Used for semantic retrieval of relevant core and contextual principles.",
+        },
+        options: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Stable identifier for the option." },
+              description: { type: "string", description: "Short prose description." },
+              features: {
+                type: "object",
+                description:
+                  "Optional map of dimension key -> 0..1 score. Dimensions must come from the registry in packages/db/src/wiki-taxonomy.ts. Options that supply features get structured alignment; otherwise the math falls back to semantic alignment.",
+                additionalProperties: { type: "number" },
+              },
+            },
+            required: ["id", "description"],
+          },
+          description: "The candidate options to score. Must be a non-empty array.",
+        },
+        callingPopulation: {
+          type: "string",
+          enum: ["in_platform_coworker", "external_coding_agent", "human"],
+          description: "Population whose principles should apply.",
+        },
+        maxPrinciples: {
+          type: "number",
+          description: "Cap on relevant core/contextual principles retrieved from Qdrant. Default 20.",
+        },
+        tieMargin: {
+          type: "number",
+          description:
+            "Margin threshold below which confidence flips to 'low' and the reasoning recommends human review. Default 0.2.",
+        },
+      },
+      required: ["context", "options", "callingPopulation"],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
   },
   // ─── EP-WIKI-001 Phase 4b2b: Wiki Lint trigger ─────────────────────────────
   {
@@ -8918,22 +8989,222 @@ export async function executeTool(
       const org = await prisma.organization
         .findFirst({ select: { id: true } })
         .catch(() => null);
-      const results = await searchWikiPages({
+      // Translate the ergonomic public schema fields (tier, appliesTo,
+      // publicOnly) into canonical principle filter args. The public MCP
+      // surface uses the short names so authors don't have to remember
+      // "principleTier" / "principleAppliesTo" / "principlePublic"; the
+      // canonical names live at the storage and retrieval layer per the
+      // chief-architect review applied to the implementation plan.
+      const searchArgs: Parameters<typeof searchWikiPages>[0] = {
         query: String(params["query"] ?? ""),
         organizationId: org?.id ?? null,
         pageKind: typeof params["pageKind"] === "string" ? params["pageKind"] : undefined,
         limit: typeof params["limit"] === "number" ? params["limit"] : 5,
-      });
+      };
+      if (typeof params["tier"] === "string") {
+        searchArgs.principleTier = params["tier"];
+      }
+      if (typeof params["appliesTo"] === "string") {
+        searchArgs.principleAppliesTo = params["appliesTo"];
+      }
+      if (typeof params["publicOnly"] === "boolean") {
+        searchArgs.principlePublic = params["publicOnly"];
+      }
+      const results = await searchWikiPages(searchArgs);
       if (results.length === 0) {
         return { success: true, message: "No matching wiki pages found.", data: { results: [] } };
       }
       const summary = results
-        .map(
-          (r) =>
-            `${r.slug} (${r.pageKind}, ${r.source}) — ${r.title} (${Math.round(r.score * 100)}% match)`,
-        )
+        .map((r) => {
+          const tierFragment =
+            r.pageKind === "principle" && r.principleTier
+              ? `, ${r.principleTier}`
+              : "";
+          return `${r.slug} (${r.pageKind}, ${r.source}${tierFragment}) — ${r.title} (${Math.round(r.score * 100)}% match)`;
+        })
         .join("\n");
       return { success: true, message: summary, data: { results } };
+    }
+
+    case "principle_decide": {
+      // Phase 2 Task 2.7. Pulls in-scope commandments from Postgres (always
+      // applied) and relevant core/contextual principles from Qdrant, then
+      // runs the pure decide() math. Returns a contribution ledger so
+      // callers can render the why, not just the what.
+      const validPopulations = new Set([
+        "in_platform_coworker",
+        "external_coding_agent",
+        "human",
+      ]);
+      const callingPopulation = params["callingPopulation"];
+      if (
+        typeof callingPopulation !== "string" ||
+        !validPopulations.has(callingPopulation)
+      ) {
+        return {
+          success: false,
+          message:
+            "callingPopulation must be one of: in_platform_coworker, external_coding_agent, human.",
+          error: "Invalid callingPopulation",
+        };
+      }
+      const optionsParam = params["options"];
+      if (!Array.isArray(optionsParam) || optionsParam.length === 0) {
+        return {
+          success: false,
+          message: "options must be a non-empty array.",
+          error: "Empty options",
+        };
+      }
+
+      const { listPrinciplesByTier, prisma, PRINCIPLE_DECIDE_DEFAULTS } =
+        await import("@dpf/db");
+      const { searchWikiPages } = await import("@/lib/wiki/embeddings");
+      const { decide } = await import("@/lib/wiki/principle-decide");
+
+      const maxPrinciples =
+        typeof params["maxPrinciples"] === "number"
+          ? params["maxPrinciples"]
+          : PRINCIPLE_DECIDE_DEFAULTS.maxPrinciples;
+      const tieMargin =
+        typeof params["tieMargin"] === "number"
+          ? params["tieMargin"]
+          : PRINCIPLE_DECIDE_DEFAULTS.tieMargin;
+      const contextualThreshold =
+        PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
+      const semanticWarnRatio =
+        PRINCIPLE_DECIDE_DEFAULTS.semanticFallbackWarnRatio;
+
+      const org = await prisma.organization
+        .findFirst({ select: { id: true } })
+        .catch(() => null);
+      const organizationId: string | null = org?.id ?? null;
+
+      // 1. Commandments from Postgres (full dimension vector). Always applied.
+      let commandments: Array<Record<string, unknown>> = [];
+      try {
+        commandments = (await listPrinciplesByTier(prisma, {
+          tier: "commandment",
+          organizationId,
+          appliesTo: callingPopulation,
+          limit: 10,
+        })) as Array<Record<string, unknown>>;
+      } catch (err) {
+        console.warn("[principle_decide] commandment Postgres lookup failed:", err);
+      }
+
+      const contextQuery = String(params["context"] ?? "");
+
+      // 2. Core from Qdrant — relevance-ranked.
+      let core: Array<Record<string, unknown>> = [];
+      try {
+        core = (await searchWikiPages({
+          query: contextQuery,
+          organizationId,
+          pageKind: "principle",
+          principleTier: "core",
+          principleAppliesTo: callingPopulation,
+          limit: 5,
+        })) as Array<Record<string, unknown>>;
+      } catch (err) {
+        console.warn("[principle_decide] core Qdrant lookup failed:", err);
+      }
+
+      // 3. Contextual from Qdrant — relevance-gated.
+      let contextual: Array<Record<string, unknown>> = [];
+      try {
+        contextual = (await searchWikiPages({
+          query: contextQuery,
+          organizationId,
+          pageKind: "principle",
+          principleTier: "contextual",
+          principleAppliesTo: callingPopulation,
+          limit: 5,
+          scoreThreshold: contextualThreshold,
+        })) as Array<Record<string, unknown>>;
+      } catch (err) {
+        console.warn("[principle_decide] contextual Qdrant lookup failed:", err);
+      }
+
+      const TIER_DEFAULT_WEIGHT: Record<string, number> = {
+        commandment: 1.0,
+        core: 0.4,
+        contextual: 0.1,
+      };
+      function resolveWeight(tier: string, override: unknown): number {
+        if (typeof override === "number") return override;
+        return TIER_DEFAULT_WEIGHT[tier] ?? 0;
+      }
+
+      // Build DecisionPrinciple[] from the merged set. Postgres rows carry
+      // the full dimensionVector; Qdrant hits only carry dimension keys, so
+      // their math contribution falls back to semantic (alignment 0 here
+      // since we don't fetch direction embeddings) — they still appear in
+      // the ledger so the caller sees what was in scope.
+      type DecisionPrinciple = Parameters<typeof decide>[1][number];
+      const principleList: DecisionPrinciple[] = [];
+
+      for (const row of commandments) {
+        principleList.push({
+          id: String(row["id"] ?? ""),
+          name: String(row["title"] ?? row["slug"] ?? "principle"),
+          tier: String(row["principleTier"] ?? "commandment"),
+          weight: resolveWeight(
+            String(row["principleTier"] ?? "commandment"),
+            row["principleWeight"],
+          ),
+          dimensionVector:
+            (row["principleDimensionVector"] as Record<string, number> | null) ??
+            {},
+        });
+      }
+      for (const hit of [...core, ...contextual]) {
+        principleList.push({
+          id: String(hit["pageId"] ?? ""),
+          name: String(hit["title"] ?? hit["slug"] ?? "principle"),
+          tier: String(hit["principleTier"] ?? "core"),
+          weight: resolveWeight(
+            String(hit["principleTier"] ?? "core"),
+            undefined,
+          ),
+          dimensionVector: {}, // Qdrant payload omits the signed vector — semantic fallback
+        });
+      }
+
+      const cappedPrinciples = principleList.slice(0, maxPrinciples);
+
+      type DecisionOption = Parameters<typeof decide>[0][number];
+      const decisionOptions: DecisionOption[] = optionsParam
+        .filter((o): o is Record<string, unknown> => typeof o === "object" && o !== null)
+        .map((o) => ({
+          id: String(o["id"] ?? ""),
+          description: String(o["description"] ?? ""),
+          features:
+            typeof o["features"] === "object" && o["features"] !== null
+              ? (o["features"] as Record<string, number>)
+              : {},
+        }));
+
+      const result = decide(decisionOptions, cappedPrinciples, {
+        tieMargin,
+        semanticFallbackWarnRatio: semanticWarnRatio,
+      });
+
+      const summary = result.recommendation
+        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)})`
+        : "No applicable principles to evaluate.";
+
+      return {
+        success: true,
+        message: summary,
+        data: {
+          recommendation: result.recommendation,
+          scores: result.scores,
+          flags: result.flags,
+          reasoning: result.reasoning,
+          appliedPrincipleCount: cappedPrinciples.length,
+        },
+      };
     }
 
     case "wiki_lint": {
