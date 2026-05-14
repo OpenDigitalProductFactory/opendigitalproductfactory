@@ -71,6 +71,9 @@ function makeToken(overrides: Partial<BootstrapToken> = {}): BootstrapToken {
     consumedAt: null,
     consumedByEdgeNodeId: null,
     revokedAt: null,
+    // Paste-provisioned default per spec § Approval policy. Tests that
+    // care about the auto-approve path override via `overrides`.
+    autoApprove: false,
     ...overrides,
   };
 }
