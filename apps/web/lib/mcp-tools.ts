@@ -46,6 +46,7 @@ import {
   listCoworkerCapabilityNeeds,
   submitCoworkerSelfAssessment,
 } from "@/lib/coworker-self-assessment/assessment-service";
+import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import {
   COWORKER_ASSESSMENT_CONFIDENCE,
   COWORKER_ASSESSMENT_VERDICTS,
@@ -250,6 +251,8 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 
+const WORK_CAPSULE_TOOL_ENUMS = workCapsuleToolEnums();
+
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "create_backlog_item",
@@ -415,6 +418,84 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["ideate"],
+  },
+  // ─── Work Capsule control harness (spec 2026-05-14) ────────────────────────
+  {
+    name: "list_work_capsules",
+    description: "List Work Capsule coordination records for active portal, Build Studio, and external agent work. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.statuses, description: "Filter by Work Capsule status." },
+        limit: { type: "number", description: "Max results (default 50, max 100)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "get_work_capsule",
+    description: "Fetch one Work Capsule with its recent activity timeline. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+      },
+      required: ["capsuleId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "create_work_capsule",
+    description: "Create a Work Capsule coordination record for planned work. Idempotency key is required so retries do not duplicate capsule activity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short capsule title." },
+        objective: { type: "string", description: "Outcome this capsule coordinates." },
+        source: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.sources, description: "Origin of the capsule." },
+        idempotencyKey: { type: "string", description: "Stable caller-provided key used to make create retries idempotent." },
+        executorKind: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.executors, description: "Optional executor expected to work the capsule." },
+      },
+      required: ["title", "objective", "source", "idempotencyKey"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "heartbeat_capsule",
+    description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+      },
+      required: ["capsuleId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "record_capsule_evidence",
+    description: "Append an evidence entry to a Work Capsule activity timeline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        kind: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.evidenceKinds, description: "Evidence kind." },
+        summary: { type: "string", description: "Evidence summary." },
+        command: { type: "string", description: "Optional command that produced the evidence." },
+        url: { type: "string", description: "Optional URL for PRs, CI runs, screenshots, or external evidence." },
+        result: { type: "object", description: "Optional structured result payload." },
+      },
+      required: ["capsuleId", "summary"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
   },
   // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────────
   {
@@ -3330,6 +3411,26 @@ export async function executeTool(
   const params = sanitizeToolParams(toolName, rawParams);
   try {
   switch (toolName) {
+    case "list_work_capsules": {
+      const { listWorkCapsulesTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return listWorkCapsulesTool(params);
+    }
+    case "get_work_capsule": {
+      const { getWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return getWorkCapsuleTool(params);
+    }
+    case "create_work_capsule": {
+      const { createWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return createWorkCapsuleTool(params, userId, context);
+    }
+    case "heartbeat_capsule": {
+      const { heartbeatCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return heartbeatCapsuleTool(params, userId, context);
+    }
+    case "record_capsule_evidence": {
+      const { recordCapsuleEvidenceTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return recordCapsuleEvidenceTool(params, userId, context);
+    }
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
         ? params["itemId"].trim()
