@@ -62,6 +62,8 @@ describe("getBuildPhasePrompt", () => {
     const prompt = await getBuildPhasePrompt("ship");
     expect(prompt).toContain("register_digital_product_from_build");
     expect(prompt).toContain("create_build_epic");
+    expect(prompt).toContain("create_portal_pr");
+    expect(prompt).toContain("Signed-off-by");
   });
   it("returns empty string for terminal phases", async () => {
     expect(await getBuildPhasePrompt("complete")).toBe("");

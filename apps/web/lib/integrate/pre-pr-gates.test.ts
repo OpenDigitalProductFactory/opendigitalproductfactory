@@ -196,3 +196,118 @@ index aaa..bbb 100644
     expect(depGate?.verdict).toBe("pass");
   });
 });
+
+describe("runPrePRGates — architecture gate", () => {
+  it("warns on a deep relative import (4+ levels up)", () => {
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,1 +1,2 @@
+ export const x = 1;
++import { bar } from "../../../../packages/db/bar";
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("warn");
+    expect(archGate?.findings.some((f) => /Deep relative import/.test(f))).toBe(true);
+    expect(archGate?.findings.some((f) => /apps\/web\/lib\/foo\.ts/.test(f))).toBe(true);
+  });
+
+  it("passes on a shallow relative import (3 levels or fewer)", () => {
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,1 +1,2 @@
+ export const x = 1;
++import { bar } from "../../../bar";
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("pass");
+    expect(archGate?.findings).toHaveLength(0);
+  });
+
+  it("ignores deep relative imports that only appear in removed lines", () => {
+    // The deep-import scan should only see added lines. A removal of a deep
+    // import is exactly the kind of cleanup the gate is supposed to encourage.
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,2 +1,2 @@
+-import { bar } from "../../../../packages/db/bar";
++import { bar } from "@/lib/db/bar";
+ export const x = 1;
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("pass");
+  });
+
+  it("warns on a file in an unexpected top-level directory", () => {
+    const diff = `diff --git a/random-dir/foo.ts b/random-dir/foo.ts
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/random-dir/foo.ts
+@@ -0,0 +1,1 @@
++export const x = 1;
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("warn");
+    expect(archGate?.findings.some((f) => /Unexpected directory: random-dir\/foo\.ts/.test(f))).toBe(true);
+  });
+
+  it("does not warn on a root-level file (no slash in path)", () => {
+    // The `file.includes("/")` guard exempts top-level files like README.md
+    // and tsconfig.json — they have no top-dir to check.
+    const diff = `diff --git a/README.md b/README.md
+index aaa..bbb 100644
+--- a/README.md
++++ b/README.md
+@@ -1,1 +1,2 @@
+ # DPF
++New line.
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("pass");
+  });
+
+  it("allows files in every recognized top-level directory", () => {
+    // Smoke test: at least one file from each ALLOWED_TOP_DIRS entry should
+    // not produce an "Unexpected directory" finding. If someone removes an
+    // entry from ALLOWED_TOP_DIRS without realizing portals use it, this fails.
+    const recognized = [
+      "apps/web/lib/foo.ts",
+      "packages/db/foo.ts",
+      "prisma/schema.prisma",
+      "scripts/foo.ts",
+      "prompts/foo.prompt.md",
+      "skills/foo.skill.md",
+      "docs/foo.md",
+      "e2e/foo.spec.ts",
+      "services/foo.ts",
+      "public/foo.svg",
+    ];
+    const diff = recognized
+      .map(
+        (path) => `diff --git a/${path} b/${path}
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/${path}
+@@ -0,0 +1,1 @@
++x
+`,
+      )
+      .join("");
+
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.findings.some((f) => /Unexpected directory/.test(f))).toBe(false);
+  });
+});
