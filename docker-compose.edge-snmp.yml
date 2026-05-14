@@ -1,0 +1,52 @@
+# DPF Edge Node — SNMP polling overlay.
+#
+# Bind-mounts an operator-provided SNMP target config into the Edge
+# Node container so the C3 collector queries the configured network
+# devices each sweep. Pair with docker-compose.edge.yml (single-host)
+# or docker-compose.edge-standalone.yml (multi-host):
+#
+#   # Single-host install (Authority + Edge Node on one machine):
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.linux.yml \
+#                  -f docker-compose.edge.yml \
+#                  -f docker-compose.edge-snmp.yml \
+#                  up -d edge-node
+#
+#   # Multi-host install (Edge Node on its own host):
+#   docker compose -f docker-compose.edge-standalone.yml \
+#                  -f docker-compose.edge-snmp.yml \
+#                  up -d edge-node
+#
+# Spec:    docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+# Runbook: docs/install/edge-node-multi-host.md
+#          (SNMP polling section)
+# Example: services/edge-node/snmp.example.json
+#
+# ─── Required environment ──────────────────────────────────────────
+#
+# In your .env on the Edge Node host:
+#
+#   # Host path to your SNMP target config. Mode 0600 recommended
+#   # (SNMPv3 auth+priv passwords live in this file).
+#   DPF_EDGE_SNMP_CONFIG_HOST_PATH=/etc/dpf-edge/snmp.json
+#
+# This overlay refuses to start if the env var is unset — same loud-
+# failure pattern as the TLS overlay (silent CA-unknown / silent
+# missing-config bites operators in production).
+#
+# ─── No daemon, no listener ────────────────────────────────────────
+#
+# The SNMP collector invokes snmpget per OID, per target, per sweep.
+# It does NOT run an SNMP listener — devices don't push to the Edge
+# Node, the Edge Node pulls from them. No new inbound ports.
+
+services:
+  edge-node:
+    environment:
+      # The collector reads from this path inside the container; the
+      # volume mount below maps the operator's host file here. Keep
+      # the container path stable across deployments.
+      DPF_EDGE_SNMP_CONFIG: /etc/dpf-edge/snmp.json
+
+    volumes:
+      - ${DPF_EDGE_SNMP_CONFIG_HOST_PATH:?DPF_EDGE_SNMP_CONFIG_HOST_PATH is required for the SNMP overlay — set it in .env to the host path of your snmp.json (see services/edge-node/snmp.example.json)}:/etc/dpf-edge/snmp.json:ro

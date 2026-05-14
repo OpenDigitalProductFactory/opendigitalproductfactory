@@ -218,6 +218,34 @@
   .hero-highlight strong { display: block; margin-bottom: 4px; font-size: 14px; }
   .hero-highlight span { color: var(--fg-muted); font-size: 13px; line-height: 1.5; }
 
+  @media (max-width: 640px) {
+    header.hero { padding: 32px 16px 28px; }
+    .wrap { padding: 0 16px; }
+    main { padding: 32px 16px 64px; }
+    .hero-logo {
+      height: 96px;
+      margin: 0 auto 16px;
+    }
+    h1 { font-size: 28px; }
+    .lede { font-size: 15px; }
+    .cta-row { margin-top: 16px; }
+    .btn {
+      width: 100%;
+      text-align: center;
+    }
+    .hero-highlights { margin-top: 18px; }
+    table.guide {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    pre code {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
   /* Sticky in-page navigation rail */
   nav.toc {
     position: sticky;
@@ -285,6 +313,13 @@
     <p class="lede">
       Open Digital Product Factory gives small teams and regulated enterprises the same digital-product, architecture, compliance, and AI-workforce capabilities that have historically been locked behind expensive enterprise suites &mdash; running on your own hardware, governed end-to-end, and extensible by AI coworkers under human approval.
     </p>
+    <div class="cta-row">
+      <a class="btn primary" href="#install-on-windows">Install on Windows</a>
+      <a class="btn" href="#what-it-does">See what it does</a>
+      <a class="btn" href="#audience">Is it for me?</a>
+      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub</a>
+      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Contributing</a>
+    </div>
     <div class="hero-highlights">
       <div class="hero-highlight">
         <strong>Runs on your hardware</strong>
@@ -296,15 +331,8 @@
       </div>
       <div class="hero-highlight">
         <strong>Builds itself, with humans in the loop</strong>
-        <span>Build Studio drafts new features in a sandbox; humans approve design and acceptance; merges land via PR.</span>
+        <span>Build Studio drafts new features in a sandbox; humans approve design, code impact, and acceptance; merges land via PR.</span>
       </div>
-    </div>
-    <div class="cta-row">
-      <a class="btn primary" href="#install-on-windows">Install on Windows</a>
-      <a class="btn" href="#what-it-does">See what it does</a>
-      <a class="btn" href="#audience">Is it for me?</a>
-      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub</a>
-      <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Contributing</a>
     </div>
   </div>
 </header>
@@ -400,7 +428,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     <div class="grid">
       <div class="card">
         <h3>User Guide</h3>
-        <p>Day-to-day operating guidance for everyone who uses the platform &mdash; getting started, AI coworkers, build studio, compliance, finance, HR, customers, and more.</p>
+        <p>Day-to-day operating guidance for everyone who uses the platform &mdash; getting started, AI coworkers, Build Studio, Edge Nodes, wiki, managed documents, compliance, finance, HR, customers, and more.</p>
       </div>
       <div class="card">
         <h3>Architecture &amp; Standards</h3>
@@ -453,13 +481,15 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>Portfolio Management</td><td>Organize digital products into portfolios with health metrics, investment tracking, and lifecycle management.</td></tr>
         <tr><td>HR &amp; Workforce</td><td>Manage employees, roles, reviews, timesheets, and organizational structure. The same role hierarchy (HR-000 through HR-500) drives platform access.</td></tr>
         <tr><td>Customer Relationships</td><td>Track customer accounts, sales pipeline from lead to order, and engagement history.</td></tr>
-        <tr><td>Compliance &amp; Regulatory</td><td>Onboard regulations and standards, map controls to obligations, collect evidence, and track posture.</td></tr>
+        <tr><td>Compliance &amp; Regulatory</td><td>Onboard regulations and standards, map controls to obligations, collect evidence, track posture, and manage licensing readiness.</td></tr>
         <tr><td>Financial Management</td><td>Invoices, suppliers and bills, purchase orders, banking and reconciliation, AI-spend visibility.</td></tr>
         <tr><td>Enterprise Architecture</td><td>Model the application, technology, and business layers with ArchiMate notation; graph-backed via Neo4j.</td></tr>
         <tr><td>Storefront</td><td>Public-facing storefront for products and services with booking, donations, and checkout. Driven by an industry archetype that seeds sections, vocabulary, finance profile, and design.</td></tr>
-        <tr><td>Build Studio</td><td>A guided five-phase pipeline (ideate, plan, build, review, ship) with AI coworkers and a sandbox.</td></tr>
+        <tr><td>Build Studio</td><td>A guided five-phase pipeline (ideate, plan, build, review, ship) with AI coworkers, sandbox execution, code intelligence, impact reports, and PR-based promotion.</td></tr>
         <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking. Coworkers create, triage, size, and link items through governed MCP tools.</td></tr>
-        <tr><td>AI Workforce</td><td>Provider configuration, dynamic model discovery, capability-tier routing, agent registry, and per-agent grants.</td></tr>
+        <tr><td>AI Workforce</td><td>Provider configuration, dynamic model discovery, capability-tier routing, operations map, capacity continuity, capability-needs review, agent registry, and per-agent grants.</td></tr>
+        <tr><td>Wiki &amp; Managed Documents</td><td>Governed platform knowledge, founder-kernel principles, source citations, linting, maintained documents, versions, references, and publication state.</td></tr>
+        <tr><td>Edge Node</td><td>Host-resident trust and discovery component with enrollment, operator approval, heartbeat freshness, local collectors, and multi-host/air-gapped runbooks.</td></tr>
         <tr><td>Identity &amp; Federation</td><td>LDAP, Active Directory, and Microsoft Entra federation for sign-in and directory bootstrap; the platform remains the source of truth for roles, route bundles, and coworker associations.</td></tr>
         <tr><td>Common Skills Library</td><td>A registry of reusable, role-bound AI skills (<code>.skill.md</code> files) declaring tools, triggers, risk band, and which coworkers can invoke them.</td></tr>
         <tr><td>Agent Interoperability</td><td>Internal coworker runtime structured around an A2A-aligned task envelope; MCP (Model Context Protocol) for tool and context interoperability.</td></tr>
@@ -529,8 +559,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="card"><h3>coo</h3><p>Ongoing operational partner once onboarding completes. Cross-functional: pulls from any value stream when the question doesn&rsquo;t fit a single specialist.</p></div>
       <div class="card"><h3>portfolio-advisor</h3><p>Digital products and portfolios &mdash; health, investment, lifecycle.</p></div>
       <div class="card"><h3>ea-architect</h3><p>Enterprise architecture &mdash; ArchiMate views, capability maps, dependencies.</p></div>
-      <div class="card"><h3>build-specialist</h3><p>Drives Build Studio: design docs, sandbox builds, test-first decomposition, code review.</p></div>
-      <div class="card"><h3>compliance-officer</h3><p>Standards onboarding, control mapping, evidence collection, posture tracking.</p></div>
+      <div class="card"><h3>build-specialist</h3><p>Drives Build Studio: design docs, sandbox builds, code intelligence, test-first decomposition, code review.</p></div>
+      <div class="card"><h3>compliance-officer</h3><p>Standards onboarding, licensing readiness, control mapping, evidence collection, posture tracking.</p></div>
       <div class="card"><h3>hr-specialist</h3><p>Workforce, roles, reviews, timesheets, organizational structure.</p></div>
       <div class="card"><h3>customer-advisor</h3><p>Customer accounts, sales pipeline, engagement history.</p></div>
       <div class="card"><h3>storefront-advisor</h3><p>Storefront content, archetype-driven sections, vocabulary, design system.</p></div>
@@ -546,7 +576,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="build-studio">
     <h2>Build Studio: the five-phase pipeline</h2>
     <p class="sub">
-      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. The Reusability Check at design time decides whether the feature should be one-off or parameterized for the hive mind.
+      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. Code intelligence and impact reports help reviewers understand what changed before a promotion or PR moves forward.
     </p>
     <table class="guide">
       <thead>
@@ -570,8 +600,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         </tr>
         <tr>
           <td><strong>4. Review</strong></td>
-          <td>Acceptance verification. Full test suite, typecheck, manual acceptance checks, UX verification.</td>
-          <td>Verification output, acceptance criteria checked, manual test steps documented.</td>
+          <td>Acceptance verification. Full test suite, typecheck, manual acceptance checks, UX verification, code-impact review.</td>
+          <td>Verification output, impact report, acceptance criteria checked, manual test steps documented.</td>
         </tr>
         <tr>
           <td><strong>5. Ship</strong></td>
@@ -620,6 +650,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <div class="tag">Spend visibility</div>
         <strong>AI cost is a financial fact.</strong>
         <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Provider usage flows into the finance module so AI spend appears alongside the rest of your operating costs &mdash; per provider, per agent, per workflow.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Operations map</div>
+        <strong>See the workforce as an operating system.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Saved operator views, reset controls, capacity continuity, and capability-needs review help operators see where AI work is active, blocked, underused, or asking for new platform support.</p>
       </div>
     </div>
   </section>
@@ -972,14 +1007,18 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>AI workforce &amp; providers</td><td><a href="/user-guide/ai-workforce/">user-guide/ai-workforce</a></td></tr>
         <tr><td>Build Studio</td><td><a href="/user-guide/build-studio/">user-guide/build-studio</a></td></tr>
         <tr><td>Compliance</td><td><a href="/user-guide/compliance/">user-guide/compliance</a></td></tr>
+        <tr><td>Licensing readiness</td><td><a href="/user-guide/compliance/licensing-readiness">user-guide/compliance/licensing-readiness</a></td></tr>
         <tr><td>Customers</td><td><a href="/user-guide/customers/">user-guide/customers</a></td></tr>
         <tr><td>Finance</td><td><a href="/user-guide/finance/">user-guide/finance</a></td></tr>
         <tr><td>HR</td><td><a href="/user-guide/hr/">user-guide/hr</a></td></tr>
         <tr><td>Operations</td><td><a href="/user-guide/operations/">user-guide/operations</a></td></tr>
         <tr><td>Platform &amp; AI ops</td><td><a href="/user-guide/platform/">user-guide/platform</a></td></tr>
+        <tr><td>Edge Nodes</td><td><a href="/user-guide/platform/edge-nodes">user-guide/platform/edge-nodes</a></td></tr>
         <tr><td>Portfolios</td><td><a href="/user-guide/portfolios/">user-guide/portfolios</a></td></tr>
         <tr><td>Products</td><td><a href="/user-guide/products/">user-guide/products</a></td></tr>
         <tr><td>Storefront</td><td><a href="/user-guide/storefront/">user-guide/storefront</a></td></tr>
+        <tr><td>Wiki</td><td><a href="/user-guide/wiki/">user-guide/wiki</a></td></tr>
+        <tr><td>Managed documents</td><td><a href="/user-guide/workspace/documents">user-guide/workspace/documents</a></td></tr>
         <tr><td>Workspace</td><td><a href="/user-guide/workspace/">user-guide/workspace</a></td></tr>
         <tr><td>Admin</td><td><a href="/user-guide/admin/">user-guide/admin</a></td></tr>
       </tbody>
@@ -1079,7 +1118,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td>Build Studio (5 phases)</td>
           <td><strong>Production</strong></td>
-          <td>End-to-end lifecycle complete through ship; design review is strict; severity-gated review reduces iteration loops.</td>
+          <td>End-to-end lifecycle complete through ship with sandbox execution, review evidence, code intelligence, and PR-based promotion.</td>
         </tr>
         <tr>
           <td>Coworker workforce, grants, tool gating</td>
@@ -1105,6 +1144,26 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Local-first inference (Docker Model Runner)</td>
           <td><strong>Production</strong></td>
           <td>Bundled with Docker Desktop 4.40+; auto-pull on first run with progress reporting.</td>
+        </tr>
+        <tr>
+          <td>Operations Map, capacity continuity, capability needs</td>
+          <td><strong>Production</strong></td>
+          <td>Operator views and saved preferences live for workforce posture; capacity continuity and capability-needs review route AI follow-up into durable evidence and backlog work.</td>
+        </tr>
+        <tr>
+          <td>Wiki and managed documents</td>
+          <td><strong>Production</strong></td>
+          <td>Global wiki browse/detail, wiki linting, founder-kernel pages, managed document list/detail, lifecycle state, versions, and references are live.</td>
+        </tr>
+        <tr>
+          <td>Licensing readiness</td>
+          <td><strong>Production</strong></td>
+          <td>Compliance licensing workspace and route-specific coworker tools capture factual licensing posture, readiness issues, and investigation evidence.</td>
+        </tr>
+        <tr>
+          <td>Edge Node single-host bundle and admin surface</td>
+          <td><strong>Early access</strong></td>
+          <td>Single-host installs bundle Edge Node and expose trust/freshness in Admin. Multi-host and air-gapped runbooks exist; native host binaries and mTLS hardening are still follow-on work.</td>
         </tr>
         <tr>
           <td>Capability-tier model routing</td>
@@ -1134,7 +1193,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td>COO-led onboarding</td>
           <td><strong>Partial</strong></td>
-          <td>Onboarding-coo coworker, archetype bootstrap, Ollama auto-bootstrap all live. The MCP onboarding step (token paste &amp; restart) has known friction; zero-click provider setup is the goal.</td>
+          <td>Onboarding-coo coworker, archetype bootstrap, local-provider setup, and install-mode guidance are live. The MCP onboarding step has known friction; zero-click provider setup is the goal.</td>
         </tr>
         <tr>
           <td>Improvement loops for every coworker</td>
@@ -1163,10 +1222,10 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="roadmap">
     <h2>Roadmap and backlog</h2>
     <p class="sub">
-      Beyond the &ldquo;What&rsquo;s still moving&rdquo; table above (which tracks features already in flight), the platform has a deliberate roadmap of larger initiatives that are designed but not yet delivered, or under active research. They are listed here so evaluators can see where the platform is heading &mdash; not as commitments to a date, but as the shape of the open backlog.
+      Beyond the &ldquo;What&rsquo;s still moving&rdquo; table above, the platform has a deliberate roadmap of larger initiatives that are in early access, designed, or under active research. They are listed here so evaluators can see where the platform is heading &mdash; not as commitments to a date, but as the shape of the open backlog.
     </p>
 
-    <h3 style="margin-top:24px; font-size:16px;">Deployment beyond Windows + Docker Desktop</h3>
+    <h3 style="margin-top:24px; font-size:16px;">Deployment maturity beyond Windows + Docker Desktop</h3>
     <table class="guide">
       <thead>
         <tr><th style="width:24%;">Target</th><th style="width:18%;">Status</th><th>Notes</th></tr>
@@ -1179,13 +1238,13 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         </tr>
         <tr>
           <td><strong>Linux single-host</strong></td>
-          <td>Designed</td>
-          <td>Cloud-deployment reference architecture lists Linux single-host as a supported variant of the Docker Compose stack. Native installer scripts are tracked work, not yet shipped.</td>
+          <td>Early access</td>
+          <td>The native Linux installer is code-complete on <code>main</code>; Ubuntu CI exercises the full stack. More distro, reboot, provider, and real-hardware verification reports are needed before GA.</td>
         </tr>
         <tr>
           <td><strong>macOS workstation</strong></td>
-          <td>Designed</td>
-          <td>Docker Desktop on macOS supports the same compose stack; the installer experience, host-network bridge, and Apple Silicon model selection need their own targeted work.</td>
+          <td>Early access</td>
+          <td>The macOS Apple Silicon installer is code-complete on <code>main</code> with Docker Desktop and Docker Model Runner support. Real Apple Silicon install reports are needed before GA.</td>
         </tr>
         <tr>
           <td><strong>Cloud-managed services (RDS, ElastiCache, Neo4j Aura, Qdrant Cloud)</strong></td>

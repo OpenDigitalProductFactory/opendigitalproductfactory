@@ -1,7 +1,7 @@
 ---
 title: "User Guide"
-description: "Day-to-day operating guide for the Open Digital Product Factory platform — getting started, AI coworkers, Build Studio, compliance, finance, HR, customers, and more."
-lastUpdated: 2026-04-26
+description: "Day-to-day operating guide for the Open Digital Product Factory platform - getting started, AI coworkers, Build Studio, compliance, finance, HR, customers, wiki, workspace, and more."
+lastUpdated: 2026-05-14
 ---
 
 The User Guide is the day-to-day operating manual for everyone who works in the platform. The same pages are bundled into the portal's in-app help at runtime, so what you see here matches what you see when you press the help button inside the product.
@@ -28,11 +28,12 @@ Each of these is the operating manual for one part of the platform. The pages ar
 | [Finance](finance/) | Invoicing, AP/AR, banking and reconciliation, AI spend, controls and automation, reporting. |
 | [HR](hr/) | Employees, roles, lifecycle scaffolding. |
 | [Operations](operations/) | Delivery backlog, infrastructure discovery, value-stream operations. |
-| [Platform](platform/) | AI operations, identity & access, authority & audit, tools & integrations. |
+| [Platform](platform/) | AI operations, Edge Nodes, identity & access, authority & audit, tools & integrations. |
 | [Portfolios](portfolios/) | Portfolio management, health metrics, investment tracking. |
 | [Products](products/) | Product inventory, lifecycle stages, business-model roles. |
 | [Storefront](storefront/) | Public-facing storefront — setup, catalog, inbox, fulfilment, business and operations settings. |
-| [Workspace](workspace/) | The personal workspace — your daily view. |
+| [Wiki](wiki/) | Governed platform knowledge, founder-kernel pages, principles, and citations. |
+| [Workspace](workspace/) | The personal workspace, managed documents, and cross-domain activity. |
 | [Admin](admin/) | Admin-only configuration screens. |
 
 ## Architecture and standards
@@ -41,4 +42,4 @@ The runtime architecture, the Trusted AI Kernel (TAK), the Global AI Agent Ident
 
 ## Specifications and plans
 
-Long-form design specs and implementation plans are kept in the source repository under [`docs/superpowers/`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers). They are historical records of how each capability was built, not onboarding material — useful if you want to understand a design decision but not necessary to use the platform.
+Long-form design specs, audits, and implementation plans are kept in the source repository under [`docs/superpowers/`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/superpowers). They are historical records of how each capability was built, not onboarding material - useful if you want to understand a design decision but not necessary to use the platform.

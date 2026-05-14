@@ -20,7 +20,15 @@ Entry points for people using the platform day-to-day:
 - [AI Coworker](user-guide/getting-started/ai-coworker.md) — working with the context-aware AI assistant on every screen.
 - [Roles & Access](user-guide/getting-started/roles-and-access.md) — platform roles and what each one can do.
 
-Domain-specific operating guides (admin, AI workforce, build studio, compliance, customers, finance, HR, operations, portfolios, products, storefront, workspace) live in their own folders under [user-guide/](user-guide/).
+Domain-specific operating guides (admin, AI workforce, build studio, compliance, customers, finance, HR, operations, platform, portfolios, products, storefront, wiki, workspace) live in their own folders under [user-guide/](user-guide/).
+
+## Source-of-truth boundaries
+
+- [Repo README](../README.md) is the project overview, install posture, and capability inventory.
+- [index.html](index.html) is the public pre-install website.
+- [user-guide/](user-guide/) is operational product help and contextual in-app documentation.
+- [architecture/](architecture/) is current architecture, standards, and conformance context.
+- [superpowers/](superpowers/) is design history, audits, and implementation planning. It can support decisions, but it is not onboarding copy.
 
 ## Architecture
 
