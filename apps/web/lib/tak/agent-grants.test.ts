@@ -235,6 +235,25 @@ describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
+  it("read tools require work_capsule_read", () => {
+    expect(isToolAllowedByGrants("list_work_capsules", ["work_capsule_read"])).toBe(true);
+    expect(isToolAllowedByGrants("get_work_capsule", ["work_capsule_read"])).toBe(true);
+    expect(isToolAllowedByGrants("list_work_capsules", ["backlog_read"])).toBe(false);
+  });
+
+  it("write tools require work_capsule_write", () => {
+    expect(isToolAllowedByGrants("create_work_capsule", ["work_capsule_write"])).toBe(true);
+    expect(isToolAllowedByGrants("record_capsule_evidence", ["work_capsule_write"])).toBe(true);
+    expect(isToolAllowedByGrants("heartbeat_capsule", ["work_capsule_read"])).toBe(false);
+  });
+
+  it("adoption requires work_capsule_adopt", () => {
+    expect(isToolAllowedByGrants("adopt_worktree", ["work_capsule_adopt"])).toBe(true);
+    expect(isToolAllowedByGrants("adopt_worktree", ["work_capsule_write"])).toBe(false);
+  });
+});
+
 describe("orchestrator with only build-plan grants cannot use sandbox tools", () => {
   const plannerGrants = ["build_plan_write", "backlog_write"];
 

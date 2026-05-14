@@ -971,6 +971,76 @@ model BacklogItemActivity {
   @@index([kind, recordedAt(sort: Desc)])
 }
 
+model WorkCapsule {
+  id                      String                @id @default(cuid())
+  capsuleId               String                @unique
+  title                   String
+  objective               String                @db.Text
+  status                  String                @default("draft")
+  source                  String
+  executorKind            String?
+  executorRef             String?
+  backlogItemId           String?
+  epicId                  String?
+  featureBuildId          String?
+  taskRunId               String?
+  gitPromotionCandidateId String?
+  changePromotionId       String?
+  repositoryFullName      String?
+  baseBranch              String?
+  baseSha                 String?
+  headBranch              String?
+  headSha                 String?
+  worktreePath            String?
+  pullRequestUrl          String?
+  pullRequestNumber       Int?
+  sandboxProviderId       String?
+  sandboxId               String?
+  scopeClaims             Json                  @default("[]")
+  workspaceState          Json                  @default("{}")
+  verificationState       Json                  @default("{}")
+  providerRequirements    Json                  @default("[]")
+  promotionPolicy         Json                  @default("{}")
+  contributionMode        String                @default("private")
+  branchTaxonomy          String?
+  idempotencyKey          String?               @unique
+  leaseHolderPrincipalId  String?
+  leaseExpiresAt          DateTime?
+  createdByPrincipalId    String?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  lastSyncedAt            DateTime?
+  archivedAt              DateTime?
+  activities              WorkCapsuleActivity[]
+
+  @@index([status, updatedAt])
+  @@index([backlogItemId])
+  @@index([featureBuildId])
+  @@index([taskRunId])
+  @@index([gitPromotionCandidateId])
+  @@index([changePromotionId])
+  @@index([epicId])
+  @@index([headBranch])
+  @@index([sandboxId])
+  @@index([leaseExpiresAt])
+}
+
+model WorkCapsuleActivity {
+  id                String      @id @default(cuid())
+  workCapsuleId     String
+  kind              String
+  summary           String
+  payload           Json        @default("{}")
+  recordedAt        DateTime    @default(now())
+  recordedById      String?
+  recordedByAgentId String?
+  toolExecutionId   String?
+  capsule           WorkCapsule @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
+
+  @@index([workCapsuleId, recordedAt(sort: Desc)])
+  @@index([kind, recordedAt(sort: Desc)])
+}
+
 model Epic {
   id                    String           @id @default(cuid())
   epicId                String           @unique

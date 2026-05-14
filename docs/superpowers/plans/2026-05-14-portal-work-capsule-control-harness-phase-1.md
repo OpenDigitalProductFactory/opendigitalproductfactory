@@ -12,7 +12,7 @@
 
 ## Chunk 1: Grounding And Scope
 
-## Live State Used For This Plan
+### Live State Used For This Plan
 
 Re-queried through the DPF MCP surface on 2026-05-14 before writing this plan:
 
@@ -23,7 +23,7 @@ Re-queried through the DPF MCP surface on 2026-05-14 before writing this plan:
 
 Plan consequence: Phase 1 must be adoption-first and visibility-first. It should not try to solve Build Studio execution quality, provider reconciliation, or portal replacement in the same slice.
 
-## Scope
+### Scope
 
 In scope for Phase 1:
 
@@ -45,7 +45,7 @@ Out of scope for Phase 1:
 - Automatic deletion, closing, or archiving of historical worktrees.
 - GitHub write operations.
 
-## File Structure
+### File Structure
 
 - `packages/db/prisma/schema.prisma`: add `WorkCapsule` and `WorkCapsuleActivity`.
 - `packages/db/prisma/migrations/20260514_add_work_capsules/migration.sql`: migration generated from Prisma and hand-reviewed.
@@ -72,7 +72,7 @@ Out of scope for Phase 1:
 
 ## Chunk 2: Schema And Domain Foundation
 
-## Task 1: Schema Foundation
+### Task 1: Schema Foundation
 
 **Files:**
 - Modify: `packages/db/prisma/schema.prisma`
@@ -128,6 +128,10 @@ model WorkCapsule {
   @@index([status, updatedAt])
   @@index([backlogItemId])
   @@index([featureBuildId])
+  @@index([taskRunId])
+  @@index([gitPromotionCandidateId])
+  @@index([changePromotionId])
+  @@index([epicId])
   @@index([headBranch])
   @@index([sandboxId])
   @@index([leaseExpiresAt])
@@ -166,7 +170,7 @@ Applying migration `20260514_add_work_capsules`
 
 If Prisma generates a timestamped folder with a later minute, keep the generated folder name and update this plan checkbox note during execution.
 
-- [ ] **Step 3: Review generated SQL**
+- [ ] **Step 3: Review generated SQL and append the adoption-uniqueness partial index**
 
 Open the generated `migration.sql` and confirm it contains:
 
@@ -182,8 +186,34 @@ CREATE TABLE "WorkCapsuleActivity" (
 CREATE UNIQUE INDEX "WorkCapsule_capsuleId_key" ON "WorkCapsule"("capsuleId");
 CREATE UNIQUE INDEX "WorkCapsule_idempotencyKey_key" ON "WorkCapsule"("idempotencyKey");
 CREATE INDEX "WorkCapsule_status_updatedAt_idx" ON "WorkCapsule"("status", "updatedAt");
+CREATE INDEX "WorkCapsule_backlogItemId_idx" ON "WorkCapsule"("backlogItemId");
+CREATE INDEX "WorkCapsule_featureBuildId_idx" ON "WorkCapsule"("featureBuildId");
+CREATE INDEX "WorkCapsule_taskRunId_idx" ON "WorkCapsule"("taskRunId");
+CREATE INDEX "WorkCapsule_gitPromotionCandidateId_idx" ON "WorkCapsule"("gitPromotionCandidateId");
+CREATE INDEX "WorkCapsule_changePromotionId_idx" ON "WorkCapsule"("changePromotionId");
+CREATE INDEX "WorkCapsule_epicId_idx" ON "WorkCapsule"("epicId");
+CREATE INDEX "WorkCapsule_headBranch_idx" ON "WorkCapsule"("headBranch");
+CREATE INDEX "WorkCapsule_sandboxId_idx" ON "WorkCapsule"("sandboxId");
 CREATE INDEX "WorkCapsule_leaseExpiresAt_idx" ON "WorkCapsule"("leaseExpiresAt");
 ```
+
+Prisma cannot express partial unique indexes in `schema.prisma`, so append
+the adoption-natural-key index by hand at the end of the same migration file.
+This enforces spec section 9.3 ("`adopt_worktree` returns existing capsule on
+`(repositoryFullName, headBranch)`") at the DB layer; without it, two
+concurrent `adopt_worktree` calls race past the application-level
+`findFirst` and create duplicates.
+
+```sql
+CREATE UNIQUE INDEX "WorkCapsule_repo_headBranch_active_key"
+  ON "WorkCapsule"("repositoryFullName", "headBranch")
+  WHERE "archivedAt" IS NULL;
+```
+
+After editing the migration, re-run `pnpm --filter @dpf/db exec prisma migrate dev`
+with no name flag to re-apply (Prisma re-runs unapplied migrations against
+a shadow DB; if it complains about drift, drop and recreate the dev DB or
+generate a fresh migration named `add_work_capsule_adoption_unique`).
 
 - [ ] **Step 4: Generate Prisma client**
 
@@ -197,6 +227,12 @@ Expected: Prisma Client generated without schema errors.
 
 - [ ] **Step 5: Commit schema slice**
 
+Note: this commit ships the schema before any vitest covers it. That is
+acceptable because the pre-commit hook runs `pnpm --filter @dpf/db typecheck`
+plus `prisma validate` (Step 4 above), and Tasks 2/3 introduce the
+behavioural tests in the very next commits. Do not slip schema-related logic
+into this commit.
+
 Run:
 
 ```powershell
@@ -204,7 +240,7 @@ git add packages/db/prisma/schema.prisma packages/db/prisma/migrations
 git commit -s -m "feat(db): add work capsule registry"
 ```
 
-## Task 2: Work Capsule Types and Validation
+### Task 2: Work Capsule Types and Validation
 
 **Files:**
 - Create: `apps/web/lib/work-capsules.ts`
@@ -218,6 +254,7 @@ Create `apps/web/lib/work-capsules.test.ts`:
 import { describe, expect, it } from "vitest";
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
+  WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
@@ -246,14 +283,23 @@ describe("work capsule enums", () => {
 });
 
 describe("scope claims", () => {
-  it("filters invalid scope claims", () => {
+  it("filters invalid scope claims and rejects malformed timestamps", () => {
     const claims = parseScopeClaims([
       { kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit", recordedAt: "2026-05-14T00:00:00.000Z", recordedByPrincipalId: "principal-1" },
       { kind: "bad", value: "x", intent: "edit" },
+      { kind: "path", value: "apps/web/x.ts", intent: "edit", recordedAt: "yesterday", recordedByPrincipalId: "principal-1" },
+      { kind: "path", value: "", intent: "edit", recordedAt: "2026-05-14T00:00:00.000Z", recordedByPrincipalId: "principal-1" },
     ]);
 
     expect(claims).toHaveLength(1);
     expect(claims[0]?.kind).toBe("path");
+  });
+});
+
+describe("evidence kinds", () => {
+  it("recognizes the allowlist", () => {
+    expect(WORK_CAPSULE_EVIDENCE_KINDS).toContain("test");
+    expect(WORK_CAPSULE_EVIDENCE_KINDS).toContain("note");
   });
 });
 
@@ -355,6 +401,27 @@ export const WORK_CAPSULE_BRANCH_TAXONOMIES = [
 
 export type WorkCapsuleBranchTaxonomy = (typeof WORK_CAPSULE_BRANCH_TAXONOMIES)[number];
 
+// Evidence-kind allowlist for `record_capsule_evidence`. Distinct from the
+// activity-kind enum because evidence is a sub-category of one activity
+// (`evidence-recorded`); without an allowlist agents invent every spelling
+// (`Test`, `tests`, `unit_test`) and the audit log loses analytical value.
+export const WORK_CAPSULE_EVIDENCE_KINDS = [
+  "test",
+  "build",
+  "screenshot",
+  "verification",
+  "lint",
+  "note",
+] as const;
+
+export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[number];
+
+// Time constants. Single source of truth so spec section 21 decisions 1 and 5 don't
+// drift between the store, presenter, and tests.
+export const LEASE_TTL_MS = 30 * 60 * 1000;            // section 21 decision 1
+export const STALE_CACHE_MS = 30 * 60 * 1000;          // presenter staleness threshold
+export const STATUS_OVERRIDE_TTL_MS = 24 * 60 * 60 * 1000; // section 21 decision 5
+
 export type ScopeClaim = {
   kind: "path" | "module" | "package" | "route" | "skill" | "prompt";
   value: string;
@@ -387,9 +454,21 @@ export function isWorkCapsuleActivityKind(value: unknown): value is WorkCapsuleA
   return typeof value === "string" && ACTIVITY_SET.has(value);
 }
 
+const EVIDENCE_KIND_SET = new Set<string>(WORK_CAPSULE_EVIDENCE_KINDS);
+
+export function isWorkCapsuleEvidenceKind(value: unknown): value is WorkCapsuleEvidenceKind {
+  return typeof value === "string" && EVIDENCE_KIND_SET.has(value);
+}
+
 export function normalizeBranchTaxonomy(branch: string | null | undefined): WorkCapsuleBranchTaxonomy | null {
   const prefix = branch?.split("/")[0]?.trim();
   return prefix && TAXONOMY_SET.has(prefix) ? (prefix as WorkCapsuleBranchTaxonomy) : null;
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0) return false;
+  const t = Date.parse(value);
+  return Number.isFinite(t);
 }
 
 export function parseScopeClaims(value: unknown): ScopeClaim[] {
@@ -400,7 +479,7 @@ export function parseScopeClaims(value: unknown): ScopeClaim[] {
     return (
       typeof candidate.value === "string" &&
       candidate.value.trim().length > 0 &&
-      typeof candidate.recordedAt === "string" &&
+      isIsoTimestamp(candidate.recordedAt) &&
       typeof candidate.recordedByPrincipalId === "string" &&
       SCOPE_KIND_SET.has(candidate.kind as ScopeClaim["kind"]) &&
       SCOPE_INTENT_SET.has(candidate.intent as ScopeClaim["intent"])
@@ -428,7 +507,7 @@ git add apps/web/lib/work-capsules.ts apps/web/lib/work-capsules.test.ts
 git commit -s -m "feat(web): add work capsule enums"
 ```
 
-## Task 3: Domain Store
+### Task 3: Domain Store
 
 **Files:**
 - Create: `apps/web/lib/work-capsules/work-capsule-store.ts`
@@ -453,18 +532,21 @@ const db = {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
-    upsert: vi.fn(),
   },
   workCapsuleActivity: {
     create: vi.fn(),
   },
+  // Default mock runs the callback against `db` itself so the implementation's
+  // transactional path is exercised end-to-end without a real Prisma client.
+  $transaction: vi.fn(async (fn: any) => fn(db)),
 };
 
 describe("work capsule store", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("creates a capsule idempotently", async () => {
-    db.workCapsule.upsert.mockResolvedValue({ id: "row-1", capsuleId: "WC-ABC12345", title: "Work control" });
+  it("creates a capsule on first call and writes a single `created` activity", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce(null);
+    db.workCapsule.create.mockResolvedValueOnce({ id: "row-1", capsuleId: "WC-ABC12345", title: "Work control" });
 
     const result = await createWorkCapsule({
       db,
@@ -478,9 +560,34 @@ describe("work capsule store", () => {
     });
 
     expect(result.capsuleId).toBe("WC-ABC12345");
-    expect(db.workCapsule.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { idempotencyKey: "manual:work-control" },
+    expect(db.workCapsule.create).toHaveBeenCalledTimes(1);
+    expect(db.workCapsuleActivity.create).toHaveBeenCalledTimes(1);
+    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "created" }),
     }));
+  });
+
+  it("returns the existing capsule on idempotent retry without writing a duplicate activity", async () => {
+    db.workCapsule.findUnique.mockResolvedValueOnce({
+      id: "row-1",
+      capsuleId: "WC-ABC12345",
+      title: "Work control",
+    });
+
+    const result = await createWorkCapsule({
+      db,
+      input: {
+        title: "Work control",
+        objective: "Adopt current worktrees.",
+        source: "manual",
+        idempotencyKey: "manual:work-control",
+      },
+      actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+    });
+
+    expect(result.capsuleId).toBe("WC-ABC12345");
+    expect(db.workCapsule.create).not.toHaveBeenCalled();
+    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
   });
 
   it("adopts an existing worktree by repository and branch", async () => {
@@ -563,14 +670,14 @@ Create `apps/web/lib/work-capsules/work-capsule-store.ts` with the tested functi
 ```ts
 import * as crypto from "crypto";
 import {
+  LEASE_TTL_MS,
+  STATUS_OVERRIDE_TTL_MS,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
   normalizeBranchTaxonomy,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleSource,
 } from "@/lib/work-capsules";
-
-const LEASE_TTL_MS = 30 * 60 * 1000;
 
 type Actor = {
   userId: string;
@@ -584,11 +691,13 @@ type CapsuleDb = {
     findFirst(args: any): Promise<any>;
     findUnique(args: any): Promise<any>;
     update(args: any): Promise<any>;
-    upsert(args: any): Promise<any>;
   };
   workCapsuleActivity: {
     create(args: any): Promise<any>;
   };
+  // Optional in transaction-scoped clients; required on the top-level prisma
+  // client so the store can wrap capsule + activity writes atomically.
+  $transaction?<T>(fn: (tx: CapsuleDb) => Promise<T>): Promise<T>;
 };
 
 function nextCapsuleId(): string {
@@ -632,26 +741,35 @@ export async function createWorkCapsule(args: {
   if (!isWorkCapsuleSource(args.input.source)) throw new Error("Invalid capsule source");
   if (args.input.executorKind && !isWorkCapsuleExecutorKind(args.input.executorKind)) throw new Error("Invalid executor kind");
 
-  const capsule = await args.db.workCapsule.upsert({
+  // Idempotency contract: a retry with the same idempotencyKey returns the
+  // existing capsule and MUST NOT emit a duplicate `created` activity.
+  // findUnique-then-create-in-transaction is preferred over upsert here so
+  // the activity insert and capsule insert commit (or roll back) together.
+  const existing = await args.db.workCapsule.findUnique({
     where: { idempotencyKey: args.input.idempotencyKey },
-    update: {},
-    create: {
-      capsuleId: nextCapsuleId(),
-      title: args.input.title,
-      objective: args.input.objective,
-      source: args.input.source,
-      executorKind: args.input.executorKind ?? null,
-      idempotencyKey: args.input.idempotencyKey,
-      createdByPrincipalId: args.actor.principalId,
-      status: args.input.executorKind ? "ready" : "draft",
-    },
   });
+  if (existing) return existing;
 
-  await recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "created",
-    summary: `Created Work Capsule ${capsule.capsuleId}`,
-    actor: args.actor,
+  const [capsule] = await args.db.$transaction(async (tx: CapsuleDb) => {
+    const created = await tx.workCapsule.create({
+      data: {
+        capsuleId: nextCapsuleId(),
+        title: args.input.title,
+        objective: args.input.objective,
+        source: args.input.source,
+        executorKind: args.input.executorKind ?? null,
+        idempotencyKey: args.input.idempotencyKey,
+        createdByPrincipalId: args.actor.principalId,
+        status: args.input.executorKind ? "ready" : "draft",
+      },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: created.id,
+      kind: "created",
+      summary: `Created Work Capsule ${created.capsuleId}`,
+      actor: args.actor,
+    });
+    return [created];
   });
 
   return capsule;
@@ -672,6 +790,9 @@ export async function adoptWorktreeCapsule(args: {
   };
   actor: Actor;
 }) {
+  // Application-level natural-key check. The Postgres partial unique index
+  // added in the migration is the actual race guard; this read is the
+  // common-path fast lane that avoids a unique-violation in the steady state.
   const existing = await args.db.workCapsule.findFirst({
     where: {
       repositoryFullName: args.input.repositoryFullName,
@@ -682,37 +803,54 @@ export async function adoptWorktreeCapsule(args: {
   if (existing) return existing;
 
   const now = new Date();
-  const capsule = await args.db.workCapsule.create({
-    data: {
-      capsuleId: nextCapsuleId(),
-      title: args.input.title,
-      objective: args.input.objective,
-      source: "external-adoption",
-      status: "ready",
-      executorKind: args.input.executorKind ?? null,
-      repositoryFullName: args.input.repositoryFullName,
-      baseBranch: args.input.baseBranch ?? "main",
-      baseSha: args.input.baseSha ?? null,
-      headBranch: args.input.headBranch,
-      headSha: args.input.headSha ?? null,
-      worktreePath: args.input.worktreePath,
-      branchTaxonomy: normalizeBranchTaxonomy(args.input.headBranch),
-      leaseHolderPrincipalId: args.actor.principalId,
-      leaseExpiresAt: args.input.executorKind ? leaseUntil(now) : null,
-      createdByPrincipalId: args.actor.principalId,
-      lastSyncedAt: now,
-    },
-  });
-
-  await recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "adopted",
-    summary: `Adopted ${args.input.headBranch}`,
-    payload: { worktreePath: args.input.worktreePath },
-    actor: args.actor,
-  });
-
-  return capsule;
+  try {
+    return await args.db.$transaction!(async (tx: CapsuleDb) => {
+      const capsule = await tx.workCapsule.create({
+        data: {
+          capsuleId: nextCapsuleId(),
+          title: args.input.title,
+          objective: args.input.objective,
+          source: "external-adoption",
+          status: "ready",
+          executorKind: args.input.executorKind ?? null,
+          repositoryFullName: args.input.repositoryFullName,
+          baseBranch: args.input.baseBranch ?? "main",
+          baseSha: args.input.baseSha ?? null,
+          headBranch: args.input.headBranch,
+          headSha: args.input.headSha ?? null,
+          worktreePath: args.input.worktreePath,
+          branchTaxonomy: normalizeBranchTaxonomy(args.input.headBranch),
+          leaseHolderPrincipalId: args.actor.principalId,
+          leaseExpiresAt: args.input.executorKind ? leaseUntil(now) : null,
+          createdByPrincipalId: args.actor.principalId,
+          lastSyncedAt: now,
+        },
+      });
+      await recordActivity(tx, {
+        workCapsuleId: capsule.id,
+        kind: "adopted",
+        summary: `Adopted ${args.input.headBranch}`,
+        payload: { worktreePath: args.input.worktreePath },
+        actor: args.actor,
+      });
+      return capsule;
+    });
+  } catch (error) {
+    // Race fallback: a concurrent caller won the partial unique index. Re-read
+    // and return the survivor instead of bubbling the unique violation.
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "P2002") {
+      const winner = await args.db.workCapsule.findFirst({
+        where: {
+          repositoryFullName: args.input.repositoryFullName,
+          headBranch: args.input.headBranch,
+          archivedAt: null,
+        },
+      });
+      if (winner) return winner;
+    }
+    throw error;
+  }
 }
 
 export async function heartbeatWorkCapsule(args: {
@@ -722,20 +860,25 @@ export async function heartbeatWorkCapsule(args: {
   now?: Date;
 }) {
   const nextLease = leaseUntil(args.now ?? new Date());
-  const capsule = await args.db.workCapsule.update({
-    where: { capsuleId: args.capsuleId },
-    data: {
-      leaseHolderPrincipalId: args.actor.principalId,
-      leaseExpiresAt: nextLease,
-    },
+  // Spec section 14 invariant 6: every user-visible capsule event writes a
+  // WorkCapsuleActivity. Wrap the lease update + activity in a transaction so
+  // a failed activity insert rolls back the lease change.
+  return args.db.$transaction!(async (tx: CapsuleDb) => {
+    const capsule = await tx.workCapsule.update({
+      where: { capsuleId: args.capsuleId },
+      data: {
+        leaseHolderPrincipalId: args.actor.principalId,
+        leaseExpiresAt: nextLease,
+      },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: capsule.id,
+      kind: "lease-renewed",
+      summary: `Lease renewed until ${nextLease.toISOString()}`,
+      actor: args.actor,
+    });
+    return capsule;
   });
-  await recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "lease-renewed",
-    summary: `Lease renewed until ${nextLease.toISOString()}`,
-    actor: args.actor,
-  });
-  return capsule;
 }
 
 export async function recordWorkCapsuleEvidence(args: {
@@ -746,6 +889,9 @@ export async function recordWorkCapsuleEvidence(args: {
 }) {
   const capsule = await args.db.workCapsule.findUnique({ where: { capsuleId: args.capsuleId } });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+  // Append-only; no capsule mutation needed, so a single activity insert is
+  // already atomic. Kept as a discrete function so callers compose the same
+  // way as the transactional ones.
   return recordActivity(args.db, {
     workCapsuleId: capsule.id,
     kind: "evidence-recorded",
@@ -777,7 +923,7 @@ git commit -s -m "feat(web): add work capsule store"
 
 ## Chunk 3: Scanner And MCP Surface
 
-## Task 4: Read-Only Git and Worktree Scanner
+### Task 4: Read-Only Git and Worktree Scanner
 
 **Files:**
 - Create: `apps/web/lib/work-capsules/git-scanner.ts`
@@ -936,7 +1082,7 @@ git add apps/web/lib/work-capsules/git-scanner.ts apps/web/lib/work-capsules/git
 git commit -s -m "feat(web): add worktree scanner"
 ```
 
-## Task 5: MCP Tools and Grants
+### Task 5: MCP Tools and Grants
 
 **Files:**
 - Modify: `apps/web/lib/mcp-tools.ts`
@@ -950,7 +1096,19 @@ git commit -s -m "feat(web): add worktree scanner"
 
 - [ ] **Step 1: Write MCP handler tests**
 
-Create `apps/web/lib/mcp-tools-work-capsules.test.ts`:
+`apps/web/lib/mcp-tools.ts` is ~11k lines and pulls in many sibling modules
+at module scope. Before flushing per-tool tests, prove the test environment
+can import it under the `@dpf/db` mock  -  otherwise downstream test failures
+look like missing handlers when they're actually missing peer mocks. Lead
+with a one-line import smoke test:
+
+```ts
+it("imports mcp-tools without runtime error under the @dpf/db mock", async () => {
+  await expect(import("./mcp-tools")).resolves.toBeDefined();
+});
+```
+
+Then create `apps/web/lib/mcp-tools-work-capsules.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1029,9 +1187,15 @@ Create `apps/web/lib/work-capsules/mcp-handlers.ts` and delegate to the store:
 import { prisma } from "@dpf/db";
 import type { ToolResult } from "@/lib/mcp-tools";
 import {
+  ensureAgentPrincipalIdentity,
+  resolvePrincipalIdForUser,
+} from "@/lib/identity/principal-linking";
+import {
+  WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
+  isWorkCapsuleEvidenceKind,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
@@ -1045,8 +1209,27 @@ import {
 
 type ToolContext = { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string } | undefined;
 
-function actor(userId: string, context: ToolContext) {
-  return { userId, agentId: context?.agentId ?? null, principalId: context?.agentId ?? userId };
+// Per AGENTS.md section 11 (principal convergence, post-2026-05-09), every new
+// identity-bearing column references `Principal.id`  -  never a raw User.id or
+// Agent.id. We resolve via the existing principal-linking primitives so the
+// capsule store can store a real Principal reference (or null when the caller
+// has no Principal yet  -  better than a fabricated FK).
+async function actor(userId: string, context: ToolContext) {
+  const agentId = context?.agentId ?? null;
+  let principalId: string | null = null;
+  try {
+    if (agentId) {
+      const synced = await ensureAgentPrincipalIdentity(agentId);
+      principalId = synced?.id ?? null;
+    } else {
+      principalId = await resolvePrincipalIdForUser(userId);
+    }
+  } catch {
+    // Principal resolution is best-effort in Phase 1; capsule writes proceed
+    // with a null principalId rather than failing the user-visible action.
+    principalId = null;
+  }
+  return { userId, agentId, principalId };
 }
 
 function stringParam(params: Record<string, unknown>, key: string): string | null {
@@ -1113,7 +1296,7 @@ export async function createWorkCapsuleTool(params: Record<string, unknown>, use
       idempotencyKey,
       executorKind: executorKind && isWorkCapsuleExecutorKind(executorKind) ? executorKind : null,
     },
-    actor: actor(userId, context),
+    actor: await actor(userId, context),
   });
   return { success: true, entityId: capsule.capsuleId, message: `Created Work Capsule ${capsule.capsuleId}.`, data: { capsule } };
 }
@@ -1121,7 +1304,7 @@ export async function createWorkCapsuleTool(params: Record<string, unknown>, use
 export async function heartbeatCapsuleTool(params: Record<string, unknown>, userId: string, context: ToolContext): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
   if (!capsuleId) return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
-  const capsule = await heartbeatWorkCapsule({ db: prisma, capsuleId, actor: actor(userId, context) });
+  const capsule = await heartbeatWorkCapsule({ db: prisma, capsuleId, actor: await actor(userId, context) });
   return { success: true, entityId: capsule.capsuleId, message: `Renewed lease for ${capsule.capsuleId}.`, data: { capsule } };
 }
 
@@ -1129,23 +1312,35 @@ export async function recordCapsuleEvidenceTool(params: Record<string, unknown>,
   const capsuleId = stringParam(params, "capsuleId");
   const summary = stringParam(params, "summary");
   if (!capsuleId || !summary) return { success: false, error: "invalid_input", message: "capsuleId and summary are required." };
+  // Evidence-kind allowlist: agents otherwise invent every spelling
+  // (`Test`, `tests`, `unit_test`) and the audit log loses analytical value.
+  // The allowlist lives in `apps/web/lib/work-capsules.ts` next to the other
+  // capsule enums per AGENTS.md section 3.
+  const rawKind = stringParam(params, "kind");
+  if (rawKind && !isWorkCapsuleEvidenceKind(rawKind)) {
+    return {
+      success: false,
+      error: "invalid_kind",
+      message: `kind must be one of: ${WORK_CAPSULE_EVIDENCE_KINDS.join(", ")}.`,
+    };
+  }
   await recordWorkCapsuleEvidence({
     db: prisma,
     capsuleId,
     evidence: {
-      kind: stringParam(params, "kind") ?? "note",
+      kind: rawKind ?? "note",
       summary,
       command: stringParam(params, "command") ?? undefined,
       url: stringParam(params, "url") ?? undefined,
       result: params.result,
     },
-    actor: actor(userId, context),
+    actor: await actor(userId, context),
   });
   return { success: true, entityId: capsuleId, message: `Recorded evidence for ${capsuleId}.` };
 }
 ```
 
-- [ ] **Step 4: Register tool definitions**
+- [ ] **Step 4: Register read-only tool definitions**
 
 Add Work Capsule tools to `PLATFORM_TOOLS` in `apps/web/lib/mcp-tools.ts` near the backlog/governed work tools. Use `workCapsuleToolEnums()` for enum arrays so the MCP schema mirrors `work-capsules.ts`:
 
@@ -1153,19 +1348,21 @@ Add Work Capsule tools to `PLATFORM_TOOLS` in `apps/web/lib/mcp-tools.ts` near t
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 ```
 
-Add definitions for:
+In Task 5, register only the read tools and `create_work_capsule`/`heartbeat_capsule`/`record_capsule_evidence` whose handlers exist in this task. Per spec section 9.3 the human capability gate differs from the agent grant gate; differentiate `requiredCapability` so the human side of the bouncer is not a no-op:
 
-- `list_work_capsules`
-- `get_work_capsule`
-- `create_work_capsule`
-- `adopt_worktree`
-- `claim_capsule_scope`
-- `record_capsule_evidence`
-- `heartbeat_capsule`
-- `update_work_capsule_status`
-- `release_capsule_scope`
+| Tool                          | `requiredCapability` | `sideEffect` | Lands in |
+| ----------------------------- | -------------------- | ------------ | -------- |
+| `list_work_capsules`          | `view_platform`      | `false`      | Task 5   |
+| `get_work_capsule`            | `view_platform`      | `false`      | Task 5   |
+| `create_work_capsule`         | `manage_backlog`     | `true`       | Task 5   |
+| `heartbeat_capsule`           | `manage_backlog`     | `true`       | Task 5   |
+| `record_capsule_evidence`     | `manage_backlog`     | `true`       | Task 5   |
+| `adopt_worktree`              | `manage_backlog`     | `true`       | Task 6   |
+| `claim_capsule_scope`         | `manage_backlog`     | `true`       | Task 6   |
+| `update_work_capsule_status`  | `manage_backlog`     | `true`       | Task 6   |
+| `release_capsule_scope`       | `manage_backlog`     | `true`       | Task 6   |
 
-Each definition uses `requiredCapability: "view_platform"`, `sideEffect: false` for reads, and `sideEffect: true` for writes. Use the enum arrays returned by `workCapsuleToolEnums()`.
+`view_platform` permits every authenticated platform user (HR-000/200/300)  -  too low a bar for write tools. `manage_backlog` is the existing builder-minimum gate already used by `promote_to_build_studio` and the backlog write surface. Use the enum arrays returned by `workCapsuleToolEnums()` for `status`, `source`, `executor`, `activity-kind`, and the `record_capsule_evidence.kind` allowlist.
 
 - [ ] **Step 5: Dispatch tool cases**
 
@@ -1194,7 +1391,14 @@ Inside `executeTool`, add cases that call the handler module. Keep the switch sm
     }
 ```
 
-For `adopt_worktree`, `claim_capsule_scope`, `update_work_capsule_status`, and `release_capsule_scope`, do not register the tool cases until the matching handlers in Task 6 exist. A tool must not be visible through MCP if its final handler is not implemented.
+Per spec invariant against silent-failure tool surfaces (memory:
+`project_proposal_trap_silent_failure.md`, `project_hive_contribution_gaps.md`),
+do **NOT** add `PLATFORM_TOOLS` definitions in Task 5 for `adopt_worktree`,
+`claim_capsule_scope`, `update_work_capsule_status`, or `release_capsule_scope`.
+Register both the definition and the dispatch case in Task 6 once their
+handlers exist. An advertised tool whose handler is missing returns a generic
+"unknown tool" 4xx and produces the exact "tools/list lies" trap that has
+stalled prior autonomous runs.
 
 - [ ] **Step 6: Wire grants**
 
@@ -1260,26 +1464,69 @@ Add matching entries for `work_capsule_write`, `work_capsule_adopt`, and `work_c
 
 In `packages/db/data/agent_registry.json`, grant `work_capsule_read`, `work_capsule_write`, and `work_capsule_adopt` to Build Studio and coding/external agent profiles that already hold `sandbox_execute` or `build_promote`. Grant `work_capsule_read` only to non-coding coordinator agents.
 
-- [ ] **Step 9: Run focused tests**
+- [ ] **Step 9: Run focused tests including the enum-parity invariant**
 
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/mcp-tools-work-capsules.test.ts apps/web/lib/tak/agent-grants.test.ts
+pnpm --filter web exec vitest run apps/web/lib/mcp-tools-work-capsules.test.ts apps/web/lib/tak/agent-grants.test.ts apps/web/lib/work-capsules-enum-parity.test.ts
 ```
 
-Expected: PASS for the tools implemented in this task. If any Work Capsule tool case is visible through `executeTool`, it must have a real handler, not a temporary fallback response.
+Expected: PASS for the tools implemented in this task. If any Work Capsule tool case is visible through `executeTool`, it must have a real handler, not a temporary fallback response. The enum-parity test (added below in Task 5 Step 8a) enforces AGENTS.md section 3  -  the MCP `enum:` arrays for `status`/`source`/`executor` MUST equal the constants in `apps/web/lib/work-capsules.ts`.
+
+- [ ] **Step 8a: Add the enum-parity test required by AGENTS.md section 3**
+
+Create `apps/web/lib/work-capsules-enum-parity.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { PLATFORM_TOOLS } from "./mcp-tools";
+import {
+  WORK_CAPSULE_EVIDENCE_KINDS,
+  WORK_CAPSULE_EXECUTOR_KINDS,
+  WORK_CAPSULE_SOURCES,
+  WORK_CAPSULE_STATUSES,
+} from "./work-capsules";
+
+function enumOf(toolName: string, paramName: string): readonly string[] {
+  const tool = PLATFORM_TOOLS.find((t) => t.name === toolName);
+  if (!tool) throw new Error(`tool ${toolName} not registered`);
+  const param = (tool.parameters as { properties?: Record<string, { enum?: string[] }> })
+    .properties?.[paramName];
+  return param?.enum ?? [];
+}
+
+describe("work capsule MCP enum parity", () => {
+  it("list_work_capsules.status mirrors WORK_CAPSULE_STATUSES", () => {
+    expect(enumOf("list_work_capsules", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
+  });
+
+  it("create_work_capsule.source mirrors WORK_CAPSULE_SOURCES", () => {
+    expect(enumOf("create_work_capsule", "source")).toEqual([...WORK_CAPSULE_SOURCES]);
+  });
+
+  it("create_work_capsule.executorKind mirrors WORK_CAPSULE_EXECUTOR_KINDS", () => {
+    expect(enumOf("create_work_capsule", "executorKind")).toEqual([...WORK_CAPSULE_EXECUTOR_KINDS]);
+  });
+
+  it("record_capsule_evidence.kind mirrors WORK_CAPSULE_EVIDENCE_KINDS", () => {
+    expect(enumOf("record_capsule_evidence", "kind")).toEqual([...WORK_CAPSULE_EVIDENCE_KINDS]);
+  });
+});
+```
+
+When Task 6 lands `update_work_capsule_status`, extend this test to cover its `status` enum too.
 
 - [ ] **Step 10: Commit MCP slice**
 
 Run:
 
 ```powershell
-git add apps/web/lib/mcp-tools.ts apps/web/lib/work-capsules/mcp-handlers.ts apps/web/lib/mcp-tools-work-capsules.test.ts apps/web/lib/tak/agent-grants.ts apps/web/lib/tak/agent-grants.test.ts apps/web/components/platform/EffectivePermissionsPanel.tsx packages/db/data/grant_catalog.json packages/db/data/agent_registry.json
+git add apps/web/lib/mcp-tools.ts apps/web/lib/work-capsules/mcp-handlers.ts apps/web/lib/mcp-tools-work-capsules.test.ts apps/web/lib/work-capsules-enum-parity.test.ts apps/web/lib/tak/agent-grants.ts apps/web/lib/tak/agent-grants.test.ts apps/web/components/platform/EffectivePermissionsPanel.tsx packages/db/data/grant_catalog.json packages/db/data/agent_registry.json
 git commit -s -m "feat(web): expose work capsule MCP tools"
 ```
 
-## Task 6: Complete Adoption, Scope, Status, and Evidence Handlers
+### Task 6: Complete Adoption, Scope, Status, and Evidence Handlers
 
 **Files:**
 - Modify: `apps/web/lib/work-capsules/work-capsule-store.ts`
@@ -1341,26 +1588,47 @@ export async function claimWorkCapsuleScope(args: {
   const capsule = await args.db.workCapsule.findUnique({ where: { capsuleId: args.capsuleId } });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
   const recordedAt = (args.now ?? new Date()).toISOString();
-  const principalId = args.actor.principalId ?? args.actor.userId;
-  const existing = Array.isArray(capsule.scopeClaims) ? capsule.scopeClaims : [];
-  const nextClaims = args.claims.map((claim) => ({
-    kind: claim.kind,
-    value: claim.value,
-    intent: claim.intent,
-    recordedAt,
-    recordedByPrincipalId: principalId,
-  }));
-  const merged = [...existing, ...nextClaims];
-  const updated = await args.db.workCapsule.update({
-    where: { capsuleId: args.capsuleId },
-    data: { scopeClaims: merged },
-  });
-  await recordActivity(args.db, {
-    workCapsuleId: capsule.id,
-    kind: "scope-claimed",
-    summary: `Claimed ${nextClaims.length} scope item(s)`,
-    payload: { claims: nextClaims },
-    actor: args.actor,
+  const principalId = args.actor.principalId ?? null;
+  const existing: Array<{ kind: string; value: string; intent: string; recordedAt: string; recordedByPrincipalId: string | null }> =
+    Array.isArray(capsule.scopeClaims) ? (capsule.scopeClaims as any) : [];
+
+  // Spec section 9.3 contract: "merging set on (capsuleId, kind, value)". A repeat
+  // claim refreshes recordedAt / recordedByPrincipalId / intent rather than
+  // duplicating the entry. Without this the array grows unbounded and
+  // collision detection joins on stale duplicates.
+  const next = new Map<string, typeof existing[number]>();
+  for (const entry of existing) {
+    next.set(`${entry.kind}:${entry.value}`, entry);
+  }
+  const newlyAdded: Array<typeof existing[number]> = [];
+  const refreshed: Array<typeof existing[number]> = [];
+  for (const claim of args.claims) {
+    const key = `${claim.kind}:${claim.value}`;
+    const merged = {
+      kind: claim.kind,
+      value: claim.value,
+      intent: claim.intent,
+      recordedAt,
+      recordedByPrincipalId: principalId ?? "",
+    };
+    if (next.has(key)) refreshed.push(merged);
+    else newlyAdded.push(merged);
+    next.set(key, merged);
+  }
+  const merged = Array.from(next.values());
+  const updated = await args.db.$transaction!(async (tx: CapsuleDb) => {
+    const row = await tx.workCapsule.update({
+      where: { capsuleId: args.capsuleId },
+      data: { scopeClaims: merged },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: capsule.id,
+      kind: "scope-claimed",
+      summary: `Claimed ${newlyAdded.length} new scope item(s); refreshed ${refreshed.length}`,
+      payload: { added: newlyAdded, refreshed },
+      actor: args.actor,
+    });
+    return row;
   });
   return updated;
 }
@@ -1372,32 +1640,43 @@ export async function updateWorkCapsuleStatus(args: {
   reason: string;
   actor: Actor;
 }) {
-  const updated = await args.db.workCapsule.update({
-    where: { capsuleId: args.capsuleId },
-    data: {
-      status: args.status,
-      workspaceState: {
-        statusOverride: {
-          reason: args.reason,
-          until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  // Spec section 21 decision 5: status overrides last 24 hours by default; the TTL is
+  // exported from `apps/web/lib/work-capsules.ts` as STATUS_OVERRIDE_TTL_MS.
+  // Atomic with the activity write per Spec section 14 invariant 6.
+  return args.db.$transaction!(async (tx: CapsuleDb) => {
+    const updated = await tx.workCapsule.update({
+      where: { capsuleId: args.capsuleId },
+      data: {
+        status: args.status,
+        workspaceState: {
+          statusOverride: {
+            reason: args.reason,
+            until: new Date(Date.now() + STATUS_OVERRIDE_TTL_MS).toISOString(),
+          },
         },
       },
-    },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: updated.id,
+      kind: "status-override",
+      summary: args.reason,
+      payload: { status: args.status },
+      actor: args.actor,
+    });
+    return updated;
   });
-  await recordActivity(args.db, {
-    workCapsuleId: updated.id,
-    kind: "status-override",
-    summary: args.reason,
-    payload: { status: args.status },
-    actor: args.actor,
-  });
-  return updated;
 }
 ```
 
-- [ ] **Step 3: Wire the remaining MCP handlers**
+- [ ] **Step 3: Wire the remaining MCP handlers AND register their tool definitions in the same commit**
 
-Implement and register `adoptWorktreeTool`, `claimCapsuleScopeTool`, `updateWorkCapsuleStatusTool`, and `releaseCapsuleScopeTool` with explicit parameter validation and calls to the store module. Before committing, search `apps/web/lib/work-capsules/mcp-handlers.ts` and `apps/web/lib/mcp-tools.ts` for temporary fallback responses and remove any that remain.
+Implement `adoptWorktreeTool`, `claimCapsuleScopeTool`, `updateWorkCapsuleStatusTool`, and `releaseCapsuleScopeTool` with explicit parameter validation and calls to the store module. In the same commit, add the matching `PLATFORM_TOOLS` entries with `requiredCapability: "manage_backlog"`, `sideEffect: true`, and the `enum:` arrays from `workCapsuleToolEnums()`. Then add the dispatch cases to the `executeTool` switch.
+
+Definition + handler + dispatch land together  -  never advertise a tool whose handler does not exist (see Task 5 Step 5 rationale).
+
+Extend `apps/web/lib/work-capsules-enum-parity.test.ts` with a case for `update_work_capsule_status.status` mirroring `WORK_CAPSULE_STATUSES`.
+
+Before committing, search `apps/web/lib/work-capsules/mcp-handlers.ts` and `apps/web/lib/mcp-tools.ts` for temporary fallback responses and remove any that remain.
 
 - [ ] **Step 4: Run MCP tests**
 
@@ -1420,7 +1699,7 @@ git commit -s -m "feat(web): complete work capsule adoption handlers"
 
 ## Chunk 4: UI And Verification
 
-## Task 7: Work Control Server Actions and Presenter
+### Task 7: Work Control Server Actions and Presenter
 
 **Files:**
 - Create: `apps/web/lib/actions/work-capsules.ts`
@@ -1461,6 +1740,8 @@ describe("presentCapsuleRow", () => {
 Create `apps/web/lib/work-capsules/work-capsule-presenter.ts`:
 
 ```ts
+import { STALE_CACHE_MS } from "@/lib/work-capsules";
+
 type CapsuleRowInput = {
   capsuleId: string;
   title: string;
@@ -1479,7 +1760,7 @@ export type PresentedCapsuleRow = ReturnType<typeof presentCapsuleRow>;
 
 export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
   const leaseExpired = row.leaseExpiresAt != null && row.leaseExpiresAt.getTime() < now.getTime();
-  const staleCache = row.lastSyncedAt != null && now.getTime() - row.lastSyncedAt.getTime() > 30 * 60 * 1000;
+  const staleCache = row.lastSyncedAt != null && now.getTime() - row.lastSyncedAt.getTime() > STALE_CACHE_MS;
   return {
     capsuleId: row.capsuleId,
     title: row.title,
@@ -1497,15 +1778,24 @@ export function presentCapsuleRow(row: CapsuleRowInput, now = new Date()) {
 
 - [ ] **Step 3: Implement server actions**
 
-Create `apps/web/lib/actions/work-capsules.ts`:
+Create `apps/web/lib/actions/work-capsules.ts`. The loader joins the read-only
+git scanner against already-adopted capsules so the "adoptable" list shows only
+worktrees that DON'T already have a capsule on their head branch  -  Phase 1's
+operationally important surface per spec section 16.
 
 ```ts
 "use server";
 
+import path from "node:path";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { presentCapsuleRow } from "@/lib/work-capsules/work-capsule-presenter";
+import {
+  scanGitWorktrees,
+  getWorktreeDirtySummary,
+  type WorktreeInfo,
+} from "@/lib/work-capsules/git-scanner";
 
 async function requireBuildAccess(): Promise<string> {
   const session = await auth();
@@ -1514,6 +1804,48 @@ async function requireBuildAccess(): Promise<string> {
     throw new Error("Unauthorized");
   }
   return user.id!;
+}
+
+// Resolves the install's repo root. The portal process's cwd is the worktree
+// root in dev; in Docker the repo is mounted at `/workspace`. Both expose
+// `git worktree list --porcelain`. Configure via `DPF_REPO_ROOT` if neither
+// matches.
+function resolveRepoRoot(): string {
+  const override = process.env.DPF_REPO_ROOT?.trim();
+  if (override) return path.resolve(override);
+  return process.cwd();
+}
+
+async function loadAdoptableRows(repoRoot: string, adoptedBranches: Set<string>) {
+  let worktrees: WorktreeInfo[];
+  try {
+    worktrees = await scanGitWorktrees(repoRoot);
+  } catch {
+    // Scanner failure (no git, missing repo, permission denied) is not fatal:
+    // surface zero adoptables so the page still renders existing capsules.
+    return [];
+  }
+  const rows = await Promise.all(
+    worktrees
+      .filter((w) => w.branch && !adoptedBranches.has(w.branch))
+      .map(async (w) => {
+        try {
+          const dirty = await getWorktreeDirtySummary(w.path);
+          return {
+            path: w.path,
+            branch: w.branch,
+            modifiedCount: dirty.modifiedCount,
+            untrackedCount: dirty.untrackedCount,
+          };
+        } catch {
+          return { path: w.path, branch: w.branch, modifiedCount: 0, untrackedCount: 0 };
+        }
+      }),
+  );
+  // Phase 1 surfaces ALL non-adopted local worktrees; the
+  // `shouldSurfaceAdoptableBranch` heuristic is reserved for the daily
+  // steward (Phase 4) where ahead/behind and last-commit data is available.
+  return rows;
 }
 
 export async function getWorkControlData() {
@@ -1535,19 +1867,74 @@ export async function getWorkControlData() {
       updatedAt: true,
     },
   });
+  const adoptedBranches = new Set(
+    capsules.map((c) => c.headBranch).filter((b): b is string => Boolean(b)),
+  );
+  const adoptable = await loadAdoptableRows(resolveRepoRoot(), adoptedBranches);
   return {
     capsules: capsules.map((row) => presentCapsuleRow(row)),
-    adoptable: [],
+    adoptable,
   };
 }
 ```
 
-- [ ] **Step 4: Run presenter test**
+- [ ] **Step 3a: Add a loader test that asserts auth and scanner integration**
+
+Create `apps/web/lib/actions/work-capsules.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    workCapsule: { findMany: vi.fn() },
+  },
+}));
+vi.mock("@/lib/work-capsules/git-scanner", () => ({
+  scanGitWorktrees: vi.fn(),
+  getWorktreeDirtySummary: vi.fn(),
+}));
+
+describe("getWorkControlData", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("rejects unauthorized callers", async () => {
+    const { auth } = await import("@/lib/auth");
+    (auth as any).mockResolvedValue({ user: { id: "u1", platformRole: "HR-900", isSuperuser: false } });
+    const { getWorkControlData } = await import("./work-capsules");
+    await expect(getWorkControlData()).rejects.toThrow(/unauthorized/i);
+  });
+
+  it("filters scanner output by already-adopted branches", async () => {
+    const { auth } = await import("@/lib/auth");
+    (auth as any).mockResolvedValue({ user: { id: "u1", platformRole: "HR-100", isSuperuser: true } });
+    const { prisma } = await import("@dpf/db");
+    (prisma.workCapsule.findMany as any).mockResolvedValue([
+      { capsuleId: "WC-1", title: "x", status: "working", source: "external-adoption", executorKind: null, headBranch: "feat/already-adopted", worktreePath: "/p", pullRequestUrl: null, leaseExpiresAt: null, lastSyncedAt: null, updatedAt: new Date() },
+    ]);
+    const scanner = await import("@/lib/work-capsules/git-scanner");
+    (scanner.scanGitWorktrees as any).mockResolvedValue([
+      { path: "/a", branch: "feat/already-adopted", headSha: "h1" },
+      { path: "/b", branch: "fix/orphan", headSha: "h2" },
+    ]);
+    (scanner.getWorktreeDirtySummary as any).mockResolvedValue({ modifiedCount: 0, untrackedCount: 0 });
+
+    const { getWorkControlData } = await import("./work-capsules");
+    const data = await getWorkControlData();
+    expect(data.adoptable).toEqual([
+      expect.objectContaining({ branch: "fix/orphan" }),
+    ]);
+  });
+});
+```
+
+- [ ] **Step 4: Run presenter and loader tests**
 
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/work-capsules/work-capsule-presenter.test.ts
+pnpm --filter web exec vitest run apps/web/lib/work-capsules/work-capsule-presenter.test.ts apps/web/lib/actions/work-capsules.test.ts
 ```
 
 Expected: PASS.
@@ -1557,11 +1944,11 @@ Expected: PASS.
 Run:
 
 ```powershell
-git add apps/web/lib/actions/work-capsules.ts apps/web/lib/work-capsules/work-capsule-presenter.ts apps/web/lib/work-capsules/work-capsule-presenter.test.ts
+git add apps/web/lib/actions/work-capsules.ts apps/web/lib/actions/work-capsules.test.ts apps/web/lib/work-capsules/work-capsule-presenter.ts apps/web/lib/work-capsules/work-capsule-presenter.test.ts
 git commit -s -m "feat(web): add work control data loader"
 ```
 
-## Task 8: Work Control UI
+### Task 8: Work Control UI
 
 **Files:**
 - Create: `apps/web/app/(shell)/build/work/page.tsx`
@@ -1608,6 +1995,17 @@ describe("WorkControlPanel", () => {
   it("renders empty state", () => {
     render(<WorkControlPanel capsules={[]} adoptable={[]} />);
     expect(screen.getByText("No active capsules yet.")).toBeInTheDocument();
+  });
+
+  it("renders adoptable worktree rows surfaced by the scanner", () => {
+    render(
+      <WorkControlPanel
+        capsules={[]}
+        adoptable={[{ path: "D:/DPF-orphan", branch: "fix/orphan", modifiedCount: 3, untrackedCount: 1 }]}
+      />,
+    );
+    expect(screen.getByText("D:/DPF-orphan")).toBeInTheDocument();
+    expect(screen.getByText("fix/orphan")).toBeInTheDocument();
   });
 });
 ```
@@ -1803,6 +2201,13 @@ In `apps/web/components/build/BuildStudio.tsx`, add a `Link` import from `next/l
 
 Place it alongside existing build-level actions, not inside a nested card.
 
+Note: spec section 12 currently says the link appears "when active capsules exist."
+Phase 1 renders the link unconditionally because (a) the page is the entry
+point for adopting the first capsule on a fresh install, and (b) gating
+requires a server-side count query the header doesn't otherwise need. Update
+spec section 12 in the same PR to match this Phase 1 behavior; the conditional
+appearance can return in a later phase if it adds value.
+
 - [ ] **Step 5: Run UI tests**
 
 Run:
@@ -1822,7 +2227,7 @@ git add apps/web/app/(shell)/build/work/page.tsx apps/web/components/build/work-
 git commit -s -m "feat(web): add work control surface"
 ```
 
-## Task 9: Phase 1 Verification and PR Update
+### Task 9: Phase 1 Verification and Branch Handoff
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-05-14-portal-work-capsule-control-harness-design.md` if implementation discovers a spec correction.
@@ -1833,10 +2238,20 @@ git commit -s -m "feat(web): add work control surface"
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/work-capsules.test.ts apps/web/lib/work-capsules/work-capsule-store.test.ts apps/web/lib/work-capsules/git-scanner.test.ts apps/web/lib/work-capsules/work-capsule-presenter.test.ts apps/web/lib/mcp-tools-work-capsules.test.ts apps/web/lib/tak/agent-grants.test.ts apps/web/components/build/work-control/WorkControlPanel.test.tsx
+pnpm --filter web exec vitest run apps/web/lib/work-capsules.test.ts apps/web/lib/work-capsules/work-capsule-store.test.ts apps/web/lib/work-capsules/git-scanner.test.ts apps/web/lib/work-capsules/work-capsule-presenter.test.ts apps/web/lib/actions/work-capsules.test.ts apps/web/lib/mcp-tools-work-capsules.test.ts apps/web/lib/tak/agent-grants.test.ts apps/web/components/build/work-control/WorkControlPanel.test.tsx
 ```
 
 Expected: PASS.
+
+- [ ] **Step 1a: Confirm release worktree filtering**
+
+Run:
+
+```powershell
+pnpm --filter web exec vitest run lib/actions/work-capsules.test.ts
+```
+
+Expected: PASS, including coverage that the `main` release worktree is not presented as adoptable implementation work.
 
 - [ ] **Step 2: Run Prisma validation and generation**
 
@@ -1899,30 +2314,80 @@ Then verify:
 
 - [ ] **Step 7: Commit any verification doc updates**
 
-If verification finds only pre-existing failures, document them in the PR body. If verification requires a code/doc correction, commit it:
+If verification finds only pre-existing failures, document them in the branch handoff notes. If verification requires a code/doc correction, commit it:
 
 ```powershell
 git add <corrected-files>
 git commit -s -m "fix: finalize work capsule phase 1"
 ```
 
-- [ ] **Step 8: Push and update PR**
+- [ ] **Step 8: Push branch without opening a PR**
 
-Run:
+Push the branch so it is backed up and visible, but do not create a PR until
+the branch is truly ready to merge. In this repository, PR creation is the
+ready-to-merge signal; draft PRs are not used as an in-flight handoff.
 
 ```powershell
 git push
-gh pr comment 596 --body "Phase 1 implementation plan added: docs/superpowers/plans/2026-05-14-portal-work-capsule-control-harness-phase-1.md"
 ```
 
-Expected: branch pushed; PR updated with a concise pointer to the plan and verification evidence. Do not replace the PR body with the full implementation plan.
+Expected: branch pushed. No PR exists until the final merge-ready review gate.
+
+- [ ] **Step 9: Capture scratch-install rehearsal preview**
+
+Run the non-destructive rehearsal in plan-only mode so the branch handoff records
+the exact source SHA, scratch ports, and Codex/Claude CLI availability without
+resetting the live install:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scratch-install-rehearsal.ps1
+```
+
+Expected: JSON plan output with `"copiedSourceSecrets": false`, a scratch worktree
+path, alternate portal/sandbox URLs, and Codex/Claude CLI availability. Full
+`-Execute` rehearsal is the next gate before merge-ready PR creation for
+install/setup/provider/promotion-sensitive work.
+
+- [ ] **Step 10: Capture first-run walkthrough evidence**
+
+For any branch that touches install, setup, provider/OAuth state, Build Studio,
+Work Capsules, promotion, or platform shell routing, run the browser-driven
+scratch flow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scratch-install-rehearsal.ps1 -Execute -RunFirstRunWalkthrough
+```
+
+Expected: `first-run-walkthrough-result.json` plus screenshots prove `/setup`,
+owner account creation, `/platform/ai/providers`, and `/build/work` from the
+scratch install. The command cleans scratch containers, volumes, image tags, and
+worktree unless keep flags are supplied.
 
 ## Implementation Notes
 
 - Do not edit the root `D:\DPF` checkout for implementation. Use the existing clean worktree at `D:\DPF\.worktrees\portal-work-capsule-control-harness`.
+- Do not open a PR as an early progress marker. Pushed branches and Work Capsules are the handoff artifacts while work is in flight.
 - Do not grant `work_capsule_promote` to any agent in Phase 1.
-- Do not use `npx`; use `pnpm --filter <pkg> exec <tool>`.
+- Do not use `npx`; use `pnpm --filter <pkg> exec <tool>`. Verification follows AGENTS.md section 2 ("never `npx`"); section 5's `npx next build` example will be reconciled in a separate doc PR.
 - Keep all new UI theme-aware. No `text-gray-*`, `bg-white`, hardcoded hex, or inline color styles.
 - Keep Work Control dense and operational. Tables are appropriate here; decorative cards and hero layouts are not.
 - Keep all code and docs ASCII unless an existing file requires otherwise.
 - Preserve 20 percent refactor budget by keeping Work Capsule logic out of `mcp-tools.ts` and out of the Build Studio component body.
+
+### Architectural Invariants Enforced In This Plan
+
+These reflect chief-architect findings rolled into the plan; every implementation step above already encodes them, but listing them here gives reviewers and downstream phases a single quick-reference.
+
+- **Idempotent capsule creation.** `create_work_capsule` and `adopt_worktree` MUST NOT emit a duplicate `created`/`adopted` activity on retry. Achieved via `findUnique -> if-not-found -> $transaction([create, activity])` for create, and a Postgres partial unique index plus `P2002` race-fallback for adopt.
+- **Adoption uniqueness at the DB layer.** The migration adds `CREATE UNIQUE INDEX "WorkCapsule_repo_headBranch_active_key" ON "WorkCapsule"("repositoryFullName","headBranch") WHERE "archivedAt" IS NULL;` so concurrent `adopt_worktree` callers cannot produce duplicate capsules even if the application-level `findFirst` races.
+- **Principal columns reference `Principal.id` only.** Per AGENTS.md section 11 (post-2026-05-09 principal convergence), `createdByPrincipalId` and `leaseHolderPrincipalId` resolve via `apps/web/lib/identity/principal-linking.ts` (`resolvePrincipalIdForUser` for users, `ensureAgentPrincipalIdentity` for agents). If resolution fails, write `null` rather than fabricate a non-Principal FK.
+- **Activity writes are atomic with the capsule mutation.** Spec section 14 invariant 6 ("every user-visible capsule event writes WorkCapsuleActivity") is enforced by wrapping each store function in `prisma.$transaction(...)`; a failed activity insert rolls back the capsule mutation.
+- **Scope claims are a set, not a log.** `claim_capsule_scope` merges on `(kind, value)`, replacing recordedAt/recordedByPrincipalId/intent in place; collision detection joins on the deduped set.
+- **Tool registration <-> handler parity.** `PLATFORM_TOOLS` definition, `executeTool` dispatch case, and the handler land in the same commit. Never advertise a tool whose handler returns "unknown tool"  -  past autonomous runs have been stalled by exactly this trap (see memories `project_proposal_trap_silent_failure.md`, `project_hive_contribution_gaps.md`).
+- **Differentiated `requiredCapability`.** Read tools use `view_platform`; write tools use `manage_backlog` (the existing builder-minimum gate). `view_platform` for writes admits HR-000/200/300 and is too permissive.
+- **Enum parity is testable.** `apps/web/lib/work-capsules-enum-parity.test.ts` asserts the `enum:` arrays in `mcp-tools.ts` equal the constants in `work-capsules.ts` for status, source, executor, evidence-kind, and (after Task 6) status-override. AGENTS.md section 3 invariant.
+- **Evidence-kind allowlist.** `record_capsule_evidence.kind` is constrained to `WORK_CAPSULE_EVIDENCE_KINDS`; arbitrary spellings are rejected so the audit log remains analytically useful.
+- **Time constants in one place.** `LEASE_TTL_MS`, `STALE_CACHE_MS`, and `STATUS_OVERRIDE_TTL_MS` live in `apps/web/lib/work-capsules.ts`; spec section 21 decisions 1 and 5 are sourced from there.
+- **Bundled MCP, no separate registration.** Per spec section 21 decision 6, Work Capsule tools ship inside the existing `apps/web/lib/mcp-tools.ts` surface; Phase 1 does NOT add a new MCP service registration row, so admins do not have to "register" the capsule tools after install.
+- **No backfill.** Existing branches and worktrees are NOT auto-adopted on migrate. Adoption is an explicit per-row user action via `/build/work` in Phase 1.
+- **Phase 1 defers executor handoff.** Spec section 6.3 specifies an `executor-changed` activity on every handoff; that activity kind exists in the enum but no Phase 1 tool writes it. Handoff lands in Phase 3 alongside Build Studio attachment.

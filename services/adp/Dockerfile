@@ -8,17 +8,16 @@
 
 FROM node:24-alpine AS build
 WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 COPY tsconfig.base.json ./tsconfig.base.json
 COPY services/adp ./services/adp
 COPY packages/integration-shared ./packages/integration-shared
 WORKDIR /app/packages/integration-shared
 RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.main = './dist/index.js'; pkg.types = './dist/index.d.ts'; pkg.scripts = { ...(pkg.scripts ?? {}), build: 'tsc' }; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');" \
-  && corepack enable \
   && pnpm install --no-frozen-lockfile \
   && pnpm build
 WORKDIR /app/services/adp
 RUN node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.dependencies['@dpf/integration-shared'] = 'file:../../packages/integration-shared'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');" \
-  && corepack enable \
   && pnpm install --no-frozen-lockfile \
   && pnpm build
 
