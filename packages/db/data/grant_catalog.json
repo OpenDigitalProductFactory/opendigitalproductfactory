@@ -223,16 +223,6 @@
       ]
     },
     {
-      "key": "work_capsule_promote",
-      "description": "Promote Work Capsule changes toward release.",
-      "category": "release",
-      "sensitivity": "confidential",
-      "honored_by_tools": [],
-      "implies": [
-        "work_capsule_read"
-      ]
-    },
-    {
       "key": "catalog_publish",
       "description": "Publish catalog.",
       "category": "release",
