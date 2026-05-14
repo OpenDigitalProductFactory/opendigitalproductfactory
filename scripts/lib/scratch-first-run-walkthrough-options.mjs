@@ -3,7 +3,7 @@ import path from "node:path";
 export const DEFAULT_ORG_NAME = "Digital Product Factory Scratch";
 export const DEFAULT_PASSWORD = "ScratchPassw0rd!";
 export const DEFAULT_PORTAL_URL = "http://localhost:3000";
-export const DEFAULT_TIMEOUT_MS = 45_000;
+export const DEFAULT_TIMEOUT_MS = 120_000;
 
 export function buildDefaultEmail(now = new Date()) {
   const stamp = now

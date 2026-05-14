@@ -99,7 +99,9 @@ branches, include the browser-driven new-customer path:
 ```
 
 That mode verifies `/setup`, owner account creation, provider setup access, and
-`/build/work` access from the scratch install before cleanup.
+`/build/work` access from the scratch install before cleanup. The browser
+walkthrough uses a 120-second per-step timeout for cold production containers;
+raise `-WalkthroughTimeoutSeconds` only when the machine is known to be slower.
 
 ## How to run each verification (manual sections)
 

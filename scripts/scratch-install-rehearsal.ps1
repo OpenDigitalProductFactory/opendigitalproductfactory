@@ -24,6 +24,7 @@ param(
     [string]$WalkthroughOrgName = "Digital Product Factory Scratch",
     [string]$WalkthroughEmail = "",
     [string]$WalkthroughPassword = "ScratchPassw0rd!",
+    [int]$WalkthroughTimeoutSeconds = 120,
     [switch]$HeadedWalkthrough
 )
 
@@ -225,6 +226,9 @@ Require-Command docker | Out-Null
 if ($RunFirstRunWalkthrough) {
     Require-Command pnpm | Out-Null
 }
+if ($WalkthroughTimeoutSeconds -lt 1) {
+    Write-Fail "WalkthroughTimeoutSeconds must be a positive integer."
+}
 
 $repoRoot = Get-RepoRoot
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -272,6 +276,7 @@ $plan = [ordered]@{
         orgName = $WalkthroughOrgName
         email = $WalkthroughEmail
         passwordRecorded = $false
+        timeoutSeconds = $WalkthroughTimeoutSeconds
         headed = [bool]$HeadedWalkthrough
     }
     codexCli = Get-CommandRecord "codex"
@@ -371,7 +376,9 @@ if ($RunFirstRunWalkthrough) {
         "--email",
         $WalkthroughEmail,
         "--password",
-        $WalkthroughPassword
+        $WalkthroughPassword,
+        "--timeout-ms",
+        ([string]($WalkthroughTimeoutSeconds * 1000))
     )
     if ($HeadedWalkthrough) {
         $walkthroughArgs += "--headed"

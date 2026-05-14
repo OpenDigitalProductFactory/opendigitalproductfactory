@@ -66,7 +66,9 @@ owner account, verifies the provider setup surface, and verifies `/build/work`
 after first login. It writes screenshots and
 `first-run-walkthrough-result.json` to the same evidence directory. The
 scratch password is used only for that local browser session and is not written
-to evidence JSON.
+to evidence JSON. The walkthrough uses a 120-second per-step timeout by default
+to allow clean production containers to complete cold first-auth navigation; use
+`-WalkthroughTimeoutSeconds <seconds>` when a slower machine needs more room.
 
 Use `-ComposeParallelLimit` to tune build concurrency. The default is `1` to
 avoid Docker Desktop memory pressure during full-stack first-run rehearsal.

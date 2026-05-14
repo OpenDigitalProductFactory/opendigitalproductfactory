@@ -54,7 +54,7 @@ test("parseWalkthroughArgs fills safe scratch defaults", () => {
   assert.equal(config.email, "scratch-admin+20260514T070809Z@dpf.local");
   assert.equal(config.password, "ScratchPassw0rd!");
   assert.equal(config.headed, false);
-  assert.equal(config.timeoutMs, 45_000);
+  assert.equal(config.timeoutMs, 120_000);
 });
 
 test("parseWalkthroughArgs rejects unknown or incomplete flags", () => {
