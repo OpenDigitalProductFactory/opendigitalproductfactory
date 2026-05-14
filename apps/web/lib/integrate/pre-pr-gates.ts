@@ -36,7 +36,16 @@ export interface PrePRGateResult {
 // ─── Diff Helpers ───────────────────────────────────────────────────────────
 
 function extractFilePaths(diff: string): string[] {
-  return [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
+  // Capture both the `a/` (old) and `b/` (new) paths so renames are visible
+  // to gates that care about destination location (e.g. architecture's
+  // unexpected-directory check). For non-renames the two paths are identical
+  // and dedupe via the Set.
+  const paths = new Set<string>();
+  for (const m of diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)) {
+    paths.add(m[1]);
+    paths.add(m[2]);
+  }
+  return [...paths];
 }
 
 function extractDiffLinesForFile(
