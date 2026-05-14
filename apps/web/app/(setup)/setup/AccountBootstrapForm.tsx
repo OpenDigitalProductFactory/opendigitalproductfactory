@@ -1,16 +1,11 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { createOrganization, createOwnerAccount } from "@/lib/actions/setup-entities";
-import { advanceStep } from "@/lib/actions/setup-progress";
+import { bootstrapFirstRunOwner } from "@/lib/actions/first-run-account-bootstrap";
 
 type Props = {
   setupId: string;
 };
-
-const NEXT_SETUP_ROUTE = "/platform/ai/providers";
 
 /**
  * Minimal account bootstrap — the ONE custom form in onboarding.
@@ -25,7 +20,6 @@ export function AccountBootstrapForm({ setupId }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
 
   const canSubmit =
     orgName.trim().length > 0 &&
@@ -37,33 +31,15 @@ export function AccountBootstrapForm({ setupId }: Props) {
     setError(null);
     startTransition(async () => {
       try {
-        // 1. Create organization
-        await createOrganization(setupId, { orgName });
-
-        // 2. Create owner account
-        await createOwnerAccount(setupId, {
-          name: orgName,
+        await bootstrapFirstRunOwner(setupId, {
+          orgName,
           email,
           password,
         });
-
-        // 3. Advance past bootstrap step
-        await advanceStep(setupId, { orgName });
-
-        // 4. Sign in client-side and redirect to the first real portal route.
-        const signInResult = await signIn("workforce", {
-          email,
-          password,
-          redirect: false,
-          redirectTo: NEXT_SETUP_ROUTE,
-        });
-        if (signInResult?.error) {
-          throw new Error("Account created, but sign-in failed. Try signing in from the login page.");
-        }
-
-        router.replace(NEXT_SETUP_ROUTE);
-        router.refresh();
       } catch (err) {
+        if (isNextRedirect(err)) {
+          throw err;
+        }
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
     });
@@ -140,5 +116,15 @@ export function AccountBootstrapForm({ setupId }: Props) {
         </form>
       </div>
     </div>
+  );
+}
+
+function isNextRedirect(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: unknown }).digest === "string" &&
+    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT;")
   );
 }

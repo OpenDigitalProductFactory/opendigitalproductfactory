@@ -6,52 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountBootstrapForm } from "./AccountBootstrapForm";
 
 const actionMocks = vi.hoisted(() => ({
-  advanceStep: vi.fn(),
-  createOrganization: vi.fn(),
-  createOwnerAccount: vi.fn(),
-  signIn: vi.fn(),
+  bootstrapFirstRunOwner: vi.fn(),
 }));
 
-const routerMocks = vi.hoisted(() => ({
-  refresh: vi.fn(),
-  replace: vi.fn(),
-}));
-
-vi.mock("@/lib/actions/setup-entities", () => ({
-  createOrganization: actionMocks.createOrganization,
-  createOwnerAccount: actionMocks.createOwnerAccount,
-}));
-
-vi.mock("@/lib/actions/setup-progress", () => ({
-  advanceStep: actionMocks.advanceStep,
-}));
-
-vi.mock("next-auth/react", () => ({
-  signIn: actionMocks.signIn,
-}));
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => routerMocks,
+vi.mock("@/lib/actions/first-run-account-bootstrap", () => ({
+  bootstrapFirstRunOwner: actionMocks.bootstrapFirstRunOwner,
 }));
 
 describe("AccountBootstrapForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    actionMocks.createOrganization.mockResolvedValue({ id: "org-1" });
-    actionMocks.createOwnerAccount.mockResolvedValue({
-      userId: "user-1",
-      email: "owner@example.com",
-    });
-    actionMocks.advanceStep.mockResolvedValue({ currentStep: "ai-providers" });
-    actionMocks.signIn.mockResolvedValue({
-      error: undefined,
-      ok: true,
-      status: 200,
-      url: "http://localhost:3000/platform/ai/providers",
-    });
+    actionMocks.bootstrapFirstRunOwner.mockResolvedValue(undefined);
   });
 
-  it("uses portal-relative navigation after bootstrap sign-in", async () => {
+  it("submits first-run account bootstrap through one server action", async () => {
     const { container } = render(<AccountBootstrapForm setupId="setup-1" />);
 
     fireEvent.change(screen.getByPlaceholderText(/digital product factory/i), {
@@ -67,20 +35,11 @@ describe("AccountBootstrapForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /get started/i }));
 
     await waitFor(() => {
-      expect(actionMocks.signIn).toHaveBeenCalledWith(
-        "workforce",
-        expect.objectContaining({
+      expect(actionMocks.bootstrapFirstRunOwner).toHaveBeenCalledWith("setup-1", {
+        orgName: "Digital Product Factory Scratch",
           email: "owner@example.com",
           password: "correct horse battery staple",
-          redirect: false,
-        }),
-      );
+      });
     });
-    await waitFor(() => {
-      expect(routerMocks.replace).toHaveBeenCalledWith("/platform/ai/providers");
-    });
-    expect(routerMocks.replace).not.toHaveBeenCalledWith(
-      "http://localhost:3000/platform/ai/providers",
-    );
   });
 });
