@@ -4,6 +4,8 @@ This is the canonical operating contract for AI agents working in the Digital Pr
 
 Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/copilot-instructions.md`, `CONVENTIONS.md`, `.continue/rules/`) are pointers to this file. Do not duplicate rules into them.
 
+**Governance principles.** Durable DPF governance is also published as tiered kernel principles under [`docs/founder-kernel/wiki/principles/`](docs/founder-kernel/wiki/principles/) and retrievable at runtime via the `wiki_query` MCP tool (filter on `pageKind='principle'`, optionally `tier`, `appliesTo`, `publicOnly`) when the connector is available. AGENTS.md remains operationally authoritative when MCP is offline — every command, path, and procedure here works without any retrieval round-trip.
+
 ---
 
 ## 1. First Principles
