@@ -189,7 +189,13 @@ describe("POST /api/v1/edge/enroll — happy path", () => {
     });
   });
 
-  it("forces autoApprove=false (Phase 0 default — token metadata, not route, decides)", async () => {
+  it("omits autoApprove from the enroll call so the token row is the source of truth", async () => {
+    // Per spec § Approval policy + the installer-bundled-Edge-Node
+    // work: auto-approval is decided by the BootstrapToken row's
+    // persisted `autoApprove` flag (set true for installer-issued
+    // local-host tokens, false for paste-provisioned tokens). The
+    // route layer no longer hardcodes a value — it leaves the field
+    // undefined so the enrollment helper reads it off the token.
     mockEnrollEdgeNode.mockResolvedValue({
       ok: true,
       nodeId: "edge_abc",
@@ -201,7 +207,10 @@ describe("POST /api/v1/edge/enroll — happy path", () => {
     });
     await POST(makeReq(VALID_BODY, { Authorization: "Bearer dpfboot_X" }));
     const call = mockEnrollEdgeNode.mock.calls[0]![0];
-    expect(call.autoApprove).toBe(false);
+    // The field must NOT be set — `undefined` lets the token row
+    // drive. Setting it to false would force pending even when the
+    // installer-issued the token, defeating the bundled install path.
+    expect(call.autoApprove).toBeUndefined();
   });
 
   it("forwards optional hostFingerprint + metadata when present", async () => {

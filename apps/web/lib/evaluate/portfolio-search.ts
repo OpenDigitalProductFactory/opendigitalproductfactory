@@ -63,7 +63,7 @@ export async function searchPortfolioContext(
     }),
     prisma.featureBuild.findMany({
       where: {
-        phase: { notIn: ["complete", "failed"] },
+        phase: { notIn: ["complete", "failed", "abandoned"] },
         OR: textConditions(["title", "description"]),
       },
       select: { id: true, buildId: true, title: true, description: true, phase: true, portfolioId: true },

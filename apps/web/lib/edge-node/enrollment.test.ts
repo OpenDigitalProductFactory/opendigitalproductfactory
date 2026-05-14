@@ -70,6 +70,42 @@ describe("issueBootstrapToken", () => {
     expect(persistedData.tokenHash).toBe(hashToken(result.plaintext));
     expect(persistedData.tokenHash).not.toBe(result.plaintext);
   });
+
+  it("defaults autoApprove=false when not specified", async () => {
+    tokCreate.mockImplementation(async ({ data }: { data: { tokenHash: string; expiresAt: Date } }) => ({
+      id: "btok_cuid_default",
+      ...data,
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+    }));
+
+    await issueBootstrapToken({ issuedByPrincipalId: "principal_user_admin" });
+
+    const persistedData = tokCreate.mock.calls[0]?.[0]?.data;
+    // Paste-provisioned tokens (the common case) MUST NOT auto-approve
+    // — otherwise an operator sharing a token with a remote host
+    // skips the Approve click intended as the trust boundary.
+    expect(persistedData?.autoApprove).toBe(false);
+  });
+
+  it("persists autoApprove=true when the caller flags it", async () => {
+    tokCreate.mockImplementation(async ({ data }: { data: { tokenHash: string; expiresAt: Date } }) => ({
+      id: "btok_cuid_installer",
+      ...data,
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+    }));
+
+    await issueBootstrapToken({
+      issuedByPrincipalId: "principal_installer",
+      autoApprove: true,
+    });
+
+    const persistedData = tokCreate.mock.calls[0]?.[0]?.data;
+    expect(persistedData?.autoApprove).toBe(true);
+  });
 });
 
 // ── enrollEdgeNode — validation paths (no transaction needed) ────────────────
@@ -422,6 +458,142 @@ describe("enrollEdgeNode — happy path", () => {
     if (!result.ok) return;
     expect(result.acceptedCapabilities).toEqual(["discovery.network"]);
     expect(capabilityRowsCreated).toBe(1);
+  });
+
+  it("trustState=trusted when token row.autoApprove=true and caller omits override", async () => {
+    // Installer-issued token: persisted autoApprove=true. Route layer
+    // doesn't pass an explicit autoApprove so the token row drives.
+    tokFindUnique.mockResolvedValueOnce({
+      id: "btok_installer",
+      tokenHash: "hash",
+      prefix: "dpfboot_inst",
+      scope: "edge:enroll",
+      issuedAt: new Date(),
+      issuedByPrincipalId: "principal_installer",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+      autoApprove: true,
+    });
+
+    let observedMode: string | undefined;
+    $transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        bootstrapToken: { update: vi.fn(async () => ({})) },
+        principal: { create: vi.fn(async () => ({ id: "principal_edge_installer" })) },
+        principalAlias: { create: vi.fn(async () => ({})) },
+        edgeNode: { create: vi.fn(async () => ({ id: "edgenode_installer" })) },
+        edgeNodeCapability: {
+          create: vi.fn(async (args: { data: { mode: string } }) => {
+            observedMode = args.data.mode;
+            return {};
+          }),
+        },
+      };
+      return fn(tx);
+    });
+
+    const result = await enrollEdgeNode({
+      bootstrapToken: "dpfboot_INSTALLER",
+      displayName: "Installer-issued node",
+      platform: "linux",
+      installMode: "container-host",
+      version: "0.1.0",
+      advertisedCapabilities: ["discovery.network"],
+      // intentionally NO autoApprove field — the token row drives.
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.trustState).toBe("trusted");
+    expect(observedMode).toBe("enabled");
+  });
+
+  it("trustState=pending when token row.autoApprove=false and caller omits override", async () => {
+    // Paste-provisioned token: the default for remote-host enrollment.
+    // No installer flag, no caller override — node must land in pending.
+    tokFindUnique.mockResolvedValueOnce({
+      id: "btok_paste",
+      tokenHash: "hash",
+      prefix: "dpfboot_paste",
+      scope: "edge:enroll",
+      issuedAt: new Date(),
+      issuedByPrincipalId: "principal_admin",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+      autoApprove: false,
+    });
+
+    $transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        bootstrapToken: { update: vi.fn(async () => ({})) },
+        principal: { create: vi.fn(async () => ({ id: "principal_edge_paste" })) },
+        principalAlias: { create: vi.fn(async () => ({})) },
+        edgeNode: { create: vi.fn(async () => ({ id: "edgenode_paste" })) },
+        edgeNodeCapability: { create: vi.fn(async () => ({})) },
+      };
+      return fn(tx);
+    });
+
+    const result = await enrollEdgeNode({
+      bootstrapToken: "dpfboot_PASTED",
+      displayName: "Paste-provisioned node",
+      platform: "linux",
+      installMode: "container-host",
+      version: "0.1.0",
+      advertisedCapabilities: ["discovery.network"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.trustState).toBe("pending");
+  });
+
+  it("explicit caller autoApprove=false overrides token row.autoApprove=true (defense in depth)", async () => {
+    // Token row says auto-approve, but caller explicitly demotes it.
+    // Useful for tests + future paths where the route layer wants to
+    // force operator approval regardless of issuance metadata.
+    tokFindUnique.mockResolvedValueOnce({
+      id: "btok_override",
+      tokenHash: "hash",
+      prefix: "dpfboot_ov",
+      scope: "edge:enroll",
+      issuedAt: new Date(),
+      issuedByPrincipalId: "principal_installer",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+      autoApprove: true,
+    });
+
+    $transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        bootstrapToken: { update: vi.fn(async () => ({})) },
+        principal: { create: vi.fn(async () => ({ id: "principal_edge_override" })) },
+        principalAlias: { create: vi.fn(async () => ({})) },
+        edgeNode: { create: vi.fn(async () => ({ id: "edgenode_override" })) },
+        edgeNodeCapability: { create: vi.fn(async () => ({})) },
+      };
+      return fn(tx);
+    });
+
+    const result = await enrollEdgeNode({
+      bootstrapToken: "dpfboot_OVERRIDE",
+      displayName: "Override-demoted node",
+      platform: "linux",
+      installMode: "container-host",
+      version: "0.1.0",
+      advertisedCapabilities: ["discovery.network"],
+      autoApprove: false, // caller override wins
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.trustState).toBe("pending");
   });
 });
 

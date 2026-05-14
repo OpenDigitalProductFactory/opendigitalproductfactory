@@ -64,6 +64,14 @@ export type WikiSearchResult = {
   score: number;
   /** Which retrieval pass surfaced this row: "org" or "kernel". */
   source: "org" | "kernel";
+  // ─── Principle-only metadata (populated when pageKind === "principle") ────
+  // Surfaced from the Qdrant payload written by storeWikiPage. Absent for
+  // non-principle pages so callers can branch on pageKind === "principle"
+  // to decide whether to render metadata.
+  principleTier?: string;
+  principleAppliesTo?: string[];
+  principleDimensions?: string[];
+  principlePublic?: boolean;
 };
 
 export type SearchWikiPagesInput = {
@@ -278,7 +286,7 @@ function projectResult(
   r: { score: number; payload: Record<string, unknown> },
   source: "org" | "kernel",
 ): WikiSearchResult {
-  return {
+  const result: WikiSearchResult = {
     pageId: String(r.payload["entityId"] ?? ""),
     slug: String(r.payload["slug"] ?? ""),
     title: String(r.payload["title"] ?? ""),
@@ -290,4 +298,20 @@ function projectResult(
     score: r.score,
     source,
   };
+  // Pass through principle payload keys when present so MCP responses can
+  // surface principle metadata without an extra Postgres round-trip. Only
+  // principle pages carry these keys (per storeWikiPage's write path).
+  if (typeof r.payload["principleTier"] === "string") {
+    result.principleTier = r.payload["principleTier"];
+  }
+  if (Array.isArray(r.payload["principleAppliesTo"])) {
+    result.principleAppliesTo = r.payload["principleAppliesTo"] as string[];
+  }
+  if (Array.isArray(r.payload["principleDimensions"])) {
+    result.principleDimensions = r.payload["principleDimensions"] as string[];
+  }
+  if (typeof r.payload["principlePublic"] === "boolean") {
+    result.principlePublic = r.payload["principlePublic"];
+  }
+  return result;
 }
