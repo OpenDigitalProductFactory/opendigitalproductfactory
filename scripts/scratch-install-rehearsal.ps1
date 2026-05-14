@@ -12,6 +12,7 @@ param(
     [switch]$Execute,
     [switch]$KeepRunning,
     [switch]$KeepWorktree,
+    [switch]$KeepImages,
     [string]$ScratchRoot = "",
     [string]$SourceRef = "HEAD",
     [string]$ProjectName = "",
@@ -253,6 +254,7 @@ $plan = [ordered]@{
     generatedSecrets = "scratch-only"
     copiedSourceSecrets = $false
     keepWorktree = [bool]$KeepWorktree
+    keepImages = [bool]$KeepImages
     composeParallelLimit = $ComposeParallelLimit
     codexCli = Get-CommandRecord "codex"
     claudeCli = Get-CommandRecord "claude"
@@ -357,7 +359,11 @@ if (-not $KeepRunning) {
     Write-Step "Stopping scratch Compose project"
     Push-Location $worktreePath
     try {
-        docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml down -v
+        if ($KeepImages) {
+            docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml down -v
+        } else {
+            docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml down -v --rmi local
+        }
     } finally {
         Pop-Location
     }
@@ -375,6 +381,6 @@ if (-not $KeepRunning) {
 } else {
     Write-Warn "Scratch stack left running. Stop with:"
     Write-Host "  cd $worktreePath"
-    Write-Host "  docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml down -v"
+    Write-Host "  docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml down -v --rmi local"
     Write-Host "  git -C $repoRoot worktree remove --force $worktreePath"
 }

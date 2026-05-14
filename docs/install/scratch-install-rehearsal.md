@@ -34,7 +34,7 @@ The script will:
 4. Start the portal and sandbox with a unique Compose project and a low Compose parallel limit.
 5. Wait for the scratch portal health endpoint.
 6. Write evidence files under the scratch evidence directory.
-7. Stop the scratch stack, remove scratch volumes, and remove the scratch worktree unless `-KeepRunning` or `-KeepWorktree` is supplied.
+7. Stop the scratch stack, remove scratch volumes, remove scratch image tags, and remove the scratch worktree unless keep flags are supplied.
 
 Use a different port range if the defaults are occupied:
 
@@ -60,6 +60,10 @@ avoid Docker Desktop memory pressure during full-stack first-run rehearsal.
 Use `-KeepWorktree` when you want to inspect generated scratch files after a
 completed run. Evidence JSON remains under the scratch evidence directory even
 when the worktree is removed.
+
+Use `-KeepImages` when you want to inspect the built scratch image tags after
+the run. Build cache may still make later rehearsals faster even when the tags
+are removed.
 
 ## Evidence Files
 
