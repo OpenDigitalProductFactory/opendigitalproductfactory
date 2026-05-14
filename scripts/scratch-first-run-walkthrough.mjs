@@ -50,10 +50,11 @@ try {
     await page.locator('input[type="password"]').first().fill(config.password);
 
     const navigation = page
-      .waitForURL((url) => !url.pathname.startsWith("/setup"), { timeout: config.timeoutMs })
+      .waitForURL((url) => !url.pathname.startsWith("/setup"), { timeout: Math.min(config.timeoutMs, 15_000) })
       .catch(() => null);
     await page.getByRole("button", { name: /get started/i }).click();
     await navigation;
+    await continueAfterStaleSetup(page, config.timeoutMs);
     await page.waitForLoadState("domcontentloaded", { timeout: config.timeoutMs }).catch(() => {});
 
     const current = new URL(page.url());
@@ -135,6 +136,31 @@ async function capture(activePage, name) {
 async function compactBodyText(activePage) {
   const text = await activePage.locator("body").innerText({ timeout: config.timeoutMs });
   return text.replace(/\s+/g, " ").trim().slice(0, 1600);
+}
+
+async function continueAfterStaleSetup(activePage, timeoutMs) {
+  const current = new URL(activePage.url());
+  if (!current.pathname.startsWith("/setup")) return;
+
+  const continueLink = activePage.getByRole("link", { name: /^continue$/i });
+  const visible = await continueLink
+    .waitFor({ state: "visible", timeout: Math.min(timeoutMs, 15_000) })
+    .then(() => true)
+    .catch(() => false);
+
+  if (visible) {
+    const recoveryNavigation = activePage
+      .waitForURL((url) => !url.pathname.startsWith("/setup"), { timeout: timeoutMs })
+      .catch(() => null);
+    await continueLink.click();
+    await recoveryNavigation;
+    return;
+  }
+
+  await activePage.goto("/setup", { waitUntil: "domcontentloaded", timeout: timeoutMs });
+  await activePage
+    .waitForURL((url) => !url.pathname.startsWith("/setup"), { timeout: Math.min(timeoutMs, 30_000) })
+    .catch(() => null);
 }
 
 function assertIncludes(text, expected, label) {
