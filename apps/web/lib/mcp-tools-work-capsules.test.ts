@@ -77,4 +77,117 @@ describe("work capsule MCP tools", () => {
       where: { capsuleId: "WC-1" },
     }));
   });
+
+  it("adopt_worktree creates a capsule for a branch/worktree pair", async () => {
+    mockPrisma.workCapsule.findFirst.mockResolvedValue(null);
+    mockPrisma.workCapsule.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPT" });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("adopt_worktree", {
+      title: "Adopt recovery branch",
+      objective: "Recover useful work.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/recovery",
+      worktreePath: "D:/DPF-recovery",
+      executorKind: "codex-desktop",
+    }, "user-1", { agentId: "codex" });
+
+    expect(result.success).toBe(true);
+    expect(result.entityId).toBe("WC-ADOPT");
+  });
+
+  it("claim_capsule_scope stores typed scope claims", async () => {
+    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-SCOPE",
+      scopeClaims: [],
+    });
+    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-SCOPE" });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("claim_capsule_scope", {
+      capsuleId: "WC-SCOPE",
+      claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit" }],
+    }, "user-1");
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        scopeClaims: [expect.objectContaining({
+          kind: "path",
+          value: "apps/web/lib/work-capsules.ts",
+          intent: "edit",
+        })],
+      }),
+    }));
+  });
+
+  it("update_work_capsule_status writes a status override", async () => {
+    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-STATUS",
+      workspaceState: { note: "preserve me" },
+    });
+    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-STATUS", status: "blocked" });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("update_work_capsule_status", {
+      capsuleId: "WC-STATUS",
+      status: "blocked",
+      reason: "Provider credential blocked.",
+    }, "user-1");
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-STATUS" },
+      data: expect.objectContaining({
+        status: "blocked",
+        workspaceState: expect.objectContaining({
+          note: "preserve me",
+          statusOverride: expect.objectContaining({ reason: "Provider credential blocked." }),
+        }),
+      }),
+    }));
+  });
+
+  it("release_capsule_scope removes matching scope claims", async () => {
+    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-RELEASE",
+      scopeClaims: [
+        {
+          kind: "path",
+          value: "apps/web/lib/work-capsules.ts",
+          intent: "edit",
+          recordedAt: "2026-05-14T00:00:00.000Z",
+          recordedByPrincipalId: "principal-1",
+        },
+        {
+          kind: "route",
+          value: "/build/work",
+          intent: "read",
+          recordedAt: "2026-05-14T00:00:00.000Z",
+          recordedByPrincipalId: "principal-1",
+        },
+      ],
+    });
+    mockPrisma.workCapsule.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-RELEASE" });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("release_capsule_scope", {
+      capsuleId: "WC-RELEASE",
+      claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
+    }, "user-1");
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        scopeClaims: [expect.objectContaining({ kind: "route", value: "/build/work" })],
+      }),
+    }));
+  });
 });

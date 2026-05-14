@@ -31,4 +31,8 @@ describe("work capsule MCP enum parity", () => {
   it("record_capsule_evidence.kind mirrors WORK_CAPSULE_EVIDENCE_KINDS", () => {
     expect(enumOf("record_capsule_evidence", "kind")).toEqual([...WORK_CAPSULE_EVIDENCE_KINDS]);
   });
+
+  it("update_work_capsule_status.status mirrors WORK_CAPSULE_STATUSES", () => {
+    expect(enumOf("update_work_capsule_status", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
+  });
 });

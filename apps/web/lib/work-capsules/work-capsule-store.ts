@@ -2,14 +2,19 @@ import { randomUUID } from "node:crypto";
 
 import {
   LEASE_TTL_MS,
+  STATUS_OVERRIDE_TTL_MS,
   isWorkCapsuleEvidenceKind,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
+  isWorkCapsuleStatus,
   normalizeBranchTaxonomy,
+  parseScopeClaims,
+  type ScopeClaim,
   type WorkCapsuleActivityKind,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleSource,
+  type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
 
 export type WorkCapsuleActor = {
@@ -58,6 +63,9 @@ type CapsuleEvidenceInput = {
   url?: string;
   result?: unknown;
 };
+
+type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
+type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
 
 function nextCapsuleId(): string {
   return `WC-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -268,5 +276,135 @@ export async function recordWorkCapsuleEvidence(args: {
     summary: args.evidence.summary,
     payload: args.evidence,
     actor: args.actor,
+  });
+}
+
+export async function claimWorkCapsuleScope(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  claims: ScopeClaimInput[];
+  actor: WorkCapsuleActor;
+  now?: Date;
+}) {
+  const capsule = await args.db.workCapsule.findUnique({
+    where: { capsuleId: args.capsuleId },
+  });
+  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  const recordedAt = (args.now ?? new Date()).toISOString();
+  const nextClaims = new Map<string, ScopeClaim>();
+  for (const entry of parseScopeClaims(capsule.scopeClaims)) {
+    nextClaims.set(`${entry.kind}:${entry.value}`, entry);
+  }
+
+  const added: ScopeClaim[] = [];
+  const refreshed: ScopeClaim[] = [];
+  for (const claim of args.claims) {
+    const normalized: ScopeClaim = {
+      kind: claim.kind,
+      value: claim.value,
+      intent: claim.intent,
+      recordedAt,
+      recordedByPrincipalId: args.actor.principalId ?? "",
+    };
+    const key = `${normalized.kind}:${normalized.value}`;
+    if (nextClaims.has(key)) refreshed.push(normalized);
+    else added.push(normalized);
+    nextClaims.set(key, normalized);
+  }
+
+  const scopeClaims = Array.from(nextClaims.values());
+  return inTransaction(args.db, async (tx) => {
+    const updated = await tx.workCapsule.update({
+      where: { capsuleId: args.capsuleId },
+      data: { scopeClaims },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: capsule.id,
+      kind: "scope-claimed",
+      summary: `Claimed ${added.length} new scope item(s); refreshed ${refreshed.length}.`,
+      payload: { added, refreshed },
+      actor: args.actor,
+    });
+    return updated;
+  });
+}
+
+export async function releaseWorkCapsuleScope(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  claims: ScopeReleaseInput[];
+  actor: WorkCapsuleActor;
+}) {
+  const capsule = await args.db.workCapsule.findUnique({
+    where: { capsuleId: args.capsuleId },
+  });
+  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  const releaseKeys = new Set(args.claims.map((claim) => `${claim.kind}:${claim.value}`));
+  const existing = parseScopeClaims(capsule.scopeClaims);
+  const scopeClaims = existing.filter((claim) => !releaseKeys.has(`${claim.kind}:${claim.value}`));
+  const released = existing.filter((claim) => releaseKeys.has(`${claim.kind}:${claim.value}`));
+
+  return inTransaction(args.db, async (tx) => {
+    const updated = await tx.workCapsule.update({
+      where: { capsuleId: args.capsuleId },
+      data: { scopeClaims },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: capsule.id,
+      kind: "scope-released",
+      summary: `Released ${released.length} scope item(s).`,
+      payload: { released },
+      actor: args.actor,
+    });
+    return updated;
+  });
+}
+
+export async function updateWorkCapsuleStatus(args: {
+  db: CapsuleDb;
+  capsuleId: string;
+  status: WorkCapsuleStatus;
+  reason: string;
+  actor: WorkCapsuleActor;
+  now?: Date;
+}) {
+  if (!isWorkCapsuleStatus(args.status)) throw new Error("Invalid capsule status");
+
+  const capsule = await args.db.workCapsule.findUnique({
+    where: { capsuleId: args.capsuleId },
+  });
+  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
+
+  const currentWorkspaceState =
+    capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+      ? capsule.workspaceState as Record<string, unknown>
+      : {};
+  const now = args.now ?? new Date();
+  const statusOverride = {
+    reason: args.reason,
+    until: new Date(now.getTime() + STATUS_OVERRIDE_TTL_MS).toISOString(),
+  };
+
+  return inTransaction(args.db, async (tx) => {
+    const updated = await tx.workCapsule.update({
+      where: { capsuleId: args.capsuleId },
+      data: {
+        status: args.status,
+        workspaceState: {
+          ...currentWorkspaceState,
+          statusOverride,
+        },
+      },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: capsule.id,
+      kind: "status-override",
+      summary: args.reason,
+      payload: { status: args.status, statusOverride },
+      actor: args.actor,
+    });
+    return updated;
   });
 }

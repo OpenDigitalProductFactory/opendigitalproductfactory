@@ -467,6 +467,53 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "adopt_worktree",
+    description: "Adopt an existing local branch/worktree pair into a Work Capsule without creating a new worktree.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short capsule title." },
+        objective: { type: "string", description: "Outcome this adopted work should reach." },
+        repositoryFullName: { type: "string", description: "GitHub repository full name, for example OpenDigitalProductFactory/opendigitalproductfactory." },
+        headBranch: { type: "string", description: "Existing branch to adopt." },
+        worktreePath: { type: "string", description: "Local worktree path for the branch." },
+        baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+        baseSha: { type: "string", description: "Optional current base SHA." },
+        headSha: { type: "string", description: "Optional current head SHA." },
+        executorKind: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.executors, description: "Optional executor adopting the worktree." },
+      },
+      required: ["title", "objective", "repositoryFullName", "headBranch", "worktreePath"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "claim_capsule_scope",
+    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
+              value: { type: "string", description: "Claimed scope value." },
+              intent: { type: "string", enum: ["edit", "read"] },
+            },
+            required: ["kind", "value", "intent"],
+          },
+          description: "Scope claims to add or refresh.",
+        },
+      },
+      required: ["capsuleId", "claims"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "heartbeat_capsule",
     description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
     inputSchema: {
@@ -475,6 +522,46 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
       },
       required: ["capsuleId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "update_work_capsule_status",
+    description: "Set a Work Capsule status and record a temporary operator-visible status override reason.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        status: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.statuses, description: "Next Work Capsule status." },
+        reason: { type: "string", description: "Reason for the status update or override." },
+      },
+      required: ["capsuleId", "status", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "release_capsule_scope",
+    description: "Release previously claimed Work Capsule scope items by kind and value.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
+              value: { type: "string", description: "Scope value to release." },
+            },
+            required: ["kind", "value"],
+          },
+          description: "Scope claims to release.",
+        },
+      },
+      required: ["capsuleId", "claims"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -3423,9 +3510,25 @@ export async function executeTool(
       const { createWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
       return createWorkCapsuleTool(params, userId, context);
     }
+    case "adopt_worktree": {
+      const { adoptWorktreeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return adoptWorktreeTool(params, userId, context);
+    }
+    case "claim_capsule_scope": {
+      const { claimCapsuleScopeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return claimCapsuleScopeTool(params, userId, context);
+    }
     case "heartbeat_capsule": {
       const { heartbeatCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
       return heartbeatCapsuleTool(params, userId, context);
+    }
+    case "update_work_capsule_status": {
+      const { updateWorkCapsuleStatusTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return updateWorkCapsuleStatusTool(params, userId, context);
+    }
+    case "release_capsule_scope": {
+      const { releaseCapsuleScopeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return releaseCapsuleScopeTool(params, userId, context);
     }
     case "record_capsule_evidence": {
       const { recordCapsuleEvidenceTool } = await import("@/lib/work-capsules/mcp-handlers");

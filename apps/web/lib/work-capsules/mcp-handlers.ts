@@ -11,13 +11,18 @@ import {
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
+  type ScopeClaim,
   type WorkCapsuleEvidenceKind,
 } from "@/lib/work-capsules";
 
 import {
+  adoptWorktreeCapsule,
+  claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
+  releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
+  updateWorkCapsuleStatus,
   type CapsuleDb,
 } from "./work-capsule-store";
 
@@ -70,6 +75,46 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
 
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
+}
+
+const SCOPE_KINDS = new Set<ScopeClaim["kind"]>(["path", "module", "package", "route", "skill", "prompt"]);
+const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
+
+function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
+  const claims = params.claims;
+  if (!Array.isArray(claims)) return null;
+
+  const parsed: Array<Pick<ScopeClaim, "kind" | "value" | "intent">> = [];
+  for (const claim of claims) {
+    if (!claim || typeof claim !== "object") return null;
+    const candidate = claim as Record<string, unknown>;
+    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
+    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
+    const intent = typeof candidate.intent === "string" ? candidate.intent : "";
+    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
+      return null;
+    }
+    parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });
+  }
+
+  return parsed.length > 0 ? parsed : null;
+}
+
+function parseReleaseInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value">> | null {
+  const claims = params.claims;
+  if (!Array.isArray(claims)) return null;
+
+  const parsed: Array<Pick<ScopeClaim, "kind" | "value">> = [];
+  for (const claim of claims) {
+    if (!claim || typeof claim !== "object") return null;
+    const candidate = claim as Record<string, unknown>;
+    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
+    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
+    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !value) return null;
+    parsed.push({ kind: kind as ScopeClaim["kind"], value });
+  }
+
+  return parsed.length > 0 ? parsed : null;
 }
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>): Promise<ToolResult> {
@@ -137,6 +182,152 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>): Promi
     success: true,
     entityId: capsule.capsuleId,
     message: `Loaded ${capsule.capsuleId}.`,
+    data: { capsule },
+  };
+}
+
+export async function adoptWorktreeTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const title = stringParam(params, "title");
+  const objective = stringParam(params, "objective");
+  const repositoryFullName = stringParam(params, "repositoryFullName");
+  const headBranch = stringParam(params, "headBranch");
+  const worktreePath = stringParam(params, "worktreePath");
+  const executorKind = stringParam(params, "executorKind");
+
+  if (!title || !objective || !repositoryFullName || !headBranch || !worktreePath) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
+    };
+  }
+  if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
+    return {
+      success: false,
+      error: "invalid_executorKind",
+      message: `executorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
+    };
+  }
+  const validatedExecutorKind = executorKind && isWorkCapsuleExecutorKind(executorKind)
+    ? executorKind
+    : null;
+
+  const capsule = await adoptWorktreeCapsule({
+    db: workCapsuleDb(),
+    input: {
+      title,
+      objective,
+      repositoryFullName,
+      headBranch,
+      worktreePath,
+      baseBranch: stringParam(params, "baseBranch") ?? null,
+      baseSha: stringParam(params, "baseSha") ?? null,
+      headSha: stringParam(params, "headSha") ?? null,
+      executorKind: validatedExecutorKind,
+    },
+    actor: await actor(userId, context),
+  });
+
+  return {
+    success: true,
+    entityId: capsule.capsuleId,
+    message: `Adopted ${headBranch} as Work Capsule ${capsule.capsuleId}.`,
+    data: { capsule },
+  };
+}
+
+export async function claimCapsuleScopeTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const capsuleId = stringParam(params, "capsuleId");
+  const claims = parseClaimInputs(params);
+  if (!capsuleId || !claims) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "capsuleId and at least one valid scope claim are required.",
+    };
+  }
+
+  const capsule = await claimWorkCapsuleScope({
+    db: workCapsuleDb(),
+    capsuleId,
+    claims,
+    actor: await actor(userId, context),
+  });
+
+  return {
+    success: true,
+    entityId: capsule.capsuleId,
+    message: `Claimed ${claims.length} scope item(s) for ${capsule.capsuleId}.`,
+    data: { capsule },
+  };
+}
+
+export async function updateWorkCapsuleStatusTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const capsuleId = stringParam(params, "capsuleId");
+  const status = stringParam(params, "status");
+  const reason = stringParam(params, "reason");
+  if (!capsuleId || !status || !isWorkCapsuleStatus(status) || !reason) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: `capsuleId, reason, and valid status are required. status must be one of: ${WORK_CAPSULE_STATUSES.join(", ")}.`,
+    };
+  }
+
+  const capsule = await updateWorkCapsuleStatus({
+    db: workCapsuleDb(),
+    capsuleId,
+    status,
+    reason,
+    actor: await actor(userId, context),
+  });
+
+  return {
+    success: true,
+    entityId: capsule.capsuleId,
+    message: `Updated ${capsule.capsuleId} status to ${status}.`,
+    data: { capsule },
+  };
+}
+
+export async function releaseCapsuleScopeTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const capsuleId = stringParam(params, "capsuleId");
+  const claims = parseReleaseInputs(params);
+  if (!capsuleId || !claims) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "capsuleId and at least one valid scope claim release are required.",
+    };
+  }
+
+  const capsule = await releaseWorkCapsuleScope({
+    db: workCapsuleDb(),
+    capsuleId,
+    claims,
+    actor: await actor(userId, context),
+  });
+
+  return {
+    success: true,
+    entityId: capsule.capsuleId,
+    message: `Released ${claims.length} scope item(s) for ${capsule.capsuleId}.`,
     data: { capsule },
   };
 }
