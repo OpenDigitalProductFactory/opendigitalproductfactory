@@ -17,6 +17,7 @@ import type {
   AsyncOpRow,
   ToolInventoryItem,
 } from "./ai-provider-types";
+import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -143,11 +144,27 @@ export const getTokenSpendByProvider = cache(
       where: { createdAt: range },
       _sum: { inputTokens: true, outputTokens: true, costUsd: true },
     });
+    const providerIds = rows.map((r) => r.providerId.trim()).filter(Boolean);
+    const providers = providerIds.length > 0
+      ? await prisma.modelProvider.findMany({
+          where: { providerId: { in: providerIds } },
+          select: { providerId: true, name: true },
+        })
+      : [];
+    const providerNames = new Map(providers.map((p) => [p.providerId, p.name]));
+
     return rows.map((r) => ({
       providerId:        r.providerId,
+      providerName:      getProviderDisplayNameForSpend(r.providerId, providerNames),
       totalInputTokens:  r._sum.inputTokens  ?? 0,
       totalOutputTokens: r._sum.outputTokens ?? 0,
       totalCostUsd:      r._sum.costUsd      ?? 0,
+      provenance: {
+        kind: "live-db",
+        label: "TokenUsage",
+        sourceTable: "TokenUsage",
+        description: "DPF recorded token usage for this provider.",
+      },
     }));
   }
 );

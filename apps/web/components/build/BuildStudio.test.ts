@@ -17,6 +17,8 @@ describe("build-studio-layout", () => {
   it("keeps the graph panel container-driven instead of using old fullscreen math", () => {
     expect(getBuildStudioGraphPanelClassName()).toContain("min-h-[420px]");
     expect(getBuildStudioGraphPanelClassName()).toContain("flex-1");
+    expect(getBuildStudioGraphPanelClassName()).toContain("flex-col");
+    expect(getBuildStudioGraphPanelClassName()).toContain("min-w-0");
     expect(getBuildStudioGraphPanelClassName()).not.toContain("100vh");
   });
 
@@ -26,6 +28,7 @@ describe("build-studio-layout", () => {
     expect(getBuildStudioSidebarClassName(false)).toContain("w-0");
     expect(BUILD_STUDIO_TEST_IDS.shell).toBe("build-studio-shell");
     expect(BUILD_STUDIO_TEST_IDS.graphPanel).toBe("build-studio-graph-panel");
+    expect(BUILD_STUDIO_TEST_IDS.buildListItem).toBe("build-studio-build-list-item");
   });
 });
 
