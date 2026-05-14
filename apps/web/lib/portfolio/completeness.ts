@@ -7,12 +7,12 @@
  * `CompletenessStrip` UI (Task 7.2):
  *
  *   1. requiredFieldsScore — % of products whose containing taxonomy node's
- *      `governance.requiredFields` are all populated. Null until at least
- *      one node has a non-empty required-fields list. Begins to vary once
- *      Task 7.3's `set_node_required_fields` lands.
+ *      `governance.requiredFields` are all populated from product metadata
+ *      or linked inventory identity evidence. Null until at least one node
+ *      has a non-empty required-fields list. Begins to vary once Task 7.3's
+ *      `set_node_required_fields` lands.
  *   2. enrichmentScore — % of products with `enrichmentStatus === "enriched"`.
- *      Null until Chunk 4 Task 4.1 adds the column. Begins to vary the moment
- *      products start carrying the field.
+ *      Null until Chunk 4 Task 4.1 adds the column and the query projects it.
  *   3. openIssuesByType — counts of open `PortfolioQualityIssue` rows scoped
  *      to the portfolio, keyed by `issueType`.
  *
@@ -33,29 +33,33 @@ export interface PortfolioCompletenessScores {
   productCount: number;
 }
 
+interface PortfolioCompletenessInventoryEntity {
+  manufacturer?: string | null;
+  observedVersion?: string | null;
+  normalizedVersion?: string | null;
+  productModel?: string | null;
+  technicalClass?: string | null;
+  iconKey?: string | null;
+}
+
+type PortfolioCompletenessProduct = {
+  id: string;
+  taxonomyNode: { governance: unknown } | null;
+  observationConfig: unknown;
+  inventoryEntities?: PortfolioCompletenessInventoryEntity[];
+  // Forward-compat: when Chunk 4 lands, callers can include enrichmentStatus.
+  enrichmentStatus?: string | null;
+  // Required-field source values are passed through product metadata,
+  // observationConfig, and derived aliases from linked inventory entity
+  // evidence. Test harnesses may still pass explicit aliases directly.
+} & Record<string, unknown>;
+
 export interface PortfolioCompletenessDb {
   digitalProduct: {
     findMany(args: {
       where: { portfolioId: string };
       select: Record<string, unknown>;
-    }): Promise<
-      Array<
-        {
-          id: string;
-          taxonomyNode: { governance: unknown } | null;
-          observationConfig: unknown;
-          inventoryEntities?: Array<{
-            manufacturer?: string | null;
-            observedVersion?: string | null;
-          }>;
-          // Forward-compat: when Chunk 4 lands, callers can include enrichmentStatus
-          enrichmentStatus?: string | null;
-          // Required-field source values — passed through observationConfig + raw entity attributes
-          // (we'll inspect these JSON-ishly per node's requiredFields list).
-          // For now the test harness mocks them.
-        } & Record<string, unknown>
-      >
-    >;
+    }): Promise<PortfolioCompletenessProduct[]>;
   };
   portfolioQualityIssue: {
     groupBy(args: {
@@ -73,6 +77,10 @@ export const DIGITAL_PRODUCT_COMPLETENESS_SELECT = {
     select: {
       manufacturer: true,
       observedVersion: true,
+      normalizedVersion: true,
+      productModel: true,
+      technicalClass: true,
+      iconKey: true,
     },
   },
   taxonomyNode: { select: { governance: true } },
@@ -130,8 +138,33 @@ function isPopulated(value: unknown): boolean {
   return true;
 }
 
+const INVENTORY_REQUIRED_FIELD_ALIASES: Record<string, Array<keyof PortfolioCompletenessInventoryEntity>> = {
+  manufacturer: ["manufacturer"],
+  observedVersion: ["observedVersion", "normalizedVersion"],
+  normalizedVersion: ["normalizedVersion", "observedVersion"],
+  productModel: ["productModel"],
+  technicalClass: ["technicalClass"],
+  iconKey: ["iconKey"],
+};
+
+function firstInventoryValue(
+  entities: PortfolioCompletenessInventoryEntity[] | undefined,
+  fields: Array<keyof PortfolioCompletenessInventoryEntity>,
+): unknown {
+  for (const entity of entities ?? []) {
+    for (const field of fields) {
+      const value = entity[field];
+      if (isPopulated(value)) {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
 function readInventoryAlias(source: Record<string, unknown>, path: string): unknown {
-  if (path !== "manufacturer" && path !== "observedVersion") {
+  const fields = INVENTORY_REQUIRED_FIELD_ALIASES[path];
+  if (!fields) {
     return undefined;
   }
 
@@ -140,17 +173,11 @@ function readInventoryAlias(source: Record<string, unknown>, path: string): unkn
     return undefined;
   }
 
-  for (const entity of entities) {
-    if (!entity || typeof entity !== "object") {
-      continue;
-    }
-    const value = (entity as Record<string, unknown>)[path];
-    if (isPopulated(value)) {
-      return value;
-    }
-  }
-
-  return undefined;
+  const identityEvidence = entities.filter(
+    (entity): entity is PortfolioCompletenessInventoryEntity =>
+      entity !== null && typeof entity === "object",
+  );
+  return firstInventoryValue(identityEvidence, fields);
 }
 
 function readRequiredFieldValue(source: Record<string, unknown>, path: string): unknown {
