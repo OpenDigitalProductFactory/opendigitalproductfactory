@@ -169,8 +169,7 @@ describe("discovery triage scoring and routing", () => {
 });
 
 describe("recordDiscoveryTriageDecision", () => {
-  it("persists the decision payload with scores, evidence, and rule candidate", async () => {
-    const create = vi.fn().mockResolvedValue({ id: "decision-row" });
+  function buildDecisionFixture() {
     const packet = buildDiscoveryEvidencePacket({
       id: "entity-7",
       entityKey: "service:test:decision",
@@ -194,6 +193,13 @@ describe("recordDiscoveryTriageDecision", () => {
     const score = scoreDiscoveryTriageCandidate(packet, DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS);
     const proposedRule = synthesizeDiscoveryFingerprintRule(packet, score, DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS);
 
+    return { packet, score, proposedRule };
+  }
+
+  it("persists the decision payload with scores, evidence, and rule candidate", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "decision-row" });
+    const { packet, score, proposedRule } = buildDecisionFixture();
+
     await recordDiscoveryTriageDecision(
       {
         discoveryTriageDecision: { create },
@@ -203,7 +209,7 @@ describe("recordDiscoveryTriageDecision", () => {
         inventoryEntityId: "entity-7",
         qualityIssueId: "issue-1",
         actorType: "agent",
-      actorId: "inventory-specialist",
+        actorId: "inventory-specialist",
         outcome: "auto-attributed",
         score,
         evidencePacket: packet,
@@ -226,6 +232,75 @@ describe("recordDiscoveryTriageDecision", () => {
         evidencePacket: packet,
         proposedRule,
         requiresHumanReview: false,
+      }),
+    });
+  });
+
+  it("resolves taxonomy node keys before writing the decision foreign key", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "decision-row" });
+    const findFirst = vi.fn().mockResolvedValue({ id: "tax-node-servers" });
+    const { packet, score, proposedRule } = buildDecisionFixture();
+
+    await recordDiscoveryTriageDecision(
+      {
+        discoveryTriageDecision: { create },
+        taxonomyNode: { findFirst },
+      },
+      {
+        decisionId: "triage-1",
+        inventoryEntityId: "entity-7",
+        actorType: "agent",
+        outcome: "auto-attributed",
+        score,
+        evidencePacket: packet,
+        proposedRule,
+        selectedTaxonomyNodeId: "foundational/compute/servers",
+        requiresHumanReview: false,
+      },
+    );
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { id: "foundational/compute/servers" },
+          { nodeId: "foundational/compute/servers" },
+        ],
+      },
+      select: { id: true },
+    });
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        selectedTaxonomyNodeId: "tax-node-servers",
+      }),
+    });
+  });
+
+  it("drops unresolved taxonomy node keys instead of writing an invalid foreign key", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "decision-row" });
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const { packet, score, proposedRule } = buildDecisionFixture();
+
+    await recordDiscoveryTriageDecision(
+      {
+        discoveryTriageDecision: { create },
+        taxonomyNode: { findFirst },
+      },
+      {
+        decisionId: "triage-1",
+        inventoryEntityId: "entity-7",
+        actorType: "agent",
+        outcome: "auto-attributed",
+        score,
+        evidencePacket: packet,
+        proposedRule,
+        selectedTaxonomyNodeId: "foundational/compute/retired-node",
+        requiresHumanReview: false,
+      },
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        selectedTaxonomyNodeId: null,
       }),
     });
   });

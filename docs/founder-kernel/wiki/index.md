@@ -28,6 +28,14 @@ The kernel was cross-referenced against its cited sources in a separate audit. S
 | [IT4IT v3 framework](../raw-sources/frameworks/it4it-v3.md) | ✓ Public-facing standard metadata verified. |
 | [CSDM framework](../raw-sources/frameworks/csdm.md) | ✓ Public-facing product documentation verified. |
 
+## Principles — durable governance
+
+Tier-weighted rules that contribute to decision aggregation across every matching context. Heavier than stances (which take a position on one topic), more durable than heuristics (which fire situationally). See [`SCHEMA.md`](../SCHEMA.md) for the `principle` page-kind contract and tier semantics.
+
+- `[[principles/trust-the-data-spine]]` — core. Prefer a trusted, auto-populated data spine over reasoning on a model nobody trusts.
+- `[[principles/one-data-model]]` — core. Prefer one canonical data model over two integrated systems of record over the same entities.
+- `[[principles/contextualize-before-transforming]]` — core. Map the existing operating model against a new standard before changing the operating model.
+
 ## Stances — Mark&#39;s positions
 
 The judgment kernel. Cite these when grounding an answer in his thinking.
@@ -95,4 +103,4 @@ This is a first cut. Pages that the research digest surfaced but haven&#39;t bee
 
 ## Status of this index page
 
-Drafted by Claude from research on Mark&#39;s public writing. Marked `status: draft` like the rest. Mark reviews and either edits in place or replaces with a version in his own voice.
+Drafted by Claude from research on Mark&#39;s public writing, then published after Mark&#39;s review. The principle pages above were drafted on top of already-published stances and are pending Mark&#39;s tier/public-promotion review before any tier escalation to `commandment` or `principlePublic: true`.
