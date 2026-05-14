@@ -13,6 +13,7 @@ new file mode 100644
 @@ -0,0 +1 @@
 +hello world
 `;
+const SIGNED_COMMIT_MESSAGE = "feat: tiny\n\nSigned-off-by: dpf-agent-a1b2c3d4 <agent-a1b2c3d4@hive.dpf>";
 
 interface CapturedCall {
   url: string;
@@ -127,6 +128,27 @@ describe("createBranchAndPR head/base split", () => {
     vi.clearAllMocks();
   });
 
+  it("rejects commit messages without a DCO Signed-off-by trailer before touching GitHub", async () => {
+    const { calls } = setupFetchMock();
+
+    await expect(createBranchAndPR({
+      headOwner: "upstream-org",
+      headRepo: "upstream-repo",
+      baseOwner: "upstream-org",
+      baseRepo: "upstream-repo",
+      baseBranch: "main",
+      branchName: "feat/tiny",
+      commitMessage: "feat: tiny",
+      diff: TINY_DIFF,
+      prTitle: "feat: tiny",
+      prBody: "body",
+      labels: ["ai-contributed"],
+      token: "ghp_test",
+    })).rejects.toThrow(/DCO/i);
+
+    expect(calls).toHaveLength(0);
+  });
+
   it("opens a same-repo PR with bare branchName when headOwner === baseOwner", async () => {
     const { calls } = setupFetchMock();
 
@@ -137,7 +159,7 @@ describe("createBranchAndPR head/base split", () => {
       baseRepo: "upstream-repo",
       baseBranch: "main",
       branchName: "feat/tiny",
-      commitMessage: "feat: tiny",
+      commitMessage: SIGNED_COMMIT_MESSAGE,
       diff: TINY_DIFF,
       prTitle: "feat: tiny",
       prBody: "body",
@@ -165,7 +187,7 @@ describe("createBranchAndPR head/base split", () => {
       baseRepo: "opendigitalproductfactory",
       baseBranch: "main",
       branchName: "dpf/a1b2c3d4/feat-tiny",
-      commitMessage: "feat: tiny",
+      commitMessage: SIGNED_COMMIT_MESSAGE,
       diff: TINY_DIFF,
       prTitle: "feat: tiny",
       prBody: "body",
@@ -195,7 +217,7 @@ describe("createBranchAndPR head/base split", () => {
       baseRepo: "opendigitalproductfactory",
       baseBranch: "main",
       branchName: "dpf/a1b2c3d4/feat-tiny",
-      commitMessage: "feat: tiny",
+      commitMessage: SIGNED_COMMIT_MESSAGE,
       diff: TINY_DIFF,
       prTitle: "feat: tiny",
       prBody: "body",
@@ -222,7 +244,7 @@ describe("createBranchAndPR head/base split", () => {
       baseRepo: "opendigitalproductfactory",
       baseBranch: "main",
       branchName: "dpf/a1b2c3d4/feat-tiny",
-      commitMessage: "feat: tiny",
+      commitMessage: SIGNED_COMMIT_MESSAGE,
       diff: TINY_DIFF,
       prTitle: "feat: tiny",
       prBody: "body",
