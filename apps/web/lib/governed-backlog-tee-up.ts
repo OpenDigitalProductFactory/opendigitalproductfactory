@@ -1,4 +1,5 @@
-import { generateBuildId } from "@/lib/feature-build-types";
+import * as crypto from "crypto";
+import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 
 const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
 const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
@@ -34,6 +35,9 @@ type GovernedBacklogTeeUpPrisma = {
     findMany(args: any): Promise<any>;
     findUnique(args: any): Promise<any>;
     update(args: any): Promise<any>;
+  };
+  epic: {
+    create(args: any): Promise<any>;
   };
   featureBuild: {
     create(args: any): Promise<any>;
@@ -107,7 +111,10 @@ export async function promoteBacklogItemToBuildDraft(
   input: PromoteBacklogItemToBuildDraftInput,
 ): Promise<PromoteBacklogItemToBuildDraftResult> {
   const { tx, itemId, userId, governedBacklogEnabled, activity } = input;
-  const item = await tx.backlogItem.findUnique({ where: { itemId } });
+  const item = await tx.backlogItem.findUnique({
+    where: { itemId },
+    include: { epic: { select: { epicId: true } } },
+  });
 
   if (!item) {
     return { kind: "error", error: "Item not found", message: `Item ${itemId} not found` };
@@ -129,6 +136,42 @@ export async function promoteBacklogItemToBuildDraft(
     };
   }
 
+  // Resolve or auto-create the epic semantic id. The happy-path-rescue spec
+  // requires an epic anchor in FeatureBuild.plan.happyPathState.intake; if the
+  // BacklogItem isn't linked, mint a solo epic from the item title and link it
+  // so the ideate→plan gate clears at promote time.
+  let epicSemanticId: string;
+  if (item.epicId && item.epic?.epicId) {
+    epicSemanticId = item.epic.epicId;
+  } else {
+    epicSemanticId = `EP-BUILD-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+    const epicTitle = item.title.trim().slice(0, 200) || "Build Studio feature";
+    const createdEpic = await tx.epic.create({
+      data: { epicId: epicSemanticId, title: epicTitle, status: "open" },
+      select: { id: true, epicId: true },
+    });
+    await tx.backlogItem.update({
+      where: { itemId },
+      data: { epicId: createdEpic.id },
+    });
+  }
+
+  const constrainedGoal = item.title.trim().slice(0, 280);
+  const plan = mergeHappyPathStateIntoPlan(null, {
+    intake: {
+      status: "ready",
+      backlogItemId: item.itemId,
+      epicId: epicSemanticId,
+      // Use the BI's persisted taxonomy node when present, else anchor on the
+      // triaged BI itself — its existence + triage outcome IS the
+      // categorization signal for the gate. Mirrors the auto-intake fallback
+      // in reviewDesignDoc (apps/web/lib/mcp-tools.ts:5153) so promote-time
+      // and review-time paths produce the same shape.
+      taxonomyNodeId: item.taxonomyNodeId ?? `triaged-bi:${item.id}`,
+      constrainedGoal,
+    },
+  });
+
   const created = await tx.featureBuild.create({
     data: {
       buildId: generateBuildId(),
@@ -138,6 +181,7 @@ export async function promoteBacklogItemToBuildDraft(
       digitalProductId: item.digitalProductId ?? null,
       originatingBacklogItemId: item.id,
       draftApprovedAt: null,
+      plan,
     },
   });
 
