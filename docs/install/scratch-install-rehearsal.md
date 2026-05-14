@@ -31,7 +31,7 @@ The script will:
 1. Create a detached scratch worktree from `HEAD`.
 2. Generate a scratch-only `.env`.
 3. Generate a Compose override with non-default host ports.
-4. Start the portal and sandbox with a unique Compose project.
+4. Start the portal and sandbox with a unique Compose project and a low Compose parallel limit.
 5. Wait for the scratch portal health endpoint.
 6. Write evidence files under the scratch evidence directory.
 7. Stop the scratch stack and remove scratch volumes unless `-KeepRunning` is supplied.
@@ -53,6 +53,9 @@ Leave the scratch portal online for browser inspection:
 ```
 
 The stop command is printed at the end when `-KeepRunning` is used.
+
+Use `-ComposeParallelLimit` to tune build concurrency. The default is `1` to
+avoid Docker Desktop memory pressure during full-stack first-run rehearsal.
 
 ## Evidence Files
 

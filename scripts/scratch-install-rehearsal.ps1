@@ -16,6 +16,7 @@ param(
     [string]$ProjectName = "",
     [int]$PortBase = 3900,
     [switch]$NoAutoPortSearch,
+    [int]$ComposeParallelLimit = 1,
     [int]$HealthTimeoutSeconds = 300
 )
 
@@ -250,6 +251,7 @@ $plan = [ordered]@{
     codexCallbackUrl = "http://localhost:$($ports.CodexCallback)"
     generatedSecrets = "scratch-only"
     copiedSourceSecrets = $false
+    composeParallelLimit = $ComposeParallelLimit
     codexCli = Get-CommandRecord "codex"
     claudeCli = Get-CommandRecord "claude"
 }
@@ -301,12 +303,19 @@ Write-Ok "Compose model renders"
 
 Write-Step "Starting scratch portal and sandbox"
 Push-Location $worktreePath
+$previousParallelLimit = $env:COMPOSE_PARALLEL_LIMIT
 try {
+    $env:COMPOSE_PARALLEL_LIMIT = "$ComposeParallelLimit"
     docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml up -d --build portal sandbox
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "docker compose up failed. Check scratch logs in $worktreePath."
     }
 } finally {
+    if ($null -eq $previousParallelLimit) {
+        Remove-Item Env:\COMPOSE_PARALLEL_LIMIT -ErrorAction SilentlyContinue
+    } else {
+        $env:COMPOSE_PARALLEL_LIMIT = $previousParallelLimit
+    }
     Pop-Location
 }
 
