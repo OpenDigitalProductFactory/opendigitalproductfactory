@@ -69,7 +69,7 @@ export function AccountBootstrapForm({ setupId }: Props) {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[var(--dpf-bg)]">
-      <div className="w-full max-w-md p-8 rounded-xl bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] shadow-lg">
+      <div className="w-full max-w-md rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 shadow-lg">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-[var(--dpf-text)]">Welcome to your platform</h1>
           <p className="mt-2 text-sm text-[var(--dpf-muted)]">
@@ -86,7 +86,7 @@ export function AccountBootstrapForm({ setupId }: Props) {
               type="text"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
-              placeholder="e.g., Riverside Medical Group"
+              placeholder="e.g., Digital Product Factory"
               className="w-full rounded-lg"
             />
           </div>
@@ -116,7 +116,7 @@ export function AccountBootstrapForm({ setupId }: Props) {
           </div>
 
           {error && (
-            <p className="text-sm text-[#ef4444]">{error}</p>
+            <p className="text-sm text-[var(--dpf-error)]">{error}</p>
           )}
 
           <button
