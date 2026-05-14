@@ -1,20 +1,15 @@
-import { prisma } from "@dpf/db";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 import { getProposalStats } from "@/lib/evaluate/proposal-data";
 import { getToolExecutionStats } from "@/lib/tool-execution-data";
+import { buildAuthoritySummaryMetrics, getPlatformAuthoritySummary } from "@/lib/platform-authority-summary";
 
 export default async function AuditHubPage() {
-  const now = new Date();
-  const [proposalStats, toolStats, activeGrants] = await Promise.all([
+  const [proposalStats, toolStats, authoritySummary] = await Promise.all([
     getProposalStats(),
     getToolExecutionStats(),
-    prisma.delegationGrant.count({
-      where: {
-        status: "active",
-        expiresAt: { gt: now },
-      },
-    }),
+    getPlatformAuthoritySummary(),
   ]);
+  const authorityMetrics = buildAuthoritySummaryMetrics(authoritySummary);
 
   return (
     <div className="space-y-6">
@@ -48,12 +43,12 @@ export default async function AuditHubPage() {
         />
         <PlatformSummaryCard
           title="Authority"
-          description="Trace role coverage, delegation chains, and effective permissions."
+          description="Trace temporary delegation chains and standing coworker tool grants."
           href="/platform/audit/authority"
           accent="var(--dpf-warning)"
           metrics={[
-            { label: "Active grants", value: activeGrants },
-            { label: "Governed agents", value: toolStats.uniqueAgents },
+            authorityMetrics[0],
+            { ...authorityMetrics[1], note: `${authoritySummary.governedAgents} governed agent${authoritySummary.governedAgents === 1 ? "" : "s"} configured.` },
           ]}
         />
         <PlatformSummaryCard
