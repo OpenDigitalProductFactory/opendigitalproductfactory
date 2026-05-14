@@ -311,3 +311,32 @@ index 0000000..1111111
     expect(archGate?.findings.some((f) => /Unexpected directory/.test(f))).toBe(false);
   });
 });
+
+describe("runPrePRGates — architecture gate (rename detection)", () => {
+  it("warns when a file is RENAMED into an unexpected directory", () => {
+    // Renames have different `a/` and `b/` paths in the `diff --git` header.
+    // The old extractor only captured the `a/` (source) path, so moving a file
+    // from a recognized dir (apps/) to an unrecognized one (random-dir/) was
+    // silently allowed.
+    const diff = `diff --git a/apps/web/lib/foo.ts b/random-dir/foo.ts
+similarity index 100%
+rename from apps/web/lib/foo.ts
+rename to random-dir/foo.ts
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("warn");
+    expect(archGate?.findings.some((f) => /Unexpected directory: random-dir\/foo\.ts/.test(f))).toBe(true);
+  });
+
+  it("does not warn when a file is renamed BETWEEN two recognized directories", () => {
+    const diff = `diff --git a/apps/web/lib/foo.ts b/packages/db/foo.ts
+similarity index 100%
+rename from apps/web/lib/foo.ts
+rename to packages/db/foo.ts
+`;
+    const result = runPrePRGates(diff);
+    const archGate = result.gates.find((g) => g.gate === "architecture");
+    expect(archGate?.verdict).toBe("pass");
+  });
+});
