@@ -164,6 +164,22 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain("First build</h2>");
   });
 
+  it("bounds the active-build title so long work names cannot take over the canvas", () => {
+    const longTitle = "Investigate and repair disconnected Build Studio current work surfaces with a very long backlog-derived title that used to consume the entire header";
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({ title: longTitle })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain(`title="${longTitle}"`);
+    expect(html).toMatch(/class=\"m-0 max-h-\[3rem\] min-w-0 overflow-hidden break-words text-base font-bold leading-6 text-\[var\(--dpf-text\)\] line-clamp-2\"/);
+  });
+
   it("renders the submission branch badge in a truncating wrapper instead of an unconstrained inline chip", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
