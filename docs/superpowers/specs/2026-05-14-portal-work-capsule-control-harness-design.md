@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-14; chief-architect review pass 2026-05-13 |
-| Status | Architect review applied; ready for implementation planning |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review) |
+| Status | Architect review applied; Phase 1 plan published; ready for Phase 1 implementation |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
 | Depends On | `2026-04-05-db-github-delivery-sync-design.md`, `2026-04-20-ship-phase-fork-redesign-design.md`, `2026-04-21-backlog-triage-build-studio-design.md`, `2026-04-23-build-studio-governed-backlog-delivery-design.md`, `2026-05-09-build-execution-provider-design.md`, `2026-05-09-deployment-contracts.md` |
+| Phase 1 Plan | `docs/superpowers/plans/2026-05-14-portal-work-capsule-control-harness-phase-1.md` |
 
 ## 1. Problem Statement
 
@@ -75,18 +76,18 @@ DPF does not need a second Build Studio. It needs a small, durable **Work Capsul
 6. Support adoption of existing messy work without losing it.
 7. Prevent new collisions through visible scope claims and stale-state warnings.
 8. Preserve the root clone as a release/merge-only worktree.
-9. Coordinate portal self-update through sandbox verification, backups, and explicit approval.
+9. Coordinate portal self-update through sandbox verification, backups, and explicit approval (lands in **Phase 5**; Phase 1 only registers the surface a future promotion candidate will attach to).
 10. Reduce manual provider/OAuth rebaseline work without exposing secrets to code agents.
 
 ## 4. Non-Goals
 
 1. Replacing Build Studio.
 2. Forcing all coding to happen inside the portal UI.
-3. Building a fully autonomous deployment system in v1.
+3. Building a fully autonomous deployment system in v1  -  Goal 9 enables a *human-approved* portal self-update path, not unattended deployment.
 4. Letting a sandbox directly mutate or replace production.
 5. Moving provider secrets, OAuth tokens, or API keys into git.
 6. Replacing GitHub PR review or branch protection.
-7. Solving every stale historical worktree in the first implementation slice.
+7. Solving every stale historical worktree in Phase 1.
 8. Changing the existing `BacklogItem.status` or `FeatureBuild.phase` vocabulary in this spec.
 
 ## 5. Research and Benchmarking
@@ -176,7 +177,7 @@ Hyphenated values are mandatory. Any enum additions must update the library cons
 | `codex-desktop` | Codex desktop session in a governed worktree | not applicable; runs outside the portal substrate and attaches via MCP |
 | `claude-desktop` | Claude desktop session in a governed worktree | not applicable; runs outside the portal substrate and attaches via MCP |
 | `human` | Manual local development | not applicable |
-| `git-webhook` | Git update event awaiting sandbox verification | provider per substrate x `dpf-native` runner for verification |
+| `git-webhook` | Git update event awaiting sandbox verification (event source, not a long-running executor  -  capsule attaches to the future verification run) | provider per substrate x `dpf-native` runner for verification |
 | `dpf-native` | Portal-side agent runner used by Build Studio | provider per substrate x `dpf-native` runner |
 
 `source` is the *origin* of the capsule and is immutable once set. `executorKind` is *current* ownership and may change across handoffs (e.g., human starts a worktree, then a Codex desktop session adopts it, then Build Studio takes it over for sandbox verification). Every executor handoff writes a `WorkCapsuleActivity` of kind `executor-changed`.
@@ -199,6 +200,8 @@ To prevent drift between three lifecycles (`BacklogItem.status`, `FeatureBuild.p
 | `draft` | created without any executor assignment or branch |
 
 Manual override is allowed but writes an activity of kind `status-override` with the operator principal and reason. A capsule's `status` field is therefore write-through with projection: the reconciler sets it on every sync, an operator may override, and the override persists until `workspaceState.statusOverride.until` or until the operator clears it.
+
+**On override TTL expiry (section 21 decision 5, default 24h):** the projector resumes control on its next sync run. The override is *not* deleted  -  the `status-override` activity remains in the capsule timeline as the historical record of why the operator intervened. If the operator wants the override to last longer they extend `workspaceState.statusOverride.until`; if they want immediate handback they clear `workspaceState.statusOverride` and the next projection sets `status` to whatever the underlying state implies.
 
 ## 7. Architecture
 
@@ -269,7 +272,14 @@ Capsule fields that mirror external systems are **caches** with a reconciler, no
 | Provider/OAuth health | `CredentialEntry`, `ModelProfile`, and provider reconciler | cached in `providerRequirements[].lastVerifiedAt`; never the keys themselves |
 | Promotion outcome | `ChangePromotion` | linked via `changePromotionId`; capsule does not duplicate deployment timestamps or promoted SHA |
 
-`lastSyncedAt` is the freshness witness for every cached field group. UI must visibly indicate when caches are stale beyond a configured threshold.
+**Freshness witnesses.** `WorkCapsule.lastSyncedAt` records the *most recent* sync of *any* cached group; the UI's overall stale-cache indicator (`STALE_CACHE_MS`, default 30 minutes) is sourced from it. Per-group freshness lives next to each group inside `workspaceState`:
+
+- `workspaceState.git.syncedAt`
+- `workspaceState.pr.syncedAt`
+- `workspaceState.sandbox.syncedAt`
+- `providerRequirements[].lastVerifiedAt` (already per-row above)
+
+Production-visible decisions (promotion approval, lease handover) MUST inspect the *per-group* witness, not the rollup `lastSyncedAt`. The rollup is a UI affordance; the per-group witness is the correctness guarantee.
 
 ## 8. Data Model Stewardship
 
@@ -352,6 +362,7 @@ model WorkCapsule {
 Field notes:
 
 - `createdByPrincipalId` and `leaseHolderPrincipalId` reference the canonical `Principal` per AGENTS.md section 11 (post-2026-05-09 convergence). External desktop sessions identify themselves via `PrincipalAlias` (kind `agent` or `service-account`) that resolves to a Principal.
+- **Principal resolution at write time.** Implementations MUST resolve the writer to a Principal using the existing `apps/web/lib/identity/principal-linking.ts` primitives  -  `resolvePrincipalIdForUser(userId)` for human writers and `ensureAgentPrincipalIdentity(agentId)` for agent writers. If resolution fails (no alias yet, principal-linking outage), the column is written as `null` rather than fabricating a non-Principal FK. A null `*PrincipalId` is a known intermediate state; a User.id or Agent.id stuffed into a Principal column is a data-integrity defect that requires migration to undo.
 - `contributionMode` is `private` (default; PR targets the install's own repo) or `hive-public` (PR targets the public hive fork; goes through `contribute_to_hive` plumbing). The two modes require different DCO/signing surfaces; capsule must declare its mode at creation so downstream tools route correctly.
 - `branchTaxonomy` records the AGENTS.md section 4 prefix (`feat`, `fix`, `chore`, `doc`, `clean`). Capsule creation enforces this; adoption infers it from branch name and warns if absent.
 - `idempotencyKey` allows safe retry of `create_work_capsule` and `adopt_worktree`. Server returns the existing capsule on conflict rather than creating a duplicate.
@@ -501,14 +512,23 @@ Commit and PR contract for any executor writing to a capsule's branch:
 
 Grant categories and authorization (AGENTS.md section 8):
 
-| Grant | Role minimum | Default holders | Notes |
-|---|---|---|---|
-| `work_capsule_read` | any authenticated user | platform users, Build Studio agent, external MCP tokens | inspection only |
-| `work_capsule_write` | builder | Build Studio agent, Codex/Claude desktop agents | create/update/status/evidence |
-| `work_capsule_adopt` | builder | external desktop agents and humans | gated separately because adoption mutates linkage |
-| `work_capsule_promote` | release operator (human role) | nobody by default | required *in addition to* existing promotion authority; never grant to coding agents |
+Every capsule tool passes through **two independent gates** at runtime:
 
-The `work_capsule_*` values are agent tool-grant keys, not human `CapabilityKey` values. Tool definitions use existing `requiredCapability` values for human role gating, then `TOOL_TO_GRANTS`, `packages/db/data/grant_catalog.json`, and seeded agent grants apply the agent-level grant check. Do not extend `PERMISSIONS` with tool-grant names unless a later slice introduces a separate human-facing capability. External clients should not receive `work_capsule_promote` by default.
+1. **Human capability gate**  -  the calling user's `platformRole` must satisfy the tool's `requiredCapability` (a `CapabilityKey` from `apps/web/lib/govern/permissions.ts`).
+2. **Agent grant gate**  -  if an agent is making the call, the agent's `tool_grants` (from `packages/db/data/agent_registry.json`) must include at least one of the grants listed in `TOOL_TO_GRANTS[toolName]`.
+
+Both must permit the call. The two layers are deliberately separate so a builder-role user can exercise a tool through the UI even if no agent grant exists, and a low-capability service account cannot escalate by holding a strong agent grant.
+
+| Agent grant | `requiredCapability` (human gate) | Default agent holders | Notes |
+|---|---|---|---|
+| `work_capsule_read` | `view_platform` | platform users, Build Studio agent, external MCP tokens | read-only inspection |
+| `work_capsule_write` | `manage_backlog` | Build Studio agent, Codex/Claude desktop agents | create / update-status / evidence / heartbeat / scope-claim / scope-release |
+| `work_capsule_adopt` | `manage_backlog` | external desktop agents and humans | gated separately from `_write` because adoption mutates linkage to historical work |
+| `work_capsule_promote` | `manage_platform` | nobody by default | required *in addition to* existing promotion authority; never grant to coding agents |
+
+`view_platform` permits HR-000/200/300  -  the floor for any platform-authenticated user. `manage_backlog` is the existing builder-minimum gate already used by `promote_to_build_studio` and the backlog write surface. `manage_platform` is the existing release-operator gate; pairing it with `work_capsule_promote` produces the two-key requirement that no single principal can promote alone.
+
+The `work_capsule_*` values are agent tool-grant keys, **not** human `CapabilityKey` values. Do not extend `PERMISSIONS` in `apps/web/lib/govern/permissions.ts` with tool-grant names unless a later slice introduces a separate human-facing capability. External clients should not receive `work_capsule_promote` by default.
 
 ### 9.4 Collision Detection
 
@@ -530,8 +550,8 @@ Soft leases keep work moving while making collisions visible early.
 
 External desktop executors (Codex, Claude, human) cannot be supervised by the portal directly. The capsule therefore models *liveness* with an explicit lease.
 
-- On capsule attach (`create_work_capsule` or `adopt_worktree` with an external executor), the server issues a lease: `leaseHolderPrincipalId` is set and `leaseExpiresAt = now() + LEASE_TTL` (default 30 minutes).
-- The executor must call `heartbeat_capsule` before expiry. The MCP middleware can auto-heartbeat on any capsule-scoped tool call.
+- On capsule attach (`create_work_capsule` or `adopt_worktree` with an external executor), the server issues a lease: `leaseHolderPrincipalId` is set and `leaseExpiresAt = now() + LEASE_TTL` (default 30 minutes; constant: `LEASE_TTL_MS` in `apps/web/lib/work-capsules.ts`).
+- The executor must call `heartbeat_capsule` before expiry. The MCP middleware MAY auto-heartbeat **only on capsule-scoped *write* tool calls** (`create_work_capsule`, `adopt_worktree`, `claim_capsule_scope`, `record_capsule_evidence`, `heartbeat_capsule`, `update_work_capsule_status`, `release_capsule_scope`). Auto-renewal MUST NOT trigger from read tools (`list_work_capsules`, `get_work_capsule`)  -  a reader checking on a stale capsule should not silently extend that capsule's lease, and read tools must remain idempotent in a way an MCP client can rely on. The auto-heartbeat middleware ships in **Phase 3** alongside external executor attachment; Phase 1 supports only the explicit `heartbeat_capsule` call.
 - A capsule whose lease has expired surfaces as `lease-expired` in the daily steward and is eligible for reassignment or abandonment recommendations. Expiry does not change `status`; the work itself may still be sound on disk.
 - Build Studio capsules do not consume the lease; their liveness comes from `FeatureBuild` execution state. The lease applies to `codex-desktop`, `claude-desktop`, `human`, and any future external executor kind.
 
@@ -540,6 +560,8 @@ The lease is advisory in v1. It generates warnings and recommendations, never si
 ### 9.6 Daily Steward
 
 The daily steward is a scheduled hygiene run. It prepares recommendations but does not delete or deploy in v1.
+
+**Scheduling substrate.** The steward runs as a queued job under the existing portal job surface (`apps/web/lib/queue/functions/`) on a daily cadence; the queue runner already exists for Build Studio verification jobs and is the canonical primitive. No new scheduler dependency is introduced. The job lands in **Phase 4** along with the operator review UI.
 
 It checks:
 
@@ -661,7 +683,7 @@ Primary surface:
 
 - `/build/work` becomes the Work Control view for active build/development work.
 - `/build/work/[capsuleId]` shows one capsule and its evidence.
-- `/build` links to Work Control from the Build Studio header/chrome when active capsules exist.
+- `/build` links to Work Control from the Build Studio header/chrome **unconditionally**. The link is the entry point for adopting the first capsule on a fresh install, so a "show only when capsules exist" gate would defeat its primary purpose. (A later phase MAY hide the link once active capsule count drops to zero AND no adoptable worktrees exist; not in scope for Phase 1.)
 - Operations > Promotions continues to own production promotion review.
 
 Recommended navigation:
@@ -733,6 +755,8 @@ Use icons for compact actions where lucide icons exist. Use tooltips for unfamil
 
 ## 13. Error Handling
 
+**Capsule lifecycle errors:**
+
 | Failure | Handling |
 |---|---|
 | root clone dirty | block new work from root; show remediation |
@@ -746,16 +770,25 @@ Use icons for compact actions where lucide icons exist. Use tooltips for unfamil
 | migration failed on clone | block promotion |
 | backup failed | block promotion |
 | post-promotion health failed | trigger rollback path |
-| MCP unavailable | allow read-only UI and show external-client attach blocked |
+
+**Platform health errors** (not capsule-state, but affect what the surface can do):
+
+| Failure | Handling |
+|---|---|
+| MCP server unavailable | allow read-only UI; show external-client attach blocked banner; reads against the DB still serve the active/adoptable lists |
+| `principal-linking` outage | capsule writes proceed with `null` `*PrincipalId` columns rather than failing the action; reconciler backfills when the service recovers |
+| git scanner unavailable (no git, missing repo, permission denied) | adoptable-worktrees list shows empty with a "scanner unavailable" diagnostic; active capsules still render |
 
 ## 14. Security and Governance
 
+This section lists the security-and-governance posture. The full architectural invariants list (durability, ordering, identity, etc.) lives in **section 18**  -  that is canonical; this section only highlights items reviewers tend to ask about.
+
 1. `.mcp.json` and `.vscode/mcp.json` remain ignored credential files.
 2. Capsules never store secrets.
-3. External agents receive only grants appropriate to their role.
-4. Promotion requires `work_capsule_promote` plus existing promotion authority.
+3. External agents receive only grants appropriate to their role per the section 9.3 grant table.
+4. Promotion requires the `work_capsule_promote` agent grant plus the existing `manage_platform` human capability  -  two-key by construction.
 5. Every MCP capsule mutation writes `ToolExecution`.
-6. Every user-visible capsule event writes `WorkCapsuleActivity`.
+6. Every user-visible capsule event writes `WorkCapsuleActivity` *atomically* with the capsule mutation that triggered it (enforced via `prisma.$transaction`).
 7. Production portal replacement requires backup evidence and human approval in v1.
 8. Scope claims are advisory in v1 but audit-visible.
 
@@ -816,60 +849,77 @@ Execute in this order so fresh installs and existing installs both land cleanly:
 
 ## 16. First Implementation Slice
 
-The smallest useful slice is:
+The first implementation slice **is Phase 1** as detailed in section 15 and the published Phase 1 plan (`docs/superpowers/plans/2026-05-14-portal-work-capsule-control-harness-phase-1.md`). For convenience the deliverables are:
 
-1. `WorkCapsule` and `WorkCapsuleActivity` schema.
-2. `apps/web/lib/work-capsules.ts` enum constants and validators.
-3. `adopt_worktree`, `list_work_capsules`, `get_work_capsule`, and `record_capsule_evidence` MCP tools.
-4. Git/worktree scanner that returns:
-   - branch
-   - base/head SHA
-   - ahead/behind count
-   - dirty file count
-   - untracked file count
-   - possible PR URL
-5. Work Control intake UI showing adoptable and active capsules.
-6. Unit tests for status validation, adoption, and scanner parsing.
+1. Migration: `WorkCapsule` + `WorkCapsuleActivity` (with the partial unique index on `(repositoryFullName, headBranch) WHERE archivedAt IS NULL` from section 9.3 race-safety, and the indexes from section 8.2).
+2. `apps/web/lib/work-capsules.ts`: enum constants (status / source / executor / activity-kind / evidence-kind), validators, and time constants (`LEASE_TTL_MS`, `STALE_CACHE_MS`, `STATUS_OVERRIDE_TTL_MS`).
+3. MCP tool surface: `list_work_capsules`, `get_work_capsule`, `create_work_capsule`, `adopt_worktree`, `claim_capsule_scope`, `release_capsule_scope`, `record_capsule_evidence`, `heartbeat_capsule`, `update_work_capsule_status`  -  definition + handler + dispatch case lands together for each.
+4. Read-only git/worktree scanner: branch, base/head SHA, dirty + untracked counts, PR URL extraction from text, worktree-list parsing.
+5. Work Control intake UI at `/build/work` showing active capsules (joined to scanner output by branch) and adoptable worktrees (scanner output minus already-adopted branches).
+6. Tests per the section 17 Phase 1 list, including the AGENTS.md section 3 enum-parity test.
 
-This slice does not create worktrees automatically and does not promote production.
+Out of scope for Phase 1 (deferred to later phases per section 15): automatic worktree creation, production promotion, lease auto-renewal middleware, daily-steward job, any `ChangePromotion.kind` work.
 
 ## 17. Verification Plan
 
-Implementation must satisfy the canonical Build Gate (AGENTS.md section 5): unit tests, production build, UX verification, and migration applies cleanly. Capsule-specific verification on top of the Build Gate:
+Every phase satisfies the canonical Build Gate (AGENTS.md section 5): unit tests, production build, UX verification, and migration applies cleanly. The capsule-specific verification list grows by phase  -  only the rows whose subject ships in that phase are testable in that phase.
 
-1. Unit tests for capsule status, source, executor, and activity-kind enum validation (parity test against `mcp-tools.ts` `enum:` arrays).
-2. Unit tests for adopt-worktree parsing of branch name, PR URL inference, and trailer extraction.
-3. MCP tool tests for create/adopt/list/get/status/evidence/heartbeat/scope paths, including idempotency-key conflict behavior.
-4. Reconciler tests: status projection precedence, lease expiry surfacing, cache freshness markers.
-5. UI tests for Work Control empty, active, conflict, blocked, stale-cache, and lease-expired states.
-6. Authorization tests covering each grant category against the role matrix in section 9.3.
-7. UX verification against the Docker-served portal at `AUTH_URL`/`APP_URL`, not `next dev`.
+### Phase 1 (Adoption-First Registry)
 
-For the self-update phase, verification expands to:
+1. Unit tests for capsule status, source, executor, activity-kind, and evidence-kind enum validation (parity test against `mcp-tools.ts` `enum:` arrays per AGENTS.md section 3).
+2. Unit tests for adopt-worktree parsing of branch name, PR URL inference, dirty/untracked counts, and worktree-list parsing.
+3. MCP tool tests for create / adopt / list / get / heartbeat / evidence / scope-claim / scope-release / status-update paths, including idempotency-key conflict behavior and the `(repositoryFullName, headBranch)` partial-unique-index race fallback.
+4. UI tests for Work Control: empty state, active capsule rows, adoptable rows, stale-cache and lease-expired health markers.
+5. Authorization tests covering both the human capability gate and the agent grant gate from section 9.3.
+6. UX verification against the Docker-served portal at `AUTH_URL` / `APP_URL`, not `next dev`.
 
-1. sandbox clone/build verification
-2. migration against cloned DB
-3. backup creation
-4. health check before and after swap
-5. rollback rehearsal
+### Phase 3 (Executor Attachment)
+
+Adds:
+
+1. Lease auto-renewal middleware tests  -  write tools renew, read tools do not.
+2. Collision-detection tests for overlapping `(kind, value)` scope claims across active capsules.
+3. External executor handoff tests  -  `executor-changed` activity is written on every transition.
+
+### Phase 4 (Daily Steward)
+
+Adds:
+
+1. Reconciler tests: status projection precedence per section 6.4, override-TTL handback, per-group freshness markers from section 7.4.
+2. Daily-steward queue job tests  -  recommendation outputs match section 9.6 categories.
+
+### Phase 5 (Portal Self-Update Gate)
+
+Adds:
+
+1. Sandbox clone/build verification against a clean substrate.
+2. Migration against cloned DB.
+3. Backup creation evidence.
+4. Health check before and after swap.
+5. Rollback rehearsal against a deliberately failed promotion.
+6. Partial-unique-index test for `ChangePromotion(kind = 'portal-replacement', status = 'in_progress')` (one-at-a-time invariant from section 10.1).
 
 ## 18. Invariants
 
-1. The root clone is never an active implementation workspace.
-2. Every active Build Studio build should have or create a Work Capsule.
-3. Every external desktop coding session should attach to a Work Capsule before making non-trivial changes.
-4. Every capsule with production-visible intent must link to verification evidence.
-5. Portal replacement cannot proceed without backup evidence.
-6. Provider requirements are references and health checks, not copied secrets.
-7. A capsule may be abandoned, but not silently deleted.
-8. Production promotion requires an explicit terminal decision.
-9. Capsule status is *derived where possible*; any manual override writes a `status-override` activity with operator principal and reason.
-10. Git is authoritative for branches, SHAs, and dirty state; capsule fields mirroring git are caches with `lastSyncedAt` and must be refreshed by the reconciler before being used in a production-visible decision.
-11. External executor capsules carry a lease; an expired lease never silently transfers ownership. It surfaces a recommendation.
-12. Every commit on a capsule branch carries a DCO sign-off and a `DPF-Capsule:` trailer; the PR body carries the same trailer.
-13. At most one `ChangePromotion` of kind `portal-replacement` may be `in_progress`, enforced by a partial unique index added in the portal-self-update slice.
+The "first enforced from" annotation tells implementers when each invariant becomes testable. Earlier-phase invariants stay in force in every later phase.
+
+1. The root clone is never an active implementation workspace. *(Phase 2.)*
+2. Every active Build Studio build should have or create a Work Capsule. *(Phase 3.)*
+3. Every external desktop coding session should attach to a Work Capsule before making non-trivial changes. *(Phase 3.)*
+4. Every capsule with production-visible intent must link to verification evidence. *(Phase 5.)*
+5. Portal replacement cannot proceed without backup evidence. *(Phase 5.)*
+6. Provider requirements are references and health checks, not copied secrets. *(Phase 1.)*
+7. A capsule may be abandoned, but not silently deleted. *(Phase 1.)*
+8. Production promotion requires an explicit terminal decision. *(Phase 5.)*
+9. Capsule status is *derived where possible*; any manual override writes a `status-override` activity with operator principal and reason. *(Phase 1 supports manual override; reconciler-driven derivation lands in Phase 4.)*
+10. Git is authoritative for branches, SHAs, and dirty state; capsule fields mirroring git are caches with per-group `syncedAt` (see section 7.4) and must be refreshed by the reconciler before being used in a production-visible decision. *(Phase 4 reconciler; Phase 5 enforcement at promotion.)*
+11. External executor capsules carry a lease; an expired lease never silently transfers ownership. It surfaces a recommendation. *(Phase 1 sets the lease; Phase 4 daily-steward surfaces expiry.)*
+12. Every commit on a capsule branch carries a DCO sign-off and a `DPF-Capsule:` trailer; the PR body carries the same trailer. *(Phase 3  -  emitted by Build Studio + external clients then.)*
+13. At most one `ChangePromotion` of kind `portal-replacement` may be `in_progress`, enforced by a partial unique index added in the portal-self-update slice. **(Enforced from Phase 5; not in effect in Phase 1.)**
 
 ## 19. Resolved V1 Decisions
+
+In this spec, **"v1" = Phases 1 through 5 inclusive**  -  the first end-to-end coordination loop from adoption through human-approved portal self-update. Phase 6 (Automation Expansion) is explicitly *post-v1* and may relax some of these decisions when evidence supports it.
 
 1. The first UI route is `/build/work`, with capsule detail at `/build/work/[capsuleId]`.
 2. Branch names preserve the existing `feat/`, `fix/`, `doc/`, `chore/`, and `clean/` taxonomy. Capsule identity is stored in `WorkCapsule`, PR body metadata, and optional commit trailers rather than replacing branch taxonomy.
@@ -894,10 +944,12 @@ This gives DPF the parallelism the user wants without letting each agent create 
 
 These decisions close the chief-architect review questions so implementation planning can proceed without schema ambiguity.
 
-1. **Lease TTL default.** External executor leases default to 30 minutes. Any capsule-scoped MCP tool call renews the lease automatically, and `heartbeat_capsule` exists for long-running clients that need an explicit renewal call.
+1. **Lease TTL default.** External executor leases default to 30 minutes (`LEASE_TTL_MS`). Renewal model phases in over two slices:
+   - **Phase 1:** `heartbeat_capsule` is the only renewal path. Clients are responsible for calling it before `leaseExpiresAt`.
+   - **Phase 3:** MCP middleware adds auto-renewal on capsule-scoped *write* tool calls (see section 9.5 for the allowlist). Read tools never auto-renew.
 2. **Capsule-to-PR cardinality.** V1 is 1:1: one capsule links to at most one active PR. Split-PR or stacked-PR work is deferred to a later slice after adoption and collision detection are reliable.
 3. **GitPromotionCandidate ordering.** A git webhook first tries to find an existing capsule by `DPF-Capsule:` trailer, PR metadata, or `(repositoryFullName, headBranch)`. If no capsule exists, it creates a capsule with `source = git-promotion`. The deterministic idempotency key is `git-promotion:<repositoryFullName>:<afterSha>`.
 4. **Branch-name allocation.** Portal-created capsules generate `<prefix>/<capsule-slug>` deterministically from branch taxonomy and title. Adopted branches keep their existing names; the portal infers taxonomy and warns when the name does not match AGENTS.md section 4.
 5. **Status override TTL.** Manual status overrides last 24 hours by default and are stored in `workspaceState.statusOverride.until`. Operators may clear or extend an override explicitly.
-6. **Bundled MCP service activation.** Work Capsule tools are built into the existing `apps/web/lib/mcp-tools.ts` MCP surface and require no separate admin MCP server registration. The implementation updates tool definitions, human `requiredCapability` values, `TOOL_TO_GRANTS`, grant catalog, and seeded agent grants in one slice.
+6. **Bundled MCP service activation.** Work Capsule tools are built into the existing `apps/web/lib/mcp-tools.ts` MCP surface and require no separate admin MCP server registration. The implementation updates tool definitions, human `requiredCapability` values, `TOOL_TO_GRANTS`, grant catalog, and seeded agent grants in **one PR** (multiple commits within that PR are fine; cross-PR splits are not, because partial enablement leaves the bouncer in an inconsistent state).
 7. **Historical adoption cutoff.** V1 surfaces: open PRs of any age, dirty worktrees of any age, branches with commits ahead of `origin/main` from the last 45 days, and any branch/worktree explicitly pasted by path or branch name. Older clean branches without PRs stay hidden until Phase 4 cleanup.
