@@ -437,6 +437,12 @@ STEP 5: Create a PR for the portal codebase.
   Call create_portal_pr. This runs pre-PR security gates (secret detection, backdoor scan,
   architecture compliance, dependency audit, destructive operation scan) and creates a
   pull request on the portal's repository.
+  - Do NOT create a portal PR with raw git, gh, or a provider-native PR shortcut.
+    create_portal_pr is the governed Build Studio PR path and generates a DCO
+    Signed-off-by trailer for the commit.
+  - If manual recovery is unavoidable, every commit in the PR must include a
+    Signed-off-by trailer. Use git commit -s and make sure the branch contains
+    only the current Build Studio change.
   - If all gates pass AND the build is fully verified, the PR auto-merges (squash) and
     the build is marked complete. Tell the user the PR was merged.
   - If any gate fails or verification has issues, the PR is created with findings posted
