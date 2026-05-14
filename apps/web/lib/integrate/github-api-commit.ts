@@ -55,6 +55,15 @@ export interface GitHubCommitResult {
   prNumber: number | null;
 }
 
+const DCO_SIGNOFF_PATTERN = /^Signed-off-by:\s+.+\s+<[^<>\s@]+@[^<>\s@]+>$/im;
+
+function assertDcoSignedCommitMessage(commitMessage: string): void {
+  if (DCO_SIGNOFF_PATTERN.test(commitMessage)) return;
+  throw new Error(
+    "DCO sign-off is required for Build Studio pull requests. Include a `Signed-off-by: Name <email>` trailer in the commit message.",
+  );
+}
+
 // ─── Diff Parsing ───────────────────────────────────────────────────────────
 
 /**
@@ -256,6 +265,8 @@ export async function createBranchAndPR(input: {
   labels: string[];
   token: string;
 }): Promise<GitHubCommitResult> {
+  assertDcoSignedCommitMessage(input.commitMessage);
+
   const {
     headOwner,
     headRepo,

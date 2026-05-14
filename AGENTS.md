@@ -14,7 +14,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 - **Live state over seed data.** Query the database for current epics, backlog, users, capabilities, status. → [kernel principle](docs/founder-kernel/wiki/principles/live-state-over-seed-data.md)
 - **Single source of truth.** Each rule, fact, or decision in exactly one place. Pointers, not copies. → [kernel principle](docs/founder-kernel/wiki/principles/single-source-of-truth.md)
 - **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save. → [kernel principle](docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md)
-- **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates.
+- **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates. → [kernel principle](docs/founder-kernel/wiki/principles/plan-before-install-paths.md)
 - **Use paid AI capacity responsibly.** → [kernel principle](docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md)
 
 ## 2. Project Architecture (current as of 2026-04-27)
@@ -49,11 +49,11 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 - **All changes land via PR against `main`** — including the maintainer's. Branch protection enforces it. → [kernel principle](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md)
 - **One concern per branch, one concern per PR.** Topic branches named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. Branch from `main`. → [kernel principle](docs/founder-kernel/wiki/principles/one-concern-per-pr.md)
 - **DCO sign-off required on every commit.** Use `git commit -s`. The DCO bot blocks merge until every commit has a `Signed-off-by:` trailer. → [kernel principle](docs/founder-kernel/wiki/principles/dco-sign-off-required.md)
-- **Always push** after committing. Local-only commits are invisible to CI.
+- **Always push** after committing. Local-only commits are invisible to CI. → [kernel principle](docs/founder-kernel/wiki/principles/always-push-after-committing.md)
 - **Squash-and-delete on merge:** `gh pr merge <n> --squash --delete-branch`.
 - **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps. → [kernel principle](docs/founder-kernel/wiki/principles/worktree-per-session.md)
 - **After creating a worktree, seed its MCP config:** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does not carry them across. Run `scripts/seed-worktree-mcp.ps1` (Windows) or `scripts/seed-worktree-mcp.sh` (macOS / Linux) from inside the new worktree to copy them from the root clone. The script is predicated on the platform being installed and an MCP token already generated at Admin > Platform Development. Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector.
-- **Keep the root clone as the merge/release worktree** — read-only for active feature work. Conventional locations: `d:\DPF` on Windows, `~/dpf` on macOS/Linux. Topic worktrees go alongside (`d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`).
+- **Keep the root clone as the merge/release worktree** — read-only for active feature work. Conventional locations: `d:\DPF` on Windows, `~/dpf` on macOS/Linux. Topic worktrees go alongside (`d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`). → [kernel principle](docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md)
 - **Branch guard before implementation and commit:** if `git status --short --branch` reports `HEAD (no branch)` or `git branch --show-current` returns `main`, abort before serious implementation. Create/switch to a topic branch first. Do not claim work is complete while commits are local-only; completion requires a pushed branch or PR unless the user explicitly asked not to publish. → [kernel principle](docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md)
 
 ## 5. Verification — Build Gate (mandatory)
@@ -77,9 +77,9 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 - **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live state before planning or changing backlog work. → [kernel principle](docs/founder-kernel/wiki/principles/backlog-lives-in-postgresql.md)
 - **Use the DPF MCP backlog tools first when available.** Local agent clients are configured by the untracked `.mcp.json` generated from Admin > Platform Development. It points the `dpf` server at the canonical MCP endpoint `/api/mcp/v1`, which exposes backlog/planning tools such as `list_backlog_items`, `get_backlog_item`, `create_backlog_item`, `update_backlog_item_status`, `list_epics`, `link_backlog_item_to_epic`, `search_specs_and_plans`, and `record_execution_evidence` according to the caller's token scopes.
-- **DB fallback must be explicit.** If the `dpf` MCP server is unavailable in the current agent session, query the live Postgres database directly and say that you used DB fallback. Do not substitute `packages/db/src/seed.ts`, generated Prisma files, or stale docs for current backlog state.
+- **DB fallback must be explicit.** If the `dpf` MCP server is unavailable in the current agent session, query the live Postgres database directly and say that you used DB fallback. Do not substitute `packages/db/src/seed.ts`, generated Prisma files, or stale docs for current backlog state. → [kernel principle](docs/founder-kernel/wiki/principles/db-fallback-explicit.md)
 - **Specs and plans** live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. Check for an existing design before starting work — some are ready to implement.
-- **Before creating a new epic:** query existing epics for overlap. Prefer extending an existing epic over creating a new one. If superseding an old epic, mark it done in the same operation.
+- **Before creating a new epic:** query existing epics for overlap. Prefer extending an existing epic over creating a new one. If superseding an old epic, mark it done in the same operation. → [kernel principle](docs/founder-kernel/wiki/principles/check-epic-overlap-before-creating.md)
 - **On completing items:** update status in the DB immediately. The system auto-closes epics when all items are done/deferred. Direct DB ops require manually flipping the parent epic.
 - **Periodic hygiene:** epics with 0 items + status `open` are noise — add items or delete. Epics where all items are done but status is still `open` must be flipped.
 
@@ -163,7 +163,7 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 
 ## 15. Communication
 
-- If uncommitted changes exist, mention them before starting new work.
+- If uncommitted changes exist, mention them before starting new work. → [kernel principle](docs/founder-kernel/wiki/principles/mention-uncommitted-changes.md)
 - When committing, list what's included.
 - State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](docs/founder-kernel/wiki/principles/state-results-directly.md)
 - Maintain forward momentum: when the current work naturally implies a next step, name the next smallest useful step from the thread direction and company context. Keep it quiet and operational - no sales pitch, no broad re-planning unless asked.
