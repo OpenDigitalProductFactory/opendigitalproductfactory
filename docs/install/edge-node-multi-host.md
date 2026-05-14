@@ -331,13 +331,14 @@ your operational calendar — there is no auto-rotation in T2.
 
 ## Discovery scope — what gets scanned and how to control it
 
-The Edge Node runs three collectors per sweep:
+The Edge Node runs four collectors per sweep:
 
 | Collector | What it does | Traffic | Cost |
 |---|---|---|---|
 | `host-info` | Reads `os.*` — hostname, NICs, CPU, mem | none | ~0ms |
 | `arp` (C1) | Reads kernel ARP cache (`/proc/net/arp` on Linux, `arp -an` on macOS) | none — passive | ~1ms |
 | `nmap-sweep` (C2) | Active `nmap -sn` ping scan of operator-allowed subnets | ARP probes (Linux + CAP_NET_RAW) or TCP connect probes | ~5–8s per /24, ~30s per /20 |
+| `snmp-poll` (C3) | Per-target SNMP query of `sysName`, `sysDescr`, `sysObjectID`, `sysUpTime`, `ifNumber` | UDP/161 to operator-supplied targets only | ~30ms × target count |
 
 The active sweep needs an operator-allowed list of subnets. By default
 it auto-derives from the host's LAN-facing NIC subnets, applying a
@@ -376,6 +377,127 @@ nmap results — they share the same observedKey.
 
 Filtered subnets surface on `envelope.warnings` so the operator sees
 why a subnet got skipped without grepping container logs.
+
+### SNMP polling (C3) — discovering switches, routers, APs
+
+C3 is the collector that closes the **T2 success bar**: "at least one
+switch / gateway / non-portal-host inventory item with `osiLayer >= 2`
+in the discovery results."
+
+Where C1 + C2 find generic hosts, C3 queries specific network devices
+for their identity (model, OS, port count, location) via SNMP and
+records them as proper `router` / `switch` / `wireless_ap` entities.
+
+**Configuration is opt-in.** The collector is a no-op until you place
+a JSON config file on the host. Default path:
+`/etc/dpf-edge/snmp.json`. Override via `DPF_EDGE_SNMP_CONFIG`.
+
+#### Quick setup
+
+```bash
+# 1. Copy the example config from the repo.
+sudo mkdir -p /etc/dpf-edge
+sudo cp services/edge-node/snmp.example.json /etc/dpf-edge/snmp.json
+sudo chmod 0600 /etc/dpf-edge/snmp.json
+
+# 2. Edit it — replace the example targets with your real devices.
+sudo $EDITOR /etc/dpf-edge/snmp.json
+
+# 3. Add to your Edge Node host's .env:
+DPF_EDGE_SNMP_CONFIG_HOST_PATH=/etc/dpf-edge/snmp.json
+
+# 4. Bring the Edge Node up with the SNMP overlay layered on top of
+#    your existing compose chain.
+
+# Single-host install (Authority + Edge Node on one machine):
+docker compose -f docker-compose.yml \
+               -f docker-compose.linux.yml \
+               -f docker-compose.edge.yml \
+               -f docker-compose.edge-snmp.yml \
+               up -d --force-recreate edge-node
+
+# Multi-host install (Edge Node on its own host):
+docker compose -f docker-compose.edge-standalone.yml \
+               -f docker-compose.edge-snmp.yml \
+               up -d edge-node
+```
+
+The `docker-compose.edge-snmp.yml` overlay refuses to start when
+`DPF_EDGE_SNMP_CONFIG_HOST_PATH` is unset — same loud-failure pattern
+as the TLS overlay so a missing config doesn't silently disable
+inventory.
+
+#### Config file format
+
+```json
+{
+  "targets": [
+    {
+      "host": "192.168.1.1",
+      "version": "2c",
+      "community": "public",
+      "port": 161,
+      "timeoutMs": 5000
+    },
+    {
+      "host": "192.168.1.2",
+      "version": "3",
+      "user": "dpf-readonly",
+      "authProtocol": "SHA",
+      "authPassword": "...",
+      "privProtocol": "AES",
+      "privPassword": "...",
+      "port": 161,
+      "timeoutMs": 5000
+    }
+  ]
+}
+```
+
+| Field | v2c | v3 | Notes |
+|---|---|---|---|
+| `host` | required | required | IP or DNS name reachable from the Edge Node container |
+| `version` | `"2c"` | `"3"` | |
+| `community` | required | — | Shared community string |
+| `user` | — | required | SNMPv3 USM user |
+| `authProtocol` | — | `"MD5"` or `"SHA"` | Prefer SHA |
+| `authPassword` | — | required | |
+| `privProtocol` | — | `"DES"` or `"AES"` | Prefer AES |
+| `privPassword` | — | required | |
+| `port` | optional, default `161` | optional, default `161` | |
+| `timeoutMs` | optional, default `5000` | optional, default `5000` | 100..60000 |
+
+Targets that fail validation are skipped with a warning on the next
+sweep's `envelope.warnings`. The collector continues with the
+remaining valid targets — one bad config row never disables the rest.
+
+#### Security guidance
+
+- **Read-only SNMP communities / users.** The Edge Node only issues
+  `snmpget` (never `snmpset`); configure the device to enforce
+  read-only at the protocol level so a compromised Edge Node can't
+  reconfigure your network.
+- **`chmod 0600`.** SNMPv3 auth and priv passwords live in this file.
+  The collector emits a warning on the next sweep if the file is
+  group-readable (mode 0640+); fix with `chmod 0600`. The collector
+  reads the file regardless — the warning is informational, not a
+  refusal, so a too-tight perms enforcement doesn't accidentally take
+  inventory off.
+- **SNMPv3 over SNMPv2c when possible.** v2c community strings are
+  sniffable on the wire. Use v2c only on LANs you control end-to-end
+  or behind a VPN; use v3 everywhere else.
+- **Limit by source IP at the device.** Most managed switches let you
+  ACL SNMP to specific source IPs. Point them at the Edge Node's
+  LAN IP only — same defense-in-depth idea as "API key + IP allow-
+  list."
+
+#### What gets emitted
+
+Per responding target:
+
+- One `snmp:<ip>` item — `itemType = router | switch | wireless_ap | network_device` (classified from `sysDescr`), `confidence = 0.95`, `rawData` includes `sysName`, `sysDescr`, `sysObjectID`, `sysUpTimeTicks`, `interfaceCount`, `vendorOidPrefix` (e.g. `1.3.6.1.4.1.9` for Cisco).
+- One `SAME_AS` relationship from `snmp:<ip>` → `arp:<ip>`. If C1 or C2 also discovered that IP, this edge lets the Authority's normalization treat them as the same physical device.
+- Per-OID failure warnings — partial inventory is still useful, so a target that responds to `sysName` but blocks `sysObjectID` still produces an entity.
 
 ## What's deferred
 
