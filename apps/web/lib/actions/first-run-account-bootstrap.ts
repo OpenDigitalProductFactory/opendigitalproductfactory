@@ -1,10 +1,9 @@
 "use server";
 
 import { signIn } from "@/lib/auth";
+import { NEXT_SETUP_ROUTE } from "./first-run-account-bootstrap-constants";
 import { createOrganization, createOwnerAccount } from "./setup-entities";
 import { advanceStep } from "./setup-progress";
-
-export const NEXT_SETUP_ROUTE = "/platform/ai/providers";
 
 type FirstRunOwnerInput = {
   orgName: string;

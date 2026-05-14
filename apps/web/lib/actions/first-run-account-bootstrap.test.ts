@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { bootstrapFirstRunOwner, NEXT_SETUP_ROUTE } from "./first-run-account-bootstrap";
+import { NEXT_SETUP_ROUTE } from "./first-run-account-bootstrap-constants";
+import { bootstrapFirstRunOwner } from "./first-run-account-bootstrap";
 
 const actionMocks = vi.hoisted(() => ({
   advanceStep: vi.fn(),
