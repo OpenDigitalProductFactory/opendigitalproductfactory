@@ -38,7 +38,7 @@ async function loadAdoptableRows(repoRoot: string, adoptedBranches: Set<string>)
 
   return Promise.all(
     worktrees
-      .filter((worktree) => worktree.branch && !adoptedBranches.has(worktree.branch))
+      .filter((worktree) => worktree.branch && worktree.branch !== "main" && !adoptedBranches.has(worktree.branch))
       .map(async (worktree) => {
         try {
           const dirty = await getWorktreeDirtySummary(worktree.path);

@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review) |
-| Status | Architect review applied; Phase 1 plan published; ready for Phase 1 implementation |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied) |
+| Status | Phase 1 implemented on branch; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
 | Depends On | `2026-04-05-db-github-delivery-sync-design.md`, `2026-04-20-ship-phase-fork-redesign-design.md`, `2026-04-21-backlog-triage-build-studio-design.md`, `2026-04-23-build-studio-governed-backlog-delivery-design.md`, `2026-05-09-build-execution-provider-design.md`, `2026-05-09-deployment-contracts.md` |
@@ -78,6 +78,8 @@ DPF does not need a second Build Studio. It needs a small, durable **Work Capsul
 8. Preserve the root clone as a release/merge-only worktree.
 9. Coordinate portal self-update through sandbox verification, backups, and explicit approval (lands in **Phase 5**; Phase 1 only registers the surface a future promotion candidate will attach to).
 10. Reduce manual provider/OAuth rebaseline work without exposing secrets to code agents.
+11. Treat PR creation as a ready-to-merge signal, not an early-progress or draft-handoff mechanism.
+12. Make a scratch-install rehearsal a required promotion input before portal self-update can be trusted after rapid change periods.
 
 ## 4. Non-Goals
 
@@ -89,6 +91,7 @@ DPF does not need a second Build Studio. It needs a small, durable **Work Capsul
 6. Replacing GitHub PR review or branch protection.
 7. Solving every stale historical worktree in Phase 1.
 8. Changing the existing `BacklogItem.status` or `FeatureBuild.phase` vocabulary in this spec.
+9. Opening PRs as an in-flight coordination mechanism. In-flight work uses pushed branches and Work Capsules; PR means merge-ready.
 
 ## 5. Research and Benchmarking
 
@@ -202,6 +205,23 @@ To prevent drift between three lifecycles (`BacklogItem.status`, `FeatureBuild.p
 Manual override is allowed but writes an activity of kind `status-override` with the operator principal and reason. A capsule's `status` field is therefore write-through with projection: the reconciler sets it on every sync, an operator may override, and the override persists until `workspaceState.statusOverride.until` or until the operator clears it.
 
 **On override TTL expiry (section 21 decision 5, default 24h):** the projector resumes control on its next sync run. The override is *not* deleted  -  the `status-override` activity remains in the capsule timeline as the historical record of why the operator intervened. If the operator wants the override to last longer they extend `workspaceState.statusOverride.until`; if they want immediate handback they clear `workspaceState.statusOverride` and the next projection sets `status` to whatever the underlying state implies.
+
+### 6.5 PR Readiness Contract
+
+DPF treats a GitHub PR as the merge lane, not as the coordination scratchpad.
+
+Before a Work Capsule may create or link a PR as merge-ready, it must carry:
+
+- a pushed branch with all intended commits
+- DCO sign-off on every commit
+- `DPF-Capsule: <capsuleId>` evidence in commit trailers or PR body metadata
+- focused tests for the touched surface
+- production build evidence
+- migration-apply evidence when schema changes exist
+- UX smoke evidence for UI/workflow changes
+- a capsule status of `ready-for-review` or later
+
+Pushed branches are allowed and encouraged while work is in flight. PR creation is delayed until the branch can safely enter merge automation. If an external agent opens a PR early, the daily steward recommends closing the PR while preserving the branch and capsule.
 
 ## 7. Architecture
 
@@ -480,6 +500,8 @@ V1 should not delete branches or worktrees. It records and recommends.
    - Build Studio
    - Codex desktop
    - Claude desktop
+   - Codex CLI in a governed sandbox
+   - Claude Code CLI in a governed sandbox
    - human
 7. Portal emits launch instructions or starts the native Build Studio flow.
 8. Executor records progress and evidence back to the capsule.
@@ -509,6 +531,7 @@ Commit and PR contract for any executor writing to a capsule's branch:
 - Every commit carries a DCO `Signed-off-by:` trailer (AGENTS.md section 4).
 - Every commit on a capsule branch carries a `DPF-Capsule: <capsuleId>` trailer so reconcilers can link commits back to capsules even when the branch name was renamed.
 - The PR body carries a machine-parseable `DPF-Capsule: <capsuleId>` line. Build Studio and external clients are both responsible for emitting this; the reconciler refuses to link a PR that does not carry it (with a one-click "Adopt this PR into capsule X" remediation in the UI).
+- PR creation is allowed only after the capsule passes the readiness contract in section 6.5. Branch pushes remain the backup/handoff mechanism before that point.
 
 Grant categories and authorization (AGENTS.md section 8):
 
@@ -587,6 +610,23 @@ Outputs:
 - "ready for promotion approval"
 - "archive candidate"
 
+### 9.7 Hive Mind and CLI Runner Coordination
+
+Codex and Claude are first-class execution tools in two modes:
+
+1. **External desktop mode.** The user runs Codex desktop or Claude desktop in an isolated worktree. The session attaches through MCP, claims scope, heartbeats, records evidence, and pushes the branch when useful.
+2. **Sandbox CLI mode.** Build Studio or the Work Capsule runner starts Codex CLI and/or Claude Code CLI inside a governed sandbox. The CLIs run as implementation workers under a capsule lease and emit evidence back through the same MCP surface.
+
+The "hive mind" is not a separate source of truth. It is a coordination pattern where several executors contribute to one capsule and one branch plan. The capsule owns:
+
+- the objective
+- executor assignment and handoff history
+- scope claims for each worker
+- evidence from each worker
+- merge/promotion readiness
+
+The CLI workers never receive production secrets directly. Their provider/OAuth state is either pre-authorized inside the sandbox runner's credential volume or marked as an unmet provider requirement. When Codex CLI and Claude Code CLI are both used, the Work Capsule records separate executor session entries under `workspaceState.executor.sessions[]`; a later reconciler can compare their evidence, flag disagreement, and preserve useful dissent instead of collapsing it into one agent output.
+
 ## 10. Portal Self-Update and Replacement
 
 The portal may coordinate its own replacement, but the sandbox must never replace production directly.
@@ -594,11 +634,12 @@ The portal may coordinate its own replacement, but the sandbox must never replac
 The safe path is:
 
 1. Work Capsule reaches `ready-for-review`.
-2. PR is opened and reviewed.
-3. PR merges to `main`.
-4. Git webhook records or updates a `GitPromotionCandidate`.
-5. Build execution provider creates a fresh sandbox from the target SHA.
-6. Sandbox verification runs:
+2. Branch is pushed and the capsule readiness contract (section 6.5) is satisfied.
+3. PR is opened and reviewed; opening the PR means the author believes merge automation may act on it.
+4. PR merges to `main`.
+5. Git webhook records or updates a `GitPromotionCandidate`.
+6. Build execution provider creates a fresh sandbox from the target SHA.
+7. Sandbox verification runs:
    - install/build setup
    - typecheck
    - production build
@@ -607,18 +648,19 @@ The safe path is:
    - login check
    - backlog count invariant
    - provider configuration presence check
+   - scratch-install/new-customer setup rehearsal when the change affects install, setup, provider auth, Build Studio, Work Capsules, promotion, or platform shell routing
    - promotion-readiness evidence capture
-7. Portal creates or links a `ChangePromotion`.
-8. Backup is captured:
+8. Portal creates or links a `ChangePromotion`.
+9. Backup is captured:
    - Postgres
    - Neo4j
    - Qdrant
    - runtime config fingerprint
    - provider configuration fingerprint without secrets
-9. Human approves promotion.
-10. Promotion runner swaps the running portal.
-11. Post-promotion health checks run.
-12. Failure triggers rollback to previous image and backup.
+10. Human approves promotion.
+11. Promotion runner swaps the running portal.
+12. Post-promotion health checks run.
+13. Failure triggers rollback to previous image and backup.
 
 ### 10.1 Production Lock
 
@@ -674,6 +716,25 @@ When a portal rebaseline is needed:
 4. Capsules blocked on providers move from `blocked` to `ready` only after health checks pass.
 
 This removes manual guessing while avoiding secret leakage to coding agents.
+
+### 11.3 Scratch-Install Rehearsal
+
+Rapid platform work is not considered promotion-ready until DPF has periodically proven the new-customer path from a clean install. The rehearsal uses a fresh database and empty runtime volumes, not the developer's warmed-up portal.
+
+Minimum evidence:
+
+1. Install starts from the documented installer or compose entry point with no existing DPF volumes.
+2. `/setup` creates the install organization and admin account.
+3. Backlog and epics are either restored from the approved backup path or explicitly preserved from the source install before destructive reset.
+4. Provider rows seed correctly without secrets.
+5. Required API-key/OAuth providers show actionable setup states.
+6. The user can re-authorize or re-enter required provider credentials through the portal UI.
+7. Build Studio can see Codex and Claude CLI availability as configured, or reports them as missing requirements without pretending they are usable.
+8. `/build/work` can create/adopt a capsule after first run.
+9. A small Build Studio or capsule-managed change reaches branch-pushed evidence without opening a PR prematurely.
+10. Promotion remains blocked until sandbox verification, backup evidence, and human approval are present.
+
+This rehearsal protects the "preserve backlog and epics, re-setup OAuth and other first-run elements" requirement. It does not move secrets between installs; it proves the setup and reauthorization paths are understandable from the new-customer perspective.
 
 ## 12. UX Design
 
@@ -819,13 +880,17 @@ Execute in this order so fresh installs and existing installs both land cleanly:
 - generate branch/worktree names
 - record initial scope
 - block root clone active work
+- keep branch push as the in-flight handoff mechanism
+- keep PR creation disabled until the readiness contract is satisfied
 
 ### Phase 3: Executor Attachment
 
 - attach Build Studio builds to capsules
 - attach Codex/Claude desktop sessions through MCP tools
+- attach Codex CLI and Claude Code CLI sandbox sessions as first-class capsule executors
 - record external execution evidence
 - expose collision warnings
+- record hive-mind handoff/disagreement evidence without merging it into one opaque agent note
 
 ### Phase 4: Daily Steward
 
@@ -838,6 +903,7 @@ Execute in this order so fresh installs and existing installs both land cleanly:
 - link `GitPromotionCandidate` to capsules
 - require sandbox verification evidence
 - require backup evidence
+- require scratch-install/new-customer rehearsal evidence for install/setup/provider/auth/platform-shell changes
 - require human approval
 - expose rollback/rescue instructions
 
@@ -855,7 +921,7 @@ The first implementation slice **is Phase 1** as detailed in section 15 and the 
 2. `apps/web/lib/work-capsules.ts`: enum constants (status / source / executor / activity-kind / evidence-kind), validators, and time constants (`LEASE_TTL_MS`, `STALE_CACHE_MS`, `STATUS_OVERRIDE_TTL_MS`).
 3. MCP tool surface: `list_work_capsules`, `get_work_capsule`, `create_work_capsule`, `adopt_worktree`, `claim_capsule_scope`, `release_capsule_scope`, `record_capsule_evidence`, `heartbeat_capsule`, `update_work_capsule_status`  -  definition + handler + dispatch case lands together for each.
 4. Read-only git/worktree scanner: branch, base/head SHA, dirty + untracked counts, PR URL extraction from text, worktree-list parsing.
-5. Work Control intake UI at `/build/work` showing active capsules (joined to scanner output by branch) and adoptable worktrees (scanner output minus already-adopted branches).
+5. Work Control intake UI at `/build/work` showing active capsules (joined to scanner output by branch) and adoptable worktrees (scanner output minus already-adopted branches, with `main` excluded because the root/release worktree is not adoptable implementation work).
 6. Tests per the section 17 Phase 1 list, including the AGENTS.md section 3 enum-parity test.
 
 Out of scope for Phase 1 (deferred to later phases per section 15): automatic worktree creation, production promotion, lease auto-renewal middleware, daily-steward job, any `ChangePromotion.kind` work.
@@ -871,7 +937,8 @@ Every phase satisfies the canonical Build Gate (AGENTS.md section 5): unit tests
 3. MCP tool tests for create / adopt / list / get / heartbeat / evidence / scope-claim / scope-release / status-update paths, including idempotency-key conflict behavior and the `(repositoryFullName, headBranch)` partial-unique-index race fallback.
 4. UI tests for Work Control: empty state, active capsule rows, adoptable rows, stale-cache and lease-expired health markers.
 5. Authorization tests covering both the human capability gate and the agent grant gate from section 9.3.
-6. UX verification against the Docker-served portal at `AUTH_URL` / `APP_URL`, not `next dev`.
+6. UI/data-loader tests that prove `main` is not presented as adoptable work.
+7. UX verification against the Docker-served portal at `AUTH_URL` / `APP_URL`, not `next dev`.
 
 ### Phase 3 (Executor Attachment)
 
@@ -880,6 +947,7 @@ Adds:
 1. Lease auto-renewal middleware tests  -  write tools renew, read tools do not.
 2. Collision-detection tests for overlapping `(kind, value)` scope claims across active capsules.
 3. External executor handoff tests  -  `executor-changed` activity is written on every transition.
+4. CLI hive tests proving Codex CLI and Claude Code CLI sessions attach as separate executor sessions, record separate evidence, and do not receive raw provider/OAuth secrets.
 
 ### Phase 4 (Daily Steward)
 
@@ -898,6 +966,7 @@ Adds:
 4. Health check before and after swap.
 5. Rollback rehearsal against a deliberately failed promotion.
 6. Partial-unique-index test for `ChangePromotion(kind = 'portal-replacement', status = 'in_progress')` (one-at-a-time invariant from section 10.1).
+7. Scratch-install rehearsal from empty runtime volumes through setup, provider setup states, Work Control access, and blocked-until-evidence promotion readiness.
 
 ## 18. Invariants
 
@@ -916,6 +985,8 @@ The "first enforced from" annotation tells implementers when each invariant beco
 11. External executor capsules carry a lease; an expired lease never silently transfers ownership. It surfaces a recommendation. *(Phase 1 sets the lease; Phase 4 daily-steward surfaces expiry.)*
 12. Every commit on a capsule branch carries a DCO sign-off and a `DPF-Capsule:` trailer; the PR body carries the same trailer. *(Phase 3  -  emitted by Build Studio + external clients then.)*
 13. At most one `ChangePromotion` of kind `portal-replacement` may be `in_progress`, enforced by a partial unique index added in the portal-self-update slice. **(Enforced from Phase 5; not in effect in Phase 1.)**
+14. PR creation is a ready-to-merge signal. In-flight work is represented by pushed branches, capsules, builds, and evidence; PRs are not used as draft parking places. *(Phase 2 UI/policy; Phase 5 enforcement for promotion.)*
+15. Scratch-install rehearsal evidence is required before promoting changes that affect install, setup, provider auth, Build Studio, Work Capsules, promotion, or platform shell routing. *(Phase 5.)*
 
 ## 19. Resolved V1 Decisions
 
@@ -926,6 +997,8 @@ In this spec, **"v1" = Phases 1 through 5 inclusive**  -  the first end-to-end c
 3. The daily steward produces recommendations only in v1. It does not delete worktrees, close PRs, or create cleanup backlog items automatically.
 4. Scope claims are soft leases in v1. They warn and guide, but they do not block git operations.
 5. Portal replacement remains human-approved in v1 even when sandbox verification is green.
+6. PRs are merge-ready artifacts. Pushed branches and capsules are the in-flight collaboration artifacts.
+7. A clean scratch install is a required release rehearsal, not an optional QA curiosity, whenever the work could change first-run or promotion confidence.
 
 ## 20. Recommended Direction
 
@@ -934,9 +1007,10 @@ Adopt the hybrid governed execution model:
 - portal owns work coordination
 - Build Studio remains native executor
 - Codex and Claude desktop attach as external executors
+- Codex CLI and Claude Code CLI can run inside the sandbox as governed executor sessions
 - Work Capsules become the missing lifecycle record
 - adoption of existing work comes before full automation
-- portal self-update goes through sandbox, backup, approval, promotion, and rollback
+- portal self-update goes through scratch-install rehearsal, sandbox, backup, approval, promotion, and rollback
 
 This gives DPF the parallelism the user wants without letting each agent create a separate universe of truth.
 
@@ -953,3 +1027,5 @@ These decisions close the chief-architect review questions so implementation pla
 5. **Status override TTL.** Manual status overrides last 24 hours by default and are stored in `workspaceState.statusOverride.until`. Operators may clear or extend an override explicitly.
 6. **Bundled MCP service activation.** Work Capsule tools are built into the existing `apps/web/lib/mcp-tools.ts` MCP surface and require no separate admin MCP server registration. The implementation updates tool definitions, human `requiredCapability` values, `TOOL_TO_GRANTS`, grant catalog, and seeded agent grants in **one PR** (multiple commits within that PR are fine; cross-PR splits are not, because partial enablement leaves the bouncer in an inconsistent state).
 7. **Historical adoption cutoff.** V1 surfaces: open PRs of any age, dirty worktrees of any age, branches with commits ahead of `origin/main` from the last 45 days, and any branch/worktree explicitly pasted by path or branch name. Older clean branches without PRs stay hidden until Phase 4 cleanup.
+8. **PR timing.** Work Capsule tooling may push branches before merge readiness, but it must not create a PR until the capsule passes section 6.5. If a PR exists before readiness, the steward recommends closing the PR and preserving the branch.
+9. **Scratch-install gate.** Portal replacement and release-candidate promotion require a clean-install rehearsal when the branch affects first-run setup, provider/OAuth state, Build Studio, Work Capsules, promotion, or platform shell routing. The rehearsal preserves backlog/epic data through backup/restore or explicit source-install export; it never copies raw secrets.

@@ -2227,7 +2227,7 @@ git add apps/web/app/(shell)/build/work/page.tsx apps/web/components/build/work-
 git commit -s -m "feat(web): add work control surface"
 ```
 
-### Task 9: Phase 1 Verification and PR Update
+### Task 9: Phase 1 Verification and Branch Handoff
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-05-14-portal-work-capsule-control-harness-design.md` if implementation discovers a spec correction.
@@ -2242,6 +2242,16 @@ pnpm --filter web exec vitest run apps/web/lib/work-capsules.test.ts apps/web/li
 ```
 
 Expected: PASS.
+
+- [ ] **Step 1a: Confirm release worktree filtering**
+
+Run:
+
+```powershell
+pnpm --filter web exec vitest run lib/actions/work-capsules.test.ts
+```
+
+Expected: PASS, including coverage that the `main` release worktree is not presented as adoptable implementation work.
 
 - [ ] **Step 2: Run Prisma validation and generation**
 
@@ -2304,29 +2314,29 @@ Then verify:
 
 - [ ] **Step 7: Commit any verification doc updates**
 
-If verification finds only pre-existing failures, document them in the PR body. If verification requires a code/doc correction, commit it:
+If verification finds only pre-existing failures, document them in the branch handoff notes. If verification requires a code/doc correction, commit it:
 
 ```powershell
 git add <corrected-files>
 git commit -s -m "fix: finalize work capsule phase 1"
 ```
 
-- [ ] **Step 8: Push and update PR**
+- [ ] **Step 8: Push branch without opening a PR**
 
-Resolve the active PR for the current branch dynamically; hardcoding a PR
-number breaks if the branch is rebased or a fresh PR is opened mid-execution.
+Push the branch so it is backed up and visible, but do not create a PR until
+the branch is truly ready to merge. In this repository, PR creation is the
+ready-to-merge signal; draft PRs are not used as an in-flight handoff.
 
 ```powershell
 git push
-$prNumber = gh pr view --json number -q .number
-gh pr comment $prNumber --body "Phase 1 implementation plan added: docs/superpowers/plans/2026-05-14-portal-work-capsule-control-harness-phase-1.md"
 ```
 
-Expected: branch pushed; PR updated with a concise pointer to the plan and verification evidence. Do not replace the PR body with the full implementation plan.
+Expected: branch pushed. No PR exists until the final merge-ready review gate.
 
 ## Implementation Notes
 
 - Do not edit the root `D:\DPF` checkout for implementation. Use the existing clean worktree at `D:\DPF\.worktrees\portal-work-capsule-control-harness`.
+- Do not open a PR as an early progress marker. Pushed branches and Work Capsules are the handoff artifacts while work is in flight.
 - Do not grant `work_capsule_promote` to any agent in Phase 1.
 - Do not use `npx`; use `pnpm --filter <pkg> exec <tool>`. Verification follows AGENTS.md section 2 ("never `npx`"); section 5's `npx next build` example will be reconciled in a separate doc PR.
 - Keep all new UI theme-aware. No `text-gray-*`, `bg-white`, hardcoded hex, or inline color styles.

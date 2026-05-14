@@ -83,4 +83,19 @@ describe("getWorkControlData", () => {
     ]);
     expect(mockGetWorktreeDirtySummary).toHaveBeenCalledWith("D:/DPF-orphan");
   });
+
+  it("does not present the release main worktree as adoptable work", async () => {
+    mockScanGitWorktrees.mockResolvedValue([
+      { path: "D:/DPF", branch: "main", headSha: "main-sha" },
+      { path: "D:/DPF-feature", branch: "feat/real-work", headSha: "feature-sha" },
+    ]);
+
+    const { getWorkControlData } = await import("./work-capsules");
+    const data = await getWorkControlData();
+
+    expect(data.adoptable).toEqual([
+      expect.objectContaining({ path: "D:/DPF-feature", branch: "feat/real-work" }),
+    ]);
+    expect(mockGetWorktreeDirtySummary).not.toHaveBeenCalledWith("D:/DPF");
+  });
 });
