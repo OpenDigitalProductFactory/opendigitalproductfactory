@@ -11,6 +11,7 @@
 param(
     [switch]$Execute,
     [switch]$KeepRunning,
+    [switch]$KeepWorktree,
     [string]$ScratchRoot = "",
     [string]$SourceRef = "HEAD",
     [string]$ProjectName = "",
@@ -251,6 +252,7 @@ $plan = [ordered]@{
     codexCallbackUrl = "http://localhost:$($ports.CodexCallback)"
     generatedSecrets = "scratch-only"
     copiedSourceSecrets = $false
+    keepWorktree = [bool]$KeepWorktree
     composeParallelLimit = $ComposeParallelLimit
     codexCli = Get-CommandRecord "codex"
     claudeCli = Get-CommandRecord "claude"
@@ -360,8 +362,19 @@ if (-not $KeepRunning) {
         Pop-Location
     }
     Write-Ok "Stopped $ProjectName and removed scratch volumes"
+
+    if (-not $KeepWorktree) {
+        Write-Step "Removing scratch worktree"
+        git -C $repoRoot worktree remove --force $worktreePath
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Could not remove scratch worktree automatically: $worktreePath"
+        } else {
+            Write-Ok "Removed scratch worktree; evidence remains at $evidencePath"
+        }
+    }
 } else {
     Write-Warn "Scratch stack left running. Stop with:"
     Write-Host "  cd $worktreePath"
     Write-Host "  docker compose -p $ProjectName -f docker-compose.yml -f docker-compose.scratch-rehearsal.override.yml down -v"
+    Write-Host "  git -C $repoRoot worktree remove --force $worktreePath"
 }
