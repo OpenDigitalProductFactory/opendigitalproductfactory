@@ -3,13 +3,16 @@ import Link from "next/link";
 import type { PortfolioTreeNode } from "@/lib/portfolio";
 import type { PortfolioSummary } from "@/lib/portfolio-data";
 import { PORTFOLIO_COLOURS, PORTFOLIO_OWNER_ROLES, computeHealth } from "@/lib/portfolio";
+import type { PortfolioBudgetMetric } from "@/lib/portfolio/budget-provenance";
+import type { DataSourceProvenance } from "@/lib/surface-data-provenance";
 import { LIFECYCLE_STAGE_LABELS } from "@/lib/backlog";
+import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
 import { PlatformHealthStrip } from "./PlatformHealthStrip";
 
 type Props = {
   roots: PortfolioTreeNode[];
   agentCounts: Record<string, number>;
-  budgets: Record<string, string>;
+  budgets: Record<string, PortfolioBudgetMetric>;
   summary: PortfolioSummary;
 };
 
@@ -95,6 +98,7 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
           {roots.map((root) => {
             const colour = PORTFOLIO_COLOURS[root.nodeId] ?? "var(--dpf-accent)";
             const ownerRole = PORTFOLIO_OWNER_ROLES[root.nodeId] ?? "--";
+            const budget = budgets[root.nodeId];
             return (
               <Link
                 key={root.id}
@@ -109,7 +113,12 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
                   <Stat value={root.totalCount} label="Products" colour="var(--dpf-text)" />
                   <Stat value={computeHealth(root.activeCount, root.totalCount)} label="Health" colour={colour} />
                   <Stat value={agentCounts[root.nodeId] ?? 0} label="Agents" colour={colour} />
-                  <Stat value={budgets[root.nodeId] ?? "--"} label="Budget" colour={colour} />
+                  <Stat
+                    value={budget?.value ?? "\u2014"}
+                    label="Budget"
+                    colour={colour}
+                    provenance={budget?.provenance}
+                  />
                   <Stat value={ownerRole} label="Owner" colour={colour} small />
                 </div>
               </Link>
@@ -206,11 +215,13 @@ function Stat({
   value,
   label,
   colour,
+  provenance,
   small,
 }: {
   value: number | string;
   label: string;
   colour: string;
+  provenance?: DataSourceProvenance;
   small?: boolean;
 }) {
   return (
@@ -219,6 +230,11 @@ function Stat({
         {value}
       </p>
       <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-wider">{label}</p>
+      {provenance && (
+        <div className="mt-1">
+          <DataSourceBadge compact provenance={provenance} />
+        </div>
+      )}
     </div>
   );
 }
