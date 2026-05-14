@@ -91,6 +91,16 @@ See [Scratch Install Rehearsal](scratch-install-rehearsal.md). The script
 creates a separate worktree, a separate Compose project, alternate ports, and
 scratch-only secrets, then records evidence under the scratch directory.
 
+For install, setup, provider, Build Studio, Work Capsule, or promotion-sensitive
+branches, include the browser-driven new-customer path:
+
+```powershell
+.\scripts\scratch-install-rehearsal.ps1 -Execute -RunFirstRunWalkthrough
+```
+
+That mode verifies `/setup`, owner account creation, provider setup access, and
+`/build/work` access from the scratch install before cleanup.
+
 ## How to run each verification (manual sections)
 
 Each section below is paste-able. Copy the block, fill in the

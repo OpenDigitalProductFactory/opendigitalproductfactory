@@ -721,18 +721,18 @@ This removes manual guessing while avoiding secret leakage to coding agents.
 
 Rapid platform work is not considered promotion-ready until DPF has periodically proven the new-customer path from a clean install. The rehearsal uses a fresh database and empty runtime volumes, not the developer's warmed-up portal.
 
-The Windows helper is `scripts/scratch-install-rehearsal.ps1`; the operator runbook is `docs/install/scratch-install-rehearsal.md`. The helper must remain non-destructive: it creates a separate git worktree, a separate Compose project, alternate host ports, and scratch-only generated secrets.
+The Windows helper is `scripts/scratch-install-rehearsal.ps1`; the operator runbook is `docs/install/scratch-install-rehearsal.md`. The helper must remain non-destructive: it creates a separate git worktree, a separate Compose project, alternate host ports, and scratch-only generated secrets. When run with `-RunFirstRunWalkthrough`, it must also drive the new-customer browser path and record screenshots plus `first-run-walkthrough-result.json`.
 
 Minimum evidence:
 
 1. Install starts from the documented installer or compose entry point with no existing DPF volumes.
-2. `/setup` creates the install organization and admin account.
+2. `/setup` creates the install organization and admin account, then keeps the new owner in the authenticated portal flow.
 3. Backlog and epics are either restored from the approved backup path or explicitly preserved from the source install before destructive reset.
 4. Provider rows seed correctly without secrets.
-5. Required API-key/OAuth providers show actionable setup states.
+5. Required API-key/OAuth providers show actionable setup states on `/platform/ai/providers`.
 6. The user can re-authorize or re-enter required provider credentials through the portal UI.
 7. Build Studio can see Codex and Claude CLI availability as configured, or reports them as missing requirements without pretending they are usable.
-8. `/build/work` can create/adopt a capsule after first run.
+8. `/build/work` is reachable after first login and can create/adopt a capsule after first run.
 9. A small Build Studio or capsule-managed change reaches branch-pushed evidence without opening a PR prematurely.
 10. Promotion remains blocked until sandbox verification, backup evidence, and human approval are present.
 

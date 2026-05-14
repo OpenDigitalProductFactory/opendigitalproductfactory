@@ -54,6 +54,20 @@ Leave the scratch portal online for browser inspection:
 
 The stop command is printed at the end when `-KeepRunning` is used.
 
+Run the first-run customer walkthrough while the scratch portal is live:
+
+```powershell
+.\scripts\scratch-install-rehearsal.ps1 -Execute -RunFirstRunWalkthrough
+```
+
+The walkthrough opens the scratch portal with Playwright, confirms `/setup`
+is reachable on empty runtime volumes, creates the scratch organization and
+owner account, verifies the provider setup surface, and verifies `/build/work`
+after first login. It writes screenshots and
+`first-run-walkthrough-result.json` to the same evidence directory. The
+scratch password is used only for that local browser session and is not written
+to evidence JSON.
+
 Use `-ComposeParallelLimit` to tune build concurrency. The default is `1` to
 avoid Docker Desktop memory pressure during full-stack first-run rehearsal.
 
@@ -71,6 +85,8 @@ The evidence directory contains:
 
 - `scratch-rehearsal-manifest.json`
 - `scratch-rehearsal-result.json` after health passes
+- `first-run-walkthrough-result.json` and screenshots when
+  `-RunFirstRunWalkthrough` is used
 - `compose-ps.txt` and `portal-logs.txt` if health fails
 
 Attach these files to the Work Capsule or release evidence before opening a PR for merge-ready promotion work.

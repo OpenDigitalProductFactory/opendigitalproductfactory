@@ -46,8 +46,8 @@ When adding or changing a QA ID for Build Studio, Ops/backlog, Discovery, Storef
 | SETUP-05 | **Incomplete information test (AI coworker path):** Ask COO to analyze branding without providing a URL | Agent asks for the URL rather than proceeding |
 | SETUP-06 | Run `scripts/scratch-install-rehearsal.ps1 -Execute` or the documented installer path with empty DPF runtime volumes | First visit redirects to `/setup`; no warmed-up organization, provider credential, backlog, or session state is silently reused |
 | SETUP-07 | Before destructive rebaseline, capture backlog/epic snapshot; after restore/import, compare live counts and representative IDs | Backlog and epics are preserved from the source install or the rehearsal fails before provider/OAuth setup begins |
-| SETUP-08 | Complete first-run setup through the portal as a new customer/admin | Organization and admin account are created; workspace loads; `/build/work` is available after login |
-| SETUP-09 | Inspect AI provider setup on a fresh install before entering any secret | Provider rows exist as configured/unconfigured states; no fake healthy status appears; missing credentials have actionable setup links |
+| SETUP-08 | Run `scripts/scratch-install-rehearsal.ps1 -Execute -RunFirstRunWalkthrough` or manually complete first-run setup through the portal as a new customer/admin | Organization and admin account are created; the new owner remains authenticated; `/build/work` is available after login; screenshots and `first-run-walkthrough-result.json` are captured |
+| SETUP-09 | Inspect AI provider setup on a fresh install before entering any secret, or use the walkthrough evidence for `/platform/ai/providers` | Provider rows exist as configured/unconfigured states; no fake healthy status appears; missing credentials have actionable setup links |
 | SETUP-10 | Re-authorize or re-enter one required provider credential through the portal UI | Credential health moves to configured/healthy without exposing raw API keys, OAuth refresh tokens, or CLI auth files in the UI or logs |
 
 ## Phase 2: Workspace Dashboard

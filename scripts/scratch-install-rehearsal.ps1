@@ -19,7 +19,12 @@ param(
     [int]$PortBase = 3900,
     [switch]$NoAutoPortSearch,
     [int]$ComposeParallelLimit = 1,
-    [int]$HealthTimeoutSeconds = 300
+    [int]$HealthTimeoutSeconds = 300,
+    [switch]$RunFirstRunWalkthrough,
+    [string]$WalkthroughOrgName = "Digital Product Factory Scratch",
+    [string]$WalkthroughEmail = "",
+    [string]$WalkthroughPassword = "ScratchPassw0rd!",
+    [switch]$HeadedWalkthrough
 )
 
 $ErrorActionPreference = "Stop"
@@ -217,6 +222,9 @@ Write-Host "============================="
 
 Require-Command git | Out-Null
 Require-Command docker | Out-Null
+if ($RunFirstRunWalkthrough) {
+    Require-Command pnpm | Out-Null
+}
 
 $repoRoot = Get-RepoRoot
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -228,6 +236,9 @@ $worktreePath = Join-Path $ScratchRoot "source"
 $evidencePath = Join-Path $ScratchRoot "evidence"
 if (-not $ProjectName) {
     $ProjectName = "dpf-scratch-$timestamp"
+}
+if (-not $WalkthroughEmail) {
+    $WalkthroughEmail = "scratch-admin+$timestamp@dpf.local"
 }
 
 $ports = Find-PortSet $PortBase -Exact:$NoAutoPortSearch
@@ -256,6 +267,13 @@ $plan = [ordered]@{
     keepWorktree = [bool]$KeepWorktree
     keepImages = [bool]$KeepImages
     composeParallelLimit = $ComposeParallelLimit
+    firstRunWalkthrough = [ordered]@{
+        enabled = [bool]$RunFirstRunWalkthrough
+        orgName = $WalkthroughOrgName
+        email = $WalkthroughEmail
+        passwordRecorded = $false
+        headed = [bool]$HeadedWalkthrough
+    }
     codexCli = Get-CommandRecord "codex"
     claudeCli = Get-CommandRecord "claude"
 }
@@ -337,6 +355,40 @@ if (-not (Wait-ForHealth $healthUrl $HealthTimeoutSeconds)) {
 }
 Write-Ok "Scratch portal health passed"
 
+$walkthroughResultPath = $null
+if ($RunFirstRunWalkthrough) {
+    Write-Step "Running first-run walkthrough"
+    $walkthroughArgs = @(
+        "exec",
+        "node",
+        "scripts/scratch-first-run-walkthrough.mjs",
+        "--portal-url",
+        $plan.portalUrl,
+        "--evidence-path",
+        $evidencePath,
+        "--org-name",
+        $WalkthroughOrgName,
+        "--email",
+        $WalkthroughEmail,
+        "--password",
+        $WalkthroughPassword
+    )
+    if ($HeadedWalkthrough) {
+        $walkthroughArgs += "--headed"
+    }
+    Push-Location $repoRoot
+    try {
+        & pnpm @walkthroughArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "First-run walkthrough failed. Evidence remains at $evidencePath."
+        }
+    } finally {
+        Pop-Location
+    }
+    $walkthroughResultPath = Join-Path $evidencePath "first-run-walkthrough-result.json"
+    Write-Ok "First-run walkthrough passed"
+}
+
 $result = [ordered]@{
     completedAt = (Get-Date).ToString("o")
     portalHealthUrl = $healthUrl
@@ -346,6 +398,15 @@ $result = [ordered]@{
     worktreePath = $worktreePath
     evidencePath = $evidencePath
     keepRunning = [bool]$KeepRunning
+    firstRunWalkthrough = if ($RunFirstRunWalkthrough) {
+        [ordered]@{
+            resultPath = $walkthroughResultPath
+            email = $WalkthroughEmail
+            passwordRecorded = $false
+        }
+    } else {
+        $null
+    }
 }
 $result | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $evidencePath "scratch-rehearsal-result.json") -Encoding ASCII
 

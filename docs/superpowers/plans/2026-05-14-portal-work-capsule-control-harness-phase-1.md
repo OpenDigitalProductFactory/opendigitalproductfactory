@@ -2348,6 +2348,21 @@ path, alternate portal/sandbox URLs, and Codex/Claude CLI availability. Full
 `-Execute` rehearsal is the next gate before merge-ready PR creation for
 install/setup/provider/promotion-sensitive work.
 
+- [ ] **Step 10: Capture first-run walkthrough evidence**
+
+For any branch that touches install, setup, provider/OAuth state, Build Studio,
+Work Capsules, promotion, or platform shell routing, run the browser-driven
+scratch flow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scratch-install-rehearsal.ps1 -Execute -RunFirstRunWalkthrough
+```
+
+Expected: `first-run-walkthrough-result.json` plus screenshots prove `/setup`,
+owner account creation, `/platform/ai/providers`, and `/build/work` from the
+scratch install. The command cleans scratch containers, volumes, image tags, and
+worktree unless keep flags are supplied.
+
 ## Implementation Notes
 
 - Do not edit the root `D:\DPF` checkout for implementation. Use the existing clean worktree at `D:\DPF\.worktrees\portal-work-capsule-control-harness`.
