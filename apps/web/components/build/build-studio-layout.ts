@@ -1,6 +1,7 @@
 export const BUILD_STUDIO_TEST_IDS = {
   shell: "build-studio-shell",
   graphPanel: "build-studio-graph-panel",
+  buildListItem: "build-studio-build-list-item",
 } as const;
 
 export function getBuildStudioShellClassName() {
@@ -26,5 +27,5 @@ export function getBuildStudioSidebarClassName(sidebarOpen: boolean) {
 }
 
 export function getBuildStudioGraphPanelClassName() {
-  return "flex min-h-[420px] flex-1 overflow-hidden px-4 pb-4 pt-3";
+  return "flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3";
 }

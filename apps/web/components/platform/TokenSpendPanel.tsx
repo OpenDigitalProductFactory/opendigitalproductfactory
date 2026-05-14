@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SpendByProvider, SpendByAgent } from "@/lib/ai-provider-types";
+import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
 
 // Month selector (switching between months) is deferred to a later phase —
 // TokenUsage will be empty in Phase 7A. Current month is fixed server-side.
@@ -36,9 +37,23 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
-          <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Token Spend — {monthLabel}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Internal token usage — {monthLabel}
+            </div>
+            <DataSourceBadge
+              compact
+              provenance={{
+                kind: "live-db",
+                label: "TokenUsage",
+                sourceTable: "TokenUsage",
+                description: "DPF recorded token usage; this is not external provider account billing.",
+              }}
+            />
           </div>
+          <p style={{ color: "var(--dpf-muted)", fontSize: 11, margin: "4px 0 0" }}>
+            Recorded by DPF from coworker runs; provider invoices require a connected finance source.
+          </p>
           {!isEmpty && (
             <div style={{ color: "var(--dpf-text)", fontSize: 18, fontWeight: 700, marginTop: 2 }}>
               {formatCost(totalCost)} total
@@ -69,11 +84,16 @@ export function TokenSpendPanel({ initialMonth, byProvider, byAgent }: Props) {
 
       {!isEmpty && tab === "provider" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
-          {byProvider.map((r) => {
+          {byProvider.map((r, index) => {
             const pct = totalCost > 0 ? Math.round((r.totalCostUsd / totalCost) * 100) : 0;
             return (
-              <div key={r.providerId} style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6, padding: 10 }}>
-                <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginBottom: 2 }}>{r.providerId}</div>
+              <div key={r.providerId || `unknown-${index}`} style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6, padding: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginBottom: 2 }}>
+                  <div style={{ color: "var(--dpf-muted)", fontSize: 10, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {r.providerName}
+                  </div>
+                  <DataSourceBadge compact provenance={r.provenance} />
+                </div>
                 <div style={{ color: "var(--dpf-text)", fontSize: 16, fontWeight: 700 }}>{formatCost(r.totalCostUsd)}</div>
                 <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginTop: 2 }}>
                   {formatTokens(r.totalInputTokens)} in · {formatTokens(r.totalOutputTokens)} out

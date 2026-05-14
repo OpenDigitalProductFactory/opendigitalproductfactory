@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
-import { getBillingLabel } from "@/lib/ai-provider-types";
+import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
+import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
 import { ModelClassBadges } from "./ModelClassBadge";
 import { ProviderStatusToggle } from "./ProviderStatusToggle";
 
@@ -97,12 +98,12 @@ export function ServiceRow({ pw, modelSummary }: Props) {
   };
   const statusColor = STATUS_COLORS_EXT[effectiveStatus] ?? "var(--dpf-muted)";
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
-  const billingLabel = getBillingLabel(provider);
+  const costView = buildProviderCostView({ provider, financeProfile: null, internalUsage: null });
 
   return (
     <div
       style={{
-        borderBottom: "1px solid var(--dpf-border, #2a2a40)",
+        borderBottom: "1px solid var(--dpf-border)",
       }}
     >
       {/* Collapsed row */}
@@ -119,7 +120,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
           gap: 8,
           padding: "6px 10px",
           cursor: "pointer",
-          background: hovered ? "var(--dpf-surface-2, #1a1a2e)" : "transparent",
+          background: hovered ? "var(--dpf-surface-2)" : "transparent",
           transition: "background 0.1s",
         }}
       >
@@ -218,7 +219,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
                 style={{
                   fontSize: 9,
                   color: "var(--dpf-muted)",
-                  background: "#ffffff0f",
+                  background: "color-mix(in srgb, var(--dpf-text) 6%, transparent)",
                   padding: "1px 4px",
                   borderRadius: 2,
                 }}
@@ -244,15 +245,9 @@ export function ServiceRow({ pw, modelSummary }: Props) {
           </span>
         )}
 
-        {/* Cost band — hidden on small screens */}
-        {provider.costBand && (
-          <span
-            className="hidden sm:inline"
-            style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}
-          >
-            {provider.costBand}
-          </span>
-        )}
+        <span className="hidden sm:inline" style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}>
+          {costView.externalProviderBilling.value}
+        </span>
 
         {/* Status toggle */}
         <span
@@ -271,8 +266,8 @@ export function ServiceRow({ pw, modelSummary }: Props) {
         <div
           style={{
             padding: "10px 14px 12px 26px",
-            background: "var(--dpf-surface-1, #13131f)",
-            borderTop: "1px solid var(--dpf-border, #2a2a40)",
+            background: "var(--dpf-surface-1)",
+            borderTop: "1px solid var(--dpf-border)",
           }}
         >
           {/* Detail grid */}
@@ -291,7 +286,9 @@ export function ServiceRow({ pw, modelSummary }: Props) {
             )}
             <DetailItem label="Sensitivity"      value={provider.sensitivityClearance.join(", ") || "—"} />
             <DetailItem label="Capability Tier"  value={provider.capabilityTier || "—"} />
-            <DetailItem label="Cost Band"        value={provider.costBand || "—"} />
+            <DetailItem label={costView.routingCostBand.label} value={costView.routingCostBand.value} />
+            <DetailItem label={costView.catalogPricing.label} value={costView.catalogPricing.value} />
+            <DetailItem label={costView.externalProviderBilling.label} value={costView.externalProviderBilling.value} />
           </div>
 
           {/* Task tags */}
@@ -304,7 +301,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
                   style={{
                     fontSize: 10,
                     color: "var(--dpf-muted)",
-                    background: "#ffffff0a",
+                    background: "color-mix(in srgb, var(--dpf-text) 4%, transparent)",
                     border: "1px solid var(--dpf-border)",
                     padding: "1px 6px",
                     borderRadius: 3,
@@ -324,12 +321,16 @@ export function ServiceRow({ pw, modelSummary }: Props) {
             </div>
           )}
 
-          {/* Billing label */}
-          {billingLabel && (
-            <div style={{ color: "var(--dpf-muted)", fontSize: 10, marginBottom: 8 }}>
-              {billingLabel}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>{costView.catalogPricing.label}</span>
+              <DataSourceBadge compact provenance={costView.catalogPricing.provenance} />
             </div>
-          )}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>{costView.externalProviderBilling.label}</span>
+              <DataSourceBadge compact provenance={costView.externalProviderBilling.provenance} />
+            </div>
+          </div>
 
           {/* Credential hint */}
           {credential?.secretHint && (

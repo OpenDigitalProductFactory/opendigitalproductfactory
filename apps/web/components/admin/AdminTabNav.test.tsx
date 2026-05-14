@@ -59,10 +59,12 @@ describe("AdminTabNav", () => {
     const html = renderToStaticMarkup(<AdminTabNav />);
 
     expect(html).toContain('href="/admin/platform-development"');
-    expect(html).toContain('href="/admin/prompts"');
-    expect(html).toContain('href="/admin/skills"');
     expect(html).toContain('href="/admin/issue-reports"');
     expect(html).toContain('href="/admin/diagnostics"');
+    expect(html).not.toContain('href="/admin/prompts"');
+    expect(html).not.toContain('href="/admin/skills"');
+    expect(html).not.toContain(">Prompts<");
+    expect(html).not.toContain(">Skills<");
     expect(html).not.toContain(">Settings<");
     expect(html).not.toContain(">Your Business<");
   });
