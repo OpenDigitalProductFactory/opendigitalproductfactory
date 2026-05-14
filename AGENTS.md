@@ -10,8 +10,8 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 - **Never fabricate.** Ground claims in code, specs, or DB state. → [kernel principle](docs/founder-kernel/wiki/principles/never-fabricate.md)
 - **Research and use standards.** Cite sources; recommend the standard unless you have a project-specific reason to deviate. → [kernel principle](docs/founder-kernel/wiki/principles/research-and-use-standards.md)
-- **Fix the seed, not the runtime.** Recurring config or data regressions mean the seed/template/setup script wasn't patched. Patch the source, then add an invariant guard.
-- **Live state over seed data.** For current epics, backlog, users, capabilities, or status, query the database. Treat `packages/db/src/seed.ts` as bootstrap defaults only; never edit it to represent runtime change.
+- **Fix the seed, not the runtime.** Patch the source script, then add an invariant guard. → [kernel principle](docs/founder-kernel/wiki/principles/fix-the-seed-not-the-runtime.md)
+- **Live state over seed data.** Query the database for current epics, backlog, users, capabilities, status. → [kernel principle](docs/founder-kernel/wiki/principles/live-state-over-seed-data.md)
 - **Single source of truth.** Each rule, fact, or decision in exactly one place. Pointers, not copies. → [kernel principle](docs/founder-kernel/wiki/principles/single-source-of-truth.md)
 - **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save. → [kernel principle](docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md)
 - **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates.
@@ -32,6 +32,8 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 ## 3. Strongly-Typed String Enums (mandatory)
 
+→ [kernel principle](docs/founder-kernel/wiki/principles/strongly-typed-string-enums.md)
+
 DB string columns with fixed valid values are canonical enums. Source of truth: `apps/web/lib/backlog.ts` (`EPIC_STATUSES`, union types) and `apps/web/lib/mcp-tools.ts` (`enum:` arrays). Match exactly.
 
 | Model         | Field    | Valid values                                |
@@ -45,14 +47,14 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 ## 4. Branching, Commits & PRs
 
 - **All changes land via PR against `main`** — including the maintainer's. Branch protection enforces it. → [kernel principle](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md)
-- **One concern per branch, one concern per PR.** Topic branches named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. Branch from `main`.
+- **One concern per branch, one concern per PR.** Topic branches named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. Branch from `main`. → [kernel principle](docs/founder-kernel/wiki/principles/one-concern-per-pr.md)
 - **DCO sign-off required on every commit.** Use `git commit -s`. The DCO bot blocks merge until every commit has a `Signed-off-by:` trailer. → [kernel principle](docs/founder-kernel/wiki/principles/dco-sign-off-required.md)
 - **Always push** after committing. Local-only commits are invisible to CI.
 - **Squash-and-delete on merge:** `gh pr merge <n> --squash --delete-branch`.
-- **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps.
+- **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps. → [kernel principle](docs/founder-kernel/wiki/principles/worktree-per-session.md)
 - **After creating a worktree, seed its MCP config:** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does not carry them across. Run `scripts/seed-worktree-mcp.ps1` (Windows) or `scripts/seed-worktree-mcp.sh` (macOS / Linux) from inside the new worktree to copy them from the root clone. The script is predicated on the platform being installed and an MCP token already generated at Admin > Platform Development. Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector.
 - **Keep the root clone as the merge/release worktree** — read-only for active feature work. Conventional locations: `d:\DPF` on Windows, `~/dpf` on macOS/Linux. Topic worktrees go alongside (`d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`).
-- **Branch guard before implementation and commit:** if `git status --short --branch` reports `HEAD (no branch)` or `git branch --show-current` returns `main`, abort before serious implementation. Create/switch to a topic branch first. Do not claim work is complete while commits are local-only; completion requires a pushed branch or PR unless the user explicitly asked not to publish.
+- **Branch guard before implementation and commit:** if `git status --short --branch` reports `HEAD (no branch)` or `git branch --show-current` returns `main`, abort before serious implementation. Create/switch to a topic branch first. Do not claim work is complete while commits are local-only; completion requires a pushed branch or PR unless the user explicitly asked not to publish. → [kernel principle](docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md)
 
 ## 5. Verification — Build Gate (mandatory)
 
@@ -73,7 +75,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 ## 6. Backlog & Planning
 
-- **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live state before planning or changing backlog work.
+- **Backlog lives in PostgreSQL** (`Epic`, `BacklogItem`). Always query live state before planning or changing backlog work. → [kernel principle](docs/founder-kernel/wiki/principles/backlog-lives-in-postgresql.md)
 - **Use the DPF MCP backlog tools first when available.** Local agent clients are configured by the untracked `.mcp.json` generated from Admin > Platform Development. It points the `dpf` server at the canonical MCP endpoint `/api/mcp/v1`, which exposes backlog/planning tools such as `list_backlog_items`, `get_backlog_item`, `create_backlog_item`, `update_backlog_item_status`, `list_epics`, `link_backlog_item_to_epic`, `search_specs_and_plans`, and `record_execution_evidence` according to the caller's token scopes.
 - **DB fallback must be explicit.** If the `dpf` MCP server is unavailable in the current agent session, query the live Postgres database directly and say that you used DB fallback. Do not substitute `packages/db/src/seed.ts`, generated Prisma files, or stale docs for current backlog state.
 - **Specs and plans** live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. Check for an existing design before starting work — some are ready to implement.
@@ -106,6 +108,8 @@ Every tool call writes to `ToolExecution` (`agentId`, `userId`, `toolName`, `par
 
 ## 9. External Tools
 
+→ [kernel principle](docs/founder-kernel/wiki/principles/tool-evaluation-pipeline.md)
+
 External MCP servers, npm packages, and APIs must pass the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption: 6 agents covering security, architecture, compliance, integration. Approved tools are version-pinned in `packages/db/data/approved_tools_registry.json` with re-evaluation scheduled.
 
 - Spec: `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md`
@@ -113,15 +117,17 @@ External MCP servers, npm packages, and APIs must pass the Tool Evaluation Pipel
 
 ## 10. Design Research
 
+→ [kernel principle](docs/founder-kernel/wiki/principles/design-research-required.md)
+
 Every new feature spec must include a "Research & Benchmarking" section before finalization. Compare 2–3 open-source leaders (read their data models, not just feature lists) and 2–3 commercial products. Document patterns adopted, patterns rejected, anti-patterns identified, and gaps the design fills. Reference specific projects, not abstract "best practices."
 
 ## 11. Data Model Stewardship
 
-Before adding any large feature, audit the existing schema for refactoring opportunities. Indicators that refactoring is needed: a domain model being reused as a shared concept; the same logical data appearing in two+ existing models; a new feature needing meta-data with no canonical home.
+Before adding any large feature, audit the existing schema for refactoring opportunities. Indicators that refactoring is needed: a domain model being reused as a shared concept; the same logical data appearing in two+ existing models; a new feature needing meta-data with no canonical home. → [kernel principle](docs/founder-kernel/wiki/principles/schema-audit-before-features.md)
 
-`Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, env vars, or bespoke fields elsewhere.
+`Organization` is the canonical platform identity model. Any feature needing org name, slug, logo, address, or contact info reads from `Organization` — not from `BrandingConfig`, env vars, or bespoke fields elsewhere. → [kernel principle](docs/founder-kernel/wiki/principles/organization-canonical-identity.md)
 
-**Principal convergence (2026-05-09).** Per the addendum on `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`, any new identity-bearing entity introduced after 2026-05-09 must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. The convergence target covers `User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and `ServiceAccount`. Authorization decisions resolve on the `Principal`; alias kind tells the platform which surface authenticated the request.
+**Principal convergence (2026-05-09).** Per the addendum on `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`, any new identity-bearing entity introduced after 2026-05-09 must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. The convergence target covers `User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and `ServiceAccount`. Authorization decisions resolve on the `Principal`; alias kind tells the platform which surface authenticated the request. → [kernel principle](docs/founder-kernel/wiki/principles/principal-convergence.md)
 
 ## 12. UI — Theme-Aware Styling (mandatory)
 
@@ -151,12 +157,14 @@ Full standard: `docs/platform-usability-standards.md`. Other UI conventions: tab
 
 ## 14. Release Testing
 
+→ [kernel principle](docs/founder-kernel/wiki/principles/release-qa-plan.md)
+
 Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence.
 
 ## 15. Communication
 
 - If uncommitted changes exist, mention them before starting new work.
 - When committing, list what's included.
-- State results and decisions directly. No running commentary on internal deliberation.
+- State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](docs/founder-kernel/wiki/principles/state-results-directly.md)
 - Maintain forward momentum: when the current work naturally implies a next step, name the next smallest useful step from the thread direction and company context. Keep it quiet and operational - no sales pitch, no broad re-planning unless asked.
 - End-of-turn summary: one or two sentences — what changed, what's next.
