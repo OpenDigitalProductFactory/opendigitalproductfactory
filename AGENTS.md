@@ -8,14 +8,14 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 ## 1. First Principles
 
-- **Never fabricate.** If you don't know, say so. Ground claims in code, specs, or DB state — not in patterns from training data.
-- **Research and use standards.** Before designing file layouts, conventions, or integrations, find the existing standard. Cite sources. Recommend the standard unless you have a project-specific reason to deviate.
+- **Never fabricate.** Ground claims in code, specs, or DB state. → [kernel principle](docs/founder-kernel/wiki/principles/never-fabricate.md)
+- **Research and use standards.** Cite sources; recommend the standard unless you have a project-specific reason to deviate. → [kernel principle](docs/founder-kernel/wiki/principles/research-and-use-standards.md)
 - **Fix the seed, not the runtime.** Recurring config or data regressions mean the seed/template/setup script wasn't patched. Patch the source, then add an invariant guard.
 - **Live state over seed data.** For current epics, backlog, users, capabilities, or status, query the database. Treat `packages/db/src/seed.ts` as bootstrap defaults only; never edit it to represent runtime change.
-- **Single source of truth.** Each rule, fact, or decision lives in exactly one place. Pointers, not copies.
-- **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save.
+- **Single source of truth.** Each rule, fact, or decision in exactly one place. Pointers, not copies. → [kernel principle](docs/founder-kernel/wiki/principles/single-source-of-truth.md)
+- **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save. → [kernel principle](docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md)
 - **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates.
-- **Use paid AI capacity responsibly.** DPF treats AI capacity as an operating asset. If valuable, authorized, evidence-producing work exists, agents should keep making governed progress rather than idle. If no safe work exists, record or surface the blocker. Token spend without durable value, evidence, or learning is waste.
+- **Use paid AI capacity responsibly.** → [kernel principle](docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md)
 
 ## 2. Project Architecture (current as of 2026-04-27)
 
@@ -44,9 +44,9 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 ## 4. Branching, Commits & PRs
 
-- **All changes land via PR against `main`** — including the maintainer's. No direct pushes; branch protection enforces it.
+- **All changes land via PR against `main`** — including the maintainer's. Branch protection enforces it. → [kernel principle](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md)
 - **One concern per branch, one concern per PR.** Topic branches named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. Branch from `main`.
-- **DCO sign-off required on every commit.** Use `git commit -s`. The DCO bot blocks merge until every commit has a `Signed-off-by:` trailer.
+- **DCO sign-off required on every commit.** Use `git commit -s`. The DCO bot blocks merge until every commit has a `Signed-off-by:` trailer. → [kernel principle](docs/founder-kernel/wiki/principles/dco-sign-off-required.md)
 - **Always push** after committing. Local-only commits are invisible to CI.
 - **Squash-and-delete on merge:** `gh pr merge <n> --squash --delete-branch`.
 - **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps.
@@ -55,6 +55,8 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 - **Branch guard before implementation and commit:** if `git status --short --branch` reports `HEAD (no branch)` or `git branch --show-current` returns `main`, abort before serious implementation. Create/switch to a topic branch first. Do not claim work is complete while commits are local-only; completion requires a pushed branch or PR unless the user explicitly asked not to publish.
 
 ## 5. Verification — Build Gate (mandatory)
+
+→ [kernel principle](docs/founder-kernel/wiki/principles/build-gate-mandatory.md)
 
 Work is not complete until all four pass:
 
@@ -122,6 +124,8 @@ Before adding any large feature, audit the existing schema for refactoring oppor
 **Principal convergence (2026-05-09).** Per the addendum on `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md`, any new identity-bearing entity introduced after 2026-05-09 must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. The convergence target covers `User`, `CustomerContact`, `Agent`, `EdgeNode`, `MobileDevice`, and `ServiceAccount`. Authorization decisions resolve on the `Principal`; alias kind tells the platform which surface authenticated the request.
 
 ## 12. UI — Theme-Aware Styling (mandatory)
+
+→ [kernel principle](docs/founder-kernel/wiki/principles/no-hardcoded-colors.md)
 
 **No hardcoded colors.** All UI uses CSS custom properties so light mode, dark mode, and branding all work automatically.
 
