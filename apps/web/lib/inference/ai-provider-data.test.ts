@@ -3,6 +3,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Use vi.hoisted so mockPrisma is available when vi.mock factory runs
 const mockPrisma = vi.hoisted(() => ({
+  tokenUsage: {
+    groupBy: vi.fn(),
+  },
+  modelProvider: {
+    findMany: vi.fn(),
+  },
   modelProfile: {
     findMany: vi.fn(),
     groupBy: vi.fn(),
@@ -31,6 +37,7 @@ import {
   getRecipesForProvider,
   getActivatedMcpServers,
   getAsyncOperations,
+  getTokenSpendByProvider,
 } from "./ai-provider-data";
 
 beforeEach(() => { vi.clearAllMocks(); });
@@ -100,5 +107,36 @@ describe("getAsyncOperations", () => {
     expect(mockPrisma.asyncInferenceOp.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 50, orderBy: { createdAt: "desc" } }),
     );
+  });
+});
+
+describe("getTokenSpendByProvider", () => {
+  it("keeps blank or unknown provider usage visible with TokenUsage provenance", async () => {
+    mockPrisma.tokenUsage.groupBy.mockResolvedValue([
+      {
+        providerId: "",
+        _sum: { inputTokens: 100, outputTokens: 50, costUsd: 0.05 },
+      },
+      {
+        providerId: "missing-provider",
+        _sum: { inputTokens: 10, outputTokens: 5, costUsd: 0.01 },
+      },
+      {
+        providerId: "openai",
+        _sum: { inputTokens: 200, outputTokens: 100, costUsd: 0.25 },
+      },
+    ]);
+    mockPrisma.modelProvider.findMany.mockResolvedValue([
+      { providerId: "openai", name: "OpenAI" },
+    ]);
+
+    const result = await getTokenSpendByProvider({ year: 2026, month: 5 });
+
+    expect(result.map((row) => row.providerName)).toEqual([
+      "Unknown provider",
+      "Unknown provider (missing-provider)",
+      "OpenAI",
+    ]);
+    expect(result.every((row) => row.provenance.sourceTable === "TokenUsage")).toBe(true);
   });
 });

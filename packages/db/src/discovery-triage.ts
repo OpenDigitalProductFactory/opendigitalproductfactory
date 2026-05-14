@@ -146,6 +146,13 @@ export type DiscoveryTriageClient = {
   discoveryTriageDecision: {
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
   };
+  taxonomyNode?: {
+    [operation: string]: unknown;
+    findFirst?(args: {
+      where: { OR: Array<{ id: string } | { nodeId: string }> };
+      select: { id: true };
+    }): Promise<{ id: string } | null>;
+  };
 };
 
 export const DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS: DiscoveryTriageThresholds = {
@@ -501,6 +508,8 @@ export async function recordDiscoveryTriageDecision(
   client: DiscoveryTriageClient,
   decision: DiscoveryTriageDecisionInput,
 ): Promise<unknown> {
+  const selectedTaxonomyNodeId = await resolveSelectedTaxonomyNodeId(client, decision.selectedTaxonomyNodeId);
+
   return client.discoveryTriageDecision.create({
     data: {
       decisionId: decision.decisionId,
@@ -513,7 +522,7 @@ export async function recordDiscoveryTriageDecision(
       taxonomyConfidence: decision.score.taxonomyConfidence,
       evidenceCompleteness: decision.score.evidenceCompleteness,
       reproducibilityScore: decision.score.reproducibilityScore,
-      selectedTaxonomyNodeId: decision.selectedTaxonomyNodeId ?? null,
+      selectedTaxonomyNodeId,
       selectedIdentity: decision.selectedIdentity ?? null,
       evidencePacket: decision.evidencePacket,
       proposedRule: decision.proposedRule ?? null,
@@ -522,4 +531,25 @@ export async function recordDiscoveryTriageDecision(
       humanReviewedAt: decision.humanReviewedAt ?? null,
     },
   });
+}
+
+async function resolveSelectedTaxonomyNodeId(
+  client: DiscoveryTriageClient,
+  selectedTaxonomyNodeId: string | null | undefined,
+): Promise<string | null> {
+  const candidate = selectedTaxonomyNodeId?.trim();
+  if (!candidate) return null;
+
+  if (typeof client.taxonomyNode?.findFirst !== "function") {
+    return candidate;
+  }
+
+  const node = await client.taxonomyNode.findFirst({
+    where: {
+      OR: [{ id: candidate }, { nodeId: candidate }],
+    },
+    select: { id: true },
+  });
+
+  return node?.id ?? null;
 }

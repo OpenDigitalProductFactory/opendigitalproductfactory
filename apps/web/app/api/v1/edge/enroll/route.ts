@@ -130,12 +130,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Phase 0 does not auto-approve via this route — the bootstrap-token
-  // metadata decides. Local-host installer-issued tokens carry an
-  // implicit auto-approve flag in the issuance path; for Phase 0 we
-  // default to operator-approval (`autoApprove: false`). Future
-  // refinement may read a flag off the BootstrapToken row to make this
-  // explicit per token; punting until A7's portal UI lands.
+  // Auto-approval is driven by the BootstrapToken row's persisted
+  // `autoApprove` flag — set true at issuance time for installer-
+  // issued local-host tokens (per spec § Approval policy: "Auto-
+  // approve when the bootstrap token is issued by the local installer
+  // for the DPF host's own Edge Node") and for operator-issued bulk-
+  // onboarding tokens. Paste-provisioned tokens default false; the
+  // node lands in `pending` until an operator clicks Approve in
+  // Admin > Platform Development. The route layer leaves
+  // `autoApprove` undefined so the token row is the source of truth.
   const result = await enrollEdgeNode({
     bootstrapToken,
     displayName: parsed.data.displayName,
@@ -149,7 +152,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...(parsed.data.metadata !== undefined
       ? { metadata: parsed.data.metadata }
       : {}),
-    autoApprove: false,
   });
 
   if (!result.ok) {

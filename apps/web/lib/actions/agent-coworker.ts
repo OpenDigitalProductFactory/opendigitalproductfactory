@@ -561,11 +561,11 @@ export async function sendMessage(input: {
       promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
     }
 
-    // Inject Build Studio context — use explicit buildId or auto-resolve on /build route
+    // Inject Build Studio context — use explicit buildId or auto-resolve on /build route.
+    // Exclude `abandoned` so a prior-test abandoned build doesn't shadow the real active build.
     if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
-      // Auto-resolve: find the user's most recent non-terminal build
       const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
+        where: { createdById: user.id!, phase: { notIn: ["complete", "failed", "abandoned"] } },
         orderBy: { updatedAt: "desc" },
         select: { buildId: true },
       });
@@ -682,14 +682,22 @@ export async function sendMessage(input: {
   // Merge and apply mode + build phase filtering
   const mergedTools = [...allPlatformTools, ...pageActions];
 
-  // Resolve the active build phase for tool filtering
+  // Resolve the active build phase for tool filtering. Prefer the build that
+  // prompt assembly already locked onto (resolvedBuildId) so we filter tools
+  // by the same build the agent is reasoning about — otherwise an abandoned
+  // build with a later updatedAt could leak its phase into the tool allowlist.
   let activeBuildPhase: string | null = null;
   if (input.routeContext.startsWith("/build")) {
-    const activeBuild = await prisma.featureBuild.findFirst({
-      where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
-      orderBy: { updatedAt: "desc" },
-      select: { phase: true, buildId: true, threadId: true },
-    }).catch(() => null);
+    const activeBuild = resolvedBuildId
+      ? await prisma.featureBuild.findUnique({
+          where: { buildId: resolvedBuildId },
+          select: { phase: true, buildId: true, threadId: true },
+        }).catch(() => null)
+      : await prisma.featureBuild.findFirst({
+          where: { createdById: user.id!, phase: { notIn: ["complete", "failed", "abandoned"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { phase: true, buildId: true, threadId: true },
+        }).catch(() => null);
     activeBuildPhase = activeBuild?.phase ?? null;
 
     // Link build to this chat thread so the BuildStudio UI can live-refresh
@@ -741,13 +749,20 @@ export async function sendMessage(input: {
   if (activeBuildPhase) {
 
     // Inject PhaseHandoff context — structured summary from the previous phase
-    // replaces raw chat history for focused, token-efficient context
+    // replaces raw chat history for focused, token-efficient context.
+    // Prefer the already-resolved buildId so we don't reach for a different
+    // build than the one assembling this prompt.
     try {
-      const activeBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: user.id!, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
-        select: { buildId: true },
-      });
+      const activeBuild = resolvedBuildId
+        ? await prisma.featureBuild.findUnique({
+            where: { buildId: resolvedBuildId },
+            select: { buildId: true },
+          })
+        : await prisma.featureBuild.findFirst({
+            where: { createdById: user.id!, phase: { notIn: ["complete", "failed", "abandoned"] } },
+            orderBy: { updatedAt: "desc" },
+            select: { buildId: true },
+          });
       if (activeBuild) {
         const latestHandoff = await prisma.phaseHandoff.findFirst({
           where: { buildId: activeBuild.buildId, toPhase: activeBuildPhase },

@@ -80,6 +80,22 @@ dpf_compose_files() {
     *)       : ;;  # no platform overlay
   esac
 
+  # Edge Node bundling. Default ON for single-host installs; set
+  # DPF_INCLUDE_EDGE=0 (or pass --no-edge to install-dpf.sh) to skip
+  # — useful for cloud / Authority-only deployments where Edge Nodes
+  # will be added later from separate hosts via
+  # docker-compose.edge-standalone.yml.
+  #
+  # The overlay's default `edge-node` service uses bridge networking
+  # so it works on both Linux (no privileged caps required) and macOS
+  # Docker Desktop (where host networking maps to the VM, not the
+  # user's machine). Operators who want real-NIC visibility on Linux
+  # can opt into the host-network profile by setting
+  # COMPOSE_PROFILES=linux-host-network in the environment.
+  if [ "${DPF_INCLUDE_EDGE:-1}" = "1" ]; then
+    DPF_COMPOSE_FILES+=(-f docker-compose.edge.yml)
+  fi
+
   # Append any caller-provided extras (e.g. docker-compose.dev.yml for
   # the developer port-exposing overlay).
   while [ "$#" -gt 0 ]; do
