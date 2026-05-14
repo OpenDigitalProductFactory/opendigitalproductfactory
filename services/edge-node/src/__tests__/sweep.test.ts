@@ -76,6 +76,24 @@ function emptyNmapAdapter() {
   };
 }
 
+/**
+ * Default SNMP adapter for sweep tests — no config file present, no
+ * exec invocations. The collector returns empty (its no-op path) so
+ * existing sweep assertions stay deterministic.
+ */
+function emptySnmpAdapter() {
+  return {
+    execSnmpget: () => "",
+    configAdapter: {
+      env: {},
+      readFile: () => "",
+      statMode: () => {
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      },
+    },
+  };
+}
+
 function makeApi(submit: AuthorityApiClient["submitDiscoveryRun"]): AuthorityApiClient {
   return {
     submitDiscoveryRun: submit,
@@ -99,6 +117,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
       newRunKey: () => `run_${++runKeyCounter}`,
       now: () => new Date("2026-05-12T12:00:00.000Z"),
     });
@@ -129,6 +148,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -149,6 +169,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     expect(submit.mock.calls[0]![0]).toBe("dpfedge_specifictoken");
@@ -173,6 +194,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     // 2 iterations × 1 submit each (no retry of dropped 413) = 2 total.
@@ -199,6 +221,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -227,6 +250,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -250,6 +274,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -275,6 +300,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     // 3 iterations, each tries once, drops, no retry. So 3 calls total.
@@ -306,6 +332,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
       newRunKey: () => `run_${++counter}`,
       maxBufferedSubmissions: 2,
       log,
@@ -335,6 +362,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     // 3 iterations means 3 sleeps at the end of each tick.
@@ -370,6 +398,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: throwingAdapter(),
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     // Iter 1 + 3 submit; iter 2 throws during collect. → 2 submits.
@@ -400,6 +429,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: populatedArpAdapter,
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
@@ -442,6 +472,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: failingArpAdapter,
       nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
@@ -490,6 +521,7 @@ describe("runSweepLoop", () => {
       hostInfoAdapter: fakeAdapter(),
       arpAdapter: populatedArpAdapter,
       nmapAdapter: populatedNmapAdapter,
+      snmpAdapter: emptySnmpAdapter(),
     });
 
     const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
@@ -524,5 +556,83 @@ describe("runSweepLoop", () => {
         relationshipType: "MEMBER_OF",
       },
     ]);
+  });
+
+  it("merges SNMP-poll items + SAME_AS relationships into the same envelope as host-info, ARP, and nmap", async () => {
+    const submit = vi.fn().mockResolvedValue({ ok: true });
+    const api = makeApi(submit);
+
+    // C2's nmap discovers 192.168.1.1 (the LAN gateway), and the
+    // operator has SNMP-configured the same IP. Both rows land in
+    // one envelope and the SAME_AS relationship lets the Authority
+    // collapse them into one canonical device.
+    const populatedNmapAdapter = {
+      execNmap: () => "Host: 192.168.1.1 (gw.lan)\tStatus: Up",
+      allowlistAdapter: {
+        networkInterfaces: () => ({}),
+        env: { DPF_EDGE_DISCOVERY_SUBNETS: "192.168.1.0/24" },
+      },
+    };
+
+    const populatedSnmpAdapter = {
+      execSnmpget: (_t: unknown, oid: string) =>
+        ({
+          "1.3.6.1.2.1.1.5.0": '"gw.lan"',
+          "1.3.6.1.2.1.1.1.0": '"Cisco IOS Software, ISR 1900"',
+          "1.3.6.1.2.1.1.2.0": "1.3.6.1.4.1.9.1.2069",
+          "1.3.6.1.2.1.1.3.0": "(123) 0:00:01.23",
+          "1.3.6.1.2.1.1.6.0": '""',
+          "1.3.6.1.2.1.2.1.0": "8",
+        })[oid] ?? "",
+      configAdapter: {
+        env: {},
+        statMode: () => 0o600,
+        readFile: () =>
+          JSON.stringify({
+            targets: [
+              { host: "192.168.1.1", version: "2c", community: "public" },
+            ],
+          }),
+      },
+    };
+
+    await runSweepLoop({
+      config: makeConfig(),
+      api,
+      state: makeState(),
+      sleep: async () => {},
+      maxIterations: 1,
+      hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
+      nmapAdapter: populatedNmapAdapter,
+      snmpAdapter: populatedSnmpAdapter,
+    });
+
+    const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
+    const items = envelope.items as Array<{
+      observedKey: string;
+      itemType: string;
+    }>;
+
+    // host-info(1) + nmap-subnet(1) + nmap-host(1) + snmp-router(1) = 4
+    expect(items).toHaveLength(4);
+
+    // SNMP entity classified as router because sysDescr mentions Cisco IOS.
+    const router = items.find((i) => i.observedKey === "snmp:192.168.1.1");
+    expect(router?.itemType).toBe("router");
+
+    // SAME_AS relationship links the snmp:<ip> + arp:<ip> entities.
+    const rels = envelope.relationships as Array<{
+      fromObservedKey: string;
+      toObservedKey: string;
+      relationshipType: string;
+    }>;
+    expect(rels).toContainEqual(
+      expect.objectContaining({
+        fromObservedKey: "snmp:192.168.1.1",
+        toObservedKey: "arp:192.168.1.1",
+        relationshipType: "SAME_AS",
+      }),
+    );
   });
 });
