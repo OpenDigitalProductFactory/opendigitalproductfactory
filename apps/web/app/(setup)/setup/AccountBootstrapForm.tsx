@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { createOrganization, createOwnerAccount } from "@/lib/actions/setup-entities";
@@ -9,6 +9,8 @@ import { advanceStep } from "@/lib/actions/setup-progress";
 type Props = {
   setupId: string;
 };
+
+const NEXT_SETUP_ROUTE = "/platform/ai/providers";
 
 /**
  * Minimal account bootstrap — the ONE custom form in onboarding.
@@ -30,7 +32,8 @@ export function AccountBootstrapForm({ setupId }: Props) {
     email.trim().length > 0 &&
     password.length >= 8;
 
-  const handleSubmit = () => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError(null);
     startTransition(async () => {
       try {
@@ -52,13 +55,13 @@ export function AccountBootstrapForm({ setupId }: Props) {
           email,
           password,
           redirect: false,
-          callbackUrl: "/platform/ai/providers",
+          redirectTo: NEXT_SETUP_ROUTE,
         });
         if (signInResult?.error) {
           throw new Error("Account created, but sign-in failed. Try signing in from the login page.");
         }
 
-        router.replace(signInResult?.url ?? "/platform/ai/providers");
+        router.replace(NEXT_SETUP_ROUTE);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -76,40 +79,49 @@ export function AccountBootstrapForm({ setupId }: Props) {
           </p>
         </div>
 
-        <div className="space-y-5">
+        <form className="space-y-5" onSubmit={handleSubmit}>
           <div>
-            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
+            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-org-name">
               Organization Name
             </label>
             <input
+              id="first-run-org-name"
+              name="organizationName"
               type="text"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
               placeholder="e.g., Digital Product Factory"
+              autoComplete="organization"
               className="w-full rounded-lg"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
+            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-owner-email">
               Your Email
             </label>
             <input
+              id="first-run-owner-email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               className="w-full rounded-lg"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
+            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-owner-password">
               Password (8+ characters)
             </label>
             <input
+              id="first-run-owner-password"
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
               className="w-full rounded-lg"
             />
           </div>
@@ -119,13 +131,13 @@ export function AccountBootstrapForm({ setupId }: Props) {
           )}
 
           <button
-            onClick={handleSubmit}
+            type="submit"
             disabled={!canSubmit || isPending}
             className="w-full py-3 text-sm font-medium text-white bg-[var(--dpf-accent)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isPending ? "Setting up..." : "Get Started"}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
