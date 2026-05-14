@@ -39,6 +39,7 @@ type Props = {
   dpfEnvironment?: string;
   projectBranch?: string | null;
   submissionBranchShortId?: string | null;
+  initialBuildId?: string | null;
 };
 
 export function BuildStudio({
@@ -48,12 +49,13 @@ export function BuildStudio({
   dpfEnvironment,
   projectBranch,
   submissionBranchShortId,
+  initialBuildId,
 }: Props) {
   const router = useRouter();
   const buildRows = Array.isArray(builds) ? builds : [];
   const portfolioRows = Array.isArray(portfolios) ? portfolios : [];
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
-    buildRows.find((b) => b.phase !== "complete" && b.phase !== "failed") ?? null,
+    resolveInitialActiveBuild(buildRows, initialBuildId),
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -653,6 +655,18 @@ export function BuildStudio({
       )}
     </div>
   );
+}
+
+function resolveInitialActiveBuild(
+  buildRows: FeatureBuildRow[],
+  initialBuildId?: string | null,
+): FeatureBuildRow | null {
+  if (initialBuildId) {
+    const linkedBuild = buildRows.find((build) => build.buildId === initialBuildId);
+    if (linkedBuild) return linkedBuild;
+  }
+
+  return buildRows.find((build) => build.phase !== "complete" && build.phase !== "failed") ?? null;
 }
 
 function BuildFailedBanner({ execState }: { execState: BuildExecutionState | null }) {
