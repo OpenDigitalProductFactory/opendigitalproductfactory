@@ -102,6 +102,21 @@ export function extractTokenUsage(data: Record<string, unknown>): TokenUsage {
   };
 }
 
+export function buildAutoDiscoveryEvalEvents(
+  providerId: string,
+  models: Array<{ id?: string; modelId: string }>,
+  userId = "system",
+) {
+  return models.map((model) => ({
+    name: "ai/eval.run" as const,
+    data: {
+      endpointId: providerId,
+      modelId: model.modelId,
+      userId,
+    },
+  }));
+}
+
 /** OAuth token exchange — obtain or refresh bearer token for a provider.
  *  Dispatches by authMethod: oauth2_authorization_code uses refreshOAuthToken,
  *  oauth2_client_credentials uses the client_credentials grant.
@@ -962,11 +977,8 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
         where: { providerId, modelStatus: "active" },
         select: { modelId: true, id: true },
       });
-      for (const m of models) {
-        await inngest.send({
-          name: "ai/eval.run" as const,
-          data: { endpointId: m.id, modelId: m.modelId, userId: "system" },
-        });
+      for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+        await inngest.send(event);
       }
       console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${providerId}`);
     } catch (err) {
