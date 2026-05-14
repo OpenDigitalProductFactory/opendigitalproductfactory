@@ -7583,6 +7583,20 @@ model BootstrapToken {
   // Operators can pre-revoke a token before consumption.
   revokedAt DateTime?
 
+  // Per spec § Approval policy: tokens flagged as installer-issued
+  // for the DPF host's own Edge Node enroll directly into
+  // trustState=trusted, skipping the operator-approval click. Paste-
+  // provisioned tokens (the default for remote nodes) leave this
+  // false so the new node lands in `pending` until an operator
+  // approves in Admin > Platform Development.
+  //
+  // Threat model: marking this true requires either Admin > Platform
+  // Development action (the operator chose to auto-approve, e.g. for
+  // bulk enrollment) or installer-side issuance (the installer runs
+  // with host access already, so a flag carrying that intent is no
+  // weaker than the install path itself).
+  autoApprove Boolean @default(false)
+
   // Relations
   issuedBy           Principal @relation("BootstrapTokenIssuer", fields: [issuedByPrincipalId], references: [id])
   consumedByEdgeNode EdgeNode? @relation("BootstrapTokenConsumer", fields: [consumedByEdgeNodeId], references: [id])

@@ -31,10 +31,19 @@ import {
   type AuthorityApiClient,
 } from "./api-client";
 import {
+  collectArpNeighbors,
+  type ArpAdapter,
+} from "./collectors/arp";
+import {
   collectHostInfo,
   type HostInfoAdapter,
   type ObservationItem,
 } from "./collectors/host-info";
+import {
+  collectNmapSweep,
+  type NmapSweepAdapter,
+  type NmapSweepRelationship,
+} from "./collectors/nmap-sweep";
 import type { EdgeNodeConfig } from "./config";
 import type { EdgeNodeState } from "./state";
 
@@ -53,7 +62,7 @@ export type SubmissionEnvelope = {
   observedAt: string;
   capabilities: string[];
   items: ObservationItem[];
-  relationships: never[];
+  relationships: NmapSweepRelationship[];
   warnings?: string[];
 };
 
@@ -68,6 +77,10 @@ export type SweepRunnerOptions = {
   maxIterations?: number;
   /** Override the host-info adapter (test seam). */
   hostInfoAdapter?: HostInfoAdapter;
+  /** Override the ARP adapter (test seam). */
+  arpAdapter?: ArpAdapter;
+  /** Override the nmap-sweep adapter (test seam). */
+  nmapAdapter?: NmapSweepAdapter;
   /** Override runKey generation (test seam). */
   newRunKey?: () => string;
   /** Override the wall-clock used for observedAt (test seam). */
@@ -100,6 +113,8 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
   const newRunKey = opts.newRunKey ?? randomUUID;
   const now = opts.now ?? (() => new Date());
   const hostInfoAdapter = opts.hostInfoAdapter;
+  const arpAdapter = opts.arpAdapter;
+  const nmapAdapter = opts.nmapAdapter;
   const maxBuffer = opts.maxBufferedSubmissions ?? 1000;
   const { config, api, state } = opts;
 
@@ -121,7 +136,23 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
     // Collect + submit a fresh sweep.
     let envelope: SubmissionEnvelope;
     try {
-      const { items, relationships } = collectHostInfo(hostInfoAdapter);
+      // Run all collectors. Each is independent — if one fails it
+      // contributes a warning instead of taking down the whole sweep.
+      // The order is intentional: host-info first (always works),
+      // then passive discovery (ARP cache), then active discovery
+      // (nmap sweep — the only one that generates traffic).
+      const host = collectHostInfo(hostInfoAdapter);
+      const arp = await collectArpNeighbors(arpAdapter);
+      const nmap = await collectNmapSweep(nmapAdapter);
+
+      const items: ObservationItem[] = [
+        ...host.items,
+        ...arp.items,
+        ...nmap.items,
+      ];
+      const relationships: NmapSweepRelationship[] = [...nmap.relationships];
+      const warnings: string[] = [...arp.warnings, ...nmap.warnings];
+
       envelope = {
         runKey: newRunKey(),
         agentMode: config.installMode,
@@ -130,6 +161,7 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
         capabilities: [PHASE_0_CAPABILITY],
         items,
         relationships,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     } catch (err) {
       // Collection itself failed — log + move on. We don't retry

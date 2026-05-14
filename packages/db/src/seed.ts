@@ -197,13 +197,6 @@ async function seedAgents(): Promise<void> {
   console.log(`Seeded ${seen.size} agents (skipped ${registry.agents.length - seen.size} duplicates)`);
 }
 
-const PORTFOLIO_BUDGETS: Record<string, number> = {
-  foundational: 2500,
-  manufacturing_and_delivery: 1800,
-  for_employees: 1200,
-  products_and_services_sold: 3500,
-};
-
 async function seedBusinessModels(): Promise<void> {
   const registry = readJson<{
     business_models: Array<{
@@ -297,12 +290,11 @@ async function seedPortfolios(): Promise<void> {
   for (const p of registry.portfolios) {
     await prisma.portfolio.upsert({
       where: { slug: p.id },
-      update: { name: p.name, description: p.description ?? null, budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null },
+      update: { name: p.name, description: p.description ?? null },
       create: {
         slug: p.id,
         name: p.name,
         description: p.description ?? null,
-        budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null,
       },
     });
   }

@@ -37,10 +37,12 @@ const INSTALLER_PRINCIPAL_EXTERNAL_ID = "service_account:installer:local-host";
 
 type Args = {
   ttlMinutes: number;
+  autoApprove: boolean;
 };
 
 function parseArgs(argv: readonly string[]): Args {
   let ttlMinutes = 15;
+  let autoApprove = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--ttl-minutes" || arg === "-t") {
@@ -52,6 +54,13 @@ function parseArgs(argv: readonly string[]): Args {
       }
       ttlMinutes = Math.floor(parsed);
       i++;
+    } else if (arg === "--auto-approve") {
+      // Per spec § Approval policy: local-host installer-issued
+      // tokens auto-approve the new EdgeNode at enrollment. Required
+      // flag for single-host installs where the operator running
+      // install-dpf.sh has already proven host access — the Approve
+      // click would be ceremonial.
+      autoApprove = true;
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -59,7 +68,7 @@ function parseArgs(argv: readonly string[]): Args {
       fatal(`unknown argument: ${arg}`);
     }
   }
-  return { ttlMinutes };
+  return { ttlMinutes, autoApprove };
 }
 
 function printHelp(): void {
@@ -69,6 +78,11 @@ function printHelp(): void {
       "",
       "Flags:",
       "  --ttl-minutes, -t N    TTL in minutes (default 15; max 1440)",
+      "  --auto-approve         Mark the token so the new EdgeNode lands",
+      "                         directly in trustState=trusted at enroll",
+      "                         (skips the Admin > Edge Nodes Approve click).",
+      "                         Use ONLY for the DPF host's own Edge Node;",
+      "                         see spec § Approval policy. Default: off.",
       "  --help, -h             Show this help",
       "",
       "Output:",
@@ -78,6 +92,7 @@ function printHelp(): void {
       "Spec:",
       "  docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md",
       "  § Token namespaces and lifecycle",
+      "  § Approval policy",
     ].join("\n"),
   );
 }
@@ -138,11 +153,14 @@ async function main(): Promise<void> {
   const result = await issueBootstrapToken({
     issuedByPrincipalId: principalId,
     ttlMs: args.ttlMinutes * 60_000,
+    autoApprove: args.autoApprove,
   });
 
   // Diagnostics to stderr so stdout is pipeable.
   console.error(
-    `Issued bootstrap token ${result.prefix}…  expires ${result.expiresAt.toISOString()}  tokenId=${result.tokenId}`,
+    `Issued bootstrap token ${result.prefix}…  expires ${result.expiresAt.toISOString()}  tokenId=${result.tokenId}${
+      args.autoApprove ? "  autoApprove=true" : ""
+    }`,
   );
 
   // Plaintext token to stdout. SHOWN ONCE.

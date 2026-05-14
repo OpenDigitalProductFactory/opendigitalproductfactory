@@ -326,6 +326,54 @@ on Host A; you must redistribute the new `ca-bundle.crt` to every
 Edge Node host or they'll fail their next handshake. Track this in
 your operational calendar — there is no auto-rotation in T2.
 
+## Discovery scope — what gets scanned and how to control it
+
+The Edge Node runs three collectors per sweep:
+
+| Collector | What it does | Traffic | Cost |
+|---|---|---|---|
+| `host-info` | Reads `os.*` — hostname, NICs, CPU, mem | none | ~0ms |
+| `arp` (C1) | Reads kernel ARP cache (`/proc/net/arp` on Linux, `arp -an` on macOS) | none — passive | ~1ms |
+| `nmap-sweep` (C2) | Active `nmap -sn` ping scan of operator-allowed subnets | ARP probes (Linux + CAP_NET_RAW) or TCP connect probes | ~5–8s per /24, ~30s per /20 |
+
+The active sweep needs an operator-allowed list of subnets. By default
+it auto-derives from the host's LAN-facing NIC subnets, applying a
+**/20 size cap** (≤ 4096 addresses per subnet) so a misconfigured
+NIC can never accidentally kick off a 65k-host scan unattended.
+
+**Configure via env vars on the Edge Node host:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `DPF_EDGE_DISCOVERY_SUBNETS` | (auto-detect) | Comma-separated CIDR list. **Replaces** auto-detect when set. Operator-explicit opt-in — the /20 cap below does NOT apply here, so use this to intentionally scan larger networks. |
+| `DPF_EDGE_DISCOVERY_MIN_CIDR_BITS` | `20` | Floor on auto-detected subnet size. Tighten (e.g. `24`) to be even safer; loosen (e.g. `16`) to auto-scan bridge nets like `docker0`. Invalid values fall back to the default. |
+
+Examples:
+
+```ini
+# Default — auto-detect, /20 cap. Scans your LAN.
+# (no env vars needed)
+
+# Explicit operator opt-in for two specific subnets.
+DPF_EDGE_DISCOVERY_SUBNETS=10.0.0.0/24,192.168.1.0/24
+
+# Scan a /16 docker bridge net (would normally be filtered).
+DPF_EDGE_DISCOVERY_MIN_CIDR_BITS=16
+
+# Disable active sweep entirely — set the env to a bogus value
+# that produces no valid CIDRs (passive ARP cache read still runs).
+DPF_EDGE_DISCOVERY_SUBNETS=disabled
+```
+
+The collector emits one **subnet entity** per scanned CIDR plus one
+**host entity** (`arp:<ip>` keyed) per host that responds, with
+`MEMBER_OF` relationships from each host to its subnet. Hosts also
+discovered via C1's ARP-cache read dedupe automatically against the
+nmap results — they share the same observedKey.
+
+Filtered subnets surface on `envelope.warnings` so the operator sees
+why a subnet got skipped without grepping container logs.
+
 ## What's deferred
 
 - **Freshness tolerance configuration** — T2.3 will add an explicit
