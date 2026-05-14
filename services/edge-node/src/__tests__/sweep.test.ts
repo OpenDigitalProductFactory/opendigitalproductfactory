@@ -47,6 +47,20 @@ function fakeAdapter() {
   };
 }
 
+/**
+ * Default ARP adapter for sweep tests — empty cache, no warnings.
+ * Makes the host-info-only assertions deterministic regardless of
+ * the CI runner's actual /proc/net/arp contents (the real default
+ * adapter would inadvertently scrape the runner's ARP table).
+ */
+function emptyArpAdapter() {
+  return {
+    platform: () => "linux" as NodeJS.Platform,
+    readProcNetArp: async () => "",
+    execArpDashAn: () => "",
+  };
+}
+
 function makeApi(submit: AuthorityApiClient["submitDiscoveryRun"]): AuthorityApiClient {
   return {
     submitDiscoveryRun: submit,
@@ -68,6 +82,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 3,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
       newRunKey: () => `run_${++runKeyCounter}`,
       now: () => new Date("2026-05-12T12:00:00.000Z"),
     });
@@ -96,6 +111,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 5,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -114,6 +130,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 2,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
     });
 
     expect(submit.mock.calls[0]![0]).toBe("dpfedge_specifictoken");
@@ -136,6 +153,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 2,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
     });
 
     // 2 iterations × 1 submit each (no retry of dropped 413) = 2 total.
@@ -160,6 +178,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 2,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -186,6 +205,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 2,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -207,6 +227,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 2,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -230,6 +251,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 3,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
     });
 
     // 3 iterations, each tries once, drops, no retry. So 3 calls total.
@@ -259,6 +281,7 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 5,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
       newRunKey: () => `run_${++counter}`,
       maxBufferedSubmissions: 2,
       log,
@@ -286,6 +309,7 @@ describe("runSweepLoop", () => {
       sleep,
       maxIterations: 3,
       hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
     });
 
     // 3 iterations means 3 sleeps at the end of each tick.
@@ -319,9 +343,84 @@ describe("runSweepLoop", () => {
       sleep: async () => {},
       maxIterations: 3,
       hostInfoAdapter: throwingAdapter(),
+      arpAdapter: emptyArpAdapter(),
     });
 
     // Iter 1 + 3 submit; iter 2 throws during collect. → 2 submits.
     expect(submit).toHaveBeenCalledTimes(2);
+  });
+
+  it("merges ARP-collector items into the same envelope as host-info", async () => {
+    const submit = vi.fn().mockResolvedValue({ ok: true });
+    const api = makeApi(submit);
+
+    const populatedArpAdapter = {
+      platform: () => "linux" as NodeJS.Platform,
+      readProcNetArp: async () =>
+        [
+          "IP address       HW type     Flags     HW address            Mask     Device",
+          "192.168.1.1      0x1         0x2       aa:bb:cc:dd:ee:ff     *        eth0",
+          "192.168.1.42     0x1         0x2       11:22:33:44:55:66     *        eth0",
+        ].join("\n"),
+      execArpDashAn: () => "",
+    };
+
+    await runSweepLoop({
+      config: makeConfig(),
+      api,
+      state: makeState(),
+      sleep: async () => {},
+      maxIterations: 1,
+      hostInfoAdapter: fakeAdapter(),
+      arpAdapter: populatedArpAdapter,
+    });
+
+    const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
+    const items = envelope.items as Array<{
+      observedKey: string;
+      itemType: string;
+    }>;
+    // 1 host-info item + 2 ARP neighbors = 3 total in the same sweep.
+    expect(items).toHaveLength(3);
+    const keys = items.map((i) => i.observedKey).sort();
+    expect(keys).toEqual(
+      expect.arrayContaining(["arp:192.168.1.1", "arp:192.168.1.42"]),
+    );
+    // Host-info's observedKey is the hashed host fingerprint; we don't
+    // assert its exact value (test would be brittle against the
+    // fingerprint algo), but the third entry is the host one.
+    expect(items.some((i) => i.itemType === "host" && !i.observedKey.startsWith("arp:"))).toBe(
+      true,
+    );
+  });
+
+  it("surfaces ARP-collector warnings on the envelope", async () => {
+    const submit = vi.fn().mockResolvedValue({ ok: true });
+    const api = makeApi(submit);
+
+    const failingArpAdapter = {
+      platform: () => "linux" as NodeJS.Platform,
+      readProcNetArp: async () => {
+        throw new Error("EACCES: permission denied");
+      },
+      execArpDashAn: () => "",
+    };
+
+    await runSweepLoop({
+      config: makeConfig(),
+      api,
+      state: makeState(),
+      sleep: async () => {},
+      maxIterations: 1,
+      hostInfoAdapter: fakeAdapter(),
+      arpAdapter: failingArpAdapter,
+    });
+
+    const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
+    expect(envelope.warnings).toBeDefined();
+    expect((envelope.warnings as string[])[0]).toMatch(/arp.*EACCES/);
+    // Host-info still produced its item even though ARP failed —
+    // collector failures must not take down the whole sweep.
+    expect((envelope.items as unknown[]).length).toBeGreaterThan(0);
   });
 });
