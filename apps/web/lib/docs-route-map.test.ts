@@ -28,6 +28,19 @@ describe("resolveDocsPath", () => {
   it("maps setup to a setup-specific getting-started doc", () => {
     expect(resolveDocsPath("/setup")).toBe("/docs/getting-started/setup-and-first-login");
   });
+
+  it("maps recently added shell surfaces to current operational docs", () => {
+    expect(resolveDocsPath("/workspace/documents/DOC-001")).toBe("/docs/workspace/documents");
+    expect(resolveDocsPath("/wiki/entities/digital-product")).toBe("/docs/wiki/index");
+    expect(resolveDocsPath("/platform/edge-nodes")).toBe("/docs/platform/edge-nodes");
+    expect(resolveDocsPath("/platform/ai/operations-map")).toBe("/docs/platform/ai-operations");
+    expect(resolveDocsPath("/platform/ai/capacity-continuity")).toBe("/docs/platform/ai-operations");
+    expect(resolveDocsPath("/platform/ai/capability-needs")).toBe("/docs/platform/ai-operations");
+    expect(resolveDocsPath("/compliance/licensing")).toBe("/docs/compliance/licensing-readiness");
+    expect(resolveDocsPath("/platform/tools/integrations/google-business-profile")).toBe(
+      "/docs/platform/tools-and-integrations",
+    );
+  });
 });
 
 describe("docs exposure policy", () => {
@@ -64,6 +77,26 @@ describe("mapped docs pages", () => {
         docsPathExists(entry.docsPath),
         `Missing docs page for ${entry.routePrefix}: ${entry.docsPath}`,
       ).toBe(true);
+    }
+  });
+
+  it("keeps high-signal visible workflow routes backed by existing docs pages", () => {
+    const visibleRouteDocsExamples = [
+      "/workspace/documents",
+      "/wiki",
+      "/platform/edge-nodes",
+      "/platform/ai/operations-map",
+      "/platform/ai/capacity-continuity",
+      "/platform/ai/capability-needs",
+      "/compliance/licensing",
+      "/finance/settings/tax",
+    ];
+
+    for (const pathname of visibleRouteDocsExamples) {
+      expect(shouldShowDocsLink(pathname), `${pathname} should expose contextual docs`).toBe(true);
+      const docsPath = resolveDocsPath(pathname);
+      expect(docsPath, `${pathname} should resolve to a docs path`).not.toBeNull();
+      expect(docsPathExists(docsPath!), `${pathname} maps to missing docs page ${docsPath}`).toBe(true);
     }
   });
 });
