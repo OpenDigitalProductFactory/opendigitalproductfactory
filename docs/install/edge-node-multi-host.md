@@ -7,7 +7,10 @@
 > on Host B, separated by at least one real switch.
 >
 > **What this is not:** macOS / Windows native binary install (T3),
-> mTLS hardening (T4), or air-gapped deployment (T5). The bearer
+> or mTLS hardening (T4). For air-gapped deployments
+> (Authority + Edge Nodes on a disconnected network, no internet
+> access, no GHCR pull-through), see
+> [edge-node-air-gapped.md](edge-node-air-gapped.md) (T5). The bearer
 > token flows over plain HTTP on the LAN for Phase 0; T2.2 ships
 > HTTPS with an operator-trusted CA bundle.
 >

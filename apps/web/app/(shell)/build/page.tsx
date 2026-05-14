@@ -10,7 +10,7 @@ import Link from "next/link";
 import { execSync } from "child_process";
 
 interface PageProps {
-  searchParams: Promise<{ v?: string }>;
+  searchParams: Promise<{ v?: string; buildId?: string }>;
 }
 
 function getProjectBranch(): string | null {
@@ -28,7 +28,7 @@ function getProjectBranch(): string | null {
 }
 
 export default async function BuildPage({ searchParams }: PageProps) {
-  const { v } = await searchParams;
+  const { v, buildId } = await searchParams;
   if (v === "2") {
     const session = await auth();
     if (!session?.user?.id) return <BuildStudioV2 />;
@@ -120,6 +120,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
         dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"}
         projectBranch={projectBranch}
         submissionBranchShortId={submissionBranchShortId}
+        initialBuildId={buildId}
       />
     </section>
   );

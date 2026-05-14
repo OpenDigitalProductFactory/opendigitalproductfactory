@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts } from "@/lib/ai-provider-data";
+import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts, getTokenSpendByProvider } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
+import { ProviderCostSourcePanel } from "@/components/platform/ProviderCostSourcePanel";
 import { getInfraCIs } from "@dpf/db";
 import { getEndpointPerformance, getRoutingProfiles, getRecentRouteDecisions } from "@/lib/actions/endpoint-performance";
 import EndpointPerformancePanel from "@/components/platform/EndpointPerformancePanel";
@@ -15,12 +16,15 @@ import { RecipePanel } from "@/components/platform/RecipePanel";
 import { OAuthConnectionStatus } from "@/components/platform/OAuthConnectionStatus";
 import { AiProviderFinancePanel } from "@/components/finance/AiProviderFinancePanel";
 import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
+import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 
 type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
   const { providerId } = await params;
-  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail] = await Promise.all([
+  const now = new Date();
+  const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
@@ -31,8 +35,14 @@ export default async function ProviderDetailPage({ params }: Props) {
     getRecipesForProvider(providerId),
     getModelClassCounts(providerId),
     getAiProviderFinanceDetail(providerId),
+    getTokenSpendByProvider(currentMonth),
   ]);
   if (!pw) notFound();
+  const costView = buildProviderCostView({
+    provider: pw.provider,
+    financeProfile: financeDetail,
+    internalUsage: tokenSpend.find((row) => row.providerId === providerId) ?? null,
+  });
 
   const hasActiveProvider = allProviders.some((p) => p.provider.status === "active");
 
@@ -101,7 +111,7 @@ export default async function ProviderDetailPage({ params }: Props) {
       {pw.provider.costPerformanceNotes && (
         <div style={{
           background: "var(--dpf-surface-1)",
-          borderLeft: "3px solid #7c8cf8",
+          borderLeft: "3px solid var(--dpf-info)",
           borderRadius: 6,
           padding: "12px 16px",
           marginBottom: 16,
@@ -127,6 +137,9 @@ export default async function ProviderDetailPage({ params }: Props) {
           )}
           <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
             <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <ProviderCostSourcePanel view={costView} />
           </div>
           <div style={{ marginTop: 16 }}>
             <AiProviderFinancePanel detail={financeDetail} />
@@ -161,7 +174,7 @@ function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-ty
       {isPluginManaged && (
         <div style={{
           background: "var(--dpf-surface-1)",
-          borderLeft: "3px solid #38bdf8",
+          borderLeft: "3px solid var(--dpf-info)",
           borderRadius: 6,
           padding: "12px 16px",
           marginBottom: 16,
@@ -188,15 +201,15 @@ function McpServiceDetail({ provider }: { provider: import("@/lib/ai-provider-ty
         </div>
         <div>
           <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Status</div>
-          <div style={{ fontSize: 13, color: provider.status === "active" ? "#4ade80" : "#fbbf24" }}>{provider.status}</div>
+          <div style={{ fontSize: 13, color: provider.status === "active" ? "var(--dpf-success)" : "var(--dpf-warning)" }}>{provider.status}</div>
         </div>
         <div>
           <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Capability Tier</div>
           <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.capabilityTier ?? "basic"}</div>
         </div>
         <div>
-          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Cost Band</div>
-          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.costBand ?? "free"}</div>
+          <div style={{ fontSize: 10, color: "var(--dpf-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Routing Cost Band</div>
+          <div style={{ fontSize: 13, color: "var(--dpf-text)" }}>{provider.costBand || "unspecified"}</div>
         </div>
       </div>
 

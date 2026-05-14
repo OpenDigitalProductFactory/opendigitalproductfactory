@@ -1,4 +1,5 @@
 // apps/web/lib/ai-provider-types.ts
+import type { DataSourceProvenance } from "@/lib/surface-data-provenance";
 
 // ─── Schedule helpers ─────────────────────────────────────────────────────────
 
@@ -112,9 +113,11 @@ export type ProviderWithCredential = {
 
 export type SpendByProvider = {
   providerId: string;
+  providerName: string;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCostUsd: number;
+  provenance: DataSourceProvenance;
 };
 
 export type SpendByAgent = {
