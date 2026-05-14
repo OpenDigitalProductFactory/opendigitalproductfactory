@@ -2333,6 +2333,21 @@ git push
 
 Expected: branch pushed. No PR exists until the final merge-ready review gate.
 
+- [ ] **Step 9: Capture scratch-install rehearsal preview**
+
+Run the non-destructive rehearsal in plan-only mode so the branch handoff records
+the exact source SHA, scratch ports, and Codex/Claude CLI availability without
+resetting the live install:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scratch-install-rehearsal.ps1
+```
+
+Expected: JSON plan output with `"copiedSourceSecrets": false`, a scratch worktree
+path, alternate portal/sandbox URLs, and Codex/Claude CLI availability. Full
+`-Execute` rehearsal is the next gate before merge-ready PR creation for
+install/setup/provider/promotion-sensitive work.
+
 ## Implementation Notes
 
 - Do not edit the root `D:\DPF` checkout for implementation. Use the existing clean worktree at `D:\DPF\.worktrees\portal-work-capsule-control-harness`.

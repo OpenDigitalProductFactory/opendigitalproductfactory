@@ -77,6 +77,20 @@ The wrapper does **not** cover macOS (no `--bootstrap` path for the
 `.dmg` install yet), real-LAN multi-host, or the TAPPaaS / Edge / cloud
 substrate spikes. Those still need the manual sections below.
 
+## Local scratch rehearsal before promotion
+
+For Windows development machines that already have a production-served local
+DPF install running, use the non-destructive scratch rehearsal instead of
+resetting the real stack:
+
+```powershell
+.\scripts\scratch-install-rehearsal.ps1 -Execute
+```
+
+See [Scratch Install Rehearsal](scratch-install-rehearsal.md). The script
+creates a separate worktree, a separate Compose project, alternate ports, and
+scratch-only secrets, then records evidence under the scratch directory.
+
 ## How to run each verification (manual sections)
 
 Each section below is paste-able. Copy the block, fill in the

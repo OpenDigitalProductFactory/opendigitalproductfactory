@@ -721,6 +721,8 @@ This removes manual guessing while avoiding secret leakage to coding agents.
 
 Rapid platform work is not considered promotion-ready until DPF has periodically proven the new-customer path from a clean install. The rehearsal uses a fresh database and empty runtime volumes, not the developer's warmed-up portal.
 
+The Windows helper is `scripts/scratch-install-rehearsal.ps1`; the operator runbook is `docs/install/scratch-install-rehearsal.md`. The helper must remain non-destructive: it creates a separate git worktree, a separate Compose project, alternate host ports, and scratch-only generated secrets.
+
 Minimum evidence:
 
 1. Install starts from the documented installer or compose entry point with no existing DPF volumes.
