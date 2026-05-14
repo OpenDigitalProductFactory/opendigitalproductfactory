@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { getFullPortfolioTree, getAgentCounts, getPortfolioBudgets, getPortfolioOwnerRoles, getPortfolioSummary } from "@/lib/portfolio-data";
 import { resolveNodeFromSlug, getSubtreeIds, buildBreadcrumbs, computeHealth } from "@/lib/portfolio";
+import { getPortfolioBudgetMetric } from "@/lib/portfolio/budget-provenance";
 import { PortfolioOverview } from "@/components/portfolio/PortfolioOverview";
 import { PortfolioNodeDetail } from "@/components/portfolio/PortfolioNodeDetail";
 import { CompletenessStrip } from "@/components/portfolio/CompletenessStrip";
@@ -54,7 +55,7 @@ export default async function PortfolioPage({ params }: Props) {
 
   const rootSlug = slugs[0] ?? ""; // slugs.length === 0 handled above; ?? "" satisfies noUncheckedIndexedAccess
   const agentCount = agentCounts[rootSlug] ?? 0;
-  const investment = budgets[rootSlug] ?? "—";
+  const investment = budgets[rootSlug] ?? getPortfolioBudgetMetric(rootSlug, null);
   const ownerRole = ownerRoles[rootSlug] ?? null;
   const healthStr = computeHealth(node.activeCount, node.totalCount);
 

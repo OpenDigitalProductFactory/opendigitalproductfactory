@@ -20,6 +20,8 @@
  * `requiredFields` value is treated as if there were no required fields.
  */
 
+import type { Prisma } from "@dpf/db";
+
 export interface PortfolioCompletenessScores {
   /** % (0–100) of products in the portfolio with all required fields populated. Null when no product has a non-empty required-fields list. */
   requiredFieldsScore: number | null;
@@ -42,6 +44,10 @@ export interface PortfolioCompletenessDb {
           id: string;
           taxonomyNode: { governance: unknown } | null;
           observationConfig: unknown;
+          inventoryEntities?: Array<{
+            manufacturer?: string | null;
+            observedVersion?: string | null;
+          }>;
           // Forward-compat: when Chunk 4 lands, callers can include enrichmentStatus
           enrichmentStatus?: string | null;
           // Required-field source values — passed through observationConfig + raw entity attributes
@@ -59,6 +65,18 @@ export interface PortfolioCompletenessDb {
     }): Promise<Array<{ issueType: string; _count: { _all: number } }>>;
   };
 }
+
+export const DIGITAL_PRODUCT_COMPLETENESS_SELECT = {
+  id: true,
+  observationConfig: true,
+  inventoryEntities: {
+    select: {
+      manufacturer: true,
+      observedVersion: true,
+    },
+  },
+  taxonomyNode: { select: { governance: true } },
+} satisfies Prisma.DigitalProductSelect;
 
 /**
  * Pull the `requiredFields` list off a node's governance JSON, defending
@@ -112,6 +130,38 @@ function isPopulated(value: unknown): boolean {
   return true;
 }
 
+function readInventoryAlias(source: Record<string, unknown>, path: string): unknown {
+  if (path !== "manufacturer" && path !== "observedVersion") {
+    return undefined;
+  }
+
+  const entities = source.inventoryEntities;
+  if (!Array.isArray(entities)) {
+    return undefined;
+  }
+
+  for (const entity of entities) {
+    if (!entity || typeof entity !== "object") {
+      continue;
+    }
+    const value = (entity as Record<string, unknown>)[path];
+    if (isPopulated(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function readRequiredFieldValue(source: Record<string, unknown>, path: string): unknown {
+  const directValue = readPath(source, path);
+  if (isPopulated(directValue)) {
+    return directValue;
+  }
+
+  return readInventoryAlias(source, path);
+}
+
 export async function computePortfolioCompleteness(
   portfolioId: string,
   db: PortfolioCompletenessDb,
@@ -119,14 +169,7 @@ export async function computePortfolioCompleteness(
   const [products, issueGroups] = await Promise.all([
     db.digitalProduct.findMany({
       where: { portfolioId },
-      select: {
-        id: true,
-        manufacturer: true,
-        observedVersion: true,
-        observationConfig: true,
-        enrichmentStatus: true,
-        taxonomyNode: { select: { governance: true } },
-      },
+      select: DIGITAL_PRODUCT_COMPLETENESS_SELECT,
     }),
     db.portfolioQualityIssue.groupBy({
       where: { portfolioId, status: "open" },
@@ -145,7 +188,9 @@ export async function computePortfolioCompleteness(
     const required = readRequiredFields(product.taxonomyNode?.governance);
     if (required.length === 0) continue;
     gatedProductCount += 1;
-    const allPopulated = required.every((path) => isPopulated(readPath(product, path)));
+    const allPopulated = required.every((path) =>
+      isPopulated(readRequiredFieldValue(product, path)),
+    );
     if (allPopulated) {
       completeGatedProductCount += 1;
     }
