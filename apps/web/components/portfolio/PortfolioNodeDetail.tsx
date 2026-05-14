@@ -2,6 +2,9 @@
 import Link from "next/link";
 import type { PortfolioTreeNode } from "@/lib/portfolio";
 import type { OwnerRoleInfo } from "@/lib/portfolio";
+import type { PortfolioBudgetMetric } from "@/lib/portfolio/budget-provenance";
+import type { DataSourceProvenance } from "@/lib/surface-data-provenance";
+import { DataSourceBadge } from "@/components/ui/DataSourceBadge";
 import { ProductList } from "./ProductList";
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 import type { GraphData } from "@/lib/actions/graph";
@@ -19,7 +22,7 @@ type Props = {
   breadcrumbs: Array<{ nodeId: string; name: string }>;
   agentCount: number;
   health: string;
-  investment: string;
+  investment: PortfolioBudgetMetric;
   ownerRole: OwnerRoleInfo | null;
   graphData?: GraphData;
   taxonomyNodeId?: string;
@@ -83,7 +86,11 @@ export function PortfolioNodeDetail({
         <StatBox label="Owner" value={ownerRole?.roleId ?? "—"} />
         <StatBox label="Agents" value={String(agentCount)} />
         <StatBox label="Health" value={health} />
-        <StatBox label="Budget" value={investment} />
+        <StatBox
+          label="Budget"
+          value={investment.value}
+          provenance={investment.provenance}
+        />
       </div>
 
       {/* About / Governance / Enrichment (Task 3.3): each renders null when its
@@ -150,10 +157,12 @@ export function PortfolioNodeDetail({
 function StatBox({
   label,
   value,
+  provenance,
   dashed = false,
 }: {
   label: string;
   value: string;
+  provenance?: DataSourceProvenance;
   dashed?: boolean;
 }) {
   return (
@@ -168,6 +177,11 @@ function StatBox({
       <p className="text-[9px] text-[var(--dpf-muted)] uppercase tracking-widest">
         {label}
       </p>
+      {provenance && (
+        <div className="mt-1 flex justify-center">
+          <DataSourceBadge compact provenance={provenance} />
+        </div>
+      )}
     </div>
   );
 }
