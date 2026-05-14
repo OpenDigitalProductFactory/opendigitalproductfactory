@@ -12,6 +12,7 @@ const mockPrisma = {
     create: vi.fn(),
   },
   epic: {
+    create: vi.fn(),
     update: vi.fn(),
   },
   featureBuild: {
@@ -131,9 +132,15 @@ describe("backlog MCP tool execution", () => {
       activeBuildId: null,
       digitalProductId: null,
       epicId: null,
+      taxonomyNodeId: null,
+      epic: null,
     };
 
     mockPrisma.backlogItem.findUnique.mockResolvedValue(backlogRow);
+    mockPrisma.epic.create.mockResolvedValue({
+      id: "epic-cuid-auto",
+      epicId: "EP-BUILD-AAAAAA",
+    });
     mockPrisma.featureBuild.create.mockResolvedValue({
       id: "build-row-1",
       buildId: "FB-12345678",
