@@ -43,6 +43,14 @@ COPY prompts/ ./prompts/
 COPY skills/ ./skills/
 COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
+# Founder kernel content — markdown sources + wiki pages + manifest +
+# embeddings.jsonl sidecar — is read at seed time by seed-wiki-kernel.ts
+# and exposed to the portal via /wiki and the wiki_query MCP tool. Without
+# this COPY the seed silently throws ENOENT (swallowed by the entrypoint's
+# `|| echo WARN`), the wiki_page table stays empty, and /wiki shows nothing.
+# Trailing slash + glob-friendly path matches the founder-kernel layout
+# (docs/founder-kernel/{manifest.json,wiki/,raw-sources/,embeddings.jsonl,…}).
+COPY docs/founder-kernel/ ./docs/founder-kernel/
 # IT4IT functional criteria workbook is read at seed time by
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.
@@ -79,6 +87,7 @@ COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore ./
 COPY --from=init /app/scripts ./scripts
 COPY --from=init /app/docs/user-guide ./docs/user-guide
+COPY --from=init /app/docs/founder-kernel ./docs/founder-kernel
 COPY --from=init /app/prompts ./prompts
 COPY --from=init /app/skills ./skills
 COPY --from=init /app/docs/Reference ./docs/Reference
