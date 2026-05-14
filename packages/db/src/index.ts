@@ -18,6 +18,9 @@ export {
 } from "./qdrant";
 
 // EP-WIKI-001 Phase 1a: wiki kernel + per-org overlay store helpers
+// Phase 2.1 adds the raw-source ingest helpers (upsertRawSource,
+// recordIngestEvent, RAW_SOURCE_TYPES) consumed by the file-source
+// orchestrator in apps/web/lib/wiki/ingest.ts.
 export {
   upsertWikiPage,
   appendRevision,
@@ -25,6 +28,10 @@ export {
   attachSource,
   getWikiPage,
   listPrinciplesByTier,
+  upsertRawSource,
+  recordIngestEvent,
+  RAW_SOURCE_TYPES,
+  isRawSourceType,
   type WikiStoreClient,
   type WikiPageKind,
   type WikiPageStatus,
@@ -34,7 +41,23 @@ export {
   type LinkPagesInput,
   type AttachSourceInput,
   type WikiPagePrincipleInput,
+  type UpsertRawSourceInput,
+  type RecordIngestEventInput,
+  type RawSourceType,
 } from "./wiki-store";
+
+// EP-WIKI-001 Phase 2.1: re-export the shared frontmatter parser so the
+// apps/web ingest orchestrator can reuse the same YAML subset that
+// founder-kernel raw-source files are written against, without reaching
+// into @dpf/db internals. Lives in `./wiki-frontmatter` rather than
+// `./seed-wiki-kernel` because the seed module's `__dirname`-based
+// KERNEL_DIR constant fails to evaluate under Vite's ESM/SSR loader.
+export {
+  parseFrontmatter as parseWikiFrontmatter,
+  extractWikilinks,
+  type RawSourceFrontmatter,
+  type WikiPageFrontmatter,
+} from "./wiki-frontmatter";
 
 // Principles-as-wiki-kind Phase 0: taxonomy constants + predicates so
 // retrieval, lint, MCP, and UI consumers in apps/web import them through
