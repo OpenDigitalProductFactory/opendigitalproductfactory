@@ -312,6 +312,122 @@ index 0000000..1111111
   });
 });
 
+describe("runPrePRGates — security-scan gate", () => {
+  it("blocks on a hardcoded API key", () => {
+    // Critical findings in security-scan should flip the gate to "block" and
+    // make canProceed false. The api_key pattern has no fileFilter so any
+    // file with the right shape trips it.
+    const diff = `diff --git a/apps/web/lib/config.ts b/apps/web/lib/config.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/config.ts
++++ b/apps/web/lib/config.ts
+@@ -1,1 +1,2 @@
+ export const x = 1;
++const api_key = "AKIAIOSFODNN7EXAMPLEKEY";
+`;
+    const result = runPrePRGates(diff);
+    expect(result.canProceed).toBe(false);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("block");
+    expect(secGate?.findings.some((f) => /\[critical\].*secrets/.test(f))).toBe(true);
+  });
+
+  it("blocks on dangerouslySetInnerHTML in a .tsx file", () => {
+    const diff = `diff --git a/apps/web/components/Foo.tsx b/apps/web/components/Foo.tsx
+index aaa..bbb 100644
+--- a/apps/web/components/Foo.tsx
++++ b/apps/web/components/Foo.tsx
+@@ -1,1 +1,2 @@
+ export const x = 1;
++return <div dangerouslySetInnerHTML={{ __html: userInput }} />;
+`;
+    const result = runPrePRGates(diff);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("block");
+    expect(secGate?.findings.some((f) => /\[critical\].*xss/.test(f))).toBe(true);
+  });
+
+  it("warns (does not block) on direct innerHTML assignment", () => {
+    // innerHTML = is "warning" severity — gate should be "warn", canProceed stays true.
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,1 +1,2 @@
+ export const x = 1;
++el.innerHTML = userText;
+`;
+    const result = runPrePRGates(diff);
+    expect(result.canProceed).toBe(true);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("warn");
+    expect(secGate?.findings.some((f) => /\[warning\].*xss/.test(f))).toBe(true);
+  });
+
+  it("warns on a Stripe/GitHub-style API token prefix", () => {
+    // The sk-/ghp_/xoxb- prefix pattern is "warning" severity with no fileFilter.
+    const diff = `diff --git a/docs/example.md b/docs/example.md
+index aaa..bbb 100644
+--- a/docs/example.md
++++ b/docs/example.md
+@@ -1,1 +1,2 @@
+ # Example
++Use the token sk-abc123XYZdef456GHI for testing.
+`;
+    const result = runPrePRGates(diff);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("warn");
+    expect(secGate?.findings.some((f) => /API token/.test(f))).toBe(true);
+  });
+
+  it("passes on a clean diff with no flagged patterns", () => {
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,1 +1,2 @@
+ export const x = 1;
++export const y = x + 2;
+`;
+    const result = runPrePRGates(diff);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("pass");
+    expect(secGate?.findings).toHaveLength(0);
+  });
+
+  it("does not flag dangerouslySetInnerHTML outside .ts/.tsx files (fileFilter honored)", () => {
+    // The dangerouslySetInnerHTML pattern is gated by /\.tsx?$/. Putting the
+    // string in a .md file should not trip the security gate.
+    const diff = `diff --git a/docs/react-guide.md b/docs/react-guide.md
+index aaa..bbb 100644
+--- a/docs/react-guide.md
++++ b/docs/react-guide.md
+@@ -1,1 +1,2 @@
+ # React
++Avoid dangerouslySetInnerHTML in components.
+`;
+    const result = runPrePRGates(diff);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("pass");
+  });
+
+  it("ignores critical patterns that only appear in removed lines", () => {
+    // Same symmetry as the destructive-ops and architecture gates: a removal
+    // of a vulnerable line is exactly the kind of cleanup the gate should reward.
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts
+index aaa..bbb 100644
+--- a/apps/web/lib/foo.ts
++++ b/apps/web/lib/foo.ts
+@@ -1,2 +1,1 @@
+-const api_key = "AKIAIOSFODNN7EXAMPLEKEY";
+ export const x = 1;
+`;
+    const result = runPrePRGates(diff);
+    const secGate = result.gates.find((g) => g.gate === "security-scan");
+    expect(secGate?.verdict).toBe("pass");
+  });
+});
+
 describe("runPrePRGates — architecture gate (rename detection)", () => {
   it("warns when a file is RENAMED into an unexpected directory", () => {
     // Renames have different `a/` and `b/` paths in the `diff --git` header.
