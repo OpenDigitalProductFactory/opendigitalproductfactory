@@ -9,6 +9,9 @@ const mockPrisma = {
     findMany: vi.fn(),
     update: vi.fn(),
   },
+  epic: {
+    create: vi.fn(),
+  },
   featureBuild: {
     create: vi.fn(),
   },
@@ -166,8 +169,9 @@ describe("governed backlog tee-up", () => {
         activeBuildId: null,
         digitalProductId: "product-1",
         epicId: "epic-1",
+        taxonomyNodeId: "taxonomy-node-1",
         createdAt: new Date("2026-04-24T10:00:00.000Z"),
-        epic: { status: "open" },
+        epic: { epicId: "EP-WORKFLOW-1" },
       })
       .mockResolvedValueOnce({
         id: "backlog-bootstrap",
@@ -180,9 +184,15 @@ describe("governed backlog tee-up", () => {
         activeBuildId: null,
         digitalProductId: null,
         epicId: null,
+        taxonomyNodeId: null,
         createdAt: new Date("2026-04-24T11:00:00.000Z"),
         epic: null,
       });
+
+    mockPrisma.epic.create.mockResolvedValueOnce({
+      id: "epic-cuid-bootstrap",
+      epicId: "EP-BUILD-AAAAAA",
+    });
 
     mockPrisma.featureBuild.create
       .mockResolvedValueOnce({ id: "build-row-1", buildId: "FB-11111111" })
@@ -264,5 +274,153 @@ describe("governed backlog tee-up", () => {
     });
     expect(mockPrisma.backlogItem.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
+  });
+
+  describe("promoteBacklogItemToBuildDraft intake initialization", () => {
+    it("seeds happyPathState.intake from a BI with an existing epic and taxonomy", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
+        id: "bi-cuid-1",
+        itemId: "BI-EPIC-OK",
+        title: "Add taxonomy filter to operations map",
+        body: "Operators need to scope the map by taxonomy node.",
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "medium",
+        activeBuildId: null,
+        digitalProductId: "product-1",
+        epicId: "epic-cuid-1",
+        taxonomyNodeId: "taxonomy-cuid-ops",
+        epic: { epicId: "EP-OPS-001" },
+      });
+      mockPrisma.featureBuild.create.mockResolvedValueOnce({
+        id: "build-row-1",
+        buildId: "FB-12345678",
+      });
+
+      const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
+      const result = await promoteBacklogItemToBuildDraft({
+        tx: mockPrisma,
+        itemId: "BI-EPIC-OK",
+        userId: "user-1",
+        governedBacklogEnabled: true,
+      });
+
+      expect(result.kind).toBe("success");
+      expect(mockPrisma.epic.create).not.toHaveBeenCalled();
+
+      const createCall = mockPrisma.featureBuild.create.mock.calls[0]![0];
+      const intake = createCall.data.plan.happyPathState.intake;
+      expect(intake).toEqual({
+        status: "ready",
+        backlogItemId: "BI-EPIC-OK",
+        epicId: "EP-OPS-001",
+        taxonomyNodeId: "taxonomy-cuid-ops",
+        constrainedGoal: "Add taxonomy filter to operations map",
+        failureReason: null,
+      });
+    });
+
+    it("auto-creates a solo epic and falls back to a triaged-bi taxonomy anchor when BI has neither", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
+        id: "bi-cuid-solo",
+        itemId: "BI-SOLO",
+        title: "Surface stale agent grants in admin",
+        body: null,
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "small",
+        activeBuildId: null,
+        digitalProductId: null,
+        epicId: null,
+        taxonomyNodeId: null,
+        epic: null,
+      });
+      mockPrisma.epic.create.mockResolvedValueOnce({
+        id: "epic-cuid-solo",
+        epicId: "EP-BUILD-ABCDEF",
+      });
+      mockPrisma.featureBuild.create.mockResolvedValueOnce({
+        id: "build-row-solo",
+        buildId: "FB-SOLO0001",
+      });
+
+      const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
+      const result = await promoteBacklogItemToBuildDraft({
+        tx: mockPrisma,
+        itemId: "BI-SOLO",
+        userId: "user-1",
+        governedBacklogEnabled: true,
+      });
+
+      expect(result.kind).toBe("success");
+
+      // Epic was minted from the BI title and linked back to the BI before
+      // the build was created.
+      expect(mockPrisma.epic.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            title: "Surface stale agent grants in admin",
+            status: "open",
+            epicId: expect.stringMatching(/^EP-BUILD-[A-F0-9]{6}$/),
+          }),
+        }),
+      );
+      expect(mockPrisma.backlogItem.update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: { itemId: "BI-SOLO" },
+          data: { epicId: "epic-cuid-solo" },
+        }),
+      );
+
+      const mintedEpicId = mockPrisma.epic.create.mock.calls[0]![0].data.epicId;
+      const createCall = mockPrisma.featureBuild.create.mock.calls[0]![0];
+      const intake = createCall.data.plan.happyPathState.intake;
+      expect(intake).toEqual({
+        status: "ready",
+        backlogItemId: "BI-SOLO",
+        epicId: mintedEpicId,
+        taxonomyNodeId: "triaged-bi:bi-cuid-solo",
+        constrainedGoal: "Surface stale agent grants in admin",
+        failureReason: null,
+      });
+    });
+
+    it("derives constrainedGoal from the BI title, truncated to 280 chars", async () => {
+      const longTitle = "Long feature title ".repeat(20).trim(); // ~ 380 chars
+      mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
+        id: "bi-cuid-long",
+        itemId: "BI-LONG",
+        title: longTitle,
+        body: "Even longer body. ".repeat(200),
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "medium",
+        activeBuildId: null,
+        digitalProductId: null,
+        epicId: "epic-cuid-long",
+        taxonomyNodeId: null,
+        epic: { epicId: "EP-LONG-001" },
+      });
+      mockPrisma.featureBuild.create.mockResolvedValueOnce({
+        id: "build-row-long",
+        buildId: "FB-LONG0001",
+      });
+
+      const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
+      const result = await promoteBacklogItemToBuildDraft({
+        tx: mockPrisma,
+        itemId: "BI-LONG",
+        userId: "user-1",
+        governedBacklogEnabled: true,
+      });
+
+      expect(result.kind).toBe("success");
+
+      const createCall = mockPrisma.featureBuild.create.mock.calls[0]![0];
+      const intake = createCall.data.plan.happyPathState.intake;
+      expect(intake.constrainedGoal).toHaveLength(280);
+      expect(longTitle.startsWith(intake.constrainedGoal)).toBe(true);
+    });
   });
 });
