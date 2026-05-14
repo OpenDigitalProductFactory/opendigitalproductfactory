@@ -1,45 +1,26 @@
-// @vitest-environment jsdom
-import "../../../components/build-studio/test-setup";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 
 import { AccountBootstrapForm } from "./AccountBootstrapForm";
 
-const actionMocks = vi.hoisted(() => ({
+vi.mock("@/lib/actions/first-run-account-bootstrap", () => ({
   bootstrapFirstRunOwner: vi.fn(),
 }));
 
-vi.mock("@/lib/actions/first-run-account-bootstrap", () => ({
-  bootstrapFirstRunOwner: actionMocks.bootstrapFirstRunOwner,
+vi.mock("./AccountBootstrapSubmitButton", () => ({
+  AccountBootstrapSubmitButton: () => <button type="submit">Get Started</button>,
 }));
 
 describe("AccountBootstrapForm", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    actionMocks.bootstrapFirstRunOwner.mockResolvedValue(undefined);
-  });
+  it("renders a native first-run bootstrap form with named required fields", () => {
+    const html = renderToStaticMarkup(<AccountBootstrapForm setupId="setup-1" />);
 
-  it("submits first-run account bootstrap through one server action", async () => {
-    const { container } = render(<AccountBootstrapForm setupId="setup-1" />);
-
-    fireEvent.change(screen.getByPlaceholderText(/digital product factory/i), {
-      target: { value: "Digital Product Factory Scratch" },
-    });
-    fireEvent.change(container.querySelector('input[type="email"]')!, {
-      target: { value: "owner@example.com" },
-    });
-    fireEvent.change(container.querySelector('input[type="password"]')!, {
-      target: { value: "correct horse battery staple" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
-
-    await waitFor(() => {
-      expect(actionMocks.bootstrapFirstRunOwner).toHaveBeenCalledWith("setup-1", {
-        orgName: "Digital Product Factory Scratch",
-          email: "owner@example.com",
-          password: "correct horse battery staple",
-      });
-    });
+    expect(html).toContain("Welcome to your platform");
+    expect(html).toContain('name="organizationName"');
+    expect(html).toContain('name="email"');
+    expect(html).toContain('name="password"');
+    expect(html).toContain('required=""');
+    expect(html).toContain('minLength="8"');
+    expect(html).toContain("Get Started");
   });
 });

@@ -1,49 +1,26 @@
-"use client";
-
-import { useState, useTransition, type FormEvent } from "react";
 import { bootstrapFirstRunOwner } from "@/lib/actions/first-run-account-bootstrap";
+import { AccountBootstrapSubmitButton } from "./AccountBootstrapSubmitButton";
 
 type Props = {
   setupId: string;
 };
 
 /**
- * Minimal account bootstrap — the ONE custom form in onboarding.
+ * Minimal account bootstrap - the one custom form in onboarding.
  *
- * Collects org name + owner credentials, creates both records,
- * then redirects into the real portal where the setup overlay
- * and COO coworker panel take over.
+ * The form posts as a native server action so first-run sign-in follows the
+ * same Auth.js redirect path as the normal login page.
  */
 export function AccountBootstrapForm({ setupId }: Props) {
-  const [orgName, setOrgName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  async function submitBootstrap(formData: FormData) {
+    "use server";
 
-  const canSubmit =
-    orgName.trim().length > 0 &&
-    email.trim().length > 0 &&
-    password.length >= 8;
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      try {
-        await bootstrapFirstRunOwner(setupId, {
-          orgName,
-          email,
-          password,
-        });
-      } catch (err) {
-        if (isNextRedirect(err)) {
-          throw err;
-        }
-        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      }
+    await bootstrapFirstRunOwner(setupId, {
+      orgName: String(formData.get("organizationName") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      password: String(formData.get("password") ?? ""),
     });
-  };
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[var(--dpf-bg)]">
@@ -55,7 +32,7 @@ export function AccountBootstrapForm({ setupId }: Props) {
           </p>
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="space-y-5" action={submitBootstrap}>
           <div>
             <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-org-name">
               Organization Name
@@ -64,10 +41,9 @@ export function AccountBootstrapForm({ setupId }: Props) {
               id="first-run-org-name"
               name="organizationName"
               type="text"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
               placeholder="e.g., Digital Product Factory"
               autoComplete="organization"
+              required
               className="w-full rounded-lg"
             />
           </div>
@@ -80,9 +56,8 @@ export function AccountBootstrapForm({ setupId }: Props) {
               id="first-run-owner-email"
               name="email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              required
               className="w-full rounded-lg"
             />
           </div>
@@ -95,36 +70,16 @@ export function AccountBootstrapForm({ setupId }: Props) {
               id="first-run-owner-password"
               name="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
+              minLength={8}
+              required
               className="w-full rounded-lg"
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-[var(--dpf-error)]">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSubmit || isPending}
-            className="w-full py-3 text-sm font-medium text-white bg-[var(--dpf-accent)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPending ? "Setting up..." : "Get Started"}
-          </button>
+          <AccountBootstrapSubmitButton />
         </form>
       </div>
     </div>
-  );
-}
-
-function isNextRedirect(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    typeof (error as { digest?: unknown }).digest === "string" &&
-    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT;")
   );
 }
