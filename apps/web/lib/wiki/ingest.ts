@@ -14,7 +14,13 @@
 // wiki pages second).
 
 import { readFileSync } from "node:fs";
-import { basename, extname, sep } from "node:path";
+import { basename, extname } from "node:path";
+
+// Split on both POSIX and Windows separators so callers can pass either flavor
+// of path (URL-style "/x/y/z.md" or native "C:\x\y\z.md") and get the same
+// derivation. Using `node:path`'s platform `sep` here drops segments on
+// Windows when the input uses forward slashes — see ingest.test.ts.
+const PATH_SEPARATOR = /[\\/]/;
 // Import via subpaths rather than the bare `@dpf/db` barrel: the apps/web
 // vitest config aliases the bare specifier to `client.ts` (Prisma client
 // only) so tests can mock the barrel cleanly. Subpath specifiers resolve
@@ -87,7 +93,7 @@ export type IngestRawSourceResult = {
  * caller controls.
  */
 export function deriveSourceKeyFromPath(filePath: string): string {
-  const segments = filePath.split(sep).filter(Boolean);
+  const segments = filePath.split(PATH_SEPARATOR).filter(Boolean);
   const file = segments.at(-1) ?? filePath;
   const parent = segments.at(-2);
   const stem = basename(file, extname(file));
@@ -102,7 +108,7 @@ export function deriveSourceKeyFromPath(filePath: string): string {
  * is not recognisable — the caller must supply `sourceType` explicitly.
  */
 export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null {
-  const segments = filePath.split(sep).filter(Boolean);
+  const segments = filePath.split(PATH_SEPARATOR).filter(Boolean);
   const parent = segments.at(-2);
   if (!parent) return null;
   const singular = parent.endsWith("s") ? parent.slice(0, -1) : parent;
