@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { createOrganization, createOwnerAccount } from "@/lib/actions/setup-entities";
 import { advanceStep } from "@/lib/actions/setup-progress";
 
@@ -37,7 +38,7 @@ export function AccountBootstrapForm({ setupId }: Props) {
         await createOrganization(setupId, { orgName });
 
         // 2. Create owner account
-        const result = await createOwnerAccount(setupId, {
+        await createOwnerAccount(setupId, {
           name: orgName,
           email,
           password,
@@ -46,21 +47,19 @@ export function AccountBootstrapForm({ setupId }: Props) {
         // 3. Advance past bootstrap step
         await advanceStep(setupId, { orgName });
 
-        // 4. Sign in (client-side) and redirect to portal
-        // The signIn import depends on the auth setup — using fetch for portability
-        const signInRes = await fetch("/api/auth/callback/workforce", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            email,
-            password,
-            csrfToken: await getCsrfToken(),
-          }),
-          redirect: "manual",
+        // 4. Sign in client-side and redirect to the first real portal route.
+        const signInResult = await signIn("workforce", {
+          email,
+          password,
+          redirect: false,
+          callbackUrl: "/platform/ai/providers",
         });
+        if (signInResult?.error) {
+          throw new Error("Account created, but sign-in failed. Try signing in from the login page.");
+        }
 
-        // Redirect to the first real portal route (AI providers)
-        router.push("/platform/ai/providers");
+        router.replace(signInResult?.url ?? "/platform/ai/providers");
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       }
@@ -130,11 +129,4 @@ export function AccountBootstrapForm({ setupId }: Props) {
       </div>
     </div>
   );
-}
-
-/** Fetch CSRF token from NextAuth for the sign-in POST. */
-async function getCsrfToken(): Promise<string> {
-  const res = await fetch("/api/auth/csrf");
-  const data = await res.json();
-  return data.csrfToken ?? "";
 }
