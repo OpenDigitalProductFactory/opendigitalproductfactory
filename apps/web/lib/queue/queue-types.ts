@@ -21,8 +21,10 @@ export type WorkItemStatus = (typeof WORK_ITEM_STATUSES)[number];
 export const WORK_ITEM_MESSAGE_TYPES = ["comment", "question", "approval-request", "status-update", "escalation", "handoff"] as const;
 export type WorkItemMessageType = (typeof WORK_ITEM_MESSAGE_TYPES)[number];
 
-export const NOTIFICATION_CHANNELS = ["in-app", "email", "slack", "sms", "push"] as const;
-export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+export {
+  COMMUNICATION_CHANNELS as NOTIFICATION_CHANNELS,
+  type CommunicationChannel as NotificationChannel,
+} from "@/lib/communications/channel-types";
 
 export const WORKER_TYPES = ["human", "ai-agent"] as const;
 export type WorkerType = (typeof WORKER_TYPES)[number];

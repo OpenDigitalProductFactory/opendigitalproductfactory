@@ -223,6 +223,8 @@ model Principal {
   status                String           @default("active")
   displayName           String
   aliases               PrincipalAlias[]
+  communicationChannelBindings CommunicationChannelBinding[]
+  communicationChannelSessions CommunicationChannelSession[]
   // Per AGENTS.md §11 (Principal convergence, 2026-05-09): EdgeNode
   // identity lives on Principal + PrincipalAlias, with EdgeNode as a
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
@@ -283,6 +285,7 @@ model EmployeeProfile {
   accountableItems          BacklogItem[]           @relation("ItemAccountable")
   calendarEvents            CalendarEvent[]
   calendarSyncs             CalendarSync[]
+  communicationChannelBindings CommunicationChannelBinding[]
   auditsPerformed           ComplianceAudit[]       @relation("AuditAuditor")
   complianceAuditLogs       ComplianceAuditLog[]    @relation("ComplianceAuditLogActor")
   evidenceCollected         ComplianceEvidence[]    @relation("EvidenceCollector")
@@ -3630,6 +3633,85 @@ model PushDeviceRegistration {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, platform])
+}
+
+model CommunicationChannelBinding {
+  id                 String                         @id @default(cuid())
+  bindingId          String                         @unique @default(cuid())
+  principalId        String
+  employeeProfileId  String?
+  channelType        String
+  providerKey        String
+  providerAccountId  String?
+  externalSubject    String
+  displayLabel       String?
+  verificationStatus String                         @default("pending")
+  allowedDirections  String[]                       @default([])
+  allowedUrgencies   String[]                       @default([])
+  quietHours         Json?
+  preferences        Json?
+  lastVerifiedAt     DateTime?
+  lastTestedAt       DateTime?
+  lastError          String?
+  isActive           Boolean                        @default(true)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+  deliveryAttempts   CommunicationDeliveryAttempt[]
+  employeeProfile    EmployeeProfile?               @relation(fields: [employeeProfileId], references: [id], onDelete: SetNull)
+  principal          Principal                      @relation(fields: [principalId], references: [id], onDelete: Cascade)
+
+  @@unique([channelType, providerKey, providerAccountId, externalSubject])
+  @@index([principalId])
+  @@index([employeeProfileId])
+  @@index([channelType, isActive])
+}
+
+model CommunicationChannelSession {
+  id                String     @id @default(cuid())
+  sessionId         String     @unique @default(cuid())
+  channelType       String
+  providerKey       String
+  providerAccountId String?
+  externalPeerId    String
+  trustLevel        String     @default("unknown")
+  principalId       String?
+  agentThreadId     String?
+  workItemId        String?
+  lastInboundAt     DateTime?
+  lastOutboundAt    DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  principal         Principal? @relation(fields: [principalId], references: [id], onDelete: SetNull)
+
+  @@unique([channelType, providerKey, providerAccountId, externalPeerId])
+  @@index([principalId])
+  @@index([agentThreadId])
+  @@index([workItemId])
+}
+
+model CommunicationDeliveryAttempt {
+  id                String                       @id @default(cuid())
+  attemptId         String                       @unique @default(cuid())
+  channelBindingId  String?
+  channelType       String
+  targetType        String
+  targetId          String
+  providerMessageId String?
+  status            String                       @default("queued")
+  urgency           String                       @default("routine")
+  errorCode         String?
+  errorMessage      String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  channelBinding    CommunicationChannelBinding? @relation(fields: [channelBindingId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([channelBindingId])
+  @@index([channelType, status])
+  @@index([createdAt])
 }
 
 model DynamicForm {
