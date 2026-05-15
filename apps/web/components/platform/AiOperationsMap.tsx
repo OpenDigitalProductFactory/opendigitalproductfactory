@@ -1770,7 +1770,6 @@ function RouteSymbolBadge({
         </g>
       ) : null}
       <circle r={radius + 6} fill="transparent" pointerEvents="all" />
-      <title>{`${label}: ${summary}`}</title>
     </g>
   );
 }
