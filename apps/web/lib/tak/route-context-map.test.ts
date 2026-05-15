@@ -83,6 +83,16 @@ describe("resolveRouteContext", () => {
     expect(ctx.docsPath).toBe("/docs/finance/banking-and-reconciliation");
   });
 
+  it("routes finance pages to a confidential finance context with the period summary tool", () => {
+    const ctx = resolveRouteContext("/finance/reports/profit-loss");
+
+    expect(ctx.domain).toBe("Finance Operations");
+    expect(ctx.routePrefix).toBe("/finance");
+    expect(ctx.sensitivity).toBe("confidential");
+    expect(ctx.domainTools).toContain("get_finance_period_summary");
+    expect(ctx.skills.some((skill) => skill.label === "Income vs expenses this month")).toBe(true);
+  });
+
   it("matches licensing routes ahead of the broader compliance context", () => {
     const ctx = resolveRouteContext("/compliance/licensing");
     expect(ctx.domain).toBe("Licensing & Permit Readiness");
@@ -121,6 +131,7 @@ describe("ROUTE_CONTEXT_MAP", () => {
       "/customer",
       "/customer/marketing",
       "/compliance/licensing",
+      "/finance",
       "/storefront",
       "/ops",
       "/build",

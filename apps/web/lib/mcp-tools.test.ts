@@ -41,6 +41,24 @@ describe("mcp tools", () => {
     expect(toolNames).toContain("fetch_public_website");
   });
 
+  it("exposes the finance period summary tool only when user capability and finance-agent grants both allow it", async () => {
+    const financeTools = await getAvailableTools(adminUser, {
+      externalAccessEnabled: false,
+      agentId: "finance-agent",
+    });
+    const inventoryTools = await getAvailableTools(inventoryUser, {
+      externalAccessEnabled: false,
+      agentId: "finance-agent",
+    });
+    const tool = financeTools.find((t) => t.name === "get_finance_period_summary");
+
+    expect(tool).toBeDefined();
+    expect(tool!.requiredCapability).toBe("view_finance");
+    expect(tool!.executionMode).toBe("immediate");
+    expect(tool!.sideEffect).toBe(false);
+    expect(inventoryTools.some((t) => t.name === "get_finance_period_summary")).toBe(false);
+  });
+
   it("makes public web search available during Build Studio ideation", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: true });
     const tool = tools.find((t) => t.name === "search_public_web");

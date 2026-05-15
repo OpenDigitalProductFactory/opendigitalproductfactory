@@ -120,6 +120,15 @@ describe("TOOL_TO_GRANTS — Marketing entries", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS — Finance entries", () => {
+  it("get_finance_period_summary requires the finance reporting grant", () => {
+    expect(isToolAllowedByGrants("get_finance_period_summary", ["financial_report_create"])).toBe(true);
+    expect(isToolAllowedByGrants("get_finance_period_summary", ["budget_read"])).toBe(false);
+    expect(isToolAllowedByGrants("get_finance_period_summary", ["registry_read"])).toBe(false);
+    expect(isToolAllowedByGrants("get_finance_period_summary", [])).toBe(false);
+  });
+});
+
 describe("TOOL_TO_GRANTS — Estate specialist entries", () => {
   it("summarize_estate_posture requires registry_read", () => {
     expect(isToolAllowedByGrants("summarize_estate_posture", ["registry_read"])).toBe(true);
@@ -359,6 +368,11 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["generate_custom_archetype"]).toEqual(["marketing_write"]);
   });
 
+  it("includes finance tools", () => {
+    const mapping = getToolGrantMapping();
+    expect(mapping["get_finance_period_summary"]).toEqual(["financial_report_create"]);
+  });
+
   it("includes admin tools", () => {
     const mapping = getToolGrantMapping();
     expect(mapping["admin_view_logs"]).toEqual(["admin_read"]);
@@ -410,6 +424,13 @@ describe("agent registry grant lookup", () => {
     expect(financeGrants).toEqual(expect.arrayContaining(["web_search"]));
     expect(isToolAllowedByGrants("search_public_web", financeGrants ?? [])).toBe(true);
     expect(isToolAllowedByGrants("fetch_public_website", financeGrants ?? [])).toBe(true);
+  });
+
+  it("lets the finance specialist use the direct finance period summary tool", () => {
+    const financeGrants = getAgentToolGrants("finance-agent");
+
+    expect(financeGrants).toEqual(expect.arrayContaining(["financial_report_create"]));
+    expect(isToolAllowedByGrants("get_finance_period_summary", financeGrants ?? [])).toBe(true);
   });
 
   it("lets the build specialist use the read-only code graph tools", () => {

@@ -437,6 +437,55 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  "/finance": {
+    routePrefix: "/finance",
+    domain: "Finance Operations",
+    sensitivity: "confidential",
+    domainContext:
+      "This page displays finance operations data classified as confidential: invoices, bills, expense claims, recurring schedules, collections posture, tax remittance readiness, and accounting handoff boundaries. Treat finance figures as evidence-backed operational summaries, not guesses. Use canonical finance records for financial answers, call out open or incomplete records, and keep tax/legal recommendations separate from verified transaction totals.",
+    domainTools: [
+      "get_finance_period_summary",
+      "search_public_web",
+      "fetch_public_website",
+      "wiki_query",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/finance/index",
+    skills: [
+      {
+        label: "Income vs expenses this month",
+        description: "Verified month-to-date income, expenses, and net from the canonical finance data",
+        capability: "view_finance",
+        prompt: "Show me income vs expenses for this month so far, with any gaps surfaced.",
+      },
+      {
+        label: "Review finance posture",
+        description: "Summarize finance configuration, recurring billing, and handoff boundaries",
+        capability: "view_finance",
+        prompt: "Summarize our current finance operating posture and where tax or accounting handoffs still need clarification.",
+      },
+      {
+        label: "Review tax setup",
+        description: "Summarize tax posture, open gaps, and what the coworker needs next",
+        capability: "view_finance",
+        prompt: "Review our current tax remittance setup and tell me what still needs to be clarified.",
+      },
+      {
+        label: "Research tax processing proposal",
+        description: "Use official sources to propose what DPF should configure for tax processing",
+        capability: "view_finance",
+        prompt: "Use External Access to research official tax authority sources for this business, then propose what DPF should configure to process taxes safely. Include assumptions, sources checked, approval boundaries, and next data needed.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/ops": {
     routePrefix: "/ops",
     domain: "Operations",
