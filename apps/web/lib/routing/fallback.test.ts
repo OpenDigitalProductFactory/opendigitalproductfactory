@@ -408,4 +408,31 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
     });
   });
+
+  describe("provider overload (529)", () => {
+    it("degrades the model and schedules recovery without disabling the provider", async () => {
+      const err = new InferenceError(
+        "API Error: 529 Overloaded. This is a server-side issue, usually temporary.",
+        "overloaded",
+        "prov1",
+        529,
+      );
+      mockCallProvider.mockRejectedValue(err);
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
+        where: { providerId: "prov1", modelId: "model1" },
+        data: { modelStatus: "degraded" },
+      });
+      expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+    });
+  });
 });

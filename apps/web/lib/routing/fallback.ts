@@ -31,6 +31,24 @@ export interface FallbackResult {
   responseId?: string;
 }
 
+async function markModelDegraded(
+  providerId: string,
+  modelId: string,
+  reason: string,
+): Promise<void> {
+  await prisma.modelProfile
+    .updateMany({
+      where: { providerId, modelId },
+      data: { modelStatus: "degraded" },
+    })
+    .catch((err) =>
+      console.error(
+        `[callWithFallbackChain] failed to degrade ${providerId}/${modelId} after ${reason}:`,
+        err,
+      ),
+    );
+}
+
 /**
  * Execute an inference call using the RouteDecision's selected endpoint,
  * falling back through the chain on failure.
@@ -187,19 +205,16 @@ export async function callWithFallbackChain(
           }
 
           // EP-INF-004: Degrade the specific MODEL, not the provider
-          await prisma.modelProfile
-            .updateMany({
-              where: { providerId: entry.providerId, modelId: entry.modelId },
-              data: { modelStatus: "degraded" },
-            })
-            .catch((err) =>
-              console.error(
-                `[callWithFallbackChain] failed to mark ${entry.providerId}/${entry.modelId} degraded:`,
-                err,
-              ),
-            );
+          await markModelDegraded(entry.providerId, entry.modelId, "rate_limit");
 
           // EP-INF-004: Schedule auto-recovery
+          scheduleRecovery(entry.providerId, entry.modelId);
+
+        } else if (e.code === "overloaded") {
+          // Claude/Anthropic 529 is provider-side overload, not bad auth or
+          // model retirement. Remove this model from preference briefly and
+          // let fallback continue through the approved chain.
+          await markModelDegraded(entry.providerId, entry.modelId, "overload");
           scheduleRecovery(entry.providerId, entry.modelId);
 
         } else if (e.code === "model_not_found") {
@@ -243,17 +258,7 @@ export async function callWithFallbackChain(
               ),
             );
         } else if (shouldDegradeModelForInterfaceDrift(e.code, e.message)) {
-          await prisma.modelProfile
-            .updateMany({
-              where: { providerId: entry.providerId, modelId: entry.modelId },
-              data: { modelStatus: "degraded" },
-            })
-            .catch((err) =>
-              console.error(
-                `[callWithFallbackChain] failed to degrade ${entry.providerId}/${entry.modelId} after interface drift:`,
-                err,
-              ),
-            );
+          await markModelDegraded(entry.providerId, entry.modelId, "interface drift");
 
           if (shouldReconcileProviderAfterError(e.code, e.message)) {
             autoDiscoverAndProfile(entry.providerId).catch((err) =>
