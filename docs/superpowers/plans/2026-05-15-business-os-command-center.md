@@ -91,7 +91,7 @@ describe("workspace command center readiness", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/workspace/command-center.test.ts
+pnpm --filter web exec vitest run lib/workspace/command-center.test.ts
 ```
 
 Expected: FAIL because `command-center.ts` does not exist.
@@ -141,7 +141,7 @@ Implement the smallest rule set:
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/workspace/command-center.test.ts
+pnpm --filter web exec vitest run lib/workspace/command-center.test.ts
 ```
 
 Expected: PASS.
@@ -173,7 +173,7 @@ Add tests for a pure `buildWorkspaceCommandCenterView(input)` function. It shoul
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/workspace/command-center.test.ts
+pnpm --filter web exec vitest run lib/workspace/command-center.test.ts
 ```
 
 Expected: FAIL because `buildWorkspaceCommandCenterView` is missing.
@@ -236,7 +236,7 @@ Keep the existing calendar and activity-feed fetches in the page for now unless 
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/workspace/command-center.test.ts
+pnpm --filter web exec vitest run lib/workspace/command-center.test.ts
 ```
 
 Expected: PASS.
@@ -271,7 +271,7 @@ Test that a fixture view renders:
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/workspace/BusinessCommandCenter.test.tsx
+pnpm --filter web exec vitest run components/workspace/BusinessCommandCenter.test.tsx
 ```
 
 Expected: FAIL because component does not exist.
@@ -307,7 +307,7 @@ Use DPF tokens only:
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/workspace/BusinessCommandCenter.test.tsx
+pnpm --filter web exec vitest run components/workspace/BusinessCommandCenter.test.tsx
 ```
 
 Expected: PASS.
@@ -344,7 +344,7 @@ Update `page.test.tsx` or add a focused unit test around the workspace tile deri
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run 'apps/web/app/(shell)/workspace/page.test.tsx'
+pnpm --filter web exec vitest run 'app/(shell)/workspace/page.test.tsx'
 ```
 
 Expected: either FAIL for the new assertion or PASS if the page test remains intentionally narrow. Record which happened in the PR.
@@ -363,7 +363,7 @@ In `page.tsx`:
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/workspace/command-center.test.ts apps/web/components/workspace/BusinessCommandCenter.test.tsx 'apps/web/app/(shell)/workspace/page.test.tsx'
+pnpm --filter web exec vitest run lib/workspace/command-center.test.ts components/workspace/BusinessCommandCenter.test.tsx 'app/(shell)/workspace/page.test.tsx'
 ```
 
 Expected: PASS.
@@ -413,7 +413,7 @@ Skip this commit if no styling cleanup was needed.
 - [ ] **Step 1: Run focused tests**
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/workspace/command-center.test.ts apps/web/components/workspace/BusinessCommandCenter.test.tsx 'apps/web/app/(shell)/workspace/page.test.tsx'
+pnpm --filter web exec vitest run lib/workspace/command-center.test.ts components/workspace/BusinessCommandCenter.test.tsx 'app/(shell)/workspace/page.test.tsx'
 ```
 
 Expected: PASS.
