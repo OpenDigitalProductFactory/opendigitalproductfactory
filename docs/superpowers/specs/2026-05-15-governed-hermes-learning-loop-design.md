@@ -121,7 +121,7 @@ The gaps are coordination and product experience, not raw table count:
 1. Skill metrics are not populated, so skill effectiveness is mostly invisible. `SkillMetric` rows are not written by any current code path.
 2. Skill use is not consistently attributed in the active chat/run UI; `apps/web/lib/tak/prompt-assembler.ts` does not record which skills were eligible, presented, loaded, or invoked.
 3. The agentic loop already has a repeated-tool observer at `apps/web/lib/tak/agentic-loop.ts:826` that writes a `PlatformIssueReport(type="agent_stuck")` row inline at `agentic-loop.ts:843` (no named helper — the write is open-coded). That row is the only structured signal that "the coworker got stuck"; nothing converts it into a reflection run, an `ImprovementProposal`, or a `CoworkerCapabilityNeed`. Any reflection trigger this spec ships must consume `PlatformIssueReport` rather than duplicate the detection.
-4. `CoworkerCapabilityNeed.kind` is a free-form String today, not an enum — using `kind="skill"` works but violates the AGENTS.md §3 "Strongly-Typed String Enums" rule until it is typed.
+4. `CoworkerCapabilityNeed.kind` is DB-backed by a Prisma `String`, but the application layer already validates it with `COWORKER_CAPABILITY_NEED_KINDS` in `apps/web/lib/coworker-self-assessment/types.ts`; Slice 2 extends that enum instead of replacing the existing taxonomy.
 5. There is no governed curator that can dry-run lifecycle changes, propose consolidation, or protect pinned skills.
 6. `SkillDefinition.status` enum (`discovered | evaluated | approved | installed | active | deprecated`) does not include the operational lifecycle states the design needs (e.g., `stale`, `pinned`, `quarantined`). The marketplace spec uses a different vocabulary again. The conflict must be reconciled with one migration, not papered over.
 7. Self-assessment is not yet tied to skill usage, failed tools, repeated user corrections, or stale playbooks.
@@ -470,18 +470,18 @@ The holistic design likely needs the following additions, introduced only when r
 
 ### 7.3 Enum discipline
 
-Per AGENTS.md §3 ("Strongly-Typed String Enums") any fixed string status or kind must be typed in `apps/web/lib/backlog.ts` and mirrored in the MCP tool definition in `apps/web/lib/mcp-tools.ts` in the same commit, before any data uses it. Hyphenated values, not underscores.
+Per AGENTS.md §3 ("Strongly-Typed String Enums") any fixed string status or kind must be typed in its owning domain module and mirrored in the MCP tool definition in `apps/web/lib/mcp-tools.ts` in the same commit, before any data uses it. `apps/web/lib/backlog.ts` remains the source for backlog enums; coworker capability needs use `apps/web/lib/coworker-self-assessment/types.ts`. Existing legacy enum values are preserved unless a dedicated migration/backfill renames them.
 
 This spec adds or formalizes the following enums on first use:
 
 | Model.field | Values | Slice |
 | --- | --- | --- |
 | `SkillDefinition.lifecycleState` (new) | `active | stale | pinned | quarantined | archived` | Slice 4 |
-| `CoworkerCapabilityNeed.kind` (existing String, must be typed) | `skill | prompt | memory | tool | convention | code | other` | Slice 2 |
+| `CoworkerCapabilityNeed.kind` (existing app-level enum over a DB String) | preserve `tool | skill | grant | model | memory | data | ui_surface | boundary`; add `prompt | convention | code | other` | Slice 2 |
 | `ImprovementProposal.category` (existing, in use) | extend the in-use set if it does not already include `skill | prompt | memory | tool | convention`; do not redefine. | Slice 3 |
 | `TaskArtifact.metadata.kind` for learning artifacts | `learning-run-report | curator-report | evolution-report | no-change-report` | Slice 2 |
 
-Each enum extension lands as a single commit that updates code + MCP schema + migration + seeds together. Live data must not contain values absent from the typed enum.
+Each enum extension lands as a single commit that updates owner code + MCP schema + any required migration or seed together. Live data must not contain values absent from the typed enum.
 
 ## 8. Runtime Flows
 
@@ -672,7 +672,7 @@ Acceptance:
 - Extract the repeated-tool detection block at `apps/web/lib/tak/agentic-loop.ts:813–870` into a named helper in `apps/web/lib/tak/runtime-issues.ts` so both the existing `PlatformIssueReport.create` write and the new reflection trigger share one detection site.
 - Add post-run hook in `apps/web/lib/tak/autonomous-work-run.ts` that classifies whether a reflection trigger fired by querying `PlatformIssueReport` rows produced during the run.
 - When a trigger fires, spawn a low-priority `TaskRun(source="skill" or "proactive")` via the existing autonomous-run facade.
-- Promote `CoworkerCapabilityNeed.kind` from free-form String to typed enum in `apps/web/lib/backlog.ts` + `mcp-tools.ts` (per AGENTS.md §3) — values: `skill | prompt | memory | tool | convention | code | other`.
+- Extend `COWORKER_CAPABILITY_NEED_KINDS` in `apps/web/lib/coworker-self-assessment/types.ts`; preserve `tool | skill | grant | model | memory | data | ui_surface | boundary`, add `prompt | convention | code | other`, and rely on `apps/web/lib/mcp-tools.ts` spreading the same constant.
 - Persist review outputs as `CoworkerSelfAssessment` + `CoworkerCapabilityNeed(kind="skill")` and emit one `ImprovementSignal` per non-trivial finding.
 - Link evidence (tool/thread/run/artifact references) to the triggering rows.
 
@@ -841,7 +841,7 @@ Start with Slice 1 and Slice 2 together as the first agile increment, executed u
 - scheduled `SkillUsageEvent` → `SkillMetric` aggregator,
 - detection helper extracted from `agentic-loop.ts:813–870` into `apps/web/lib/tak/runtime-issues.ts`, with both the existing `PlatformIssueReport.create` and the new reflection trigger flowing through it,
 - post-run reflection hook in `apps/web/lib/tak/autonomous-work-run.ts` (consuming `PlatformIssueReport` rows produced during the run),
-- `CoworkerCapabilityNeed.kind` promoted to typed enum in `backlog.ts` + `mcp-tools.ts`,
+- `CoworkerCapabilityNeed.kind` extended through `COWORKER_CAPABILITY_NEED_KINDS` in `apps/web/lib/coworker-self-assessment/types.ts`, with MCP schemas consuming the same constant,
 - skill-related `CoworkerCapabilityNeed` + `ImprovementSignal` emission,
 - skill attribution chip in coworker chat + `/platform/ai/skills` detail (theme-token compliant),
 - vitest covering attribution, aggregator idempotency, trigger classification, no-direct-mutation, and enum enforcement.

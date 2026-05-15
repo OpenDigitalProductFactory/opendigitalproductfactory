@@ -243,61 +243,84 @@ git add packages/db/prisma/schema.prisma packages/db/prisma/migrations/<timestam
 git commit -s -m "feat(db): add skill telemetry and improvement signal models"
 ```
 
-### Task 2: Reconcile capability need kind constants
+### Task 2: Extend capability-need kind enum (do not replace)
 
 **Files:**
 - Modify: `apps/web/lib/coworker-self-assessment/types.ts`
-- Modify: `apps/web/lib/mcp-tools.ts`
-- Modify: `apps/web/lib/coworker-self-assessment/assessment-service.test.ts`
-- Modify: `apps/web/lib/coworker-self-assessment/review-service.test.ts`
+- Verify (no change expected): `apps/web/lib/mcp-tools.ts`
 - Modify: `apps/web/lib/mcp-tools-coworker-self-assessment.test.ts`
+- Touch only if a test references a new kind: `apps/web/lib/coworker-self-assessment/assessment-service.test.ts`, `apps/web/lib/coworker-self-assessment/review-service.test.ts`
 
-- [ ] **Step 1: Update the failing tests first**
-
-In coworker self-assessment tests, replace stale `ui_surface` examples with `other` unless the test specifically needs a UI-surface concept. Add assertions that these values are accepted:
+**Current state (verified 2026-05-15):**
 
 ```typescript
-["skill", "prompt", "memory", "tool", "convention", "code", "other"]
+// apps/web/lib/coworker-self-assessment/types.ts:7-16
+export const COWORKER_CAPABILITY_NEED_KINDS = [
+  "tool", "skill", "grant", "model", "memory", "data", "ui_surface", "boundary",
+] as const;
 ```
 
-Add an MCP test that `submit_coworker_capability_need` exposes the same enum.
+The enum is **already typed** — the spec sentence "free-form String today" is incorrect about the application layer (the DB column is a Prisma `String`, but every call site validates against `COWORKER_CAPABILITY_NEED_KINDS`). `apps/web/lib/mcp-tools.ts` already spreads the same constant into the MCP schema at lines 2763, 2792, 9852, 9908. Live data uses only `tool` (confirmed by the preconditions query).
 
-- [ ] **Step 2: Update the canonical constant**
+The aligned spec extends the existing taxonomy rather than replacing it. `skill`, `memory`, and `tool` already exist; `prompt`, `convention`, `code`, and `other` must be **added** to the constant. The five values currently in the enum that were missing from the original draft (`grant`, `model`, `data`, `ui_surface`, `boundary`) **must be preserved** — each represents a real operational-gap class already wired into the assessment surfaces. Dropping them would invalidate the historical taxonomy and break the assessment dashboard.
 
-In `apps/web/lib/coworker-self-assessment/types.ts`, set:
+- [ ] **Step 1: Write a failing test for the new kinds**
+
+In `apps/web/lib/mcp-tools-coworker-self-assessment.test.ts`, add a case that submits a capability need with each new kind (`prompt`, `convention`, `code`, `other`) and asserts the MCP schema accepts it. This test fails today because the constant does not yet include them.
+
+In the same file, add an inverse assertion that an unknown kind (e.g. `"made-up"`) is rejected — guard against future enum drift.
+
+- [ ] **Step 2: Extend the canonical constant**
+
+In `apps/web/lib/coworker-self-assessment/types.ts`, update:
 
 ```typescript
 export const COWORKER_CAPABILITY_NEED_KINDS = [
-  "skill",
-  "prompt",
-  "memory",
+  // Existing operational gap kinds — DO NOT remove without product review.
   "tool",
+  "skill",
+  "grant",
+  "model",
+  "memory",
+  "data",
+  "ui_surface",
+  "boundary",
+  // Governed Hermes learning Slice 2 (spec §7.3 additions).
+  "prompt",
   "convention",
   "code",
   "other",
 ] as const;
 ```
 
-- [ ] **Step 3: Confirm MCP schema reads the same constant**
+Hyphenation: `ui_surface` keeps its underscore (live shape; do not break existing rows). New values are single tokens; if a future value needs multi-word form, prefer hyphens per AGENTS.md §3.
 
-`apps/web/lib/mcp-tools.ts` should continue using `COWORKER_CAPABILITY_NEED_KINDS`; do not duplicate the list inline.
+- [ ] **Step 3: Verify MCP schema picks up the new values automatically**
+
+`apps/web/lib/mcp-tools.ts` already imports and spreads `COWORKER_CAPABILITY_NEED_KINDS` at lines 2763, 2792, 9852, 9908 — no edit needed. Confirm no parallel hardcoded enum exists:
+
+```powershell
+git grep -n '"ui_surface"|"boundary"' apps/web/lib | Where-Object { $_ -notmatch 'types\.ts|\.test\.|\.md' }
+```
+
+Expected: no matches. If any exist, replace with imports of `COWORKER_CAPABILITY_NEED_KINDS`.
 
 - [ ] **Step 4: Run focused tests**
-
-Run:
 
 ```powershell
 pnpm --filter web exec vitest run apps/web/lib/coworker-self-assessment/assessment-service.test.ts apps/web/lib/coworker-self-assessment/review-service.test.ts apps/web/lib/mcp-tools-coworker-self-assessment.test.ts
 ```
 
-Expected: tests pass.
+Expected: tests pass, including the new `prompt | convention | code | other` cases. The existing `ui_surface` test case at `assessment-service.test.ts:52` continues to pass unchanged.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add apps/web/lib/coworker-self-assessment apps/web/lib/mcp-tools.ts apps/web/lib/mcp-tools-coworker-self-assessment.test.ts
-git commit -s -m "feat(ai): type coworker capability need kinds"
+git add apps/web/lib/coworker-self-assessment apps/web/lib/mcp-tools-coworker-self-assessment.test.ts
+git commit -s -m "feat(ai): extend coworker capability-need kinds for skill reflection"
 ```
+
+**Spec note:** The parent spec's §7.3 table is now aligned to the extended-union rule. Do not reintroduce replacement wording in Slice 2.
 
 ## Chunk 2: Skill Runtime Telemetry
 
@@ -490,18 +513,28 @@ Use event counts as source of truth:
 
 Use `upsert` on `SkillMetric` by `skillId_agentId_period`.
 
-- [ ] **Step 3: Run tests**
+- [ ] **Step 3: Register the aggregator as a scheduled job**
+
+Without a schedule, `aggregateSkillMetrics` would never run and `SkillMetric` would stay empty, defeating the Definition of Done. Register the aggregator as a daily `ScheduledJob`:
+
+1. Add a seed entry in `packages/db/src/seed.ts` or the nearest companion scheduled-job seed with `jobId="skill-metrics-aggregator"`, `name="Skill Metrics Aggregator"`, and `schedule="0 5 * * *"` (daily 05:00 UTC). `ScheduledJob` has no `kind` or `enabled` columns; enabled means the schedule is not `disabled`. The 05:00 slot was verified on 2026-05-15 against live `ScheduledJob` rows and repo cron seeds; no existing job uses it.
+2. Register a handler in the scheduled-job dispatcher (search for an existing job-kind switch — typically in `apps/web/lib/scheduled-jobs/` or the dispatcher route) that calls `aggregateSkillMetrics()` and records duration.
+3. Aggregator must be idempotent — repeated runs against the same period upsert to the same `SkillMetric` rows, never duplicate. Step 1 of this task's tests already covers this.
+
+Also expose a server-action button on `/platform/ai/skills` (or an existing admin "Run job" surface) that runs `aggregateSkillMetrics({ period })` on demand, so an operator can force a refresh during UX verification without waiting for the cron tick.
+
+- [ ] **Step 4: Run tests**
 
 ```powershell
 pnpm --filter web exec vitest run apps/web/lib/skills/skill-metrics.test.ts
 ```
 
-Expected: tests pass.
+Expected: tests pass. The scheduled-job handler test must also assert idempotency across two consecutive invocations.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```powershell
-git add apps/web/lib/skills/skill-metrics.ts apps/web/lib/skills/skill-metrics.test.ts
+git add apps/web/lib/skills/skill-metrics.ts apps/web/lib/skills/skill-metrics.test.ts packages/db/src/seed.ts
 git commit -s -m "feat(skills): aggregate skill metrics from usage events"
 ```
 
@@ -804,9 +837,15 @@ Implementation:
 
 - [ ] **Step 5: Hook the trigger after autonomous runs**
 
-In `executeAutonomousAgenticLoop`, capture `const startedAt = new Date()` before `runAgenticLoop`. After the result resolves, call `processRuntimeIssueReflection` with the run context. Catch and log failures; never block the user response.
+In `executeAutonomousAgenticLoop`, capture `const startedAt = new Date()` before `runAgenticLoop`. After the result resolves, call `processRuntimeIssueReflection` with the run context. Catch and log failures; never block the user response. Use `void`-style fire-and-forget plus structured logging with the `[reflection-triggers]` prefix, matching the planned `reflection-triggers.ts` module and existing bracketed subsystem tags such as `[agentic-loop]`, `[agentic-tool]`, and `[governed-execute]`, so a slow reflection job cannot delay the user-facing response.
 
-Do not trigger reflection for reflection runs themselves. Guard with metadata or source.
+**Reflection-loop self-protection (must be explicit).** A reflection run produces tool calls of its own; if one of those calls trips the repeated-tool detector, it would file a new `PlatformIssueReport`, which would trigger another reflection — an unbounded loop. Apply all three guards:
+
+1. **Source check.** When the parent `TaskRun.source === "proactive"` and the run title starts with `"Skill reflection:"`, skip the post-run reflection hook entirely. Test: a reflection `TaskRun` that itself trips the repeated-tool guard must produce zero new reflection `TaskRun` rows.
+2. **Metadata guard.** Stamp every reflection-spawned `TaskRun` with `metadata.reflectionDepth = (parent.metadata.reflectionDepth ?? 0) + 1`. Refuse to spawn when `reflectionDepth >= 1`. This catches the case where the source check is bypassed (e.g. a future caller uses `source="coworker"` for a reflection-equivalent flow).
+3. **Idempotency at the signal layer.** `createOrTouchImprovementSignal` already dedupes on `(sourceType, sourceId)`. The reflection trigger MUST set `sourceId = platformIssueReport.reportId` so a re-fire on the same issue increments `recurrenceCount` instead of producing a parallel signal.
+
+Add a vitest case that asserts a reflection run cannot recursively trigger another reflection run, exercising all three guards.
 
 - [ ] **Step 6: Run focused tests**
 
@@ -1013,13 +1052,36 @@ Only do this if verification required changes after the prior task commits.
 
 **Files:** none.
 
-- [ ] **Step 1: Push**
+- [ ] **Step 1: PR-overlap sweep before pushing**
+
+This slice touches several high-traffic files (`agent-coworker.ts`, `agent-skills.ts`, `agentic-loop.ts`, `autonomous-work-run.ts`, `prompt-assembler.ts`, `mcp-governed-execute.ts`, `mcp-tools.ts`, `coworker-self-assessment/types.ts`, `schema.prisma`). Concurrent sessions can land overlapping changes. Sweep before push:
+
+```powershell
+git fetch origin main
+git log origin/main --since="14 days ago" --pretty=format:"%h %s" -- `
+  apps/web/lib/actions/agent-coworker.ts `
+  apps/web/lib/actions/agent-skills.ts `
+  apps/web/lib/tak/agentic-loop.ts `
+  apps/web/lib/tak/autonomous-work-run.ts `
+  apps/web/lib/tak/prompt-assembler.ts `
+  apps/web/lib/mcp-governed-execute.ts `
+  apps/web/lib/mcp-tools.ts `
+  apps/web/lib/coworker-self-assessment/types.ts `
+  packages/db/prisma/schema.prisma
+
+gh pr list --state open --json number,title,headRefName,files `
+  --jq '.[] | select(.files[]?.path | test("agent-coworker|agent-skills|agentic-loop|autonomous-work-run|prompt-assembler|mcp-governed-execute|mcp-tools|coworker-self-assessment|schema.prisma")) | {number, title, branch: .headRefName}'
+```
+
+If conflicts are likely, rebase onto `origin/main` and re-run verification (Task 12) before pushing. If another open PR is solving the same problem (e.g. another session also extracting `runtime-issues.ts`), pause and coordinate — do not push and hope.
+
+- [ ] **Step 2: Push**
 
 ```powershell
 git push -u origin feat/skill-telemetry-and-reflection
 ```
 
-- [ ] **Step 2: Open a draft PR**
+- [ ] **Step 3: Open a draft PR**
 
 Use GitHub tooling or `gh` fallback. PR title:
 
@@ -1029,13 +1091,21 @@ Use GitHub tooling or `gh` fallback. PR title:
 
 PR body must include:
 
-- summary of skill telemetry,
-- summary of reflection trigger behavior,
-- note that skill proposals/curator/evolution are out of scope,
-- verification commands and outcomes,
-- UX verification evidence,
-- migration note,
-- DCO note.
+- summary of skill telemetry (what events fire, where `ToolExecution.skillId` is written, how `SkillMetric` is populated and on what schedule),
+- summary of reflection trigger behavior (what the trigger consumes, what it writes, the three-layer loop-protection),
+- explicit statement that skill proposals, curator, lifecycle states, evidence search, evolution, and external import are out of scope (Slices 3–7),
+- verification commands and outcomes from Task 12,
+- UX verification evidence (screenshots from Task 12 Step 5),
+- migration note (Prisma migrate, indexes added, no destructive changes, nullable columns only),
+- DCO note (all commits signed; confirm `gh pr checks` shows DCO green before flipping out of draft).
+
+- [ ] **Step 4: Verify PR-level checks before marking ready**
+
+```powershell
+gh pr checks --watch
+```
+
+Wait for green. Per AGENTS.md §4, DCO must pass and the build gate must be clean before any reviewer is requested.
 
 ## Rollback Plan
 
@@ -1050,10 +1120,12 @@ If the implementation causes runtime problems:
 ## Definition Of Done
 
 - `SkillUsageEvent` records are created for eligible, loaded, invoked, completed, and failed phases.
-- `SkillMetric` is populated by an idempotent aggregator.
+- `SkillMetric` is populated by an idempotent aggregator **and** the aggregator is registered as a daily `ScheduledJob` (cron `0 5 * * *`, verified free on 2026-05-15), seeded, and exposed via an on-demand admin trigger.
 - `ToolExecution.skillId` is set for explicit skill invocations.
+- `COWORKER_CAPABILITY_NEED_KINDS` is **extended** (not replaced): the existing eight values remain and `prompt | convention | code | other` are added; MCP schema picks up the change without duplication.
 - Repeated-tool runtime issues are detected through `runtime-issues.ts`, not open-coded in `agentic-loop.ts`.
 - A repeated-tool `PlatformIssueReport` can produce a governed reflection `TaskRun`, a `CoworkerSelfAssessment`, a `CoworkerCapabilityNeed(kind="skill")`, and an `ImprovementSignal`.
+- Reflection runs cannot recursively trigger themselves: the source check, `metadata.reflectionDepth` guard, and `(sourceType, sourceId)` signal-layer dedupe all have explicit test coverage.
 - No production skill content is mutated by this slice.
 - `/platform/ai/skills` shows skill telemetry.
 - Coworker chat shows a compact, theme-aware active skill chip.
@@ -1061,4 +1133,5 @@ If the implementation causes runtime problems:
 - `pnpm --filter web typecheck` passes.
 - `pnpm --filter web exec next build` passes.
 - UX verification is recorded.
-- All commits are signed with DCO and pushed to a branch.
+- PR-overlap sweep against the touched files is recorded in the PR body; no concurrent PR is solving the same surface.
+- All commits are signed with DCO and pushed to a branch; `gh pr checks` is green before flipping out of draft.
