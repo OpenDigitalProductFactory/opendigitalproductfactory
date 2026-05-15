@@ -196,7 +196,11 @@ export async function executeAutonomousAgenticLoop(input: {
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
 
-  return runAgenticLoop({
+  // Capture before-run timestamp so the post-run reflection trigger only
+  // considers PlatformIssueReport rows this run produced.
+  const startedAt = new Date();
+
+  const result = await runAgenticLoop({
     systemPrompt: input.systemPrompt,
     chatHistory: input.chatHistory,
     sensitivity: input.sensitivity,
@@ -216,6 +220,35 @@ export async function executeAutonomousAgenticLoop(input: {
     ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
     onProgress: input.onProgress,
   });
+
+  // Governed Hermes learning Slice 2: fire-and-forget reflection trigger.
+  // Inspects PlatformIssueReport rows produced during this run and emits
+  // self-assessment + capability-need + ImprovementSignal evidence per row.
+  // The trigger has its own three-layer loop guard (source check, depth
+  // guard, signal-layer dedupe) — see reflection-triggers.ts. Void-style
+  // so a slow reflection cannot delay the user response.
+  void (async () => {
+    try {
+      const { processRuntimeIssueReflection } = await import(
+        "@/lib/tak/reflection-triggers"
+      );
+      await processRuntimeIssueReflection({
+        taskRunId: input.taskRunId ?? null,
+        userId: input.userId,
+        agentId: input.agentId,
+        threadId: input.threadId,
+        routeContext: input.routeContext,
+        since: startedAt,
+      });
+    } catch (err) {
+      console.warn(
+        "[reflection-triggers] post-run hook failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  })();
+
+  return result;
 }
 
 export async function executeAutonomousWorkTool(input: {
