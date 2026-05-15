@@ -162,9 +162,14 @@ type AmbiguityReviewer = (input: AmbiguityReviewInput) => Promise<unknown[]>;
 
 type HiveScoutPrisma = Pick<
   PrismaClient,
-  "eaReferenceModelElement" | "skillDefinition" | "agent" | "backlogItem" | "backlogItemActivity" | "user"
+  | "eaReferenceModelElement"
+  | "skillDefinition"
+  | "agent"
+  | "backlogItem"
+  | "backlogItemActivity"
+  | "user"
+  | "platformConfig"
 > & {
-  appSetting?: unknown;
   taskRun?: unknown;
 };
 
@@ -588,17 +593,9 @@ export async function runHiveScoutIngest(
   const reviewBySource = new Map<string, AmbiguityReviewDecision>();
   const reviewer = options.ambiguityReviewer ?? (options.enableAutonomousReview ? reviewAmbiguousEntriesWithTak : null);
   if (reviewer && candidates.length > 0) {
-    const appSettingClient = db.appSetting as
-      | {
-          findUnique: (args: {
-            where: { key: string };
-            select?: { value?: boolean };
-          }) => Promise<{ value: unknown } | null>;
-        }
-      | undefined;
     const reviewSettings = await loadAutonomousReviewSettings({
       settingPrefix: REVIEW_SETTING_PREFIX,
-      appSetting: appSettingClient,
+      platformConfig: db.platformConfig,
       defaults: { cacheTtlDays: REVIEW_CACHE_TTL_DAYS },
     });
     if (!reviewSettings.enabled) {
@@ -638,32 +635,38 @@ export async function runHiveScoutIngest(
       reviewBatchSize = reviewCandidates.length;
       const startedAt = Date.now();
 
-      try {
-        const reviewInput = {
-          entries: reviewCandidates.map((candidate) => toPublicReviewEntry(candidate.entry)),
-          existingSkillNames: skillNames,
-          existingCoworkerNames: coworkerNames,
-          valueStreamNames: [...streamNames],
-        };
-        assertReviewInputAllowlist(reviewInput, [
-          "entries",
-          "existingSkillNames",
-          "existingCoworkerNames",
-          "valueStreamNames",
-        ]);
-        const rawDecisions = await reviewer(reviewInput);
-        reviewLatencyMs = Date.now() - startedAt;
-        const { decisions, dropped } = validateReviewDecisions(rawDecisions);
-        reviewSchemaDropCount = dropped;
-        for (const decision of decisions) {
-          reviewBySource.set(decision.sourceUrl, decision);
-          incrementClassification(reviewClassificationHistogram, decision.classification);
+      if (reviewCandidates.length === 0) {
+        reviewParseSuccessRate = 1;
+      } else {
+        try {
+          const reviewedSourceUrls = new Set(reviewCandidates.map((candidate) => candidate.entry.sourceUrl));
+          const reviewInput = {
+            entries: reviewCandidates.map((candidate) => toPublicReviewEntry(candidate.entry)),
+            existingSkillNames: skillNames,
+            existingCoworkerNames: coworkerNames,
+            valueStreamNames: [...streamNames],
+          };
+          assertReviewInputAllowlist(reviewInput, [
+            "entries",
+            "existingSkillNames",
+            "existingCoworkerNames",
+            "valueStreamNames",
+          ]);
+          const rawDecisions = await reviewer(reviewInput);
+          reviewLatencyMs = Date.now() - startedAt;
+          const { decisions, dropped } = validateReviewDecisions(rawDecisions);
+          const acceptedDecisions = decisions.filter((decision) => reviewedSourceUrls.has(decision.sourceUrl));
+          reviewSchemaDropCount = dropped + (decisions.length - acceptedDecisions.length);
+          for (const decision of acceptedDecisions) {
+            reviewBySource.set(decision.sourceUrl, decision);
+            incrementClassification(reviewClassificationHistogram, decision.classification);
+          }
+          reviewParseSuccessRate = reviewBatchSize > 0 ? acceptedDecisions.length / reviewBatchSize : 1;
+        } catch (error) {
+          reviewLatencyMs = Date.now() - startedAt;
+          reviewFailed = reviewCandidates.length;
+          reviewFailureReason = classifyAutonomousReviewFailure(error);
         }
-        reviewParseSuccessRate = reviewBatchSize > 0 ? decisions.length / reviewBatchSize : 1;
-      } catch (error) {
-        reviewLatencyMs = Date.now() - startedAt;
-        reviewFailed = reviewCandidates.length;
-        reviewFailureReason = classifyAutonomousReviewFailure(error);
       }
     }
     reviewed = reviewBySource.size;

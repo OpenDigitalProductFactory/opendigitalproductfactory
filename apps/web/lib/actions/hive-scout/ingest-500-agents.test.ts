@@ -136,7 +136,7 @@ const INJECTION_SAMPLE_README = `# 500+ AI Agent Projects
 describe("runHiveScoutIngest ambiguity review", () => {
   function makePrisma() {
     return {
-      appSetting: {
+      platformConfig: {
         findUnique: async (_args?: unknown) => null,
       },
       eaReferenceModelElement: {
@@ -269,7 +269,7 @@ describe("runHiveScoutIngest ambiguity review", () => {
   it("honors the runtime review kill switch without blocking deterministic ingest", async () => {
     let reviewerCalls = 0;
     const prisma = makePrisma();
-    (prisma.appSetting as { findUnique: (args?: unknown) => Promise<unknown> }).findUnique = async (args?: unknown) => {
+    (prisma.platformConfig as { findUnique: (args?: unknown) => Promise<unknown> }).findUnique = async (args?: unknown) => {
       const where = (args as { where: { key: string } }).where;
       return where.key === "hive-scout.review.enabled" ? { key: where.key, value: false } : null;
     };
@@ -342,6 +342,54 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(created).toEqual([{ status: "deferred" }]);
   });
 
+  it("treats fully cached review batches as successful review metrics", async () => {
+    let reviewerCalls = 0;
+    const prisma = makePrisma();
+    const cachedByUrl = new Map(
+      ["https://github.com/example/threat-hunter", "https://github.com/example/meeting-notes"].map((sourceUrl) => [
+        sourceUrl,
+        {
+          payload: {
+            sourceUrl,
+            sourceUrlHash: sourceUrlHash(sourceUrl),
+            ambiguityReview: {
+              sourceUrl,
+              classification: "existing_skill_gap",
+              novelty: "medium",
+              valueStream: "Operate",
+              valueStreamConfidence: "medium",
+              rationale: "Fresh cached review decision.",
+            },
+          },
+          recordedAt: new Date(),
+        },
+      ]),
+    );
+    (prisma.backlogItemActivity as { findMany: (args?: unknown) => Promise<unknown[]> }).findMany = async (args?: unknown) => {
+      const where = (args as { where: { payload: { equals: string } } }).where;
+      return [...cachedByUrl.values()].filter((row) => row.payload.sourceUrlHash === where.payload.equals);
+    };
+
+    const result = await runHiveScoutIngest({
+      fetcher: async () => REVIEW_SAMPLE_README,
+      prisma: prisma as never,
+      loadPrompt: async () => "{{NAME}}",
+      notifyAdmins: async () => undefined,
+      enableAutonomousReview: true,
+      ambiguityReviewer: async () => {
+        reviewerCalls++;
+        return [];
+      },
+    });
+
+    expect(reviewerCalls).toBe(0);
+    expect(result.reviewed).toBe(2);
+    expect(result.reviewCacheHits).toBe(2);
+    expect(result.reviewCacheHitRate).toBe(1);
+    expect(result.reviewBatchSize).toBe(0);
+    expect(result.reviewParseSuccessRate).toBe(1);
+  });
+
   it("records schema drops when reviewer output violates the strict decision contract", async () => {
     const result = await runHiveScoutIngest({
       fetcher: async () => REVIEW_SAMPLE_README,
@@ -372,6 +420,30 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(result.reviewSchemaDropCount).toBe(1);
     expect(result.reviewParseSuccessRate).toBe(0.5);
     expect(result.reviewClassificationHistogram).toEqual({ new_archetype: 1 });
+  });
+
+  it("drops reviewer decisions for source URLs outside the reviewed batch", async () => {
+    const result = await runHiveScoutIngest({
+      fetcher: async () => REVIEW_SAMPLE_README,
+      prisma: makePrisma() as never,
+      loadPrompt: async () => "{{NAME}}",
+      notifyAdmins: async () => undefined,
+      ambiguityReviewer: async () => [
+        {
+          sourceUrl: "https://github.com/example/not-in-the-batch",
+          classification: "out_of_scope",
+          novelty: "low",
+          valueStream: null,
+          valueStreamConfidence: "low",
+          rationale: "The reviewer must not introduce unrelated source URLs.",
+        },
+      ],
+    });
+
+    expect(result.reviewed).toBe(0);
+    expect(result.reviewSchemaDropCount).toBe(1);
+    expect(result.reviewClassificationHistogram).toEqual({});
+    expect(result.created).toBe(2);
   });
 
   it("sends only public catalog fields and DPF names to the reviewer", async () => {

@@ -17,11 +17,11 @@
 - Reviewer batch capped at 12 entries per run.
 - Reviewer failure must not block deterministic ingest (`reviewFailed` reported, run continues).
 - Reviewer failures carry a typed `reviewFailureReason` from the closed enum: `"timeout"`, `"json_parse"`, `"schema_validation"`, `"provider_rate_limit"`, `"provider_unavailable"`, `"router_no_route"`, `"budget_exhausted"`, `"unknown"`. Anything not categorizable surfaces as `"unknown"` and counts toward the auto-pause trigger.
-- Reviewer output validated as strict JSON via Zod; invalid decisions silently dropped, entry falls through to deterministic path, and the dropped count is recorded as `reviewSchemaDropCount`.
+- Reviewer output validated as strict JSON via Zod; invalid decisions and valid-looking decisions for source URLs outside the submitted batch are silently dropped, entries fall through to deterministic path, and the dropped count is recorded as `reviewSchemaDropCount`.
 - Reviewer call carries no tool grants — it cannot fetch, parse, dedupe, write, or call other tools.
 - Reviewer routing intent is fixed: `task type "analysis"`, `effort "low"`, `budget class "minimize_cost"`. Provider selection is left to the router (no provider pinning).
 - Reviewer is opt-in: only enabled when invoked through `run_hive_scout_ingest` (which sets `enableAutonomousReview: true`).
-- Reviewer can be disabled at runtime through the existing/future `appSetting` key `hive-scout.review.enabled = false`; installs without a key-value settings model default safely to enabled and require no schema change.
+- Reviewer can be disabled at runtime through the existing `PlatformConfig` key `hive-scout.review.enabled = false`; installs without the key default safely to enabled and require no schema change.
 - Per-source review decisions are cached from existing `BacklogItemActivity.payload.ambiguityReview` rows. Cache key is `sha256(sourceUrl)`; staleness window default is 30 days (`hive-scout.review.cacheTtlDays` when available).
 - Reviewer auto-pauses (next run sets `reviewSkipReason: "auto_paused"` and files an admin notification) when, over the last 5 runs: `reviewParseSuccessRate < 0.5`, OR `reviewFailureReason == "unknown"` appears more than once, OR `reviewClassificationHistogram` shows ≥ 90% in a single class. Auto-pause is cleared by an operator flipping `hive-scout.review.enabled` after addressing root cause.
 - Public-data egress is enforced by a unit test that asserts the prompt input shape against an allowlist (`entries`, `existingSkillNames`, `existingCoworkerNames`, `valueStreamNames`); no body text, no prompts, no tool grants, no org context may reach the reviewer.
@@ -100,7 +100,7 @@ No schema or skill files change in this slice.
 - [ ] Use the shared `bounded-autonomous-review` helpers for failure classification, settings loading, schema-drop counting, egress allowlist validation, and auto-pause health evaluation; Hive Scout should own only the domain-specific candidate construction and backlog writes.
 - [ ] Cap the batch to 12 entries per run. Truncate, do not retry.
 - [ ] Pass exactly four input fields to the reviewer: `entries` (post-dedupe public catalog rows), `existingSkillNames` (cap 80), `existingCoworkerNames` (cap 80), and `valueStreamNames` (the seeded IT4IT value-stream name list). Do not pass body text, prompts, tool grants, or org context. The egress allowlist is enforced by the test in Task 6.
-- [ ] Require strict JSON-array output. Validate each decision with the Zod schema before use; silently drop invalid entries — they fall through to the deterministic path and increment `reviewSchemaDropCount`.
+- [ ] Require strict JSON-array output. Validate each decision with the Zod schema before use; silently drop invalid entries and decisions for source URLs outside the reviewed batch — they fall through to the deterministic path and increment `reviewSchemaDropCount`.
 - [ ] Wrap the reviewer call in a try/catch. On any thrown error, classify the failure into one of `"timeout" | "json_parse" | "schema_validation" | "provider_rate_limit" | "provider_unavailable" | "router_no_route" | "budget_exhausted" | "unknown"`, set `reviewFailureReason` accordingly, set `reviewFailed = candidates.length`, and continue the deterministic ingest. The run must still produce its backlog writes and admin notification.
 - [ ] Enable the reviewer only from `run_hive_scout_ingest` (set `enableAutonomousReview: true` in `executeTool`); direct/manual callers remain deterministic unless they pass their own `ambiguityReviewer` or `enableAutonomousReview: true`.
 - [ ] Resolve the reviewer system prompt from the seeded prompt store (`category: specialist`, `name: hive-scout-ambiguity-reviewer`). Resolve by name, not by file path, so Admin > Prompts edits take effect on the next run.
@@ -138,7 +138,7 @@ pnpm --filter web exec vitest run lib/actions/hive-scout/ingest-500-agents.test.
 - [ ] Add `evaluateReviewerHealth()` that reads the last 5 Hive Scout `TaskRun` summaries and returns one of `"healthy"`, `"auto_pause_parse_rate"`, `"auto_pause_unknown_failures"`, `"auto_pause_degenerate_distribution"`.
 - [ ] Before invoking the reviewer in Task 3, call `evaluateReviewerHealth()`; if not `"healthy"`, set `reviewSkipReason: "auto_paused"`, file an admin notification with the trigger reason, and skip the provider call.
 - [ ] Auto-pause clears only when an operator sets `hive-scout.review.enabled = false` then back to `true` (explicit acknowledgement). The plan does not add a separate "unpause" key; the existing toggle is the acknowledgement surface.
-- [ ] Make auto-pause thresholds operator-tunable via `AppSetting` keys: `hive-scout.review.minParseRate` (default 0.5), `hive-scout.review.maxUnknownFailuresInWindow` (default 1), `hive-scout.review.maxSingleClassFraction` (default 0.9), `hive-scout.review.healthWindowSize` (default 5). Resolves spec §8.2 open decision #3.
+- [ ] Make auto-pause thresholds operator-tunable via `PlatformConfig` keys: `hive-scout.review.minParseRate` (default 0.5), `hive-scout.review.maxUnknownFailuresInWindow` (default 1), `hive-scout.review.maxSingleClassFraction` (default 0.9), `hive-scout.review.healthWindowSize` (default 5). Resolves spec §8.2 open decision #3.
 
 ## Task 6: Safety tests and seed verification
 
@@ -186,7 +186,7 @@ Spec open-decision resolutions:
 
 - §8.2 #1 reviewer prompt provenance — Task 6 seed test asserts the seeded prompt resolves by name on fresh install.
 - §8.2 #2 cache TTL default — Task 6 cache TTL sanity check confirms or adjusts the 30-day default; chosen value documented in PR.
-- §8.2 #3 auto-pause severity tunability — Task 5 makes thresholds `AppSetting`-tunable.
+- §8.2 #3 auto-pause severity tunability — Task 5 makes thresholds `PlatformConfig`-tunable.
 - §8.2 #4 reviewer-disagreement signal weight — explicitly deferred to Slice 3; this slice only persists the disagreement (covered by Task 2).
 - §8.2 #5 public-data egress unit test owner — Task 6 egress allowlist test colocated with the reviewer call site.
 

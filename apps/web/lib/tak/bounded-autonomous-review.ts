@@ -27,7 +27,7 @@ export type AutonomousReviewSettings = {
   healthWindowSize: number;
 };
 
-type AppSettingClient = {
+type PlatformConfigClient = {
   findUnique: (args: {
     where: { key: string };
     select?: { value?: boolean };
@@ -117,20 +117,20 @@ function parseSettingNumber(value: unknown, fallback: number): number {
 
 export async function loadAutonomousReviewSettings(input: {
   settingPrefix: string;
-  appSetting?: AppSettingClient | null;
+  platformConfig?: PlatformConfigClient | null;
   defaults?: Partial<AutonomousReviewSettings>;
 }): Promise<AutonomousReviewSettings> {
   const defaults = { ...DEFAULT_SETTINGS, ...input.defaults };
-  if (!input.appSetting) return defaults;
+  if (!input.platformConfig) return defaults;
 
   const key = (suffix: string) => `${input.settingPrefix}.${suffix}`;
   const [enabledRow, ttlRow, minParseRateRow, maxUnknownRow, maxSingleClassRow, windowSizeRow] = await Promise.all([
-    input.appSetting.findUnique({ where: { key: key("enabled") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("cacheTtlDays") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("minParseRate") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("maxUnknownFailuresInWindow") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("maxSingleClassFraction") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("healthWindowSize") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("enabled") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("cacheTtlDays") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("minParseRate") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("maxUnknownFailuresInWindow") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("maxSingleClassFraction") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("healthWindowSize") }, select: { value: true } }),
   ]);
 
   return {

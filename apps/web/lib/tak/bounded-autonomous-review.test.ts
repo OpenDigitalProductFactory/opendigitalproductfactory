@@ -51,10 +51,10 @@ describe("bounded autonomous review helpers", () => {
     ).not.toThrow();
   });
 
-  it("loads settings from a namespaced appSetting client with defaults", async () => {
+  it("loads settings from a namespaced PlatformConfig client with defaults", async () => {
     const settings = await loadAutonomousReviewSettings({
       settingPrefix: "example.review",
-      appSetting: {
+      platformConfig: {
         findUnique: async ({ where }: { where: { key: string } }) =>
           where.key === "example.review.enabled"
             ? { value: "false" }
