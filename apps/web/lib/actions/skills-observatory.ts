@@ -36,6 +36,26 @@ export type SkillExecutionEntry = {
   durationMs: number | null;
   routeContext: string | null;
   createdAt: string;
+  /**
+   * Governed Hermes learning Slice 1: business skill id when this tool call
+   * was attributed to an active coworker skill. Null for tool calls outside
+   * an explicit skill invocation.
+   */
+  skillId: string | null;
+};
+
+export type SkillTelemetrySummary = {
+  totalUsageEvents: number;
+  eligibleEvents: number;
+  loadedEvents: number;
+  invokedEvents: number;
+  completedEvents: number;
+  failedEvents: number;
+  metricRowCount: number;
+  /** Distinct (skillId, agentId) pairs that have recorded usage in the current period. */
+  activeSkillCount: number;
+  /** Period key of the latest SkillMetric row, or null if SkillMetric is empty. */
+  latestMetricPeriod: string | null;
 };
 
 // ─── Fetchers ───────────────────────────────────────────────────────────────
@@ -130,7 +150,16 @@ export async function getSpecialistExecutions(limit = 100): Promise<SkillExecuti
     where: { agentId: { in: specialistIds } },
     orderBy: { createdAt: "desc" },
     take: limit,
-    select: { id: true, agentId: true, toolName: true, success: true, durationMs: true, routeContext: true, createdAt: true },
+    select: {
+      id: true,
+      agentId: true,
+      toolName: true,
+      success: true,
+      durationMs: true,
+      routeContext: true,
+      createdAt: true,
+      skillId: true,
+    },
   });
 
   return executions.map((e) => ({
@@ -141,7 +170,37 @@ export async function getSpecialistExecutions(limit = 100): Promise<SkillExecuti
     durationMs: e.durationMs,
     routeContext: e.routeContext,
     createdAt: e.createdAt.toISOString(),
+    skillId: e.skillId,
   }));
+}
+
+/**
+ * Governed Hermes learning Slice 1: shape SkillUsageEvent + SkillMetric for
+ * the observatory's telemetry tab. Returns aggregate counts only — per-row
+ * inspection lives in the Skills detail view (later slice).
+ */
+export async function getSkillTelemetrySummary(): Promise<SkillTelemetrySummary> {
+  const [grouped, metricCount, latestMetric, activeAgg] = await Promise.all([
+    prisma.skillUsageEvent.groupBy({ by: ["phase"], _count: { _all: true } }),
+    prisma.skillMetric.count(),
+    prisma.skillMetric.findFirst({ orderBy: { period: "desc" }, select: { period: true } }),
+    prisma.skillMetric.groupBy({ by: ["skillId", "agentId"], _count: { _all: true } }),
+  ]);
+
+  const byPhase = new Map(grouped.map((g) => [g.phase, g._count._all]));
+  const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
+
+  return {
+    totalUsageEvents: total,
+    eligibleEvents: byPhase.get("eligible") ?? 0,
+    loadedEvents: byPhase.get("loaded") ?? 0,
+    invokedEvents: byPhase.get("invoked") ?? 0,
+    completedEvents: byPhase.get("completed") ?? 0,
+    failedEvents: byPhase.get("failed") ?? 0,
+    metricRowCount: metricCount,
+    activeSkillCount: activeAgg.length,
+    latestMetricPeriod: latestMetric?.period ?? null,
+  };
 }
 
 /** Summary stats for the observatory header. */
