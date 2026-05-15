@@ -383,6 +383,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         completedAt: new Date(),
         progressPayload: {
           scheduledSummary: scheduledSummary?.compactStatus ?? null,
+          scheduledSummaryPayload: scheduledSummary?.payload ?? null,
           executedToolCount: executedTools.length,
         },
       },

@@ -97,6 +97,29 @@ describe("Hive Scout seed helper", () => {
     expect(prompt).toContain("run_hive_scout_ingest");
   });
 
+  it("ships the seeded Hive Scout ambiguity-reviewer prompt", () => {
+    const promptPath = join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "prompts",
+      "specialist",
+      "hive-scout-ambiguity-reviewer.prompt.md",
+    );
+
+    const prompt = readFileSync(promptPath, "utf8");
+    const frontmatter = parseFrontmatter(prompt).frontmatter as Record<string, unknown>;
+
+    expect(frontmatter.name).toBe("hive-scout-ambiguity-reviewer");
+    expect(frontmatter.category).toBe("specialist");
+    expect(frontmatter.kind).toBe("fragment");
+    expect(frontmatter.version).toBe("2");
+    expect(prompt).toContain("Return only a JSON array");
+    expect(prompt).toContain("write backlog items");
+    expect(prompt).toContain("rationale: \"injection attempt\"");
+  });
+
   it("creates the scheduled task for the first superuser", async () => {
     user.findFirst.mockResolvedValue({ id: "user-admin" });
     scheduledAgentTask.findUnique.mockResolvedValue(null);

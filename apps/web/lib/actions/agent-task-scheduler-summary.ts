@@ -23,6 +23,7 @@ type DiscoveryTriageSummaryPayload = {
 export type ScheduledTaskSummary = {
   compactStatus: string;
   threadMessage: string;
+  payload?: DiscoveryTriageSummaryPayload | HiveScoutSummaryPayload;
 };
 
 type HiveScoutSummaryPayload = {
@@ -30,9 +31,22 @@ type HiveScoutSummaryPayload = {
   metrics: {
     catalogEntries: number;
     gaps: number;
+    reviewed: number;
     created: number;
     duplicates: number;
+    skippedByReview: number;
     deferred: number;
+    reviewFailed: number;
+    reviewBatchSize: number;
+    reviewBatchUtilization: number;
+    reviewParseSuccessRate: number;
+    reviewSchemaDropCount: number;
+    reviewCacheHits: number;
+    reviewCacheHitRate: number;
+    reviewLatencyMs: number;
+    reviewFailureReason?: string;
+    reviewSkipReason?: string;
+    reviewClassificationHistogram?: Record<string, number>;
   };
   createdItemIds?: string[];
 };
@@ -116,6 +130,7 @@ export function extractDiscoveryTriageSummary(
   return {
     compactStatus,
     threadMessage,
+    payload,
   };
 }
 
@@ -139,9 +154,34 @@ export function extractHiveScoutSummary(
     metrics: {
       catalogEntries: asNumber(scoutTool.result.data.catalogEntries) ?? 0,
       gaps: asNumber(scoutTool.result.data.gaps) ?? 0,
+      reviewed: asNumber(scoutTool.result.data.reviewed) ?? 0,
       created: asNumber(scoutTool.result.data.created) ?? 0,
       duplicates: asNumber(scoutTool.result.data.duplicates) ?? 0,
+      skippedByReview: asNumber(scoutTool.result.data.skippedByReview) ?? 0,
       deferred: asNumber(scoutTool.result.data.deferred) ?? 0,
+      reviewFailed: asNumber(scoutTool.result.data.reviewFailed) ?? 0,
+      reviewBatchSize: asNumber(scoutTool.result.data.reviewBatchSize) ?? 0,
+      reviewBatchUtilization: asNumber(scoutTool.result.data.reviewBatchUtilization) ?? 0,
+      reviewParseSuccessRate: asNumber(scoutTool.result.data.reviewParseSuccessRate) ?? 0,
+      reviewSchemaDropCount: asNumber(scoutTool.result.data.reviewSchemaDropCount) ?? 0,
+      reviewCacheHits: asNumber(scoutTool.result.data.reviewCacheHits) ?? 0,
+      reviewCacheHitRate: asNumber(scoutTool.result.data.reviewCacheHitRate) ?? 0,
+      reviewLatencyMs: asNumber(scoutTool.result.data.reviewLatencyMs) ?? 0,
+      ...(asString(scoutTool.result.data.reviewFailureReason)
+        ? { reviewFailureReason: asString(scoutTool.result.data.reviewFailureReason) as string }
+        : {}),
+      ...(asString(scoutTool.result.data.reviewSkipReason)
+        ? { reviewSkipReason: asString(scoutTool.result.data.reviewSkipReason) as string }
+        : {}),
+      ...(isRecord(scoutTool.result.data.reviewClassificationHistogram)
+        ? {
+            reviewClassificationHistogram: Object.fromEntries(
+              Object.entries(scoutTool.result.data.reviewClassificationHistogram)
+                .map(([key, value]): [string, number] => [key, asNumber(value) ?? 0])
+                .filter(([, value]) => value > 0),
+            ),
+          }
+        : {}),
     },
     ...(createdItemIds.length > 0 ? { createdItemIds } : {}),
   };
@@ -150,8 +190,12 @@ export function extractHiveScoutSummary(
     "Hive Scout",
     `parsed=${payload.metrics.catalogEntries}`,
     `gaps=${payload.metrics.gaps}`,
+    `reviewed=${payload.metrics.reviewed}`,
     `created=${payload.metrics.created}`,
     `duplicates=${payload.metrics.duplicates}`,
+    `review-rejections=${payload.metrics.skippedByReview}`,
+    `review-schema-drops=${payload.metrics.reviewSchemaDropCount}`,
+    `review-cache-hits=${payload.metrics.reviewCacheHits}`,
     `deferred=${payload.metrics.deferred}`,
   ].join(" ");
 
@@ -168,6 +212,7 @@ export function extractHiveScoutSummary(
   return {
     compactStatus,
     threadMessage,
+    payload,
   };
 }
 

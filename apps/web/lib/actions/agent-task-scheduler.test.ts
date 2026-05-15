@@ -520,8 +520,21 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
             data: {
               catalogEntries: 27,
               gaps: 5,
+              reviewed: 4,
               created: 3,
               duplicates: 2,
+              skippedByReview: 1,
+              reviewBatchSize: 4,
+              reviewBatchUtilization: 0.33,
+              reviewParseSuccessRate: 0.75,
+              reviewSchemaDropCount: 1,
+              reviewCacheHits: 1,
+              reviewCacheHitRate: 0.2,
+              reviewLatencyMs: 842,
+              reviewClassificationHistogram: {
+                new_archetype: 2,
+                duplicate_pattern: 1,
+              },
               deferred: 1,
               createdItemIds: ["HS-1", "HS-2", "HS-3"],
             },
@@ -539,10 +552,27 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
     expect(agentTaskMessage?.data.parts).toEqual([
       {
         type: "message",
-        text: expect.stringContaining("Hive Scout parsed=27 gaps=5 created=3"),
+        text: expect.stringContaining("Hive Scout parsed=27 gaps=5 reviewed=4 created=3"),
       },
     ]);
+    expect(agentTaskMessage?.data.parts[0].text).toContain("review-schema-drops=1");
+    expect(agentTaskMessage?.data.parts[0].text).toContain("review-cache-hits=1");
     expect(agentTaskMessage?.data.parts[0].text).not.toContain("I stopped because");
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "task-run-row-1" },
+        data: expect.objectContaining({
+          progressPayload: expect.objectContaining({
+            scheduledSummaryPayload: expect.objectContaining({
+              metrics: expect.objectContaining({
+                reviewCacheHits: 1,
+                reviewSchemaDropCount: 1,
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it("marks the TaskRun failed and preserves the next schedule when the loop throws", async () => {
