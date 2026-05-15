@@ -7,10 +7,11 @@
 | **Builds on** | [EP-WIKI-004 — PPR Retrieval Over the Wiki-Link Graph](2026-05-09-wiki-ppr-retrieval-design.md) (provides the relevance ranking that powers the in-context sidebar and atlas highlight) |
 | **Reuses** | [Phase EA-2 — EA Graph Canvas (2026-03-12, implemented)](2026-03-12-phase-ea2-canvas-design.md) — React Flow + ELK toolchain, custom node/edge patterns |
 | **Reuses** | [EA Reference Value Stream Projection (2026-03-14, implemented)](2026-03-14-ea-reference-value-stream-projection-design.md) — pattern of materializing a normalized model into a visual view |
-| **Status** | Draft (research follow-up) |
+| **Status** | Draft — principle-aware pass applied 2026-05-15 (chief-architect review) |
 | **Created** | 2026-05-09 |
 | **Author** | Mark Bodman + Claude (design partner) |
 | **Inspiration** | Obsidian graph view; Roam Research bidirectional links; Quartz static-site graph; HippoRAG 2 PPR-weighted subgraph visualization |
+| **Related** | [Principles as a Wiki Kind](2026-05-12-principles-as-wiki-kind-design.md) — adds `principle` as the eighth `WikiPageKind` with tier/applies-to/consumer-archetype/dimension-vector metadata. This spec's tier 1 / tier 2 / tier 3 surfaces all need principle-aware behavior, not only the atlas tabs. |
 
 ---
 
@@ -53,7 +54,7 @@ EP-WIKI-005 specifies three surfaces matched to those three needs.
 |------|-------|---------|-------------|
 | **1 — In-context sidebar** | Any product, portfolio, or domain page | Ranked list (no graph) | "What's relevant here?" |
 | **2 — Page-local mini-graph** | Wiki page detail (`/wiki/[slug]`) | Bounded React Flow graph (≤30 nodes) | "How does this page connect?" |
-| **3 — Kernel atlas** | `/wiki` route | Pageable graph with cluster-by-`pageKind`, table view, and search | "What's the shape of the kernel?" |
+| **3 — Kernel atlas** | `/wiki` route | Pageable graph with cluster-by-`pageKind`, principle consumer view, table view, and search | "What's the shape of the kernel?" |
 
 Each tier is independent. The same data (`WikiPage`, `WikiPageLink`, `WikiPageSource`, kernel/overlay flags) feeds all three through different projections. A user never has to leave their primary task to use tier 1; they go to a wiki page for tier 2; they go to `/wiki` for tier 3.
 
@@ -74,12 +75,13 @@ Top 5–7 wiki pages relevant to the current page, queried via `searchByPPR()` (
 
 Each row shows:
 - **Page title** (linked to `/wiki/[slug]`).
-- **`pageKind` chip** — `stance ★`, `heuristic ⬤`, `decision ◆`, `entity ▢`, `summary ▭`, `runbook ▬`, `index ◇`.
+- **`pageKind` chip** — `principle ⬢`, `stance ★`, `heuristic ⬤`, `decision ◆`, `entity ▢`, `summary ▭`, `runbook ▬`, `index ◇`. (Shape registry in §6.1.)
+- **For `principle` rows additionally**: tier badge (Commandment / Core / Contextual) and a small consumer-archetype glyph so the user can tell at a glance whether the rule governs them.
 - **Kernel/overlay badge** — kernel pages carry a small "K" or founder mark; overlay pages are unbadged.
 - **Provenance count** — "3 sources" with hover-card showing the citing `RawSource` titles.
 - **Freshness state** — amber dot if `validation_state ≠ current` per [TAK §12.5](2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md).
 
-`stance` and `heuristic` rows are **always elevated to the top** regardless of PPR score. The kernel exists to surface judgment, and judgment-flavored pages deserve top billing whenever they're at all relevant.
+**Judgment-page elevation, in order:** `principle` rows that match the caller's scope (`principleAppliesTo` + `principleConsumerArchetype` per the principles spec §12.1) come first, ordered Commandment → Core → Contextual. Then `stance` and `heuristic` rows. Then everything else by PPR score. Principle commandments are the kernel's most-load-bearing judgment — they should never be buried by a higher-scoring entity row. Within the principle group, ordering is tier-first then PPR; commandments always show even when their PPR score is below the row cap.
 
 ### 3.2 Where it goes
 
@@ -121,7 +123,9 @@ ELK `layered` direction:
 
 ### 4.3 Visual encoding
 
-Per §6 below. Stance pages render as filled stars; heuristics as filled circles; entities as rectangles; decisions as diamonds; summaries as light rectangles; runbooks as elongated rectangles; indices as open diamonds. Kernel = dark; overlay = accent. Override edges dashed; source-citation chips faint; reflection-derived edges curly (per [EP-WIKI-003](2026-05-09-wiki-importance-and-reflection-design.md)).
+Per §6 below. Principle pages render as filled hexagons; stance pages as filled stars; heuristics as filled circles; entities as rectangles; decisions as diamonds; summaries as light rectangles; runbooks as elongated rectangles; indices as open diamonds. Kernel = dark; overlay = accent. Override edges dashed; source-citation chips faint; reflection-derived edges curly (per [EP-WIKI-003](2026-05-09-wiki-importance-and-reflection-design.md)).
+
+For principle nodes specifically: the hexagon carries an inner glyph for tier (filled = commandment, half-filled = core, hollow = contextual) so commandments read as visually heavier than contextual rules at a glance. Override edges from an overlay principle to its kernel parent are dashed and labeled `overrides` per [Principles as a Wiki Kind §11.6](2026-05-12-principles-as-wiki-kind-design.md).
 
 ### 4.4 Implementation
 
@@ -141,15 +145,19 @@ The dedicated route for kernel maintainers and visual learners. Single page, thr
 
 Force-directed graph with cluster constraints by `pageKind`. Stances cluster together (top), heuristics next, then entities, decisions, summaries, runbooks, indices. Overlay pages render lighter; kernel pages bolder. Override edges visible but de-emphasized so the kernel structure reads first.
 
+For `pageKind=principle`, the atlas exposes two projections. The **default** is the same load-bearing axis as the principle browser (`/wiki?kind=principle` per the principles spec §13.1) — **tier-first**: a Commandment cluster, then a Core cluster, then a Contextual cluster, with consumer-archetype as a filter-chip group above the canvas. The **secondary** projection groups by consumer archetype first (Universal → AI Coworker Universal → Generalist / COO → Specialists → Route / Domain Specific), with route/domain context sub-clusters under the last group; this is the right view when a maintainer is auditing what governs a specific surface (e.g., "what does Build Studio see?"). A toggle at the top of the canvas swaps projections; neither projection should be the only available view.
+
 ### 5.2 Mode B — Pagekind table
 
-Same data, sortable table grouped by `pageKind`. Columns: title, slug, kernel/overlay, source count, last revision, freshness. For list-thinkers and for the cases where the user already knows the slug.
+Same data, sortable table grouped by `pageKind` by default. When filtered to principles, the table groups by **tier first** (Commandment → Core → Contextual) with consumer archetype shown as a filter-chip group above the table and as a sortable column; the same sort toggle from §5.1 flips grouping to CA-first when the user wants a route/domain audit. Columns: title, slug, tier, consumer archetype, applies-to, contexts, kernel/overlay, source count, last revision, freshness. For list-thinkers and for the cases where the user already knows the slug.
 
 ### 5.3 Mode C — Time-travel atlas
 
 Cluster view with a slider at the top exposing the **bi-temporal `asOf`** parameter from [EP-WIKI-002](2026-05-09-wiki-bi-temporal-revisions-design.md). Sliding back shows the kernel as it was at any prior point — pages that didn't exist yet are absent; pages whose `worldValidTo` has passed at the current `asOf` are shown but greyed; revisions reflect the chosen point in system-time.
 
 This is the surface that delivers on the "what did Mark believe in 2024 vs 2026?" promise.
+
+Principle evolution is the most interesting bi-temporal signal on this surface: tier promotions (contextual → core → commandment), retirements, vector rebalances, and overlay/kernel divergence all show as visible changes across the slider range. A "show principle changes only" filter narrows the canvas to `pageKind=principle` so a kernel maintainer can audit "what did our doctrine actually look like a year ago?" without the noise of unrelated entity edits.
 
 ### 5.4 Search integration
 
@@ -186,6 +194,7 @@ Standardized across tiers 2 and 3.
 
 | `pageKind` | Shape | Why |
 |------------|-------|-----|
+| `principle` | Hexagon ⬢ with tier glyph inside | Governance doctrine — heaviest judgment shape; inner glyph carries tier (filled commandment, half-filled core, hollow contextual) |
 | `stance` | Filled star ★ | Judgment kernel — must be visually distinct |
 | `heuristic` | Filled circle ⬤ | Rules of thumb — solid, decisive feel |
 | `entity` | Rectangle ▢ | Neutral concept page |
@@ -193,6 +202,8 @@ Standardized across tiers 2 and 3.
 | `summary` | Light rectangle ▭ | Lower visual weight than entity to discourage summary-only pages |
 | `runbook` | Elongated rectangle ▬ | Procedural feel |
 | `index` | Open diamond ◇ | Table-of-contents pages |
+
+All eight `WikiPageKind` values now have a defined shape. The hexagon is intentionally the visually heaviest because principles outrank every other kind in governance authority.
 
 ### 6.2 Color by kernel/overlay
 
@@ -206,6 +217,13 @@ Standardized across tiers 2 and 3.
 - **Drift detected** (`kernel-drift` lint finding open): amber outline + small ⚠ icon top-right.
 - **Draft** (`status = "draft"`): dashed node border.
 - **Archived** (`status = "archived"`): 50% opacity, grey monochrome.
+
+Principle-specific state outlines (apply only to `pageKind=principle` nodes):
+
+- **Commandment-cap exceeded** (`principle-commandment-cap-exceeded` lint finding open): red outline + ⚠, because the cap of 10 is a doctrinal invariant per [Principles spec §8](2026-05-12-principles-as-wiki-kind-design.md).
+- **Public-safety violation** (`principle-public-unsafe-marker` lint finding open): red outline + 🔒 — page is marked `principlePublic: true` but lint detected a local marker, secret pattern, or internal-only phrase.
+- **Coherence violation** (`principle-incoherent-archetype-applies-to` lint finding open): amber outline + ⚠ — consumer archetype and applies-to combination violates the §8A.1 coherence matrix.
+- **Contradiction under review** (`principle-contradiction-review` lint finding open): amber outline + ⇄ on both contradicting nodes; click expands to a side panel comparing the two `principleDimensionVector` values.
 
 ### 6.4 Edge types
 

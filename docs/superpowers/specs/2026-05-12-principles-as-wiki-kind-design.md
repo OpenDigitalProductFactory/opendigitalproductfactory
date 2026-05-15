@@ -2,20 +2,27 @@
 
 | Field | Value |
 |-------|-------|
-| **Date** | 2026-05-12 |
-| **Status** | Draft (chief-architect review applied) |
+| **Date** | 2026-05-12 (re-baselined 2026-05-15) |
+| **Status** | Draft — re-baselined after chief-architect review against actual worktree state |
 | **Author** | Claude (design partner) for Mark Bodman |
 | **Purpose** | Make DPF's durable operating principles a first-class, citable wiki kind, retrievable by in-platform coworkers and external coding agents, with inspectable advisory decision support. |
 
 ## 0. Chief Architect Review Summary
 
-The direction is right: DPF needs a durable principle layer that is richer than `AGENTS.md`, more governed than local memory, and more retrievable than scattered specs. The original draft also overreached in three places. This pass corrects those before implementation:
+The direction is right: DPF needs a durable principle layer that is richer than `AGENTS.md`, more governed than local memory, and more retrievable than scattered specs. The 2026-05-15 chief-architect review against the live worktree found that **most of the foundation is already shipped** and the spec/plan baseline was materially stale. This revision narrows the scope to the remaining work:
 
-1. **Current truth and future contract are now separated.** In this branch, `KnowledgeArticle` is still live beside `WikiPage`; `WikiPageKind` does not include `principle`; `wiki_query` only filters by `pageKind`; passive recall performs one vector search; and the public docs site is Jekyll/static, not a runtime DB consumer.
-2. **Decision math is advisory, not authority.** Principles do not "resolve mathematically" in the sense of replacing architecture judgment. The tool produces a scored recommendation with a contribution ledger, missing-data warnings, tie handling, and human override path.
-3. **Structured scoring no longer parses prose.** The previous design inferred dimension polarity from `principleDirection` text. That is brittle. This version adds an explicit signed `principleDimensionVector` and treats prose direction as the human-readable statement.
-4. **Public principles are generated from the kernel source, not live DB rows.** The public site under `docs/` is built statically. The single source of truth is the founder-kernel markdown; runtime `WikiPage` rows are seeded projections.
-5. **The UI surface is part of the architecture.** Principles need a compact governance browser, detail pages, public rendering, admin lint, and decision breakdown views. Otherwise they become hidden metadata that agents may or may not use.
+1. **What's done, on the implementation base of this branch.**
+   - `WikiPage.pageKind="principle"` is the eighth supported kind.
+   - `WikiPage` already carries `principleTier`, `principleDirection`, `principleWeight`, `principleWeightRationale`, `principleDimensionVector`, `principleDimensions`, `principleAppliesTo`, `principlePublic`, `principlePublicRationale`, plus indexes on `principleTier` and `principlePublic` — applied via migration `20260513000000_add_principle_fields_to_wikipage`.
+   - `packages/db/src/wiki-taxonomy.ts` is the single source of truth for `WIKI_PAGE_KINDS`, `WIKI_PAGE_STATUSES`, `PRINCIPLE_TIERS`, `PRINCIPLE_APPLIES_TO`, `PRINCIPLE_DIMENSIONS`, `PRINCIPLE_TIER_DEFAULT_WEIGHT`, `PRINCIPLE_TIER_CAPS`, and `PRINCIPLE_DECIDE_DEFAULTS`, with `isWikiPageKind` / `isPrincipleTier` / `isPrincipleAppliesTo` / `isPrincipleDimension` predicates. `wiki-store.ts` imports and re-exports the types.
+   - `docs/founder-kernel/_templates/principle.template.md` exists. `docs/founder-kernel/wiki/principles/` already contains 41 published principle pages — three founder-kernel seed commandments (PR #565), the AI-coworker eight including Principle 9 / Responsible Capacity Utilization (PRs #566, #570), eight commandment-tier promotions from AGENTS.md (PR #579) plus two additional binding commandments (PR #590), fourteen core-tier promotions from AGENTS.md (PR #589), and six contextual-tier promotions from AGENTS.md (PR #592).
+   - `docs/founder-kernel/manifest.json` is on `schemaVersion: 0.2.0`, `kernelVersion: 0.2.1`, `pageCount: 62`, `sourceCount: 11`, with the description naming the principle kind explicitly.
+   - The AI-coworker principles markdown contains Principles 1–9.
+2. **What this spec now owns.** The remaining net-new work is the **consumer-archetype axis** (§8A), the **back-fill of the 41 existing principle pages**, decision support (`principle_decide`), retrieval integration that respects consumer archetype, lint detectors for the new axis plus public safety and coherence, tier-first UI grouping with consumer-archetype filter chips, the kernel-slug uniqueness gap (a separate small refactor PR), and Jekyll public-docs generation.
+3. **Decision math is advisory, not authority.** Principles do not "resolve mathematically" in the sense of replacing architecture judgment. The tool produces a scored recommendation with a contribution ledger, missing-data warnings, tie handling, and human override path. The `Principles as vectors` memory commitment is preserved as a *contribution-aggregation* model, not an authority model.
+4. **Structured scoring does not parse prose.** Polarity is carried by an explicit signed `principleDimensionVector`. Prose `principleDirection` is the human-readable statement.
+5. **Public principles are generated from the kernel source, not live DB rows.** The public site under `docs/` is built statically by Jekyll. The kernel markdown is the single source of truth; runtime `WikiPage` rows are seeded projections; the public site is a generated artifact from the same kernel source.
+6. **The UI surface is part of the architecture.** Principles need a compact governance browser, detail pages, public rendering, admin lint, and decision breakdown views. The browser defaults to **tier-first** ordering (commandments above core above contextual) with consumer-archetype filter chips — tier is what determines weight, lint severity, retrieval injection, and cap enforcement, while consumer archetype is a filter dimension on top of that.
 
 ## 1. Inputs and Current Repo Truth
 
@@ -28,23 +35,37 @@ This design extends:
 - [`AGENTS.md`](../../../AGENTS.md)
 - Live MCP planning context checked on 2026-05-12
 
-### 1.1 Verified Current State
+### 1.1 Verified Current State (re-baselined 2026-05-15)
 
 | Area | Current repo truth | Why it matters |
 |------|--------------------|----------------|
-| Knowledge model migration | `KnowledgeArticle` remains live (`packages/db/prisma/schema.prisma:6402`) and EP-WIKI Phase 1a explicitly says `KnowledgeArticle` stays beside new wiki models until a later PR (`schema.prisma:6469`). | This spec must not assume `KnowledgeArticle` has already been absorbed into `WikiPage`. Principle work is additive unless the wiki migration lands first. |
-| Wiki model | `WikiPage` exists with `pageKind` as a string convention: `entity | summary | decision | runbook | index | stance | heuristic` (`schema.prisma:6500`, `schema.prisma:6505`). | Adding `principle` requires schema docs, TS union, UI labels, seed parsing, query filters, and lint updates. |
-| Wiki type union | `packages/db/src/wiki-store.ts:43` defines `WikiPageKind`; it does not include `principle`. | The type union is the practical enum for authoring and seeding, even though the DB column is a string. |
-| Qdrant wiki search | `searchWikiPages` supports `query`, `organizationId`, optional `pageKind`, `limit`, and `scoreThreshold` (`apps/web/lib/wiki/embeddings.ts:56`). It filters published rows and does overlay-aware two-pass retrieval (`embeddings.ts:139`). | Tier and applies-to filtering are new work. Commandments cannot be "always included" by the current helper without a DB prepass or a dedicated principle recall helper. |
-| Passive recall | `recallWikiContext` performs a single `searchWikiPages` call and formats the result (`apps/web/lib/wiki/recall.ts:70`). | Principle recall needs a new tier-aware assembler, not only a different query string. |
-| In-portal MCP tool | `wiki_query` exists in `PLATFORM_TOOLS` with only `query`, `pageKind`, and `limit` filters (`apps/web/lib/mcp-tools.ts:1971`). Its handler forwards only those fields (`mcp-tools.ts:8431`). | `tier`, `appliesTo`, `principleOnly`, and principle-specific output are new work. |
-| Tool execution modes | `ToolDefinition.executionMode` is only `"proposal" | "immediate"` (`apps/web/lib/mcp-tools.ts:83`). | `principle_decide` must use `executionMode: "immediate"`, `sideEffect: false`, and advisory semantics in the description. `"advisory"` is not a valid execution mode. |
-| External MCP | `/api/mcp/v1` exposes platform tools through JSON-RPC, gates them by token scope, and default-denies tools without grant mappings (`apps/web/app/api/mcp/v1/route.ts:167`). `wiki_query` maps to `registry_read` (`apps/web/lib/tak/agent-grants.ts:67`). | External agents only see principle tools when the tools are in `PLATFORM_TOOLS`, grant-mapped, and the token has the right scope. The spec cannot assume every external session already has them. |
-| Founder kernel schema | `SCHEMA.md` defines seven current page kinds and no `principle` (`docs/founder-kernel/SCHEMA.md:13`). `AUTHORING.md` says the seed walker only scans `raw-sources/` and `wiki/` (`AUTHORING.md:41`). | Principle pages need new schema, templates, folder convention, authoring rules, and seed support. |
-| Founder kernel content | `docs/founder-kernel/manifest.json` currently has `pageCount: 0`, `sourceCount: 0`; `wiki/index.md` says the index is the first kernel page. | The first content-promotion batch is real seeding, not migration of an existing populated kernel. |
-| Public docs site | `docs/_config.yml` is a Jekyll/GitHub Pages config, excludes `superpowers`, and applies default layout to Markdown pages. | `/principles` on the public site should be a generated `docs/principles.md` artifact, not a Next.js route querying runtime Postgres. |
-| AI principles document | In this branch, `ai-coworker-development-principles.md` contains Principles 1-8 and an Application section. PR #489 exists in other branch history, but its capacity-continuity spec and Principle 9 are not present in this branch's HEAD. | Batch 3 must either promote the eight branch-local principles first or explicitly rebase onto PR #489 before claiming nine principles. |
-| Live planning state | MCP `search_specs_and_plans` returned no live matches for this exact principles/wiki spec. Open epic `EP-TAK-3F9A21` covers TAK/GAID refresh with open memory/MCP/observability items (`BI-MEM-5A41C7`, `BI-MCP-7E53D1`, `BI-OBS-4B63F2`). | This work should align with TAK/GAID governed memory and MCP surfaces rather than create an orphan feature epic. |
+| Wiki page kind union | `packages/db/src/wiki-taxonomy.ts` exports `WIKI_PAGE_KINDS` including `principle`. `wiki-store.ts` re-exports the type. The `WikiPage.pageKind` schema comment lists `entity | summary | decision | runbook | index | stance | heuristic | principle`. | The kind is a shipped fact. Net-new code must extend rather than introduce it. |
+| Schema fields | `packages/db/prisma/schema.prisma` `WikiPage` model (lines ~7075–7117) already carries `principleTier`, `principleDirection`, `principleWeight`, `principleWeightRationale`, `principleDimensionVector`, `principleDimensions`, `principleAppliesTo`, `principlePublic`, `principlePublicRationale`, with `@@index([principleTier])` and `@@index([principlePublic])`. Migration `20260513000000_add_principle_fields_to_wikipage` shipped these. | The schema work is done **except for the consumer-archetype axis** (§8A). The remaining migration adds two columns and one index. |
+| Knowledge model migration | `KnowledgeArticle` remains live beside `WikiPage` per EP-WIKI-001 Phase 1a; absorption is owned by a later EP-WIKI migration PR. | Principle work is additive on top of `WikiPage` and does not touch `KnowledgeArticle`. |
+| Taxonomy constants | `wiki-taxonomy.ts` exports `WIKI_PAGE_KINDS`, `WIKI_PAGE_STATUSES`, `PRINCIPLE_TIERS`, `PRINCIPLE_APPLIES_TO`, `PRINCIPLE_DIMENSIONS`, `PRINCIPLE_TIER_DEFAULT_WEIGHT`, `PRINCIPLE_TIER_CAPS`, `PRINCIPLE_DECIDE_DEFAULTS`, plus `isWikiPageKind` / `isWikiPageStatus` / `isPrincipleTier` / `isPrincipleAppliesTo` / `isPrincipleDimension`. | The remaining constants work is `PRINCIPLE_CONSUMER_ARCHETYPES`, `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES`, and the matching `isPrincipleConsumerArchetype` / `isPrincipleConsumerContextSlug` predicates. |
+| Qdrant wiki search | `searchWikiPages` supports `query`, `organizationId`, optional `pageKind`, `limit`, and `scoreThreshold`. Filters published rows and does overlay-aware two-pass retrieval. | Principle-aware filters (`principleTier`, `principleAppliesTo`, `principleConsumerArchetype`, `principleConsumerContext`, `principlePublic`) are not yet wired. Commandments still need a Postgres-first prepass for "always include" semantics. |
+| Passive recall | `recallWikiContext` performs a single `searchWikiPages` call and formats the result. | A principle-aware `recallPrincipleContext` (Postgres-first commandments + Qdrant relevance for core/contextual, filtered by consumer archetype before tier weighting) is still net-new. |
+| In-portal MCP tool | `wiki_query` exists in `PLATFORM_TOOLS` with `query`, `pageKind`, and `limit` filters. | `tier`, `appliesTo`, `consumerArchetype`, `consumerContext`, `publicOnly`, and principle-specific output are still net-new. |
+| Tool execution modes | `ToolDefinition.executionMode` is `"proposal" | "immediate"`. | `principle_decide` must use `executionMode: "immediate"`, `sideEffect: false`, advisory description. `"advisory"` is not a valid execution mode. |
+| External MCP | `/api/mcp/v1` exposes platform tools through JSON-RPC, gates them by token scope, and default-denies tools without grant mappings. `wiki_query` maps to `registry_read`. | `principle_decide` provisionally maps to `registry_read`; see §11.5 on the future case for a tighter advisory-grant. |
+| Founder kernel schema and authoring | `SCHEMA.md` documents the eight page kinds including `principle`. `AUTHORING.md` documents the principle authoring contract and the `wiki/principles/` folder convention. The principle template exists at `docs/founder-kernel/_templates/principle.template.md`. | Schema and authoring docs are shipped. Updates needed: add consumer-archetype frontmatter shape, coherence rule (§8A), and back-fill guidance. |
+| Founder kernel content | `docs/founder-kernel/manifest.json` is on `kernelVersion: 0.2.1`, `schemaVersion: 0.2.0`, `pageCount: 62`, `sourceCount: 11`. `docs/founder-kernel/wiki/principles/` contains 41 published principle pages: founder-kernel seed commandments (PR #565); AI-coworker Principles 1–9 (PRs #566, #570); ten commandment-tier promotions from AGENTS.md (PRs #579, #590); fourteen core-tier promotions from AGENTS.md (PR #589); six contextual-tier promotions from AGENTS.md (PR #592). | Phases that used to seed these pages from scratch are obsolete. The remaining content work is **back-fill** of consumer archetype + contexts onto the 41 existing pages, plus separately-scoped future memory promotions (Batch 5) and public-docs generation (Batch 6) which have **not** shipped on main. |
+| AI principles document | `docs/architecture/ai-coworker-development-principles.md` contains Principles 1–9 including `## Principle 9: Responsible Capacity Utilization`. The capacity-continuity spec `2026-05-12-ai-capacity-continuity-design.md` is present alongside this spec. | Earlier phase plans that branched on "is Principle 9 here?" are obsolete. The pre-check is redundant; the answer is yes. |
+| Public docs site | `docs/_config.yml` is a Jekyll/GitHub Pages config, excludes `superpowers`, and applies default layout to Markdown pages. | `/principles` on the public site is still a generated `docs/principles.md` artifact, not a Next.js route querying runtime Postgres. Public docs generation is still net-new. |
+| Kernel slug uniqueness | `WikiPage` carries `@@unique([organizationId, slug])`, which does not protect kernel rows where `organizationId IS NULL`. | Two kernel rows can currently collide on `slug`. Closing this is a small refactor-budget PR that does not depend on principle work and should ship independently. |
+| Live planning state | The spec links to a backlog item/epic via `Backlog linkage` in §1.2. Implementation PRs MUST cite that ID rather than treating this work as orphan. | Per the *Verify substrate before proposing new substrate* and *Continuous overlap sweep* feedback, this work must be tied to live planning state before any PR opens. |
+
+### 1.2 Backlog Linkage and Discoverability
+
+Established practice on this substrate is that principle PRs ship via PR alone — the shipped batches (#531, #538, #542/#564, #565, #566, #570, #579, #589, #590, #592) cite no `BI-*` IDs and rely on the PR title + body for discoverability. This spec respects that pattern: a `BI-*` ID is recommended but not strictly required.
+
+What IS required:
+
+1. Before opening the PR, run `mcp__dpf__search_specs_and_plans` for "principles wiki kind consumer archetype" and `mcp__dpf__list_epics` for open epics — record matches in the PR body.
+2. If an existing epic fits (likely `EP-TAK-3F9A21` for governed memory + MCP grants, or `EP-DOCS-6B9F2A` for the public-docs Jekyll piece), attach the PR to it via the PR body. If no epic fits cleanly, the PR body must include a self-contained "Why this exists" paragraph so the work is discoverable from PR search alone.
+3. The PR title MUST name the substantive change (e.g., `feat(principles): consumer archetypes, advisory decision support, retrieval, lint, UI, public docs`) — never a generic `feat(wiki): updates`.
+
+This loosens the earlier "MUST create or attach a backlog item" framing because the actual practice across the shipped batches shows the PR + merge history is the source of truth for principle work, not the backlog table.
 
 ## 2. Research and Benchmarking
 
@@ -199,36 +220,97 @@ Tier inflation is the primary governance failure mode. A commandment requires:
 
 `situational` is intentionally not a wiki tier. Situational notes stay in memory, backlog comments, execution evidence, or dated specs.
 
+## 8A. Consumer Archetype Taxonomy
+
+Tier answers "how strongly should this govern a decision?" It does not answer "who is expected to consume this?" The portal and retrieval paths need a second axis so humans reviewing the wiki and AI coworkers retrieving context do not see Build Studio-specific, specialist-specific, or route-bound material mixed into universal guidance.
+
+Add a principle consumer archetype:
+
+| Consumer archetype | Meaning | Default portal placement | Runtime retrieval posture |
+|--------------------|---------|--------------------------|---------------------------|
+| `universal` | Applies to humans and AI anywhere in DPF. | Universal | Always eligible when `principleAppliesTo` matches the caller. |
+| `ai-coworker-universal` | Applies to all in-platform AI coworkers, regardless of route. | AI Coworker Universal | Eligible for all AI coworker recall; visible to humans reviewing AI governance. |
+| `generalist` | Applies to generalist/orchestrator coworkers such as the COO, especially when coordinating or escalating work. | Generalist / COO | Eligible for generalist agents and coordinator routes; not injected into specialist-only recall by default. |
+| `specialist` | Applies to specialist coworkers as a class. | Specialists | Eligible for specialist agents before route-specific rules are considered. |
+| `route-domain-specific` | Applies only inside a named product surface, route, domain, or workflow. Build Studio principles live here unless they truly apply everywhere. | Route / Domain Specific, grouped by context such as Build Studio | Eligible only when the caller's route/domain context matches, or when the query explicitly asks for that context. |
+
+Use `principleConsumerContexts` for the specific route/domain labels behind `route-domain-specific`, such as `build-studio`, `marketing`, `compliance`, `discovery`, `finance`, `storefront`, or `portfolio`. These are governed slug strings, not a closed enum; route-facing lint can compare them against `apps/web/lib/tak/route-context-map.ts` where a route context exists. A route-specific principle without at least one context is a lint error. Context labels are for consumption routing and human review; they do not create new wiki pages.
+
+### 8A.1 Coherence Matrix (consumer archetype × applies-to)
+
+The two axes are independent in the schema but not in semantics. The coherence rule below is enforced by `principle-incoherent-archetype-applies-to` lint (§14):
+
+| Consumer archetype \ `principleAppliesTo` | `in_platform_coworker` | `external_coding_agent` | `human` |
+|---|---|---|---|
+| `universal` | required (with at least one of external or human) | required (with at least one of in-platform or human) | required (with at least one of in-platform or external) |
+| `ai-coworker-universal` | ✅ valid | ✅ valid | ❌ incoherent — humans are not AI coworkers |
+| `generalist` | ✅ valid | ✅ valid (treats Claude Code, Codex CLI, and similar broad agents as generalists) | ❌ incoherent — "generalist" denotes a generalist agent, not a human role |
+| `specialist` | ✅ valid | ⚠️ rare but valid only when the principle scopes a specialist external agent (e.g., a single-purpose CI bot); lint warns and asks for `principleWeightRationale` | ❌ incoherent |
+| `route-domain-specific` | ✅ valid (most Build Studio coworker rules live here) | ✅ valid (route-specific external-agent rules) | ✅ valid (humans operating inside a specific product surface — e.g., a Storefront-specific human policy) |
+
+Rules:
+
+- `universal` requires at least two `principleAppliesTo` populations. Otherwise it is not universal and should be tightened to `ai-coworker-universal`, `generalist`, `specialist`, or `route-domain-specific`.
+- `ai-coworker-universal`, `generalist`, and `specialist` MUST NOT include `human` in `principleAppliesTo`. These archetypes describe agent classes.
+- `route-domain-specific` MAY include `human`, since route/domain governance often binds humans operating inside that route.
+- `specialist` + `external_coding_agent` is rare (most external agents are generalists). Lint downgrades this to a `warn` and requires `principleWeightRationale` to explain the specialist scope.
+
+Back-fill of the 41 existing principle pages MUST apply this matrix. Lint blocks publish on incoherent combinations.
+
 ## 9. Schema Extension
 
-Add principle-only fields to `WikiPage`. These are nullable or defaulted so existing page kinds are unaffected.
+### 9.1 What is already in the schema
+
+The first principle migration (`20260513000000_add_principle_fields_to_wikipage`) is already applied on this branch. The following fields are live on `WikiPage`:
 
 ```prisma
-model WikiPage {
-  // existing fields...
-
-  principleTier             String?   // commandment | core | contextual
-  principleDirection        String?   @db.Text
-  principleWeight           Float?
-  principleWeightRationale  String?   @db.Text
-  principleDimensionVector  Json?     // Record<dimension, signed weight -1..1>
-  principleDimensions       String[]  @default([]) // derived keys for query/filter/display
-  principleAppliesTo        String[]  @default([]) // in_platform_coworker | external_coding_agent | human
-  principlePublic           Boolean   @default(false)
-  principlePublicRationale  String?   @db.Text
+  principleTier            String?   // commandment | core | contextual
+  principleDirection       String?   @db.Text
+  principleWeight          Float?
+  principleWeightRationale String?   @db.Text
+  principleDimensionVector Json?     // Record<dimension, signed weight -1..1>
+  principleDimensions      String[]  @default([])
+  principleAppliesTo       String[]  @default([])
+  principlePublic          Boolean   @default(false)
+  principlePublicRationale String?   @db.Text
 
   @@index([principleTier])
   @@index([principlePublic])
-}
+```
+
+### 9.2 What this spec still adds (the only remaining schema delta)
+
+Two columns and one index for the consumer-archetype axis:
+
+```prisma
+  principleConsumerArchetype String?  // universal | ai-coworker-universal | generalist | specialist | route-domain-specific
+  principleConsumerContexts  String[] @default([]) // route/domain labels such as build-studio
+
+  @@index([principleConsumerArchetype])
 ```
 
 Notes:
 
-- `principleDimensions` and `principleAppliesTo` default to empty arrays so the migration applies cleanly to existing rows.
-- `principleDimensionVector` is JSON because Prisma cannot express a typed sparse vector map in the schema. Its keys must be validated against the registry.
-- Do not add a normal Prisma index on array containment in V1. If applies-to filtering becomes hot, add a hand-written Postgres GIN index in a later migration.
-- `principlePublic=false` by default. Public exposure is a deliberate promotion decision, not a tier default.
-- Canonical string values live in a small typed module, for example `packages/db/src/wiki-principles.ts`, and are imported by seed, lint, MCP schemas, and UI.
+- The two new fields default to nullable / empty array so the migration applies cleanly to the 41 existing principle rows. Back-fill happens via kernel-markdown frontmatter edits + re-seed, not via DML in the migration.
+- `principleDimensionVector` remains JSON because Prisma cannot express a typed sparse vector map in the schema. Its keys are validated against `PRINCIPLE_DIMENSIONS` by seed parsing and lint.
+- No Prisma GIN index on array containment in V1. If `principleAppliesTo` or `principleConsumerContexts` filtering becomes hot, add a hand-written Postgres GIN index in a later migration with metrics evidence.
+- Canonical consumer-archetype string values live in `packages/db/src/wiki-taxonomy.ts` (added by this spec) and are imported by seed, lint, MCP schemas, retrieval, and UI. Consumer contexts use a shared slug-normalization helper rather than a closed enum.
+
+### 9.3 Adjacent refactor — kernel slug uniqueness gap (separate small PR)
+
+While reading the wiki schema, the chief-architect review surfaced a uniqueness gap that is **not principle-specific** and should not be coupled to this work:
+
+`WikiPage` carries `@@unique([organizationId, slug])`. In Postgres, a unique index over a nullable column treats `NULL` values as distinct — so two kernel rows (`organizationId IS NULL`) can be inserted with the same `slug`. This is a real wiki-platform correctness gap that affects all eight page kinds, not only principles.
+
+Closing this requires a hand-written partial unique index:
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS "WikiPage_kernel_slug_key"
+  ON "WikiPage"("slug")
+  WHERE "organizationId" IS NULL;
+```
+
+This ships as its own small PR titled `fix(db): guard kernel WikiPage.slug uniqueness when organizationId is NULL` and is not blocked by, nor blocks, principle work. The plan calls it out as a refactor-budget item.
 
 ## 10. Dimension Registry
 
@@ -295,8 +377,24 @@ Tool metadata:
 - `executionMode: "immediate"`
 - `sideEffect: false`
 - annotations: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`
-- grant: `registry_read`
+- grant: `registry_read` (provisional — see §11.5)
 - response semantics: advisory only
+
+### 11.5 Grant-mapping is provisional
+
+Mapping `principle_decide` to `registry_read` is the right starting point — it inherits an existing scope, requires no new TAK governance surface, and matches the read-only behavior of the tool. But `principle_decide` is decision support, not registry read. A future TAK/GAID refresh (already tracked under the TAK epic referenced by §1.2) may introduce a tighter scope such as `principle_advisory_read` to distinguish "see the principle catalog" from "score options against the catalog." When that refinement lands, `principle_decide` migrates to the tighter scope. Until then, the read-only and side-effect-free annotations are load-bearing.
+
+### 11.6 Org overlay contract
+
+Mark's `Single org per install (no multi-tenancy)` posture means overlay risk is low in practice today, but the underlying data model is multi-tenant via `WikiPage.kernelPageId`. The contract:
+
+- **Retrieval.** `recallPrincipleContext` for a caller in org `X` returns:
+  1. Overlay principles published by org `X` that match scope (always, when `principleTier="commandment"`; subject to Qdrant ranking otherwise).
+  2. Kernel principles NOT shadowed by an org-`X` overlay (matched by `kernelPageId` reference).
+  3. For other orgs, only the kernel set is returned. Overlay rows are org-scoped.
+- **Cap.** The kernel commandment cap of 10 is global to the kernel. Each org carries its own cap (default 10) over its own overlay commandments. Lint enforces both.
+- **Ledger.** `principle_decide` contribution ledger rows include `source: "kernel"` or `source: "overlay:<orgId>"` and, when the row is an overlay, `overrides: "<kernel-slug>"` if applicable. Reviewers can see exactly which principle voted.
+- **Public docs.** `docs/principles.md` is generated from kernel principles only. Overlay principles are never written to the public site.
 
 ### 11.2 Retrieval Procedure
 
@@ -358,13 +456,15 @@ The output should explain that Option B wins because the strongest commandments 
 
 ### 12.1 Passive Recall
 
-Add a principle-aware recall helper rather than overloading the current single-search `recallWikiContext`:
+Add a principle-aware recall helper rather than overloading the current single-search `recallWikiContext`. Lint detectors that depend on Qdrant similarity (`principle-duplicate`, `principle-contradiction-review`) run **after** seed completes; on a cold start without Qdrant content they degrade to no-op and emit an `info`-level finding rather than failing the orchestrator. Lint must remain usable before any embedding exists.
 
 ```typescript
 recallPrincipleContext({
   query,
   organizationId,
   callingPopulation,
+  consumerArchetype,
+  consumerContext,
   limit,
 })
 ```
@@ -374,6 +474,8 @@ It should:
 - inject all in-scope commandments, capped at 10
 - add top relevant core principles, default 5
 - add contextual principles only above a higher threshold, default 0.75
+- filter by consumer archetype before tier weighting: universal first, then caller-specific archetypes, then matching route/domain contexts
+- exclude `route-domain-specific` principles unless `consumerContext` matches or the query explicitly asks for that route/domain
 - format principles separately from ordinary wiki context so system prompts can distinguish governance from background knowledge
 - silently degrade like existing wiki recall if Qdrant is down, but still include commandments from Postgres when DB is available
 
@@ -387,12 +489,14 @@ Extend both in-portal and external MCP tool schema:
   pageKind?: "entity" | "summary" | "decision" | "runbook" | "index" | "stance" | "heuristic" | "principle";
   tier?: "commandment" | "core" | "contextual";
   appliesTo?: "in_platform_coworker" | "external_coding_agent" | "human";
+  consumerArchetype?: "universal" | "ai-coworker-universal" | "generalist" | "specialist" | "route-domain-specific";
+  consumerContext?: string;
   publicOnly?: boolean;
   limit?: number;
 }
 ```
 
-When `pageKind="principle"`, the response should include principle metadata, not only slug/kind/title. For external MCP, verify the tool appears in `/api/mcp/v1` `tools/list` for tokens with `registry_read`.
+When `pageKind="principle"`, the response should include principle metadata, not only slug/kind/title. The metadata includes tier, applies-to, consumer archetype, consumer contexts, public/internal state, and direction. For external MCP, verify the tool appears in `/api/mcp/v1` `tools/list` for tokens with `registry_read`.
 
 ### 12.3 AGENTS.md Discovery
 
@@ -406,11 +510,14 @@ Update `AGENTS.md` only after the external MCP/tooling slice lands:
 
 ### 13.1 Portal Principle Browser
 
-The existing `/wiki` list is a good base, but principle pages need richer scan behavior:
+The existing `/wiki` list is a good base, but principle pages need a governance-first organization. Do not create duplicate wiki pages to solve this; organize the same pages.
 
-- Add a `Principles` tab or `/wiki?kind=principle` filter that groups by tier: Commandments, Core, Contextual.
-- Show compact rows, not large cards: tier badge, title, direction, applies-to chips, public/internal state, source count, last reviewed date.
-- Use DPF tokens only: `text-[var(--dpf-text)]`, `text-[var(--dpf-muted)]`, `bg-[var(--dpf-surface-1)]`, `bg-[var(--dpf-surface-2)]`, `border-[var(--dpf-border)]`, `text-[var(--dpf-accent)]`.
+- The default grouping for `/wiki?kind=principle` is **tier-first**: Commandments → Core → Contextual. Tier is what determines weight, lint severity, retrieval injection, and cap enforcement, so tier is the load-bearing view of governance hierarchy.
+- Consumer archetype is a **filter-chip group** above the list: Universal, AI Coworker Universal, Generalist / COO, Specialists, Route / Domain Specific. Multi-select; default is all-selected. A secondary sort toggle lets a user flip the grouping to **CA-first** when they want a route/domain audit (e.g., "show me everything Build Studio coworkers see").
+- Route / Domain Specific rows show their `principleConsumerContexts` as chips. When the CA filter narrows to Route / Domain Specific, rows further sub-group by context (Build Studio, Marketing, Compliance, …).
+- Compact rows (not large cards): tier badge, title, direction, applies-to chips, consumer archetype chip, route/domain context chips, public/internal state, source count, last reviewed date.
+- `pageKind` is a secondary filter (and a small badge per row). It must not be the primary human-review organization when the user is already inside the principle browser.
+- Use DPF tokens only: `text-[var(--dpf-text)]`, `text-[var(--dpf-muted)]`, `bg-[var(--dpf-surface-1)]`, `bg-[var(--dpf-surface-2)]`, `border-[var(--dpf-border)]`, `text-[var(--dpf-accent)]`. No hardcoded colors.
 - Add a dimension mini-strip using labels and accessible text. Do not rely on color alone.
 - Keep row heights stable; badges and long principle names must wrap without resizing adjacent controls.
 
@@ -457,6 +564,9 @@ Use existing `WikiLintFinding.findingKind` and severity values (`info`, `warn`, 
 | `principle-unknown-dimension` | error | yes | Vector or dimensions include a key outside registry |
 | `principle-vector-dimension-mismatch` | warn | no | `principleDimensions` does not match vector keys |
 | `principle-missing-applies-to` | error | yes | Empty `principleAppliesTo` |
+| `principle-missing-consumer-archetype` | error | yes | Empty or unknown `principleConsumerArchetype` |
+| `principle-route-context-missing` | error | yes | `route-domain-specific` without at least one `principleConsumerContexts` entry |
+| `principle-incoherent-archetype-applies-to` | error / warn | yes for error rows | Violates §8A.1 coherence matrix: `human` paired with `ai-coworker-universal` / `generalist` / `specialist` = `error`; `specialist` + `external_coding_agent` without `principleWeightRationale` = `warn` with required rationale; `universal` with fewer than two `principleAppliesTo` populations = `error` |
 | `principle-tier-weight-mismatch` | warn | no | Weight differs from tier default without rationale |
 | `principle-commandment-cap-exceeded` | error | yes | More than 10 published kernel commandments |
 | `principle-public-missing-rationale` | warn | no | `principlePublic=true` without `principlePublicRationale` |
@@ -468,70 +578,36 @@ The contradiction lint does not auto-resolve. Contradictions can be legitimate; 
 
 ## 15. Migration and Delivery Plan
 
-Each batch should be a separate PR. Branch from current `main` and rebase this spec branch before implementation because the capacity-continuity PR exists outside this branch's HEAD.
+Earlier revisions of this spec described seven sequential batches starting from scratch. After the 2026-05-15 re-baseline, most of that work is already shipped. The remaining delivery is **one focused phase** (consumer-archetype axis + back-fill + decision support + retrieval + lint + UI + public-docs generator) and **two adjacent small PRs** (kernel-slug uniqueness fix; `principle_decide` advisory tool if it cannot fit cleanly in the main PR).
 
-### Batch 0 - Schema, Constants, and Authoring Contract
+The detailed implementation plan lives in [`2026-05-12-principles-as-wiki-kind.md`](../plans/2026-05-12-principles-as-wiki-kind.md). The summary below is intentionally short — read the plan for tasks, files, and verification commands.
 
-- Add principle fields to `WikiPage`.
-- Add `principle` to `WikiPageKind`.
-- Add canonical constants for tiers, applies-to values, dimensions, and defaults.
-- Update `SCHEMA.md`, `AUTHORING.md`, templates, seed frontmatter parsing, and manifest schema version.
-- Update `WikiPageKindBadge`, `WikiPageList`, `WikiPageViewer` to render principle metadata.
-- Tests: `packages/db/src/wiki-store.test.ts`, `packages/db/src/seed-wiki-kernel.test.ts`, wiki component tests where present.
+### Phase A — Consumer-archetype axis and back-fill (main PR)
 
-### Batch 1 - Principle Lint and Public Safety
+- **Schema.** Add `principleConsumerArchetype String?` and `principleConsumerContexts String[] @default([])` to `WikiPage`. Add `@@index([principleConsumerArchetype])`. New migration `<timestamp>_add_principle_consumer_archetype_to_wikipage`.
+- **Taxonomy constants.** Extend `wiki-taxonomy.ts` with `PRINCIPLE_CONSUMER_ARCHETYPES`, `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES`, `isPrincipleConsumerArchetype`, `isPrincipleConsumerContextSlug`. Existing constants stay.
+- **Seed parsing.** Extend `seed-wiki-kernel.ts` to parse `principleConsumerArchetype` and `principleConsumerContexts` from frontmatter. Validate via the new predicates; reject `route-domain-specific` without at least one context.
+- **Back-fill.** Edit the 41 existing principle pages under `docs/founder-kernel/wiki/principles/` to add `principleConsumerArchetype` and (where applicable) `principleConsumerContexts` frontmatter. Defaults per §8A.1 coherence matrix; Build Studio principles use `route-domain-specific` + `[build-studio]`. Re-seed verifies the back-fill.
+- **Qdrant payload.** Extend the wiki-page payload write helper so principle pages also carry `principleConsumerArchetype` and `principleConsumerContexts`. Non-principle pages are unchanged.
+- **Retrieval.** Add `recallPrincipleContext` (Postgres-first commandments + Qdrant relevance for core/contextual) with consumer-archetype filtering ahead of tier weighting. Wire it into `recallWikiContext`. Pass route/domain context through.
+- **MCP.** Extend `wiki_query` schema with `tier`, `appliesTo`, `consumerArchetype`, `consumerContext`, `publicOnly`. Update the handler to forward to `searchWikiPages`. Add `principle_decide` (executionMode: immediate, sideEffect: false, advisory). Map to `registry_read` (see §11.5).
+- **Lint.** Add the principle detectors per §14 (tier/direction/vector/applies-to/consumer-archetype/route-context/incoherent-archetype-applies-to/tier-weight-mismatch/commandment-cap/public-rationale/public-unsafe/duplicate/contradiction). Detectors that depend on Qdrant degrade to no-op + info finding on cold start (§12.1).
+- **UI.** Principle browser at `/wiki?kind=principle`: tier-first default grouping, CA filter chips, contextual sub-grouping for Route / Domain Specific (§13.1). Principle detail page metadata panel (§13.2). Decision breakdown view for `principle_decide` results (§13.3).
+- **AGENTS.md pointer.** Add the short `wiki_query pageKind='principle'` discovery line after external MCP visibility is verified.
+- **Visual-nav spec.** Update [`2026-05-09-wiki-visual-navigation-design.md`](2026-05-09-wiki-visual-navigation-design.md) for principle awareness in Tier 1 (sidebar), Tier 2 (mini-graph node shape), Tier 3 (atlas grouping), §6.1 (shape), §6.3 (state outlines).
+- **Public docs generation.** `scripts/generate-public-principles.mjs` reads kernel principle markdown with `principlePublic: true`, generates `docs/principles.md` grouped by tier, with snapshot-drift test. Link from `docs/index.html` and `docs/README.md`.
 
-- Add principle lint detectors and tests.
-- Add public-safety detection for local/private/internal markers.
-- Extend `/admin/wiki/lint` filters so principle findings are easy to isolate.
-- Add fixture pages for valid/invalid principle cases.
+### Phase B — Adjacent refactor-budget PR (independent)
 
-### Batch 2 - Retrieval and MCP Tools
+`fix(db): guard kernel WikiPage.slug uniqueness when organizationId is NULL` — adds the partial unique index per §9.3. Not coupled to Phase A; can land before, alongside, or after.
 
-- Add `recallPrincipleContext`.
-- Extend `searchWikiPages` or add `searchPrinciples`.
-- Extend `wiki_query` filters and results.
-- Add `principle_decide`.
-- Ensure `/api/mcp/v1` tools/list exposes the new/extended tools for `registry_read` tokens.
-- Tests: `apps/web/lib/wiki/recall.test.ts`, `apps/web/lib/wiki/embeddings.test.ts`, `apps/web/lib/mcp-tools-wiki-query.test.ts`, new `mcp-tools-principle-decide.test.ts`, and `/api/mcp/v1` route tests if the tool visibility contract changes.
+### Phase C — Future durable-promotion follow-ups (out of scope here)
 
-### Batch 3 - Seed the First Principle Set
+The 41 existing principle pages cover most of the AI-coworker, AGENTS.md, and first-slice memory promotions. Any further memory promotions are out of scope for this spec; they ship through normal kernel authoring PRs against the existing `principle` kind, with the same lint and review discipline.
 
-Scope depends on branch base:
+### Phase D — Future grant-mapping refinement (tracked under TAK epic)
 
-- If PR #489/capacity continuity is present after rebase: promote Principles 1-9 plus the approved capacity principle.
-- If not: promote the eight branch-local AI coworker principles first and leave capacity/proactivity as follow-up content.
-
-For each principle:
-
-- author a kernel markdown page under `docs/founder-kernel/wiki/principles/`
-- create or cite public-safe raw sources
-- assign tier, direction, vector, applies-to, public flag, and public rationale
-- run seed and lint
-
-Do not bulk move `AGENTS.md` in this batch.
-
-### Batch 4 - AGENTS.md Governance Pointers
-
-- Identify durable principle prose in `AGENTS.md`.
-- Promote only durable governance, not local operational mechanics.
-- Replace duplicated prose with short pointers where safe.
-- Keep command, branch, verification, worktree, MCP-token, and local QA instructions inline.
-- Add the `wiki_query pageKind='principle'` pointer after MCP tooling is verified.
-
-### Batch 5 - Reviewed Memory Promotion
-
-- Inventory candidate memory-derived principles.
-- Classify as commandment/core/contextual/situational.
-- Promote only reviewed, durable, product-safe principles.
-- Rewrite private memory as authored principles with sources and rationale; do not cite local memory paths in public content.
-- Leave episodic, runtime, branch, and stale-state notes in memory.
-
-### Batch 6 - Public Docs Generation
-
-- Add a script to generate `docs/principles.md` from public kernel principle pages.
-- Add public docs navigation links.
-- Add a doc-generation test or snapshot check to catch drift.
+When TAK/GAID adds a tighter advisory scope (e.g., `principle_advisory_read`), migrate `principle_decide` from `registry_read`. Owned by the TAK epic referenced in §1.2, not by this spec.
 
 ## 16. Verification Plan
 
@@ -548,6 +624,7 @@ pnpm --filter web build
 For UI changes:
 
 - Verify `/wiki`, `/wiki?kind=principle`, a principle detail page, and `/admin/wiki/lint` against the rebuilt Docker-served portal.
+- Verify `/wiki?kind=principle` groups by consumer archetype first and tier second, with Build Studio material isolated under Route / Domain Specific > Build Studio.
 - Verify theme tokens in light and dark mode.
 - Verify long principle names, long dimension labels, and empty-state copy do not overflow.
 - Verify public `docs/principles.md` renders under the Jekyll layout.
@@ -564,14 +641,18 @@ For MCP:
 |------|----------|------------|
 | Principle inflation | High | Hard cap on commandments; lint gate; PR review for tier changes. |
 | Math is trusted as authority | High | Tool is read-only/immediate/advisory; output includes warnings; no execute button; TAK/HITL remains authoritative. |
+| Back-fill produces incoherent archetype/applies-to combos on the 41 existing pages | High | §8A.1 coherence matrix + `principle-incoherent-archetype-applies-to` lint runs against every back-filled page before the migration PR opens. |
 | Prose/vector drift | Medium | Lint checks that dimension keys and prose direction are present; reviewer must approve vector changes. |
-| Public docs drift from runtime | Medium | Generate public docs from kernel markdown, then seed runtime from the same source. |
+| Public docs drift from runtime | Medium | Generate public docs from kernel markdown, then seed runtime from the same source; snapshot-drift test gates CI. |
 | Local memory leaks into product docs | High | No raw memory import; review/redact/rewrite; public-safety lint blocks local paths and private markers. |
-| External agents cannot see principles | High | Extend external MCP `tools/list`; add `AGENTS.md` pointer only after verified; keep core operational rules inline. |
-| Current branch lacks PR #489 content | Medium | Rebase before implementation or scope Batch 3 to eight branch-local principles. |
+| External agents cannot see principles | High | Extend external MCP `tools/list`; add `AGENTS.md` pointer only after visibility is verified; keep core operational rules inline. |
+| `principle_decide` grant is too broad | Medium | `registry_read` is provisional per §11.5; tighter advisory scope tracked under TAK epic; tool stays read-only, sideEffect:false. |
+| Org overlay overrides a kernel commandment in surprising ways | Low today (single-org-per-install) / Medium long-term | §11.6 documents the contract: overlay commandments are scoped to the org, do not count toward the kernel cap of 10, override by `kernelPageId` reference; ledger labels overlay-sourced contributions as such. |
+| Lint blocked on cold start because Qdrant has no embeddings yet | Medium | `principle-duplicate` and `principle-contradiction-review` degrade to no-op + info finding when Qdrant returns empty; per §12.1, lint must work before seed completes. |
 | `KnowledgeArticle` migration collision | Medium | Principle work is additive; do not alter `KnowledgeArticle` unless EP-WIKI migration PR owns it. |
-| Query performance for applies-to arrays | Low in V1 | Start without GIN index; add hand-written index if metrics show need. |
+| Query performance for applies-to / consumer-contexts arrays | Low in V1 | Start without GIN index; add hand-written index if metrics show need. |
 | UI becomes decorative instead of operational | Medium | Compact rows, contribution ledger, filters, source count, and last-reviewed signals are required acceptance criteria. |
+| Concurrent worktrees ship overlapping principle changes | Medium | Per `Continuous overlap sweep` feedback, Phase A preflight includes a recent-main `git log` + `gh pr list --state open` sweep before push; re-sweep before every push, not just at session start. |
 
 ## 18. Open Questions with Recommendations
 
@@ -585,21 +666,28 @@ For MCP:
    Recommendation: public pages should speak as DPF doctrine. Internal pages can reference Mark/local-agent details; public pages should not.
 
 4. **Should org overlays have their own principles?**  
-   Recommendation: yes inside the portal, using the existing overlay mechanism. Public docs remain kernel-only.
+   Resolved: yes inside the portal, using the existing overlay mechanism (`WikiPage.kernelPageId`). Mark's `Single org per install (no multi-tenancy)` posture means this is low-risk in practice today, but the data model is multi-tenant and the contract needs to be explicit:
+   - Overlay principles are scoped to the org and DO NOT count toward the kernel commandment cap of 10. Each org may carry its own commandment set up to its own cap (default 10; per-org overrides via configuration).
+   - When an overlay overrides a kernel principle, `recallPrincipleContext` returns the overlay row only for callers in that org; the kernel row is returned for everyone else.
+   - The `principle_decide` contribution ledger labels overlay-sourced contributions with their org and the kernel page they override (if any), so reviewers can see exactly which principle voted.
+   - Public docs (`docs/principles.md`) remain kernel-only. Overlay principles are never published to the public site.
 
 5. **Should commandment recall bypass Qdrant?**  
-   Recommendation: yes. Use Postgres for in-scope commandments, then Qdrant for relevance-ranked core/contextual principles.
+   Recommendation: yes. Use Postgres for in-scope commandments, then Qdrant for relevance-ranked core/contextual principles. See §12.1 for the cold-start contract.
 
 6. **Should `principle_decide` record evidence?**  
    Recommendation: not in V1. Tool execution logging already captures calls. Add explicit evidence recording only when a downstream workflow consumes decisions as artifacts.
+
+7. **Should the `/wiki?kind=principle` browser default to tier-first or consumer-archetype-first ordering?**  
+   Resolved (re-baseline 2026-05-15): tier-first by default. Tier is what determines weight, lint severity, retrieval injection, and cap enforcement, so the load-bearing governance axis comes first. CA is exposed as a filter-chip group above the list with a sort toggle for CA-first viewing. See §13.1.
 
 ## 19. Success Criteria
 
 - `principle` is accepted by seed, DB, UI, Qdrant payloads, lint, `wiki_query`, and passive recall.
 - Commandment principles are always injected for matching populations.
-- `wiki_query` can filter by `pageKind="principle"`, `tier`, and `appliesTo`.
+- `wiki_query` can filter by `pageKind="principle"`, `tier`, `appliesTo`, `consumerArchetype`, and `consumerContext`.
 - `principle_decide` returns structured contribution ledgers, tie warnings, commandment-conflict flags, and semantic-fallback warnings.
-- `/wiki?kind=principle` and principle detail pages are polished, dense, token-themed, and accessible.
+- `/wiki?kind=principle` and principle detail pages are polished, dense, token-themed, accessible, and organized by consumer archetype for human review.
 - `docs/principles.md` is generated from public kernel principles and linked from the public docs.
 - No durable principle-shaped rule remains duplicated across the AI principles doc, promoted `AGENTS.md` sections, and founder-kernel principles without an intentional pointer.
 - `AGENTS.md` remains usable when MCP/wiki is unavailable.
