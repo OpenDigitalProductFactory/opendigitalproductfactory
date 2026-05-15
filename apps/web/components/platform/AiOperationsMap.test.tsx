@@ -122,6 +122,14 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("priorityIds?: ReadonlySet<string>");
   });
 
+  it("uses the rich symbol detail popover instead of native SVG title tooltips", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aria-label={`${label}: ${summary}`}");
+    expect(source).toContain("data-symbol-detail-popover");
+    expect(source).not.toContain("<title>{`${label}: ${summary}`}</title>");
+  });
+
   it("shows configured inactive providers as topology nodes even without active routes", () => {
     const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
 
