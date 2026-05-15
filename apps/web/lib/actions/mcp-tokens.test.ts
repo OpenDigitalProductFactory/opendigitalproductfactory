@@ -222,7 +222,7 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
     expect(addScopesMock).not.toHaveBeenCalled();
   });
 
-  it("adds the default read-only coding-agent scopes to an existing token", async () => {
+  it("adds the default coding-agent scopes to an existing token", async () => {
     authMock.mockResolvedValue({ user: { id: "u1" } });
     listMock.mockResolvedValue([
       {
@@ -241,8 +241,19 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
         "code_graph_read",
         "file_read",
         "spec_plan_read",
+        "work_capsule_read",
+        "work_capsule_write",
+        "work_capsule_adopt",
       ],
-      addedScopes: ["architecture_read", "code_graph_read", "file_read", "spec_plan_read"],
+      addedScopes: [
+        "architecture_read",
+        "code_graph_read",
+        "file_read",
+        "spec_plan_read",
+        "work_capsule_read",
+        "work_capsule_write",
+        "work_capsule_adopt",
+      ],
     });
 
     const result = await upgradeMyMcpTokenForCodingAgent({ tokenId: "tok_x" });
@@ -254,6 +265,9 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
       "code_graph_read",
       "file_read",
       "spec_plan_read",
+      "work_capsule_read",
+      "work_capsule_write",
+      "work_capsule_adopt",
     ]);
   });
 });
