@@ -3330,6 +3330,8 @@ model ToolExecution {
   // Autonomous coworker runtime Slice 1: nullable parent TaskRun link.
   // Persisted by mcp-governed-execute.ts when context.taskRunId is provided.
   taskRunId     String?
+  // Governed Hermes learning Slice 1: nullable active skill attribution.
+  skillId       String?
   receipt       ToolExecutionReceipt?
   documentLifecycleEvents DocumentLifecycleEvent[]
 
@@ -3341,6 +3343,7 @@ model ToolExecution {
   @@index([capabilityId, createdAt(sort: Desc)])
   @@index([apiTokenId, createdAt(sort: Desc)])
   @@index([taskRunId, createdAt(sort: Desc)])
+  @@index([skillId, createdAt(sort: Desc)])
 }
 
 model ToolExecutionReceipt {
@@ -3754,6 +3757,10 @@ model PlatformIssueReport {
   agentId             String?
   featureBuildId      String?
   source              String        @default("manual")
+  // Governed Hermes learning Slice 1: link runtime issues to the thread/run
+  // that produced them so reflection can avoid route/time-window heuristics.
+  threadId            String?
+  taskRunId           String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   upstreamIssueNumber Int?
@@ -3763,6 +3770,41 @@ model PlatformIssueReport {
   featureBuild        FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
 
   @@index([featureBuildId])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId])
+}
+
+model ImprovementSignal {
+  id                        String   @id @default(cuid())
+  signalId                  String   @unique
+  sourceType                String
+  sourceId                  String
+  title                     String
+  description               String?  @db.Text
+  evidence                  Json     @default("{}")
+  recurrenceCount           Int      @default(1)
+  status                    String   @default("open")
+  routeContext              String?
+  agentId                   String?
+  threadId                  String?
+  buildId                   String?
+  providerId                String?
+  toolName                  String?
+  digitalProductId          String?
+  portfolioId               String?
+  suspectedRootCause        String?
+  objectiveImpactHypothesis String?
+  graphNodeRefs             String[] @default([])
+  graphEdgeRefs             String[] @default([])
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  lastSeenAt                DateTime @default(now())
+
+  @@unique([sourceType, sourceId])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([routeContext, createdAt(sort: Desc)])
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([toolName, createdAt(sort: Desc)])
 }
 
 model ExternalEvidenceRecord {
@@ -6900,6 +6942,7 @@ model SkillDefinition {
   evaluation  ToolEvaluation?   @relation(fields: [evaluationId], references: [id])
   assignments SkillAssignment[]
   metrics     SkillMetric[]
+  usageEvents SkillUsageEvent[]
 
   @@index([status])
   @@index([category])
@@ -6941,6 +6984,30 @@ model SkillMetric {
 
   @@unique([skillId, agentId, period])
   @@index([skillId])
+}
+
+model SkillUsageEvent {
+  id              String   @id @default(cuid())
+  eventId         String   @unique
+  skillId         String
+  agentId         String
+  userId          String?
+  threadId        String?
+  taskRunId       String?
+  toolExecutionId String?
+  routeContext    String?
+  phase           String
+  source          String   @default("coworker")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+
+  @@index([skillId, createdAt(sort: Desc)])
+  @@index([agentId, createdAt(sort: Desc)])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId, createdAt(sort: Desc)])
+  @@index([phase, createdAt(sort: Desc)])
 }
 
 // ─── EP-DELEG-001: Delegation Chain (Authority Propagation & Chain of Custody) ─
