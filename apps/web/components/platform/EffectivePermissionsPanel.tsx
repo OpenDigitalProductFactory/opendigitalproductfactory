@@ -77,6 +77,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   analyze_public_website_branding: ["web_search"],
   search_integrations: ["external_registry_search", "registry_read"],
   search_knowledge: ["registry_read"],
+  get_finance_period_summary: ["financial_report_create"],
   launch_sandbox: ["sandbox_execute"],
   generate_code: ["sandbox_execute"],
   iterate_sandbox: ["sandbox_execute"],

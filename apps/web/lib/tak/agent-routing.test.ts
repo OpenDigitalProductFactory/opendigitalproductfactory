@@ -63,6 +63,8 @@ describe("resolveAgentForRoute", () => {
     expect(result.systemPrompt).toContain("search_public_web");
     expect(result.systemPrompt).toContain("fetch_public_website");
     expect(result.systemPrompt).toContain("DPF tax processing proposal");
+    expect(result.systemPrompt).toContain("get_finance_period_summary");
+    expect(result.skills.some((skill) => skill.label === "Income vs expenses this month")).toBe(true);
     expect(result.skills.some((skill) => skill.label === "Research tax processing proposal")).toBe(true);
   });
 

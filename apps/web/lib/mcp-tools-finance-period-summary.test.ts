@@ -70,10 +70,19 @@ describe("get_finance_period_summary MCP tool", () => {
     expect(res.message).toMatch(/income 9000\.00 USD/);
     expect(res.message).toMatch(/expenses 3000\.00 USD/);
     expect(res.message).toMatch(/net 6000\.00 USD/);
-    const data = res.data as { income: { total: number }; expenses: { total: number }; net: number };
+    expect(res.message).toMatch(/Evidence:/);
+    const data = res.data as {
+      income: { total: number };
+      expenses: { total: number };
+      net: number;
+      verificationStatus: string;
+      sourceLanguage: string;
+    };
     expect(data.income.total).toBe(9000);
     expect(data.expenses.total).toBe(3000);
     expect(data.net).toBe(6000);
+    expect(data.verificationStatus).toBe("verified");
+    expect(data.sourceLanguage).toContain("Invoice.totalAmount");
   });
 
   it("returns an explicit no-activity message when nothing is recorded", async () => {
@@ -81,8 +90,10 @@ describe("get_finance_period_summary MCP tool", () => {
     const res = await executeTool("get_finance_period_summary", {}, "user_test");
     expect(res.success).toBe(true);
     expect(res.message).toMatch(/no paid activity recorded yet/);
-    const data = res.data as { gaps: string[] };
+    expect(res.message).toMatch(/Caveats:/);
+    const data = res.data as { gaps: string[]; verificationStatus: string };
     expect(data.gaps.length).toBeGreaterThan(0);
+    expect(data.verificationStatus).toBe("no_current_data");
   });
 
   it("accepts a preset period parameter", async () => {
