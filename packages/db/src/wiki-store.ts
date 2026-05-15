@@ -55,6 +55,8 @@ type WikiIngestEventClient = Pick<WikiStoreClient, "wikiIngestEvent">;
 // working.
 import type {
   PrincipleAppliesTo,
+  PrincipleConsumerArchetype,
+  PrincipleConsumerContext,
   PrincipleDimension,
   PrincipleTier,
   WikiPageKind,
@@ -63,6 +65,8 @@ import type {
 export { WIKI_PAGE_KINDS, WIKI_PAGE_STATUSES } from "./wiki-taxonomy";
 export type {
   PrincipleAppliesTo,
+  PrincipleConsumerArchetype,
+  PrincipleConsumerContext,
   PrincipleDimension,
   PrincipleTier,
   WikiPageKind,
@@ -90,6 +94,21 @@ export type WikiPagePrincipleInput = {
   principleDimensionVector?: Record<PrincipleDimension | string, number> | null;
   principleDimensions?: PrincipleDimension[] | string[];
   principleAppliesTo?: PrincipleAppliesTo[] | string[];
+  /**
+   * Consumer archetype — answers "who is expected to consume this principle?"
+   * Independent axis from `principleAppliesTo`; the coherence rule for valid
+   * combinations is in spec section 8A.1 and is enforced by lint, not at the
+   * store layer. The store passes whatever the caller supplies so a draft
+   * with an incoherent pairing can still be saved for lint to surface.
+   */
+  principleConsumerArchetype?: PrincipleConsumerArchetype | string | null;
+  /**
+   * Route/domain context slugs that scope a `route-domain-specific` archetype
+   * (e.g., `["build-studio"]`). Empty array for non-route archetypes. Slug
+   * shape and the "route-domain-specific requires at least one context" rule
+   * are enforced by `isPrincipleConsumerContextSlug` + lint, not here.
+   */
+  principleConsumerContexts?: PrincipleConsumerContext[] | string[];
   principlePublic?: boolean;
   principlePublicRationale?: string | null;
 };
@@ -146,6 +165,12 @@ function principleDataFromInput(
   }
   if (input.principleAppliesTo !== undefined) {
     data.principleAppliesTo = input.principleAppliesTo;
+  }
+  if (input.principleConsumerArchetype !== undefined) {
+    data.principleConsumerArchetype = input.principleConsumerArchetype;
+  }
+  if (input.principleConsumerContexts !== undefined) {
+    data.principleConsumerContexts = input.principleConsumerContexts;
   }
   if (input.principlePublic !== undefined) {
     data.principlePublic = input.principlePublic;
