@@ -105,7 +105,7 @@ No schema or skill files change in this slice.
 - [ ] Enable the reviewer only from `run_hive_scout_ingest` (set `enableAutonomousReview: true` in `executeTool`); direct/manual callers remain deterministic unless they pass their own `ambiguityReviewer` or `enableAutonomousReview: true`.
 - [ ] Resolve the reviewer system prompt from the seeded prompt store (`category: specialist`, `name: hive-scout-ambiguity-reviewer`). Resolve by name, not by file path, so Admin > Prompts edits take effect on the next run.
 - [ ] Before calling the reviewer, key the cache lookup by `sha256(sourceUrl)` against existing `BacklogItemActivity.payload.ambiguityReview` rows; reuse decisions inside the cache TTL window. Cache hits MUST NOT call the provider.
-- [ ] Read `hive-scout.review.enabled` when a key-value settings model is present; if it is false, skip the reviewer and report `reviewSkipReason: "operator_disabled"`.
+- [ ] Read `hive-scout.review.enabled` from `PlatformConfig`; if it is false, skip the reviewer and report `reviewSkipReason: "operator_disabled"`. Missing key defaults to enabled (matches the line-24 invariant).
 
 ## Task 4: Update scheduled summaries, telemetry, and verification
 
