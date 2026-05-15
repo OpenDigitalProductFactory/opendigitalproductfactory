@@ -96,6 +96,16 @@ describe("extractDiscoveryTriageSummary", () => {
               escalationQueueDepth: 2,
               repeatUnresolved: 1,
               autoApplyRate: 0.5,
+              reviewed: 1,
+              reviewFailed: 0,
+              reviewBatchSize: 1,
+              reviewBatchUtilization: 0.083,
+              reviewParseSuccessRate: 1,
+              reviewSchemaDropCount: 1,
+              reviewLatencyMs: 218,
+              reviewClassificationHistogram: {
+                force_human_review: 1,
+              },
             },
           },
         },
@@ -106,8 +116,11 @@ describe("extractDiscoveryTriageSummary", () => {
     expect(summary?.compactStatus).toContain("Discovery triage cadence");
     expect(summary?.compactStatus).toContain("processed=4");
     expect(summary?.compactStatus).toContain("taxonomy-gaps=1");
+    expect(summary?.compactStatus).toContain("reviewed=1");
+    expect(summary?.compactStatus).toContain("review-schema-drops=1");
     expect(summary?.threadMessage).toContain("[Scheduled summary: discovery taxonomy gap triage]");
     expect(summary?.threadMessage).toContain("\"runIdempotencyKey\": \"2026-04-25:inventory-specialist:cadence\"");
+    expect(summary?.threadMessage).toContain("\"reviewClassificationHistogram\"");
   });
 
   it("reports skipped triage runs with the idempotency key", () => {

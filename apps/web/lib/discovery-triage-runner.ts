@@ -12,6 +12,20 @@ import {
 } from "@dpf/db/discovery-triage";
 import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
+import {
+  applyDiscoveryTriageAutonomousReview,
+  attachBoundedReview,
+  DISCOVERY_TRIAGE_REVIEW_BATCH_LIMIT,
+  requiresHumanReviewForOutcome,
+  reviewDiscoveryTriageWithTak,
+  type AutoPauseTrigger,
+  type DiscoveryTriageDecisionOutcome,
+  type DiscoveryTriageReviewClassification,
+  type DiscoveryTriageReviewContext,
+  type DiscoveryTriageReviewer,
+  type ReviewFailureReason,
+  type ReviewSkipReason,
+} from "@/lib/discovery-triage-review";
 
 export type DiscoveryTriageTrigger = "cadence" | "volume";
 export const DEFAULT_DISCOVERY_TRIAGE_ACTOR_ID = DISCOVERY_TRIAGE_AGENT_ID;
@@ -62,6 +76,15 @@ export type DiscoveryTriageRunnerDb = {
     findFirst(args: Record<string, unknown>): Promise<{ decisionId: string } | null>;
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
   };
+  platformConfig?: {
+    findUnique(args: {
+      where: { key: string };
+      select?: { value?: boolean };
+    }): Promise<{ value: unknown } | null>;
+  };
+  taskRun?: {
+    findMany(args: Record<string, unknown>): Promise<Array<{ progressPayload: unknown }>>;
+  };
 };
 
 export type DiscoveryTriageRunMetrics = {
@@ -75,6 +98,17 @@ export type DiscoveryTriageRunMetrics = {
   escalationQueueDepth: number;
   repeatUnresolved: number;
   autoApplyRate: number;
+  reviewed: number;
+  reviewFailed: number;
+  reviewFailureReason?: ReviewFailureReason;
+  reviewSkipReason?: ReviewSkipReason;
+  autoPauseTrigger?: AutoPauseTrigger | null;
+  reviewBatchSize: number;
+  reviewBatchUtilization: number;
+  reviewParseSuccessRate: number;
+  reviewSchemaDropCount: number;
+  reviewLatencyMs: number | null;
+  reviewClassificationHistogram: Partial<Record<DiscoveryTriageReviewClassification, number>>;
 };
 
 export type DiscoveryTriageRunResult = {
@@ -86,7 +120,7 @@ export type DiscoveryTriageRunResult = {
   metrics: DiscoveryTriageRunMetrics;
   decisions: Array<{
     inventoryEntityId: string;
-    outcome: "auto-attributed" | "human-review" | "taxonomy-gap" | "needs-more-evidence" | "dismissed";
+    outcome: DiscoveryTriageDecisionOutcome;
     requiresHumanReview: boolean;
   }>;
 };
@@ -171,6 +205,14 @@ function createEmptyMetrics(): DiscoveryTriageRunMetrics {
     escalationQueueDepth: 0,
     repeatUnresolved: 0,
     autoApplyRate: 0,
+    reviewed: 0,
+    reviewFailed: 0,
+    reviewBatchSize: 0,
+    reviewBatchUtilization: 0,
+    reviewParseSuccessRate: 0,
+    reviewSchemaDropCount: 0,
+    reviewLatencyMs: null,
+    reviewClassificationHistogram: {},
   };
 }
 
@@ -178,6 +220,7 @@ function finalizeMetrics(metrics: DiscoveryTriageRunMetrics): DiscoveryTriageRun
   return {
     ...metrics,
     escalationQueueDepth: metrics.humanReview + metrics.taxonomyGap,
+    reviewBatchUtilization: Number((metrics.reviewBatchSize / DISCOVERY_TRIAGE_REVIEW_BATCH_LIMIT).toFixed(3)),
     autoApplyRate: metrics.processed > 0
       ? Number((metrics.autoAttributed / metrics.processed).toFixed(3))
       : 0,
@@ -216,6 +259,15 @@ async function loadTaxonomyNodeLookup(
   return lookup;
 }
 
+type DiscoveryTriageCandidateContext = DiscoveryTriageReviewContext & {
+  entity: DiscoveryTriageRunnerEntity;
+  autoApply: boolean;
+  selectedTaxonomyNodeId: string | null;
+  selectedIdentity: Record<string, unknown> | null;
+  proposedRule: ReturnType<typeof synthesizeDiscoveryFingerprintRule>;
+  qualityIssueId: string | null;
+};
+
 export async function runDiscoveryTriagePass(
   db: DiscoveryTriageRunnerDb = prisma as unknown as DiscoveryTriageRunnerDb,
   options: {
@@ -225,6 +277,8 @@ export async function runDiscoveryTriagePass(
     now?: Date;
     runIdempotencyKey?: string;
     thresholds?: DiscoveryTriageThresholds;
+    enableAutonomousReview?: boolean;
+    autonomousReviewer?: DiscoveryTriageReviewer;
   } = {},
 ): Promise<DiscoveryTriageRunResult> {
   const trigger = options.trigger ?? "cadence";
@@ -262,6 +316,7 @@ export async function runDiscoveryTriagePass(
   const metrics = createEmptyMetrics();
   const decisions: DiscoveryTriageRunResult["decisions"] = [];
   const seen = new Set<string>();
+  const contexts: DiscoveryTriageCandidateContext[] = [];
 
   for (const entity of entities) {
     if (seen.has(entity.id)) continue;
@@ -273,8 +328,11 @@ export async function runDiscoveryTriagePass(
       trigger,
     });
     const score = scoreDiscoveryTriageCandidate(packetWithRunMetadata, thresholds);
-    const outcome = resolveDiscoveryTriageOutcome(score, packetWithRunMetadata, thresholds);
-    const requiresHumanReview = outcome === "human-review" || outcome === "taxonomy-gap";
+    const proceduralOutcome = resolveDiscoveryTriageOutcome(
+      score,
+      packetWithRunMetadata,
+      thresholds,
+    ) as DiscoveryTriageDecisionOutcome;
     const autoApply = shouldAutoApplyTriageDecision(score, packetWithRunMetadata, thresholds);
     const selectedTaxonomyCandidateId = packetWithRunMetadata.candidateTaxonomy[0]?.nodeId ?? null;
     const selectedTaxonomyNodeId = selectedTaxonomyCandidateId
@@ -288,56 +346,83 @@ export async function runDiscoveryTriagePass(
           version: packetWithRunMetadata.identityCandidates[0].version ?? null,
         }
       : null;
-    const proposedRule = outcome === "auto-attributed"
+    const proposedRule = proceduralOutcome === "auto-attributed"
       ? withResolvedProposedRuleTaxonomyNodeId(
         synthesizeDiscoveryFingerprintRule(packetWithRunMetadata, score, thresholds),
         selectedTaxonomyNodeId,
       )
       : null;
 
-    if (autoApply && selectedTaxonomyNodeId) {
+    contexts.push({
+      entity,
+      packet: packetWithRunMetadata,
+      score,
+      proceduralOutcome,
+      outcome: proceduralOutcome,
+      requiresHumanReview: requiresHumanReviewForOutcome(proceduralOutcome),
+      autoApply,
+      selectedTaxonomyNodeId,
+      selectedIdentity,
+      proposedRule,
+      boundedReview: null,
+      qualityIssueId: issueByEntityId.get(entity.id)?.id ?? null,
+    });
+  }
+
+  const reviewer = options.autonomousReviewer ?? (options.enableAutonomousReview ? reviewDiscoveryTriageWithTak : null);
+  if (reviewer) {
+    await applyDiscoveryTriageAutonomousReview(db, {
+      actorId,
+      reviewer,
+      contexts,
+      metrics,
+    });
+  }
+
+  for (const context of contexts) {
+    if (context.autoApply && context.selectedTaxonomyNodeId && context.outcome === "auto-attributed") {
       await db.inventoryEntity.update({
-        where: { id: entity.id },
+        where: { id: context.entity.id },
         data: {
-          taxonomyNodeId: selectedTaxonomyNodeId,
+          taxonomyNodeId: context.selectedTaxonomyNodeId,
           attributionStatus: "attributed",
           attributionMethod: "ai-proposed",
-          attributionConfidence: score.taxonomyConfidence,
-          attributionEvidence: packetWithRunMetadata,
+          attributionConfidence: context.score.taxonomyConfidence,
+          attributionEvidence: context.packet,
         },
       });
     }
 
     await recordDiscoveryTriageDecision(db, {
-      decisionId: `triage-${entity.id}-${randomUUID().slice(0, 8)}`,
-      inventoryEntityId: entity.id,
-      qualityIssueId: issueByEntityId.get(entity.id)?.id ?? null,
+      decisionId: `triage-${context.entity.id}-${randomUUID().slice(0, 8)}`,
+      inventoryEntityId: context.entity.id,
+      qualityIssueId: context.qualityIssueId,
       actorType,
       actorId,
-      outcome,
-      score,
-      evidencePacket: packetWithRunMetadata,
-      proposedRule,
-      selectedTaxonomyNodeId,
-      selectedIdentity,
-      requiresHumanReview,
+      outcome: context.outcome,
+      score: context.score,
+      evidencePacket: attachBoundedReview(context.packet, context.boundedReview),
+      proposedRule: context.outcome === "auto-attributed" ? context.proposedRule : null,
+      selectedTaxonomyNodeId: context.selectedTaxonomyNodeId,
+      selectedIdentity: context.selectedIdentity,
+      requiresHumanReview: context.requiresHumanReview,
     });
 
     metrics.processed += 1;
     metrics.decisionsCreated += 1;
-    if (outcome === "auto-attributed") metrics.autoAttributed += 1;
-    if (outcome === "human-review") metrics.humanReview += 1;
-    if (outcome === "taxonomy-gap") metrics.taxonomyGap += 1;
-    if (outcome === "needs-more-evidence") metrics.needsMoreEvidence += 1;
-    if (outcome === "dismissed") metrics.dismissed += 1;
-    if (issueByEntityId.has(entity.id) || entity.attributionStatus === "needs_review") {
+    if (context.outcome === "auto-attributed") metrics.autoAttributed += 1;
+    if (context.outcome === "human-review") metrics.humanReview += 1;
+    if (context.outcome === "taxonomy-gap") metrics.taxonomyGap += 1;
+    if (context.outcome === "needs-more-evidence") metrics.needsMoreEvidence += 1;
+    if (context.outcome === "dismissed") metrics.dismissed += 1;
+    if (issueByEntityId.has(context.entity.id) || context.entity.attributionStatus === "needs_review") {
       metrics.repeatUnresolved += 1;
     }
 
     decisions.push({
-      inventoryEntityId: entity.id,
-      outcome,
-      requiresHumanReview,
+      inventoryEntityId: context.entity.id,
+      outcome: context.outcome,
+      requiresHumanReview: context.requiresHumanReview,
     });
   }
 
@@ -358,6 +443,8 @@ export async function runDiscoveryTriageDaily(
     trigger?: DiscoveryTriageTrigger;
     now?: Date;
     thresholds?: DiscoveryTriageThresholds;
+    enableAutonomousReview?: boolean;
+    autonomousReviewer?: DiscoveryTriageReviewer;
   } = {},
 ): Promise<DiscoveryTriageRunResult> {
   const now = options.now ?? new Date();
@@ -400,6 +487,8 @@ export async function runDiscoveryTriageDaily(
     now,
     runIdempotencyKey,
     thresholds: options.thresholds,
+    enableAutonomousReview: options.enableAutonomousReview,
+    autonomousReviewer: options.autonomousReviewer,
   });
 }
 
@@ -422,6 +511,8 @@ export async function maybeTriggerDiscoveryTriageForVolume(
     now?: Date;
     threshold?: number;
     thresholds?: DiscoveryTriageThresholds;
+    enableAutonomousReview?: boolean;
+    autonomousReviewer?: DiscoveryTriageReviewer;
   } = {},
 ): Promise<{
   triggered: boolean;
@@ -452,6 +543,8 @@ export async function maybeTriggerDiscoveryTriageForVolume(
     trigger: "volume",
     now: options.now,
     thresholds: options.thresholds,
+    enableAutonomousReview: options.enableAutonomousReview,
+    autonomousReviewer: options.autonomousReviewer,
   });
 
   return {

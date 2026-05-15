@@ -10215,6 +10215,7 @@ export async function executeTool(
         trigger,
         actorType: "agent",
         actorId: context?.agentId ?? DISCOVERY_TRIAGE_AGENT_ID,
+        enableAutonomousReview: true,
       });
       return {
         success: true,

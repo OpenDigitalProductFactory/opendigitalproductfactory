@@ -17,6 +17,17 @@ type DiscoveryTriageSummaryPayload = {
     escalationQueueDepth?: number;
     repeatUnresolved?: number;
     autoApplyRate?: number;
+    reviewed?: number;
+    reviewFailed?: number;
+    reviewBatchSize?: number;
+    reviewBatchUtilization?: number;
+    reviewParseSuccessRate?: number;
+    reviewSchemaDropCount?: number;
+    reviewLatencyMs?: number | null;
+    reviewFailureReason?: string;
+    reviewSkipReason?: string;
+    autoPauseTrigger?: string | null;
+    reviewClassificationHistogram?: Record<string, number>;
   };
 };
 
@@ -102,6 +113,31 @@ export function extractDiscoveryTriageSummary(
       escalationQueueDepth: asNumber(metrics.escalationQueueDepth) ?? 0,
       repeatUnresolved: asNumber(metrics.repeatUnresolved) ?? 0,
       autoApplyRate: asNumber(metrics.autoApplyRate) ?? 0,
+      reviewed: asNumber(metrics.reviewed) ?? 0,
+      reviewFailed: asNumber(metrics.reviewFailed) ?? 0,
+      reviewBatchSize: asNumber(metrics.reviewBatchSize) ?? 0,
+      reviewBatchUtilization: asNumber(metrics.reviewBatchUtilization) ?? 0,
+      reviewParseSuccessRate: asNumber(metrics.reviewParseSuccessRate) ?? 0,
+      reviewSchemaDropCount: asNumber(metrics.reviewSchemaDropCount) ?? 0,
+      reviewLatencyMs: asNumber(metrics.reviewLatencyMs) ?? 0,
+      ...(asString(metrics.reviewFailureReason)
+        ? { reviewFailureReason: asString(metrics.reviewFailureReason) as string }
+        : {}),
+      ...(asString(metrics.reviewSkipReason)
+        ? { reviewSkipReason: asString(metrics.reviewSkipReason) as string }
+        : {}),
+      ...(asString(metrics.autoPauseTrigger)
+        ? { autoPauseTrigger: asString(metrics.autoPauseTrigger) as string }
+        : {}),
+      ...(isRecord(metrics.reviewClassificationHistogram)
+        ? {
+            reviewClassificationHistogram: Object.fromEntries(
+              Object.entries(metrics.reviewClassificationHistogram)
+                .map(([key, value]): [string, number] => [key, asNumber(value) ?? 0])
+                .filter(([, value]) => value > 0),
+            ),
+          }
+        : {}),
     },
   };
 
@@ -113,6 +149,8 @@ export function extractDiscoveryTriageSummary(
         `auto=${payload.metrics?.autoAttributed ?? 0}`,
         `escalations=${payload.metrics?.escalationQueueDepth ?? 0}`,
         `taxonomy-gaps=${payload.metrics?.taxonomyGap ?? 0}`,
+        `reviewed=${payload.metrics?.reviewed ?? 0}`,
+        `review-schema-drops=${payload.metrics?.reviewSchemaDropCount ?? 0}`,
       ].join(" ");
 
   const threadMessage = [

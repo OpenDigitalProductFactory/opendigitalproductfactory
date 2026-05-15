@@ -23,6 +23,43 @@ function createRunnerDb() {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({}),
     },
+    platformConfig: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    taskRun: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+  };
+}
+
+function makeAmbiguousEntity(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    entityKey: `service:${id}`,
+    entityType: "service",
+    name: `ambiguous-${id}`,
+    firstSeenAt: new Date("2026-04-22T00:00:00Z"),
+    lastSeenAt: new Date("2026-04-25T00:00:00Z"),
+    attributionStatus: "needs_review",
+    candidateTaxonomy: [
+      {
+        nodeId: "foundational/network_management/network_connectivity",
+        name: "Network Connectivity",
+        score: 0.91,
+      },
+      {
+        nodeId: "foundational/network_management/network_security",
+        name: "Network Security",
+        score: 0.89,
+      },
+    ],
+    properties: {
+      processName: "edge-service",
+      ports: [443],
+      softwareEvidence: ["edge"],
+      secretToken: "must-not-egress",
+    },
+    ...overrides,
   };
 }
 
@@ -151,6 +188,138 @@ describe("runDiscoveryTriagePass", () => {
     expect(result.metrics.humanReview).toBe(1);
     expect(result.metrics.escalationQueueDepth).toBe(1);
     expect(result.metrics.repeatUnresolved).toBe(1);
+  });
+
+  it("uses bounded review for ambiguous packets and records schema drops without blocking deterministic decisions", async () => {
+    const db = createRunnerDb();
+    db.inventoryEntity.findMany.mockResolvedValue([
+      makeAmbiguousEntity("entity-review-1"),
+      makeAmbiguousEntity("entity-review-2", {
+        candidateTaxonomy: [],
+        confidence: 0.3,
+        properties: {},
+      }),
+    ]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([]);
+
+    const result = await runDiscoveryTriagePass(db, {
+      enableAutonomousReview: true,
+      autonomousReviewer: async () => [
+        {
+          inventoryEntityId: "entity-review-1",
+          classification: "dismiss",
+          confidence: "medium",
+          rationale: "Repeated probe noise rather than a durable product signal.",
+        },
+        {
+          inventoryEntityId: "entity-review-2",
+          classification: "invented",
+          confidence: "high",
+          rationale: "Invalid classification should be dropped.",
+        },
+        {
+          inventoryEntityId: "outside-batch",
+          classification: "force_human_review",
+          confidence: "high",
+          rationale: "Valid shape but not part of this reviewed batch.",
+        },
+      ],
+    });
+
+    expect(db.discoveryTriageDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inventoryEntityId: "entity-review-1",
+        outcome: "dismissed",
+        requiresHumanReview: false,
+        evidencePacket: expect.objectContaining({
+          boundedReview: expect.objectContaining({
+            classification: "dismiss",
+          }),
+        }),
+      }),
+    });
+    expect(result.metrics.reviewed).toBe(1);
+    expect(result.metrics.reviewSchemaDropCount).toBe(2);
+    expect(result.metrics.reviewParseSuccessRate).toBe(0.5);
+    expect(result.metrics.reviewClassificationHistogram).toEqual({ dismiss: 1 });
+  });
+
+  it("sends only allowlisted public triage fields to the bounded reviewer", async () => {
+    const db = createRunnerDb();
+    let capturedInput: Record<string, unknown> | null = null;
+    db.inventoryEntity.findMany.mockResolvedValue([makeAmbiguousEntity("entity-egress")]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([]);
+
+    await runDiscoveryTriagePass(db, {
+      enableAutonomousReview: true,
+      autonomousReviewer: async (input) => {
+        capturedInput = input as Record<string, unknown>;
+        return [
+          {
+            inventoryEntityId: "entity-egress",
+            classification: "force_human_review",
+            confidence: "medium",
+            rationale: "Ambiguous placement needs operator review.",
+          },
+        ];
+      },
+    });
+
+    expect(capturedInput).not.toBeNull();
+    const captured = capturedInput as unknown as Record<string, unknown>;
+    expect(Object.keys(captured).sort()).toEqual(["allowedClassifications", "entities"].sort());
+    const reviewedEntity = (captured["entities"] as Array<Record<string, unknown>>)[0];
+    expect(reviewedEntity).toEqual(expect.objectContaining({
+      inventoryEntityId: "entity-egress",
+      proceduralOutcome: "human-review",
+    }));
+    expect(reviewedEntity).not.toHaveProperty("properties");
+    expect(JSON.stringify(captured)).not.toContain("must-not-egress");
+  });
+
+  it("classifies reviewer failures and continues the procedural triage pass", async () => {
+    const db = createRunnerDb();
+    db.inventoryEntity.findMany.mockResolvedValue([makeAmbiguousEntity("entity-failure")]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([]);
+
+    const result = await runDiscoveryTriagePass(db, {
+      enableAutonomousReview: true,
+      autonomousReviewer: async () => {
+        throw new Error("provider rate limit exceeded");
+      },
+    });
+
+    expect(result.metrics.reviewFailed).toBe(1);
+    expect(result.metrics.reviewFailureReason).toBe("provider_rate_limit");
+    expect(result.metrics.decisionsCreated).toBe(1);
+    expect(db.discoveryTriageDecision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        inventoryEntityId: "entity-failure",
+        outcome: "human-review",
+      }),
+    });
+  });
+
+  it("honors the runtime review kill switch without skipping procedural triage", async () => {
+    const db = createRunnerDb();
+    let reviewerCalls = 0;
+    db.platformConfig.findUnique.mockImplementation(async ({ where }: { where: { key: string } }) =>
+      where.key === "discovery-triage.review.enabled" ? { value: false } : null,
+    );
+    db.inventoryEntity.findMany.mockResolvedValue([makeAmbiguousEntity("entity-disabled")]);
+    db.portfolioQualityIssue.findMany.mockResolvedValue([]);
+
+    const result = await runDiscoveryTriagePass(db, {
+      enableAutonomousReview: true,
+      autonomousReviewer: async () => {
+        reviewerCalls++;
+        return [];
+      },
+    });
+
+    expect(reviewerCalls).toBe(0);
+    expect(result.metrics.reviewSkipReason).toBe("operator_disabled");
+    expect(result.metrics.decisionsCreated).toBe(1);
   });
 
   it("routes clear identity without a taxonomy node to taxonomy-gap", async () => {
