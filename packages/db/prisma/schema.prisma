@@ -3645,7 +3645,7 @@ model CommunicationChannelBinding {
   employeeProfileId  String?
   channelType        String
   providerKey        String
-  providerAccountId  String?
+  providerAccountId  String                         @default("")
   externalSubject    String
   displayLabel       String?
   verificationStatus String                         @default("pending")
@@ -3674,7 +3674,7 @@ model CommunicationChannelSession {
   sessionId         String     @unique @default(cuid())
   channelType       String
   providerKey       String
-  providerAccountId String?
+  providerAccountId String     @default("")
   externalPeerId    String
   trustLevel        String     @default("unknown")
   principalId       String?
