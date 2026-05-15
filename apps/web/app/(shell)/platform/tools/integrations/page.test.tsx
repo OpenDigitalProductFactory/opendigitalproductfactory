@@ -36,6 +36,17 @@ describe("EnterpriseIntegrationsPage", () => {
     expect(html).toContain("/platform/tools/integrations/whatsapp-business");
   });
 
+  it("surfaces the employee communications fabric on the native integrations landing page", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain("Employee Communications Fabric");
+    expect(html).toContain("Employee Communications");
+    expect(html).toContain("/platform/tools/integrations/communications");
+  });
+
   it("surfaces Instagram Business on the native integrations landing page", async () => {
     mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
 
