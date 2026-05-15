@@ -786,6 +786,32 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "get_finance_period_summary",
+    description: "Return verified income, expenses, and net for a finance period (defaults to month-to-date). Income = sum of paid invoices; expenses = sum of paid bills + paid expense claims; net = income − expenses. Includes pending receivables/payables, multi-currency flags, source paths, and explicit gap descriptions when activity is missing. Use this whenever the user asks for a P&L figure, income vs expenses, or net cash position for a period — it is the canonical numeric answer for the Finance Specialist coworker.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        period: {
+          type: "string",
+          enum: ["month-to-date", "last-month", "quarter-to-date", "year-to-date"],
+          description: "Preset period. Defaults to month-to-date. Ignored when startDate/endDate are provided.",
+        },
+        startDate: {
+          type: "string",
+          description: "ISO date (e.g. 2026-05-01). When set, period is treated as a custom window. endDate is required alongside.",
+        },
+        endDate: {
+          type: "string",
+          description: "ISO date for the end of the custom window. Must be on or after startDate.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_finance",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "get_marketing_summary",
     description: "Get archetype-aware marketing metrics: storefront inbox counts, CRM pipeline summary, and the marketing playbook for this business type",
     inputSchema: {
@@ -10579,6 +10605,39 @@ export async function executeTool(
           message: `Platform update failed: ${err instanceof Error ? err.message : "Unknown error"}`,
           error: err instanceof Error ? err.message : "Unknown error",
         };
+      }
+    }
+
+    case "get_finance_period_summary": {
+      const { getFinancePeriodSummary } = await import("@/lib/finance/period-summary");
+      const periodInput: Parameters<typeof getFinancePeriodSummary>[0] = {};
+      const period = typeof params["period"] === "string" ? params["period"] : undefined;
+      if (period === "month-to-date" || period === "last-month" || period === "quarter-to-date" || period === "year-to-date") {
+        periodInput.period = period;
+      }
+      if (typeof params["startDate"] === "string" && params["startDate"].trim()) {
+        periodInput.startDate = params["startDate"];
+      }
+      if (typeof params["endDate"] === "string" && params["endDate"].trim()) {
+        periodInput.endDate = params["endDate"];
+      }
+
+      try {
+        const summary = await getFinancePeriodSummary(periodInput);
+        const incomeAmount = summary.income.total.toFixed(2);
+        const expensesAmount = summary.expenses.total.toFixed(2);
+        const netAmount = summary.net.toFixed(2);
+        const message = summary.income.count === 0 && summary.expenses.count === 0
+          ? `${summary.period.label}: no paid activity recorded yet. Net ${netAmount} ${summary.currency}.`
+          : `${summary.period.label}: income ${incomeAmount} ${summary.currency} (${summary.income.count} invoice${summary.income.count === 1 ? "" : "s"}), expenses ${expensesAmount} ${summary.currency} (${summary.expenses.count} bill${summary.expenses.count === 1 ? "" : "s"}/claim${summary.expenses.count === 1 ? "" : "s"}), net ${netAmount} ${summary.currency}.`;
+        return {
+          success: true,
+          message,
+          data: summary as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: msg, message: `get_finance_period_summary failed: ${msg}` };
       }
     }
 
