@@ -272,6 +272,10 @@ function parseCliJsonOutput(output: string): {
   }
 }
 
+function isProviderOverloadMessage(text: string): boolean {
+  return /\b529\b|overloaded/i.test(text);
+}
+
 // ─── CLI Adapter ────────────────────────────────────────────────────────────
 
 export const cliAdapter: ExecutionAdapterHandler = {
@@ -537,6 +541,12 @@ export const cliAdapter: ExecutionAdapterHandler = {
                 "auth",
                 providerId,
               ));
+            } else if (isProviderOverloadMessage(stderr)) {
+              reject(new InferenceError(
+                `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
+                "overloaded",
+                providerId,
+              ));
             } else if (stderr.includes("rate") || stderr.includes("429")) {
               reject(new InferenceError(
                 `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
@@ -593,6 +603,14 @@ export const cliAdapter: ExecutionAdapterHandler = {
         throw new InferenceError(
           `Claude CLI auth error (from stdout): ${parsed.text.slice(0, 200)}`,
           "auth",
+          providerId,
+        );
+      }
+
+      if (parsed.toolCalls.length === 0 && parsed.text.length < 600 && isProviderOverloadMessage(parsed.text)) {
+        throw new InferenceError(
+          `Claude CLI overloaded (from stdout): ${parsed.text.slice(0, 300)}`,
+          "overloaded",
           providerId,
         );
       }

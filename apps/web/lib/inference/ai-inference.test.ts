@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { InferenceError } from "./ai-inference";
+import { classifyHttpError, InferenceError } from "./ai-inference";
 
 describe("InferenceError", () => {
   it("has correct code and providerId", () => {
@@ -12,6 +12,31 @@ describe("InferenceError", () => {
   it("includes statusCode when provided", () => {
     const err = new InferenceError("rate limited", "rate_limit", "openai", 429);
     expect(err.statusCode).toBe(429);
+  });
+});
+
+describe("classifyHttpError", () => {
+  it("classifies HTTP 529 as provider overload", () => {
+    const err = classifyHttpError(
+      529,
+      "anthropic-sub",
+      "API Error: 529 Overloaded. This is a server-side issue, usually temporary.",
+    );
+
+    expect(err.code).toBe("overloaded");
+    expect(err.statusCode).toBe(529);
+    expect(err.message).toContain("Overloaded");
+  });
+
+  it("classifies overloaded provider text as overload even when status is generic", () => {
+    const err = classifyHttpError(
+      503,
+      "anthropic-sub",
+      "API Error: 529 Overloaded. If it persists, check status.claude.com.",
+    );
+
+    expect(err.code).toBe("overloaded");
+    expect(err.statusCode).toBe(503);
   });
 });
 

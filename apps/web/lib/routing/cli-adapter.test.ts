@@ -71,6 +71,7 @@ import {
   CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE,
   extractMentionedPlatformToolNames,
 } from "./cli-adapter";
+import { InferenceError } from "@/lib/ai-inference";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";
@@ -255,6 +256,50 @@ describe("cliAdapter", () => {
     mockSpawn.mockReturnValue(proc);
 
     await expect(cliAdapter.execute(makeRequest())).rejects.toThrow(/auth failed/i);
+  });
+
+  it("classifies Claude CLI 529 overloaded stderr as overload", async () => {
+    mockGetProviderBearerToken.mockResolvedValue({
+      token: "sk-ant-oat01-test-token",
+    });
+
+    const proc = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: ReturnType<typeof vi.fn>;
+    };
+    proc.stdout = new EventEmitter();
+    proc.stderr = new EventEmitter();
+    proc.kill = vi.fn();
+
+    setTimeout(() => {
+      proc.stderr.emit("data", Buffer.from("API Error: 529 Overloaded. This is a server-side issue."));
+      proc.emit("close", 1);
+    }, 10);
+
+    mockSpawn.mockReturnValue(proc);
+
+    await expect(cliAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "overloaded",
+      providerId: "anthropic-sub",
+    } satisfies Partial<InferenceError>);
+  });
+
+  it("classifies Claude CLI 529 overloaded stdout as overload", async () => {
+    mockGetProviderBearerToken.mockResolvedValue({
+      token: "sk-ant-oat01-test-token",
+    });
+
+    const cliOutput = JSON.stringify({
+      result: "API Error\nAPI Error: 529 Overloaded. This is a server-side issue, usually temporary.",
+      usage: {},
+    });
+    mockSpawn.mockReturnValue(createMockProcess(cliOutput));
+
+    await expect(cliAdapter.execute(makeRequest())).rejects.toMatchObject({
+      code: "overloaded",
+      providerId: "anthropic-sub",
+    } satisfies Partial<InferenceError>);
   });
 
   it("disables Claude Code's native tools via --disallowedTools (BI-931303FF regression)", async () => {
