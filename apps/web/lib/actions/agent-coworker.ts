@@ -430,6 +430,12 @@ export async function sendMessage(input: {
   const isCrossCuttingOverlay = agent.agentId === "AGT-ORCH-000";
 
   let populatedPrompt: string;
+  // Governed Hermes learning Slice 1: active coworker skill (if any).
+  // Set inside the unified-prompt branch when the user message invokes a
+  // known eligible skill via the canonical `Use the <id> skill.` marker.
+  // Threaded through executeAutonomousAgenticLoop so ToolExecution.skillId
+  // attributes each tool call to the active skill.
+  let activeSkillId: string | null = null;
 
   if (useUnified) {
     // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
@@ -590,7 +596,7 @@ export async function sendMessage(input: {
     // vs. selected skills. The active skill id is also propagated through
     // the autonomous loop in Task 7 so ToolExecution.skillId gets populated.
     const candidateSkillId = extractInvokedSkillId(input.content);
-    const activeSkillId =
+    activeSkillId =
       candidateSkillId && eligibleSkillIds.includes(candidateSkillId)
         ? candidateSkillId
         : null;
@@ -1183,6 +1189,7 @@ export async function sendMessage(input: {
       agentDisplayName: agent.agentName,
       buildPhase: activeBuild?.phase ?? null,
       featureBuildId: activeBuild?.id ?? null,
+      activeSkillId,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });

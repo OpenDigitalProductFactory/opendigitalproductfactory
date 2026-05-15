@@ -652,6 +652,14 @@ export async function runAgenticLoop(params: {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
+  /**
+   * Governed Hermes learning Slice 1: active coworker skill for this run.
+   * When set, every governed tool call records the same skillId in
+   * ToolExecution audit rows so reflection and metrics can attribute action
+   * evidence to the originating skill. Null when the run was not triggered
+   * by a specific skill invocation.
+   */
+  activeSkillId?: string | null;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -670,6 +678,7 @@ export async function runAgenticLoop(params: {
     agentDisplayName,
     taskRunId,
     apiTokenId,
+    activeSkillId,
   } = params;
 
   const userContext = await resolveUserContext(userId);
@@ -1361,6 +1370,7 @@ export async function runAgenticLoop(params: {
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
+            skillId: activeSkillId ?? undefined,
           },
           source: "agentic-loop",
         });
@@ -1382,6 +1392,23 @@ export async function runAgenticLoop(params: {
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
+
+      // Governed Hermes learning Slice 1: attribute tool outcome to the
+      // active skill (if any). Fire-and-forget — the SkillUsageEvent writer
+      // catches DB errors so this can never delay the user response.
+      if (activeSkillId) {
+        const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
+        void recordSkillUsageEvents({
+          phase: toolResult.success ? "completed" : "failed",
+          skillIds: [activeSkillId],
+          agentId,
+          userId,
+          threadId,
+          taskRunId: taskRunId ?? null,
+          routeContext,
+          metadata: { toolName: tc.name, iteration, durationMs },
+        });
+      }
     }
 
     // Append ONE assistant message (with toolCalls preserved) + N tool result messages.

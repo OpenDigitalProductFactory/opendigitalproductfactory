@@ -185,6 +185,13 @@ export async function executeAutonomousAgenticLoop(input: {
   featureBuildId?: string | null;
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
+  /**
+   * Governed Hermes learning Slice 1: when the user message invokes a specific
+   * coworker skill (via the canonical `Use the <id> skill.` marker), the
+   * caller threads its skillId through here so subsequent ToolExecution rows
+   * can be attributed to the active skill.
+   */
+  activeSkillId?: string | null;
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -205,6 +212,7 @@ export async function executeAutonomousAgenticLoop(input: {
     agentDisplayName: input.agentDisplayName,
     buildPhase: input.buildPhase,
     featureBuildId: input.featureBuildId,
+    activeSkillId: input.activeSkillId ?? null,
     ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
     onProgress: input.onProgress,
   });

@@ -31,6 +31,13 @@ export type GovernedExecuteContext = {
   routeContext?: string;
   taskRunId?: string;
   apiTokenId?: string;
+  /**
+   * Governed Hermes learning Slice 1: active coworker skill for this call.
+   * Set by runAgenticLoop when the parent run is attributed to a specific
+   * skill invocation. Persisted to ToolExecution.skillId so reflection and
+   * skill metrics can attribute action evidence to the originating skill.
+   */
+  skillId?: string;
 };
 
 export type GovernedExecuteArgs = {
@@ -196,6 +203,7 @@ async function writeAudit(data: {
         (data.durationMs ? ` (${data.durationMs}ms)` : "")
       : null,
     apiTokenId: data.context?.apiTokenId ?? null,
+    skillId: data.context?.skillId ?? null,
   };
   try {
     if (_toolExecutionCreateOverride) {
