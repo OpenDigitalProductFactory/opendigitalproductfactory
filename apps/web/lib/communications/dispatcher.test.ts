@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  deliveryAttemptCreate: vi.fn(),
   notificationCreate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    communicationDeliveryAttempt: { create: mocks.deliveryAttemptCreate },
     notification: { create: mocks.notificationCreate },
   },
 }));
@@ -15,6 +17,7 @@ import { createInAppAdapter } from "./in-app-adapter";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.deliveryAttemptCreate.mockResolvedValue({ attemptId: "attempt-1" });
   mocks.notificationCreate.mockResolvedValue({ id: "notif-1" });
 });
 
@@ -46,6 +49,17 @@ describe("communication dispatcher", () => {
         read: false,
       },
     });
+    expect(mocks.deliveryAttemptCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        channelType: "in-app",
+        targetType: "work-item",
+        targetId: "WI-1",
+        providerMessageId: "notif-1",
+        status: "sent",
+        urgency: "priority",
+      }),
+      select: { attemptId: true },
+    });
   });
 
   it("returns failed when no adapter is registered for the channel", async () => {
@@ -61,5 +75,16 @@ describe("communication dispatcher", () => {
 
     expect(result.status).toBe("failed");
     expect(result.errorCode).toBe("adapter_not_registered");
+    expect(mocks.deliveryAttemptCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        channelType: "teams",
+        targetType: "work-item",
+        targetId: "WI-1",
+        status: "failed",
+        urgency: "priority",
+        errorCode: "adapter_not_registered",
+      }),
+      select: { attemptId: true },
+    });
   });
 });
