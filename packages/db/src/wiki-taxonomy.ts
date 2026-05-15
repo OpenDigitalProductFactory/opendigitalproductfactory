@@ -59,6 +59,44 @@ export const PRINCIPLE_APPLIES_TO = [
 export type PrincipleAppliesTo = (typeof PRINCIPLE_APPLIES_TO)[number];
 
 /**
+ * Consumer archetype — answers "who is expected to consume this principle?"
+ * Independent axis from `PRINCIPLE_APPLIES_TO`; the coherence rule for valid
+ * combinations is in spec section 8A.1 and is enforced by lint, not at the
+ * type layer. Ordered broadest-to-narrowest so retrieval iterates scope tiers
+ * cleanly: universal first, then caller-specific archetypes, then route/domain
+ * narrowed by context. See spec section 8A.
+ */
+export const PRINCIPLE_CONSUMER_ARCHETYPES = [
+  "universal",
+  "ai-coworker-universal",
+  "generalist",
+  "specialist",
+  "route-domain-specific",
+] as const;
+export type PrincipleConsumerArchetype =
+  (typeof PRINCIPLE_CONSUMER_ARCHETYPES)[number];
+
+/**
+ * Example route/domain slugs used as values of `principleConsumerContexts` when
+ * `principleConsumerArchetype = "route-domain-specific"`. These are NOT a
+ * closed enum — `isPrincipleConsumerContextSlug` defines the slug-shape
+ * contract and new contexts are added by authoring without a schema change.
+ * Ordering puts `build-studio` first because it is the most-cited consumer
+ * context in the existing kernel.
+ */
+export const PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES = [
+  "build-studio",
+  "marketing",
+  "compliance",
+  "discovery",
+  "finance",
+  "storefront",
+  "portfolio",
+] as const;
+/** Consumer-context slugs are governed kebab-case strings, not a closed enum. */
+export type PrincipleConsumerContext = string;
+
+/**
  * Option-feature axes that principle dimension vectors can score against.
  * V1 ships a small registry — growth is gated by PR review so the registry
  * stays auditable. See spec section 10.
@@ -157,5 +195,32 @@ export function isPrincipleDimension(
   return (
     typeof value === "string" &&
     (PRINCIPLE_DIMENSIONS as readonly string[]).includes(value)
+  );
+}
+
+export function isPrincipleConsumerArchetype(
+  value: unknown,
+): value is PrincipleConsumerArchetype {
+  return (
+    typeof value === "string" &&
+    (PRINCIPLE_CONSUMER_ARCHETYPES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Kebab-case slug validator for `principleConsumerContexts` entries. Accepts
+ * lowercase alphanumeric characters and single-hyphen separators only. Rejects
+ * leading/trailing hyphens, double hyphens, underscores, whitespace, and
+ * non-string values. Contexts are governed slugs, not a closed enum, so the
+ * shape contract lives here rather than in a hardcoded array.
+ */
+const CONSUMER_CONTEXT_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export function isPrincipleConsumerContextSlug(
+  value: unknown,
+): value is PrincipleConsumerContext {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    CONSUMER_CONTEXT_SLUG_PATTERN.test(value)
   );
 }
