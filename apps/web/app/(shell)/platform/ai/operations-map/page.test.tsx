@@ -10,6 +10,7 @@ vi.mock("@dpf/db", () => ({
     backlogItemActivity: { findMany: vi.fn() },
     externalEvidenceRecord: { findMany: vi.fn() },
     routeDecisionLog: { findMany: vi.fn() },
+    routeOutcome: { findMany: vi.fn() },
     agentMessage: { findMany: vi.fn() },
     modelProvider: { findMany: vi.fn() },
     modelProfile: { findMany: vi.fn() },
