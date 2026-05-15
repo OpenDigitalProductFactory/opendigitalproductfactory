@@ -1,8 +1,8 @@
 # Employee Communication Fabric Design
 
-**Date:** 2026-05-15  
-**Status:** Draft  
-**Related backlog:** BI-INT-8D4F72, EP-INT-2E7C1A  
+**Date:** 2026-05-15
+**Status:** Draft
+**Related backlog:** BI-INT-8D4F72, EP-INT-2E7C1A
 **Related specs:** `2026-03-21-whatsapp-secretary-gateway-design.md`, `2026-04-04-collaborative-work-queue-design.md`, `2026-03-19-mobile-companion-app-design.md`, `2026-04-01-phase-handoff-and-human-authority-engagement-design.md`
 
 ## 1. Goal

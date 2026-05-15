@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-export type AutonomousReviewFailureReason =
+export type ReviewFailureReason =
   | "timeout"
   | "json_parse"
   | "schema_validation"
@@ -10,15 +10,15 @@ export type AutonomousReviewFailureReason =
   | "budget_exhausted"
   | "unknown";
 
-export type AutonomousReviewSkipReason = "operator_disabled" | "auto_paused" | "no_candidates";
+export type ReviewSkipReason = "operator_disabled" | "auto_paused" | "no_candidates";
 
-export type AutonomousReviewerHealthStatus =
-  | "healthy"
-  | "auto_pause_parse_rate"
-  | "auto_pause_unknown_failures"
-  | "auto_pause_degenerate_distribution";
+export type AutoPauseTrigger = "parse_rate" | "unknown_failures" | "degenerate_distribution";
 
-export type AutonomousReviewSettings = {
+export type ReviewerHealth =
+  | { state: "healthy" }
+  | { state: "auto_paused"; trigger: AutoPauseTrigger };
+
+export type ReviewSettings = {
   enabled: boolean;
   cacheTtlDays: number;
   minParseRate: number;
@@ -27,18 +27,20 @@ export type AutonomousReviewSettings = {
   healthWindowSize: number;
 };
 
-type AppSettingClient = {
+export type ReviewRunSummary = {
+  reviewParseSuccessRate?: unknown;
+  reviewFailureReason?: unknown;
+  reviewClassificationHistogram?: unknown;
+};
+
+type PlatformConfigClient = {
   findUnique: (args: {
     where: { key: string };
     select?: { value?: boolean };
   }) => Promise<{ value: unknown } | null>;
 };
 
-type TaskRunClient = {
-  findMany: (args: unknown) => Promise<Array<{ progressPayload: unknown }>>;
-};
-
-const DEFAULT_SETTINGS: AutonomousReviewSettings = {
+const DEFAULT_SETTINGS: ReviewSettings = {
   enabled: true,
   cacheTtlDays: 30,
   minParseRate: 0.5,
@@ -47,7 +49,7 @@ const DEFAULT_SETTINGS: AutonomousReviewSettings = {
   healthWindowSize: 5,
 };
 
-export function classifyAutonomousReviewFailure(error: unknown): AutonomousReviewFailureReason {
+export function classifyReviewFailure(error: unknown): ReviewFailureReason {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   if (message.includes("timeout") || message.includes("timed out")) return "timeout";
   if (message.includes("rate") && message.includes("limit")) return "provider_rate_limit";
@@ -86,7 +88,7 @@ export function validateAutonomousReviewDecisions<T>(
   };
 }
 
-export function assertReviewInputAllowlist(
+export function assertEgressAllowlist(
   input: Record<string, unknown>,
   allowedKeys: readonly string[],
 ): void {
@@ -115,22 +117,22 @@ function parseSettingNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
-export async function loadAutonomousReviewSettings(input: {
-  settingPrefix: string;
-  appSetting?: AppSettingClient | null;
-  defaults?: Partial<AutonomousReviewSettings>;
-}): Promise<AutonomousReviewSettings> {
+export async function loadReviewSettings(input: {
+  namespace: string;
+  platformConfig?: PlatformConfigClient | null;
+  defaults?: Partial<ReviewSettings>;
+}): Promise<ReviewSettings> {
   const defaults = { ...DEFAULT_SETTINGS, ...input.defaults };
-  if (!input.appSetting) return defaults;
+  if (!input.platformConfig) return defaults;
 
-  const key = (suffix: string) => `${input.settingPrefix}.${suffix}`;
+  const key = (suffix: string) => `${input.namespace}.${suffix}`;
   const [enabledRow, ttlRow, minParseRateRow, maxUnknownRow, maxSingleClassRow, windowSizeRow] = await Promise.all([
-    input.appSetting.findUnique({ where: { key: key("enabled") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("cacheTtlDays") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("minParseRate") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("maxUnknownFailuresInWindow") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("maxSingleClassFraction") }, select: { value: true } }),
-    input.appSetting.findUnique({ where: { key: key("healthWindowSize") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("enabled") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("cacheTtlDays") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("minParseRate") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("maxUnknownFailuresInWindow") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("maxSingleClassFraction") }, select: { value: true } }),
+    input.platformConfig.findUnique({ where: { key: key("healthWindowSize") }, select: { value: true } }),
   ]);
 
   return {
@@ -152,12 +154,6 @@ function readRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function readScheduledReviewMetrics(progressPayload: unknown): Record<string, unknown> | null {
-  const progress = readRecord(progressPayload);
-  const summaryPayload = readRecord(progress?.scheduledSummaryPayload);
-  return readRecord(summaryPayload?.metrics);
-}
-
 function singleClassFraction(histogram: unknown): number {
   const record = readRecord(histogram);
   if (!record) return 0;
@@ -169,34 +165,22 @@ function singleClassFraction(histogram: unknown): number {
   return Math.max(...counts) / total;
 }
 
-export async function evaluateAutonomousReviewerHealth(input: {
-  agentId: string;
-  taskRun?: TaskRunClient | null;
+export function evaluateReviewerHealth(input: {
+  history: ReadonlyArray<ReviewRunSummary | null | undefined>;
   thresholds?: Partial<Pick<
-    AutonomousReviewSettings,
+    ReviewSettings,
     "minParseRate" | "maxUnknownFailuresInWindow" | "maxSingleClassFraction" | "healthWindowSize"
   >>;
-}): Promise<AutonomousReviewerHealthStatus> {
-  if (!input.taskRun) return "healthy";
-
+}): ReviewerHealth {
   const thresholds = { ...DEFAULT_SETTINGS, ...input.thresholds };
-  const runs = await input.taskRun.findMany({
-    where: {
-      currentAgentId: input.agentId,
-      progressPayload: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: thresholds.healthWindowSize,
-    select: { progressPayload: true },
-  });
+  const history = input.history.slice(0, thresholds.healthWindowSize);
 
   let parseRateTotal = 0;
   let parseRateCount = 0;
   let unknownFailures = 0;
   let degenerateDistribution = false;
 
-  for (const run of runs) {
-    const metrics = readScheduledReviewMetrics(run.progressPayload);
+  for (const metrics of history) {
     if (!metrics) continue;
 
     const parseRate = metrics.reviewParseSuccessRate;
@@ -211,13 +195,13 @@ export async function evaluateAutonomousReviewerHealth(input: {
   }
 
   if (parseRateCount > 0 && parseRateTotal / parseRateCount < thresholds.minParseRate) {
-    return "auto_pause_parse_rate";
+    return { state: "auto_paused", trigger: "parse_rate" };
   }
   if (unknownFailures > thresholds.maxUnknownFailuresInWindow) {
-    return "auto_pause_unknown_failures";
+    return { state: "auto_paused", trigger: "unknown_failures" };
   }
   if (degenerateDistribution) {
-    return "auto_pause_degenerate_distribution";
+    return { state: "auto_paused", trigger: "degenerate_distribution" };
   }
-  return "healthy";
+  return { state: "healthy" };
 }
