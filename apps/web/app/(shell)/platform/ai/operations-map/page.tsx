@@ -11,6 +11,7 @@ export default async function OperationsMapPage() {
       template={data.template}
       agents={data.agents}
       projections={data.projections}
+      routingTopology={data.routingTopology}
       recentWindowLabel={data.recentWindowLabel}
     />
   );

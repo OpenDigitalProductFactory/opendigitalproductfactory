@@ -7,9 +7,10 @@ import { getPlatformFamily, PLATFORM_FAMILIES } from "@/components/platform/plat
 export function PlatformTabNav() {
   const pathname = usePathname();
   const activeFamily = getPlatformFamily(pathname);
+  const isOperationsMap = pathname === "/platform/ai/operations-map";
 
   return (
-    <div className="mb-6 space-y-3">
+    <div className={isOperationsMap ? "mb-3 space-y-2" : "mb-6 space-y-3"}>
       <div className="flex flex-wrap gap-2 border-b border-[var(--dpf-border)] pb-2">
         {PLATFORM_FAMILIES.map((family) => {
           const isActive = family.key === activeFamily.key;
@@ -31,8 +32,8 @@ export function PlatformTabNav() {
         })}
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm text-[var(--dpf-muted)]">{activeFamily.description}</p>
+      <div className={isOperationsMap ? "space-y-1" : "space-y-2"}>
+        <p className={isOperationsMap ? "sr-only" : "text-sm text-[var(--dpf-muted)]"}>{activeFamily.description}</p>
         <div className="flex flex-wrap gap-2">
           {activeFamily.subItems.map((item) => {
             const isActive =

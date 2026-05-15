@@ -26,6 +26,10 @@ export function classifyProviderTier(providerId: string): ProviderTier {
 import type { QualityTier } from "./quality-tiers";
 import type { ModelCardCapabilities, ModelCardPricing } from "./model-card-types";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
+import {
+  normalizeRouteDecisionActor,
+  type RouteDecisionActor,
+} from "./route-decision-attribution";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -239,14 +243,30 @@ export async function loadOverrides(taskType: string): Promise<EndpointOverride[
 /**
  * Persist a RouteDecision to the audit log.
  */
+type RouteDecisionPersistenceContext = {
+  actor?: RouteDecisionActor | null;
+  /** @deprecated Prefer actor: { kind: "agent", id }. */
+  agentId?: string | null;
+  agentMessageId?: string | null;
+};
+
 export async function persistRouteDecision(
   decision: import("./types").RouteDecision,
-  agentMessageId?: string,
+  context?: string | RouteDecisionPersistenceContext,
   shadowMode = false,
 ): Promise<string> {
+  const agentMessageId = typeof context === "string" ? context : context?.agentMessageId;
+  const actor = normalizeRouteDecisionActor(
+    typeof context === "string"
+      ? null
+      : context?.actor ?? (context?.agentId ? { kind: "agent", id: context.agentId } : null),
+  );
   const record = await prisma.routeDecisionLog.create({
     data: {
       agentMessageId: agentMessageId ?? null,
+      actorKind: actor.actorKind,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
       selectedEndpointId: decision.selectedEndpoint ?? "none",
       selectedModelId: decision.selectedModelId ?? null,
       taskType: decision.taskType,

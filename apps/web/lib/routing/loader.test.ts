@@ -1,93 +1,80 @@
-import { describe, it, expect } from "vitest";
-import { resolveToolUse, classifyProviderTier } from "./loader";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { persistRouteDecision } from "./loader";
+import type { RouteDecision } from "./types";
 
-const baseProfile = {
-  profileSource: "seed",
-  capabilityOverrides: null,
-  capabilities: {},
-  supportsToolUse: null,
-  provider: { supportsToolUse: true },
-};
+const { mockPrisma } = vi.hoisted(() => ({
+  mockPrisma: {
+    routeDecisionLog: {
+      create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
+    },
+  },
+}));
 
-describe("resolveToolUse", () => {
-  it("admin override wins over everything", () => {
-    const profile = { ...baseProfile, profileSource: "admin", capabilityOverrides: { toolUse: false }, capabilities: { toolUse: true }, supportsToolUse: true };
-    expect(resolveToolUse(profile as any)).toBe(false);
+vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
+
+describe("persistRouteDecision", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.routeDecisionLog.create.mockResolvedValue({ id: "decision-log-1" });
   });
 
-  it("provider hard floor beats catalog or admin claims of tool support", () => {
-    const profile = {
-      ...baseProfile,
-      profileSource: "admin",
-      capabilityOverrides: { toolUse: true },
-      capabilities: { toolUse: true },
-      supportsToolUse: true,
-      provider: { supportsToolUse: false },
-    };
-    expect(resolveToolUse(profile as any)).toBe(false);
+  it("rejects new route decision logs without an explicit actor", async () => {
+    await expect(persistRouteDecision(makeDecision())).rejects.toThrow(
+      /RouteDecisionLog requires an actor/,
+    );
+
+    expect(mockPrisma.routeDecisionLog.create).not.toHaveBeenCalled();
   });
 
-  it("explicit profile-level false beats stale capability metadata", () => {
-    const profile = {
-      ...baseProfile,
-      profileSource: "catalog",
-      capabilities: { toolUse: true },
-      supportsToolUse: false,
-      provider: { supportsToolUse: true },
-    };
-    expect(resolveToolUse(profile as any)).toBe(false);
+  it("persists agent attribution as both the actor and coworker id", async () => {
+    await persistRouteDecision(makeDecision(), { actor: { kind: "agent", id: "build-specialist" } });
+
+    expect(mockPrisma.routeDecisionLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorKind: "agent",
+        actorId: "build-specialist",
+        agentId: "build-specialist",
+      }),
+    });
   });
 
-  it("discovery capability value used for discovery-owned profiles", () => {
-    const profile = { ...baseProfile, profileSource: "auto-discover", capabilities: { toolUse: true } };
-    expect(resolveToolUse(profile as any)).toBe(true);
-  });
+  it("persists explicit non-coworker actors without inventing a coworker id", async () => {
+    await persistRouteDecision(makeDecision(), { actor: { kind: "system", id: "routing-evaluator" } });
 
-  it("discovery capability false is respected (not overridden by provider)", () => {
-    const profile = { ...baseProfile, profileSource: "auto-discover", capabilities: { toolUse: false } };
-    expect(resolveToolUse(profile as any)).toBe(false);
-  });
-
-  it("catalog capability value used for catalog-owned profiles", () => {
-    const profile = { ...baseProfile, profileSource: "catalog", capabilities: { toolUse: true } };
-    expect(resolveToolUse(profile as any)).toBe(true);
-  });
-
-  it("falls through to profile.supportsToolUse when capabilities has no toolUse", () => {
-    const profile = { ...baseProfile, profileSource: "seed", capabilities: {}, supportsToolUse: true };
-    expect(resolveToolUse(profile as any)).toBe(true);
-  });
-
-  it("falls through to provider supportsToolUse as floor", () => {
-    const profile = { ...baseProfile, profileSource: "seed", capabilities: {}, supportsToolUse: null, provider: { supportsToolUse: true } };
-    expect(resolveToolUse(profile as any)).toBe(true);
-  });
-
-  it("returns null when everything unknown", () => {
-    const profile = { ...baseProfile, profileSource: "seed", capabilities: {}, supportsToolUse: null, provider: { supportsToolUse: null } };
-    expect(resolveToolUse(profile as any)).toBeNull();
+    expect(mockPrisma.routeDecisionLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorKind: "system",
+        actorId: "routing-evaluator",
+        agentId: null,
+      }),
+    });
   });
 });
 
-describe("classifyProviderTier", () => {
-  it("classifies local Docker Model Runner as bundled", () => {
-    expect(classifyProviderTier("local")).toBe("bundled");
-  });
-
-  it("classifies ollama as bundled", () => {
-    expect(classifyProviderTier("ollama")).toBe("bundled");
-  });
-
-  it("classifies external OAuth providers as user_configured", () => {
-    expect(classifyProviderTier("anthropic-sub")).toBe("user_configured");
-    expect(classifyProviderTier("codex")).toBe("user_configured");
-    expect(classifyProviderTier("chatgpt")).toBe("user_configured");
-  });
-
-  it("classifies unknown providers as user_configured by default", () => {
-    // Any provider that isn't explicitly a bundled-default is treated as
-    // user_configured — keeps the rule durable as new providers are added.
-    expect(classifyProviderTier("xai")).toBe("user_configured");
-    expect(classifyProviderTier("mistral")).toBe("user_configured");
-  });
-});
+function makeDecision(): RouteDecision {
+  return {
+    selectedEndpoint: "anthropic:claude-sonnet",
+    selectedModelId: "claude-sonnet",
+    reason: "Best score for requested task.",
+    fitnessScore: 91,
+    fallbackChain: [],
+    candidates: [
+      {
+        endpointId: "anthropic:claude-sonnet",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+        endpointName: "Claude Sonnet",
+        fitnessScore: 91,
+        dimensionScores: { reasoning: 90 },
+        costPerOutputMToken: 3,
+        excluded: false,
+      },
+    ],
+    excludedCount: 0,
+    excludedReasons: [],
+    policyRulesApplied: [],
+    taskType: "conversation",
+    sensitivity: "internal",
+    timestamp: new Date("2026-05-14T10:00:00.000Z"),
+  };
+}

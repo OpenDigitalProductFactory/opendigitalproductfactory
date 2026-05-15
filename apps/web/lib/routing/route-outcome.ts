@@ -19,6 +19,7 @@ export interface RouteOutcomeInput {
   recipeId: string | null;
   contractFamily: string;
   taskType: string;
+  agentId?: string | null;
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
@@ -50,6 +51,7 @@ export async function recordRouteOutcome(outcome: RouteOutcomeInput): Promise<vo
         recipeId: outcome.recipeId,
         contractFamily: outcome.contractFamily,
         taskType: outcome.taskType,
+        agentId: outcome.agentId ?? null,
         latencyMs: outcome.latencyMs,
         inputTokens: outcome.inputTokens,
         outputTokens: outcome.outputTokens,

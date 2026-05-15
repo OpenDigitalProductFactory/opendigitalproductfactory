@@ -287,6 +287,43 @@ References:
 
 ## Visual Grammar
 
+### V2 provider-routing topology addendum
+
+The Operations Map V2 provider-routing layer is a topology overlay for AI coworker traffic. It answers a narrower operator question than the business-flow map: which coworker routed to which provider, why did the route change, what provider pressure caused the change, and what scheduled work is likely to hit the route next.
+
+The visual metaphor is a schematic transit/network topology:
+
+- **Coworker nodes** sit on the left/top side of the map.
+- **Provider nodes** sit on the right/bottom side of the map.
+- **Route-decision nodes** sit between them.
+- **Traffic paths** are curved SVG routes with arrowheads; path style communicates state, while glyphs and text labels carry the accessible meaning.
+- **The bottom rail** is temporal: history, current routing, and future schedule markers share the same coordinate system so replay and forecast do not move the topology itself.
+
+Symbol grammar:
+
+| Symbol | Meaning | Data source | Rendering rule |
+| --- | --- | --- | --- |
+| Diamond / route branch | Router selected, rejected, or reranked a provider | `RouteDecisionLog.reason`, `candidateTrace`, `excludedTrace` | Solid active route through the selected endpoint; inspector shows reason and fitness score |
+| Gauge / meter | Hourly limit, spend ceiling, subscription burn, or use-it-or-lose-it pressure | `TokenUsage`, provider finance/capacity profile, route reason text when structured quota fields are absent | Marker appears on the route or provider; never rely on orange color alone |
+| Octagon with X | Hard provider error, auth failure, unavailable model, 5xx, or tool/runtime failure | `RouteDecisionLog.fallbacksUsed`, `excludedTrace`, failed runtime rows | Dashed failover line plus explicit error glyph and label |
+| Clock / calendar | Scheduled future coworker work, calendar event, provider re-enable, or quota reset | `ScheduledAgentTask`, `ScheduledJob`, `CalendarEvent` when linked to AI/provider work | Dotted forecast route and future marker on the bottom rail |
+| Shield / lock | Sensitivity, governance, local-only routing, tool grant, or approval boundary | `RouteDecisionLog.sensitivity`, policy rules, agent/tool grants, provider clearance | Gate marker between coworker and provider; inspector links to authority/routing surfaces |
+| Server / cloud | Local LLM versus cloud/native provider | `ModelProvider.category`, `baseUrl`, `endpointType`, `cliEngine` | Node icon differentiates local fallback from cloud provider without relying on text alone |
+
+Line grammar:
+
+- **Selected active route:** solid line with directional arrow.
+- **Healthy secondary traffic:** solid thinner line.
+- **Failover or degraded route:** dashed line with warning/error symbol.
+- **Scheduled or forecast route:** dotted line with clock symbol.
+- **Historical route:** muted line; selected replay event restores its full state.
+
+Accessibility constraints:
+
+- Color is never the only state channel. State must be carried by at least two of: line style, shape, icon, text label, or inspector label.
+- Motion is an enhancement only. Reduced-motion mode renders static route pulses and keeps the same timeline markers and `aria-label` text.
+- The topology layout stays stable while replaying history or previewing future work; only route emphasis and marker state changes.
+
 ### Core objects
 
 | Visual object | Meaning | Data source |

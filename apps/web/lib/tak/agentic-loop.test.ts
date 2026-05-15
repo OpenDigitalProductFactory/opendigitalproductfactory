@@ -47,14 +47,17 @@ function mockResult(overrides: {
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   inputTokens?: number;
   outputTokens?: number;
+  providerId?: string;
+  modelId?: string;
+  toolsStripped?: boolean;
 }) {
   return {
     content: overrides.content,
-    providerId: "anthropic-sub",
-    modelId: "claude-haiku-4-5-20251001",
+    providerId: overrides.providerId ?? "anthropic-sub",
+    modelId: overrides.modelId ?? "claude-haiku-4-5-20251001",
     downgraded: false,
     downgradeMessage: null,
-    toolsStripped: false,
+    toolsStripped: overrides.toolsStripped ?? false,
     inputTokens: overrides.inputTokens ?? 100,
     outputTokens: overrides.outputTokens ?? 50,
     toolCalls: overrides.toolCalls ?? [],
@@ -348,6 +351,77 @@ describe("runAgenticLoop", () => {
         }),
       }),
     );
+  });
+
+  it("returns a visible diagnostic instead of issuing a second local-model nudge on non-build tool turns", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "I can check that for you.",
+      providerId: "local",
+      modelId: "docker.io/ai/gemma4:latest",
+      toolCalls: [],
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/finance",
+      agentId: "finance-agent",
+      tools: [{ name: "get_finance_summary", description: "Get finance summary", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false }],
+      toolsForProvider: [{ type: "function", function: { name: "get_finance_summary", description: "Get finance summary", parameters: {} } }],
+    });
+
+    expect(mockRoute).toHaveBeenCalledTimes(1);
+    expect(result.providerId).toBe("local");
+    expect(result.content).toContain("routed to Docker Model Runner");
+    expect(result.content).toContain("did not produce the required tool call");
+  });
+
+  it("does not surface raw tool_use JSON when a non-build tool loop hits the runtime limit", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+    const dateNow = vi.spyOn(Date, "now");
+
+    dateNow
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(2)
+      .mockReturnValueOnce(3)
+      .mockReturnValue(121_000);
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: '{"type":"tool_use","id":"toolu_12","name":"doc_search","input":{"query":"month-to-date P&L"}}',
+      providerId: "codex",
+      modelId: "gpt-5.3-codex",
+      toolCalls: [
+        {
+          id: "toolu_12",
+          name: "doc_search",
+          arguments: { query: "month-to-date P&L" },
+        },
+      ],
+    }));
+    mockExecuteTool.mockResolvedValueOnce({
+      success: true,
+      message: "No matching documents found.",
+    });
+
+    try {
+      const result = await runAgenticLoop({
+        ...baseParams,
+        routeContext: "/finance",
+        agentId: "finance-agent",
+        tools: [{ name: "doc_search", description: "Search docs", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false }],
+        toolsForProvider: [{ type: "function", function: { name: "doc_search", description: "Search docs", parameters: {} } }],
+      });
+
+      expect(result.executedTools).toHaveLength(1);
+      expect(result.content).not.toContain('"type":"tool_use"');
+      expect(result.content).not.toContain("toolu_12");
+      expect(result.content).toContain("runtime limit");
+      expect(result.content).toContain("doc_search");
+    } finally {
+      dateNow.mockRestore();
+    }
   });
 
   it("forwards taskRunId into governedExecuteTool context on every tool call", async () => {

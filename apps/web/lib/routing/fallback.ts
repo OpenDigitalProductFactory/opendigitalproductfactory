@@ -16,6 +16,10 @@ import {
   shouldReconcileProviderAfterError,
 } from "@/lib/inference/provider-reconciliation";
 
+type RouteOutcomeAttribution = {
+  agentId?: string | null;
+};
+
 export interface FallbackResult {
   providerId: string;
   modelId: string;
@@ -39,6 +43,7 @@ export async function callWithFallbackChain(
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
   mcpSession?: import("./adapter-types").AdapterMcpSession,
+  outcomeAttribution?: RouteOutcomeAttribution,
 ): Promise<FallbackResult> {
   if (!decision.selectedEndpoint) {
     throw new Error(
@@ -76,6 +81,7 @@ export async function callWithFallbackChain(
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
   let rateLimitRetried = false;
+  const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i]!;
@@ -123,6 +129,7 @@ export async function callWithFallbackChain(
         recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
         contractFamily: plan?.contractFamily ?? decision.taskType,
         taskType: decision.taskType,
+        agentId,
         latencyMs: result.inferenceMs,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
@@ -265,6 +272,7 @@ export async function callWithFallbackChain(
           recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
           contractFamily: plan?.contractFamily ?? decision.taskType,
           taskType: decision.taskType,
+          agentId,
           latencyMs: 0,
           inputTokens: 0,
           outputTokens: 0,
