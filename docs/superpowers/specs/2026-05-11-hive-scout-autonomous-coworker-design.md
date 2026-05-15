@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-05-11 (Phase 1 landed 2026-05-11; Phase 2 ambiguity review in flight 2026-05-12) |
-| Status | Phase 1 landed in main (`feat(ai): land Hive Scout taskrun phase 1 cleanly` #488). Phase 2 (autonomous ambiguity review) in progress per `docs/superpowers/plans/2026-05-12-hive-scout-v2-ambiguity-review.md`. Phases 3–4 (proceduralization loop, burn-rate-aware scheduling) deferred. |
+| Date | 2026-05-11 (Phase 1 landed 2026-05-11; Phase 2 landed 2026-05-15) |
+| Status | Phase 1 landed in main (`feat(ai): land Hive Scout taskrun phase 1 cleanly` #488). Phase 2 landed in main (`feat(ai): add Hive Scout ambiguity review` #620). Substrate validated by a second consumer (`feat(discovery): add bounded triage review substrate` #624). Phases 3–4 (proceduralization loop, burn-rate-aware scheduling) deferred and unblocked. |
 | Related repo areas | `apps/web/lib/actions/hive-scout/ingest-500-agents.ts`, `apps/web/lib/actions/hive-scout/ingest-500-agents.test.ts`, `apps/web/lib/actions/hive-scout/ingest-500-agents-run.test.ts`, `apps/web/lib/queue/functions/hive-scout-ingest.ts`, `apps/web/lib/mcp-tools.ts`, `apps/web/scripts/hive-scout-manual-run.ts`, `apps/web/lib/actions/agent-task-scheduler.ts`, `apps/web/lib/actions/agent-task-scheduler-summary.ts`, `apps/web/lib/tak/scheduled-task-runs.ts`, `apps/web/lib/ai-operations-map/*`, `skills/platform/scout-external-catalogs.skill.md`, `prompts/templates/hive-scout-archetype-gap.prompt.md` |
 | Related specs | `2026-05-11-autonomous-coworker-runtime-design.md`, `2026-04-27-routing-control-data-plane-design.md`, `2026-04-23-ai-provider-finance-bridge-design.md`, `2026-04-18-purpose-first-product-estate-design.md` |
 | Related plan | `docs/superpowers/plans/2026-05-12-hive-scout-v2-ambiguity-review.md` |
@@ -239,13 +239,17 @@ Slice 2 emits per-run reviewer telemetry through the existing `TaskRun` summary 
 | `reviewFailureReason` | enum from §4.4 | kill-switch trigger source |
 | `reviewSkipReason` | `"operator_disabled" \| "no_subscription_lagging" \| ...` | audit trail for skipped runs |
 
-**Kill-switch trigger conditions.** The reviewer is automatically paused (next run sets `reviewSkipReason: "auto_paused"`) and an admin notification is filed when, over the last 5 runs:
+**Kill-switch trigger conditions.** The reviewer is automatically paused (next run sets `reviewSkipReason: "auto_paused"`) and an admin notification is filed when, over the rolling health window (default 5 runs, operator-tunable):
 
 - `reviewParseSuccessRate < 0.5` (output contract collapsing), or
 - `reviewFailureReason == "unknown"` appears more than once (uncategorized failure mode), or
 - `reviewClassificationHistogram` shows ≥ 90% in a single class (degenerate output).
 
-Auto-pause is a soft pause — operator clears it by flipping `hive-scout.review.enabled` after addressing the root cause. This pattern keeps the platform's "evidence before diagnosis" doctrine front-of-mind: the spec does not let the reviewer fail silently or self-degrade indefinitely.
+A window with zero `reviewed` runs (everything was skipped, deterministic-only, or cached) is treated as healthy — the reviewer cannot be auto-paused without evidence. Auto-pause is a soft pause; operator clears it by flipping `hive-scout.review.enabled` after addressing the root cause. This pattern keeps the platform's "evidence before diagnosis" doctrine front-of-mind: the spec does not let the reviewer fail silently or self-degrade indefinitely.
+
+**Shared substrate.** The reviewer controls (failure-classification, settings loading, egress allowlist enforcement, schema validation, health evaluation) are extracted into a TAK-level reusable module at `apps/web/lib/tak/bounded-autonomous-review.ts`. Hive Scout is the first consumer; the next bounded autonomous reviewer in the platform (e.g., a future build-studio output classifier or hive-contribution gatekeeper) reuses the same substrate without re-deriving these invariants. This is a deliberate proceduralization step in line with §4.3 — bounded-reviewer scaffolding is repeatable and belongs in code, not per-feature plans.
+
+**Validated by a second consumer (PR #624).** Within three days of the substrate landing, [`apps/web/lib/discovery-triage-review.ts`](apps/web/lib/discovery-triage-review.ts) (the discovery-triage bounded review wrapper) became the second consumer. It re-exports `ReviewFailureReason`, `ReviewSkipReason`, and `AutoPauseTrigger` from the substrate and adds discovery-triage-specific ergonomics (`attachBoundedReview`, `DISCOVERY_TRIAGE_REVIEW_*`, decision-outcome shapes) without widening the substrate API. The substrate's "no domain-specific symbols" rule held, which is the architectural test that matters: future bounded reviewers should follow the same pattern — substrate at `lib/tak/`, domain wrapper next to the consumer, no leakage in either direction.
 
 ## 6. Use-It-or-Lose-It Scheduling Policy
 
@@ -442,6 +446,8 @@ Per [`AGENTS.md`](AGENTS.md) §10, every feature spec compares prior art and exp
 | [`ashishpatel26/500-AI-Agents-Projects`](https://github.com/ashishpatel26/500-AI-Agents-Projects) (MIT) | Curated README catalog of ~500 open-source agent projects, hand-maintained, framework-tagged. | Catalog-as-data source; framework taxonomy (`crewai`, `autogen`, `agno`, `langgraph`); MIT license posture (reference, not vendor). | Hand-curation as the only quality gate — we add deterministic dedupe and bounded AI review on top. |
 | [`e2b-dev/awesome-ai-agents`](https://github.com/e2b-dev/awesome-ai-agents) (MIT) | "Awesome list" pattern: hand-curated, README-only, no machine-readable schema. | Public-data egress posture; the "scout reads catalogs" framing. | Plain awesome-list as source — has no value-stream alignment and high duplication; would force more LLM work than necessary. |
 | [`microsoft/autogen`](https://github.com/microsoft/autogen) tool-discovery patterns | Multi-agent runtime with structured tool registration. | Bounded tool grants per agent; reviewer cannot fetch/parse/write. | Free-form multi-agent conversation as the discovery primitive — too unbounded for a periodic scout. |
+| [`jxnl/instructor`](https://github.com/jxnl/instructor) and [`pydantic/pydantic-ai`](https://github.com/pydantic/pydantic-ai) (MIT/Apache) | Schema-validated structured output from LLMs via Pydantic / Zod-style models, including retry-on-validation-failure. | Strict typed-output contract enforced before downstream code touches the result; treat schema validation as a first-class layer, not a post-hoc check. | Built-in retry-on-validation-failure — Hive Scout silently drops invalid entries (per §4.4) instead of retrying, because retries would defeat `budget class: minimize_cost` and the deterministic path picks up anything dropped. |
+| [`langchain-ai/langchain`](https://github.com/langchain-ai/langchain) output parsers | Per-call output-parser objects, often with auto-fix LLM passes when parsing fails. | The "output parser as contract layer" framing — parser is part of the call site, not a downstream concern. | Auto-fix passes that re-call the LLM to repair malformed JSON — cost-unbounded, masks prompt drift. Hive Scout treats malformed JSON as a typed `reviewFailureReason: "json_parse"` instead. |
 
 ### 9.2 Commercial comparators
 
