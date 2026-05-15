@@ -12,7 +12,10 @@ import {
   type CoworkerSkill,
 } from "@/lib/skills/runtime";
 
-export type { CoworkerSkill };
+// Type re-export removed: files marked "use server" may only export async
+// functions in Next.js, so consumers should import CoworkerSkill from
+// `@/lib/skills/runtime` directly. No current import sites referenced the
+// re-export; verified via repo grep before removal.
 
 export async function getSkillsForAgent(agentId: string): Promise<CoworkerSkill[]> {
   return runtimeGetSkillsForAgent(agentId);
