@@ -21,6 +21,13 @@ type Props = {
   userContext: UserContext;
   marketingSkillRules?: Record<string, MarketingSkillRule> | null;
   onSend: (prompt: string) => void;
+  /**
+   * Governed Hermes learning Slice 1 callback. When set, AgentCoworkerPanel
+   * receives the full skill object on click so it can show a compact
+   * AgentSkillAttributionChip while the request is in flight. Falls back to
+   * onSend(skill.prompt) when omitted, preserving the original contract.
+   */
+  onSendSkill?: (skill: { skillId: string; label: string; prompt: string }) => void;
   onCreateSkill: () => void;
 };
 
@@ -111,6 +118,7 @@ function handleHoverOut(e: React.MouseEvent<HTMLButtonElement>) {
 export function AgentSkillsDropdown({
   skills,
   userSkills,
+  onSendSkill,
   userContext,
   marketingSkillRules,
   onSend,
@@ -261,7 +269,15 @@ export function AgentSkillsDropdown({
                   key={skill.skillId ?? skill.prompt}
                   type="button"
                   onClick={() => {
-                    onSend(skill.prompt);
+                    if (onSendSkill && skill.skillId) {
+                      onSendSkill({
+                        skillId: skill.skillId,
+                        label: skill.label,
+                        prompt: skill.prompt,
+                      });
+                    } else {
+                      onSend(skill.prompt);
+                    }
                     setIsOpen(false);
                   }}
                   style={skillButtonStyle}
