@@ -56,6 +56,12 @@ services:
     build:
       context: .
       target: runner
+      args:
+        # Stamps the build's source identity into /app/.dpf-image-version.
+        # Set DPF_VERSION=$(git rev-parse HEAD) before `docker compose build`,
+        # or use scripts/build-images.{ps1,sh} which does it for you. When
+        # unset, the Dockerfile falls back to a content hash of the source.
+        DPF_VERSION: ${DPF_VERSION:-}
     command: ["/docker-entrypoint.sh"]
     volumes:
       - dpf-source-code:/workspace
@@ -73,6 +79,9 @@ services:
     build:
       context: .
       target: runner
+      args:
+        # See portal-init.build.args.DPF_VERSION above for the convention.
+        DPF_VERSION: ${DPF_VERSION:-}
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -170,6 +179,9 @@ services:
     build:
       context: .
       target: runner
+      args:
+        # See portal-init.build.args.DPF_VERSION above for the convention.
+        DPF_VERSION: ${DPF_VERSION:-}
     command: ["/docker-entrypoint.sh"]
     environment:
       DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
