@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getWorkspaceTiles } from "@/lib/permissions";
+import { buildWorkspaceCommandCenterView } from "@/lib/workspace/command-center";
 
 describe("workspace tile derivation", () => {
   it("HR-500 sees Backlog tile", () => {
@@ -24,5 +25,9 @@ describe("workspace tile derivation", () => {
     expect(tiles).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: "documents", route: "/workspace/documents" }),
     ]));
+  });
+
+  it("keeps the command center projection importable from the workspace page package", () => {
+    expect(typeof buildWorkspaceCommandCenterView).toBe("function");
   });
 });
