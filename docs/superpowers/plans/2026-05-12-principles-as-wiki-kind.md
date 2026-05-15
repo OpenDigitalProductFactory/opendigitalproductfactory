@@ -1,6 +1,6 @@
 # Principles as a Wiki Kind - Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Phase A is one PR; Phase B is an independent PR; do not bundle.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Phase A is one PR. Phase B was retired post-merge (already shipped — see spec §9.3); skip it.
 
 | Field | Value |
 |-------|-------|
@@ -12,7 +12,7 @@
 | **Branch base for all phases** | `origin/main` per `feedback_worktree_base_origin_main.md` |
 | **Backlog linkage** | REQUIRED before any PR opens — see Phase -1 below |
 
-**Goal:** Land the remaining consumer-archetype axis on top of the already-shipped `principle` wiki kind, back-fill the 41 existing principle pages, add advisory decision support, wire retrieval and MCP, ship lint with coherence enforcement, deliver tier-first UI with consumer-archetype filter chips, and generate the Jekyll public-docs page. Separately, close the kernel-slug uniqueness gap.
+**Goal:** Land the remaining consumer-archetype axis on top of the already-shipped `principle` wiki kind, back-fill the 41 existing principle pages, add advisory decision support, wire retrieval and MCP, ship lint with coherence enforcement, deliver tier-first UI with consumer-archetype filter chips, and generate the Jekyll public-docs page. The kernel-slug uniqueness gap originally carved out as Phase B is already closed; see spec §9.3.
 
 **Architecture:** Spec [`2026-05-12-principles-as-wiki-kind-design.md`](../specs/2026-05-12-principles-as-wiki-kind-design.md) is the authority. This plan is the task breakdown.
 
@@ -61,7 +61,7 @@ Plus, per memory feedback:
 
 20 percent of every PR is reserved for cleanup, deletions, and consistency fixes per `feedback_zero_technical_debt.md`. Each PR description must name what was retired.
 
-This plan has one explicit refactor item already carved out: Phase B closes the kernel-slug uniqueness gap as its own small PR rather than coupling it to principle work.
+The kernel-slug uniqueness gap originally carved out as Phase B was already closed in the prior principle migration; that Phase B is retired (see spec §9.3 and the Phase B section below).
 
 ---
 
@@ -423,53 +423,12 @@ pnpm --filter web exec vitest run                    # full web suite before pus
 - Overlap-sweep snapshot (recent main + open PRs).
 - Refactor-budget items retired.
 - UX verification screenshots for `/wiki?kind=principle`, principle detail, lint admin, and `/principles/` Jekyll preview.
-- Note that Phase B (kernel-slug uniqueness) is independent and tracked separately.
 
 ---
 
-## Phase B — Kernel slug uniqueness (independent refactor PR)
+## Phase B — Retired (already shipped)
 
-**Branch:** `fix/wikipage-kernel-slug-uniqueness`
-
-**Objective:** Close the wiki-platform correctness gap where `@@unique([organizationId, slug])` does not constrain rows where `organizationId IS NULL`. Not coupled to Phase A — ships independently and can land before, alongside, or after.
-
-**Files to create:** `packages/db/prisma/migrations/<timestamp>_guard_kernel_wikipage_slug_uniqueness/migration.sql`
-
-**Files to modify:** `packages/db/src/wiki-store.test.ts` (regression test).
-
-### Task B.1 — Migration
-
-- [ ] **Write failing regression test** in `wiki-store.test.ts`: inserting two kernel rows (`organizationId IS NULL`) with the same `slug` must fail with a unique-constraint error. Inserting an org overlay (`organizationId = "<id>"`) with the same `slug` as a kernel row remains legal.
-- [ ] **Run test, verify it fails** (current schema allows the duplicate).
-- [ ] **Create the migration:**
-
-```sql
-CREATE UNIQUE INDEX IF NOT EXISTS "WikiPage_kernel_slug_key"
-  ON "WikiPage"("slug")
-  WHERE "organizationId" IS NULL;
-```
-
-- [ ] **Apply migration:** `pnpm --filter @dpf/db exec prisma migrate dev`.
-- [ ] **Run test, verify it passes.**
-- [ ] **Run full DB workspace tests:** all green.
-- [ ] **Commit (signed):** `fix(db): guard kernel WikiPage.slug uniqueness when organizationId is NULL`.
-
-### Phase B Verification
-
-```powershell
-pnpm --filter @dpf/db exec vitest run src/wiki-store.test.ts
-pnpm --filter @dpf/db exec prisma migrate status
-pnpm --filter web typecheck
-pnpm --filter web build
-```
-
-**Exit criteria:**
-
-- Two kernel rows cannot share a `slug`.
-- Org overlay rows with the same `slug` as a kernel row remain legal.
-- No existing kernel row pre-violates the new uniqueness — if any do, surface them in the PR and resolve before merge.
-
-**PR title:** `fix(db): guard kernel WikiPage.slug uniqueness when organizationId is NULL`.
+Originally scoped as an independent refactor PR to close the kernel-slug uniqueness gap. Verified post-merge on 2026-05-15 to be already shipped in `20260513000000_add_principle_fields_to_wikipage` — see spec §9.3 for the verified migration excerpt. Do not start this phase; the partial unique index is live.
 
 ---
 
@@ -515,8 +474,7 @@ After Phase A merges:
 
 ## Plan Review Checklist (run plan-document-reviewer before committing)
 
-- [ ] Phase A and Phase B both have explicit branch names, file lists, TDD-shaped tasks, verification commands, and exit criteria.
-- [ ] Phase A does not depend on Phase B and vice versa.
+- [ ] Phase A has an explicit branch name, file list, TDD-shaped tasks, verification commands, and exit criteria. (Phase B is retired — see above.)
 - [ ] Every code change is preceded by a failing test.
 - [ ] Every test command is a workspace-pinned `pnpm --filter` invocation.
 - [ ] Continuous overlap sweep is required before every push, not only at session start.
