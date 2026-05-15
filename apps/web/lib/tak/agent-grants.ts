@@ -196,6 +196,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
 
+  // Finance
+  get_finance_period_summary:   ["financial_report_create"],
+
   // Marketing / Storefront
   get_marketing_summary:        ["marketing_read"],
   suggest_campaign_ideas:       ["marketing_read"],
