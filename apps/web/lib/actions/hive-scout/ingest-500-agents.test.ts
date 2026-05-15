@@ -388,6 +388,8 @@ describe("runHiveScoutIngest ambiguity review", () => {
     expect(result.reviewCacheHitRate).toBe(1);
     expect(result.reviewBatchSize).toBe(0);
     expect(result.reviewParseSuccessRate).toBe(1);
+    expect(result.reviewLatencyMs).toBeNull();
+    expect(result.autoPauseTrigger).toBeNull();
   });
 
   it("records schema drops when reviewer output violates the strict decision contract", async () => {
@@ -505,6 +507,8 @@ describe("runHiveScoutIngest ambiguity review", () => {
 
     expect(reviewerCalls).toBe(0);
     expect(result.reviewSkipReason).toBe("auto_paused");
+    expect(result.autoPauseTrigger).toBe("parse_rate");
+    expect(result.reviewLatencyMs).toBeNull();
     expect(result.created).toBe(2);
   });
 

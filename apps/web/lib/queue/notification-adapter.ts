@@ -1,4 +1,6 @@
-import { prisma } from "@dpf/db";
+import type { CommunicationAdapter, CommunicationUrgency } from "@/lib/communications/channel-types";
+import { createCommunicationDispatcher } from "@/lib/communications/dispatcher";
+import { createInAppAdapter } from "@/lib/communications/in-app-adapter";
 
 export interface QueueNotification {
   recipientUserId: string;
@@ -9,35 +11,34 @@ export interface QueueNotification {
   deepLink?: string;
 }
 
-export interface NotificationAdapter {
-  channel: string;
-  send(notification: QueueNotification): Promise<void>;
-}
+const adapters: CommunicationAdapter[] = [createInAppAdapter()];
 
-// Built-in in-app adapter — writes to existing Notification model
-export const inAppAdapter: NotificationAdapter = {
-  channel: "in-app",
-  async send(notification) {
-    await prisma.notification.create({
-      data: {
-        userId: notification.recipientUserId,
-        type: "work-queue",
-        title: notification.title,
-        body: notification.body,
-        deepLink: notification.deepLink ?? "/workspace/my-queue",
-        read: false,
-      },
-    });
-  },
-};
-
-// Registry of active adapters — pluggable, new channels added here
-const adapters: NotificationAdapter[] = [inAppAdapter];
-
-export function registerAdapter(adapter: NotificationAdapter): void {
+export function registerAdapter(adapter: CommunicationAdapter): void {
   adapters.push(adapter);
 }
 
 export async function sendQueueNotification(notification: QueueNotification): Promise<void> {
-  await Promise.allSettled(adapters.map((a) => a.send(notification)));
+  const dispatcher = createCommunicationDispatcher(adapters);
+  await dispatcher.send({
+    channel: "in-app",
+    target: {
+      targetType: "work-item",
+      targetId: notification.workItemId,
+      recipientUserId: notification.recipientUserId,
+    },
+    title: notification.title,
+    body: notification.body,
+    urgency: normalizeUrgency(notification.urgency),
+    deepLink: notification.deepLink,
+  });
+}
+
+function normalizeUrgency(urgency: string): CommunicationUrgency {
+  return urgency === "emergency"
+    ? "emergency"
+    : urgency === "urgent"
+      ? "urgent"
+      : urgency === "priority"
+        ? "priority"
+        : "routine";
 }

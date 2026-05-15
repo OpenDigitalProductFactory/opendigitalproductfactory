@@ -5,6 +5,8 @@
 **Epic:** EP-SECRETARY-001  
 **Goal:** Add a WhatsApp-first company secretary that can communicate through a single company identity, act within the authority of validated employees, serve unknown/public contacts in a limited mode, and route cross-human asks into the platform's governed queue.
 
+**Relationship:** This is now a channel-specific slice under the broader Employee Communication Fabric design in `docs/superpowers/specs/2026-05-15-employee-communication-fabric-design.md`. Keep WhatsApp-specific runtime, binding, and secretary behavior here; keep cross-channel dispatch, employee reachability, provider priority, and delivery evidence rules in the broader fabric spec.
+
 ---
 
 ## 1. Problem Statement

@@ -90,6 +90,16 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
+          title="Employee Communications Fabric"
+          description="Governed employee reachability, delivery evidence, and channel-adapter readiness across DPF-owned and external messaging surfaces."
+          href="/platform/tools/integrations/communications"
+          accent="var(--dpf-info)"
+          metrics={[
+            { label: "Category", value: "Employee Communications" },
+            { label: "Model", value: "Fabric" },
+          ]}
+        />
+        <PlatformSummaryCard
           title="HubSpot CRM & Marketing"
           description="Marketing and CRM anchor for account details, contacts, and lead-capture forms on the enterprise substrate."
           href="/platform/tools/integrations/hubspot"

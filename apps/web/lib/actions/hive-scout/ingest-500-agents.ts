@@ -17,13 +17,15 @@ import { z } from "zod";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
 import { sendQueueNotification } from "@/lib/queue/notification-adapter";
 import {
-  assertReviewInputAllowlist,
-  classifyAutonomousReviewFailure,
-  evaluateAutonomousReviewerHealth,
-  loadAutonomousReviewSettings,
+  assertEgressAllowlist,
+  classifyReviewFailure,
+  evaluateReviewerHealth,
+  loadReviewSettings,
   validateAutonomousReviewDecisions,
-  type AutonomousReviewFailureReason,
-  type AutonomousReviewSkipReason,
+  type AutoPauseTrigger,
+  type ReviewFailureReason as BoundedReviewFailureReason,
+  type ReviewRunSummary,
+  type ReviewSkipReason as BoundedReviewSkipReason,
 } from "@/lib/tak/bounded-autonomous-review";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ export interface IngestResult {
   reviewFailed?: number;
   reviewFailureReason?: ReviewFailureReason;
   reviewSkipReason?: ReviewSkipReason;
+  autoPauseTrigger?: AutoPauseTrigger | null;
   reviewBatchSize?: number;
   reviewBatchUtilization?: number;
   reviewSchemaDropCount?: number;
@@ -122,7 +125,7 @@ export interface IngestResult {
   reviewClassificationHistogram?: Partial<Record<AmbiguityReviewClassification, number>>;
   reviewCacheHits?: number;
   reviewCacheHitRate?: number;
-  reviewLatencyMs?: number;
+  reviewLatencyMs?: number | null;
   created: number;
   duplicates: number;
   deferred: number;
@@ -145,9 +148,9 @@ export type AmbiguityReviewDecision = {
   rationale: string;
 };
 
-export type ReviewFailureReason = AutonomousReviewFailureReason;
+export type ReviewFailureReason = BoundedReviewFailureReason;
 
-export type ReviewSkipReason = AutonomousReviewSkipReason;
+export type ReviewSkipReason = BoundedReviewSkipReason;
 
 type PublicReviewEntry = Pick<CatalogEntry, "name" | "industry" | "description" | "sourceUrl">;
 
@@ -458,6 +461,12 @@ function readPayloadRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function readReviewRunSummary(progressPayload: unknown): ReviewRunSummary | null {
+  const progress = readPayloadRecord(progressPayload);
+  const summaryPayload = readPayloadRecord(progress?.scheduledSummaryPayload);
+  return readPayloadRecord(summaryPayload?.metrics);
+}
+
 async function findCachedReview(
   db: HiveScoutPrisma,
   sourceUrl: string,
@@ -567,7 +576,8 @@ export async function runHiveScoutIngest(
   let reviewSchemaDropCount = 0;
   let reviewParseSuccessRate = 0;
   let reviewCacheHits = 0;
-  let reviewLatencyMs = 0;
+  let reviewLatencyMs: number | null = null;
+  let autoPauseTrigger: AutoPauseTrigger | null = null;
   const reviewClassificationHistogram: Partial<Record<AmbiguityReviewClassification, number>> = {};
   let created = 0;
   let duplicates = 0;
@@ -593,8 +603,8 @@ export async function runHiveScoutIngest(
   const reviewBySource = new Map<string, AmbiguityReviewDecision>();
   const reviewer = options.ambiguityReviewer ?? (options.enableAutonomousReview ? reviewAmbiguousEntriesWithTak : null);
   if (reviewer && candidates.length > 0) {
-    const reviewSettings = await loadAutonomousReviewSettings({
-      settingPrefix: REVIEW_SETTING_PREFIX,
+    const reviewSettings = await loadReviewSettings({
+      namespace: REVIEW_SETTING_PREFIX,
       platformConfig: db.platformConfig,
       defaults: { cacheTtlDays: REVIEW_CACHE_TTL_DAYS },
     });
@@ -604,9 +614,21 @@ export async function runHiveScoutIngest(
       const taskRunClient = db.taskRun as
         | { findMany: (args: unknown) => Promise<Array<{ progressPayload: unknown }>> }
         | undefined;
-      const reviewerHealth = await evaluateAutonomousReviewerHealth({
-        agentId: "external-catalog-scout",
-        taskRun: taskRunClient,
+      const reviewHistory = taskRunClient
+        ? (await taskRunClient.findMany({
+            where: {
+              currentAgentId: "external-catalog-scout",
+              progressPayload: { not: null },
+            },
+            orderBy: { createdAt: "desc" },
+            take: reviewSettings.healthWindowSize,
+            select: { progressPayload: true },
+          }))
+            .map((run) => readReviewRunSummary(run.progressPayload))
+            .filter((summary): summary is ReviewRunSummary => Boolean(summary))
+        : [];
+      const reviewerHealth = evaluateReviewerHealth({
+        history: reviewHistory,
         thresholds: {
           minParseRate: reviewSettings.minParseRate,
           maxUnknownFailuresInWindow: reviewSettings.maxUnknownFailuresInWindow,
@@ -614,8 +636,9 @@ export async function runHiveScoutIngest(
           healthWindowSize: reviewSettings.healthWindowSize,
         },
       });
-      if (reviewerHealth !== "healthy") {
+      if (reviewerHealth.state === "auto_paused") {
         reviewSkipReason = "auto_paused";
+        autoPauseTrigger = reviewerHealth.trigger;
       }
     }
 
@@ -646,7 +669,7 @@ export async function runHiveScoutIngest(
             existingCoworkerNames: coworkerNames,
             valueStreamNames: [...streamNames],
           };
-          assertReviewInputAllowlist(reviewInput, [
+          assertEgressAllowlist(reviewInput, [
             "entries",
             "existingSkillNames",
             "existingCoworkerNames",
@@ -665,7 +688,7 @@ export async function runHiveScoutIngest(
         } catch (error) {
           reviewLatencyMs = Date.now() - startedAt;
           reviewFailed = reviewCandidates.length;
-          reviewFailureReason = classifyAutonomousReviewFailure(error);
+          reviewFailureReason = classifyReviewFailure(error);
         }
       }
     }
@@ -735,6 +758,7 @@ export async function runHiveScoutIngest(
     reviewFailed,
     ...(reviewFailureReason ? { reviewFailureReason } : {}),
     ...(reviewSkipReason ? { reviewSkipReason } : {}),
+    autoPauseTrigger,
     reviewBatchSize,
     reviewBatchUtilization,
     reviewSchemaDropCount,
