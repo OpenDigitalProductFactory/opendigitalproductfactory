@@ -170,6 +170,22 @@ model SkillUsageEvent {
 }
 ```
 
+Add nullable correlation columns on `PlatformIssueReport` so reflection can precisely target the originating thread/run. Today the model has only `agentId` and `routeContext` — that conflates parallel threads on the same route. Both columns are nullable; existing rows are not backfilled.
+
+```prisma
+  // Governed Hermes learning Slice 1: link a runtime issue to the thread/run
+  // that produced it, so reflection can correlate without time-window heuristics.
+  threadId  String?
+  taskRunId String?
+```
+
+Add matching indexes:
+
+```prisma
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId])
+```
+
 Add minimal `ImprovementSignal` from the flywheel spec:
 
 ```prisma
@@ -215,7 +231,7 @@ Run:
 pnpm --filter @dpf/db exec prisma migrate dev --name skill_telemetry_and_reflection
 ```
 
-Expected: migration creates `SkillUsageEvent`, adds nullable `skillId` to `ToolExecution`, and creates `ImprovementSignal`.
+Expected: migration creates `SkillUsageEvent`, adds nullable `skillId` to `ToolExecution`, adds nullable `threadId` + `taskRunId` to `PlatformIssueReport`, and creates `ImprovementSignal`.
 
 - [ ] **Step 3: Inspect the generated SQL**
 
@@ -517,7 +533,7 @@ Use `upsert` on `SkillMetric` by `skillId_agentId_period`.
 
 Without a schedule, `aggregateSkillMetrics` would never run and `SkillMetric` would stay empty, defeating the Definition of Done. Register the aggregator as a daily `ScheduledJob`:
 
-1. Add a seed entry in `packages/db/src/seed.ts` or the nearest companion scheduled-job seed with `jobId="skill-metrics-aggregator"`, `name="Skill Metrics Aggregator"`, and `schedule="0 5 * * *"` (daily 05:00 UTC). `ScheduledJob` has no `kind` or `enabled` columns; enabled means the schedule is not `disabled`. The 05:00 slot was verified on 2026-05-15 against live `ScheduledJob` rows and repo cron seeds; no existing job uses it.
+1. Add a seed entry in `packages/db/src/seed.ts` or the nearest companion scheduled-job seed with `jobId="skill-metrics-aggregator"`, `name="Skill Metrics Aggregator"`, and `schedule="0 5 * * *"` (daily 05:00 UTC). `ScheduledJob` columns are exactly: `id, jobId, name, schedule, lastRunAt, nextRunAt, lastStatus, lastError, createdAt, updatedAt` — there is no `kind`, `enabled`, or `disabled` column. A scheduled job exists iff the row exists; pausing means deleting the row, not flipping a flag. The 05:00 slot was verified on 2026-05-15 against live `ScheduledJob` rows and repo cron seeds (`grep "0 5 \* \* \*"` returned no matches); no existing job uses it.
 2. Register a handler in the scheduled-job dispatcher (search for an existing job-kind switch — typically in `apps/web/lib/scheduled-jobs/` or the dispatcher route) that calls `aggregateSkillMetrics()` and records duration.
 3. Aggregator must be idempotent — repeated runs against the same period upsert to the same `SkillMetric` rows, never duplicate. Step 1 of this task's tests already covers this.
 
@@ -726,11 +742,13 @@ export async function recordRepeatedToolIssue(input: {
   routeContext: string | null;
   userId: string;
   agentId: string | null;
+  threadId: string | null;
+  taskRunId: string | null;
   featureBuildId?: string | null;
 }): Promise<{ reportId: string } | null>
 ```
 
-Use the same `PlatformIssueReport` fields currently written inline.
+Use the same `PlatformIssueReport` fields currently written inline, plus the new `threadId` and `taskRunId` columns added in Task 1. The existing call site in `agentic-loop.ts` already has both in scope (the loop receives `threadId` as a parameter and `taskRunId` as `params.taskRunId`); pass them through. The reflection trigger in Task 9 relies on these for precise correlation — leaving them null degrades reflection to a noisy time/route heuristic.
 
 - [ ] **Step 4: Replace inline logic in `agentic-loop.ts`**
 
@@ -825,7 +843,7 @@ export async function processRuntimeIssueReflection(input: {
 
 Implementation:
 
-1. Query `PlatformIssueReport` rows created since `since` for the same agent/thread/route where `type="agent_stuck"` and `source="coworker_runtime"`.
+1. Query `PlatformIssueReport` rows created since `since` where `type="agent_stuck"`, `source="coworker_runtime"`, and **`taskRunId = input.taskRunId`** (precise correlation). Fall back to `agentId + routeContext + createdAt >= since` only when `taskRunId` is null on the source row — this only happens for legacy rows written before the Task 1 migration; emit a warning log when this fallback fires so we can spot un-migrated callers.
 2. For each row, create an autonomous work run titled `Skill reflection: repeated tool use`.
 3. Create a deterministic self-assessment with `verdict="gaps"` and `confidence="medium"`.
 4. Create one need with:
@@ -842,7 +860,7 @@ In `executeAutonomousAgenticLoop`, capture `const startedAt = new Date()` before
 **Reflection-loop self-protection (must be explicit).** A reflection run produces tool calls of its own; if one of those calls trips the repeated-tool detector, it would file a new `PlatformIssueReport`, which would trigger another reflection — an unbounded loop. Apply all three guards:
 
 1. **Source check.** When the parent `TaskRun.source === "proactive"` and the run title starts with `"Skill reflection:"`, skip the post-run reflection hook entirely. Test: a reflection `TaskRun` that itself trips the repeated-tool guard must produce zero new reflection `TaskRun` rows.
-2. **Metadata guard.** Stamp every reflection-spawned `TaskRun` with `metadata.reflectionDepth = (parent.metadata.reflectionDepth ?? 0) + 1`. Refuse to spawn when `reflectionDepth >= 1`. This catches the case where the source check is bypassed (e.g. a future caller uses `source="coworker"` for a reflection-equivalent flow).
+2. **Metadata guard.** `TaskRun` has no `metadata` column — the available JSON bags are `authorityScope`, `a2aMetadata`, and `progressPayload`. Stamp `reflectionDepth` into `a2aMetadata` (the closest semantic fit — "metadata about this run's identity in the A2A graph"): `a2aMetadata = { ...(parent.a2aMetadata ?? {}), reflectionDepth: ((parent.a2aMetadata as { reflectionDepth?: number } | null)?.reflectionDepth ?? 0) + 1 }`. Refuse to spawn when `reflectionDepth >= 1`. This catches the case where the source check is bypassed (e.g. a future caller uses `source="coworker"` for a reflection-equivalent flow). Add a typed helper `getReflectionDepth(run: TaskRun): number` in `reflection-triggers.ts` so callers never reach into the JSON blob directly.
 3. **Idempotency at the signal layer.** `createOrTouchImprovementSignal` already dedupes on `(sourceType, sourceId)`. The reflection trigger MUST set `sourceId = platformIssueReport.reportId` so a re-fire on the same issue increments `recurrenceCount` instead of producing a parallel signal.
 
 Add a vitest case that asserts a reflection run cannot recursively trigger another reflection run, exercising all three guards.
@@ -1125,7 +1143,7 @@ If the implementation causes runtime problems:
 - `COWORKER_CAPABILITY_NEED_KINDS` is **extended** (not replaced): the existing eight values remain and `prompt | convention | code | other` are added; MCP schema picks up the change without duplication.
 - Repeated-tool runtime issues are detected through `runtime-issues.ts`, not open-coded in `agentic-loop.ts`.
 - A repeated-tool `PlatformIssueReport` can produce a governed reflection `TaskRun`, a `CoworkerSelfAssessment`, a `CoworkerCapabilityNeed(kind="skill")`, and an `ImprovementSignal`.
-- Reflection runs cannot recursively trigger themselves: the source check, `metadata.reflectionDepth` guard, and `(sourceType, sourceId)` signal-layer dedupe all have explicit test coverage.
+- Reflection runs cannot recursively trigger themselves: the source check, `a2aMetadata.reflectionDepth` guard (with `getReflectionDepth` helper), and `(sourceType, sourceId)` signal-layer dedupe all have explicit test coverage.
 - No production skill content is mutated by this slice.
 - `/platform/ai/skills` shows skill telemetry.
 - Coworker chat shows a compact, theme-aware active skill chip.
