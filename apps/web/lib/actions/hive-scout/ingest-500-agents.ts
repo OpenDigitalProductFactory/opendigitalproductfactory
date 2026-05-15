@@ -12,8 +12,19 @@
 
 import { createHash } from "crypto";
 import { prisma } from "@dpf/db";
+import type { Prisma, PrismaClient } from "@dpf/db";
+import { z } from "zod";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
 import { sendQueueNotification } from "@/lib/queue/notification-adapter";
+import {
+  assertReviewInputAllowlist,
+  classifyAutonomousReviewFailure,
+  evaluateAutonomousReviewerHealth,
+  loadAutonomousReviewSettings,
+  validateAutonomousReviewDecisions,
+  type AutonomousReviewFailureReason,
+  type AutonomousReviewSkipReason,
+} from "@/lib/tak/bounded-autonomous-review";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -27,7 +38,12 @@ const ITEM_ID_PREFIX = "HS";
 // prompts/templates/ to keep prompts/specialist/ scoped to actual specialists.
 const PROMPT_CATEGORY = "templates";
 const PROMPT_SLUG = "hive-scout-archetype-gap";
+const REVIEWER_PROMPT_CATEGORY = "specialist";
+const REVIEWER_PROMPT_SLUG = "hive-scout-ambiguity-reviewer";
 const DEEP_LINK = "/portfolio/backlog?source=hive-scout";
+const REVIEW_BATCH_LIMIT = 12;
+const REVIEW_CACHE_TTL_DAYS = 30;
+const REVIEW_SETTING_PREFIX = "hive-scout.review";
 
 // A starter mapping from catalog-industry labels to IT4IT value-stream names
 // as seeded into `EaReferenceModelElement` (kind="value_stream"). Entries are
@@ -94,11 +110,78 @@ export interface ValueStreamMatch {
 export interface IngestResult {
   catalogEntries: number;
   gaps: number;
+  reviewed?: number;
+  skippedByReview?: number;
+  reviewFailed?: number;
+  reviewFailureReason?: ReviewFailureReason;
+  reviewSkipReason?: ReviewSkipReason;
+  reviewBatchSize?: number;
+  reviewBatchUtilization?: number;
+  reviewSchemaDropCount?: number;
+  reviewParseSuccessRate?: number;
+  reviewClassificationHistogram?: Partial<Record<AmbiguityReviewClassification, number>>;
+  reviewCacheHits?: number;
+  reviewCacheHitRate?: number;
+  reviewLatencyMs?: number;
   created: number;
   duplicates: number;
   deferred: number;
   createdItemIds?: string[];
 }
+
+export type AmbiguityReviewClassification =
+  | "new_archetype"
+  | "existing_skill_gap"
+  | "duplicate_pattern"
+  | "out_of_scope"
+  | "needs_human_review";
+
+export type AmbiguityReviewDecision = {
+  sourceUrl: string;
+  classification: AmbiguityReviewClassification;
+  novelty: "high" | "medium" | "low";
+  valueStream: string | null;
+  valueStreamConfidence: "high" | "medium" | "low";
+  rationale: string;
+};
+
+export type ReviewFailureReason = AutonomousReviewFailureReason;
+
+export type ReviewSkipReason = AutonomousReviewSkipReason;
+
+type PublicReviewEntry = Pick<CatalogEntry, "name" | "industry" | "description" | "sourceUrl">;
+
+type AmbiguityReviewInput = {
+  entries: PublicReviewEntry[];
+  existingSkillNames: string[];
+  existingCoworkerNames: string[];
+  valueStreamNames: string[];
+};
+
+type AmbiguityReviewer = (input: AmbiguityReviewInput) => Promise<unknown[]>;
+
+type HiveScoutPrisma = Pick<
+  PrismaClient,
+  "eaReferenceModelElement" | "skillDefinition" | "agent" | "backlogItem" | "backlogItemActivity" | "user"
+> & {
+  appSetting?: unknown;
+  taskRun?: unknown;
+};
+
+const AmbiguityReviewDecisionSchema = z.object({
+  sourceUrl: z.string().url(),
+  classification: z.enum([
+    "new_archetype",
+    "existing_skill_gap",
+    "duplicate_pattern",
+    "out_of_scope",
+    "needs_human_review",
+  ]),
+  novelty: z.enum(["high", "medium", "low"]),
+  valueStream: z.string().nullable(),
+  valueStreamConfidence: z.enum(["high", "medium", "low"]),
+  rationale: z.string().min(1),
+});
 
 // ─── Parsing ────────────────────────────────────────────────────────────────
 
@@ -255,8 +338,12 @@ export function mapIndustryToStream(
  * ~500 entries while staying short enough to read in the UI.
  */
 export function itemIdForSource(sourceUrl: string): string {
-  const digest = createHash("sha256").update(sourceUrl).digest("hex").slice(0, 16);
+  const digest = sourceUrlHash(sourceUrl).slice(0, 16);
   return `${ITEM_ID_PREFIX}-${digest.toUpperCase()}`;
+}
+
+export function sourceUrlHash(sourceUrl: string): string {
+  return createHash("sha256").update(sourceUrl).digest("hex");
 }
 
 // ─── Gap detection ──────────────────────────────────────────────────────────
@@ -314,6 +401,15 @@ const FALLBACK_BODY_TEMPLATE = `**Use case:** {{NAME}}
 Reference only — not vendored. The linked repository is MIT-licensed
 inspiration for a DPF-native archetype; we do not import its code.`;
 
+const FALLBACK_REVIEWER_PROMPT = [
+  "You are the Hive Scout ambiguity reviewer.",
+  "Return ONLY a JSON array. One decision per entry.",
+  "Each decision must contain sourceUrl, classification, novelty, valueStream, valueStreamConfidence, and rationale.",
+  "classification must be one of: new_archetype, existing_skill_gap, duplicate_pattern, out_of_scope, needs_human_review.",
+  "Judge novelty, archetype clustering, value-stream fit, and whether the idea is actually new for DPF.",
+  "Keep deterministic mechanics outside this review: do not fetch, parse, dedupe, or write backlog items.",
+].join(" ");
+
 function renderBody(
   template: string,
   entry: CatalogEntry,
@@ -335,6 +431,62 @@ function renderBody(
   );
 }
 
+function toPublicReviewEntry(entry: CatalogEntry): PublicReviewEntry {
+  return {
+    name: entry.name,
+    industry: entry.industry,
+    description: entry.description,
+    sourceUrl: entry.sourceUrl,
+  };
+}
+
+function incrementClassification(
+  histogram: Partial<Record<AmbiguityReviewClassification, number>>,
+  classification: AmbiguityReviewClassification,
+): void {
+  histogram[classification] = (histogram[classification] ?? 0) + 1;
+}
+
+function readPayloadRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+async function findCachedReview(
+  db: HiveScoutPrisma,
+  sourceUrl: string,
+  cacheTtlDays: number,
+): Promise<AmbiguityReviewDecision | null> {
+  const cutoff = new Date(Date.now() - cacheTtlDays * 24 * 60 * 60 * 1000);
+  const hash = sourceUrlHash(sourceUrl);
+  const rows = await db.backlogItemActivity.findMany({
+    where: {
+      kind: "evidence",
+      recordedAt: { gte: cutoff },
+      payload: {
+        path: ["sourceUrlHash"],
+        equals: hash,
+      },
+    },
+    orderBy: { recordedAt: "desc" },
+    take: 1,
+    select: { payload: true },
+  });
+
+  const payload = readPayloadRecord(rows[0]?.payload);
+  const review = payload ? payload.ambiguityReview : null;
+  return isValidAmbiguityDecision(review) ? review : null;
+}
+
+function validateReviewDecisions(values: unknown[]): {
+  decisions: AmbiguityReviewDecision[];
+  dropped: number;
+} {
+  const result = validateAutonomousReviewDecisions(AmbiguityReviewDecisionSchema, values);
+  return { decisions: result.decisions, dropped: result.dropped };
+}
+
 // ─── Main entry point ───────────────────────────────────────────────────────
 
 export interface IngestOptions {
@@ -346,6 +498,16 @@ export interface IngestOptions {
   actorAgentId?: string;
   /** Optional parent task run id for backlog evidence provenance. */
   taskRunId?: string;
+  /** Enable the default TAK-routed ambiguity reviewer for candidate gaps. */
+  enableAutonomousReview?: boolean;
+  /** Test/runtime seam for bounded ambiguity review. */
+  ambiguityReviewer?: AmbiguityReviewer;
+  /** Test seam; production uses the shared Prisma client. */
+  prisma?: HiveScoutPrisma;
+  /** Test seam; production uses the prompt loader. */
+  loadPrompt?: typeof loadPrompt;
+  /** Test seam; production uses queue notifications. */
+  notifyAdmins?: (created: number, prismaClient: HiveScoutPrisma) => Promise<void>;
 }
 
 async function defaultFetcher(url: string): Promise<string> {
@@ -361,17 +523,20 @@ export async function runHiveScoutIngest(
 ): Promise<IngestResult> {
   const fetcher = options.fetcher ?? defaultFetcher;
   const url = options.readmeUrl ?? CATALOG_README_URL;
+  const db = (options.prisma ?? prisma) as HiveScoutPrisma;
+  const promptLoader = options.loadPrompt ?? loadPrompt;
+  const adminNotifier = options.notifyAdmins ?? notifyAdmins;
 
   const markdown = await fetcher(url);
   const entries = parseReadme(markdown);
 
   const [seededStreams, existingSkills, agentRows] = await Promise.all([
-    prisma.eaReferenceModelElement.findMany({
+    db.eaReferenceModelElement.findMany({
       where: { kind: "value_stream" },
       select: { name: true },
     }),
-    prisma.skillDefinition.findMany({ select: { name: true } }),
-    prisma.agent.findMany({
+    db.skillDefinition.findMany({ select: { name: true } }),
+    db.agent.findMany({
       where: { archived: false },
       select: { name: true },
     }),
@@ -381,45 +546,161 @@ export async function runHiveScoutIngest(
   const skillNames = existingSkills.map((s: { name: string }) => s.name);
   const coworkerNames = agentRows.map((a: { name: string }) => a.name);
 
-  const bodyTemplate = await loadPrompt(
+  const bodyTemplate = await promptLoader(
     PROMPT_CATEGORY,
     PROMPT_SLUG,
     FALLBACK_BODY_TEMPLATE,
   );
 
   let gaps = 0;
+  let reviewed = 0;
+  let skippedByReview = 0;
+  let reviewFailed = 0;
+  let reviewFailureReason: ReviewFailureReason | undefined;
+  let reviewSkipReason: ReviewSkipReason | undefined;
+  let reviewBatchSize = 0;
+  let reviewSchemaDropCount = 0;
+  let reviewParseSuccessRate = 0;
+  let reviewCacheHits = 0;
+  let reviewLatencyMs = 0;
+  const reviewClassificationHistogram: Partial<Record<AmbiguityReviewClassification, number>> = {};
   let created = 0;
   let duplicates = 0;
   let deferred = 0;
   const createdItemIds: string[] = [];
+  const candidates: Array<{ entry: CatalogEntry; itemId: string; match: ValueStreamMatch }> = [];
 
   for (const entry of entries) {
     if (!isGap(entry, skillNames, coworkerNames)) continue;
     gaps++;
 
     const itemId = itemIdForSource(entry.sourceUrl);
-    const existing = await prisma.backlogItem.findUnique({ where: { itemId } });
+    const existing = await db.backlogItem.findUnique({ where: { itemId } });
     if (existing) {
       duplicates++;
       continue;
     }
 
     const match = mapIndustryToStream(entry.industry, streamNames);
-    const status = match.confidence === "mapped" ? "open" : "deferred";
-    if (status === "deferred") deferred++;
+    candidates.push({ entry, itemId, match });
+  }
 
-    const createdItem = await prisma.backlogItem.create({
+  const reviewBySource = new Map<string, AmbiguityReviewDecision>();
+  const reviewer = options.ambiguityReviewer ?? (options.enableAutonomousReview ? reviewAmbiguousEntriesWithTak : null);
+  if (reviewer && candidates.length > 0) {
+    const appSettingClient = db.appSetting as
+      | {
+          findUnique: (args: {
+            where: { key: string };
+            select?: { value?: boolean };
+          }) => Promise<{ value: unknown } | null>;
+        }
+      | undefined;
+    const reviewSettings = await loadAutonomousReviewSettings({
+      settingPrefix: REVIEW_SETTING_PREFIX,
+      appSetting: appSettingClient,
+      defaults: { cacheTtlDays: REVIEW_CACHE_TTL_DAYS },
+    });
+    if (!reviewSettings.enabled) {
+      reviewSkipReason = "operator_disabled";
+    } else {
+      const taskRunClient = db.taskRun as
+        | { findMany: (args: unknown) => Promise<Array<{ progressPayload: unknown }>> }
+        | undefined;
+      const reviewerHealth = await evaluateAutonomousReviewerHealth({
+        agentId: "external-catalog-scout",
+        taskRun: taskRunClient,
+        thresholds: {
+          minParseRate: reviewSettings.minParseRate,
+          maxUnknownFailuresInWindow: reviewSettings.maxUnknownFailuresInWindow,
+          maxSingleClassFraction: reviewSettings.maxSingleClassFraction,
+          healthWindowSize: reviewSettings.healthWindowSize,
+        },
+      });
+      if (reviewerHealth !== "healthy") {
+        reviewSkipReason = "auto_paused";
+      }
+    }
+
+    if (!reviewSkipReason) {
+      for (const candidate of candidates) {
+        const cachedReview = await findCachedReview(db, candidate.entry.sourceUrl, reviewSettings.cacheTtlDays);
+        if (cachedReview) {
+          reviewBySource.set(candidate.entry.sourceUrl, cachedReview);
+          incrementClassification(reviewClassificationHistogram, cachedReview.classification);
+          reviewCacheHits++;
+        }
+      }
+
+      const reviewCandidates = candidates
+        .filter((candidate) => !reviewBySource.has(candidate.entry.sourceUrl))
+        .slice(0, REVIEW_BATCH_LIMIT);
+      reviewBatchSize = reviewCandidates.length;
+      const startedAt = Date.now();
+
+      try {
+        const reviewInput = {
+          entries: reviewCandidates.map((candidate) => toPublicReviewEntry(candidate.entry)),
+          existingSkillNames: skillNames,
+          existingCoworkerNames: coworkerNames,
+          valueStreamNames: [...streamNames],
+        };
+        assertReviewInputAllowlist(reviewInput, [
+          "entries",
+          "existingSkillNames",
+          "existingCoworkerNames",
+          "valueStreamNames",
+        ]);
+        const rawDecisions = await reviewer(reviewInput);
+        reviewLatencyMs = Date.now() - startedAt;
+        const { decisions, dropped } = validateReviewDecisions(rawDecisions);
+        reviewSchemaDropCount = dropped;
+        for (const decision of decisions) {
+          reviewBySource.set(decision.sourceUrl, decision);
+          incrementClassification(reviewClassificationHistogram, decision.classification);
+        }
+        reviewParseSuccessRate = reviewBatchSize > 0 ? decisions.length / reviewBatchSize : 1;
+      } catch (error) {
+        reviewLatencyMs = Date.now() - startedAt;
+        reviewFailed = reviewCandidates.length;
+        reviewFailureReason = classifyAutonomousReviewFailure(error);
+      }
+    }
+    reviewed = reviewBySource.size;
+  } else if (reviewer && candidates.length === 0) {
+    reviewSkipReason = "no_candidates";
+    reviewParseSuccessRate = 1;
+  }
+
+  const reviewBatchUtilization = reviewBatchSize / REVIEW_BATCH_LIMIT;
+  const reviewCacheHitRate = candidates.length > 0 ? reviewCacheHits / candidates.length : 0;
+
+  for (const candidate of candidates) {
+    const { entry, itemId } = candidate;
+    const review = reviewBySource.get(entry.sourceUrl) ?? null;
+    if (review?.classification === "duplicate_pattern" || review?.classification === "out_of_scope") {
+      skippedByReview++;
+      continue;
+    }
+
+    const match = applyReviewToMatch(candidate.match, review);
+    const status = match.confidence === "mapped" ? "open" : "deferred";
+    const reviewRequiresHuman = review?.classification === "needs_human_review";
+    const finalStatus = reviewRequiresHuman ? "deferred" : status;
+    if (finalStatus === "deferred") deferred++;
+
+    const createdItem = await db.backlogItem.create({
       data: {
         itemId,
         title: `Coworker archetype: ${entry.name} (${entry.industry})`,
         type: "portfolio",
-        status,
+        status: finalStatus,
         body: renderBody(bodyTemplate, entry, match),
         source: BACKLOG_SOURCE,
       },
     });
     createdItemIds.push(itemId);
-    await prisma.backlogItemActivity.create({
+    await db.backlogItemActivity.create({
       data: {
         backlogItemId: createdItem.id,
         kind: "evidence",
@@ -429,21 +710,36 @@ export async function runHiveScoutIngest(
           catalog: CATALOG_NAME,
           catalogLicense: CATALOG_LICENSE,
           sourceUrl: entry.sourceUrl,
+          sourceUrlHash: sourceUrlHash(entry.sourceUrl),
           framework: entry.framework ?? null,
           valueStream: match.stream,
           valueStreamConfidence: match.confidence,
-        },
+          ambiguityReview: review,
+        } as Prisma.InputJsonValue,
         recordedByAgentId: options.actorAgentId ?? null,
       },
     });
     created++;
   }
 
-  await notifyAdmins(created);
+  await adminNotifier(created, db);
 
   return {
     catalogEntries: entries.length,
     gaps,
+    reviewed,
+    skippedByReview,
+    reviewFailed,
+    ...(reviewFailureReason ? { reviewFailureReason } : {}),
+    ...(reviewSkipReason ? { reviewSkipReason } : {}),
+    reviewBatchSize,
+    reviewBatchUtilization,
+    reviewSchemaDropCount,
+    reviewParseSuccessRate,
+    reviewClassificationHistogram,
+    reviewCacheHits,
+    reviewCacheHitRate,
+    reviewLatencyMs,
     created,
     duplicates,
     deferred,
@@ -451,9 +747,75 @@ export async function runHiveScoutIngest(
   };
 }
 
-async function notifyAdmins(created: number): Promise<void> {
+function applyReviewToMatch(
+  match: ValueStreamMatch,
+  _review: AmbiguityReviewDecision | null,
+): ValueStreamMatch {
+  return match;
+}
+
+function isValidAmbiguityDecision(value: unknown): value is AmbiguityReviewDecision {
+  return AmbiguityReviewDecisionSchema.safeParse(value).success;
+}
+
+function extractJsonArray(text: string): unknown {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const match = trimmed.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error("No JSON array found in ambiguity review response");
+    return JSON.parse(match[0]);
+  }
+}
+
+async function reviewAmbiguousEntriesWithTak(
+  input: AmbiguityReviewInput,
+): Promise<unknown[]> {
+  const entries = input.entries.slice(0, REVIEW_BATCH_LIMIT);
+  if (entries.length === 0) return [];
+
+  const { routeAndCall } = await import("@/lib/routed-inference");
+  const systemPrompt = await loadPrompt(
+    REVIEWER_PROMPT_CATEGORY,
+    REVIEWER_PROMPT_SLUG,
+    FALLBACK_REVIEWER_PROMPT,
+  );
+  const result = await routeAndCall(
+    [
+      {
+        role: "user",
+        content: JSON.stringify(
+          {
+            entries,
+            existingSkillNames: input.existingSkillNames.slice(0, 80),
+            existingCoworkerNames: input.existingCoworkerNames.slice(0, 80),
+            valueStreamNames: input.valueStreamNames,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+    systemPrompt,
+    "internal",
+    {
+      taskType: "analysis",
+      budgetClass: "minimize_cost",
+      effort: "low",
+      agentId: "external-catalog-scout",
+      agentDisplayName: "External Catalog Scout",
+      persistDecision: true,
+    },
+  );
+
+  const parsed = extractJsonArray(result.content);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+async function notifyAdmins(created: number, prismaClient: HiveScoutPrisma = prisma): Promise<void> {
   if (created === 0) return;
-  const admins = await prisma.user.findMany({
+  const admins = await prismaClient.user.findMany({
     where: { isSuperuser: true, isActive: true },
     select: { id: true },
   });
