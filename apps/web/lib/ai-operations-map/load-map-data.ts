@@ -8,7 +8,9 @@ import {
   projectToolExecution,
   projectToolExecutionReceipt,
 } from "./project-events";
+import { projectRoutingTopology } from "./project-routing-topology";
 import type {
+  OperationsMapRoutingTopology,
   OperationsMapAgent,
   OperationsMapBacklogEvidence,
   OperationsMapExternalEvidence,
@@ -26,11 +28,27 @@ export type OperationsMapData = {
   template: OperationsMapTemplate;
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
+  routingTopology: OperationsMapRoutingTopology;
   recentWindowLabel: string;
 };
 
 export async function loadOperationsMapData(): Promise<OperationsMapData> {
-  const [storefrontConfig, agents, taskRuns, toolExecutions, toolReceipts, backlogEvidence, externalEvidence] = await Promise.all([
+  const [
+    storefrontConfig,
+    agents,
+    taskRuns,
+    toolExecutions,
+    toolReceipts,
+    backlogEvidence,
+    externalEvidence,
+    routeDecisions,
+    providers,
+    modelProfiles,
+    tokenUsage,
+    routeOutcomes,
+    scheduledAgentTasks,
+    scheduledJobs,
+  ] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
         archetype: {
@@ -169,7 +187,132 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         createdAt: true,
       },
     }),
+    prisma.routeDecisionLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        agentMessageId: true,
+        actorKind: true,
+        actorId: true,
+        agentId: true,
+        selectedEndpointId: true,
+        taskType: true,
+        sensitivity: true,
+        reason: true,
+        fitnessScore: true,
+        candidateTrace: true,
+        excludedTrace: true,
+        policyRulesApplied: true,
+        fallbackChain: true,
+        fallbacksUsed: true,
+        shadowMode: true,
+        createdAt: true,
+        selectedModelId: true,
+      },
+    }),
+    prisma.modelProvider.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        providerId: true,
+        name: true,
+        status: true,
+        category: true,
+        baseUrl: true,
+        endpointType: true,
+        serviceKind: true,
+        mcpTransport: true,
+        cliEngine: true,
+        recentFailureRate: true,
+      },
+    }),
+    prisma.modelProfile.findMany({
+      select: {
+        id: true,
+        providerId: true,
+        modelId: true,
+        friendlyName: true,
+        modelStatus: true,
+      },
+    }),
+    prisma.tokenUsage.findMany({
+      orderBy: { createdAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        agentId: true,
+        providerId: true,
+        contextKey: true,
+        inputTokens: true,
+        outputTokens: true,
+        inferenceMs: true,
+        costUsd: true,
+        createdAt: true,
+      },
+    }),
+    prisma.routeOutcome.findMany({
+      where: {
+        OR: [
+          { providerErrorCode: { not: null } },
+          { fallbackOccurred: true },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        agentId: true,
+        providerId: true,
+        modelId: true,
+        taskType: true,
+        fallbackOccurred: true,
+        providerErrorCode: true,
+        createdAt: true,
+      },
+    }),
+    prisma.scheduledAgentTask.findMany({
+      where: { isActive: true },
+      orderBy: { nextRunAt: "asc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        taskId: true,
+        agentId: true,
+        title: true,
+        routeContext: true,
+        isActive: true,
+        nextRunAt: true,
+        lastStatus: true,
+      },
+    }),
+    prisma.scheduledJob.findMany({
+      orderBy: { nextRunAt: "asc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        jobId: true,
+        name: true,
+        nextRunAt: true,
+        lastStatus: true,
+      },
+    }),
   ]);
+
+  const routeDecisionAgentMessageIds = [
+    ...new Set(routeDecisions.map((decision) => decision.agentMessageId).filter((id): id is string => Boolean(id))),
+  ];
+  const routeDecisionAgentMessages = routeDecisionAgentMessageIds.length > 0
+    ? await prisma.agentMessage.findMany({
+      where: { id: { in: routeDecisionAgentMessageIds } },
+      select: {
+        id: true,
+        agentId: true,
+      },
+    })
+    : [];
+  const routeDecisionAgentIdByMessageId = new Map(
+    routeDecisionAgentMessages.map((message) => [message.id, message.agentId]),
+  );
 
   const template = getMapTemplate({
     archetypeId: storefrontConfig?.archetype?.archetypeId ?? null,
@@ -203,10 +346,36 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     ...externalEvidence.map((row) => projectExternalEvidence(row as OperationsMapExternalEvidence, template)),
   ].sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
 
+  const stationedAgents = projectAgentsToStations(mapAgents, template);
+  const routingTopology = projectRoutingTopology({
+    agents: stationedAgents.map((agent) => ({
+      agentId: agent.agentId,
+      name: agent.name,
+      stationLabel: agent.stationLabel,
+    })),
+    providers,
+    endpointProfiles: modelProfiles.map((profile) => ({
+      endpointId: profile.id,
+      providerId: profile.providerId,
+      modelId: profile.modelId,
+      friendlyName: profile.friendlyName,
+      modelStatus: profile.modelStatus,
+    })),
+    routeDecisions: routeDecisions.map((decision) => ({
+      ...decision,
+      agentId: decision.agentId ?? (decision.agentMessageId ? routeDecisionAgentIdByMessageId.get(decision.agentMessageId) ?? null : null),
+    })),
+    tokenUsage,
+    routeOutcomes,
+    scheduledAgentTasks,
+    scheduledJobs,
+  });
+
   return {
     template,
-    agents: projectAgentsToStations(mapAgents, template),
+    agents: stationedAgents,
     projections,
+    routingTopology,
     recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
   };
 }

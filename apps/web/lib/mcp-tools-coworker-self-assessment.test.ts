@@ -155,6 +155,42 @@ describe("coworker self-assessment tools", () => {
     });
   });
 
+  it("loads assessment context for route-defined coworkers not yet present in Agent rows", async () => {
+    mockPrisma.agent.findFirst.mockResolvedValueOnce(null);
+
+    const result = await executeTool(
+      "assess_my_capabilities",
+      { query: "current month finance totals" },
+      "user-1",
+      { agentId: "finance-agent", routeContext: "/finance" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(getToolMarketplaceReadiness).toHaveBeenCalledWith({
+      query: "current month finance totals",
+      agentId: "finance-agent",
+      limit: 12,
+    });
+    expect(result.data).toMatchObject({
+      profile: {
+        agentId: "finance-agent",
+        slugId: "finance-agent",
+        name: "Finance Specialist",
+        routeContext: "/finance",
+        grants: expect.arrayContaining(["registry_read", "web_search"]),
+        skills: expect.arrayContaining([
+          expect.objectContaining({
+            label: "Review finance posture",
+            capability: "view_finance",
+            taskType: "conversation",
+          }),
+        ]),
+      },
+      latestAssessment: null,
+      responseShape: expect.any(Object),
+    });
+  });
+
   it("submits a capability need using the execution agent identity", async () => {
     const result = await executeTool(
       "submit_coworker_capability_need",

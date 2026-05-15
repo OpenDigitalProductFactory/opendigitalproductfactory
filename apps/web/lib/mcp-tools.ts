@@ -59,6 +59,7 @@ import {
   type CoworkerCapabilityNeedSeverity,
   type CoworkerCapabilityNeedStatus,
 } from "@/lib/coworker-self-assessment/types";
+import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -3107,6 +3108,46 @@ function requireCurrentCoworker(context?: { agentId?: string }): string {
   return agentId;
 }
 
+function routeValueStream(capability: CapabilityKey | null): string {
+  return capability?.replace(/^(view|manage)_/, "") || "cross-cutting";
+}
+
+async function loadRouteDefinedCoworkerProfile(agentId: string, routeContext?: string | null) {
+  const routeEntry = ROUTE_AGENT_MAP_ENTRIES.find(([, entry]) => entry.agentId === agentId)?.[1] ?? null;
+  if (!routeEntry) return null;
+
+  const { getAgentToolGrants } = await import("@/lib/tak/agent-grants");
+  const grants = getAgentToolGrants(agentId) ?? ["registry_read"];
+
+  return {
+    profile: {
+      agentId: routeEntry.agentId,
+      slugId: routeEntry.agentId,
+      name: routeEntry.agentName,
+      tier: routeEntry.sensitivity === "restricted" ? 1 : 2,
+      type: "specialist",
+      description: routeEntry.agentDescription,
+      valueStream: routeValueStream(routeEntry.capability),
+      it4itSections: [],
+      lifecycleStage: "production",
+      hitlTierDefault: routeEntry.sensitivity === "public" ? 3 : 1,
+      humanSupervisorId: null,
+      escalatesTo: null,
+      delegatesTo: [],
+      routeContext: routeContext ?? null,
+      grants,
+      skills: routeEntry.skills.map((skill, index) => ({
+        label: skill.label,
+        description: skill.description,
+        capability: skill.capability,
+        taskType: skill.taskType ?? "conversation",
+        sortOrder: index,
+      })),
+    },
+    latestAssessment: null,
+  };
+}
+
 async function loadCoworkerProfile(agentId: string, routeContext?: string | null) {
   const agent = await prisma.agent.findFirst({
     where: { OR: [{ agentId }, { slugId: agentId }] },
@@ -3139,6 +3180,11 @@ async function loadCoworkerProfile(agentId: string, routeContext?: string | null
   });
 
   if (!agent) {
+    const routeDefinedProfile = await loadRouteDefinedCoworkerProfile(agentId, routeContext);
+    if (routeDefinedProfile) {
+      return routeDefinedProfile;
+    }
+
     throw new Error(`Coworker ${agentId} was not found.`);
   }
 

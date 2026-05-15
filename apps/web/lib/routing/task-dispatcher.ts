@@ -13,6 +13,7 @@ import {
   InferenceError,
   type ChatMessage,
 } from "@/lib/ai-inference";
+import { normalizeRouteDecisionActor } from "./route-decision-attribution";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** The payload passed to callProvider for each attempt. */
@@ -150,9 +151,13 @@ async function persistDecision(
   context: DispatchContext,
   fallbacksUsed: { endpointId: string; error: string; timestamp: string }[],
 ) {
+  const actor = normalizeRouteDecisionActor({ kind: "agent", id: context.agentId });
   return prisma.routeDecisionLog.create({
     data: {
       agentMessageId: context.agentMessageId,
+      actorKind: actor.actorKind,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
       // Schema requires selectedEndpointId String (not nullable).
       // Use empty string as sentinel when all endpoints failed.
       selectedEndpointId: selectedCandidate?.endpointId ?? "",

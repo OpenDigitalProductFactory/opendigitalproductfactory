@@ -20,4 +20,157 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("toggleSourceFilter");
     expect(source).toContain("toggleSeverityFilter");
   });
+
+  it("renders the provider routing topology with route symbols and timeline labels", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("routingTopology");
+    expect(source).toContain("Provider routing topology");
+    expect(source).toContain("aria-label=\"Provider routing topology\"");
+    expect(source).toContain("Route decision");
+    expect(source).toContain("Limit / quota");
+    expect(source).toContain("Error / outage");
+    expect(source).toContain("Failover path");
+    expect(source).toContain("Scheduled future");
+    expect(source).toContain("scheduled coworker invocation windows");
+    expect(source).not.toContain("scheduled routing windows");
+    expect(source).toContain("Current routing");
+    expect(source).toContain("Future schedule");
+    expect(source).toContain("<svg");
+    expect(source).toContain("markerEnd");
+    expect(source).toContain("Zoom out");
+    expect(source).toContain("Zoom in");
+    expect(source).toContain("Reset zoom");
+    expect(source).toContain("Route filter");
+    expect(source).toContain("Provider filter");
+    expect(source).toContain("Provider type");
+    expect(source).toContain("LLM providers");
+    expect(source).toContain("MCP servers");
+    expect(source).toContain("providerTypeFilter");
+    expect(source).toContain("providerMatchesTypeFilter");
+    expect(source).toContain("controlFilteredRoutes");
+    expect(source).toContain("replayFilteredRoutes");
+    expect(source).toContain("displayRoutes");
+    expect(source).toContain("routingLineStroke");
+    expect(source).toContain("routingLineDasharray");
+    expect(source).toContain("animateMotion");
+    expect(source).toContain("routeDecisionPoint");
+    expect(source).toContain("data-route-symbol");
+    expect(source).toContain("RoutingSymbolGlyph");
+    expect(source).toContain("providerMarkersByProviderId");
+    expect(source).toContain("coworkerMarkersByCoworkerId");
+    expect(source).toContain("coworkerMarkerCaption");
+    expect(source).toContain("routingMarkerStroke");
+    expect(source).toContain("isUnattributedRouteDecisionMarker");
+    expect(source).toContain("data-unattributed-router-source");
+    expect(source).toContain("Router audit");
+    expect(source).toContain("Coworker missing");
+    expect(source).not.toContain("symbolGlyph");
+  });
+
+  it("keeps the first viewport focused on a graphical routing map instead of dashboard cards", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("aria-label=\"Routing map workspace\"");
+    expect(source).toContain("min-h-[calc(100vh-9rem)]");
+    expect(source).toContain("MapSymbolRail");
+    expect(source).toContain("RouteStyleRail");
+    expect(source).toContain("aria-label=\"Routing replay timeline\"");
+    expect(source).toContain("aria-label=\"Activity projection details\"");
+    expect(source).not.toContain("xl:grid-cols-[minmax(0,1fr)_320px]");
+    expect(source).not.toContain(">Decision symbols<");
+  });
+
+  it("supports replay, symbol inspection, thinner traffic, vertical spacing, and spend rollups", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("setReplayTimestamp");
+    expect(source).toContain("timelineCenterTimestamp");
+    expect(source).toContain("zoomTimelineAroundPlayhead");
+    expect(source).toContain("resetTimelineZoom");
+    expect(source).toContain("selectedReplayTime");
+    expect(source).toContain("type=\"range\"");
+    expect(source).toContain("aria-label=\"Routing replay cursor\"");
+    expect(source).toContain("timelineMarkerPosition");
+    expect(source).toContain("RoutingSymbolDetail");
+    expect(source).toContain("data-symbol-detail-popover");
+    expect(source).toContain("Coworker");
+    expect(source).toContain("Not recorded on this routing event");
+    expect(source).toContain("routeSymbolCaption");
+    expect(source).toContain("caption={routeSymbolCaption");
+    expect(source).toContain("onInspect");
+    expect(source).toContain("symbolDetailAnchor");
+    expect(source).toContain("anchorSymbolDetail");
+    expect(source).toContain("data-symbol-detail-anchor");
+    expect(source).toContain("pinnedMarkerId");
+    expect(source).toContain("onSelectInspect");
+    expect(source).toContain("onKeyDown");
+    expect(source).toContain("aggregateRoutesForDisplay");
+    expect(source).toContain("sourceRouteIds");
+    expect(source).toContain("routingSummary");
+    expect(source).toContain("Spend");
+    expect(source).toContain("Tokens");
+    expect(source).toContain("formatCurrency");
+    expect(source).toContain("formatTokenCount");
+    expect(source).toContain("Math.min(5, 1.25 + trafficWeight * 0.45)");
+    expect(source).toContain("ROUTING_LAYOUT");
+    expect(source).toContain("width: 1080");
+    expect(source).toContain("providerNodeX: 852");
+    expect(source).toContain("routedCoworkerIds");
+    expect(source).toContain("routedProviderIds");
+    expect(source).toContain("prioritizeRoutingNodeIds");
+    expect(source).toContain("priorityIds?: ReadonlySet<string>");
+  });
+
+  it("shows configured inactive providers as topology nodes even without active routes", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("configured / inactive");
+    expect(source).toContain("providerNodeStateLabel");
+    expect(source).toContain("providerNodeStroke");
+    expect(source).toContain("data-provider-state");
+    expect(source).toContain("configured-inactive");
+    expect(source).toContain("providerTypeFilteredProviders.forEach");
+    expect(source).toContain("visibleProviders.length > 0 || visibleCoworkers.length > 0");
+  });
+
+  it("renders provider nodes with known provider logo marks instead of generic symbols", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("ProviderLogoMark");
+    expect(source).toContain("ProviderBrandGlyph");
+    expect(source).toContain("providerLogoFor");
+    expect(source).toContain("PROVIDER_LOGO_MATCHERS");
+    expect(source).toContain("data-provider-logo");
+    expect(source).toContain("Claude");
+    expect(source).toContain("OpenAI");
+    expect(source).toContain("Gemini");
+    expect(source).toContain("Ollama");
+    expect(source).toContain("GitHub");
+    expect(source).toContain("Postgres");
+    expect(source).toContain("Browser");
+    expect(source).toContain("aria-label={`${provider.label} logo`}");
+  });
+
+  it("renders routing replay as a video-style timeline with visible playhead and time ticks", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("buildTimelineTicks");
+    expect(source).toContain("RoutingTimelineTick");
+    expect(source).toContain("formatTickLabel");
+    expect(source).toContain("timelineSpanLabel");
+    expect(source).toContain("formatTimelineSpan");
+    expect(source).toContain("data-routing-playhead");
+    expect(source).toContain("aria-label=\"Selected replay time\"");
+    expect(source).toContain("bg-[var(--dpf-error)]");
+    expect(source).toContain("data-routing-event-marker");
+    expect(source).toContain("Time scale");
+    expect(source).toContain("ROUTING_TIMELINE_ZOOM_LEVELS");
+    expect(source).toContain("buildTimelineWindow");
+    expect(source).toContain("clampTimelineTimestamp");
+    expect(source).toContain("timelineMarkerInRange");
+    expect(source).toContain("Zoom time scale in");
+    expect(source).toContain("Reset time scale");
+    expect(source).toContain("zoomLabel");
+  });
 });

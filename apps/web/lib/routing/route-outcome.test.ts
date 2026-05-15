@@ -75,6 +75,19 @@ describe("recordRouteOutcome", () => {
     });
   });
 
+  it("records coworker attribution when present", async () => {
+    await recordRouteOutcome({
+      ...BASE_OUTCOME,
+      agentId: "support-specialist",
+    } as RouteOutcomeInput & { agentId: string });
+
+    expect(prisma.routeOutcome.create).toHaveBeenCalledOnce();
+    const call = vi.mocked(prisma.routeOutcome.create).mock.calls[0][0];
+    expect(call.data).toMatchObject({
+      agentId: "support-specialist",
+    });
+  });
+
   it("generates unique requestId", async () => {
     await recordRouteOutcome(BASE_OUTCOME);
     await recordRouteOutcome(BASE_OUTCOME);

@@ -14,6 +14,7 @@ import {
   DEFAULT_MINIMUM_CAPABILITIES,
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
 } from "@/lib/routing/agent-capability-types";
+import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 import type { UserContext } from "@/lib/permissions";
 
@@ -295,6 +296,38 @@ function buildFabricationFailureMessage(params: {
   return "I stopped because I was still describing work without using the required tools. The authoritative state was not updated yet, so the claimed progress would have been misleading.";
 }
 
+function buildLocalToolCallFailureMessage(result: RoutedInferenceResult): string {
+  const modelLabel = result.modelId || "the selected local model";
+  return [
+    "This turn routed to Docker Model Runner, but the local model did not produce the required tool call for this data-backed request.",
+    `Model: ${modelLabel}.`,
+    "The route is recorded, but there is no tool-backed result to return. Retry with a tool-capable provider or update this coworker's model assignment before asking for current operational totals.",
+  ].join(" ");
+}
+
+type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
+
+function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
+  const counts = new Map<string, number>();
+  for (const tool of executedTools) {
+    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([name, count]) => count > 1 ? `${name} x${count}` : name)
+    .join(", ");
+}
+
+function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
+  const toolSummary = summarizeExecutedToolNames(executedTools) || "the available tools";
+  return [
+    `I used ${toolSummary}, but the coworker hit the runtime limit before it produced a final answer.`,
+    "I stopped before returning another raw tool request.",
+    "The route and tool attempts were recorded; try a narrower question or use the finance reports directly for the current totals while we add a more direct finance-summary tool.",
+  ].join(" ");
+}
+
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
 // Nudging these responses toward tools breaks legitimate HR / data-entry flows
@@ -438,7 +471,7 @@ export type AgenticResult = {
   totalInputTokens: number;
   totalOutputTokens: number;
   /** Tool calls executed during the loop */
-  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: ToolResult }>;
+  executedTools: ExecutedTool[];
   /** If a proposal tool was called, return it for approval card rendering */
   proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
 };
@@ -1113,6 +1146,29 @@ export async function runAgenticLoop(params: {
         ),
       });
 
+        if (
+          shouldNudgeNow &&
+          iteration === 0 &&
+          executedTools.length === 0 &&
+          result.providerId === "local" &&
+          !BUILD_ROUTE_PATTERN.test(routeContext ?? "")
+        ) {
+          console.warn(
+            `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${agentId} route=${routeContext}`,
+          );
+          return {
+            content: buildLocalToolCallFailureMessage(result),
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
+
         if (shouldNudgeNow) {
           // Preserve the best text-only response before nudging, in case the
           // nudge produces an empty response (common with ChatGPT/gpt-5.4).
@@ -1354,6 +1410,7 @@ export async function runAgenticLoop(params: {
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
   const fallbackContent = lastResult?.content?.trim() ?? "";
+  const fallbackIsRawToolUse = fallbackContent.length > 0 && extractToolCalls(fallbackContent).length > 0;
   const fallbackIsFabricated = detectFabrication(
     fallbackContent,
     executedTools.length,
@@ -1362,7 +1419,9 @@ export async function runAgenticLoop(params: {
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
   );
   return {
-    content: fallbackIsFabricated
+    content: fallbackIsRawToolUse
+      ? buildRuntimeLimitToolLoopMessage(executedTools)
+      : fallbackIsFabricated
       ? buildFabricationFailureMessage({
           response: fallbackContent,
           tools,

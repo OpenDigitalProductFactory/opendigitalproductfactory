@@ -1988,6 +1988,7 @@ model RouteOutcome {
   recipeId          String?
   contractFamily    String
   taskType          String
+  agentId           String?
   latencyMs         Int
   inputTokens       Int
   outputTokens      Int
@@ -2002,6 +2003,7 @@ model RouteOutcome {
 
   @@index([recipeId, contractFamily])
   @@index([providerId, modelId])
+  @@index([agentId, createdAt])
 }
 
 model RecipePerformance {
@@ -5384,6 +5386,9 @@ model PolicyRule {
 model RouteDecisionLog {
   id                 String   @id @default(cuid())
   agentMessageId     String?
+  actorKind          String
+  actorId            String
+  agentId            String?
   selectedEndpointId String
   taskType           String
   sensitivity        String
@@ -5399,6 +5404,8 @@ model RouteDecisionLog {
   selectedModelId    String?
 
   @@index([taskType])
+  @@index([actorKind, actorId, createdAt])
+  @@index([agentId, createdAt])
   @@index([selectedEndpointId])
   @@index([createdAt])
 }

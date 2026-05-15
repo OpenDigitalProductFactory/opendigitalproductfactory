@@ -108,6 +108,11 @@ describe("callWithFallbackChain", () => {
       undefined, // no tools
     );
     expect(mockPrisma.routeDecisionLog.create).toHaveBeenCalledOnce();
+    expect(mockPrisma.routeDecisionLog.create.mock.calls[0][0].data).toEqual(expect.objectContaining({
+      actorKind: "agent",
+      actorId: "test-agent",
+      agentId: "test-agent",
+    }));
     expect(mockObserve).not.toHaveBeenCalled();
   });
 

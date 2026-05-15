@@ -51,6 +51,10 @@ vi.mock("@/lib/ai-provider-internals", () => ({
   autoDiscoverAndProfile: vi.fn(),
 }));
 
+vi.mock("./route-outcome", () => ({
+  recordRouteOutcome: vi.fn(() => Promise.resolve()),
+}));
+
 // ── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { callWithFallbackChain } from "./fallback";
@@ -59,6 +63,7 @@ import { callProvider, InferenceError } from "@/lib/ai-inference";
 import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
+import { recordRouteOutcome } from "./route-outcome";
 import type { RouteDecision } from "./types";
 import type { SensitivityLevel } from "./types";
 
@@ -95,6 +100,7 @@ const mockLearnFromRateLimitResponse = learnFromRateLimitResponse as ReturnType<
 const mockExtractRetryAfterMs = extractRetryAfterMs as ReturnType<typeof vi.fn>;
 const mockScheduleRecovery = scheduleRecovery as ReturnType<typeof vi.fn>;
 const mockAutoDiscoverAndProfile = autoDiscoverAndProfile as ReturnType<typeof vi.fn>;
+const mockRecordRouteOutcome = recordRouteOutcome as ReturnType<typeof vi.fn>;
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -115,6 +121,7 @@ beforeEach(() => {
     discovered: 1,
     profiled: 1,
   });
+  mockRecordRouteOutcome.mockResolvedValue(undefined);
 
   // Default: extractRetryAfterMs returns undefined (fallback to 60s)
   mockExtractRetryAfterMs.mockReturnValue(undefined);
@@ -145,6 +152,34 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       );
 
       expect(mockRecordRequest).toHaveBeenCalledWith("prov1", "model1", 150);
+    });
+
+    it("records route outcomes with coworker attribution from the MCP session", async () => {
+      mockCallProvider.mockResolvedValue({
+        content: "hello",
+        inputTokens: 100,
+        outputTokens: 50,
+        inferenceMs: 200,
+      });
+
+      await callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+        undefined,
+        undefined,
+        undefined,
+        { userId: "user-1", agentId: "support-specialist", threadId: "thread-1", routeContext: "service-operations" },
+      );
+
+      expect(mockRecordRouteOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: "support-specialist",
+          providerId: "prov1",
+          modelId: "model1",
+          fallbackOccurred: false,
+        }),
+      );
     });
   });
 

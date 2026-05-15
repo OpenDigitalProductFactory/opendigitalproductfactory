@@ -157,6 +157,80 @@ export type OperationsMapProjectionFilters = {
   severities: OperationsMapSeverity[];
 };
 
+export type OperationsMapRoutingRouteState = "active" | "secondary" | "failover" | "scheduled" | "historical";
+
+export type OperationsMapRoutingMarkerType = "decision" | "quota" | "error" | "failover" | "scheduled" | "governance";
+
+export type OperationsMapRoutingProviderKind = "cloud" | "local" | "cli";
+
+export type OperationsMapRoutingProviderType = "llm" | "mcp" | "other";
+
+export type OperationsMapRoutingCoworker = {
+  agentId: string;
+  label: string;
+  stationLabel: string | null;
+};
+
+export type OperationsMapRoutingProvider = {
+  providerId: string;
+  label: string;
+  status: string;
+  kind: OperationsMapRoutingProviderKind;
+  providerType: OperationsMapRoutingProviderType;
+  costUsd: number;
+  tokenTotal: number;
+  decisionCount: number;
+};
+
+export type OperationsMapRoutingRoute = {
+  id: string;
+  coworkerId: string;
+  providerId: string;
+  state: OperationsMapRoutingRouteState;
+  label: string;
+  summary: string;
+  occurredAt: string | null;
+  decisionId: string | null;
+  trafficWeight: number;
+  markerIds: string[];
+};
+
+export type OperationsMapRoutingMarker = {
+  id: string;
+  type: OperationsMapRoutingMarkerType;
+  label: string;
+  summary: string;
+  routeId: string | null;
+  coworkerId: string | null;
+  actorKind?: string | null;
+  actorId?: string | null;
+  providerId: string | null;
+  occurredAt: string | null;
+};
+
+export type OperationsMapRoutingTimelineMarker = {
+  id: string;
+  lane: "history" | "current" | "future";
+  label: string;
+  occurredAt: string;
+  markerType: OperationsMapRoutingMarkerType;
+};
+
+export type OperationsMapRoutingLegendItem = {
+  state: OperationsMapRoutingRouteState;
+  label: string;
+  description: string;
+};
+
+export type OperationsMapRoutingTopology = {
+  coworkers: OperationsMapRoutingCoworker[];
+  providers: OperationsMapRoutingProvider[];
+  routes: OperationsMapRoutingRoute[];
+  markers: OperationsMapRoutingMarker[];
+  timeline: OperationsMapRoutingTimelineMarker[];
+  legend: OperationsMapRoutingLegendItem[];
+};
+
 export type OperationsMapQuickViewId = "all" | "exceptions" | "evidence" | "tool-runs";
 
 export type OperationsMapQuickView = {

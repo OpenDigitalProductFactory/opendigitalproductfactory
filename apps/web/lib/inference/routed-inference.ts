@@ -22,6 +22,7 @@ import {
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
 import { logTokenUsage } from "@/lib/ai-inference";
+import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
 
 // ─── Result type ────────────────────────────────────────────────────────────
 
@@ -120,6 +121,12 @@ export interface RouteAndCallOptions {
    * which agent triggered the capability floor violation.
    */
   agentId?: string;
+  /**
+   * Actor responsible for this routing decision. Agent calls normally set
+   * agentId; system utilities and schedulers should set this explicitly so
+   * RouteDecisionLog never lands as an unattributed audit event.
+   */
+  routingActor?: RouteDecisionActor;
   /**
    * EP-INF-013: Reasoning effort hint for the selected model.
    *   low    — no extended thinking; fast and cheap (default when omitted)
@@ -410,7 +417,9 @@ export async function routeAndCall(
 
   // 4. Persist route decision (fire-and-forget unless disabled)
   if (options?.persistDecision !== false) {
-    persistRouteDecision(decision).catch((err) =>
+    persistRouteDecision(decision, {
+      actor: options?.routingActor ?? (options?.agentId ? { kind: "agent", id: options.agentId } : { kind: "system", id: "routed-inference" }),
+    }).catch((err) =>
       console.error("[routeAndCall] Failed to persist route decision:", err),
     );
   }
@@ -426,6 +435,7 @@ export async function routeAndCall(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
+      { agentId: options?.agentId ?? null },
     );
 
     // If the adapter returned an operation ID (async adapter), create tracking record
@@ -492,6 +502,7 @@ export async function routeAndCall(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
+    { agentId: options?.agentId ?? null },
   );
 
   // 5c. Local-fallback signal.

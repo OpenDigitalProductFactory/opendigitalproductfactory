@@ -66,4 +66,13 @@ describe("PlatformTabNav", () => {
     expect(html).toContain('href="/platform/ai/capability-needs"');
     expect(html).toContain(">Capability Needs<");
   });
+
+  it("uses compact chrome on the operations map so the visual route map starts sooner", () => {
+    pathname = "/platform/ai/operations-map";
+    const html = renderToStaticMarkup(<PlatformTabNav />);
+
+    expect(html).toContain("mb-3");
+    expect(html).toContain("sr-only");
+    expect(html).toContain('href="/platform/ai/operations-map"');
+  });
 });

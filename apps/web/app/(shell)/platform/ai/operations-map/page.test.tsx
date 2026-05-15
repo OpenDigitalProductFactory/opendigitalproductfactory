@@ -9,6 +9,13 @@ vi.mock("@dpf/db", () => ({
     toolExecutionReceipt: { findMany: vi.fn() },
     backlogItemActivity: { findMany: vi.fn() },
     externalEvidenceRecord: { findMany: vi.fn() },
+    routeDecisionLog: { findMany: vi.fn() },
+    agentMessage: { findMany: vi.fn() },
+    modelProvider: { findMany: vi.fn() },
+    modelProfile: { findMany: vi.fn() },
+    tokenUsage: { findMany: vi.fn() },
+    scheduledAgentTask: { findMany: vi.fn() },
+    scheduledJob: { findMany: vi.fn() },
   },
 }));
 
@@ -65,6 +72,51 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([
+      {
+        id: "decision-1",
+        agentMessageId: "build-specialist",
+        selectedEndpointId: "anthropic:claude-sonnet",
+        taskType: "codegen",
+        sensitivity: "confidential",
+        reason: "Best fit for code review",
+        fitnessScore: 0.91,
+        candidateTrace: [
+          {
+            endpointId: "anthropic:claude-sonnet",
+            providerId: "anthropic",
+            modelId: "claude-sonnet",
+            excluded: false,
+          },
+        ],
+        excludedTrace: [],
+        policyRulesApplied: [],
+        fallbackChain: [],
+        fallbacksUsed: null,
+        shadowMode: false,
+        createdAt: new Date("2026-05-10T12:01:00.000Z"),
+        selectedModelId: "claude-sonnet",
+      },
+    ] as never);
+    vi.mocked(prisma.agentMessage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([
+      {
+        providerId: "anthropic",
+        name: "Claude",
+        status: "active",
+        category: "external",
+        baseUrl: "https://api.anthropic.com",
+        endpointType: "llm",
+        serviceKind: null,
+        mcpTransport: null,
+        cliEngine: "claude",
+        recentFailureRate: 0,
+      },
+    ] as never);
+    vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
 
     const { default: OperationsMapPage } = await import("./page");
     const element = await OperationsMapPage();
@@ -77,6 +129,11 @@ describe("AI operations map page", () => {
     expect(props.projections.map((projection: { summary: string }) => projection.summary)).toContain("Write blocked by policy");
     expect(props.projections[0].links.authorityHref).toBe("/platform/audit/ledger?toolExecutionId=tool-1");
     expect(props.projections[0].links.coworkerHref).toBe("/platform/ai/agent/build-specialist");
+    expect(props.routingTopology.routes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ coworkerId: "build-specialist", providerId: "anthropic", state: "active" }),
+      ]),
+    );
     expect(props.recentWindowLabel).toBe("Last 40 records per evidence source");
   });
 });
