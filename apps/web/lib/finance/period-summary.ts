@@ -97,6 +97,8 @@ export type FinancePeriodComponent = {
   source: string;
 };
 
+export type FinancePeriodVerificationStatus = "verified" | "partial" | "no_current_data";
+
 export type FinancePeriodSummary = {
   period: { preset: string; label: string; start: string; end: string };
   currency: string;
@@ -115,6 +117,8 @@ export type FinancePeriodSummary = {
   };
   currencies: { distinctCount: number; codes: string[] };
   gaps: string[];
+  verificationStatus: FinancePeriodVerificationStatus;
+  sourceLanguage: string;
   provenance: {
     description: string;
     sources: string[];
@@ -274,7 +278,14 @@ export async function getFinancePeriodSummary(
     );
   }
 
-  return {
+  const verificationStatus: FinancePeriodVerificationStatus =
+    income.count === 0 && expensesCount === 0
+      ? "no_current_data"
+      : gaps.length > 0
+        ? "partial"
+        : "verified";
+
+  const summary: FinancePeriodSummary = {
     period: {
       preset: window.preset,
       label: window.label,
@@ -314,6 +325,8 @@ export async function getFinancePeriodSummary(
       codes: distinctCurrencies,
     },
     gaps,
+    verificationStatus,
+    sourceLanguage: "",
     provenance: {
       description:
         "Cash-basis aggregation from the canonical Invoice, Bill, and ExpenseClaim tables. Matches the lib/actions/reports.ts profit-loss aggregation used by the Finance reports surface.",
@@ -325,6 +338,20 @@ export async function getFinancePeriodSummary(
       ],
     },
   };
+  summary.sourceLanguage = formatFinancePeriodSummary(summary);
+  return summary;
+}
+
+export function formatFinancePeriodSummary(summary: FinancePeriodSummary): string {
+  const incomeAmount = summary.income.total.toFixed(2);
+  const expensesAmount = summary.expenses.total.toFixed(2);
+  const netAmount = summary.net.toFixed(2);
+  const verdict = summary.income.count === 0 && summary.expenses.count === 0
+    ? `${summary.period.label}: no paid activity recorded yet. Net ${netAmount} ${summary.currency}.`
+    : `${summary.period.label}: income ${incomeAmount} ${summary.currency} (${summary.income.count} invoice${summary.income.count === 1 ? "" : "s"}), expenses ${expensesAmount} ${summary.currency} (${summary.expenses.count} bill${summary.expenses.count === 1 ? "" : "s"}/claim${summary.expenses.count === 1 ? "" : "s"}), net ${netAmount} ${summary.currency}.`;
+  const evidence = `Evidence: ${summary.provenance.description} Sources: ${summary.provenance.sources.join("; ")}.`;
+  const caveats = summary.gaps.length > 0 ? ` Caveats: ${summary.gaps.join(" ")}` : "";
+  return `${verdict} Verification status: ${summary.verificationStatus}. ${evidence}${caveats}`;
 }
 
 function toNumber(value: unknown): number {

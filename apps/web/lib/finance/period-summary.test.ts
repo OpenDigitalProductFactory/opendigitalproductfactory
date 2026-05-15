@@ -149,6 +149,9 @@ describe("getFinancePeriodSummary", () => {
     expect(summary.expenses.expenseClaims.total).toBe(800);
     expect(summary.net).toBe(8000);
     expect(summary.gaps).toEqual([]);
+    expect(summary.verificationStatus).toBe("verified");
+    expect(summary.sourceLanguage).toContain("Evidence:");
+    expect(summary.sourceLanguage).toContain("Invoice.totalAmount");
     expect(summary.provenance.sources).toHaveLength(3);
   });
 
@@ -163,6 +166,9 @@ describe("getFinancePeriodSummary", () => {
     expect(summary.net).toBe(0);
     expect(summary.gaps).toHaveLength(1);
     expect(summary.gaps[0]).toMatch(/No paid invoices, bills, or expense claims/);
+    expect(summary.verificationStatus).toBe("no_current_data");
+    expect(summary.sourceLanguage).toContain("no paid activity recorded yet");
+    expect(summary.sourceLanguage).toContain("Caveats:");
   });
 
   it("flags partial gaps when only one side has activity", async () => {
@@ -180,6 +186,7 @@ describe("getFinancePeriodSummary", () => {
     expect(summary.expenses.total).toBe(0);
     expect(summary.gaps.some((g) => g.includes("expenses are zero"))).toBe(true);
     expect(summary.gaps.some((g) => g.includes("income is zero"))).toBe(false);
+    expect(summary.verificationStatus).toBe("partial");
   });
 
   it("surfaces pending receivables and payables as separate signals", async () => {

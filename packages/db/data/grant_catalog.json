@@ -567,7 +567,9 @@
       "description": "Create financial report.",
       "category": "consume",
       "sensitivity": "internal",
-      "honored_by_tools": [],
+      "honored_by_tools": [
+        "get_finance_period_summary"
+      ],
       "implies": []
     },
     {
