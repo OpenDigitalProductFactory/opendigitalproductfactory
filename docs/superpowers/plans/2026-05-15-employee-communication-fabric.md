@@ -153,7 +153,7 @@ describe("communication channel types", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/channel-types.test.ts
+pnpm --filter web exec vitest run lib/communications/channel-types.test.ts
 ```
 
 Expected: FAIL because `apps/web/lib/communications/channel-types.ts` does not exist.
@@ -277,7 +277,7 @@ export {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/channel-types.test.ts
+pnpm --filter web exec vitest run lib/communications/channel-types.test.ts
 ```
 
 Expected: PASS.
@@ -356,7 +356,7 @@ describe("selectCommunicationPlan", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/dispatch-policy.test.ts
+pnpm --filter web exec vitest run lib/communications/dispatch-policy.test.ts
 ```
 
 Expected: FAIL because `dispatch-policy.ts` does not exist.
@@ -423,7 +423,7 @@ export function selectCommunicationPlan(input: SelectCommunicationPlanInput): Co
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/dispatch-policy.test.ts
+pnpm --filter web exec vitest run lib/communications/dispatch-policy.test.ts
 ```
 
 Expected: PASS.
@@ -521,7 +521,7 @@ describe("communication dispatcher", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/dispatcher.test.ts
+pnpm --filter web exec vitest run lib/communications/dispatcher.test.ts
 ```
 
 Expected: FAIL because dispatcher and adapter files do not exist.
@@ -677,7 +677,7 @@ export async function sendQueueNotification(notification: QueueNotification): Pr
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/dispatcher.test.ts
+pnpm --filter web exec vitest run lib/communications/dispatcher.test.ts
 ```
 
 Expected: PASS.
@@ -873,7 +873,7 @@ describe("recordDeliveryAttempt", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/delivery-evidence.test.ts
+pnpm --filter web exec vitest run lib/communications/delivery-evidence.test.ts
 ```
 
 Expected: FAIL because `delivery-evidence.ts` does not exist.
@@ -977,7 +977,7 @@ expect(deliveryCreate).toHaveBeenCalledWith(expect.objectContaining({
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/delivery-evidence.test.ts apps/web/lib/communications/dispatcher.test.ts
+pnpm --filter web exec vitest run lib/communications/delivery-evidence.test.ts lib/communications/dispatcher.test.ts
 ```
 
 Expected: PASS.
@@ -1044,7 +1044,7 @@ describe("parseChannelBindingInput", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/channel-bindings.test.ts
+pnpm --filter web exec vitest run lib/communications/channel-bindings.test.ts
 ```
 
 Expected: FAIL because `channel-bindings.ts` does not exist.
@@ -1126,7 +1126,7 @@ export function parseChannelBindingInput(
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications/channel-bindings.test.ts
+pnpm --filter web exec vitest run lib/communications/channel-bindings.test.ts
 ```
 
 Expected: PASS.
@@ -1177,7 +1177,7 @@ describe("CommunicationsPage", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run "apps/web/app/(shell)/platform/tools/integrations/communications/page.test.tsx"
+pnpm --filter web exec vitest run "app/(shell)/platform/tools/integrations/communications/page.test.tsx"
 ```
 
 Expected: FAIL because the page does not exist.
@@ -1275,7 +1275,7 @@ expect(html).toContain("/platform/tools/integrations/communications");
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run "apps/web/app/(shell)/platform/tools/integrations/communications/page.test.tsx" "apps/web/app/(shell)/platform/tools/integrations/page.test.tsx"
+pnpm --filter web exec vitest run "app/(shell)/platform/tools/integrations/communications/page.test.tsx" "app/(shell)/platform/tools/integrations/page.test.tsx"
 ```
 
 Expected: PASS.
@@ -1337,7 +1337,7 @@ describe("EmployeeReachabilityPanel", () => {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/employee/EmployeeReachabilityPanel.test.tsx
+pnpm --filter web exec vitest run components/employee/EmployeeReachabilityPanel.test.tsx
 ```
 
 Expected: FAIL because the panel does not exist.
@@ -1397,7 +1397,7 @@ export function EmployeeReachabilityPanel({ bindings }: { bindings: Reachability
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/employee/EmployeeReachabilityPanel.test.tsx
+pnpm --filter web exec vitest run components/employee/EmployeeReachabilityPanel.test.tsx
 ```
 
 Expected: PASS.
@@ -1423,7 +1423,7 @@ git commit -s -m "feat(employee): add reachability panel"
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/communications apps/web/components/employee/EmployeeReachabilityPanel.test.tsx "apps/web/app/(shell)/platform/tools/integrations/communications/page.test.tsx" "apps/web/app/(shell)/platform/tools/integrations/page.test.tsx"
+pnpm --filter web exec vitest run lib/communications components/employee/EmployeeReachabilityPanel.test.tsx "app/(shell)/platform/tools/integrations/communications/page.test.tsx" "app/(shell)/platform/tools/integrations/page.test.tsx"
 ```
 
 Expected: PASS.
@@ -1433,7 +1433,7 @@ Expected: PASS.
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/queue
+pnpm --filter web exec vitest run lib/queue
 ```
 
 Expected: PASS, or only pre-existing unrelated failures. If failures occur in files touched by this plan, fix them before continuing.
