@@ -6,7 +6,7 @@ import {
 } from "./mcp-token-scopes";
 
 describe("defaultMcpTokenScopes", () => {
-  it("selects the read-only scopes coding agents need for repo-grounded work", () => {
+  it("selects the scopes coding agents need for repo-grounded coordinated work", () => {
     const availableScopes = [
       "admin_write",
       "architecture_read",
@@ -14,6 +14,9 @@ describe("defaultMcpTokenScopes", () => {
       "code_graph_read",
       "file_read",
       "spec_plan_read",
+      "work_capsule_adopt",
+      "work_capsule_read",
+      "work_capsule_write",
     ];
 
     expect(defaultMcpTokenScopes(availableScopes)).toEqual([
@@ -22,6 +25,9 @@ describe("defaultMcpTokenScopes", () => {
       "code_graph_read",
       "file_read",
       "spec_plan_read",
+      "work_capsule_read",
+      "work_capsule_write",
+      "work_capsule_adopt",
     ]);
   });
 
