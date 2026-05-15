@@ -1,7 +1,7 @@
 ---
 title: Founder Kernel
 pageKind: index
-status: draft
+status: published
 abstract: Top-level index for the founder kernel — stances, heuristics, entities, and the raw sources that back them.
 ---
 
@@ -9,7 +9,34 @@ abstract: Top-level index for the founder kernel — stances, heuristics, entiti
 
 The founder kernel is the wisdom layer that ships with DPF. It answers the question every user eventually asks: **&#34;what would Mark do?&#34;** Pages here are not summaries of external material; they are the platform&#39;s stance, organised by kind.
 
-This first cut was researched and drafted from Mark&#39;s public corpus (LinkedIn long-form articles, Open Group publications including the W205 *Shift to Digital Product* white paper, BriefingsDirect interviews, Architecture &amp; Governance Magazine, ServiceNow community blogs, IT4IT v3 contributions, DPROM, and CSDM v5 materials). Every page is **`status: draft`** — Mark reviews, edits, and flips to `published` what survives.
+This first cut was researched and drafted from Mark&#39;s public corpus (LinkedIn long-form articles, Open Group publications including the W205 *Shift to Digital Product* white paper, BriefingsDirect interviews, Architecture &amp; Governance Magazine, ServiceNow community blogs, IT4IT v3 contributions, DPROM, and CSDM v5 materials). Mark published the kernel after review.
+
+## Source verification status
+
+The kernel was cross-referenced against its cited sources in a separate audit. Status per source:
+
+| Source | Verification |
+|---|---|
+| [Possible Futures for EA (A&amp;G Magazine)](../raw-sources/articles/possible-futures-enterprise-architecture.md) | ✓ All quoted claims verified verbatim. |
+| [Open Group 2017 blog interview](../raw-sources/articles/open-group-2017-managing-business-of-it.md) | ✓ All quoted claims verified verbatim. |
+| [W205 *Shift to Digital Product* paper](../raw-sources/papers/shift-to-digital-product-w205.md) | ✓ Authorship, date, thesis, and Service Model → Digital Product Backbone reframe all verified against The Open Group&#39;s published metadata. |
+| [BriefingsDirect 2019 transcript](../raw-sources/articles/briefings-direct-it4it-2019.md) | ⚠ Bodman&#39;s &#34;hub of frameworks&#34; and &#34;framework for managing IT&#34; quotes verified verbatim. **Attribution caveat:** a separate &#34;helps bring ITIL and SAFe together&#34; gloss in the same transcript is from Lars Rossen, not Bodman — drafts citing this source should keep attribution clean. |
+| [Sibling Portfolios (ServiceNow community)](../raw-sources/articles/sibling-portfolios.md) | ⚠ Position verified. **Two attribution caveats:** the article does not use the term &#34;DPM&#34; (that branding is from a 2022 LinkedIn post), and the &#34;DevOps at enterprise level&#34; quote earlier drafts associated with this article isn&#39;t actually in it (it&#39;s from the 2022 DPM overview post). |
+| LinkedIn Pulse: [Why Product-Centric Approach](../raw-sources/articles/why-product-centric-approach-needed.md) | ⊘ **Unverified.** LinkedIn returned HTTP 503 to the audit (auth-wall). The Digital Product definition quote and the &#34;Projects are time-bound&#34; quote that the stance pages rest on are taken from the research agent&#39;s prior ingestion via search snippets; not independently verified by this audit. Mark should spot-check before high-stakes use. |
+| LinkedIn Pulse: [Why Product-Centricity Critical](../raw-sources/articles/why-product-centricity-critical.md) | ⊘ Same as above — auth-wall blocked verification. |
+| LinkedIn Pulse: [Think Twice](../raw-sources/articles/think-twice-ea-platform-servicenow.md) | ⊘ Auth-wall blocked verification. The &#34;Ugly Reckoning Phase&#34; phasing and the camera analogy that `stances/dont-integrate-ea-platform` rests on need a personal spot-check. |
+| [IT4IT v3 framework](../raw-sources/frameworks/it4it-v3.md) | ✓ Public-facing standard metadata verified. |
+| [CSDM framework](../raw-sources/frameworks/csdm.md) | ✓ Public-facing product documentation verified. |
+
+## Principles — durable governance
+
+Tier-weighted rules that contribute to decision aggregation across every matching context. Heavier than stances (which take a position on one topic), more durable than heuristics (which fire situationally). See [`SCHEMA.md`](../SCHEMA.md) for the `principle` page-kind contract and tier semantics.
+
+- `[[principles/trust-the-data-spine]]` — core. Prefer a trusted, auto-populated data spine over reasoning on a model nobody trusts.
+- `[[principles/one-data-model]]` — core. Prefer one canonical data model over two integrated systems of record over the same entities.
+- `[[principles/contextualize-before-transforming]]` — core. Map the existing operating model against a new standard before changing the operating model.
+- `[[principles/do-the-work-dont-task-the-operator]]` — **commandment** (binds agents only). If the sandbox can do the task, the agent does it. Operator tasking is for HITL gates, judgment, irreversibility, or genuinely-impossible work — never for friction the agent could have absorbed.
+- `[[principles/test-in-the-portal-build]]` — **commandment** (binds agents only). Unit tests against mocked dependencies prove code shape; only a portal build exercising migrations, seed, build artifacts, and the rendered route proves the platform works.
 
 ## Stances — Mark&#39;s positions
 
@@ -78,4 +105,4 @@ This is a first cut. Pages that the research digest surfaced but haven&#39;t bee
 
 ## Status of this index page
 
-Drafted by Claude from research on Mark&#39;s public writing. Marked `status: draft` like the rest. Mark reviews and either edits in place or replaces with a version in his own voice.
+Drafted by Claude from research on Mark&#39;s public writing, then published after Mark&#39;s review. The principle pages above were drafted on top of already-published stances and are pending Mark&#39;s tier/public-promotion review before any tier escalation to `commandment` or `principlePublic: true`.

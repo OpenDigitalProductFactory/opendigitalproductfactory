@@ -46,6 +46,7 @@ import {
   listCoworkerCapabilityNeeds,
   submitCoworkerSelfAssessment,
 } from "@/lib/coworker-self-assessment/assessment-service";
+import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import {
   COWORKER_ASSESSMENT_CONFIDENCE,
   COWORKER_ASSESSMENT_VERDICTS,
@@ -251,6 +252,8 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 
+const WORK_CAPSULE_TOOL_ENUMS = workCapsuleToolEnums();
+
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "create_backlog_item",
@@ -416,6 +419,171 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["ideate"],
+  },
+  // ─── Work Capsule control harness (spec 2026-05-14) ────────────────────────
+  {
+    name: "list_work_capsules",
+    description: "List Work Capsule coordination records for active portal, Build Studio, and external agent work. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.statuses, description: "Filter by Work Capsule status." },
+        limit: { type: "number", description: "Max results (default 50, max 100)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "get_work_capsule",
+    description: "Fetch one Work Capsule with its recent activity timeline. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+      },
+      required: ["capsuleId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "create_work_capsule",
+    description: "Create a Work Capsule coordination record for planned work. Idempotency key is required so retries do not duplicate capsule activity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short capsule title." },
+        objective: { type: "string", description: "Outcome this capsule coordinates." },
+        source: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.sources, description: "Origin of the capsule." },
+        idempotencyKey: { type: "string", description: "Stable caller-provided key used to make create retries idempotent." },
+        executorKind: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.executors, description: "Optional executor expected to work the capsule." },
+      },
+      required: ["title", "objective", "source", "idempotencyKey"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "adopt_worktree",
+    description: "Adopt an existing local branch/worktree pair into a Work Capsule without creating a new worktree.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short capsule title." },
+        objective: { type: "string", description: "Outcome this adopted work should reach." },
+        repositoryFullName: { type: "string", description: "GitHub repository full name, for example OpenDigitalProductFactory/opendigitalproductfactory." },
+        headBranch: { type: "string", description: "Existing branch to adopt." },
+        worktreePath: { type: "string", description: "Local worktree path for the branch." },
+        baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+        baseSha: { type: "string", description: "Optional current base SHA." },
+        headSha: { type: "string", description: "Optional current head SHA." },
+        executorKind: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.executors, description: "Optional executor adopting the worktree." },
+      },
+      required: ["title", "objective", "repositoryFullName", "headBranch", "worktreePath"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "claim_capsule_scope",
+    description: "Claim path/module/package/route/skill/prompt scope for a Work Capsule. Repeated claims refresh the existing scope entry.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
+              value: { type: "string", description: "Claimed scope value." },
+              intent: { type: "string", enum: ["edit", "read"] },
+            },
+            required: ["kind", "value", "intent"],
+          },
+          description: "Scope claims to add or refresh.",
+        },
+      },
+      required: ["capsuleId", "claims"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "heartbeat_capsule",
+    description: "Renew the active lease for a Work Capsule so other agents can see that work is in flight.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+      },
+      required: ["capsuleId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "update_work_capsule_status",
+    description: "Set a Work Capsule status and record a temporary operator-visible status override reason.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        status: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.statuses, description: "Next Work Capsule status." },
+        reason: { type: "string", description: "Reason for the status update or override." },
+      },
+      required: ["capsuleId", "status", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "release_capsule_scope",
+    description: "Release previously claimed Work Capsule scope items by kind and value.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
+              value: { type: "string", description: "Scope value to release." },
+            },
+            required: ["kind", "value"],
+          },
+          description: "Scope claims to release.",
+        },
+      },
+      required: ["capsuleId", "claims"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "record_capsule_evidence",
+    description: "Append an evidence entry to a Work Capsule activity timeline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        kind: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.evidenceKinds, description: "Evidence kind." },
+        summary: { type: "string", description: "Evidence summary." },
+        command: { type: "string", description: "Optional command that produced the evidence." },
+        url: { type: "string", description: "Optional URL for PRs, CI runs, screenshots, or external evidence." },
+        result: { type: "object", description: "Optional structured result payload." },
+      },
+      required: ["capsuleId", "summary"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
   },
   // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────────
   {
@@ -1116,6 +1284,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
         summary: { type: "string", description: "2-3 sentence plain-language summary of what was accomplished in this phase" },
         decisionsMade: { type: "array", items: { type: "string" }, description: "Key decisions made and why" },
         openIssues: { type: "array", items: { type: "string" }, description: "Unresolved issues or risks carried to next phase" },
@@ -1135,6 +1304,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
         field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update — required" },
         value: { type: "object", description: "JSON value to store — required, do not omit. Shape varies by field; for designDoc include summary/files/approach, for buildPlan include tasks array with per-task acceptance criteria." },
       },
@@ -1148,7 +1318,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "reviewDesignDoc",
     description: "Submit the design document for AI review. Returns pass/fail with issues.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
@@ -1157,7 +1332,12 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "reviewBuildPlan",
     description: "Submit the implementation plan for AI review. Returns pass/fail with issues.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false, // Internal build workflow — available in advise mode
@@ -2207,15 +2387,29 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── EP-WIKI-001 Phase 3b2: Wiki Query ──────────────────────────────────────
   {
     name: "wiki_query",
-    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, and a content preview. Prefer this over web speculation.",
+    description: "Search the founder kernel + per-org overlay wiki for entity, stance, heuristic, principle, decision, summary, runbook, or index pages. Use when the user asks about a DPF concept, what the founder's view is on something, what governance principles apply, or for grounded judgment on a question. Returns top-K pages with slug, kind, kernel/overlay origin, content preview, and (for principle pages) tier + applies-to + dimensions + public-classification metadata. Prefer this over web speculation.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string", description: "What to search for. Natural language; the wiki is embedded for semantic similarity." },
         pageKind: {
           type: "string",
-          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic"],
-          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'entity' for definitions; 'decision' for DEC-* records.",
+          enum: ["entity", "summary", "decision", "runbook", "index", "stance", "heuristic", "principle"],
+          description: "Optional filter to one page kind. Use 'stance' or 'heuristic' when the user wants judgment; 'principle' for governance rules with tier and applies-to; 'entity' for definitions; 'decision' for DEC-* records.",
+        },
+        tier: {
+          type: "string",
+          enum: ["commandment", "core", "contextual"],
+          description: "When pageKind=principle: filter to one tier. Commandment = non-negotiable doctrine; core = strong defaults; contextual = narrow operational rules.",
+        },
+        appliesTo: {
+          type: "string",
+          enum: ["in_platform_coworker", "external_coding_agent", "human"],
+          description: "When pageKind=principle: filter to principles that apply to this population.",
+        },
+        publicOnly: {
+          type: "boolean",
+          description: "When pageKind=principle: only return principles classified as public (safe to surface to customers / contributors).",
         },
         limit: { type: "number", description: "Max results (default 5)." },
       },
@@ -2224,6 +2418,63 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
+  },
+  // ─── Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support ──
+  {
+    name: "principle_decide",
+    description:
+      "Advisory only. Score a set of options against the governance principles in scope for the calling population, and return a recommendation plus a per-principle contribution ledger. Uses commandments from Postgres (always included) and relevant core/contextual principles from semantic search. Does not execute the recommended option; the caller retains authority. Use when you have two or more options and want to surface which governance principles pull which way.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        context: {
+          type: "string",
+          description:
+            "A short description of the decision being made. Used for semantic retrieval of relevant core and contextual principles.",
+        },
+        options: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Stable identifier for the option." },
+              description: { type: "string", description: "Short prose description." },
+              features: {
+                type: "object",
+                description:
+                  "Optional map of dimension key -> 0..1 score. Dimensions must come from the registry in packages/db/src/wiki-taxonomy.ts. Options that supply features get structured alignment; otherwise the math falls back to semantic alignment.",
+                additionalProperties: { type: "number" },
+              },
+            },
+            required: ["id", "description"],
+          },
+          description: "The candidate options to score. Must be a non-empty array.",
+        },
+        callingPopulation: {
+          type: "string",
+          enum: ["in_platform_coworker", "external_coding_agent", "human"],
+          description: "Population whose principles should apply.",
+        },
+        maxPrinciples: {
+          type: "number",
+          description: "Cap on relevant core/contextual principles retrieved from Qdrant. Default 20.",
+        },
+        tieMargin: {
+          type: "number",
+          description:
+            "Margin threshold below which confidence flips to 'low' and the reasoning recommends human review. Default 0.2.",
+        },
+      },
+      required: ["context", "options", "callingPopulation"],
+    },
+    requiredCapability: null,
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
   },
   // ─── EP-WIKI-001 Phase 4b2b: Wiki Lint trigger ─────────────────────────────
   {
@@ -3065,10 +3316,51 @@ function logAdminActivity(
   }).then(() => {}).catch(() => {});
 }
 
-/** Resolve the active (non-complete, non-failed) FeatureBuild for the current user. */
-async function resolveActiveBuildId(userId: string): Promise<string | null> {
+/**
+ * Phases that exclude a FeatureBuild from "active" auto-resolution.
+ * `abandoned` is included because abandoned builds from prior runs would
+ * otherwise shadow the freshly promoted build (BI-E9CD1B92, 2026-05-13).
+ */
+const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
+
+/**
+ * Pull a well-formed `buildId` hint out of a tool's params bag.
+ * Returns null when the hint is missing, non-string, or doesn't have the
+ * `FB-` prefix that all real FeatureBuild IDs carry.
+ */
+function extractBuildIdHint(params: Record<string, unknown>): string | null {
+  const v = params["buildId"];
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  return trimmed.startsWith("FB-") ? trimmed : null;
+}
+
+/**
+ * Resolve the active FeatureBuild for the current user.
+ *
+ * When `buildIdHint` is supplied AND it resolves to an existing build the
+ * caller is allowed to act on, that hint wins — even if the user has a more
+ * recently updated build. This is how explicit `buildId` arguments from MCP
+ * tool calls reach the per-tool handlers without being silently overridden
+ * (the bug behind FB-1D69766D returning FB-72EB9C06's review).
+ *
+ * Fallback: most-recently-updated non-terminal build created by the user.
+ */
+async function resolveActiveBuildId(
+  userId: string,
+  buildIdHint?: string | null,
+): Promise<string | null> {
+  if (buildIdHint && buildIdHint.startsWith("FB-")) {
+    const hinted = await prisma.featureBuild.findUnique({
+      where: { buildId: buildIdHint },
+      select: { buildId: true, createdById: true },
+    });
+    // Access model today is owner-only — see getFeatureBuildForContext for the
+    // matching check. If a future grant model lands, expand this predicate.
+    if (hinted && hinted.createdById === userId) return hinted.buildId;
+  }
   const build = await prisma.featureBuild.findFirst({
-    where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
+    where: { createdById: userId, phase: { notIn: [...TERMINAL_BUILD_PHASES] } },
     orderBy: { updatedAt: "desc" },
     select: { buildId: true },
   });
@@ -3252,6 +3544,42 @@ export async function executeTool(
   const params = sanitizeToolParams(toolName, rawParams);
   try {
   switch (toolName) {
+    case "list_work_capsules": {
+      const { listWorkCapsulesTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return listWorkCapsulesTool(params);
+    }
+    case "get_work_capsule": {
+      const { getWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return getWorkCapsuleTool(params);
+    }
+    case "create_work_capsule": {
+      const { createWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return createWorkCapsuleTool(params, userId, context);
+    }
+    case "adopt_worktree": {
+      const { adoptWorktreeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return adoptWorktreeTool(params, userId, context);
+    }
+    case "claim_capsule_scope": {
+      const { claimCapsuleScopeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return claimCapsuleScopeTool(params, userId, context);
+    }
+    case "heartbeat_capsule": {
+      const { heartbeatCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return heartbeatCapsuleTool(params, userId, context);
+    }
+    case "update_work_capsule_status": {
+      const { updateWorkCapsuleStatusTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return updateWorkCapsuleStatusTool(params, userId, context);
+    }
+    case "release_capsule_scope": {
+      const { releaseCapsuleScopeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return releaseCapsuleScopeTool(params, userId, context);
+    }
+    case "record_capsule_evidence": {
+      const { recordCapsuleEvidenceTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return recordCapsuleEvidenceTool(params, userId, context);
+    }
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
         ? params["itemId"].trim()
@@ -4587,17 +4915,8 @@ export async function executeTool(
     }
 
     case "update_feature_brief": {
-      // Auto-resolve buildId if the LLM passed a placeholder or invalid value
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        buildId = latestBuild.buildId;
-      }
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const { updateFeatureBrief } = await import("@/lib/actions/build");
       const brief = {
         title: String(params["title"] ?? ""),
@@ -4623,16 +4942,8 @@ export async function executeTool(
     }
 
     case "suggest_taxonomy_placement": {
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true, brief: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        buildId = latestBuild.buildId;
-      }
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
         select: { brief: true },
@@ -4669,16 +4980,8 @@ export async function executeTool(
 
     case "confirm_taxonomy_placement": {
       try {
-        let buildId = String(params["buildId"] ?? "");
-        if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-          const latestBuild = await prisma.featureBuild.findFirst({
-            where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-            orderBy: { updatedAt: "desc" },
-            select: { buildId: true },
-          });
-          if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-          buildId = latestBuild.buildId;
-        }
+        const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+        if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
         const { confirmFeatureTaxonomy } = await import("@/lib/integrate/feature-attribution");
         const nodeId = params["nodeId"] ? String(params["nodeId"]) : null;
         // Validate proposeNew structure before passing to Prisma.
@@ -4714,24 +5017,19 @@ export async function executeTool(
     }
 
     case "register_digital_product_from_build": {
-      // Auto-resolve buildId if the LLM passed a placeholder
-      let buildId = String(params["buildId"] ?? "");
-      if (!buildId || buildId.startsWith("CURRENT") || !buildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true, diffPatch: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        // Pre-flight: deploy_feature must have run first to extract the diff
-        if (!latestBuild.diffPatch) {
-          return {
-            success: false,
-            error: "deploy_feature must be called first",
-            message: "The sandbox diff has not been extracted yet. Call deploy_feature first to extract the diff, then call register_digital_product_from_build.",
-          };
-        }
-        buildId = latestBuild.buildId;
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      // Pre-flight: deploy_feature must have run first to extract the diff.
+      const diffCheck = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { diffPatch: true },
+      });
+      if (!diffCheck?.diffPatch) {
+        return {
+          success: false,
+          error: "deploy_feature must be called first",
+          message: "The sandbox diff has not been extracted yet. Call deploy_feature first to extract the diff, then call register_digital_product_from_build.",
+        };
       }
       const { shipBuild } = await import("@/lib/actions/build");
       try {
@@ -4758,17 +5056,8 @@ export async function executeTool(
     }
 
     case "create_build_epic": {
-      // Auto-resolve buildId and digitalProductId from the build record
-      let epicBuildId = String(params["buildId"] ?? "");
-      if (!epicBuildId || epicBuildId.startsWith("CURRENT") || !epicBuildId.startsWith("FB-")) {
-        const latestBuild = await prisma.featureBuild.findFirst({
-          where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-          orderBy: { updatedAt: "desc" },
-          select: { buildId: true },
-        });
-        if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
-        epicBuildId = latestBuild.buildId;
-      }
+      const epicBuildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!epicBuildId) return { success: false, error: "No active build", message: "No active build found" };
       // Auto-resolve digitalProductId and portfolioSlug from the build's linked product
       const epicBuild = await prisma.featureBuild.findUnique({
         where: { buildId: epicBuildId },
@@ -4806,13 +5095,15 @@ export async function executeTool(
 
     case "search_portfolio_context": {
       const { searchPortfolioContext } = await import("@/lib/portfolio-search");
+      const activeBuildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       let portfolioId: string | null = null;
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
-        select: { portfolioId: true },
-      });
-      portfolioId = latestBuild?.portfolioId ?? null;
+      if (activeBuildId) {
+        const build = await prisma.featureBuild.findUnique({
+          where: { buildId: activeBuildId },
+          select: { portfolioId: true },
+        });
+        portfolioId = build?.portfolioId ?? null;
+      }
       const results = await searchPortfolioContext(String(params["query"] ?? ""), portfolioId);
       const totalMatches = results.taxonomyMatches.length + results.productMatches.length + results.buildMatches.length + results.backlogMatches.length;
       return { success: true, message: `Found ${totalMatches} related item${totalMatches !== 1 ? "s" : ""}.`, data: results as unknown as Record<string, unknown> };
@@ -4915,10 +5206,10 @@ export async function executeTool(
     }
 
     case "save_build_notes": {
-      // Auto-resolve the active build and merge notes into its plan field
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const latestBuild = await prisma.featureBuild.findUnique({
+        where: { buildId },
         select: { buildId: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
@@ -4952,9 +5243,10 @@ export async function executeTool(
     }
 
     case "save_phase_handoff": {
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: userId, phase: { notIn: ["complete", "failed"] } },
-        orderBy: { updatedAt: "desc" },
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const latestBuild = await prisma.featureBuild.findUnique({
+        where: { buildId },
         select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
@@ -5058,7 +5350,7 @@ export async function executeTool(
     // ─── Build Studio Lifecycle Tool Handlers (EP-SELF-DEV-002) ─────────────
 
     case "saveBuildEvidence": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build found.", message: "No active build." };
       const field = String(params.field ?? "");
       const allowedFields = ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet", "scoutFindings"];
@@ -5257,7 +5549,7 @@ export async function executeTool(
     }
 
     case "reviewDesignDoc": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let phaseGateBlocker: string | null = null;
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
@@ -5536,7 +5828,7 @@ export async function executeTool(
     }
 
     case "reviewBuildPlan": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
@@ -5685,7 +5977,7 @@ export async function executeTool(
 
     case "get_code_graph_freshness": {
       const { getCodeGraphFreshness } = await import("@/lib/integrate/code-graph-access");
-      const freshness = await getCodeGraphFreshness();
+      const freshness = await getCodeGraphFreshness(undefined, { inspectStructuralHealth: true });
       return {
         success: true,
         message: freshness.summary,
@@ -5694,7 +5986,7 @@ export async function executeTool(
     }
 
     case "inspect_build_code_impact": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) {
         return { success: false, error: "No active build.", message: "No active build." };
       }
@@ -5842,7 +6134,7 @@ export async function executeTool(
     }
 
     case "start_build": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
@@ -5884,7 +6176,7 @@ export async function executeTool(
 
 
     case "run_sandbox_tests": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const { isSandboxAvailable: rstAvail } = await import("@/lib/integrate/sandbox/build-branch");
@@ -6098,7 +6390,7 @@ export async function executeTool(
     case "search_sandbox":
     case "list_sandbox_files":
     case "run_sandbox_command": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       // Simple availability check — no slot management, no pool acquisition.
@@ -6355,7 +6647,7 @@ export async function executeTool(
     }
 
     case "describe_model": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const modelName = String(params.model_name ?? "");
@@ -6404,7 +6696,7 @@ export async function executeTool(
     }
 
     case "validate_schema": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       // Simple availability check — no slot management
@@ -6450,10 +6742,7 @@ export async function executeTool(
     }
 
     case "deploy_feature": {
-      const explicitBuildId = typeof params.buildId === "string" && params.buildId.startsWith("FB-")
-        ? params.buildId
-        : null;
-      const buildId = explicitBuildId ?? await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({
         where: { buildId },
@@ -6637,7 +6926,7 @@ export async function executeTool(
     // ─── Portal PR Creation & Merge ────────────────────────────────────────
 
     case "create_portal_pr": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const build = await prisma.featureBuild.findUnique({
@@ -7407,7 +7696,7 @@ export async function executeTool(
     // ─── Hive Mind Contribution ──────────────────────────────────────────────
 
     case "assess_contribution": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const build = await prisma.featureBuild.findUnique({
@@ -7537,10 +7826,7 @@ export async function executeTool(
     }
 
     case "contribute_to_hive": {
-      const explicitBuildId = typeof params.buildId === "string" && params.buildId.startsWith("FB-")
-        ? params.buildId
-        : null;
-      const buildId = explicitBuildId ?? await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
 
       const devConfig = await prisma.platformDevConfig.findUnique({
@@ -7932,7 +8218,7 @@ export async function executeTool(
     }
 
     case "run_ux_test": {
-      const buildId = await resolveActiveBuildId(userId);
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true } });
       if (!build?.sandboxPort || !build.sandboxId || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
@@ -8953,22 +9239,222 @@ export async function executeTool(
       const org = await prisma.organization
         .findFirst({ select: { id: true } })
         .catch(() => null);
-      const results = await searchWikiPages({
+      // Translate the ergonomic public schema fields (tier, appliesTo,
+      // publicOnly) into canonical principle filter args. The public MCP
+      // surface uses the short names so authors don't have to remember
+      // "principleTier" / "principleAppliesTo" / "principlePublic"; the
+      // canonical names live at the storage and retrieval layer per the
+      // chief-architect review applied to the implementation plan.
+      const searchArgs: Parameters<typeof searchWikiPages>[0] = {
         query: String(params["query"] ?? ""),
         organizationId: org?.id ?? null,
         pageKind: typeof params["pageKind"] === "string" ? params["pageKind"] : undefined,
         limit: typeof params["limit"] === "number" ? params["limit"] : 5,
-      });
+      };
+      if (typeof params["tier"] === "string") {
+        searchArgs.principleTier = params["tier"];
+      }
+      if (typeof params["appliesTo"] === "string") {
+        searchArgs.principleAppliesTo = params["appliesTo"];
+      }
+      if (typeof params["publicOnly"] === "boolean") {
+        searchArgs.principlePublic = params["publicOnly"];
+      }
+      const results = await searchWikiPages(searchArgs);
       if (results.length === 0) {
         return { success: true, message: "No matching wiki pages found.", data: { results: [] } };
       }
       const summary = results
-        .map(
-          (r) =>
-            `${r.slug} (${r.pageKind}, ${r.source}) — ${r.title} (${Math.round(r.score * 100)}% match)`,
-        )
+        .map((r) => {
+          const tierFragment =
+            r.pageKind === "principle" && r.principleTier
+              ? `, ${r.principleTier}`
+              : "";
+          return `${r.slug} (${r.pageKind}, ${r.source}${tierFragment}) — ${r.title} (${Math.round(r.score * 100)}% match)`;
+        })
         .join("\n");
       return { success: true, message: summary, data: { results } };
+    }
+
+    case "principle_decide": {
+      // Phase 2 Task 2.7. Pulls in-scope commandments from Postgres (always
+      // applied) and relevant core/contextual principles from Qdrant, then
+      // runs the pure decide() math. Returns a contribution ledger so
+      // callers can render the why, not just the what.
+      const validPopulations = new Set([
+        "in_platform_coworker",
+        "external_coding_agent",
+        "human",
+      ]);
+      const callingPopulation = params["callingPopulation"];
+      if (
+        typeof callingPopulation !== "string" ||
+        !validPopulations.has(callingPopulation)
+      ) {
+        return {
+          success: false,
+          message:
+            "callingPopulation must be one of: in_platform_coworker, external_coding_agent, human.",
+          error: "Invalid callingPopulation",
+        };
+      }
+      const optionsParam = params["options"];
+      if (!Array.isArray(optionsParam) || optionsParam.length === 0) {
+        return {
+          success: false,
+          message: "options must be a non-empty array.",
+          error: "Empty options",
+        };
+      }
+
+      const { listPrinciplesByTier, prisma, PRINCIPLE_DECIDE_DEFAULTS } =
+        await import("@dpf/db");
+      const { searchWikiPages } = await import("@/lib/wiki/embeddings");
+      const { decide } = await import("@/lib/wiki/principle-decide");
+
+      const maxPrinciples =
+        typeof params["maxPrinciples"] === "number"
+          ? params["maxPrinciples"]
+          : PRINCIPLE_DECIDE_DEFAULTS.maxPrinciples;
+      const tieMargin =
+        typeof params["tieMargin"] === "number"
+          ? params["tieMargin"]
+          : PRINCIPLE_DECIDE_DEFAULTS.tieMargin;
+      const contextualThreshold =
+        PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
+      const semanticWarnRatio =
+        PRINCIPLE_DECIDE_DEFAULTS.semanticFallbackWarnRatio;
+
+      const org = await prisma.organization
+        .findFirst({ select: { id: true } })
+        .catch(() => null);
+      const organizationId: string | null = org?.id ?? null;
+
+      // 1. Commandments from Postgres (full dimension vector). Always applied.
+      let commandments: Array<Record<string, unknown>> = [];
+      try {
+        commandments = (await listPrinciplesByTier(prisma, {
+          tier: "commandment",
+          organizationId,
+          appliesTo: callingPopulation,
+          limit: 10,
+        })) as Array<Record<string, unknown>>;
+      } catch (err) {
+        console.warn("[principle_decide] commandment Postgres lookup failed:", err);
+      }
+
+      const contextQuery = String(params["context"] ?? "");
+
+      // 2. Core from Qdrant — relevance-ranked.
+      let core: Array<Record<string, unknown>> = [];
+      try {
+        core = (await searchWikiPages({
+          query: contextQuery,
+          organizationId,
+          pageKind: "principle",
+          principleTier: "core",
+          principleAppliesTo: callingPopulation,
+          limit: 5,
+        })) as Array<Record<string, unknown>>;
+      } catch (err) {
+        console.warn("[principle_decide] core Qdrant lookup failed:", err);
+      }
+
+      // 3. Contextual from Qdrant — relevance-gated.
+      let contextual: Array<Record<string, unknown>> = [];
+      try {
+        contextual = (await searchWikiPages({
+          query: contextQuery,
+          organizationId,
+          pageKind: "principle",
+          principleTier: "contextual",
+          principleAppliesTo: callingPopulation,
+          limit: 5,
+          scoreThreshold: contextualThreshold,
+        })) as Array<Record<string, unknown>>;
+      } catch (err) {
+        console.warn("[principle_decide] contextual Qdrant lookup failed:", err);
+      }
+
+      const TIER_DEFAULT_WEIGHT: Record<string, number> = {
+        commandment: 1.0,
+        core: 0.4,
+        contextual: 0.1,
+      };
+      function resolveWeight(tier: string, override: unknown): number {
+        if (typeof override === "number") return override;
+        return TIER_DEFAULT_WEIGHT[tier] ?? 0;
+      }
+
+      // Build DecisionPrinciple[] from the merged set. Postgres rows carry
+      // the full dimensionVector; Qdrant hits only carry dimension keys, so
+      // their math contribution falls back to semantic (alignment 0 here
+      // since we don't fetch direction embeddings) — they still appear in
+      // the ledger so the caller sees what was in scope.
+      type DecisionPrinciple = Parameters<typeof decide>[1][number];
+      const principleList: DecisionPrinciple[] = [];
+
+      for (const row of commandments) {
+        principleList.push({
+          id: String(row["id"] ?? ""),
+          name: String(row["title"] ?? row["slug"] ?? "principle"),
+          tier: String(row["principleTier"] ?? "commandment"),
+          weight: resolveWeight(
+            String(row["principleTier"] ?? "commandment"),
+            row["principleWeight"],
+          ),
+          dimensionVector:
+            (row["principleDimensionVector"] as Record<string, number> | null) ??
+            {},
+        });
+      }
+      for (const hit of [...core, ...contextual]) {
+        principleList.push({
+          id: String(hit["pageId"] ?? ""),
+          name: String(hit["title"] ?? hit["slug"] ?? "principle"),
+          tier: String(hit["principleTier"] ?? "core"),
+          weight: resolveWeight(
+            String(hit["principleTier"] ?? "core"),
+            undefined,
+          ),
+          dimensionVector: {}, // Qdrant payload omits the signed vector — semantic fallback
+        });
+      }
+
+      const cappedPrinciples = principleList.slice(0, maxPrinciples);
+
+      type DecisionOption = Parameters<typeof decide>[0][number];
+      const decisionOptions: DecisionOption[] = optionsParam
+        .filter((o): o is Record<string, unknown> => typeof o === "object" && o !== null)
+        .map((o) => ({
+          id: String(o["id"] ?? ""),
+          description: String(o["description"] ?? ""),
+          features:
+            typeof o["features"] === "object" && o["features"] !== null
+              ? (o["features"] as Record<string, number>)
+              : {},
+        }));
+
+      const result = decide(decisionOptions, cappedPrinciples, {
+        tieMargin,
+        semanticFallbackWarnRatio: semanticWarnRatio,
+      });
+
+      const summary = result.recommendation
+        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)})`
+        : "No applicable principles to evaluate.";
+
+      return {
+        success: true,
+        message: summary,
+        data: {
+          recommendation: result.recommendation,
+          scores: result.scores,
+          flags: result.flags,
+          reasoning: result.reasoning,
+          appliedPrincipleCount: cappedPrinciples.length,
+        },
+      };
     }
 
     case "wiki_lint": {

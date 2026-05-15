@@ -197,13 +197,6 @@ async function seedAgents(): Promise<void> {
   console.log(`Seeded ${seen.size} agents (skipped ${registry.agents.length - seen.size} duplicates)`);
 }
 
-const PORTFOLIO_BUDGETS: Record<string, number> = {
-  foundational: 2500,
-  manufacturing_and_delivery: 1800,
-  for_employees: 1200,
-  products_and_services_sold: 3500,
-};
-
 async function seedBusinessModels(): Promise<void> {
   const registry = readJson<{
     business_models: Array<{
@@ -297,12 +290,11 @@ async function seedPortfolios(): Promise<void> {
   for (const p of registry.portfolios) {
     await prisma.portfolio.upsert({
       where: { slug: p.id },
-      update: { name: p.name, description: p.description ?? null, budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null },
+      update: { name: p.name, description: p.description ?? null },
       create: {
         slug: p.id,
         name: p.name,
         description: p.description ?? null,
-        budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null,
       },
     });
   }
@@ -1680,29 +1672,38 @@ async function seedAnthropicSubScope(): Promise<void> {
     update: {},  // preserve existing credentials on re-seed
   });
 
-  // anthropic-sub is conversation-capable but not a governed custom-tool
-  // backend for coworker work. Mark supportsToolUse=false so the routing
-  // pipeline excludes it whenever an agent requires tool execution.
+  // anthropic-sub uses the Claude CLI adapter. Platform tools are injected as
+  // tool descriptions, Claude Code native tools are suppressed, and the
+  // agentic loop executes parsed platform tool_use events server-side. Keep
+  // the seed aligned with that adapter contract so active paid Claude models
+  // remain eligible for coworker turns that require tools.
   await prisma.modelProvider.updateMany({
     where: { providerId: "anthropic-sub" },
-    data: { supportsToolUse: false },
+    data: { supportsToolUse: true },
   });
   await prisma.modelProfile.updateMany({
-    where: { providerId: "anthropic-sub" },
-    data: { supportsToolUse: false },
+    where: {
+      providerId: "anthropic-sub",
+      modelStatus: { in: ["active", "degraded"] },
+      NOT: { profileSource: "admin" },
+    },
+    data: { supportsToolUse: true },
   });
   await prisma.$executeRaw`
     UPDATE "ModelProfile"
     SET "capabilities" = jsonb_set(
       COALESCE("capabilities", '{}'::jsonb),
       '{toolUse}',
-      'false'::jsonb,
+      'true'::jsonb,
       true
     )
     WHERE "providerId" = 'anthropic-sub'
+      AND "modelStatus" IN ('active', 'degraded')
+      AND ("profileSource" IS NULL OR "profileSource" <> 'admin')
+      AND NOT (COALESCE("capabilityOverrides", '{}'::jsonb) ? 'toolUse')
   `;
 
-  console.log("Seeded anthropic-sub credential scope (toolUse=false)");
+  console.log("Seeded anthropic-sub credential scope (toolUse=true)");
 }
 
 /**
@@ -2059,6 +2060,7 @@ async function main(): Promise<void> {
   await seedDeliberationPatterns(prisma);
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
+  await assertAnthropicSubToolCapability();
   await assertCoworkerAgentsHaveGrants();
   console.log("Seed complete.");
 }
@@ -2082,6 +2084,59 @@ async function assertActiveProvidersHaveClearance(): Promise<void> {
     throw new Error(
       `Seed invariant violated: active providers without sensitivityClearance: ${list}. ` +
         `Add sensitivityClearance to the relevant seed function (see seedLocalModels/seedCodexModels for reference).`,
+    );
+  }
+}
+
+/**
+ * anthropic-sub is the paid subscription provider most likely to be active on
+ * local installs. If its tool capability seed drifts false, every coworker
+ * with the default toolUse floor routes to the bundled local model even though
+ * Claude is connected. Fail seed instead of silently shipping that state.
+ */
+async function assertAnthropicSubToolCapability(): Promise<void> {
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId: "anthropic-sub" },
+    select: { status: true, supportsToolUse: true },
+  });
+  if (!provider || (provider.status !== "active" && provider.status !== "degraded")) return;
+
+  const profiles = await prisma.modelProfile.findMany({
+    where: {
+      providerId: "anthropic-sub",
+      modelStatus: { in: ["active", "degraded"] },
+      retiredAt: null,
+    },
+    select: {
+      modelId: true,
+      supportsToolUse: true,
+      capabilities: true,
+      capabilityOverrides: true,
+      profileSource: true,
+    },
+  });
+
+  const offenders = profiles.filter((profile) => {
+    const overrides = profile.capabilityOverrides as Record<string, unknown> | null;
+    if (profile.profileSource === "admin" || (overrides && "toolUse" in overrides)) {
+      return false;
+    }
+    const capabilities =
+      profile.capabilities &&
+      typeof profile.capabilities === "object" &&
+      !Array.isArray(profile.capabilities)
+        ? (profile.capabilities as Record<string, unknown>)
+        : {};
+    return provider.supportsToolUse !== true ||
+      profile.supportsToolUse !== true ||
+      capabilities.toolUse !== true;
+  });
+
+  if (offenders.length > 0) {
+    throw new Error(
+      `Seed invariant violated: anthropic-sub is active but ${offenders.length} active profile(s) ` +
+        `are not tool-capable: ${offenders.map((p) => p.modelId).join(", ")}. ` +
+        `Keep providers-registry.json, model-profiles.json, and seedAnthropicSubScope aligned with the Claude CLI adapter contract.`,
     );
   }
 }

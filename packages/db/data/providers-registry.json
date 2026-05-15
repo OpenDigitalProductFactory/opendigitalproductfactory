@@ -70,13 +70,13 @@
       "authExplained": "Sign in with your Claude account via OAuth, or paste a subscription token. No separate API key needed.",
       "costTier": "subscription",
       "costExplained": "Included in your Claude subscription. Availability can vary by account and backend state.",
-      "capabilitySummary": "Good at conversation, analysis, and guided text work when custom MCP tool execution is not required.",
-      "limitations": "Do not route custom MCP tool-based coworker work here. Treat this backend as no-custom-tool-use for governed platform tasks.",
+      "capabilitySummary": "Good at conversation, analysis, code, and governed platform tool use through the Claude CLI adapter.",
+      "limitations": "Runs through Claude CLI. Availability depends on the subscription session and rolling rate limits; native Claude Code tools are suppressed for platform inference.",
       "dataResidency": "United States (Anthropic servers).",
       "setupDifficulty": "easy",
       "regulatoryNotes": "Same as Anthropic. SOC 2 Type II certified."
     },
-    "supportsToolUse": false
+    "supportsToolUse": true
   },
   {
     "providerId": "openai",

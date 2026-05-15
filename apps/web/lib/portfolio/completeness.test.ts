@@ -85,6 +85,55 @@ describe("computePortfolioCompleteness", () => {
     expect(result.productCount).toBe(3);
   });
 
+  it("scores required identity fields from linked inventory entities instead of DigitalProduct columns", async () => {
+    const { db, findMany, groupBy } = mockDb();
+    findMany.mockResolvedValue([
+      {
+        id: "dp_1",
+        inventoryEntities: [
+          {
+            manufacturer: "Acme",
+            observedVersion: null,
+            normalizedVersion: "1.0",
+          },
+        ],
+        taxonomyNode: { governance: { requiredFields: ["manufacturer", "observedVersion"] } },
+        observationConfig: null,
+      },
+      {
+        id: "dp_2",
+        inventoryEntities: [
+          {
+            manufacturer: "Acme",
+            observedVersion: null,
+            normalizedVersion: null,
+          },
+        ],
+        taxonomyNode: { governance: { requiredFields: ["manufacturer", "observedVersion"] } },
+        observationConfig: null,
+      },
+    ]);
+    groupBy.mockResolvedValue([]);
+
+    const result = await computePortfolioCompleteness("p_1", db as never);
+
+    expect(result.requiredFieldsScore).toBe(50);
+    const findManyArgs = findMany.mock.calls[0][0];
+    expect(findManyArgs.select).not.toHaveProperty("manufacturer");
+    expect(findManyArgs.select).not.toHaveProperty("observedVersion");
+    expect(findManyArgs.select).not.toHaveProperty("enrichmentStatus");
+    expect(findManyArgs.select.inventoryEntities).toEqual({
+      select: {
+        manufacturer: true,
+        observedVersion: true,
+        normalizedVersion: true,
+        productModel: true,
+        technicalClass: true,
+        iconKey: true,
+      },
+    });
+  });
+
   it("supports dot-paths in requiredFields (e.g. observationConfig.classifyAs)", async () => {
     const { db, findMany, groupBy } = mockDb();
     findMany.mockResolvedValue([
@@ -175,5 +224,52 @@ describe("computePortfolioCompleteness", () => {
     const args = groupBy.mock.calls[0][0];
     expect(args.where).toEqual({ portfolioId: "p_42", status: "open" });
     expect(args.by).toEqual(["issueType"]);
+  });
+
+  it("selects schema-owned DigitalProduct fields and linked inventory metadata", async () => {
+    const { db, findMany, groupBy } = mockDb();
+    findMany.mockResolvedValue([]);
+    groupBy.mockResolvedValue([]);
+
+    await computePortfolioCompleteness("p_select", db as never);
+
+    const select = findMany.mock.calls[0][0].select;
+    expect(select).toMatchObject({
+      id: true,
+      observationConfig: true,
+      taxonomyNode: { select: { governance: true } },
+      inventoryEntities: {
+        select: {
+          manufacturer: true,
+          observedVersion: true,
+        },
+      },
+    });
+    expect(select).not.toHaveProperty("manufacturer");
+    expect(select).not.toHaveProperty("observedVersion");
+    expect(select).not.toHaveProperty("enrichmentStatus");
+  });
+
+  it("resolves required manufacturer/version fields from the primary inventory entity", async () => {
+    const { db, findMany, groupBy } = mockDb();
+    findMany.mockResolvedValue([
+      {
+        id: "dp_1",
+        inventoryEntities: [{ manufacturer: "Acme", observedVersion: "1.0" }],
+        taxonomyNode: { governance: { requiredFields: ["manufacturer", "observedVersion"] } },
+        observationConfig: null,
+      },
+      {
+        id: "dp_2",
+        inventoryEntities: [{ manufacturer: "Acme", observedVersion: null }],
+        taxonomyNode: { governance: { requiredFields: ["manufacturer", "observedVersion"] } },
+        observationConfig: null,
+      },
+    ]);
+    groupBy.mockResolvedValue([]);
+
+    const result = await computePortfolioCompleteness("p_1", db as never);
+
+    expect(result.requiredFieldsScore).toBe(50);
   });
 });

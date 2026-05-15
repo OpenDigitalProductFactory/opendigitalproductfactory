@@ -82,6 +82,13 @@ Flags:
                 Skip the LaunchAgent / systemd-user autostart install
                 step. The platform comes up but won't auto-start at
                 login / boot.
+  --no-edge     Skip bundling the Edge Node container alongside the
+                Authority Core. Use this for cloud / Authority-only
+                deployments where Edge Nodes will be added later from
+                separate hosts (docker-compose.edge-standalone.yml).
+                Default: Edge Node IS bundled for single-host installs.
+                The bundled node auto-approves at enrollment per spec
+                § Approval policy.
   -h, --help    Show this help.
 
 Status: Phase 6 (framework vertical slice). Full end-user install (Docker
@@ -98,6 +105,7 @@ EOF
 DPF_DRY_RUN=0
 DPF_MODE="dev"   # dev | release
 DPF_AUTOSTART=1
+DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"   # 1 = bundle Edge Node; 0 = skip
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
@@ -107,6 +115,7 @@ while [ $# -gt 0 ]; do
     --release)              DPF_MODE="release" ;;
     --dev)                  DPF_MODE="dev" ;;
     --no-autostart)         DPF_AUTOSTART=0 ;;
+    --no-edge)              DPF_INCLUDE_EDGE=0 ;;
     --force-unsupported-host)
                             DPF_FORCE_UNSUPPORTED_HOST=1
                             export DPF_FORCE_UNSUPPORTED_HOST ;;
@@ -292,11 +301,63 @@ if [ "${HEALTH_OK:-0}" != "1" ]; then
   exit 1
 fi
 
-# 12. Persist successful install state.
+# 12. Edge Node bootstrap. Mint an auto-approve bootstrap token, wire
+#     it into .env, and restart the edge-node container so it enrolls.
+#     Per spec § Approval policy: tokens issued by the local installer
+#     auto-approve at enrollment, so the operator doesn't have to click
+#     Approve in Admin > Platform Development for the host's own node.
+if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
+  step "Edge Node bootstrap"
+
+  # Mint a single-use auto-approve token via the same helper the verify
+  # wrapper uses. The token's plaintext appears once on stdout; we
+  # capture it without echoing.
+  if EDGE_TOKEN="$(pnpm --filter web exec tsx scripts/issue-edge-bootstrap-token.ts \
+       --ttl-minutes 30 \
+       --auto-approve 2>/dev/null | tail -1)"; then
+    if [ -z "$EDGE_TOKEN" ] || [[ "$EDGE_TOKEN" != dpfboot_* ]]; then
+      warn "Edge Node bootstrap-token output not recognized; skipping enrollment wiring."
+      info "  You can re-issue manually via Admin > Platform Development > Edge Nodes."
+    else
+      # Append (or replace) DPF_BOOTSTRAP_TOKEN in .env so the
+      # edge-node container picks it up on next restart. Idempotent:
+      # successive installer runs replace the prior token.
+      if grep -q "^DPF_BOOTSTRAP_TOKEN=" .env 2>/dev/null; then
+        dpf_sed_inplace "s|^DPF_BOOTSTRAP_TOKEN=.*|DPF_BOOTSTRAP_TOKEN=$EDGE_TOKEN|" .env
+      else
+        printf '\n# Edge Node bootstrap token — installer-issued, auto-approve.\n' >> .env
+        printf 'DPF_BOOTSTRAP_TOKEN=%s\n' "$EDGE_TOKEN" >> .env
+      fi
+      # Same for the operator-friendly node name so the admin UI shows
+      # something descriptive instead of the container hostname.
+      if ! grep -q "^DPF_EDGE_NODE_NAME=" .env 2>/dev/null; then
+        printf 'DPF_EDGE_NODE_NAME=%s\n' "${HOSTNAME:-$(hostname 2>/dev/null || echo edge-node-local)}" >> .env
+      fi
+
+      # Restart the edge-node service so it picks up the new env. The
+      # service was started in step 10 but enrolled with no token (or
+      # a stale one); recreate-without-deps avoids touching the portal.
+      if docker compose "${DPF_COMPOSE_FILES[@]}" up -d --no-deps --force-recreate edge-node >/dev/null 2>&1; then
+        ok "Edge Node bootstrapped — auto-approve token wired into .env"
+        info "  The node enrolls within ~10s; check Admin > Platform Development > Edge Nodes."
+      else
+        warn "edge-node container restart failed; node may not have enrolled."
+        info "  Inspect: docker compose ${DPF_COMPOSE_FILES[*]} logs edge-node --tail 50"
+      fi
+    fi
+  else
+    warn "Edge Node bootstrap-token issuance failed; skipping enrollment wiring."
+    info "  You can re-issue manually via Admin > Platform Development > Edge Nodes."
+  fi
+else
+  info "Edge Node bundling skipped (--no-edge). Add Edge Nodes later from separate hosts via docker-compose.edge-standalone.yml."
+fi
+
+# 13. Persist successful install state.
 dpf_state_write lastSuccessfulInstallVersion "$DPF_INSTALLER_VERSION" 2>/dev/null || true
 dpf_state_write lastHealthCheck "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
 
-# 13. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
+# 14. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
 #     Gated by --no-autostart for operators who manage their own.
 if [ "$DPF_AUTOSTART" = "1" ]; then
   step "Autostart"

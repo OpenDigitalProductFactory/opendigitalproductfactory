@@ -50,6 +50,17 @@ export type ResolvedMcpToken = {
   capability: McpTokenCapability;
 };
 
+export type AddMcpTokenScopesResult =
+  | {
+      ok: true;
+      scopes: string[];
+      addedScopes: string[];
+    }
+  | {
+      ok: false;
+      error: "not_found" | "revoked" | "expired";
+    };
+
 const TOKEN_PREFIX = "dpfmcp_";
 const SECRET_BYTES = 24;
 const PREFIX_DISPLAY_LENGTH = 12;
@@ -198,6 +209,42 @@ export async function revokeMcpApiToken(
     data: { revokedAt: new Date(), revokedReason: reason },
   });
   return { ok: true };
+}
+
+export async function addScopesToMcpApiToken(
+  tokenId: string,
+  scopes: string[],
+): Promise<AddMcpTokenScopesResult> {
+  const existing = await prisma.mcpApiToken.findUnique({
+    where: { id: tokenId },
+    select: { scopes: true, revokedAt: true, expiresAt: true },
+  });
+  if (!existing) return { ok: false, error: "not_found" };
+  if (existing.revokedAt) return { ok: false, error: "revoked" };
+  if (existing.expiresAt != null && existing.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "expired" };
+  }
+
+  const current = Array.isArray(existing.scopes) ? existing.scopes : [];
+  const seen = new Set(current);
+  const addedScopes: string[] = [];
+  const merged = [...current];
+  for (const scope of scopes) {
+    const trimmed = scope.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    addedScopes.push(trimmed);
+    merged.push(trimmed);
+  }
+
+  if (addedScopes.length > 0) {
+    await prisma.mcpApiToken.update({
+      where: { id: tokenId },
+      data: { scopes: merged },
+    });
+  }
+
+  return { ok: true, scopes: merged, addedScopes };
 }
 
 export async function resolveMcpApiToken(

@@ -403,7 +403,7 @@ async function getWorkspaceContext(): Promise<string> {
     prisma.backlogItem.count(),
     prisma.backlogItem.count({ where: { status: { in: ["open", "in-progress"] } } }),
     prisma.epic.count(),
-    prisma.featureBuild.count({ where: { phase: { notIn: ["complete", "failed"] } } }),
+    prisma.featureBuild.count({ where: { phase: { notIn: ["complete", "failed", "abandoned"] } } }),
     prisma.digitalProduct.count(),
     prisma.modelProvider.count({ where: { status: "active" } }),
   ]);

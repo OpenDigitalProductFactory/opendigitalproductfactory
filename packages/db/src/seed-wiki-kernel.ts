@@ -29,45 +29,24 @@ import {
   type WikiPageKind,
   type WikiPageStatus,
 } from "./wiki-store";
+import {
+  parseFrontmatter as parseFrontmatterShared,
+  extractWikilinks as extractWikilinksShared,
+  type RawSourceFrontmatter as RawSourceFrontmatterShared,
+  type WikiPageFrontmatter as WikiPageFrontmatterShared,
+} from "./wiki-frontmatter";
+
+// Re-export the shared frontmatter parser + types so existing imports of
+// these symbols from `./seed-wiki-kernel` keep working. The canonical
+// home is now `./wiki-frontmatter` (see Phase 2.1 — extracted so apps/web
+// can pull the parser through @dpf/db without dragging in this module's
+// `__dirname`-based KERNEL_DIR constant).
+export const parseFrontmatter = parseFrontmatterShared;
+export const extractWikilinks = extractWikilinksShared;
+export type RawSourceFrontmatter = RawSourceFrontmatterShared;
+export type WikiPageFrontmatter = WikiPageFrontmatterShared;
 
 const KERNEL_DIR = join(__dirname, "..", "..", "..", "docs", "founder-kernel");
-
-// ─── Frontmatter Types ──────────────────────────────────────────────────────
-
-export type RawSourceFrontmatter = {
-  sourceKey?: string;
-  sourceType: string;
-  title: string;
-  authors?: string[];
-  publishedAt?: string;
-  url?: string;
-  doi?: string;
-  license?: string;
-  abstract?: string;
-};
-
-export type WikiPageFrontmatter = {
-  slug?: string;
-  title: string;
-  pageKind: WikiPageKind;
-  status?: WikiPageStatus;
-  abstract?: string;
-  /** Source slugs (relative to raw-sources/) that this page cites. */
-  sources?: string[];
-  // ─── Principle-only frontmatter (spec section 9) ───
-  // Required-field gating lives in lint detectors per spec section 14, not
-  // here. The seed walker accepts incomplete principle data so lint can
-  // surface findings on saved drafts.
-  principleTier?: string;
-  principleDirection?: string;
-  principleWeight?: number;
-  principleWeightRationale?: string;
-  principleDimensionVector?: Record<string, number>;
-  principleDimensions?: string[];
-  principleAppliesTo?: string[];
-  principlePublic?: boolean;
-  principlePublicRationale?: string;
-};
 
 // ─── Manifest ───────────────────────────────────────────────────────────────
 
@@ -88,111 +67,11 @@ function readManifest(): Manifest {
 }
 
 // ─── Frontmatter Parser ─────────────────────────────────────────────────────
-
-/**
- * Subset YAML parser — same shape as seed-skills.ts and
- * seed-prompt-templates.ts. Handles scalars, inline arrays, and
- * block-style lists. Does not handle nested objects.
- */
-export function parseFrontmatter<T extends Record<string, unknown>>(
-  raw: string,
-): { frontmatter: T; body: string } {
-  const normalised = raw.replace(/\r\n/g, "\n");
-  const match = normalised.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) {
-    throw new Error("Missing YAML frontmatter delimiters (---)");
-  }
-
-  const yamlBlock = match[1];
-  const body = match[2].trim();
-
-  const fm: Record<string, unknown> = {};
-  const lines = yamlBlock.split("\n");
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.trim().startsWith("#") || line.trim() === "") {
-      i++;
-      continue;
-    }
-
-    const kvMatch = line.match(/^(\w[\w.-]*)\s*:\s*(.*)/);
-    if (!kvMatch) {
-      i++;
-      continue;
-    }
-
-    const key = kvMatch[1];
-    const value = kvMatch[2].trim();
-
-    // Block-style list:
-    //   key:
-    //     - item1
-    //     - item2
-    if (value === "") {
-      const items: string[] = [];
-      let j = i + 1;
-      while (j < lines.length) {
-        const next = lines[j];
-        const itemMatch = next.match(/^\s+-\s+(.*)$/);
-        if (!itemMatch) break;
-        items.push(itemMatch[1].trim().replace(/^["']|["']$/g, ""));
-        j++;
-      }
-      if (items.length > 0) {
-        fm[key] = items;
-        i = j;
-        continue;
-      }
-    }
-
-    // Inline array: [a, b, c]
-    if (value.startsWith("[") && value.endsWith("]")) {
-      fm[key] = value
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-        .filter((s) => s.length > 0);
-      i++;
-      continue;
-    }
-
-    // Inline JSON object: { "key": value, ... }
-    // Used primarily for principleDimensionVector. Authors must use JSON
-    // syntax (quoted keys); YAML-style unquoted keys are not supported here.
-    if (value.startsWith("{") && value.endsWith("}")) {
-      try {
-        fm[key] = JSON.parse(value);
-        i++;
-        continue;
-      } catch {
-        // Fall through to scalar handling if the JSON parse fails — better
-        // to surface as a typed-value mismatch downstream than to silently
-        // accept a malformed value.
-      }
-    }
-
-    // Scalar (with optional surrounding quotes). Quoted values stay strings;
-    // unquoted true/false/numbers coerce to their typed shape so principle
-    // frontmatter (principlePublic: true, principleWeight: 0.85, etc.)
-    // round-trips with the right type.
-    const hasQuotes = /^["'].*["']$/.test(value);
-    const scalarRaw = value.replace(/^["']|["']$/g, "");
-    if (!hasQuotes && scalarRaw === "true") {
-      fm[key] = true;
-    } else if (!hasQuotes && scalarRaw === "false") {
-      fm[key] = false;
-    } else if (!hasQuotes && scalarRaw !== "" && /^-?\d+(\.\d+)?$/.test(scalarRaw)) {
-      fm[key] = parseFloat(scalarRaw);
-    } else {
-      fm[key] = scalarRaw;
-    }
-    i++;
-  }
-
-  return { frontmatter: fm as T, body };
-}
+// `parseFrontmatter` is now defined in `./wiki-frontmatter` and re-exported
+// at the top of this file (for back-compat with imports of
+// `./seed-wiki-kernel`). The shared module exists so apps/web can pull the
+// parser through @dpf/db without dragging in this module's `__dirname`-
+// based KERNEL_DIR constant.
 
 // ─── Principle Payload Extractor ───────────────────────────────────────────
 
@@ -284,19 +163,8 @@ export function extractPrinciplePayload(
 }
 
 // ─── Wikilink Extractor ─────────────────────────────────────────────────────
-
-/**
- * Extract all [[slug]] tokens from a body. Returns deduped slugs.
- * Allowed slug characters: letters, digits, slashes, hyphens, underscores.
- */
-export function extractWikilinks(body: string): string[] {
-  const matches = body.matchAll(/\[\[([a-zA-Z0-9/_-]+)\]\]/g);
-  const slugs = new Set<string>();
-  for (const m of matches) {
-    if (m[1]) slugs.add(m[1]);
-  }
-  return Array.from(slugs);
-}
+// `extractWikilinks` lives in `./wiki-frontmatter` alongside the parser
+// and is re-exported at the top of this file.
 
 // ─── Filesystem Walk ────────────────────────────────────────────────────────
 
@@ -346,13 +214,20 @@ async function seedRawSources(
     const raw = readFileSync(file, "utf8");
     const { frontmatter, body } = parseFrontmatter<RawSourceFrontmatter>(raw);
     const sourceKey = frontmatter.sourceKey ?? deriveSlug(file, sourcesDir);
+    if (!frontmatter.sourceType || !frontmatter.title) {
+      throw new Error(
+        `seed-wiki-kernel: ${file} is missing required frontmatter (sourceType + title).`,
+      );
+    }
+    const sourceType = frontmatter.sourceType;
+    const title = frontmatter.title;
 
     const upserted = (await prisma.rawSource.upsert({
       where: { sourceKey },
       create: {
         sourceKey,
-        sourceType: frontmatter.sourceType,
-        title: frontmatter.title,
+        sourceType,
+        title,
         authors: frontmatter.authors ?? [],
         publishedAt: frontmatter.publishedAt ? new Date(frontmatter.publishedAt) : null,
         url: frontmatter.url ?? null,
@@ -364,8 +239,8 @@ async function seedRawSources(
         // Kernel sources have no organizationId.
       },
       update: {
-        sourceType: frontmatter.sourceType,
-        title: frontmatter.title,
+        sourceType,
+        title,
         authors: frontmatter.authors ?? [],
         publishedAt: frontmatter.publishedAt ? new Date(frontmatter.publishedAt) : null,
         url: frontmatter.url ?? null,
@@ -638,6 +513,31 @@ export type SeedWikiKernelResult = {
  * (Phase 5 not done), returns `{ emptyKernel: true }` without error.
  */
 export async function seedWikiKernel(prisma: PrismaClient): Promise<SeedWikiKernelResult> {
+  // Probe the kernel directory BEFORE calling readManifest(). If the
+  // founder-kernel content isn't present in the image at all (e.g. the
+  // Dockerfile is missing `COPY docs/founder-kernel/`), readManifest()
+  // would throw ENOENT and the docker-entrypoint's
+  // `|| echo "WARN Seed had warnings"` would swallow the failure — the
+  // operator then sees a non-fatal warning and a permanently empty
+  // /wiki page. Surfacing this as a typed, actionable warning makes the
+  // packaging gap visible the moment it happens.
+  if (!existsSync(KERNEL_DIR)) {
+    console.warn(
+      `[seedWikiKernel] founder-kernel directory not present at ${KERNEL_DIR}. ` +
+        `The container image is missing 'COPY docs/founder-kernel/' — wiki pages will be empty until the image is rebuilt with that COPY. ` +
+        `Returning an empty-kernel result; no rows seeded.`,
+    );
+    return {
+      kernelVersion: "0.0.0",
+      sourceCount: 0,
+      pageCount: 0,
+      orphanLinks: [],
+      emptyKernel: true,
+      qdrantPointsSeeded: 0,
+      embeddingsSidecarPresent: false,
+    };
+  }
+
   const manifest = readManifest();
   const sourcesDir = join(KERNEL_DIR, "raw-sources");
   const wikiDir = join(KERNEL_DIR, "wiki");

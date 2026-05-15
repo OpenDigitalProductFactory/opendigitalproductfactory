@@ -31,12 +31,35 @@ import {
   type AuthorityApiClient,
 } from "./api-client";
 import {
+  collectArpNeighbors,
+  type ArpAdapter,
+} from "./collectors/arp";
+import {
   collectHostInfo,
   type HostInfoAdapter,
   type ObservationItem,
 } from "./collectors/host-info";
+import {
+  collectNmapSweep,
+  type NmapSweepAdapter,
+  type NmapSweepRelationship,
+} from "./collectors/nmap-sweep";
+import {
+  collectSnmpPoll,
+  type SnmpPollAdapter,
+  type SnmpRelationship,
+} from "./collectors/snmp-poll";
 import type { EdgeNodeConfig } from "./config";
 import type { EdgeNodeState } from "./state";
+
+/**
+ * Unified relationship shape carried in the submission envelope. Both
+ * the nmap-sweep and snmp-poll collectors produce the same field set,
+ * so we widen at the envelope level to accept either.
+ */
+export type SubmissionRelationship =
+  | NmapSweepRelationship
+  | SnmpRelationship;
 
 const PHASE_0_CAPABILITY = "discovery.network";
 
@@ -53,7 +76,7 @@ export type SubmissionEnvelope = {
   observedAt: string;
   capabilities: string[];
   items: ObservationItem[];
-  relationships: never[];
+  relationships: SubmissionRelationship[];
   warnings?: string[];
 };
 
@@ -68,6 +91,12 @@ export type SweepRunnerOptions = {
   maxIterations?: number;
   /** Override the host-info adapter (test seam). */
   hostInfoAdapter?: HostInfoAdapter;
+  /** Override the ARP adapter (test seam). */
+  arpAdapter?: ArpAdapter;
+  /** Override the nmap-sweep adapter (test seam). */
+  nmapAdapter?: NmapSweepAdapter;
+  /** Override the SNMP-poll adapter (test seam). */
+  snmpAdapter?: SnmpPollAdapter;
   /** Override runKey generation (test seam). */
   newRunKey?: () => string;
   /** Override the wall-clock used for observedAt (test seam). */
@@ -100,6 +129,9 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
   const newRunKey = opts.newRunKey ?? randomUUID;
   const now = opts.now ?? (() => new Date());
   const hostInfoAdapter = opts.hostInfoAdapter;
+  const arpAdapter = opts.arpAdapter;
+  const nmapAdapter = opts.nmapAdapter;
+  const snmpAdapter = opts.snmpAdapter;
   const maxBuffer = opts.maxBufferedSubmissions ?? 1000;
   const { config, api, state } = opts;
 
@@ -121,7 +153,36 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
     // Collect + submit a fresh sweep.
     let envelope: SubmissionEnvelope;
     try {
-      const { items, relationships } = collectHostInfo(hostInfoAdapter);
+      // Run all collectors. Each is independent — if one fails it
+      // contributes a warning instead of taking down the whole sweep.
+      // The order is intentional: host-info first (always works),
+      // then passive discovery (ARP cache), then active discovery
+      // (nmap sweep), then targeted SNMP poll of operator-configured
+      // network devices. SNMP runs last so the IP-keyed entities from
+      // earlier collectors are in the same envelope — the Authority's
+      // normalization can later collapse `snmp:<ip>` + `arp:<ip>`
+      // into one canonical device.
+      const host = collectHostInfo(hostInfoAdapter);
+      const arp = await collectArpNeighbors(arpAdapter);
+      const nmap = await collectNmapSweep(nmapAdapter);
+      const snmp = await collectSnmpPoll(snmpAdapter);
+
+      const items: ObservationItem[] = [
+        ...host.items,
+        ...arp.items,
+        ...nmap.items,
+        ...snmp.items,
+      ];
+      const relationships: SubmissionRelationship[] = [
+        ...nmap.relationships,
+        ...snmp.relationships,
+      ];
+      const warnings: string[] = [
+        ...arp.warnings,
+        ...nmap.warnings,
+        ...snmp.warnings,
+      ];
+
       envelope = {
         runKey: newRunKey(),
         agentMode: config.installMode,
@@ -130,6 +191,7 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
         capabilities: [PHASE_0_CAPABILITY],
         items,
         relationships,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     } catch (err) {
       // Collection itself failed — log + move on. We don't retry

@@ -1,0 +1,25 @@
+{
+  "_comment": "DPF Edge Node — SNMP target configuration example. Copy to /etc/dpf-edge/snmp.json on the Edge Node host, edit, chmod 0600, and bind-mount into the container (see docs/install/edge-node-multi-host.md § SNMP polling). The Edge Node treats this file as opt-in: if absent, C3 is a no-op.",
+  "targets": [
+    {
+      "_comment": "SNMPv2c — single shared community string. Sniffable on the wire; only use on trusted LANs or behind a VPN.",
+      "host": "192.168.1.1",
+      "version": "2c",
+      "community": "public",
+      "port": 161,
+      "timeoutMs": 5000
+    },
+    {
+      "_comment": "SNMPv3 — per-user credentials with auth + encryption. Recommended for anything other than a private lab. authProtocol: MD5 or SHA. privProtocol: DES or AES (prefer AES).",
+      "host": "192.168.1.2",
+      "version": "3",
+      "user": "dpf-readonly",
+      "authProtocol": "SHA",
+      "authPassword": "REPLACE_WITH_REAL_AUTH_PASSWORD",
+      "privProtocol": "AES",
+      "privPassword": "REPLACE_WITH_REAL_PRIV_PASSWORD",
+      "port": 161,
+      "timeoutMs": 5000
+    }
+  ]
+}

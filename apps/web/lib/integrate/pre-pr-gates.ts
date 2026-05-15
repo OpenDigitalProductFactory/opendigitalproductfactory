@@ -36,22 +36,42 @@ export interface PrePRGateResult {
 // ─── Diff Helpers ───────────────────────────────────────────────────────────
 
 function extractFilePaths(diff: string): string[] {
-  return [...diff.matchAll(/^diff --git a\/(.+) b\/.+$/gm)].map((m) => m[1]);
+  // Capture both the `a/` (old) and `b/` (new) paths so renames are visible
+  // to gates that care about destination location (e.g. architecture's
+  // unexpected-directory check). For non-renames the two paths are identical
+  // and dedupe via the Set.
+  const paths = new Set<string>();
+  for (const m of diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)) {
+    paths.add(m[1]);
+    paths.add(m[2]);
+  }
+  return [...paths];
+}
+
+function extractDiffLinesForFile(
+  diff: string,
+  filePath: string,
+): { added: string[]; removed: string[] } {
+  // Split the diff on file-block boundaries so we can isolate one file's hunk
+  // without relying on a multiline regex (the previous `^...(?=^diff --git|$)/m`
+  // version stopped at the first newline because `$` matches end-of-line under /m).
+  const blocks = diff.split(/^(?=diff --git )/m);
+  const header = `diff --git a/${filePath} `;
+  const target = blocks.find((b) => b.startsWith(header));
+  if (!target) return { added: [], removed: [] };
+
+  const added: string[] = [];
+  const removed: string[] = [];
+  for (const line of target.split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) added.push(line.slice(1));
+    else if (line.startsWith("-")) removed.push(line.slice(1));
+  }
+  return { added, removed };
 }
 
 function extractAddedLinesForFile(diff: string, filePath: string): string[] {
-  const escaped = filePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const fileRegex = new RegExp(
-    `^diff --git a/${escaped} b/.+\\n[\\s\\S]*?(?=^diff --git|$)`,
-    "m",
-  );
-  const match = fileRegex.exec(diff);
-  if (!match) return [];
-
-  return match[0]
-    .split("\n")
-    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
-    .map((line) => line.slice(1));
+  return extractDiffLinesForFile(diff, filePath).added;
 }
 
 // ─── Gate 1: Security Scan ──────────────────────────────────────────────────
@@ -140,6 +160,21 @@ function runArchitectureGate(diff: string): GateResult {
 
 // ─── Gate 4: Dependency Audit ───────────────────────────────────────────────
 
+// Matches a single dep entry line: `    "name": "^1.2.3",` or `"name": "1.2.3"` (no comma).
+// Version must start with a digit (optionally prefixed by ~ or ^), which keeps the regex from
+// matching section headers like `"dependencies": {`. Trailing comma is optional so mid-block
+// and end-of-block adds both match.
+const DEP_LINE_RE = /^\s*"([^"]+)"\s*:\s*"([~^]?\d[^"]*)",?\s*$/;
+
+function parseDepLines(lines: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of lines) {
+    const m = line.match(DEP_LINE_RE);
+    if (m) out.set(m[1], m[2]);
+  }
+  return out;
+}
+
 function runDependencyGate(diff: string): GateResult {
   const files = extractFilePaths(diff);
   const packageFiles = files.filter((f) => f.endsWith("package.json"));
@@ -150,14 +185,17 @@ function runDependencyGate(diff: string): GateResult {
 
   const findings: string[] = [];
   for (const pf of packageFiles) {
-    const lines = extractAddedLinesForFile(diff, pf);
-    for (const line of lines) {
-      // Match new dependency additions: "name": "^version"
-      const depMatch = line.match(/^\s*"([^"]+)"\s*:\s*"([~^]?\d[^"]*)"$/);
-      if (depMatch) {
-        const [, name, version] = depMatch;
-        findings.push(`New dependency: ${name}@${version} (in ${pf}) — verify it is vetted and license-compatible`);
-      }
+    const { added, removed } = extractDiffLinesForFile(diff, pf);
+    const addedDeps = parseDepLines(added);
+    const removedDeps = parseDepLines(removed);
+
+    // A pure add (name appears only in `+` lines) is a new dependency.
+    // A `+` paired with a matching `-` for the same name is a version bump — skip.
+    for (const [name, version] of addedDeps) {
+      if (removedDeps.has(name)) continue;
+      findings.push(
+        `New dependency: ${name}@${version} (in ${pf}) — verify it is vetted and license-compatible`,
+      );
     }
   }
 

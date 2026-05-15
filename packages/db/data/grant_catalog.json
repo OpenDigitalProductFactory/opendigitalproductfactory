@@ -183,6 +183,46 @@
       "implies": []
     },
     {
+      "key": "work_capsule_read",
+      "description": "Read Work Capsule coordination records.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_work_capsule",
+        "list_work_capsules"
+      ],
+      "implies": []
+    },
+    {
+      "key": "work_capsule_write",
+      "description": "Create and update Work Capsule coordination records.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "claim_capsule_scope",
+        "create_work_capsule",
+        "heartbeat_capsule",
+        "record_capsule_evidence",
+        "release_capsule_scope",
+        "update_work_capsule_status"
+      ],
+      "implies": [
+        "work_capsule_read"
+      ]
+    },
+    {
+      "key": "work_capsule_adopt",
+      "description": "Adopt external branches and worktrees into Work Capsules.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "adopt_worktree"
+      ],
+      "implies": [
+        "work_capsule_read"
+      ]
+    },
+    {
       "key": "catalog_publish",
       "description": "Publish catalog.",
       "category": "release",

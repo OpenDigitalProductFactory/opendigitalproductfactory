@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 
-import { CODE_GRAPH_GRAPH_KEY } from "./constants";
+import { CODE_GRAPH_GRAPH_KEY, CODE_GRAPH_PROJECTION_VERSION } from "./constants";
 import {
   getChangedFiles,
   getCurrentBranch,
@@ -13,8 +13,10 @@ import {
   clearCodeGraph,
   ensureCodeGraphNeo4jSchema,
   syncTrackedFile,
+  syncTrackedFilesFull,
 } from "./neo4j-projection";
 import {
+  clearCodeGraphFileHashes,
   countCodeGraphFileHashes,
   findCodeGraphIndexState,
   markCodeGraphFailed,
@@ -45,13 +47,21 @@ export type ReconcileCodeGraphResult = {
 };
 
 export function planCodeGraphRefresh(input: {
+  indexedGraphVersion: number | null;
+  currentGraphVersion: number;
   currentHeadSha: string | null;
   lastIndexedHeadSha: string | null;
   changedFiles: string[];
   diffFailed: boolean;
   forceFull: boolean;
 }): CodeGraphRefreshPlan {
-  if (input.forceFull || !input.lastIndexedHeadSha || !input.currentHeadSha || input.diffFailed) {
+  if (
+    input.forceFull ||
+    input.indexedGraphVersion !== input.currentGraphVersion ||
+    !input.lastIndexedHeadSha ||
+    !input.currentHeadSha ||
+    input.diffFailed
+  ) {
     return { mode: "full", changedFiles: [] };
   }
 
@@ -63,6 +73,19 @@ export function planCodeGraphRefresh(input: {
     mode: "incremental",
     changedFiles: input.changedFiles,
   };
+}
+
+function isTestFile(filePath: string): boolean {
+  return /\.(test|spec)\.[jt]sx?$/.test(filePath);
+}
+
+export function orderCodeGraphFilesForProjection(files: string[]): string[] {
+  return [...files].sort((left, right) => {
+    const leftRank = isTestFile(left) ? 1 : 0;
+    const rightRank = isTestFile(right) ? 1 : 0;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return left.localeCompare(right);
+  });
 }
 
 export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promise<ReconcileCodeGraphResult> {
@@ -116,6 +139,8 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     }
 
     const plan = planCodeGraphRefresh({
+      indexedGraphVersion: state?.graphVersion ?? null,
+      currentGraphVersion: CODE_GRAPH_PROJECTION_VERSION,
       currentHeadSha: headSha,
       lastIndexedHeadSha: state?.lastIndexedHeadSha ?? null,
       changedFiles,
@@ -123,13 +148,18 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
       forceFull: input.forceFull ?? false,
     });
 
-    const files = plan.mode === "full" ? await listTrackedFiles(gitRoot) : plan.changedFiles;
+    const files = orderCodeGraphFilesForProjection(
+      plan.mode === "full" ? await listTrackedFiles(gitRoot) : plan.changedFiles,
+    );
     await ensureCodeGraphNeo4jSchema();
     if (plan.mode === "full") {
       await clearCodeGraph(graphKey);
-    }
-    for (const filePath of files) {
-      await syncTrackedFile(graphKey, gitRoot, filePath);
+      await clearCodeGraphFileHashes(graphKey);
+      await syncTrackedFilesFull(graphKey, gitRoot, files);
+    } else {
+      for (const filePath of files) {
+        await syncTrackedFile(graphKey, gitRoot, filePath);
+      }
     }
     const indexedFileCount = await countCodeGraphFileHashes(graphKey);
     await markCodeGraphReady(graphKey, {

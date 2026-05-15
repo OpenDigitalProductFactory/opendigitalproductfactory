@@ -1,7 +1,7 @@
 ---
 title: Digital Product
 pageKind: entity
-status: draft
+status: published
 abstract: Anything that runs code that one party is responsible for that delivers outcomes for a consumer party.
 sources:
   - articles/why-product-centric-approach-needed

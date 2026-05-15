@@ -11,6 +11,7 @@ describe("proxy route classification", () => {
 
   it("classifies employee auth and public pages correctly", () => {
     expect(classifyRoute("/login")).toBe(RouteClass.EmployeeAuth);
+    expect(classifyRoute("/setup")).toBe(RouteClass.PublicPage);
     expect(classifyRoute("/forgot-password")).toBe(RouteClass.PublicPage);
     expect(classifyRoute("/reset-password")).toBe(RouteClass.PublicPage);
     expect(classifyRoute("/welcome")).toBe(RouteClass.PublicPage);

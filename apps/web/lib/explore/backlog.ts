@@ -20,6 +20,10 @@ export type BacklogItemWithRelations = {
   body: string | null;
   priority: number | null;
   epicId: string | null;
+  triageOutcome: string | null;
+  effortSize: string | null;
+  activeBuildId: string | null;
+  activeBuild: { buildId: string; phase: string | null } | null;
   digitalProduct: { id: string; productId: string; name: string } | null;
   taxonomyNode: { id: string; nodeId: string; name: string } | null;
   submittedBy: { email: string } | null;

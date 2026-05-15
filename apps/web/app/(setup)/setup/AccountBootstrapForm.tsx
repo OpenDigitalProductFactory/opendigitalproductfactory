@@ -1,75 +1,30 @@
-"use client";
-
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { createOrganization, createOwnerAccount } from "@/lib/actions/setup-entities";
-import { advanceStep } from "@/lib/actions/setup-progress";
+import { bootstrapFirstRunOwner } from "@/lib/actions/first-run-account-bootstrap";
+import { AccountBootstrapSubmitButton } from "./AccountBootstrapSubmitButton";
 
 type Props = {
   setupId: string;
 };
 
 /**
- * Minimal account bootstrap — the ONE custom form in onboarding.
+ * Minimal account bootstrap - the one custom form in onboarding.
  *
- * Collects org name + owner credentials, creates both records,
- * then redirects into the real portal where the setup overlay
- * and COO coworker panel take over.
+ * The form posts as a native server action so first-run sign-in follows the
+ * same Auth.js redirect path as the normal login page.
  */
 export function AccountBootstrapForm({ setupId }: Props) {
-  const [orgName, setOrgName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const router = useRouter();
+  async function submitBootstrap(formData: FormData) {
+    "use server";
 
-  const canSubmit =
-    orgName.trim().length > 0 &&
-    email.trim().length > 0 &&
-    password.length >= 8;
-
-  const handleSubmit = () => {
-    setError(null);
-    startTransition(async () => {
-      try {
-        // 1. Create organization
-        await createOrganization(setupId, { orgName });
-
-        // 2. Create owner account
-        const result = await createOwnerAccount(setupId, {
-          name: orgName,
-          email,
-          password,
-        });
-
-        // 3. Advance past bootstrap step
-        await advanceStep(setupId, { orgName });
-
-        // 4. Sign in (client-side) and redirect to portal
-        // The signIn import depends on the auth setup — using fetch for portability
-        const signInRes = await fetch("/api/auth/callback/workforce", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            email,
-            password,
-            csrfToken: await getCsrfToken(),
-          }),
-          redirect: "manual",
-        });
-
-        // Redirect to the first real portal route (AI providers)
-        router.push("/platform/ai/providers");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      }
+    await bootstrapFirstRunOwner(setupId, {
+      orgName: String(formData.get("organizationName") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      password: String(formData.get("password") ?? ""),
     });
-  };
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[var(--dpf-bg)]">
-      <div className="w-full max-w-md p-8 rounded-xl bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] shadow-lg">
+      <div className="w-full max-w-md rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 shadow-lg">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-[var(--dpf-text)]">Welcome to your platform</h1>
           <p className="mt-2 text-sm text-[var(--dpf-muted)]">
@@ -77,64 +32,54 @@ export function AccountBootstrapForm({ setupId }: Props) {
           </p>
         </div>
 
-        <div className="space-y-5">
+        <form className="space-y-5" action={submitBootstrap}>
           <div>
-            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
+            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-org-name">
               Organization Name
             </label>
             <input
+              id="first-run-org-name"
+              name="organizationName"
               type="text"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              placeholder="e.g., Riverside Medical Group"
+              placeholder="e.g., Digital Product Factory"
+              autoComplete="organization"
+              required
               className="w-full rounded-lg"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
+            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-owner-email">
               Your Email
             </label>
             <input
+              id="first-run-owner-email"
+              name="email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
               className="w-full rounded-lg"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1">
+            <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-owner-password">
               Password (8+ characters)
             </label>
             <input
+              id="first-run-owner-password"
+              name="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              required
               className="w-full rounded-lg"
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-[#ef4444]">{error}</p>
-          )}
-
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit || isPending}
-            className="w-full py-3 text-sm font-medium text-white bg-[var(--dpf-accent)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPending ? "Setting up..." : "Get Started"}
-          </button>
-        </div>
+          <AccountBootstrapSubmitButton />
+        </form>
       </div>
     </div>
   );
-}
-
-/** Fetch CSRF token from NextAuth for the sign-in POST. */
-async function getCsrfToken(): Promise<string> {
-  const res = await fetch("/api/auth/csrf");
-  const data = await res.json();
-  return data.csrfToken ?? "";
 }

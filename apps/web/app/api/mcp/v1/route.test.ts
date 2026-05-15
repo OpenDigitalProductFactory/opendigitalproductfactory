@@ -574,6 +574,114 @@ describe("POST — tools/list", () => {
       expect(typeof tool.annotations.destructiveHint).toBe("boolean");
     }
   });
+
+  // ─── Principles-as-wiki-kind Phase 2 Task 2.8 ───────────────────────────
+  describe("principle MCP tools are gated by registry_read scope", () => {
+    it("exposes wiki_query and principle_decide to tokens with registry_read", async () => {
+      resolveMock.mockResolvedValue({
+        tokenId: "tok_p",
+        userId: "u1",
+        agentId: null,
+        scopes: ["registry_read"],
+        capability: "read",
+      });
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 10, method: "tools/list" },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const toolNames = body.result.tools.map((t: { name: string }) => t.name);
+      expect(toolNames).toContain("wiki_query");
+      expect(toolNames).toContain("principle_decide");
+    });
+
+    it("hides wiki_query and principle_decide from tokens without registry_read", async () => {
+      resolveMock.mockResolvedValue({
+        tokenId: "tok_p",
+        userId: "u1",
+        agentId: null,
+        scopes: ["backlog_read"], // NOT registry_read
+        capability: "read",
+      });
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 11, method: "tools/list" },
+        }),
+      );
+      const body = await res.json();
+      const toolNames = body.result.tools.map((t: { name: string }) => t.name);
+      expect(toolNames).not.toContain("wiki_query");
+      expect(toolNames).not.toContain("principle_decide");
+    });
+
+    it("exposes the extended wiki_query input schema (tier, appliesTo, publicOnly, principle in pageKind enum)", async () => {
+      resolveMock.mockResolvedValue({
+        tokenId: "tok_p",
+        userId: "u1",
+        agentId: null,
+        scopes: ["registry_read"],
+        capability: "read",
+      });
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 12, method: "tools/list" },
+        }),
+      );
+      const body = await res.json();
+      const wikiQuery = body.result.tools.find(
+        (t: { name: string }) => t.name === "wiki_query",
+      );
+      expect(wikiQuery).toBeDefined();
+      const props = wikiQuery.inputSchema.properties as Record<
+        string,
+        { enum?: string[] }
+      >;
+      // pageKind enum now includes "principle"
+      expect(props.pageKind.enum).toContain("principle");
+      // New principle filter fields are advertised
+      expect(props.tier).toBeDefined();
+      expect(props.tier.enum).toEqual(["commandment", "core", "contextual"]);
+      expect(props.appliesTo).toBeDefined();
+      expect(props.appliesTo.enum).toEqual([
+        "in_platform_coworker",
+        "external_coding_agent",
+        "human",
+      ]);
+      expect(props.publicOnly).toBeDefined();
+    });
+
+    it("exposes principle_decide with the documented input shape (context, options, callingPopulation)", async () => {
+      resolveMock.mockResolvedValue({
+        tokenId: "tok_p",
+        userId: "u1",
+        agentId: null,
+        scopes: ["registry_read"],
+        capability: "read",
+      });
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 13, method: "tools/list" },
+        }),
+      );
+      const body = await res.json();
+      const decide = body.result.tools.find(
+        (t: { name: string }) => t.name === "principle_decide",
+      );
+      expect(decide).toBeDefined();
+      expect(decide.inputSchema.required).toEqual(
+        expect.arrayContaining(["context", "options", "callingPopulation"]),
+      );
+      expect(decide.annotations.readOnlyHint).toBe(true);
+      expect(decide.annotations.destructiveHint).toBe(false);
+      expect(decide.annotations.idempotentHint).toBe(true);
+    });
+  });
 });
 
 describe("POST — tools/call", () => {

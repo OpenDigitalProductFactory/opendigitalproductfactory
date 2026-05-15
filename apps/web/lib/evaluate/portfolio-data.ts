@@ -3,7 +3,11 @@
 // Both layout.tsx and page.tsx call getPortfolioTree() — React deduplicates automatically.
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import { buildPortfolioTree, formatBudget, PORTFOLIO_OWNER_ROLES, type OwnerRoleInfo } from "./portfolio";
+import { buildPortfolioTree, PORTFOLIO_OWNER_ROLES, type OwnerRoleInfo } from "./portfolio";
+import {
+  getPortfolioBudgetMetric,
+  type PortfolioBudgetMetric,
+} from "@/lib/portfolio/budget-provenance";
 
 export const getPortfolioTree = cache(async (pruneEmpty = true) => {
   const [nodes, totalCounts, activeCounts] = await Promise.all([
@@ -75,16 +79,17 @@ export const getAgentCounts = cache(async (): Promise<Record<string, number>> =>
 });
 
 /**
- * Returns annual budget per portfolio slug, e.g. { foundational: "$2.5M", ... }.
- * Returns "—" for portfolios with null budget.
+ * Returns annual budget metric per portfolio slug with visible source
+ * provenance. Seeded placeholders remain visible as placeholders until a
+ * connected finance/setup source replaces them.
  * React cache() deduplicates across layout + page within one request.
  */
-export const getPortfolioBudgets = cache(async (): Promise<Record<string, string>> => {
+export const getPortfolioBudgets = cache(async (): Promise<Record<string, PortfolioBudgetMetric>> => {
   const portfolios = await prisma.portfolio.findMany({
     select: { slug: true, budgetKUsd: true },
   });
   return Object.fromEntries(
-    portfolios.map((p) => [p.slug, formatBudget(p.budgetKUsd)])
+    portfolios.map((p) => [p.slug, getPortfolioBudgetMetric(p.slug, p.budgetKUsd)])
   );
 });
 

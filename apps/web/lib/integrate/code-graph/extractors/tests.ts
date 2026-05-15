@@ -35,12 +35,25 @@ function withSourceExtension(filePath: string): string {
   return hasSourceExtension(filePath) ? filePath : `${filePath}.ts`;
 }
 
+function normalizeRuntimeSpecifierExtension(sourcePath: string, testFilePath: string): string {
+  if (!/\.(test|spec)\.tsx?$/.test(testFilePath)) {
+    return sourcePath;
+  }
+  if (sourcePath.endsWith(".jsx")) {
+    return `${sourcePath.slice(0, -4)}.tsx`;
+  }
+  if (sourcePath.endsWith(".js")) {
+    return `${sourcePath.slice(0, -3)}.ts`;
+  }
+  return sourcePath;
+}
+
 function resolveSourceImport(specifier: string, testFilePath: string): string | null {
   if (specifier.startsWith(".")) {
-    return withSourceExtension(normalizePath(`${dirname(testFilePath)}/${specifier}`));
+    return normalizeRuntimeSpecifierExtension(withSourceExtension(normalizePath(`${dirname(testFilePath)}/${specifier}`)), testFilePath);
   }
   if (specifier.startsWith("@/")) {
-    return withSourceExtension(normalizePath(`apps/web/${specifier.slice(2)}`));
+    return normalizeRuntimeSpecifierExtension(withSourceExtension(normalizePath(`apps/web/${specifier.slice(2)}`)), testFilePath);
   }
   return null;
 }

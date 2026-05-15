@@ -17,6 +17,22 @@ COPY services/edge-node/src ./src
 RUN pnpm build
 
 FROM node:24-alpine AS runner
+
+# Discovery collector dependencies:
+#
+# - nmap            C2's active subnet sweep. Uses ARP requests when
+#                   CAP_NET_RAW is granted (docker-compose.edge*.yml
+#                   grants it on Linux); falls back to TCP connect
+#                   probes otherwise.
+# - net-snmp-tools  C3's network-device poll. Ships snmpget/snmpwalk
+#                   with v2c + v3 support. No daemon, no listener —
+#                   the binaries are invoked per query.
+#
+# Future collectors will add `arp-scan` (alternative ARP-request
+# probe) — held off until that collector lands so the image surface
+# stays small.
+RUN apk add --no-cache nmap net-snmp-tools
+
 # Phase 0 runs as a non-root user. The container needs no special
 # capabilities for the Phase 0 collector set (ip addr, docker ps, ss
 # from outside the host? - actually Phase 0 collectors live in A5; A3

@@ -7,18 +7,20 @@
  * `CompletenessStrip` UI (Task 7.2):
  *
  *   1. requiredFieldsScore — % of products whose containing taxonomy node's
- *      `governance.requiredFields` are all populated. Null until at least
- *      one node has a non-empty required-fields list. Begins to vary once
- *      Task 7.3's `set_node_required_fields` lands.
+ *      `governance.requiredFields` are all populated from product metadata
+ *      or linked inventory identity evidence. Null until at least one node
+ *      has a non-empty required-fields list. Begins to vary once Task 7.3's
+ *      `set_node_required_fields` lands.
  *   2. enrichmentScore — % of products with `enrichmentStatus === "enriched"`.
- *      Null until Chunk 4 Task 4.1 adds the column. Begins to vary the moment
- *      products start carrying the field.
+ *      Null until Chunk 4 Task 4.1 adds the column and the query projects it.
  *   3. openIssuesByType — counts of open `PortfolioQualityIssue` rows scoped
  *      to the portfolio, keyed by `issueType`.
  *
  * Defensive against malformed `governance` JSON: any non-`string[]`
  * `requiredFields` value is treated as if there were no required fields.
  */
+
+import type { Prisma } from "@dpf/db";
 
 export interface PortfolioCompletenessScores {
   /** % (0–100) of products in the portfolio with all required fields populated. Null when no product has a non-empty required-fields list. */
@@ -31,25 +33,33 @@ export interface PortfolioCompletenessScores {
   productCount: number;
 }
 
+interface PortfolioCompletenessInventoryEntity {
+  manufacturer?: string | null;
+  observedVersion?: string | null;
+  normalizedVersion?: string | null;
+  productModel?: string | null;
+  technicalClass?: string | null;
+  iconKey?: string | null;
+}
+
+type PortfolioCompletenessProduct = {
+  id: string;
+  taxonomyNode: { governance: unknown } | null;
+  observationConfig: unknown;
+  inventoryEntities?: PortfolioCompletenessInventoryEntity[];
+  // Forward-compat: when Chunk 4 lands, callers can include enrichmentStatus.
+  enrichmentStatus?: string | null;
+  // Required-field source values are passed through product metadata,
+  // observationConfig, and derived aliases from linked inventory entity
+  // evidence. Test harnesses may still pass explicit aliases directly.
+} & Record<string, unknown>;
+
 export interface PortfolioCompletenessDb {
   digitalProduct: {
     findMany(args: {
       where: { portfolioId: string };
       select: Record<string, unknown>;
-    }): Promise<
-      Array<
-        {
-          id: string;
-          taxonomyNode: { governance: unknown } | null;
-          observationConfig: unknown;
-          // Forward-compat: when Chunk 4 lands, callers can include enrichmentStatus
-          enrichmentStatus?: string | null;
-          // Required-field source values — passed through observationConfig + raw entity attributes
-          // (we'll inspect these JSON-ishly per node's requiredFields list).
-          // For now the test harness mocks them.
-        } & Record<string, unknown>
-      >
-    >;
+    }): Promise<PortfolioCompletenessProduct[]>;
   };
   portfolioQualityIssue: {
     groupBy(args: {
@@ -59,6 +69,22 @@ export interface PortfolioCompletenessDb {
     }): Promise<Array<{ issueType: string; _count: { _all: number } }>>;
   };
 }
+
+export const DIGITAL_PRODUCT_COMPLETENESS_SELECT = {
+  id: true,
+  observationConfig: true,
+  inventoryEntities: {
+    select: {
+      manufacturer: true,
+      observedVersion: true,
+      normalizedVersion: true,
+      productModel: true,
+      technicalClass: true,
+      iconKey: true,
+    },
+  },
+  taxonomyNode: { select: { governance: true } },
+} satisfies Prisma.DigitalProductSelect;
 
 /**
  * Pull the `requiredFields` list off a node's governance JSON, defending
@@ -112,6 +138,57 @@ function isPopulated(value: unknown): boolean {
   return true;
 }
 
+const INVENTORY_REQUIRED_FIELD_ALIASES: Record<string, Array<keyof PortfolioCompletenessInventoryEntity>> = {
+  manufacturer: ["manufacturer"],
+  observedVersion: ["observedVersion", "normalizedVersion"],
+  normalizedVersion: ["normalizedVersion", "observedVersion"],
+  productModel: ["productModel"],
+  technicalClass: ["technicalClass"],
+  iconKey: ["iconKey"],
+};
+
+function firstInventoryValue(
+  entities: PortfolioCompletenessInventoryEntity[] | undefined,
+  fields: Array<keyof PortfolioCompletenessInventoryEntity>,
+): unknown {
+  for (const entity of entities ?? []) {
+    for (const field of fields) {
+      const value = entity[field];
+      if (isPopulated(value)) {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
+function readInventoryAlias(source: Record<string, unknown>, path: string): unknown {
+  const fields = INVENTORY_REQUIRED_FIELD_ALIASES[path];
+  if (!fields) {
+    return undefined;
+  }
+
+  const entities = source.inventoryEntities;
+  if (!Array.isArray(entities)) {
+    return undefined;
+  }
+
+  const identityEvidence = entities.filter(
+    (entity): entity is PortfolioCompletenessInventoryEntity =>
+      entity !== null && typeof entity === "object",
+  );
+  return firstInventoryValue(identityEvidence, fields);
+}
+
+function readRequiredFieldValue(source: Record<string, unknown>, path: string): unknown {
+  const directValue = readPath(source, path);
+  if (isPopulated(directValue)) {
+    return directValue;
+  }
+
+  return readInventoryAlias(source, path);
+}
+
 export async function computePortfolioCompleteness(
   portfolioId: string,
   db: PortfolioCompletenessDb,
@@ -119,14 +196,7 @@ export async function computePortfolioCompleteness(
   const [products, issueGroups] = await Promise.all([
     db.digitalProduct.findMany({
       where: { portfolioId },
-      select: {
-        id: true,
-        manufacturer: true,
-        observedVersion: true,
-        observationConfig: true,
-        enrichmentStatus: true,
-        taxonomyNode: { select: { governance: true } },
-      },
+      select: DIGITAL_PRODUCT_COMPLETENESS_SELECT,
     }),
     db.portfolioQualityIssue.groupBy({
       where: { portfolioId, status: "open" },
@@ -145,7 +215,9 @@ export async function computePortfolioCompleteness(
     const required = readRequiredFields(product.taxonomyNode?.governance);
     if (required.length === 0) continue;
     gatedProductCount += 1;
-    const allPopulated = required.every((path) => isPopulated(readPath(product, path)));
+    const allPopulated = required.every((path) =>
+      isPopulated(readRequiredFieldValue(product, path)),
+    );
     if (allPopulated) {
       completeGatedProductCount += 1;
     }

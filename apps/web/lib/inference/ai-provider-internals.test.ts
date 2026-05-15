@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { extractTokenUsage } from "./ai-provider-internals";
+import {
+  buildAutoDiscoveryEvalEvents,
+  extractTokenUsage,
+} from "./ai-provider-internals";
 
 describe("extractTokenUsage", () => {
   it("reads OpenAI-compatible prompt and completion token fields", () => {
@@ -29,5 +32,33 @@ describe("extractTokenUsage", () => {
       inputTokens: undefined,
       outputTokens: undefined,
     });
+  });
+});
+
+describe("buildAutoDiscoveryEvalEvents", () => {
+  it("uses the provider id as endpointId, not the ModelProfile row id", () => {
+    const events = buildAutoDiscoveryEvalEvents("anthropic-sub", [
+      { id: "cmogs56yp00018xqagh6iq4px", modelId: "claude-sonnet-4-6" },
+      { id: "cmogs56z800038xqa9gwwdmlq", modelId: "claude-opus-4-6" },
+    ]);
+
+    expect(events).toEqual([
+      {
+        name: "ai/eval.run",
+        data: {
+          endpointId: "anthropic-sub",
+          modelId: "claude-sonnet-4-6",
+          userId: "system",
+        },
+      },
+      {
+        name: "ai/eval.run",
+        data: {
+          endpointId: "anthropic-sub",
+          modelId: "claude-opus-4-6",
+          userId: "system",
+        },
+      },
+    ]);
   });
 });

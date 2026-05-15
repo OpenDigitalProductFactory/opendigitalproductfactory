@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockRunCypher } = vi.hoisted(() => ({
+  mockRunCypher: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     codeGraphIndexState: {
@@ -9,6 +13,7 @@ vi.mock("@dpf/db", () => ({
       findMany: vi.fn(),
     },
   },
+  runCypher: mockRunCypher,
 }));
 
 import { prisma } from "@dpf/db";
@@ -19,6 +24,7 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRunCypher.mockResolvedValue([]);
 });
 
 describe("getCodeGraphFreshness", () => {
@@ -52,6 +58,41 @@ describe("getCodeGraphFreshness", () => {
     expect(result.available).toBe(true);
     expect(result.indexStatus).toBe("ready");
     expect(result.warnings).toContain("Uncommitted local changes may not be reflected in graph-backed analysis.");
+  });
+
+  it("can inspect structural relationship health for realistic benchmark readiness", async () => {
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
+      graphKey: "source-code",
+      graphVersion: 2,
+      indexStatus: "ready",
+      workspaceRoot: "/workspace",
+      lastIndexedAt: new Date("2026-05-13T00:00:00.000Z"),
+      lastIndexedBranch: "main",
+      lastIndexedHeadSha: "abc123",
+      workspaceDirty: false,
+      workspaceDirtyObservedAt: null,
+      indexedFileCount: 42,
+      lastError: null,
+    } as never);
+    mockRunCypher.mockResolvedValue([
+      { relationship: "DEFINES", count: 10 },
+      { relationship: "IMPORTS", count: 20 },
+    ]);
+
+    const result = await getCodeGraphFreshness("source-code", {
+      inspectStructuralHealth: true,
+    });
+
+    expect(result.relationshipCounts).toEqual({
+      DEFINES: 10,
+      IMPORTS: 20,
+      IMPLEMENTS_ROUTE: 0,
+      EXPOSES_TOOL: 0,
+      TESTED_BY: 0,
+    });
+    expect(result.warnings).toContain(
+      "Code graph structural relationships are missing: IMPLEMENTS_ROUTE, EXPOSES_TOOL, TESTED_BY.",
+    );
   });
 });
 

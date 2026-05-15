@@ -2,7 +2,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { GitBranch } from "lucide-react";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -12,6 +14,7 @@ import { ProcessGraph } from "./ProcessGraph";
 import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
+import { BuildListItem } from "./BuildListItem";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
@@ -39,6 +42,7 @@ type Props = {
   dpfEnvironment?: string;
   projectBranch?: string | null;
   submissionBranchShortId?: string | null;
+  initialBuildId?: string | null;
 };
 
 export function BuildStudio({
@@ -48,12 +52,13 @@ export function BuildStudio({
   dpfEnvironment,
   projectBranch,
   submissionBranchShortId,
+  initialBuildId,
 }: Props) {
   const router = useRouter();
   const buildRows = Array.isArray(builds) ? builds : [];
   const portfolioRows = Array.isArray(portfolios) ? portfolios : [];
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
-    buildRows.find((b) => b.phase !== "complete" && b.phase !== "failed") ?? null,
+    resolveInitialActiveBuild(buildRows, initialBuildId),
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -323,6 +328,15 @@ export function BuildStudio({
 
         {/* Left: Build List */}
         <div className={getBuildStudioSidebarClassName(sidebarOpen)}>
+          <div className="border-b border-[var(--dpf-border)] p-3">
+            <Link
+              href="/build/work"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            >
+              <GitBranch className="h-4 w-4" aria-hidden="true" />
+              <span>Work Control</span>
+            </Link>
+          </div>
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
               <div className="px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
@@ -376,58 +390,26 @@ export function BuildStudio({
                 });
 
                 return (
-                <button
-                  key={build.buildId}
-                  onClick={() => { setActiveBuild(build); setSidebarOpen(true); }}
-                  className="block w-full text-left px-3 py-2.5 mb-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-[var(--dpf-surface-2)] hover:shadow-dpf-xs animate-slide-up focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                  style={{
-                    animationDelay: `${idx * 30}ms`,
-                    animationFillMode: "backwards",
-                    border: activeBuild?.buildId === build.buildId
-                      ? "1px solid var(--dpf-accent)"
-                      : "1px solid transparent",
-                    background: activeBuild?.buildId === build.buildId
-                      ? "var(--dpf-surface-2)"
-                      : "transparent",
-                  }}
-                >
-                  <div className="flex min-w-0 items-start justify-between gap-2">
-                    <div className="mb-0.5 min-w-0 flex-1 break-words text-sm font-semibold text-[var(--dpf-text)]">{build.title}</div>
-                    <button
-                      type="button"
-                      aria-label={`Delete ${build.title}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isDevEnvironment) return;
-                        if (!confirm(`Delete "${build.title}"?`)) return;
-                        deleteFeatureBuild(build.buildId).then(() => {
-                          if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
-                          router.refresh();
-                        });
-                      }}
-                      className="text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] text-xs ml-2 shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 rounded"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                  <div className="text-xs text-[var(--dpf-muted)]">
-                    {build.buildId}
-                    {build.originator && (
-                      <span> &middot; {build.originator.itemId}</span>
-                    )}
-                    <span> &middot; {build.phase}</span>
-                    {build.product && (
-                      <span> &middot; v{build.product.version} &middot; {build.product.backlogCount} item{build.product.backlogCount !== 1 ? "s" : ""}</span>
-                    )}
-                  </div>
-                  {lifecycleLabel && (
-                    <div className="mt-2">
-                      <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--dpf-text)]">
-                        {lifecycleLabel}
-                      </span>
-                    </div>
-                  )}
-                </button>
+                  <BuildListItem
+                    key={build.buildId}
+                    build={build}
+                    active={activeBuild?.buildId === build.buildId}
+                    index={idx}
+                    lifecycleLabel={lifecycleLabel}
+                    isDevEnvironment={isDevEnvironment}
+                    onSelect={() => {
+                      setActiveBuild(build);
+                      setSidebarOpen(true);
+                    }}
+                    onDelete={() => {
+                      if (isDevEnvironment) return;
+                      if (!confirm(`Delete "${build.title}"?`)) return;
+                      deleteFeatureBuild(build.buildId).then(() => {
+                        if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
+                        router.refresh();
+                      });
+                    }}
+                  />
                 );
               })
             )}
@@ -441,7 +423,12 @@ export function BuildStudio({
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="m-0 min-w-0 break-words text-base font-bold text-[var(--dpf-text)]">{activeBuild.title}</h2>
+                    <h2
+                      title={activeBuild.title}
+                      className="m-0 max-h-[3rem] min-w-0 overflow-hidden break-words text-base font-bold leading-6 text-[var(--dpf-text)] line-clamp-2"
+                    >
+                      {activeBuild.title}
+                    </h2>
                     <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
@@ -653,6 +640,18 @@ export function BuildStudio({
       )}
     </div>
   );
+}
+
+function resolveInitialActiveBuild(
+  buildRows: FeatureBuildRow[],
+  initialBuildId?: string | null,
+): FeatureBuildRow | null {
+  if (initialBuildId) {
+    const linkedBuild = buildRows.find((build) => build.buildId === initialBuildId);
+    if (linkedBuild) return linkedBuild;
+  }
+
+  return buildRows.find((build) => build.phase !== "complete" && build.phase !== "failed") ?? null;
 }
 
 function BuildFailedBanner({ execState }: { execState: BuildExecutionState | null }) {

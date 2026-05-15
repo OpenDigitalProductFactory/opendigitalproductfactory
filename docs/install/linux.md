@@ -80,8 +80,12 @@ bash install-dpf.sh --headless --release
 2. **`~/.dpf/install-state.json`** — initializes or migrates the install
    state file (schema-versioned). Honors `XDG_STATE_HOME`.
 3. **Compose chain** — assembles `docker-compose.yml` +
-   `docker-compose.linux.yml` (+ `docker-compose.release.yml` if
-   `--release`).
+   `docker-compose.linux.yml` + `docker-compose.edge.yml` (+
+   `docker-compose.release.yml` if `--release`). The Edge Node
+   container is bundled by default for single-host installs; pass
+   `--no-edge` to skip it for Authority-only deployments (cloud,
+   headless installs where Edge Nodes will be added later from
+   separate hosts).
 4. **Docker Engine** — installs via distro pkg manager if missing
    (Docker's official `apt`/`dnf` repos), runs `systemctl enable --now
    docker`, adds your user to the `docker` group.
@@ -99,9 +103,18 @@ bash install-dpf.sh --headless --release
     `linux-monitoring` profile for cAdvisor + node-exporter).
 11. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-12. **Persist state** — records `lastSuccessfulInstallVersion` and
+12. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
+    auto-approve bootstrap token via
+    `apps/web/scripts/issue-edge-bootstrap-token.ts --auto-approve`,
+    writes it to `.env` as `DPF_BOOTSTRAP_TOKEN`, restarts the
+    `edge-node` container so it enrolls. The new EdgeNode lands
+    directly in `trustState=trusted` per spec § Approval policy —
+    the operator running `install-dpf.sh` has already proven host
+    access, so the Approve click in `/platform/edge-nodes` would be
+    ceremonial. The node appears in the admin UI within ~10 seconds.
+13. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-13. **systemd user unit** — installs
+14. **systemd user unit** — installs
     `~/.config/systemd/user/dpf.service` and runs
     `loginctl enable-linger $USER` so the stack auto-starts at boot
     (skip with `--no-autostart`).
@@ -123,7 +136,7 @@ Login credentials are written to `.env` in the install directory:
 |------|---------|
 | Start the stack | `bash dpf-start.sh` |
 | Stop the stack | `bash dpf-stop.sh` |
-| Tail logs | `docker compose -f docker-compose.yml -f docker-compose.linux.yml logs -f` |
+| Tail logs | `docker compose -f docker-compose.yml -f docker-compose.linux.yml -f docker-compose.edge.yml logs -f` |
 | Diagnostic bundle | `bash install-dpf.sh doctor` |
 | Wipe + reinstall (destructive) | `bash dpf-reinstall.sh` |
 | Tag + push a release | `bash dpf-release.sh --bump minor` |
@@ -131,6 +144,51 @@ Login credentials are written to `.env` in the install directory:
 | Full uninstall (wipe data) | `bash uninstall-dpf.sh --purge` |
 
 Pass `--help` to any of those scripts to see all flags.
+
+## Edge Node — what's running and why
+
+A single-host install bundles a **DPF Edge Node** alongside the
+Authority Core. The Edge Node is a small Node.js container that:
+
+- Reports its host (hostname + LAN IP addresses) to the Authority
+- Submits discovery observations on a regular sweep cadence (default
+  5 min)
+- Receives policy + interval updates from the Authority on each
+  heartbeat (default 60s)
+
+It enrolls automatically on first install (the installer mints a
+single-use `dpfboot_*` token flagged as installer-issued, writes it
+to `.env`, and the container consumes it on startup). Per spec §
+Approval policy the new node lands directly in `trustState=trusted`
+— no Approve click needed because the operator running
+`install-dpf.sh` already has host access.
+
+Verify it's running:
+
+```bash
+# Container is up
+docker compose -f docker-compose.yml -f docker-compose.linux.yml \
+               -f docker-compose.edge.yml \
+               ps edge-node
+
+# Node appears in the admin UI at /platform/edge-nodes with
+# trustState=trusted, a recent lastSeenAt, and (after a few minutes)
+# a DiscoveryRun count > 0.
+```
+
+**Skip the Edge Node:** `bash install-dpf.sh --no-edge` for
+Authority-only deployments (cloud / headless installs where Edge
+Nodes will be added later from separate hosts via the
+`docker-compose.edge-standalone.yml` path —
+[multi-host runbook](edge-node-multi-host.md)).
+
+**Add Edge Nodes from other hosts later:** when you want to
+discover topology on a second machine (different physical box, VM,
+LAN segment), follow the
+[multi-host runbook](edge-node-multi-host.md). The remote host
+runs only the Edge Node container, points it at this Authority's
+URL, and goes through the operator Approve click (paste-provisioned
+tokens always require explicit approval per spec § Approval policy).
 
 ## LLM provider
 

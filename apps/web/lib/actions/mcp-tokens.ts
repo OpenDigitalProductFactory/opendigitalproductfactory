@@ -2,12 +2,14 @@
 
 import { auth } from "@/lib/auth";
 import {
+  addScopesToMcpApiToken,
   issueMcpApiToken,
   listMcpApiTokens,
   revokeMcpApiToken,
   type IssueMcpTokenResult,
   type McpTokenCapability,
 } from "@/lib/auth/mcp-api-token";
+import { CODING_AGENT_MCP_TOKEN_SCOPES } from "@/lib/mcp-token-scopes";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
 /**
@@ -173,4 +175,44 @@ export async function revokeMyMcpToken(input: {
     return { ok: false, error: "not_found_or_not_yours" };
   }
   return revokeMcpApiToken(input.tokenId, input.reason);
+}
+
+export async function upgradeMyMcpTokenForCodingAgent(input: {
+  tokenId: string;
+}): Promise<
+  | { ok: true; scopes: string[]; addedScopes: string[] }
+  | { ok: false; error: string; message: string }
+> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "unauthorized", message: "Sign in first" };
+  }
+
+  const tokens = await listMcpApiTokens(session.user.id);
+  const owned = tokens.find((t) => t.id === input.tokenId);
+  if (!owned) {
+    return {
+      ok: false,
+      error: "not_found_or_not_yours",
+      message: "Token was not found for the current user.",
+    };
+  }
+  if (owned.revokedAt != null) {
+    return { ok: false, error: "revoked", message: "Revoked tokens cannot be upgraded." };
+  }
+  if (owned.expiresAt != null && owned.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "expired", message: "Expired tokens cannot be upgraded." };
+  }
+
+  const result = await addScopesToMcpApiToken(input.tokenId, [
+    ...CODING_AGENT_MCP_TOKEN_SCOPES,
+  ]);
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      message: `Could not upgrade token: ${result.error}`,
+    };
+  }
+  return result;
 }

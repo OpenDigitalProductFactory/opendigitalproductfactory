@@ -4,6 +4,9 @@ export const CODING_AGENT_MCP_TOKEN_SCOPES = [
   "code_graph_read",
   "file_read",
   "spec_plan_read",
+  "work_capsule_read",
+  "work_capsule_write",
+  "work_capsule_adopt",
 ] as const;
 
 export function defaultMcpTokenScopes(availableScopes: readonly string[]): string[] {

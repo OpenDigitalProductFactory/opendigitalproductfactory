@@ -16,6 +16,7 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  addScopesToMcpApiToken,
   issueMcpApiToken,
   listMcpApiTokens,
   resolveMcpApiToken,
@@ -396,6 +397,60 @@ describe("revokeMcpApiToken", () => {
     expect(tokenUpdate).toHaveBeenCalledWith({
       where: { id: "tok_x" },
       data: { revokedAt: expect.any(Date), revokedReason: "leaked" },
+    });
+  });
+});
+
+describe("addScopesToMcpApiToken", () => {
+  it("returns not_found when token doesn't exist", async () => {
+    tokenFindUnique.mockResolvedValue(null);
+
+    const result = await addScopesToMcpApiToken("missing", ["code_graph_read"]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("not_found");
+    expect(tokenUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses to expand revoked tokens", async () => {
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_x",
+      scopes: ["backlog_read"],
+      revokedAt: new Date(),
+    });
+
+    const result = await addScopesToMcpApiToken("tok_x", ["code_graph_read"]);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("revoked");
+    expect(tokenUpdate).not.toHaveBeenCalled();
+  });
+
+  it("adds only missing scopes and preserves existing order", async () => {
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_x",
+      scopes: ["backlog_read", "file_read"],
+      revokedAt: null,
+    });
+
+    const result = await addScopesToMcpApiToken("tok_x", [
+      "code_graph_read",
+      "file_read",
+      "spec_plan_read",
+    ]);
+
+    expect(result).toEqual({
+      ok: true,
+      scopes: ["backlog_read", "file_read", "code_graph_read", "spec_plan_read"],
+      addedScopes: ["code_graph_read", "spec_plan_read"],
+    });
+    expect(tokenUpdate).toHaveBeenCalledWith({
+      where: { id: "tok_x" },
+      data: {
+        scopes: ["backlog_read", "file_read", "code_graph_read", "spec_plan_read"],
+      },
     });
   });
 });

@@ -74,8 +74,10 @@ bash install-dpf.sh --headless --release
 2. **`~/.dpf/install-state.json`** — initializes or migrates the install
    state file (schema-versioned).
 3. **Compose chain** — assembles `docker-compose.yml` +
-   `docker-compose.macos.yml` (+ `docker-compose.release.yml` if
-   `--release`).
+   `docker-compose.macos.yml` + `docker-compose.edge.yml` (+
+   `docker-compose.release.yml` if `--release`). The Edge Node
+   container is bundled by default for single-host installs; pass
+   `--no-edge` to skip it.
 4. **Docker Desktop** — installs the `.dmg` if missing
    (`hdiutil attach` + `cp -R /Applications`), then starts it and waits
    for the daemon.
@@ -89,9 +91,21 @@ bash install-dpf.sh --headless --release
 9. **`docker compose up -d`** on the macOS overlay.
 10. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-11. **Persist state** — records `lastSuccessfulInstallVersion` and
+11. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
+    auto-approve bootstrap token, writes it to `.env` as
+    `DPF_BOOTSTRAP_TOKEN`, restarts the `edge-node` container so it
+    enrolls. The new EdgeNode lands directly in `trustState=trusted`
+    per spec § Approval policy. **macOS limitation:** the Edge Node
+    runs in bridge mode (Docker Desktop doesn't honor
+    `network_mode: host` the way Linux does), so its discovery output
+    sees the Docker Desktop VM's interfaces rather than your Mac's
+    real NICs. That's a known constraint resolved by the future
+    native macOS Edge Node binary (T3) — until then, the Edge Node
+    here demonstrates the enrollment + heartbeat + submission path
+    but not L2 host-network discovery.
+12. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-12. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
+13. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
     so the stack auto-starts at login (skip with `--no-autostart`).
 
 Total wall time: ~10 minutes including the AI-model download (varies

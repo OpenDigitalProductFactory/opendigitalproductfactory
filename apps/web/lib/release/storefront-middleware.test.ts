@@ -27,4 +27,8 @@ describe("classifyRoute", () => {
   it("classifies /login as employee auth", () => {
     expect(classifyRoute("/login")).toBe(RouteClass.EmployeeAuth);
   });
+
+  it("classifies /setup as public first-run page", () => {
+    expect(classifyRoute("/setup")).toBe(RouteClass.PublicPage);
+  });
 });

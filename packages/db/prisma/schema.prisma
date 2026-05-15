@@ -971,6 +971,76 @@ model BacklogItemActivity {
   @@index([kind, recordedAt(sort: Desc)])
 }
 
+model WorkCapsule {
+  id                      String                @id @default(cuid())
+  capsuleId               String                @unique
+  title                   String
+  objective               String                @db.Text
+  status                  String                @default("draft")
+  source                  String
+  executorKind            String?
+  executorRef             String?
+  backlogItemId           String?
+  epicId                  String?
+  featureBuildId          String?
+  taskRunId               String?
+  gitPromotionCandidateId String?
+  changePromotionId       String?
+  repositoryFullName      String?
+  baseBranch              String?
+  baseSha                 String?
+  headBranch              String?
+  headSha                 String?
+  worktreePath            String?
+  pullRequestUrl          String?
+  pullRequestNumber       Int?
+  sandboxProviderId       String?
+  sandboxId               String?
+  scopeClaims             Json                  @default("[]")
+  workspaceState          Json                  @default("{}")
+  verificationState       Json                  @default("{}")
+  providerRequirements    Json                  @default("[]")
+  promotionPolicy         Json                  @default("{}")
+  contributionMode        String                @default("private")
+  branchTaxonomy          String?
+  idempotencyKey          String?               @unique
+  leaseHolderPrincipalId  String?
+  leaseExpiresAt          DateTime?
+  createdByPrincipalId    String?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  lastSyncedAt            DateTime?
+  archivedAt              DateTime?
+  activities              WorkCapsuleActivity[]
+
+  @@index([status, updatedAt])
+  @@index([backlogItemId])
+  @@index([featureBuildId])
+  @@index([taskRunId])
+  @@index([gitPromotionCandidateId])
+  @@index([changePromotionId])
+  @@index([epicId])
+  @@index([headBranch])
+  @@index([sandboxId])
+  @@index([leaseExpiresAt])
+}
+
+model WorkCapsuleActivity {
+  id                String      @id @default(cuid())
+  workCapsuleId     String
+  kind              String
+  summary           String
+  payload           Json        @default("{}")
+  recordedAt        DateTime    @default(now())
+  recordedById      String?
+  recordedByAgentId String?
+  toolExecutionId   String?
+  capsule           WorkCapsule @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
+
+  @@index([workCapsuleId, recordedAt(sort: Desc)])
+  @@index([kind, recordedAt(sort: Desc)])
+}
+
 model Epic {
   id                    String           @id @default(cuid())
   epicId                String           @unique
@@ -7589,6 +7659,20 @@ model BootstrapToken {
 
   // Operators can pre-revoke a token before consumption.
   revokedAt DateTime?
+
+  // Per spec § Approval policy: tokens flagged as installer-issued
+  // for the DPF host's own Edge Node enroll directly into
+  // trustState=trusted, skipping the operator-approval click. Paste-
+  // provisioned tokens (the default for remote nodes) leave this
+  // false so the new node lands in `pending` until an operator
+  // approves in Admin > Platform Development.
+  //
+  // Threat model: marking this true requires either Admin > Platform
+  // Development action (the operator chose to auto-approve, e.g. for
+  // bulk enrollment) or installer-side issuance (the installer runs
+  // with host access already, so a flag carrying that intent is no
+  // weaker than the install path itself).
+  autoApprove Boolean @default(false)
 
   // Relations
   issuedBy           Principal @relation("BootstrapTokenIssuer", fields: [issuedByPrincipalId], references: [id])

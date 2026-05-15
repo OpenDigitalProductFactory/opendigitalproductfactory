@@ -25,7 +25,7 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(KNOWN_PROVIDER_MODELS["anthropic-sub"].length).toBeGreaterThanOrEqual(3);
   });
 
-  it("lists Sonnet 4.6 as active with frontier reasoning scores", () => {
+  it("lists Sonnet 4.6 as active with frontier reasoning and platform tool scores", () => {
     const sonnet = KNOWN_PROVIDER_MODELS["anthropic-sub"].find(
       (m) => m.modelId === "claude-sonnet-4-6",
     );
@@ -33,9 +33,9 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(sonnet!.defaultStatus).toBe("active");
     expect(sonnet!.qualityTier).toBe("frontier");
     expect(sonnet!.scores!.codegen).toBeGreaterThanOrEqual(90);
-    expect(sonnet!.scores!.toolFidelity).toBe(10);
+    expect(sonnet!.scores!.toolFidelity).toBeGreaterThanOrEqual(90);
     expect(sonnet!.scores!.reasoning).toBeGreaterThanOrEqual(90);
-    expect(sonnet!.capabilities.toolUse).toBe(false);
+    expect(sonnet!.capabilities.toolUse).toBe(true);
   });
 
   it("lists Opus 4.6 as active with frontier scores", () => {
@@ -46,8 +46,8 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(opus!.defaultStatus).toBe("active");
     expect(opus!.qualityTier).toBe("frontier");
     expect(opus!.scores!.codegen).toBeGreaterThanOrEqual(90);
-    expect(opus!.scores!.toolFidelity).toBe(10);
-    expect(opus!.capabilities.toolUse).toBe(false);
+    expect(opus!.scores!.toolFidelity).toBeGreaterThanOrEqual(90);
+    expect(opus!.capabilities.toolUse).toBe(true);
   });
 
   it("lists Haiku 4.5 as active with strong-tier scores", () => {
@@ -57,8 +57,8 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(haiku).toBeDefined();
     expect(haiku!.defaultStatus).toBe("active");
     expect(haiku!.qualityTier).toBe("strong");
-    expect(haiku!.scores!.toolFidelity).toBe(10);
-    expect(haiku!.capabilities.toolUse).toBe(false);
+    expect(haiku!.scores!.toolFidelity).toBeGreaterThanOrEqual(70);
+    expect(haiku!.capabilities.toolUse).toBe(true);
   });
 
   it("retires Haiku 3 by default (empty via subscription OAuth)", () => {
@@ -83,7 +83,7 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     }
   });
 
-  it("keeps Sonnet ahead of Haiku on reasoning and code dimensions without claiming custom tool use", () => {
+  it("keeps Sonnet ahead of Haiku on reasoning, code, and tool-use dimensions", () => {
     const sonnet = KNOWN_PROVIDER_MODELS["anthropic-sub"].find(
       (m) => m.modelId === "claude-sonnet-4-6",
     )!;
@@ -92,7 +92,7 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     )!;
     expect(sonnet.scores!.codegen).toBeGreaterThan(haiku.scores!.codegen);
     expect(sonnet.scores!.reasoning).toBeGreaterThan(haiku.scores!.reasoning);
-    expect(sonnet.scores!.toolFidelity).toBe(10);
-    expect(haiku.scores!.toolFidelity).toBe(10);
+    expect(sonnet.scores!.toolFidelity).toBeGreaterThan(haiku.scores!.toolFidelity);
+    expect(haiku.scores!.toolFidelity).toBeGreaterThanOrEqual(70);
   });
 });

@@ -38,7 +38,8 @@
 | LLM provider — Ollama (Linux) | compose-render | `ollama` service actually pulls + serves a model | 🙋 **reports wanted** |
 | LLM provider — external | code review | Real `LLM_BASE_URL` (Anthropic / OpenAI / hosted Ollama) round-trips | 🙋 **reports wanted** |
 | TAPPaaS deployment | none — spec only | Pilot deploy into a real TAPPaaS environment | 🧪 **design partner wanted** |
-| DPF Edge Node enrollment | none — spec only | First-draft enrollment ceremony executed end-to-end | 🧪 **design partner wanted** |
+| DPF Edge Node enrollment (single-host) | none — spec only | First-draft enrollment ceremony executed end-to-end | 🙋 **reports wanted** |
+| DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres + Neo4j | 🙋 **reports wanted** |
 | Cloud deployment (Single VM / Container / k8s) | none — spec only | At least one substrate pilot per packaging target | 🧪 **design partner wanted** |
 
 ## Fastest path: one command for the whole sweep
@@ -75,6 +76,32 @@ verification report for the Linux row of the matrix.
 The wrapper does **not** cover macOS (no `--bootstrap` path for the
 `.dmg` install yet), real-LAN multi-host, or the TAPPaaS / Edge / cloud
 substrate spikes. Those still need the manual sections below.
+
+## Local scratch rehearsal before promotion
+
+For Windows development machines that already have a production-served local
+DPF install running, use the non-destructive scratch rehearsal instead of
+resetting the real stack:
+
+```powershell
+.\scripts\scratch-install-rehearsal.ps1 -Execute
+```
+
+See [Scratch Install Rehearsal](scratch-install-rehearsal.md). The script
+creates a separate worktree, a separate Compose project, alternate ports, and
+scratch-only secrets, then records evidence under the scratch directory.
+
+For install, setup, provider, Build Studio, Work Capsule, or promotion-sensitive
+branches, include the browser-driven new-customer path:
+
+```powershell
+.\scripts\scratch-install-rehearsal.ps1 -Execute -RunFirstRunWalkthrough
+```
+
+That mode verifies `/setup`, owner account creation, provider setup access, and
+`/build/work` access from the scratch install before cleanup. The browser
+walkthrough uses a 120-second per-step timeout for cold production containers;
+raise `-WalkthroughTimeoutSeconds` only when the machine is known to be slower.
 
 ## How to run each verification (manual sections)
 
@@ -293,6 +320,164 @@ matrix row for your platform.
 
 Linked spec: [docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md](../superpowers/specs/2026-05-09-dpf-edge-node-design.md).
 Lifecycle script: [services/edge-node/scripts/verify-lifecycle.ts](../../services/edge-node/scripts/verify-lifecycle.ts).
+
+#### Clock sync prerequisite (NTP)
+
+The Authority's `/api/v1/edge/discovery-runs` route enforces a
+freshness window on submitted observations. The default bounds are
+asymmetric:
+
+- **Past:** 24 hours (matches spec § Soft-fail policy windows — Edge
+  Nodes are allowed to queue submissions locally for up to 24h when
+  the Authority is unreachable, then flush on reconnect stamping the
+  original `observedAt`).
+- **Future:** 5 minutes (NTP-tightened — a healthy NTP-synced LAN has
+  sub-second skew between hosts; anything more than a few minutes
+  ahead is almost certainly a clock-sync problem on the Edge Node
+  side and worth catching loudly).
+
+**Prerequisite:** every Edge Node host must run NTP. On a freshly
+provisioned VM:
+
+```bash
+# Debian / Ubuntu — systemd-timesyncd is the default
+sudo timedatectl set-ntp true
+timedatectl status                # expect: System clock synchronized: yes
+
+# Fedora / RHEL — chrony is the default
+sudo systemctl enable --now chronyd
+chronyc tracking                  # expect: Leap status: Normal
+```
+
+If you see `stale_observation` errors with the message "must be at
+most 5.0min ahead of server time (likely cause: NTP skew on the Edge
+Node host)" or "must be at most 24.0h before server time", that's the
+freshness gate firing. Fix NTP first, then re-check; widening the
+bounds with the env vars below should be a last resort.
+
+**Operator-configurable bounds:**
+
+The Authority Core honors two env vars (set on the **Authority** host,
+not on the Edge Node — the check runs server-side):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `DPF_EDGE_FRESHNESS_PAST_SEC` | `86400` (24h) | How old `observedAt` may be. Tighten for air-gap deployments where 24h-stale data is suspicious by definition. |
+| `DPF_EDGE_FRESHNESS_FUTURE_SEC` | `300` (5min) | How far ahead `observedAt` may be. Widen only if you have chronic clock skew that's expected (rare). |
+
+Either bound set to a non-numeric value or `<= 0` falls back to the
+default — operator typos don't accidentally disable the check.
+
+Audit rows for rejections include the signed `deltaMs`, `direction`
+(`past` or `future`), and the bounds in force at the time:
+
+```sql
+SELECT parameters->'summary' AS summary
+FROM "ToolExecution"
+WHERE "toolName" = 'edge.discovery_runs.submit'
+  AND "result"->>'error' = 'stale_observation'
+ORDER BY "createdAt" DESC LIMIT 5;
+```
+
+### 7b. Edge Node multi-host LAN verification (T2)
+
+**Status:** T2 code-complete per T2.1 through T2.4. **Real-hardware
+reports wanted** for a real second-host Edge Node enrolling against a
+remote Authority Core across a LAN.
+
+This is the next verification rung up from § 7 (which covers
+single-host enrollment). The bar:
+
+```
+Authority Core on Host A
+   │  (over a real LAN, separated by at least one switch)
+   ▼
+Edge Node on Host B   ← a different machine, native Linux Docker
+```
+
+The Authority portal shows the Edge Node enrolled with a **non-loopback
+IP attributed to it**, and the discovery rows include real LAN-side
+IPs plus at least one switch / gateway / non-portal-host item with
+`osiLayer >= 2`.
+
+#### Full runbook
+
+The end-to-end ceremony — Authority preflight, bootstrap token,
+operator approval, first sweep, and the SQL that verifies it landed —
+is in [`docs/install/edge-node-multi-host.md`](edge-node-multi-host.md).
+
+It also walks the optional HTTPS path (T2.2 — Caddy sidecar on the
+Authority, `NODE_EXTRA_CA_CERTS` on the Edge Node).
+
+#### Operational notes you'll want before starting
+
+These are the gotchas the T2 verification gap list (G4 + G7) called
+out — they bite operators who jump straight to `docker compose up -d`:
+
+**1. Authority Core URL stability (G4).** The Edge Node persists the
+`DPF_AUTHORITY_URL` it enrolled against. If Host A reboots and DHCP
+hands it a different IP, every enrolled Edge Node on the LAN loses
+contact until you reconfigure. Use one of:
+
+- Static IP / DHCP reservation for Host A on your router
+- mDNS `.local` name via `avahi-daemon` (Linux) or Bonjour (macOS)
+- DNS A record on your LAN
+
+A dynamic DHCP IP is fine for the first verification run, but plan
+to pin it before you treat the deployment as durable. Authority
+auto-discovery (mDNS-SD, Zeroconf, etc.) is deferred to a later
+thread — T2's expectation is "operator pins it."
+
+**2. Operator approval gate (G7).** Paste-provisioned bootstrap
+tokens always land in `trustState=pending` per spec § Approval
+policy. The node enrolls successfully but **cannot submit
+observations** until an operator clicks **Approve** in
+`/platform/edge-nodes`. This is the friction that makes Edge Node
+enrollment opt-in, not silent.
+
+The Phase 0 single-host demo glosses over this because the local
+installer-issued bootstrap token auto-approves. The multi-host path
+does NOT — if you skip the Approve click, your sweeps will keep
+failing with `node_not_trusted` errors and your `DiscoveryRun` table
+will stay empty. Watch for this in your first run.
+
+**3. NTP on both hosts.** See § 7's "Clock sync prerequisite (NTP)"
+subsection above. The Authority's `/api/v1/edge/discovery-runs` route
+rejects submissions whose `observedAt` falls outside the asymmetric
+freshness window. Fresh VMs without NTP can drift tens of seconds
+and silently fail their first sweep.
+
+#### Verification gate
+
+Same checklist as § 7's Phase 0 matrix, plus the multi-host-specific
+rows from the
+[Edge Node multi-host verification template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=edge_node_multi_host_verification.md):
+
+- [ ] Authority is reachable from Host B (not just from Host A)
+- [ ] Edge Node enrolls and lands in `pending`
+- [ ] Operator approves; node flips to `trusted`
+- [ ] First sweep submits within one sweep interval
+- [ ] `EdgeNode.metadata.host.ipAddresses` includes the Host B LAN IP
+- [ ] `DiscoveredItem` rows include real LAN-side addresses (not
+      Docker bridge IPs)
+- [ ] At least one switch / gateway / non-portal-host item with
+      `osiLayer >= 2`
+- [ ] Audit chain rows in `ToolExecution` for every route exercised
+- [ ] (Optional) TLS path: bring up `docker-compose.tls.yml` on
+      Host A; distribute `ca-bundle.crt` to Host B; switch
+      `DPF_AUTHORITY_URL` to `https://...`; re-verify
+
+When that happens, **T2 flips to `verified on real LAN`** in the
+parent thread ledger.
+
+#### File a report
+
+Open an issue with the
+[Edge Node multi-host verification template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=edge_node_multi_host_verification.md).
+The template asks for LAN topology, the path you took (HTTP / HTTPS),
+the T2 checklist tick-list, the SQL output, and a doctor bundle from
+each host. Partial reports are valuable — failure reports name the
+symptom and the LAN topology and are more useful than no report.
 
 ### 8. Cloud deployment patterns
 

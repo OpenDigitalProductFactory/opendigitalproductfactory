@@ -27,6 +27,17 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_functional_failure_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],
 
+  // Work Capsule control harness (spec 2026-05-14)
+  list_work_capsules: ["work_capsule_read"],
+  get_work_capsule: ["work_capsule_read"],
+  create_work_capsule: ["work_capsule_write"],
+  adopt_worktree: ["work_capsule_adopt"],
+  claim_capsule_scope: ["work_capsule_write"],
+  record_capsule_evidence: ["work_capsule_write"],
+  heartbeat_capsule: ["work_capsule_write"],
+  update_work_capsule_status: ["work_capsule_write"],
+  release_capsule_scope: ["work_capsule_write"],
+
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
   // denied by the default-deny rule below. That broke the entire backlog →
@@ -75,6 +86,10 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   wiki_query: ["registry_read"],
   // EP-WIKI-001 Phase 4b2b: on-demand wiki lint trigger
   wiki_lint: ["registry_read"],
+  // Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support
+  // over governance principles. Read-only — returns scored options with a
+  // contribution ledger; never executes the recommended option itself.
+  principle_decide: ["registry_read"],
 
   // Build / Sandbox
   launch_sandbox: ["sandbox_execute"],
