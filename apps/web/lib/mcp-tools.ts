@@ -10230,10 +10230,11 @@ export async function executeTool(
       const result = await runHiveScoutIngest({
         actorAgentId: context?.agentId,
         taskRunId: context?.taskRunId,
+        enableAutonomousReview: true,
       });
       return {
         success: true,
-        message: `Hive Scout parsed ${result.catalogEntries} entries, detected ${result.gaps} gaps, created ${result.created} backlog suggestion${result.created === 1 ? "" : "s"}, skipped ${result.duplicates} duplicate${result.duplicates === 1 ? "" : "s"}, and deferred ${result.deferred}.`,
+        message: `Hive Scout parsed ${result.catalogEntries} entries, detected ${result.gaps} gaps, reviewed ${result.reviewed ?? 0} ambiguous candidate${result.reviewed === 1 ? "" : "s"}, created ${result.created} backlog suggestion${result.created === 1 ? "" : "s"}, skipped ${result.duplicates} deterministic duplicate${result.duplicates === 1 ? "" : "s"} and ${result.skippedByReview ?? 0} review rejection${result.skippedByReview === 1 ? "" : "s"}, deferred ${result.deferred}, reused ${result.reviewCacheHits ?? 0} cached review${result.reviewCacheHits === 1 ? "" : "s"}, dropped ${result.reviewSchemaDropCount ?? 0} invalid review entr${result.reviewSchemaDropCount === 1 ? "y" : "ies"}${result.reviewSkipReason ? `, and skipped autonomous review because ${result.reviewSkipReason}` : ""}${result.reviewFailureReason ? `, with reviewer failure reason ${result.reviewFailureReason}` : ""}.`,
         data: result as unknown as Record<string, unknown>,
       };
     }
