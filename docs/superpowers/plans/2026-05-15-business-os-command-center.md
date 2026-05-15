@@ -1,6 +1,12 @@
 # Business OS Command Center Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents are explicitly available for this execution) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+| Field | Value |
+|-------|-------|
+| Status | **Executed.** First slice shipped in commit `74d98668`. Plan retained as the durable record of decisions, file structure, and verification steps. |
+| Spec | [`2026-05-15-business-os-command-center-design.md`](../specs/2026-05-15-business-os-command-center-design.md) |
+| Surface | `/workspace` → [BusinessCommandCenter](../../../apps/web/components/workspace/BusinessCommandCenter.tsx) over [loadWorkspaceCommandCenter](../../../apps/web/lib/workspace/command-center.ts) |
+
+> **For agentic workers (re-running or extending this plan):** Use the `superpowers:executing-plans` skill (or `superpowers:subagent-driven-development` when subagents are explicitly available). Steps use checkbox (`- [ ]`) syntax for tracking. Since the first slice has shipped, treat each task as a re-runnable verification gate rather than a from-scratch implementation step.
 
 **Goal:** Redesign `/workspace` into a Business Operating System command center that shows cross-business state, human plus AI work in motion, and six-C readiness without adding new schema.
 
@@ -63,15 +69,16 @@ import { deriveReadinessCell, deriveContainmentState } from "./command-center";
 
 describe("workspace command center readiness", () => {
   it("marks confidence as attention when evidence is stale or missing", () => {
-    expect(
-      deriveReadinessCell("confidence", {
-        hasFreshEvidence: false,
-        hasActiveConnection: true,
-        hasActor: true,
-        hasCadence: true,
-        hasContainment: true,
-      }).state,
-    ).toBe("attention");
+    const cell = deriveReadinessCell("confidence", {
+      hasFreshEvidence: false,
+      hasActiveConnection: true,
+      hasActor: true,
+      hasCadence: true,
+      hasContainment: true,
+    });
+    expect(cell.state).toBe("attention");
+    expect(cell.key).toBe("confidence");
+    expect(cell.label).toBeTruthy();
   });
 
   it("marks containment as blocked when an action-capable signal lacks approval or route scope", () => {
@@ -83,8 +90,14 @@ describe("workspace command center readiness", () => {
       }),
     ).toBe("blocked");
   });
+
+  it("emits unknown rather than synthesizing a default for missing-signal cells", () => {
+    expect(deriveReadinessCell("cadence", {}).state).toBe("unknown");
+  });
 });
 ```
+
+These tests exercise every field of the `ReadinessCell` DTO (`key`, `state`, `label`) and pin the spec's "emit `unknown` rather than default" rule from §"Readiness State Taxonomy".
 
 - [ ] **Step 2: Run the tests to verify RED**
 
@@ -244,9 +257,11 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add apps/web/lib/workspace/command-center.ts apps/web/lib/workspace/command-center.test.ts 'apps/web/app/(shell)/workspace/page.tsx'
+git add apps/web/lib/workspace/command-center.ts apps/web/lib/workspace/command-center.test.ts
 git commit -s -m "refactor(workspace): extract command center projection"
 ```
+
+> Note: `page.tsx` is intentionally **not** staged here. Page integration happens in Task 4. Staging it now would either be a no-op (no changes in this task) or — worse, in a concurrent-session setup — would sweep in another worktree's unrelated edits. See the worktree-per-session and `git commit --only` discipline in [AGENTS.md](../../../AGENTS.md).
 
 ## Chunk 2: Command Center UI
 
@@ -320,7 +335,7 @@ Run:
 rg -n "text-gray-|bg-gray-|border-gray-|text-white|text-black|#[0-9a-fA-F]{3,6}" apps/web/components/workspace/BusinessCommandCenter.tsx
 ```
 
-Expected: no matches, except no `text-white` should be present in this component.
+Expected: no matches. All colors must come from `var(--dpf-*)` tokens; `text-white`/`text-black`/`text-gray-*` are not allowed in this component.
 
 - [ ] **Step 6: Commit**
 
@@ -337,9 +352,9 @@ git commit -s -m "feat(workspace): render business command center"
 
 - [ ] **Step 1: Extend page tests**
 
-Update `page.test.tsx` or add a focused unit test around the workspace tile derivation contract that asserts the command-center module remains importable. If server-component test coverage is too shallow, prefer testing the loader and component rather than brittle page snapshots.
+`apps/web/app/(shell)/workspace/page.test.tsx` already exists as a narrow smoke test. Add a single assertion that the page module can be imported without throwing (this catches the most common server-component breakage from loader refactors). Do not attempt full server-component rendering — coverage for command-center behavior lives in `command-center.test.ts` and `BusinessCommandCenter.test.tsx`.
 
-- [ ] **Step 2: Verify RED or existing gap**
+- [ ] **Step 2: Verify the test runs**
 
 Run:
 
@@ -347,7 +362,7 @@ Run:
 pnpm --filter web exec vitest run 'app/(shell)/workspace/page.test.tsx'
 ```
 
-Expected: either FAIL for the new assertion or PASS if the page test remains intentionally narrow. Record which happened in the PR.
+Expected: PASS. (The intent of this step is to confirm the import-time smoke test exercises the new loader path. If it fails, the loader's transitive imports are the most likely cause — fix before continuing.)
 
 - [ ] **Step 3: Render `BusinessCommandCenter` above existing sections**
 
@@ -462,11 +477,22 @@ git commit -s -m "fix(workspace): stabilize command center verification"
 
 ## Completion Checklist
 
-- [ ] Design spec exists at `docs/superpowers/specs/2026-05-15-business-os-command-center-design.md`
-- [ ] Implementation plan exists at `docs/superpowers/plans/2026-05-15-business-os-command-center.md`
+Procedural:
+
+- [ ] Design spec exists at [`docs/superpowers/specs/2026-05-15-business-os-command-center-design.md`](../specs/2026-05-15-business-os-command-center-design.md)
+- [ ] Implementation plan exists at [`docs/superpowers/plans/2026-05-15-business-os-command-center.md`](2026-05-15-business-os-command-center.md)
 - [ ] First implementation slice has no schema migration
-- [ ] Tests pass
-- [ ] Typecheck passes
+- [ ] Tests pass (`command-center.test.ts`, `BusinessCommandCenter.test.tsx`, `page.test.tsx`)
+- [ ] Typecheck passes (`pnpm --filter web typecheck`)
 - [ ] Production build passes or a pre-existing blocker is documented
 - [ ] `/workspace` verified in browser
 - [ ] Branch has only command-center files staged/committed
+
+Spec acceptance — each item maps to a numbered bullet in the spec's "First Implementation Slice" section:
+
+- [ ] `/workspace` first viewport renders Command Strip, Operating Snapshot, Six-C Readiness Matrix, and Human plus AI Work In Motion
+- [ ] Every displayed signal links to a source route or explicitly emits the `unknown` readiness state (per spec §"Readiness State Taxonomy")
+- [ ] Confidence and containment cells render for AI-driven or automation-driven signals
+- [ ] AI Operations Map is linked from the surface, not duplicated
+- [ ] Only `var(--dpf-*)` styling tokens are used in new components (verified by the rg sweep in Task 5 Step 1)
+- [ ] Unit tests cover six-C derivation for all four states (`good`, `attention`, `blocked`, `unknown`) including empty-state behavior

@@ -2,13 +2,31 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Draft for review |
+| Status | First slice landed (commit `74d98668`); spec now serves as the durable reference for follow-on work |
 | Date | 2026-05-15 |
 | Scope | Workspace home command center, human plus AI workforce operating model, six-C readiness model |
-| Primary surface | `/workspace` |
+| Primary surface | `/workspace` (renders [BusinessCommandCenter](apps/web/components/workspace/BusinessCommandCenter.tsx) over [loadWorkspaceCommandCenter](apps/web/lib/workspace/command-center.ts)) |
 | Sibling surfaces | `/platform/ai/operations-map`, `/platform/ai/capability-needs`, `/platform/ai/authority`, `/platform/audit/authority` |
-| Related specs | `2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md`, `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-04-30-ai-coworker-operator-pattern.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md` |
-| Backlog alignment | Extends `EP-TAK-3F9A21` concepts; likely needs a new Workspace/Business OS epic before implementation |
+| Related specs | [TAK/GAID refresh (2026-04-25)](../specs/2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md), [A2A-aligned coworker runtime (2026-04-23)](../specs/2026-04-23-a2a-aligned-coworker-runtime-design.md), [AI coworker operator pattern (2026-04-30)](../specs/2026-04-30-ai-coworker-operator-pattern.md), [AI coworker visual control surface (2026-05-10)](../specs/2026-05-10-ai-coworker-visual-control-surface-design.md) |
+| Implementation plan | [`2026-05-15-business-os-command-center.md`](../plans/2026-05-15-business-os-command-center.md) — first slice complete |
+| Backlog alignment | First slice landed without a new epic. Follow-on slices (Cadence Center, Confidence Ledger, Containment Inspector) should be grouped under a new `EP-WORKSPACE-*` Business OS epic before implementation. |
+
+## Contents
+
+1. [Purpose](#purpose)
+2. [Current Repo Truth](#current-repo-truth)
+3. [Research And Benchmarking](#research-and-benchmarking)
+4. [Product Model](#product-model) — six-C readiness, workspace home as command center, navigation contract
+5. [TAK And GAID Integration](#tak-and-gaid-integration)
+6. [Data Projection Architecture](#data-projection-architecture)
+7. [Readiness State Taxonomy](#readiness-state-taxonomy)
+8. [UI Design Principles](#ui-design-principles)
+9. [First Implementation Slice](#first-implementation-slice)
+10. [Follow-On Slices](#follow-on-slices)
+11. [Out Of Scope](#out-of-scope) and [Deferred](#deferred)
+12. [Risks](#risks)
+13. [Recommended Next Step](#recommended-next-step)
+14. [Glossary](#glossary)
 
 ## Purpose
 
@@ -203,6 +221,29 @@ Responsibilities:
 
 The first implementation should not add a new command-center table. If later projections become expensive or need historical snapshots, add a materialized projection after measuring the page.
 
+## Readiness State Taxonomy
+
+Each six-C cell resolves to one of four states. The taxonomy is the same vocabulary used by the loader and component, so a state shown in the UI maps 1:1 to a value produced by the projection helper.
+
+| State | Meaning | Example trigger |
+|-------|---------|-----------------|
+| `good` | Domain is healthy on this dimension | Fresh evidence rows in the last interval; active connection to required system; staffed actor; cadence on schedule; containment path defined |
+| `attention` | Soft signal — operator review warranted, no block | Memory item is past freshness threshold but corroborated; cadence drifted within tolerance; confidence partial |
+| `blocked` | Hard signal — action-capable signals require resolution first | No actor with the required grant; approval path missing for a side-effect-capable action; container/scope undefined |
+| `unknown` | DPF doesn't have enough signal to classify | Domain not yet wired; no source rows; not-yet-implemented surface — surfaced explicitly rather than hidden |
+
+The four states map onto the confidence × containment quadrant from §"Six-C Readiness" as follows:
+
+| Confidence | Containment | Resulting state(s) |
+|------------|-------------|--------------------|
+| High | Strong | `good` — eligible for deterministic automation or proposal-mode action |
+| High | Weak | `attention` — operator review required before action |
+| Low | Strong | `attention` — safe to investigate, not safe to execute |
+| Low | Weak | `blocked` for action-capable signals; `attention` for advisory-only signals |
+| Insufficient evidence on either axis | — | `unknown` |
+
+The loader MUST emit `unknown` rather than synthesize a default state when a signal is genuinely missing. This is the operator-visible counterpart to TAK §12.4's "advisory until revalidated" — a missing-signal cell should look different from a present-but-degraded one.
+
 ## UI Design Principles
 
 - No marketing hero. The workspace is a tool surface.
@@ -253,13 +294,20 @@ Acceptance:
 
 ## Out Of Scope
 
-- Replacing domain routes.
-- Adding new connectors.
-- Adding a new workflow automation engine.
-- Creating public/federated GAID issuance.
-- Making personal or team wikis authoritative policy.
-- Building live streaming command-center animation in V1.
+These are permanent boundaries for the command center as a surface — not deferred V1 omissions.
+
+- Replacing domain routes. The command center projects over them; it does not absorb them.
+- Adding a new workflow automation engine. TAK + scheduled coworker tasks remain the runtime; the command center is the operator view.
+- Making personal or team wikis authoritative policy. Knowledge vaults inform; TAK rules enforce. (See [TAK/GAID spec §5.8](../specs/2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md).)
 - Writing to business records directly from the matrix without proposal or approval paths.
+
+## Deferred
+
+These are intentional V1 omissions that will revisit in follow-on slices.
+
+- Adding new connectors. Owned by integration epics, not this surface.
+- Creating public/federated GAID issuance. Owned by future GAID work.
+- Live streaming command-center animation. V1 is a quiet operational surface; live updates can be added once the read path stabilizes.
 
 ## Risks
 
@@ -274,6 +322,21 @@ Acceptance:
 
 ## Recommended Next Step
 
-Write an implementation plan for the first slice: extract the current workspace data projection, add the six-C view DTO, and redesign `/workspace` as the command center while preserving existing route links and activity sections.
+First slice landed in commit `74d98668` ([apps/web/lib/workspace/command-center.ts](apps/web/lib/workspace/command-center.ts), [apps/web/components/workspace/BusinessCommandCenter.tsx](apps/web/components/workspace/BusinessCommandCenter.tsx), [/workspace page](apps/web/app/(shell)/workspace/page.tsx)). With the projection-and-render surface in place, the next move is the **Business OS Readiness Audit** follow-on slice (§"Follow-On Slices" item 1): a panel that scores each domain against the six Cs and emits governed capability needs or backlog items when a cell is `blocked` or repeatedly `attention`.
 
-The implementation should land as a narrow UI/data-projection slice, not a platform-wide automation rewrite.
+That audit slice should land under a new `EP-WORKSPACE-*` epic so the Cadence Center, Confidence Ledger, and Containment Inspector slices have a clear home. The audit creates the first write-path from this surface — make sure its writes flow through `AgentActionProposal` rather than direct mutation, per the "no writes without proposal/approval" boundary in §"Out Of Scope".
+
+## Glossary
+
+| Term | Expansion / meaning |
+|------|---------------------|
+| **A2A** | Agent-to-Agent — task-envelope and inter-agent runtime protocol; see [2026-04-23 spec](../specs/2026-04-23-a2a-aligned-coworker-runtime-design.md) |
+| **AIDoc** | Agent Identity Document — resolvable record of an agent's identity, operating state, tool surface, declared authorization classes, and validation state; see [TAK/GAID spec §5.2](../specs/2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md) |
+| **Business OS** | The framing this spec proposes: DPF as a Business Operating System with a command-center home, not a portal landing page |
+| **DTO** | Data Transfer Object — the view shape returned by the loader and consumed by the component; independent of React |
+| **GAID** | Governed Agent Identity — DPF's local standard at [docs/architecture/GAID.md](../../architecture/GAID.md) |
+| **MCP** | Model Context Protocol — Anthropic's tool/resource protocol |
+| **Proposal-mode action** | An action that must produce an `AgentActionProposal` row and wait for human approval before execution |
+| **Six Cs** | Context, Connections, Capabilities, Cadence, Confidence, Containment — the command center's per-domain readiness dimensions |
+| **TAK** | Trusted AI Kernel — DPF's local standard at [docs/architecture/trusted-ai-kernel.md](../../architecture/trusted-ai-kernel.md) |
+| **`var(--dpf-*)`** | DPF's CSS custom-property theme tokens; the only allowed source of color in command-center UI per §"UI Design Principles" |
