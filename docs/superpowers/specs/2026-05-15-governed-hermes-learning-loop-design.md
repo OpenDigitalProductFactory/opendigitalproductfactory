@@ -5,9 +5,9 @@
 | Date | 2026-05-15 |
 | Status | Draft for review |
 | Related epics | EP-TAK-3F9A21 |
-| Related repo areas | `apps/web/lib/actions/agent-coworker.ts`, `apps/web/lib/tak/agentic-loop.ts`, `apps/web/lib/tak/autonomous-work-run.ts`, `apps/web/lib/tak/prompt-assembler.ts`, `apps/web/lib/tak/governed-memory.ts`, `apps/web/lib/actions/agent-skills.ts`, `apps/web/lib/actions/skill-discovery.ts`, `apps/web/lib/actions/skills-observatory.ts`, `apps/web/lib/coworker-self-assessment/*`, `apps/web/app/(shell)/platform/ai/*`, `packages/db/prisma/schema.prisma`, `skills/`, `prompts/` |
+| Related repo areas | `apps/web/lib/actions/agent-coworker.ts`, `apps/web/lib/tak/agentic-loop.ts`, `apps/web/lib/tak/autonomous-work-run.ts`, `apps/web/lib/tak/prompt-assembler.ts`, `apps/web/lib/tak/governed-memory.ts`, `apps/web/lib/actions/agent-skills.ts`, `apps/web/lib/actions/skill-discovery.ts`, `apps/web/lib/actions/skills-observatory.ts`, `apps/web/lib/coworker-self-assessment/*`, `apps/web/lib/improvement-flywheel/*`, `apps/web/app/(shell)/platform/ai/*`, `packages/db/prisma/schema.prisma`, `skills/`, `prompts/` |
 | Related standards | `AGENTS.md`, `docs/architecture/trusted-ai-kernel.md`, `docs/architecture/GAID.md`, `docs/architecture/agent-standards-dpf-conformance.md`, `docs/architecture/ai-coworker-development-principles.md` |
-| Related specs | `2026-03-30-ai-coworker-skills-marketplace.md`, `2026-04-05-continuous-improvement-flywheel-design.md`, `2026-04-30-ai-coworker-operator-pattern.md`, `2026-04-30-build-specialist-operator-contract.md`, `2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-05-11-autonomous-coworker-runtime-design.md`, `2026-05-11-ai-routing-ux-verification-test-architecture-design.md` |
+| Related specs | `2026-03-30-ai-coworker-skills-marketplace.md`, `2026-04-05-continuous-improvement-flywheel-design.md`, `2026-04-30-ai-coworker-operator-pattern.md`, `2026-04-30-build-specialist-operator-contract.md`, `2026-04-25-tak-gaid-auth-identity-memory-refresh-design.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-05-11-autonomous-coworker-runtime-design.md`, `2026-05-11-ai-routing-ux-verification-test-architecture-design.md`, `2026-05-12-ai-capacity-continuity-design.md`, `2026-05-13-realtime-hitl-mobile-companion-design.md`, `2026-05-13-code-intelligence-graph-adoption-design.md`, `2026-05-14-coworker-memory-shape-contracts-design.md`, `2026-05-14-portal-work-capsule-control-harness-design.md` |
 
 ## 1. Purpose
 
@@ -35,6 +35,26 @@ DPF should build a governed coworker learning system with five coordinated plane
 
 The product surface should make the loop visible in `/platform/ai`: what the coworker used, what it learned, what it wants changed, what was approved, and what was rolled back.
 
+### 2.1 Non-goals
+
+To prevent scope creep across what is already a holistic design, this spec **does not**:
+
+- redefine memory primitives — `2026-05-14-coworker-memory-shape-contracts-design.md` owns `MemoryCandidate`, `UserFact` policy classes, and freshness rules,
+- redesign the signal-routing or portfolio-prioritization layer — `2026-04-05-continuous-improvement-flywheel-design.md` owns `ImprovementSignal` and the top-3 prioritization spine,
+- redesign the skills marketplace browse/install surface — `2026-03-30-ai-coworker-skills-marketplace.md` owns the catalog, ratings, and discovery flow,
+- redesign Build Studio's PR/verification lifecycle — `2026-05-11-autonomous-coworker-runtime-design.md` and `2026-04-30-build-specialist-operator-contract.md` own that path,
+- replace TAK/GAID authority, identity, or grant resolution — those remain canonical at `docs/architecture/trusted-ai-kernel.md` and `docs/architecture/GAID.md`,
+- introduce a parallel runtime or job system alongside `TaskRun` — reflection, curator, and evolution all flow through the existing operator-pattern runtime,
+- expose any agent-to-production write that bypasses `ImprovementProposal` review, `SkillRevision` history, or PR-based delivery.
+
+### 2.2 IT4IT alignment
+
+Per the Mark/DPF "IT4IT v3.0.1 foundation" principle, this loop is positioned in the **Detect-to-Correct** and **Request-to-Fulfill** value streams:
+
+- **Detect-to-Correct.** Skill-failure detection (`PlatformIssueReport`), reflection triggers, curator stale/duplicate detection, and rollback live here. Evidence flows from `ToolExecution` and `TaskRun` into reflection runs.
+- **Request-to-Fulfill.** `ImprovementProposal` review, `SkillRevision` activation, evolution-lab PRs, and graduation candidates land here, joining the existing backlog → Build Studio → ship path.
+- **Strategy-to-Portfolio** is touched only through `ImprovementSignal` emission into the flywheel (§6.3.2). This spec does not own the prioritization step.
+
 ## 3. Current Repo Truth
 
 ### 3.1 Live state verified 2026-05-15
@@ -55,18 +75,42 @@ Live Postgres inspection showed:
 | `TaskRun` | 44 | A2A-shaped work identity exists. |
 | `ScheduledAgentTask` | 2 | Scheduled coworker execution exists. |
 | `ScheduledJob` | 10 | General background scheduling exists. |
+| `PlatformIssueReport` | n/a (model exists) | The current "stuck coworker / repeated tool" detector at `apps/web/lib/tak/agentic-loop.ts:843` writes `type="agent_stuck"` rows here inline (no named helper function — the spec must integrate with this exact call site, not invent one). This is the **first** signal source the reflection plane must consume. |
+| `ImprovementProposal` | n/a (model exists) | Governed proposal envelope with `category`, `severity`, `agentId`, `reviewedById`, `backlogItemId`, `buildId`, `verifiedAt`, `contributionStatus`. Skill-shaped proposals fit here. |
+| `DeliberationRun` | n/a (model exists) | Multi-perspective governed reasoning over `TaskRun`/`TaskNode`. Existing substrate for any "reflection plane" run that needs branched evaluation. |
+| `PromptTemplate` / `PromptRevision` | n/a (model exists) | Prompts are seeded, edited via Admin > Prompts, and versioned via `PromptRevision`. Sets the precedent skills should follow for revision history. |
+| `BacklogItemActivity` | n/a (model exists) | `kind` is free-form String today (not enum-constrained); used as the canonical evidence trail on backlog work. |
+| `ExternalEvidenceRecord` | n/a (model exists) | External-provider evidence with `actorUserId`, `routeContext`, `provider`, `resultSummary`. Already governs cross-provider audit. |
 
-The immediate architectural signal is clear: DPF has the primitives, but not the integrated learning loop.
+#### Forward-dependency primitives (referenced but not yet shipped)
+
+These are named throughout the spec as if they were live. They are not. Each lands in another in-flight spec; this design depends on those landing first or alongside.
+
+| Concept | Owning spec | Today's state |
+| --- | --- | --- |
+| `ImprovementSignal` | `2026-04-05-continuous-improvement-flywheel-design.md` (Draft) | Not in `schema.prisma`. This spec's reflection plane assumes the flywheel ships the model and the signal-routing service. |
+| `MemoryCandidate` | `2026-05-14-coworker-memory-shape-contracts-design.md` | Not in `schema.prisma`. This spec defers all memory-candidate shape to that document and must not redefine it. |
+
+The immediate architectural signal is clear: DPF has the primitives, but not the integrated learning loop. Two corollaries follow:
+
+1. **Substrate-before-invention.** `ImprovementProposal`, `DeliberationRun`, and the `PromptTemplate`/`PromptRevision` precedent must be reused before any new "skill improvement", "reflection report", or "skill revision" model is added. New tables enter only when an existing model is unambiguously the wrong shape.
+2. **Live enums beat aspirational enums.** `SkillDefinition.status` is `discovered | evaluated | approved | installed | active | deprecated` today (`packages/db/prisma/schema.prisma:6800`). Any lifecycle vocabulary in this spec must reconcile with that enum or propose a single migration that updates it.
 
 ### 3.2 Existing strengths to preserve
 
 DPF already has:
 
-- `SkillDefinition`, `SkillAssignment`, and `SkillMetric` as a first-class skill substrate.
-- `TaskRun`, `TaskNode`, `TaskMessage`, and `TaskArtifact` as governed work identity.
+- `SkillDefinition`, `SkillAssignment`, and `SkillMetric` as a first-class skill substrate (with `skillMdContent` already on `SkillDefinition`).
+- `TaskRun`, `TaskNode`, `TaskMessage`, and `TaskArtifact` as governed work identity (`TaskRun.source` already enumerates `coworker | build | skill | proactive`).
+- `DeliberationRun` for multi-perspective governed reasoning over a `TaskRun`/`TaskNode` tree (`schema.prisma`).
 - `ToolExecution` and `ToolExecutionReceipt` as audit and evidence.
-- `CoworkerSelfAssessment` and `CoworkerCapabilityNeed` as coworker-submitted improvement needs.
+- `ImprovementProposal` as the governed proposal envelope already linked to backlog, build, reviewer, and contribution status.
+- `CoworkerSelfAssessment` and `CoworkerCapabilityNeed` as coworker-submitted improvement needs (with submitter attribution and severity/status).
+- `PromptTemplate` + `PromptRevision` as the existing precedent for versioned, edit-via-admin, seed-from-repo content.
+- `PlatformIssueReport` as the live, in-use sink for runtime issues observed by the agentic loop today (`type="agent_stuck"` rows written at `apps/web/lib/tak/agentic-loop.ts:843`); the reflection plane must integrate with this exact code path rather than invent a parallel observer.
 - TAK/GAID standards for authority, identity, memory policy, and verifiable agent behavior.
+- The Continuous Improvement Flywheel design (`2026-04-05-continuous-improvement-flywheel-design.md`) which already specs `ImprovementSignal`, signal normalization, and routing into the common backlog.
+- The AI Coworker Operator Pattern (`2026-04-30-ai-coworker-operator-pattern.md`) and Build Specialist Operator Contract — the inheritable five-piece contract for any governed autonomous run.
 - `/platform/ai/*` surfaces for skills, authority, history, prompts, routing, model assignment, and capability needs.
 - The AI Operations Map direction for visualizing coworker state as operational flow.
 
@@ -74,14 +118,17 @@ DPF already has:
 
 The gaps are coordination and product experience, not raw table count:
 
-1. Skill metrics are not populated, so skill effectiveness is mostly invisible.
-2. Skill use is not consistently attributed in the active chat/run UI.
-3. Coworkers can submit capability needs, but there is no full skill-improvement proposal workflow.
-4. Self-assessment is not yet tied to skill usage, failed tools, repeated user corrections, or stale playbooks.
+1. Skill metrics are not populated, so skill effectiveness is mostly invisible. `SkillMetric` rows are not written by any current code path.
+2. Skill use is not consistently attributed in the active chat/run UI; `apps/web/lib/tak/prompt-assembler.ts` does not record which skills were eligible, presented, loaded, or invoked.
+3. The agentic loop already has a repeated-tool observer at `apps/web/lib/tak/agentic-loop.ts:826` that writes a `PlatformIssueReport(type="agent_stuck")` row inline at `agentic-loop.ts:843` (no named helper — the write is open-coded). That row is the only structured signal that "the coworker got stuck"; nothing converts it into a reflection run, an `ImprovementProposal`, or a `CoworkerCapabilityNeed`. Any reflection trigger this spec ships must consume `PlatformIssueReport` rather than duplicate the detection.
+4. `CoworkerCapabilityNeed.kind` is a free-form String today, not an enum — using `kind="skill"` works but violates the AGENTS.md §3 "Strongly-Typed String Enums" rule until it is typed.
 5. There is no governed curator that can dry-run lifecycle changes, propose consolidation, or protect pinned skills.
-6. Session history is persisted, but there is no operator-grade search/replay layer equivalent to Hermes session search.
-7. Offline evolution is not separated from production mutation as a formal Build Studio or sandbox lane.
-8. Skills, prompts, memory, tool grants, and route context are still spread across multiple admin views instead of one learning narrative.
+6. `SkillDefinition.status` enum (`discovered | evaluated | approved | installed | active | deprecated`) does not include the operational lifecycle states the design needs (e.g., `stale`, `pinned`, `quarantined`). The marketplace spec uses a different vocabulary again. The conflict must be reconciled with one migration, not papered over.
+7. Self-assessment is not yet tied to skill usage, failed tools, repeated user corrections, or stale playbooks.
+8. Session history is persisted, but there is no operator-grade search/replay layer equivalent to Hermes session search.
+9. Offline evolution is not separated from production mutation as a formal Build Studio or sandbox lane.
+10. Skills, prompts, memory, tool grants, and route context are still spread across multiple admin views instead of one learning narrative.
+11. The five-piece Operator Pattern contract (operator contract, skill playbooks, tool surface, persistent work products, UI surface) is not yet applied to the reflection, curator, or evolution runs themselves — they are governed runs and should inherit it.
 
 ## 4. Research and Benchmarking
 
@@ -211,13 +258,16 @@ Most agent systems optimize for individual agent productivity. DPF must optimize
 ## 5. Design Principles
 
 1. **Governed learning over hidden adaptation.** Coworkers may propose changes, but production skill/prompt/memory changes require policy-appropriate review.
-2. **Procedural memory belongs in skills.** Repeated workflows, work instructions, validation steps, scripts, and templates should be skills, not long prompt paragraphs or user facts.
-3. **Facts belong in governed memory.** User, organization, route, and domain facts must remain policy-classed and freshness-aware.
-4. **Evidence first.** Every proposed improvement must cite the run, tool call, thread, artifact, user correction, test, or benchmark that caused it.
-5. **Refactor while implementing.** Each slice should reduce fragmentation between skills, prompts, runtime evidence, and UI rather than create a parallel subsystem.
-6. **Visible learning builds trust.** Operators should see what changed, why, who proposed it, who approved it, and how to roll it back.
-7. **Autonomy stops at risk boundaries.** Low-risk draft proposals can be automatic; activation, external imports, tool grants, prompt changes, or code changes use explicit approval.
-8. **Stable behavior graduates to code.** When a skill becomes a repeated deterministic workflow, the platform should file a graduation candidate to turn it into code, policy, schema, tests, or a first-class tool.
+2. **Reuse before invent.** Before any new model, service, or surface, name the existing primitive (`ImprovementProposal`, `DeliberationRun`, `TaskRun`, `CoworkerCapabilityNeed`, `PromptRevision`) and explain why it cannot serve. Substrate-creep is the easiest way to fragment governance.
+3. **One flywheel.** This loop is the skill-and-coworker-deepening lane of the Continuous Improvement Flywheel (`2026-04-05-continuous-improvement-flywheel-design.md`). Reflection outputs become `ImprovementSignal` entries; the flywheel is the prioritization spine. Do not build a parallel router.
+4. **Operator pattern applies to learning runs.** Every reflection, curator, and evolution run is a governed operator and inherits the five-piece contract from `2026-04-30-ai-coworker-operator-pattern.md`: operator contract, skill playbooks, tool surface, persistent work products, UI surface.
+5. **Procedural memory belongs in skills.** Repeated workflows, work instructions, validation steps, scripts, and templates should be skills, not long prompt paragraphs or user facts.
+6. **Facts belong in governed memory.** User, organization, route, and domain facts must remain policy-classed and freshness-aware (see `2026-05-14-coworker-memory-shape-contracts-design.md`).
+7. **Evidence first.** Every proposed improvement must cite the run, tool call, thread, artifact, user correction, test, or benchmark that caused it.
+8. **Refactor while implementing.** Each slice should reduce fragmentation between skills, prompts, runtime evidence, and UI rather than create a parallel subsystem.
+9. **Visible learning builds trust.** Operators should see what changed, why, who proposed it, who approved it, and how to roll it back.
+10. **Autonomy stops at risk boundaries.** Low-risk draft proposals can be automatic; activation, external imports, tool grants, prompt changes, or code changes use explicit approval.
+11. **Stable behavior graduates to code.** When a skill becomes a repeated deterministic workflow, the platform should file a graduation candidate to turn it into code, policy, schema, tests, or a first-class tool.
 
 ## 6. Target Architecture
 
@@ -253,6 +303,15 @@ DPF should not make every supporting file a giant DB blob immediately. The desig
 3. add a skill asset manifest for references/templates/scripts when the first implementation needs bundled assets,
 4. later decide whether assets live in repo, object storage, or Postgres-backed artifacts.
 
+#### 6.1.1 Lifecycle vocabulary reconciliation
+
+`SkillDefinition.status` today is `discovered | evaluated | approved | installed | active | deprecated`. The marketplace spec (`2026-03-30-ai-coworker-skills-marketplace.md`) and earlier drafts of this design have used `active | stale | archived | pinned | quarantined | proposed`. The two are not mergeable as drop-in synonyms because they describe different axes:
+
+- The current enum describes **adoption stage**: how the skill entered the org and whether it is approved for use.
+- The proposed states describe **operational health**: whether the skill is being used, decaying, intentionally protected, or under quarantine.
+
+Decision: keep `SkillDefinition.status` as adoption stage, and introduce `SkillDefinition.lifecycleState` as a separate column for operational health, valued `active | stale | pinned | quarantined | archived`. The migration that adds the column also adds the typed enum in `apps/web/lib/backlog.ts` and the matching MCP tool definition (per AGENTS.md §3). `proposed` is not a state on the skill; it is the state of the proposing `ImprovementProposal`.
+
 ### 6.2 Runtime evidence and session search
 
 Hermes' session search works because past work is retrievable without flooding every prompt. DPF should implement the same principle over governed records:
@@ -276,10 +335,14 @@ This is not a replacement for governed memory. It is evidence recall.
 
 ### 6.3 Reflection plane
 
-DPF should add background learning reviews as first-class `TaskRun` records. A reflection run can be triggered by:
+Reflection runs are governed `TaskRun` records — not a parallel job system. They inherit the Operator Pattern: each reflection run has an explicit operator contract (what trigger fired, what evidence is in scope, what work products it must produce, what authority it holds, when it advances vs. waits).
+
+#### 6.3.1 Triggers
+
+A reflection run can be triggered by:
 
 - loaded skill plus failed tool execution,
-- repeated tool failure,
+- repeated tool failure (already detected at `apps/web/lib/tak/agentic-loop.ts:826`; the loop persists a `PlatformIssueReport(type="agent_stuck")` row at `agentic-loop.ts:843`. The reflection trigger consumes that row — it does **not** re-detect, and the detection block must first be extracted into a named helper so both the existing report and the reflection trigger fire from one site),
 - user correction or explicit dissatisfaction,
 - contract violation detected by `agentic-loop`,
 - repeated manual workaround,
@@ -287,38 +350,40 @@ DPF should add background learning reviews as first-class `TaskRun` records. A r
 - scheduled weekly curator pass,
 - Build Studio verification failure,
 - low user rating or unresolved capability need,
-- marketplace/import update.
+- marketplace/import update,
+- capacity-continuity scheduling (`2026-05-12-ai-capacity-continuity-design.md`).
+
+#### 6.3.2 Outputs
 
 Each reflection run outputs one or more of:
 
-- `CoworkerSelfAssessment`,
-- `CoworkerCapabilityNeed`,
-- `SkillImprovementProposal`,
-- `PromptImprovementProposal`,
-- `MemoryCandidate`,
-- `ConventionCandidate`,
+- `CoworkerSelfAssessment` — the assessment record itself,
+- `CoworkerCapabilityNeed` (with typed `kind`) — the surfaced need,
+- `ImprovementProposal` — the existing governed proposal envelope, with `category` set to `skill | prompt | memory | tool | convention | code` and `routeContext` populated; the diff and evidence carried in `description` / `conversationExcerpt` / `observedFriction` until a richer payload is justified,
+- `MemoryCandidate` — only if `2026-05-14-coworker-memory-shape-contracts-design.md` does not already provide this primitive; reuse first,
+- `ImprovementSignal` (per `2026-04-05-continuous-improvement-flywheel-design.md`) — the canonical input to the portfolio flywheel,
 - `BacklogItem` proposal or linked evidence,
-- "no change" report with rationale.
+- `TaskArtifact` carrying a typed "no change" report with rationale.
 
-The run must not mutate a production skill, prompt, memory, grant, or code file directly unless the action is explicitly policy-allowed.
+The run must not mutate a production skill, prompt, memory, grant, or code file directly unless the action is explicitly policy-allowed. Mutation always goes through `ImprovementProposal` review or the Build Studio PR lane.
 
 ### 6.4 Curation plane
 
-The curator is the supervisor of learning assets. It should run as a scheduled/event-triggered governed job, not a hidden side effect.
+The curator is the supervisor of learning assets. It runs as a scheduled/event-triggered governed `TaskRun` (a `ScheduledAgentTask` whose execution becomes an operator-pattern coworker run), not a hidden side effect.
 
 Responsibilities:
 
-- compute skill lifecycle state: active, stale, archived, pinned, quarantined, proposed,
+- compute skill `lifecycleState`: `active | stale | pinned | quarantined | archived` (per §6.1.1),
 - identify duplicate or overlapping skills,
 - flag skills with high failure rate, low usage, missing tests, missing references, or stale external source,
-- propose consolidations and patches,
+- propose consolidations and patches via `ImprovementProposal` (no separate proposal model),
 - protect pinned skills from archive/delete,
-- create dry-run reports before mutation,
-- snapshot affected artifacts before approved changes,
-- support rollback to prior revision,
-- file capability needs or backlog items when the curator cannot act.
+- create dry-run reports as `TaskArtifact` records linked to the curator's `TaskRun`,
+- snapshot affected artifacts as `SkillRevision` records before approved changes (mirroring the `PromptRevision` precedent),
+- support rollback to a prior `SkillRevision`,
+- emit each significant finding as an `ImprovementSignal` so the portfolio flywheel can prioritize across signals.
 
-The curator should never auto-delete skills. Archive is recoverable.
+The curator should never auto-delete skills. Archive is recoverable. Curator activity must produce audit records under the curator's GAID identity, not the user's.
 
 ### 6.5 Evolution plane
 
@@ -360,7 +425,7 @@ The learning loop should become visible across three surfaces:
    - capability needs by value stream,
    - skill and prompt changes linked to TaskRuns and evidence.
 
-UI must follow `AGENTS.md` theme-aware styling: no hardcoded colors, tokenized text/surface/border/accent values, restrained enterprise layout, dense but scannable controls, and no decorative card-on-card surfaces.
+UI must follow AGENTS.md §12 theme-aware styling: no hardcoded colors, no inline `style={{ color: "#xxx" }}`, tokens only — `text-[var(--dpf-text)]`, `text-[var(--dpf-muted)]`, `bg-[var(--dpf-surface-1|2)]`, `bg-[var(--dpf-bg)]`, `border-[var(--dpf-border)]`, `text-[var(--dpf-accent)]` / `bg-[var(--dpf-accent)]`. `<option>` elements need explicit `bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]`. Sole exception: `text-white` on accent buttons. Layout: restrained enterprise density, scannable controls, no decorative card-on-card surfaces, progressive disclosure (3–5 essential fields, advanced via coworker). The full standard is `docs/platform-usability-standards.md`.
 
 ## 7. Data Model Stewardship
 
@@ -368,38 +433,55 @@ UI must follow `AGENTS.md` theme-aware styling: no hardcoded colors, tokenized t
 
 The first implementation slices should reuse:
 
-- `SkillDefinition`,
+- `SkillDefinition` (extend with `lifecycleState` per §6.1.1),
 - `SkillAssignment`,
 - `SkillMetric`,
-- `TaskRun`,
-- `TaskArtifact`,
+- `TaskRun` (use `source = "skill"` or `"proactive"` for reflection runs),
+- `TaskNode`, `TaskMessage`, `TaskArtifact`,
+- `DeliberationRun` (when reflection requires multi-perspective evaluation),
 - `ToolExecution`,
 - `ToolExecutionReceipt`,
+- `PlatformIssueReport` (canonical sink for runtime issues observed by the agentic loop today; reflection consumes it, does not duplicate it),
+- `ImprovementProposal` (the existing proposal envelope — no parallel `SkillImprovementProposal`),
 - `CoworkerSelfAssessment`,
-- `CoworkerCapabilityNeed`,
+- `CoworkerCapabilityNeed` (with `kind` promoted to a typed enum per AGENTS.md §3),
+- `PromptTemplate` + `PromptRevision` (precedent for `SkillRevision`),
 - `BacklogItemActivity`,
 - `ExternalEvidenceRecord`,
-- `UserFact`.
+- `UserFact`,
+- `ScheduledAgentTask` (for curator and reflection schedules).
 
 This avoids inventing a separate "learning system" alongside DPF's existing governance substrate.
 
 ### 7.2 New or extended concepts
 
-The holistic design likely needs the following additions, introduced only when required by a slice:
+The holistic design likely needs the following additions, introduced only when required by a slice. Each row names the existing primitive to extend before any new model lands.
 
-| Concept | Purpose | Initial implementation guidance |
+| Concept | Purpose | Decision |
 | --- | --- | --- |
-| `SkillUsageEvent` | Event-level record that a skill was presented, loaded, invoked, completed, failed, or rated. | Add before expanding `SkillMetric`; aggregate metrics can be derived. |
-| `SkillRevision` | Immutable record of each skill content/config version and approver. | Required before curator or proposal application can mutate skills. |
-| `SkillImprovementProposal` | Proposed diff against a skill, with evidence and risk band. | Can initially be modeled as `CoworkerCapabilityNeed(kind="skill")` plus JSON diff if avoiding a table in slice 1. |
-| `LearningRunReport` | Structured output of reflection or curator run. | Can initially be a `TaskArtifact` with a typed metadata contract. |
-| `SkillLifecycleState` | Active, stale, archived, pinned, quarantined, proposed. | Can start as fields on `SkillDefinition`; split later if history requires it. |
-| `EvidenceSearchIndex` | Searchable index over threads, task artifacts, tool executions, and evidence. | Start with Postgres full-text or scoped query helpers; add vector/FTS optimization later. |
-| `EvolutionExperiment` | Offline optimization run with dataset, baseline, candidate, metrics, and diff. | Belongs in Build Studio or a dedicated sandbox model once needed. |
+| `SkillUsageEvent` | Event-level record that a skill was presented, loaded, invoked, completed, failed, or rated. | New table — `SkillMetric` is per-period aggregate and cannot carry per-event provenance. Aggregates derive from events; do not write both directly. Land in Slice 1. |
+| `SkillRevision` | Immutable record of each skill content/config version and approver. | New table, modeled directly on the existing `PromptRevision` precedent (`PromptTemplate` + `PromptRevision`). Same shape, same naming, same review semantics. Land in Slice 3. |
+| Skill improvement proposal | Proposed diff against a skill, with evidence and risk band. | **Reuse `ImprovementProposal`** — it already carries `category`, `severity`, `agentId`, `routeContext`, `threadId`, `submittedById`, `reviewedById`, `backlogItemId`, `buildId`, `verifiedAt`, `contributionStatus`. Add `proposedDiffJson` and `targetSkillId` only if `description`/`conversationExcerpt` cannot carry the diff cleanly. Do **not** create `SkillImprovementProposal`. |
+| Reflection / curator run report | Structured output of a reflection or curator run. | Reuse `TaskRun` + `TaskArtifact` with a typed `kind` on the artifact (e.g. `learning-run-report`). Use `DeliberationRun` when the run requires multi-perspective evaluation. No new run-report table. |
+| Skill operational lifecycle | `active | stale | pinned | quarantined | archived` (per §6.1.1). | New `SkillDefinition.lifecycleState` column, separate from existing adoption-stage `status`. Typed enum lands with the migration. |
+| Evidence / session search | Searchable index over threads, task artifacts, tool executions, and evidence. | Start with Postgres full-text or scoped query helpers over existing tables; add vector/FTS optimization later. No new evidence table — only an indexed query service. |
+| Evolution experiment | Offline optimization run with dataset, baseline, candidate, metrics, and diff. | New table only when Slice 6 lands. Until then, model experiments as Build Studio `FeatureBuild` records with typed metadata. |
+| `MemoryCandidate` | Proposed memory write awaiting policy review. | Defer to `2026-05-14-coworker-memory-shape-contracts-design.md`. Reuse whatever it specifies; do not redefine. |
 
 ### 7.3 Enum discipline
 
-Any fixed string status or kind must be typed in TypeScript and mirrored in MCP schemas in the same commit. Hyphenated values should follow existing backlog conventions.
+Per AGENTS.md §3 ("Strongly-Typed String Enums") any fixed string status or kind must be typed in `apps/web/lib/backlog.ts` and mirrored in the MCP tool definition in `apps/web/lib/mcp-tools.ts` in the same commit, before any data uses it. Hyphenated values, not underscores.
+
+This spec adds or formalizes the following enums on first use:
+
+| Model.field | Values | Slice |
+| --- | --- | --- |
+| `SkillDefinition.lifecycleState` (new) | `active | stale | pinned | quarantined | archived` | Slice 4 |
+| `CoworkerCapabilityNeed.kind` (existing String, must be typed) | `skill | prompt | memory | tool | convention | code | other` | Slice 2 |
+| `ImprovementProposal.category` (existing, in use) | extend the in-use set if it does not already include `skill | prompt | memory | tool | convention`; do not redefine. | Slice 3 |
+| `TaskArtifact.metadata.kind` for learning artifacts | `learning-run-report | curator-report | evolution-report | no-change-report` | Slice 2 |
+
+Each enum extension lands as a single commit that updates code + MCP schema + migration + seeds together. Live data must not contain values absent from the typed enum.
 
 ## 8. Runtime Flows
 
@@ -407,27 +489,26 @@ Any fixed string status or kind must be typed in TypeScript and mirrored in MCP 
 
 When a coworker receives a request:
 
-1. resolve route coworker and assignments,
-2. expose skill metadata in prompt/context,
-3. record which skills were eligible,
-4. record which skill was loaded or invoked,
-5. tie subsequent tool executions and outcomes back to the active skill where possible,
-6. aggregate usage into `SkillMetric`,
-7. surface the active skill in the UI.
+1. resolve route coworker and assignments via `apps/web/lib/actions/agent-skills.ts:getSkillsForAgent`,
+2. expose skill metadata (not bodies) in the composed prompt — extend `apps/web/lib/tak/prompt-assembler.ts` with a `skills` block alongside `domainTools`, and have it emit a `SkillUsageEvent` of phase `eligible` for each presented skill,
+3. when a skill is loaded into the prompt body, emit a `SkillUsageEvent` of phase `loaded`,
+4. when the agent invokes a skill (or a skill-attributable tool call fires), emit a `SkillUsageEvent` of phase `invoked` with the parent `taskRunId`, `threadId`, and originating `toolExecutionId` where known,
+5. tie subsequent `ToolExecution` rows to the active skill via `ToolExecution.taskRunId` (already present) plus a new `ToolExecution.skillId` nullable column when the active skill is unambiguous,
+6. roll `SkillUsageEvent` rows up into `SkillMetric` per period via a scheduled aggregator (no double-write from the runtime),
+7. surface the active skill in the chat/coworker UI as a compact attribution affordance using DPF theme tokens (see §10).
 
-This turns "the agent probably used a skill" into auditable product state.
+This turns "the agent probably used a skill" into auditable product state. Telemetry must be emitted regardless of whether a reflection/curator pipeline downstream is enabled — measurement is independent of action.
 
 ### 8.2 Reflection after meaningful work
 
 After a meaningful run:
 
-1. `agentic-loop` or a post-run observer classifies whether a reflection trigger fired,
-2. a low-priority `TaskRun(source="skill" or "proactive")` is created,
-3. the reflection run receives bounded evidence: recent thread summary, tool executions, loaded skills, user correction, task outcome,
-4. the run decides whether to produce a skill proposal, memory candidate, capability need, or no-op report,
-5. outputs are persisted as reviewable records.
-
-Foreground user flow should not wait on this unless the user explicitly asks to review the result immediately.
+1. The post-run observer in `apps/web/lib/tak/autonomous-work-run.ts` (called after `executeAutonomousAgenticLoop` returns) classifies whether a reflection trigger fired. It queries `PlatformIssueReport` rows produced during the run (the `agent_stuck` row written by `agentic-loop.ts:843` plus any other `coworker_runtime`-sourced reports) instead of re-implementing detection. Slice 2 starts by extracting `agentic-loop.ts:813–870` into a named helper (e.g. `detectRepeatedToolFailure` in a new `apps/web/lib/tak/runtime-issues.ts`) so the existing `PlatformIssueReport.create` and the new reflection trigger share one detection site.
+2. If a trigger fires, a low-priority `TaskRun(source="skill" or "proactive")` is created via the existing `AutonomousWorkRun` facade so authority, GAID identity, and evidence trail are inherited.
+3. The reflection run receives bounded evidence: recent thread summary, last N `ToolExecution` rows for this thread, loaded skills, user correction signals, task outcome. Evidence is fetched by the search service in §6.2, not by stuffing the prompt.
+4. The run decides whether to produce a skill proposal (`ImprovementProposal` with `category="skill"`), a memory candidate (per memory shape contracts), a capability need (typed `kind`), a backlog item, or a typed no-change `TaskArtifact`.
+5. Every non-no-change output also emits an `ImprovementSignal` (per `2026-04-05-continuous-improvement-flywheel-design.md`) so the portfolio flywheel can prioritize across signals — the reflection plane is the producer, not the prioritizer.
+6. Foreground user flow does not wait on this unless the user explicitly asks to review the result immediately. The coworker UI's busy state and a notification are the user-visible signal of active reflection (per the "Agent as main conduit" pattern).
 
 ### 8.3 Curator dry-run
 
@@ -485,13 +566,23 @@ When a skill or convention is repeatedly successful and stable:
 
 ### 9.2 Security controls
 
-- External skills and tools pass the Tool Evaluation Pipeline before adoption.
+- External skills and tools pass the Tool Evaluation Pipeline (AGENTS.md §9, EP-GOVERN-002) before adoption.
 - Skills with scripts or external sources are scanned and assigned a risk band.
-- Skill-level allowed tools must be intersected with user role and agent grants.
+- Skill-level allowed tools must be intersected with user role capabilities (`PERMISSIONS[capability].roles`) and agent grants (`config_profile.tool_grants`) per `apps/web/lib/agent-grants.ts:getAvailableTools`. Both must permit the tool.
 - Prompt-injection scanning applies to imported skills, memory candidates, and tool results.
 - Secrets must never be written into skills, memory, proposals, or curator reports.
-- Principal/GAID identity must be used for new actor attribution surfaces.
-- All approved changes produce audit records and revision history.
+- Principal/GAID identity must be used for new actor attribution surfaces. New identity-bearing entities introduced after 2026-05-09 must be modeled as `PrincipalAlias` linked to a single `Principal` (AGENTS.md §11).
+- All approved changes produce `ToolExecution` audit records and revision history (`SkillRevision`, `PromptRevision`).
+
+### 9.3 Delivery governance
+
+This spec inherits the AGENTS.md §4 delivery contract — the spec does not relax these:
+
+- Every change lands via a PR against `main` from a topic branch (`feat/<slug>`, etc.).
+- Every commit carries a DCO `Signed-off-by:` trailer (`git commit -s`); the DCO bot blocks merge otherwise.
+- Concurrent slice work uses one git worktree per session (`git worktree add ../DPF-<topic> -b <prefix>/<topic>`) — never share a working tree.
+- The build gate (AGENTS.md §5) — vitest + `next build` + UX verification + clean migration — is mandatory per slice; Build-Studio-produced PRs cannot fail CI typecheck.
+- Theme-token compliance (AGENTS.md §12) is part of the build gate for every UI surface this spec touches.
 
 ## 10. UI and UX Requirements
 
@@ -563,52 +654,66 @@ Acceptance:
 
 ### Slice 1: Skill usage telemetry and attribution
 
-- Add event-level skill usage tracking or a minimal equivalent.
-- Populate `SkillMetric`.
-- Tie skill usage to `TaskRun`, `AgentThread`, and `ToolExecution` where possible.
-- Show skill attribution in coworker UI and `/platform/ai/skills`.
+- Add `SkillUsageEvent` model (per §7.2) with phases `eligible | loaded | invoked | completed | failed | rated`.
+- Extend `apps/web/lib/tak/prompt-assembler.ts` to emit `eligible` and `loaded` events when composing the prompt, and to expose a `skills` block alongside `domainTools`.
+- Add `ToolExecution.skillId` (nullable) and have `apps/web/lib/tak/agentic-loop.ts` populate it when the active skill is unambiguous.
+- Add a scheduled aggregator that rolls `SkillUsageEvent` into `SkillMetric` per period; runtime never writes to `SkillMetric` directly.
+- Show skill attribution in the coworker chat panel and `/platform/ai/skills` detail (theme-token compliant).
 
 Acceptance:
 
-- a run can prove which skill was eligible, loaded, and used,
-- `SkillMetric` is no longer empty after exercised flows,
-- tests cover metric recording and attribution.
+- a run can prove which skill was eligible, loaded, and used, with row-level evidence,
+- `SkillMetric` is no longer empty after exercised flows and is the same value as the aggregator's recomputation,
+- vitest covers event emission, attribution, and aggregator idempotency,
+- `next build` clean; UX verification confirms skill chip appears in coworker chat.
 
 ### Slice 2: Reflection triggers and skill capability needs
 
-- Trigger background review after repeated tool failure, user correction, or loaded-skill failure.
-- Persist review as `TaskRun` plus `CoworkerSelfAssessment` or `CoworkerCapabilityNeed(kind="skill")`.
-- Link evidence to the triggering tool/thread/run.
+- Extract the repeated-tool detection block at `apps/web/lib/tak/agentic-loop.ts:813–870` into a named helper in `apps/web/lib/tak/runtime-issues.ts` so both the existing `PlatformIssueReport.create` write and the new reflection trigger share one detection site.
+- Add post-run hook in `apps/web/lib/tak/autonomous-work-run.ts` that classifies whether a reflection trigger fired by querying `PlatformIssueReport` rows produced during the run.
+- When a trigger fires, spawn a low-priority `TaskRun(source="skill" or "proactive")` via the existing autonomous-run facade.
+- Promote `CoworkerCapabilityNeed.kind` from free-form String to typed enum in `apps/web/lib/backlog.ts` + `mcp-tools.ts` (per AGENTS.md §3) — values: `skill | prompt | memory | tool | convention | code | other`.
+- Persist review outputs as `CoworkerSelfAssessment` + `CoworkerCapabilityNeed(kind="skill")` and emit one `ImprovementSignal` per non-trivial finding.
+- Link evidence (tool/thread/run/artifact references) to the triggering rows.
 
 Acceptance:
 
-- a failing skill path creates a reviewable need with submitter attribution,
+- a failing skill path creates a reviewable need with submitter attribution and an `ImprovementSignal`,
 - no production skill content changes automatically,
-- capability-needs UI can filter skill-related needs.
+- `CoworkerCapabilityNeed.kind` is enum-validated everywhere it is set or filtered,
+- capability-needs UI can filter skill-related needs,
+- vitest covers trigger classification + signal emission; `next build` clean.
 
 ### Slice 3: Skill improvement proposals
 
-- Add a proposal representation for skill diffs.
-- Support approve, edit, reject, and link-to-backlog actions.
-- Persist pre-change revision snapshots.
+- Reuse `ImprovementProposal` with `category="skill"` and a `targetSkillId` reference; add `proposedDiffJson` only if the existing text fields cannot carry the diff cleanly.
+- Add `SkillRevision` model directly mirroring the `PromptRevision` shape (immutable per-version record, approver, snapshot).
+- Support approve, edit, reject, and link-to-backlog actions on `ImprovementProposal` for `category="skill"`.
+- Activation writes a new `SkillRevision`, then updates `SkillDefinition.skillMdContent` (the seed pattern: patch the seed file too if the change should survive a fresh install — Mark's "fix the seed, not the runtime" rule).
+- Rollback restores from a prior `SkillRevision` and writes a new revision.
 
 Acceptance:
 
-- a coworker can propose a skill patch,
-- an operator can inspect evidence and diff,
-- approved change creates revision history.
+- a coworker can submit an `ImprovementProposal(category="skill")` with diff and evidence,
+- an operator can inspect evidence and diff in `/platform/ai/skills` detail,
+- approved change creates a `SkillRevision` and updates `SkillDefinition` atomically,
+- rollback restores prior `skillMdContent` and writes a new revision (no in-place mutation),
+- vitest covers approval, rollback, and seed-vs-runtime drift detection.
 
 ### Slice 4: Curator dry-run and lifecycle states
 
-- Add curator run service.
-- Produce dry-run reports for stale, duplicate, failing, unassigned, or high-value skills.
-- Add pinned, stale, archived, and quarantined lifecycle states.
+- Add `SkillDefinition.lifecycleState` column with typed enum (per §6.1.1 and §7.3); migration also seeds initial lifecycle for every existing skill.
+- Add curator run as a `ScheduledAgentTask` whose execution is a governed coworker `TaskRun` (operator-pattern compliant — explicit operator contract, named work products).
+- Produce dry-run reports for stale, duplicate, failing, unassigned, or high-value skills as `TaskArtifact` rows with `metadata.kind="curator-report"`.
+- Curator emits `ImprovementSignal` and (optionally) `ImprovementProposal` rows; never mutates skills directly.
 
 Acceptance:
 
-- curator can run without mutation,
-- report is visible in `/platform/ai/skills`,
-- pinned skills cannot be archived by curator.
+- curator runs without any direct skill mutation,
+- report is visible in `/platform/ai/skills` with theme-token UI,
+- pinned skills cannot be archived by curator (invariant test),
+- `SkillDefinition.lifecycleState` enum is enforced in TS + MCP schema + DB constraint,
+- vitest covers curator findings + dry-run guarantee; `next build` clean.
 
 ### Slice 5: Evidence/session search
 
@@ -663,14 +768,15 @@ Acceptance:
 
 Each implementation slice should spend real effort reducing fragmentation:
 
-1. Centralize skill resolution, attribution, and telemetry in a dedicated service instead of scattering it through route handlers.
-2. Keep prompt assembly as a composition layer; do not embed curator or reflection logic directly into prompt strings.
-3. Reuse `TaskRun` for learning work instead of creating one-off job state.
-4. Reuse `CoworkerCapabilityNeed` for agent-submitted needs until a proposal table is justified.
-5. Keep `ToolExecution` as the action audit source; do not invent a second tool log.
-6. Treat `SkillMetric` as aggregate state and add event records only when aggregates are insufficient.
-7. Prefer typed status constants and MCP schema updates over ad hoc strings.
-8. Keep UI projections over canonical runtime records; do not let the UI become a separate state store.
+1. **Split `apps/web/lib/actions/agent-coworker.ts`** (currently 1,793 lines, well past the AGENTS.md soft limit for action files) along the seams this work surfaces — skill resolution + attribution should leave that file and live in a dedicated `apps/web/lib/skills/runtime.ts` service. Route handlers consume the service. Slice 1 must perform this extraction, not defer it.
+2. **Add a `skills` block to `apps/web/lib/tak/prompt-assembler.ts`** as a peer of `domainTools`, and keep the prompt assembler a pure composition layer — no curator or reflection logic in prompt strings.
+3. **Reuse `TaskRun` for learning work** instead of creating one-off job state. Reflection, curator, and evolution runs all flow through `AutonomousWorkRun`.
+4. **Reuse `ImprovementProposal` and `CoworkerCapabilityNeed`** for agent-submitted needs and proposed diffs — do not introduce a parallel proposal table.
+5. **Keep `ToolExecution` as the action audit source**; do not invent a second tool log. Add `ToolExecution.skillId` to bind action evidence to skill attribution.
+6. **Treat `SkillMetric` as aggregate state** derived from `SkillUsageEvent`; runtime never writes to both directly.
+7. **Prefer typed status constants** in `apps/web/lib/backlog.ts` and MCP schema updates in `apps/web/lib/mcp-tools.ts` over ad hoc strings (AGENTS.md §3).
+8. **Keep UI projections over canonical runtime records.** The `/platform/ai/*` surfaces and the Operations Map overlay must read from `SkillDefinition`, `SkillUsageEvent`, `SkillMetric`, `ImprovementProposal`, `CoworkerCapabilityNeed`, and `TaskRun` directly — never a parallel UI state store.
+9. **Mirror `PromptRevision` for `SkillRevision`.** Same shape, same naming, same review semantics — discoverable for any operator who already knows the prompt revision pattern.
 
 ## 13. Acceptance Criteria
 
@@ -699,24 +805,47 @@ The holistic program is successful when:
 | UI becomes too complex | Use progressive disclosure: overview, filters, detail panels, evidence links. |
 | Evolution overfits to small traces | Require held-out eval cases, manual review, and production monitoring after activation. |
 | Refactoring stalls delivery | Slice by slice: each PR must improve one runtime seam and one visible outcome. |
+| Lifecycle vocabulary fragmentation | Adoption-stage `status` and operational `lifecycleState` are intentionally separate (per §6.1.1); both are typed enums; the marketplace spec is updated in the same migration commit so the platform speaks one vocabulary. |
+| Substrate duplication via copy-paste from Hermes | Reviewers gate every new model against the §7.1 reuse list; the §7.2 table requires a stated reason any new table cannot be an extension of an existing one. |
+| Reflection plane outruns the flywheel | Reflection emits `ImprovementSignal` rows only — prioritization stays in the flywheel. Removing this discipline is treated as a regression. |
+| Seed/runtime drift on approved skill changes | Skill activation patches the seed file (`skills/<category>/<name>.skill.md`) in the same commit as the runtime mutation; an invariant guard in seed verifies parity on boot ("fix the seed, not the runtime"). |
+| Cross-session sweep on concurrent slice work | Per AGENTS.md §4 each slice runs in its own `git worktree`; PR checks include a branch-guard so commits never sweep across sessions. |
 
-## 15. Open Questions
+## 15. Resolved Decisions and Open Questions
 
-1. Should the first proposal object be a new `SkillImprovementProposal` table or a typed `CoworkerCapabilityNeed(kind="skill")` with `evidenceJson` carrying the diff?
-2. Should lifecycle state live on `SkillDefinition` first, or should revisions/lifecycle be modeled separately from the start?
-3. What is the review authority for low-risk skill text changes: AI Ops, agent owner, platform admin, or route owner?
-4. Which UI route should become the primary operator home for learning: `/platform/ai/skills`, `/platform/ai/operations`, or a coworker detail page?
-5. What evidence can be used in evolution experiments when an install contains customer/private data?
-6. Should skill scripts run only in Build Studio/sandbox, or can low-risk deterministic scripts run in the portal runtime under strict allowlists?
+### 15.1 Resolved during spec drafting
+
+| Question | Decision | Anchor |
+| --- | --- | --- |
+| New `SkillImprovementProposal` table vs. typed `CoworkerCapabilityNeed(kind="skill")` with diff JSON? | Neither — reuse `ImprovementProposal` with `category="skill"` and `targetSkillId`. | §7.2 |
+| Lifecycle state on `SkillDefinition` or a separate model? | Separate column on `SkillDefinition`: `lifecycleState` (operational health) is distinct from `status` (adoption stage); both typed enums. | §6.1.1, §7.3 |
+| Where does the reflection trigger consume "agent stuck" signal? | The existing `PlatformIssueReport(type="agent_stuck")` row at `agentic-loop.ts:843`. Slice 2 extracts detection into one shared helper so both writes fire from the same site. | §3.1, §6.3.1, §8.2 |
+
+### 15.2 Open
+
+1. **Review authority for low-risk skill text changes.** Default proposal: "agent owner approves; AI Ops audits weekly," pending product-owner sign-off. Resolve before Slice 3 ships.
+2. **Primary operator home for learning.** Operations Map overlay (`2026-05-10-ai-coworker-visual-control-surface-design.md`) is the platform-wide projection; `/platform/ai/skills` is the skill-domain deep view; coworker detail is the agent-domain deep view. Recommendation: Operations Map is the entry point; confirm with product before Slice 8.
+3. **Evidence usable in evolution experiments when an install contains customer/private data.** Reuse the policy classes in `2026-05-14-coworker-memory-shape-contracts-design.md` rather than redefine; that spec must land its policy taxonomy before Slice 6 starts.
+4. **Skill-script execution surface.** Build Studio/sandbox only, or low-risk deterministic scripts allowed in portal runtime under strict allowlists? Default to sandbox-only until a concrete portal use case forces the question.
+5. **Capacity-continuity handoff.** When a reflection-triggered run needs scheduled capacity, how does the contract handshake with `2026-05-12-ai-capacity-continuity-design.md`? Cross-reference only; do not re-spec here.
+6. **HITL Mobile Companion approvals.** Should curator findings be approvable from `2026-05-13-realtime-hitl-mobile-companion-design.md`, or only from desktop operator surfaces? Defer to mobile companion spec's scope decision.
+7. **Forward-dependency sequencing.** `ImprovementSignal` (flywheel spec) and `MemoryCandidate` (memory shape contracts spec) are both Draft. Concretely: does the Hermes spec block on those landing first, or do all three move as a coordinated wave? Recommend coordinated wave with a single program-level review.
 
 ## 16. First Implementation Recommendation
 
-Start with Slice 1 and Slice 2 together as the first agile increment:
+Start with Slice 1 and Slice 2 together as the first agile increment, executed under one topic branch (`feat/skill-telemetry-and-reflection`) in its own worktree (per AGENTS.md §4):
 
-- skill usage telemetry,
-- visible skill attribution,
-- reflection trigger for loaded-skill failure,
-- skill-related `CoworkerCapabilityNeed`,
-- tests around attribution and no-direct-mutation.
+- `SkillUsageEvent` model + migration,
+- `apps/web/lib/tak/prompt-assembler.ts` `skills` block + event emission,
+- `ToolExecution.skillId` (nullable) + agentic-loop binding,
+- scheduled `SkillUsageEvent` → `SkillMetric` aggregator,
+- detection helper extracted from `agentic-loop.ts:813–870` into `apps/web/lib/tak/runtime-issues.ts`, with both the existing `PlatformIssueReport.create` and the new reflection trigger flowing through it,
+- post-run reflection hook in `apps/web/lib/tak/autonomous-work-run.ts` (consuming `PlatformIssueReport` rows produced during the run),
+- `CoworkerCapabilityNeed.kind` promoted to typed enum in `backlog.ts` + `mcp-tools.ts`,
+- skill-related `CoworkerCapabilityNeed` + `ImprovementSignal` emission,
+- skill attribution chip in coworker chat + `/platform/ai/skills` detail (theme-token compliant),
+- vitest covering attribution, aggregator idempotency, trigger classification, no-direct-mutation, and enum enforcement.
 
-This is bigger than a tiny patch but still bounded. It creates the measurement spine for everything else and proves the corporate-governed version of Hermes-style self-improvement without prematurely introducing curator mutation, marketplace import, or offline optimization.
+This is bigger than a tiny patch but still bounded. It creates the measurement spine for everything else and proves the corporate-governed version of Hermes-style self-improvement without prematurely introducing curator mutation, marketplace import, or offline optimization. Crucially it adds **zero new proposal substrate** — proposals reuse `ImprovementProposal`, signals reuse the flywheel — so the increment validates the reuse-first principle before any later slice is allowed to add a new model.
+
+Slice 3 (proposals + `SkillRevision`) and Slice 4 (curator + `lifecycleState`) can run in parallel worktrees once Slice 1+2 lands, since they share no schema collisions.
