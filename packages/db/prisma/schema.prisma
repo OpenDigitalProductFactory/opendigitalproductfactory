@@ -2102,6 +2102,93 @@ model RecipePerformance {
   @@unique([recipeId, contractFamily])
 }
 
+// ─── Coworker Execution Adapter Substrate (Phase A1–A3) ──────────────────────
+// Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md
+// Captures observed adapter capabilities per (adapterKind, adapterVersion).
+// Replaces hand-maintained capability tables with probe-populated rows.
+model AdapterCapabilityProfile {
+  id                          String   @id @default(cuid())
+  adapterKind                 String   // "http-anthropic" | "claude-code-cli" | "codex-cli" | "codex-mcp" | "local-ollama"
+  adapterVersion              String   // e.g. "claude-code/1.2.3", "codex-cli/0.125.0", "anthropic-http/2024-06-01"
+  probedAt                    DateTime
+  probedBy                    String   // host/process identity, for cache invalidation across replicas
+
+  // Observed capabilities — booleans, not aspirations
+  supportsStreamingEvents     Boolean
+  supportsMcpAttach           Boolean
+  supportsMcpAttachPerInvoke  Boolean  // Claude Code: yes (--mcp-config); Codex: no (static config only)
+  supportsSubagents           Boolean
+  supportsHooks               Boolean
+  supportsPlanState           Boolean
+  supportsTodoState           Boolean
+  supportsWebFetch            Boolean
+  supportsWebSearch           Boolean
+  supportsSessionResume       Boolean
+  supportsExtendedThinking    Boolean
+  supportsOutputSchema        Boolean
+
+  // Operating envelope
+  maxInteractiveLatencyMs     Int      // wall-clock budget for first event
+  supportedAuthModes          String[] // "api-key" | "oauth" | "local"
+
+  // Known landmines (Codex example: --json silently ignored when MCP active)
+  knownDegradations           Json?    // [{ trigger: string, behavior: string, source: string }]
+
+  @@unique([adapterKind, adapterVersion])
+  @@index([adapterKind, probedAt])
+}
+
+// One row per adapter execution attempt. Captures latency, tokens, cost,
+// quota pool, status, refusal/error class, tool-call validity, capability
+// usage, and schema-drift detection. Supports single/shadow/race execution
+// modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
+model AdapterRunTelemetry {
+  id                  String    @id @default(cuid())
+  threadId            String?   // null for non-coworker runs (probes, eval)
+  agentMessageId      String?   // joins to AgentMessage when applicable
+  buildId             String?   // for Build Studio dispatch via the substrate
+  agentId             String?   // attribution (PR #607 convention)
+  skillId             String?   // active skill at run time (PR #623 precedent)
+  adapterKind         String
+  adapterVersion      String
+  providerId          String
+  modelId             String
+
+  executionMode       String    // "single" | "shadow-primary" | "shadow-alt" | "race-primary" | "race-loser"
+  raceCohortId        String?   // groups concurrent race/shadow runs
+
+  startedAt           DateTime
+  finishedAt          DateTime?
+  durationMs          Int?
+  firstEventLatencyMs Int?
+
+  // Outcome dimensions (spec §5.4)
+  status              String    // "success" | "refusal" | "error" | "timeout" | "cancelled" | "policy-block"
+  refusalReason       String?
+  errorClass          String?
+  inputTokens         Int?
+  cachedInputTokens   Int?
+  outputTokens        Int?
+  reasoningTokens     Int?
+  estimatedCostUsd    Decimal?  @db.Decimal(10, 6)
+  quotaPoolConsumed   String?   // "anthropic-api" | "anthropic-oauth" | "openai-api" | "openai-chatgpt" | "local"
+
+  toolCallsTotal      Int       @default(0)
+  toolCallsInvalid    Int       @default(0) // fabricated tool names, schema mismatches
+  capabilitiesUsed    String[]  // which capability booleans were actually exercised this run
+  schemaDriftDetected Boolean   @default(false) // adapter emitted unexpected event shape
+
+  userAccepted        Boolean?  // null = not yet decided; true = message kept; false = retried/discarded
+  acceptedAt          DateTime?
+
+  rawEventDigest      String?   // sha256 of normalized event log, for cross-adapter equivalence checks
+
+  @@index([adapterKind, startedAt])
+  @@index([raceCohortId])
+  @@index([threadId, startedAt])
+  @@index([agentId, startedAt])
+}
+
 model Engagement {
   id            String   @id @default(cuid())
   engagementId  String   @unique // ENG-<uuid>
@@ -3185,7 +3272,19 @@ model AgentThread {
   messages    AgentMessage[]
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Coworker execution adapter substrate (Phase A3) — per-thread CLI session
+  // pinning. Null means no active CLI session; CliSessionService writes these
+  // when issuing a session and a sweeper expires stale rows via the
+  // cliSessionLastUsedAt index.
+  // Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md §4.2
+  cliSessionId          String?
+  cliSessionAdapterKind String?
+  cliSessionContainerId String?
+  cliSessionLastUsedAt  DateTime?
+  cliSessionWorkdir     String?
+
   @@unique([userId, contextKey])
+  @@index([cliSessionLastUsedAt])
 }
 
 model AgentMessage {
