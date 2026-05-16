@@ -608,14 +608,15 @@ Because Codex requires `~/.codex/config.toml` mutation for MCP attach, the Codex
 
 ## 12. Implementation Phases
 
-### Phase A — Schema + capability profile (foundation)
+### Phase A — Schema + capability profile (foundation) — **shipped 2026-05-16**
 
 1. Add `AdapterCapabilityProfile`, `AdapterRunTelemetry` tables; extend `AgentThread` with `cliSession*` columns.
 2. Implement `probe()` for current HTTP and Claude CLI adapters; populate profile rows.
-3. Remove hard-coded check at [ai-inference.ts:353](../../../apps/web/lib/ai-inference.ts#L353) — replace with registry resolution.
-4. Tests: probe deterministic against fixture stream; registry resolution returns expected adapter for current single-mode behavior; no behavior change vs today.
+3. Remove hard-coded check at [`ai-inference.ts:353`](../../../apps/web/lib/inference/ai-inference.ts#L353) — replace with `parseExecutionAdapterSelector` + `resolveExecutionAdapter`. PR #520's mcpSession mounting is preserved verbatim.
+4. Tests: probe deterministic against fixture stream; resolver returns expected adapter for current single-mode behavior; no behavior change vs today.
+5. Wire `AdapterRunTelemetry` write at end of every coworker run, fire-and-forget so a DB outage cannot break a turn.
 
-**Acceptance:** every existing coworker run works identically, but the route plan now carries a structured `executionAdapter` field and writes a telemetry row.
+**Acceptance:** every existing coworker run works identically, the route plan carries a structured `executionAdapter` selector (with legacy-string passthrough for non-CLI/chat adapter strings), and writes one telemetry row per call. See plan's "Phase A status" table for the per-task commit hashes.
 
 ### Phase B — Codex CLI adapter + event normalizer
 
