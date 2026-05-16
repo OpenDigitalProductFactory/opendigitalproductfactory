@@ -1036,6 +1036,9 @@ When generating or reviewing UI code, enforce these rules:
     domainTools: [
       "wiki_query",
       "wiki_ingest",
+      "list_wiki_overlay_drafts",
+      "publish_wiki_overlay_pages",
+      "fetch_public_website",
       "search_knowledge",
       "search_knowledge_base",
       "search_project_files",
