@@ -67,10 +67,28 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dpf
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: dpf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dpf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
+      ADMIN_PASSWORD: ci_admin_changeme
     # Unit Tests runs informationally while the broken-test backlog is drained
-    # (issue #104). Typecheck, Production Build, and Routing Tier Contract
-    # are the binding gates. Flip this back to blocking once the suite is
-    # honest again.
+    # (issue #104). It still provisions a CI Postgres database and applies
+    # migrations so Prisma-backed tests fail for product defects, not runner
+    # setup. Typecheck, Production Build, and Routing Tier Contract remain
+    # the binding gates until the full suite is honest again.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
@@ -88,6 +106,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm --filter @dpf/db exec prisma migrate deploy
 
       - name: Run unit tests
         run: pnpm test
