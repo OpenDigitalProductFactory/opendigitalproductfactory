@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied) |
-| Status | Phase 1 merged to `main` via PR #602; Phase 2 implementation plan merged via PR #665 and awaits implementation; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied) |
+| Status | Phase 1 merged to `main` via PR #602; Phase 2 implements display-and-record governed creation pending verification/PR; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
 | Depends On | `2026-04-05-db-github-delivery-sync-design.md`, `2026-04-20-ship-phase-fork-redesign-design.md`, `2026-04-21-backlog-triage-build-studio-design.md`, `2026-04-23-build-studio-governed-backlog-delivery-design.md`, `2026-05-09-build-execution-provider-design.md`, `2026-05-09-deployment-contracts.md` |
@@ -418,7 +418,7 @@ This mirrors `BacklogItemActivity` and keeps capsule history inspectable without
 
 Per AGENTS.md section 3, `kind` is a strongly-typed string enum sourced from `apps/web/lib/work-capsules.ts` and mirrored in MCP tool `enum:` arrays. Initial values:
 
-`created`, `adopted`, `status-changed`, `status-override`, `executor-changed`, `scope-claimed`, `scope-released`, `evidence-recorded`, `pr-linked`, `pr-merged`, `sandbox-attached`, `verification-passed`, `verification-failed`, `provider-blocked`, `provider-unblocked`, `lease-renewed`, `lease-expired`, `promotion-prepared`, `promotion-approved`, `promotion-rolled-back`, `archived`, `superseded`.
+`created`, `adopted`, `workspace-planned`, `status-changed`, `status-override`, `executor-changed`, `scope-claimed`, `scope-released`, `evidence-recorded`, `pr-linked`, `pr-merged`, `sandbox-attached`, `verification-passed`, `verification-failed`, `provider-blocked`, `provider-unblocked`, `lease-renewed`, `lease-expired`, `promotion-prepared`, `promotion-approved`, `promotion-rolled-back`, `archived`, `superseded`.
 
 Adding a new kind requires updating `work-capsules.ts` and the MCP tool definition in the same commit, per AGENTS.md section 3.
 
@@ -494,9 +494,9 @@ V1 should not delete branches or worktrees. It records and recommends.
 
 1. User starts from a backlog item, spec, plan, or manual objective.
 2. Portal creates a capsule.
-3. Portal generates branch and worktree names.
-4. Portal creates the worktree from `origin/main`.
-5. Portal runs the repo MCP seed helper for the new worktree.
+3. Portal generates the deterministic branch name and canonical worktree path.
+4. Portal persists `headBranch`, `worktreePath`, and `branchTaxonomy`, and records a `workspace-planned` activity.
+5. Portal displays the exact `git worktree add ... origin/main` and repo MCP seed helper commands for the operator to run on the host.
 6. Portal assigns an executor:
    - Build Studio
    - Codex desktop
@@ -504,10 +504,10 @@ V1 should not delete branches or worktrees. It records and recommends.
    - Codex CLI in a governed sandbox
    - Claude Code CLI in a governed sandbox
    - human
-7. Portal emits launch instructions or starts the native Build Studio flow.
+7. Active in-container worktree creation stays deferred to a sandbox-runner slice that owns substrate-mount behavior.
 8. Executor records progress and evidence back to the capsule.
 
-Creation must refuse to use the root clone as an active worktree.
+Creation must refuse to use the root clone as an active worktree. Production installs mount `dpf-source-code` as a named volume, so Phase 2 is intentionally display-and-record rather than portal-executed host mutation.
 
 ### 9.3 External Client Attachment
 
