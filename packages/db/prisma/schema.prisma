@@ -3272,7 +3272,19 @@ model AgentThread {
   messages    AgentMessage[]
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Coworker execution adapter substrate (Phase A3) — per-thread CLI session
+  // pinning. Null means no active CLI session; CliSessionService writes these
+  // when issuing a session and a sweeper expires stale rows via the
+  // cliSessionLastUsedAt index.
+  // Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md §4.2
+  cliSessionId          String?
+  cliSessionAdapterKind String?
+  cliSessionContainerId String?
+  cliSessionLastUsedAt  DateTime?
+  cliSessionWorkdir     String?
+
   @@unique([userId, contextKey])
+  @@index([cliSessionLastUsedAt])
 }
 
 model AgentMessage {
