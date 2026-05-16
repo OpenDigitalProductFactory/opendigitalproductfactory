@@ -12,6 +12,7 @@
 
 import { createHash } from "crypto";
 import { prisma } from "@dpf/db";
+import { upsertRawSource } from "@dpf/db/wiki-store";
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { z } from "zod";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
@@ -755,6 +756,24 @@ export async function runHiveScoutIngest(
     const finalStatus = reviewRequiresHuman ? "deferred" : status;
     if (finalStatus === "deferred") deferred++;
 
+    // Upsert a citable RawSource for the catalog entry. Idempotent on
+    // sourceKey — repeat runs do not create duplicate rows. organizationId
+    // is null because the 500-AI-Agents-Projects catalog is platform-shared
+    // (every install reads the same upstream README); WikiPage rows that
+    // cite this source in Slice 3 will be org-scoped per
+    // commitIngestProposal's contract.
+    const rawSource = await upsertRawSource(db, {
+      sourceKey: rawSourceKeyForEntry(entry),
+      sourceType: "external-url",
+      title: entry.name,
+      url: entry.sourceUrl,
+      license: CATALOG_LICENSE,
+      retrievedAt: new Date(),
+      organizationId: null,
+      isKernel: false,
+    });
+    const rawSourceId = (rawSource as { id: string }).id;
+
     const createdItem = await db.backlogItem.create({
       data: {
         itemId,
@@ -781,6 +800,7 @@ export async function runHiveScoutIngest(
           valueStream: match.stream,
           valueStreamConfidence: match.confidence,
           ambiguityReview: review,
+          rawSourceId,
         } as Prisma.InputJsonValue,
         recordedByAgentId: options.actorAgentId ?? null,
       },

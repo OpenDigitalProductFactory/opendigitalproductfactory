@@ -167,6 +167,12 @@ describe("runHiveScoutIngest ambiguity review", () => {
       taskRun: {
         findMany: async (_args?: unknown) => [],
       },
+      rawSource: {
+        upsert: async ({ where }: { where: { sourceKey: string } }) => ({
+          id: `raw-${where.sourceKey}`,
+          sourceKey: where.sourceKey,
+        }),
+      },
     };
   }
 
