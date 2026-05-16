@@ -19,6 +19,12 @@ import {
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
+import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
+import {
+  parseExecutionAdapterSelector,
+  type ExecutionAdapterSelector,
+} from "../routing/execution-adapter-types";
+import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
 import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
@@ -352,17 +358,46 @@ export async function callProvider(
     responsePolicy: {},
   };
 
+  // Phase A6: route the executionAdapter through the structured selector +
+  // capability-aware resolver. Legacy string values for CLI/chat kinds round-trip
+  // through parseExecutionAdapterSelector; legacy strings outside the structured
+  // taxonomy (responses, embedding, image_gen, async, transcription) fall through
+  // to the registry directly so existing routes are unchanged.
+  const executionAdapterRaw = effectivePlan.executionAdapter;
+  let selector: ExecutionAdapterSelector | null;
+  try {
+    selector = parseExecutionAdapterSelector(executionAdapterRaw);
+  } catch (e) {
+    if (typeof executionAdapterRaw !== "string") {
+      // Object input that failed validation — propagate.
+      throw e;
+    }
+    selector = null;
+  }
+
   // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
   // binaries — they do not need HTTP base URL or auth headers.
-  const isCliAdapter = effectivePlan.executionAdapter === "claude-cli"
-    || effectivePlan.executionAdapter === "codex-cli";
+  const isCliAdapter =
+    selector !== null &&
+    (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
   const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
   const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
-  const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
+  const adapter =
+    selector !== null
+      ? await resolveExecutionAdapter(selector, effectivePlan.capabilityRequirements)
+      : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
+  const telemetryStartedAt = new Date();
+  // Phase A7: telemetry kind derived from the structured selector when
+  // present; legacy-string paths land as "legacy:<adapter>" so analytics can
+  // distinguish unrouted traffic from structured-selector traffic.
+  const telemetryAdapterKind =
+    selector !== null
+      ? selector.kind
+      : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
   let result;
   try {
     result = await adapter.execute({
@@ -381,12 +416,46 @@ export async function callProvider(
     endTimer();
     const errorType = err instanceof InferenceError ? err.code : "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
+    // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
+    // swallows its own errors so we never mask the original throw.
+    const finishedAt = new Date();
+    void writeAdapterTelemetry({
+      adapterKind: telemetryAdapterKind,
+      adapterVersion: selector?.version ?? "unknown",
+      providerId,
+      modelId,
+      executionMode: "single",
+      startedAt: telemetryStartedAt,
+      finishedAt,
+      durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
+      status: err instanceof InferenceError ? "error" : "error",
+      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      refusalReason: err instanceof Error ? err.message.slice(0, 200) : undefined,
+    });
     throw err;
   }
 
   // 4. Record token and cost metrics
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "input" }, result.usage.inputTokens);
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "output" }, result.usage.outputTokens);
+
+  // Phase A7: success-path telemetry row. Fire-and-forget so a DB outage
+  // can't break the user's reply.
+  const telemetryFinishedAt = new Date();
+  void writeAdapterTelemetry({
+    adapterKind: telemetryAdapterKind,
+    adapterVersion: selector?.version ?? "unknown",
+    providerId,
+    modelId,
+    executionMode: "single",
+    startedAt: telemetryStartedAt,
+    finishedAt: telemetryFinishedAt,
+    durationMs: telemetryFinishedAt.getTime() - telemetryStartedAt.getTime(),
+    status: "success",
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    toolCallsTotal: result.toolCalls.length,
+  });
 
   // 5. Map AdapterResult → InferenceResult
   return {
