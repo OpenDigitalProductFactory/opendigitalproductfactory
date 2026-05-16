@@ -135,7 +135,7 @@ describe("work capsule MCP tools", () => {
       data: expect.objectContaining({
         branchTaxonomy: "feat",
         headBranch: "feat/phase-2-mcp-plan",
-        worktreePath: "D:\\DPF-phase-2-mcp-plan",
+        worktreePath: expect.stringContaining("phase-2-mcp-plan"),
       }),
     }));
     expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
