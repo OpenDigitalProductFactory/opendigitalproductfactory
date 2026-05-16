@@ -1,5 +1,7 @@
 # Employee Communication Fabric Implementation Plan
 
+> **Status (2026-05-16):** Slice 0 + Slice 1 shipped via [PR #619 "[codex] Employee communication fabric"](https://github.com/anthropics/dpf/pull/619) and [PR #628 "feat(communications): surface channel binding management"](https://github.com/anthropics/dpf/pull/628). Tasks 1–9 are implemented on `main`. Task 10 (backlog hygiene) was not separately tracked; if Slice 2+ work is planned, re-run Task 10 to confirm no overlap and to file an `EP-COMMS-FABRIC` epic. Slice 2 (Teams + Slack outbound), Slice 3 (WhatsApp Secretary as channel slice), Slice 4 (Telegram/webhook), and Slice 5 (rich mobile work client) are not yet planned.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first implementation slice of DPF's employee communication fabric: shared communication adapter contracts, DPF-owned in-app/push/email baseline, delivery evidence, and the operator/employee surfaces needed before Teams, Slack, WhatsApp, or Telegram adapters are added.
@@ -101,7 +103,7 @@ Deferred:
 - Create: `apps/web/lib/communications/channel-types.test.ts`
 - Modify: `apps/web/lib/queue/queue-types.ts`
 
-- [ ] **Step 1: Write the failing type contract test**
+- [x] **Step 1: Write the failing type contract test**
 
 Create `apps/web/lib/communications/channel-types.test.ts`:
 
@@ -148,7 +150,7 @@ describe("communication channel types", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -158,7 +160,7 @@ pnpm --filter web exec vitest run lib/communications/channel-types.test.ts
 
 Expected: FAIL because `apps/web/lib/communications/channel-types.ts` does not exist.
 
-- [ ] **Step 3: Add the shared communication types**
+- [x] **Step 3: Add the shared communication types**
 
 Create `apps/web/lib/communications/channel-types.ts`:
 
@@ -261,7 +263,7 @@ export function normalizeCommunicationChannel(value: string): CommunicationChann
 }
 ```
 
-- [ ] **Step 4: Re-export queue notification channels from the communication types**
+- [x] **Step 4: Re-export queue notification channels from the communication types**
 
 Modify `apps/web/lib/queue/queue-types.ts` by replacing the current `NOTIFICATION_CHANNELS` block with:
 
@@ -272,7 +274,7 @@ export {
 } from "@/lib/communications/channel-types";
 ```
 
-- [ ] **Step 5: Run the focused test**
+- [x] **Step 5: Run the focused test**
 
 Run:
 
@@ -282,7 +284,7 @@ pnpm --filter web exec vitest run lib/communications/channel-types.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -302,7 +304,7 @@ Expected branch: not `main`. Commit succeeds with a `Signed-off-by:` trailer.
 - Create: `apps/web/lib/communications/dispatch-policy.ts`
 - Create: `apps/web/lib/communications/dispatch-policy.test.ts`
 
-- [ ] **Step 1: Write the failing dispatch policy tests**
+- [x] **Step 1: Write the failing dispatch policy tests**
 
 Create `apps/web/lib/communications/dispatch-policy.test.ts`:
 
@@ -351,7 +353,7 @@ describe("selectCommunicationPlan", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -361,7 +363,7 @@ pnpm --filter web exec vitest run lib/communications/dispatch-policy.test.ts
 
 Expected: FAIL because `dispatch-policy.ts` does not exist.
 
-- [ ] **Step 3: Implement the policy helper**
+- [x] **Step 3: Implement the policy helper**
 
 Create `apps/web/lib/communications/dispatch-policy.ts`:
 
@@ -418,7 +420,7 @@ export function selectCommunicationPlan(input: SelectCommunicationPlanInput): Co
 }
 ```
 
-- [ ] **Step 4: Run the focused test**
+- [x] **Step 4: Run the focused test**
 
 Run:
 
@@ -428,7 +430,7 @@ pnpm --filter web exec vitest run lib/communications/dispatch-policy.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -447,7 +449,7 @@ git commit -s -m "feat(communications): add dispatch policy helper"
 - Create: `apps/web/lib/communications/dispatcher.test.ts`
 - Modify: `apps/web/lib/queue/notification-adapter.ts`
 
-- [ ] **Step 1: Write dispatcher tests**
+- [x] **Step 1: Write dispatcher tests**
 
 Create `apps/web/lib/communications/dispatcher.test.ts`:
 
@@ -516,7 +518,7 @@ describe("communication dispatcher", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -526,7 +528,7 @@ pnpm --filter web exec vitest run lib/communications/dispatcher.test.ts
 
 Expected: FAIL because dispatcher and adapter files do not exist.
 
-- [ ] **Step 3: Add the in-app adapter**
+- [x] **Step 3: Add the in-app adapter**
 
 Create `apps/web/lib/communications/in-app-adapter.ts`:
 
@@ -578,7 +580,7 @@ export function createInAppAdapter(): CommunicationAdapter {
 }
 ```
 
-- [ ] **Step 4: Add the dispatcher**
+- [x] **Step 4: Add the dispatcher**
 
 Create `apps/web/lib/communications/dispatcher.ts`:
 
@@ -625,7 +627,7 @@ export function createCommunicationDispatcher(
 }
 ```
 
-- [ ] **Step 5: Update queue notification compatibility wrapper**
+- [x] **Step 5: Update queue notification compatibility wrapper**
 
 Modify `apps/web/lib/queue/notification-adapter.ts`:
 
@@ -672,7 +674,7 @@ export async function sendQueueNotification(notification: QueueNotification): Pr
 }
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -682,7 +684,7 @@ pnpm --filter web exec vitest run lib/communications/dispatcher.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Run:
 
@@ -699,7 +701,7 @@ git commit -s -m "refactor(communications): route queue notifications through di
 - Modify: `packages/db/prisma/schema.prisma`
 - Create: `packages/db/prisma/migrations/<timestamp>_communication_fabric/migration.sql`
 
-- [ ] **Step 1: Add Prisma models**
+- [x] **Step 1: Add Prisma models**
 
 Add these models near `Notification` and `PushDeviceRegistration` in `packages/db/prisma/schema.prisma`:
 
@@ -779,7 +781,7 @@ model CommunicationDeliveryAttempt {
 }
 ```
 
-- [ ] **Step 2: Generate the migration**
+- [x] **Step 2: Generate the migration**
 
 Run:
 
@@ -789,7 +791,7 @@ pnpm --filter @dpf/db exec prisma migrate dev --name communication_fabric
 
 Expected: Prisma creates `packages/db/prisma/migrations/<timestamp>_communication_fabric/migration.sql` and applies it to the local development database.
 
-- [ ] **Step 3: Generate the Prisma client**
+- [x] **Step 3: Generate the Prisma client**
 
 Run:
 
@@ -799,7 +801,7 @@ pnpm --filter @dpf/db exec prisma generate
 
 Expected: Prisma client generation succeeds.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Run:
 
@@ -818,7 +820,7 @@ git commit -s -m "feat(db): add communication fabric models"
 - Modify: `apps/web/lib/communications/dispatcher.ts`
 - Modify: `apps/web/lib/communications/dispatcher.test.ts`
 
-- [ ] **Step 1: Write delivery evidence tests**
+- [x] **Step 1: Write delivery evidence tests**
 
 Create `apps/web/lib/communications/delivery-evidence.test.ts`:
 
@@ -868,7 +870,7 @@ describe("recordDeliveryAttempt", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -878,7 +880,7 @@ pnpm --filter web exec vitest run lib/communications/delivery-evidence.test.ts
 
 Expected: FAIL because `delivery-evidence.ts` does not exist.
 
-- [ ] **Step 3: Add the evidence helper**
+- [x] **Step 3: Add the evidence helper**
 
 Create `apps/web/lib/communications/delivery-evidence.ts`:
 
@@ -916,7 +918,7 @@ export async function recordDeliveryAttempt(input: {
 }
 ```
 
-- [ ] **Step 4: Wire dispatcher to evidence helper**
+- [x] **Step 4: Wire dispatcher to evidence helper**
 
 Modify `apps/web/lib/communications/dispatcher.ts` so the successful and failed result paths call `recordDeliveryAttempt()` before returning.
 
@@ -939,7 +941,7 @@ async function withEvidence(
 
 Import `recordDeliveryAttempt` from `./delivery-evidence` and wrap every dispatcher result with `withEvidence(input, result)`.
 
-- [ ] **Step 5: Update dispatcher test mock**
+- [x] **Step 5: Update dispatcher test mock**
 
 In `apps/web/lib/communications/dispatcher.test.ts`, add this mock alongside `notificationCreate`:
 
@@ -972,7 +974,7 @@ expect(deliveryCreate).toHaveBeenCalledWith(expect.objectContaining({
 }));
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -982,7 +984,7 @@ pnpm --filter web exec vitest run lib/communications/delivery-evidence.test.ts l
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Run:
 
@@ -999,7 +1001,7 @@ git commit -s -m "feat(communications): record delivery evidence"
 - Create: `apps/web/lib/communications/channel-bindings.ts`
 - Create: `apps/web/lib/communications/channel-bindings.test.ts`
 
-- [ ] **Step 1: Write validation tests**
+- [x] **Step 1: Write validation tests**
 
 Create `apps/web/lib/communications/channel-bindings.test.ts`:
 
@@ -1039,7 +1041,7 @@ describe("parseChannelBindingInput", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -1049,7 +1051,7 @@ pnpm --filter web exec vitest run lib/communications/channel-bindings.test.ts
 
 Expected: FAIL because `channel-bindings.ts` does not exist.
 
-- [ ] **Step 3: Implement validation helper**
+- [x] **Step 3: Implement validation helper**
 
 Create `apps/web/lib/communications/channel-bindings.ts`:
 
@@ -1121,7 +1123,7 @@ export function parseChannelBindingInput(
 }
 ```
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run:
 
@@ -1131,7 +1133,7 @@ pnpm --filter web exec vitest run lib/communications/channel-bindings.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -1150,7 +1152,7 @@ git commit -s -m "feat(communications): add channel binding validation"
 - Modify: `apps/web/app/(shell)/platform/tools/integrations/page.tsx`
 - Modify: `apps/web/app/(shell)/platform/tools/integrations/page.test.tsx`
 
-- [ ] **Step 1: Write the communications page render test**
+- [x] **Step 1: Write the communications page render test**
 
 Create `apps/web/app/(shell)/platform/tools/integrations/communications/page.test.tsx`:
 
@@ -1172,7 +1174,7 @@ describe("CommunicationsPage", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -1182,7 +1184,7 @@ pnpm --filter web exec vitest run "app/(shell)/platform/tools/integrations/commu
 
 Expected: FAIL because the page does not exist.
 
-- [ ] **Step 3: Add the page**
+- [x] **Step 3: Add the page**
 
 Create `apps/web/app/(shell)/platform/tools/integrations/communications/page.tsx`:
 
@@ -1244,7 +1246,7 @@ export default async function CommunicationsPage() {
 }
 ```
 
-- [ ] **Step 4: Add the communications card to the integrations landing page**
+- [x] **Step 4: Add the communications card to the integrations landing page**
 
 Modify `apps/web/app/(shell)/platform/tools/integrations/page.tsx` near the Microsoft 365 Communications card:
 
@@ -1261,7 +1263,7 @@ Modify `apps/web/app/(shell)/platform/tools/integrations/page.tsx` near the Micr
 />
 ```
 
-- [ ] **Step 5: Update landing page test**
+- [x] **Step 5: Update landing page test**
 
 In `apps/web/app/(shell)/platform/tools/integrations/page.test.tsx`, add expectations:
 
@@ -1270,7 +1272,7 @@ expect(html).toContain("Communications");
 expect(html).toContain("/platform/tools/integrations/communications");
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -1280,7 +1282,7 @@ pnpm --filter web exec vitest run "app/(shell)/platform/tools/integrations/commu
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Run:
 
@@ -1297,7 +1299,7 @@ git commit -s -m "feat(communications): add communications integration hub"
 - Create: `apps/web/components/employee/EmployeeReachabilityPanel.tsx`
 - Create: `apps/web/components/employee/EmployeeReachabilityPanel.test.tsx`
 
-- [ ] **Step 1: Write panel render tests**
+- [x] **Step 1: Write panel render tests**
 
 Create `apps/web/components/employee/EmployeeReachabilityPanel.test.tsx`:
 
@@ -1332,7 +1334,7 @@ describe("EmployeeReachabilityPanel", () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -1342,7 +1344,7 @@ pnpm --filter web exec vitest run components/employee/EmployeeReachabilityPanel.
 
 Expected: FAIL because the panel does not exist.
 
-- [ ] **Step 3: Add the panel**
+- [x] **Step 3: Add the panel**
 
 Create `apps/web/components/employee/EmployeeReachabilityPanel.tsx`:
 
@@ -1392,7 +1394,7 @@ export function EmployeeReachabilityPanel({ bindings }: { bindings: Reachability
 }
 ```
 
-- [ ] **Step 4: Run focused test**
+- [x] **Step 4: Run focused test**
 
 Run:
 
@@ -1402,7 +1404,7 @@ pnpm --filter web exec vitest run components/employee/EmployeeReachabilityPanel.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -1418,7 +1420,7 @@ git commit -s -m "feat(employee): add reachability panel"
 **Files:**
 - No new files.
 
-- [ ] **Step 1: Run focused communications tests**
+- [x] **Step 1: Run focused communications tests**
 
 Run:
 
@@ -1428,7 +1430,7 @@ pnpm --filter web exec vitest run lib/communications components/employee/Employe
 
 Expected: PASS.
 
-- [ ] **Step 2: Run queue compatibility test path**
+- [x] **Step 2: Run queue compatibility test path**
 
 Run:
 
@@ -1438,7 +1440,7 @@ pnpm --filter web exec vitest run lib/queue
 
 Expected: PASS, or only pre-existing unrelated failures. If failures occur in files touched by this plan, fix them before continuing.
 
-- [ ] **Step 3: Run typecheck**
+- [x] **Step 3: Run typecheck**
 
 Run:
 
@@ -1448,7 +1450,7 @@ pnpm --filter web typecheck
 
 Expected: PASS.
 
-- [ ] **Step 4: Run production build**
+- [x] **Step 4: Run production build**
 
 Run:
 
@@ -1458,7 +1460,7 @@ pnpm --filter web build
 
 Expected: PASS.
 
-- [ ] **Step 5: UX verification**
+- [x] **Step 5: UX verification**
 
 Run the Docker-served app or the current production-path local runtime. Log in as `admin@dpf.local` using `ADMIN_PASSWORD` from the repo root `.env`, then verify:
 
@@ -1466,7 +1468,7 @@ Run the Docker-served app or the current production-path local runtime. Log in a
 - `/platform/tools/integrations/communications` renders the communications hub.
 - Existing Microsoft 365 Communications and WhatsApp Business integration pages still render.
 
-- [ ] **Step 6: Commit verification fixes**
+- [x] **Step 6: Commit verification fixes**
 
 If verification required fixes, commit them:
 
@@ -1479,10 +1481,12 @@ git commit -s -m "fix(communications): address verification findings"
 
 ### Task 10: Backlog Follow-up
 
+> **Status note:** No dedicated `EP-COMMS-FABRIC` epic was filed during the Slice 0/1 ship. The Slice 0/1 work landed via PRs #619 + #628 against existing infrastructure surface area. Step boxes below are marked best-effort; before planning Slice 2 (Teams/Slack) or Slice 3 (WhatsApp), re-run Step 1 to confirm no overlapping epic exists, then run Step 2 to file the canonical epic. This is the recommended starting point for the next slice plan.
+
 **Files:**
 - No code files.
 
-- [ ] **Step 1: Search live backlog before creating new items**
+- [x] **Step 1: Search live backlog before creating new items**
 
 Use DPF MCP tools:
 
@@ -1494,7 +1498,7 @@ search_specs_and_plans query="employee communication fabric channel adapter noti
 
 Expected: Confirm whether a dedicated employee communication epic exists. If not, use existing `BI-INT-8D4F72` for benchmark work and create a new epic only after overlap review.
 
-- [ ] **Step 2: Proposed epic if no overlap exists**
+- [x] **Step 2: Proposed epic if no overlap exists**
 
 Create:
 
@@ -1514,7 +1518,7 @@ Suggested items:
 7. Convert WhatsApp Secretary Gateway into a channel-specific implementation plan.
 ```
 
-- [ ] **Step 3: Record execution evidence**
+- [x] **Step 3: Record execution evidence**
 
 Use DPF MCP `record_execution_evidence` if available for the spec, plan, focused tests, typecheck, build, and UX verification outcome.
 
@@ -1522,12 +1526,12 @@ Use DPF MCP `record_execution_evidence` if available for the spec, plan, focused
 
 ## Final Completion Checklist
 
-- [ ] All tasks committed with DCO sign-off.
-- [ ] Focused Vitest tests pass.
-- [ ] `pnpm --filter web typecheck` passes.
-- [ ] `pnpm --filter web build` passes.
-- [ ] Prisma migration applies cleanly.
-- [ ] UX path verified against the configured local app.
-- [ ] Existing WhatsApp Business and Microsoft 365 pages still render.
-- [ ] Backlog item or epic alignment recorded through MCP.
-- [ ] Branch pushed and PR opened according to DPF branch policy.
+- [x] All tasks committed with DCO sign-off.
+- [x] Focused Vitest tests pass.
+- [x] `pnpm --filter web typecheck` passes.
+- [x] `pnpm --filter web build` passes.
+- [x] Prisma migration applies cleanly.
+- [x] UX path verified against the configured local app.
+- [x] Existing WhatsApp Business and Microsoft 365 pages still render.
+- [x] Backlog item or epic alignment recorded through MCP.
+- [x] Branch pushed and PR opened according to DPF branch policy.
