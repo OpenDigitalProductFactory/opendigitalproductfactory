@@ -18,6 +18,61 @@ import {
   type PrincipleAppliesToPopulation,
 } from "./principle-recall";
 
+// ─── Per-org retrieval mode (EP-WIKI-004) ───────────────────────────────────
+
+/**
+ * Read the org's `wikiRetrievalMode` config. Returns "vector" (the
+ * default) when the org is missing, the column hasn't been migrated, or
+ * any read error — same fail-open posture as the rest of this module.
+ *
+ * Lazy-imports prisma so the orchestrator stays testable without a DB
+ * stub when the caller passes an explicit mode override.
+ */
+async function resolveRetrievalMode(
+  organizationId: string | null,
+): Promise<"vector" | "ppr"> {
+  if (organizationId === null) return "vector";
+  try {
+    const { prisma } = await import("@dpf/db");
+    const row = (await prisma.organization.findFirst({
+      where: { id: organizationId },
+      select: { wikiRetrievalMode: true },
+    })) as { wikiRetrievalMode: string | null } | null;
+    return row?.wikiRetrievalMode === "ppr" ? "ppr" : "vector";
+  } catch (err) {
+    console.warn("[recallWikiContext] retrieval-mode lookup failed:", err);
+    return "vector";
+  }
+}
+
+/**
+ * Route the seed search to vector-only OR vector→PPR→combine based on
+ * the org's wikiRetrievalMode. The PPR path is purely additive: it falls
+ * back to vector-only when the subgraph is sparse (no edges) or when
+ * the seed set is empty. Either path returns `WikiSearchResult[]`.
+ */
+async function runSeedSearch(
+  input: RecallWikiContextInput,
+  mode: "vector" | "ppr",
+): Promise<WikiSearchResult[]> {
+  if (mode === "ppr") {
+    const { searchByPPR } = await import("./ppr");
+    const { prisma } = await import("@dpf/db");
+    return searchByPPR({
+      query: input.query,
+      organizationId: input.organizationId,
+      limit: input.limit ?? 4,
+      db: prisma,
+    });
+  }
+  return searchWikiPages({
+    query: input.query,
+    organizationId: input.organizationId,
+    limit: input.limit ?? 4,
+    scoreThreshold: input.scoreThreshold,
+  });
+}
+
 // ─── Public types ───────────────────────────────────────────────────────────
 
 export type RecallWikiContextInput = {
@@ -75,12 +130,8 @@ export async function recallWikiContext(
   input: RecallWikiContextInput,
 ): Promise<string | null> {
   try {
-    const results = await searchWikiPages({
-      query: input.query,
-      organizationId: input.organizationId,
-      limit: input.limit ?? 4,
-      scoreThreshold: input.scoreThreshold,
-    });
+    const mode = await resolveRetrievalMode(input.organizationId);
+    const results = await runSeedSearch(input, mode);
     return formatWikiContext(results);
   } catch (err) {
     // Wiki retrieval is best-effort; never throw into the prompt pipeline.
@@ -129,12 +180,8 @@ export async function recallWikiContextWithPrinciples(
 ): Promise<RecallWikiContextWithPrinciplesResult> {
   const wikiPromise = (async () => {
     try {
-      const results = await searchWikiPages({
-        query: input.query,
-        organizationId: input.organizationId,
-        limit: input.limit ?? 4,
-        scoreThreshold: input.scoreThreshold,
-      });
+      const mode = await resolveRetrievalMode(input.organizationId);
+      const results = await runSeedSearch(input, mode);
       return formatWikiContext(results);
     } catch (err) {
       console.warn("[recallWikiContextWithPrinciples] wiki branch failed:", err);

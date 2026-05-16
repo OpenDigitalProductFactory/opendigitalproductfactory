@@ -2480,6 +2480,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
           description: "When pageKind=principle: only return principles classified as public (safe to surface to customers / contributors).",
         },
         limit: { type: "number", description: "Max results (default 5)." },
+        retrievalMode: {
+          type: "string",
+          enum: ["vector", "ppr"],
+          description: "EP-WIKI-004: 'vector' for cosine-only ranking (default — same as before). 'ppr' adds a Personalized PageRank pass over the per-org WikiPageLink subgraph so pages linked from the seed set also surface. Falls back to vector if the subgraph is sparse or PPR fails. Default: the org's wikiRetrievalMode setting, which is 'vector' until explicitly switched.",
+        },
       },
       required: ["query"],
     },
@@ -9470,8 +9475,51 @@ export async function executeTool(
       const { searchWikiPages } = await import("@/lib/wiki/embeddings");
       const { prisma } = await import("@dpf/db");
       const org = await prisma.organization
-        .findFirst({ select: { id: true } })
+        .findFirst({ select: { id: true, wikiRetrievalMode: true } })
         .catch(() => null);
+      const organizationId = org?.id ?? null;
+
+      // EP-WIKI-004 retrieval mode: the per-call override wins; otherwise
+      // fall back to the org's wikiRetrievalMode setting; otherwise default
+      // to vector. Principle filters and PPR aren't compatible (PPR seeds
+      // from raw vector search; principle filters need the cosine-side
+      // tier/applies-to gating), so if any principle filter is supplied we
+      // force vector mode and let the caller know via the data shape.
+      const callerMode = typeof params["retrievalMode"] === "string" ? params["retrievalMode"] : undefined;
+      const principleFiltersPresent =
+        typeof params["tier"] === "string" ||
+        typeof params["appliesTo"] === "string" ||
+        typeof params["publicOnly"] === "boolean";
+      const orgMode = org?.wikiRetrievalMode === "ppr" ? "ppr" : "vector";
+      const mode: "vector" | "ppr" = principleFiltersPresent
+        ? "vector"
+        : callerMode === "ppr" || callerMode === "vector"
+        ? callerMode
+        : orgMode;
+
+      const limit = typeof params["limit"] === "number" ? params["limit"] : 5;
+
+      if (mode === "ppr") {
+        const { searchByPPR } = await import("@/lib/wiki/ppr");
+        const results = await searchByPPR({
+          query: String(params["query"] ?? ""),
+          organizationId,
+          limit,
+          db: prisma,
+        });
+        if (results.length === 0) {
+          return { success: true, message: "No matching wiki pages found.", data: { results: [], retrievalMode: mode } };
+        }
+        const summary = results
+          .map((r) => {
+            const tierFragment =
+              r.pageKind === "principle" && r.principleTier ? `, ${r.principleTier}` : "";
+            return `${r.slug} (${r.pageKind}, ${r.source}${tierFragment}) — ${r.title} (combined ${Math.round(r.combinedScore * 100)}%, cosine ${Math.round(r.cosineScore * 100)}%, PPR ${r.pprScore.toFixed(4)})`;
+          })
+          .join("\n");
+        return { success: true, message: summary, data: { results, retrievalMode: mode } };
+      }
+
       // Translate the ergonomic public schema fields (tier, appliesTo,
       // publicOnly) into canonical principle filter args. The public MCP
       // surface uses the short names so authors don't have to remember
@@ -9480,9 +9528,9 @@ export async function executeTool(
       // chief-architect review applied to the implementation plan.
       const searchArgs: Parameters<typeof searchWikiPages>[0] = {
         query: String(params["query"] ?? ""),
-        organizationId: org?.id ?? null,
+        organizationId,
         pageKind: typeof params["pageKind"] === "string" ? params["pageKind"] : undefined,
-        limit: typeof params["limit"] === "number" ? params["limit"] : 5,
+        limit,
       };
       if (typeof params["tier"] === "string") {
         searchArgs.principleTier = params["tier"];
@@ -9495,7 +9543,7 @@ export async function executeTool(
       }
       const results = await searchWikiPages(searchArgs);
       if (results.length === 0) {
-        return { success: true, message: "No matching wiki pages found.", data: { results: [] } };
+        return { success: true, message: "No matching wiki pages found.", data: { results: [], retrievalMode: mode } };
       }
       const summary = results
         .map((r) => {
@@ -9506,7 +9554,7 @@ export async function executeTool(
           return `${r.slug} (${r.pageKind}, ${r.source}${tierFragment}) — ${r.title} (${Math.round(r.score * 100)}% match)`;
         })
         .join("\n");
-      return { success: true, message: summary, data: { results } };
+      return { success: true, message: summary, data: { results, retrievalMode: mode } };
     }
 
     case "principle_decide": {
