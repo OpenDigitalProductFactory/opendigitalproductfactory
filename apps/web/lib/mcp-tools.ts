@@ -2113,6 +2113,42 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "proposal",
     sideEffect: true,
   },
+  {
+    name: "propose_skill_improvement",
+    description:
+      "Propose a content change to a specific coworker skill (e.g. tightening instructions, fixing a stale " +
+      "reference). Use when you have observed the current skill prompt produce the wrong behavior and you can " +
+      "draft a better version. Submits an ImprovementProposal(category='skill', targetSkillId=…) that a human " +
+      "reviews on /platform/ai/skills.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        skillId: {
+          type: "string",
+          description: "The SkillDefinition.skillId (business id) the proposal targets, e.g. 'build-page'.",
+        },
+        title: { type: "string", description: "Short title for the change (max 100 chars)" },
+        description: { type: "string", description: "Why the change is needed; cite the friction or failure" },
+        proposedContent: {
+          type: "string",
+          description: "Full proposed SKILL.md body (replaces the current content if approved)",
+        },
+        severity: {
+          type: "string",
+          enum: ["low", "medium", "high", "critical"],
+          description: "Impact severity (default: medium)",
+        },
+        observedFriction: {
+          type: "string",
+          description: "What you observed that prompted this change",
+        },
+      },
+      required: ["skillId", "title", "description", "proposedContent"],
+    },
+    requiredCapability: null,
+    executionMode: "proposal",
+    sideEffect: true,
+  },
   // ─── Provider Management ────────────────────────────────────────────────────
   {
     name: "add_provider",
@@ -2525,6 +2561,63 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     executionMode: "immediate",
     sideEffect: false,
+  },
+  // ─── EP-WIKI-001 Phase 2.3b: Wiki ingest pipeline ──────────────────────────
+  {
+    name: "wiki_ingest",
+    description:
+      "Ingest a raw source (markdown file on disk) into the wiki: upsert the RawSource row, run the three-pass LLM extraction (abstract, claim, stance/heuristic), and optionally commit the proposal as draft overlay pages under the requesting org. Kernel pages stay PR-only (spec §4). Use when the user wants to import an article into the kernel knowledge surface, or to preview what the LLM would extract from a source without writing anything. Two modes: 'propose' returns the structured proposal for review without DB writes; 'commit' runs the full pipeline and lands drafts on /wiki?status=all.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: {
+          type: "string",
+          description:
+            "Absolute or process-relative path to the markdown source file. Files under docs/founder-kernel/raw-sources/ get sourceKey + sourceType derived from the path; for ad-hoc files outside that tree, pass sourceKey and sourceType explicitly.",
+        },
+        sourceKey: {
+          type: "string",
+          description:
+            "Stable, idempotent key for the source (default: derived from filePath parent/stem). Re-ingesting the same key updates the existing RawSource row in place.",
+        },
+        sourceType: {
+          type: "string",
+          enum: ["paper", "article", "spec", "doc", "framework", "external-url"],
+          description:
+            "Source type override (default: derived from the parent directory name when it matches the registry).",
+        },
+        mode: {
+          type: "string",
+          enum: ["propose", "commit"],
+          description:
+            "'propose' returns the WikiDiffProposal without DB writes (good for human-in-the-loop review). 'commit' writes draft overlay pages and revisions. Default: 'propose'.",
+        },
+        acceptThreshold: {
+          type: "number",
+          description:
+            "Minimum claim confidence to commit. Below this, claims are skipped (visible as skippedLowConfidence). Default 0.5. Ignored in propose mode.",
+        },
+        maxBodyDeltaRatio: {
+          type: "number",
+          description:
+            "Cap on body growth per existing page in one commit cycle (default 0.3 = 30% per spec §6). Pages whose append would exceed the cap surface as errors instead of being auto-committed; the reviewer can resolve via manual edit.",
+        },
+        organizationId: {
+          type: "string",
+          description:
+            "Org for the overlay commit. Default: the current session's org. Kernel-write attempts (organizationId resolves null) fail in commit mode.",
+        },
+      },
+      required: ["filePath"],
+    },
+    requiredCapability: null,
+    executionMode: "proposal",
+    sideEffect: true,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
   },
   // ─── Knowledge Search ──────────────────────────────────────────────────────
   {
@@ -8763,6 +8856,56 @@ export async function executeTool(
       ).catch(() => {});
     }
 
+    case "propose_skill_improvement": {
+      const skillId = String(params["skillId"] ?? "").trim();
+      const proposedContent = String(params["proposedContent"] ?? "").trim();
+      const title = String(params["title"] ?? "").trim();
+      const description = String(params["description"] ?? "").trim();
+      if (!skillId || !proposedContent || !title || !description) {
+        return {
+          success: false,
+          error: "Missing required fields",
+          message:
+            "propose_skill_improvement requires skillId, title, description, and proposedContent.",
+        };
+      }
+      const sev = String(params["severity"] ?? "medium");
+      const severity = (["low", "medium", "high", "critical"].includes(sev) ? sev : "medium") as
+        | "low"
+        | "medium"
+        | "high"
+        | "critical";
+      const observedFriction =
+        typeof params["observedFriction"] === "string" ? params["observedFriction"] : null;
+      try {
+        const { submitSkillImprovementProposal } = await import("@/lib/skills/proposals");
+        const result = await submitSkillImprovementProposal({
+          skillId,
+          proposedContent,
+          title,
+          description,
+          severity,
+          submittedById: userId,
+          agentId: context?.agentId ?? "unknown",
+          routeContext: context?.routeContext ?? "unknown",
+          threadId: context?.threadId ?? null,
+          observedFriction,
+        });
+        return {
+          success: true,
+          entityId: result.proposalId,
+          message: `Skill proposal ${result.proposalId} created for ${skillId}. A reviewer must approve before it takes effect.`,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        return {
+          success: false,
+          error: msg,
+          message: `Could not create skill proposal: ${msg}`,
+        };
+      }
+    }
+
     case "add_provider": {
       const providerId = String(params["providerId"] ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
       if (!providerId) return { success: false, error: "Invalid provider ID", message: "Provider ID is required" };
@@ -9548,6 +9691,116 @@ export async function executeTool(
         .join("\n");
 
       return { success: true, message: summary, data: { runs } };
+    }
+
+    case "wiki_ingest": {
+      // Phase 2.3b — glue 2.1 source ingest + 2.2 proposal engine +
+      // 2.3a commit step into one MCP-callable action. Production
+      // inference adapter wraps utilityInfer (pass 1) + routeAndCall
+      // (passes 2 + 3); the InferenceCallable injection lets tests
+      // stub deterministically.
+      const filePath = typeof params["filePath"] === "string" ? params["filePath"] : null;
+      if (!filePath) {
+        return {
+          success: false,
+          message: "wiki_ingest requires `filePath`.",
+          error: "Missing filePath",
+        };
+      }
+      const mode = typeof params["mode"] === "string" && params["mode"] === "commit" ? "commit" : "propose";
+      const sourceKey = typeof params["sourceKey"] === "string" ? params["sourceKey"] : undefined;
+      const sourceType = typeof params["sourceType"] === "string" ? params["sourceType"] : undefined;
+      const acceptThreshold =
+        typeof params["acceptThreshold"] === "number" ? params["acceptThreshold"] : undefined;
+      const maxBodyDeltaRatio =
+        typeof params["maxBodyDeltaRatio"] === "number" ? params["maxBodyDeltaRatio"] : undefined;
+
+      const { prisma } = await import("@dpf/db");
+      const orgIdParam = typeof params["organizationId"] === "string" ? params["organizationId"] : null;
+      let organizationId: string | null = orgIdParam;
+      if (!organizationId) {
+        const currentOrg = await prisma.organization
+          .findFirst({ select: { id: true } })
+          .catch(() => null);
+        organizationId = currentOrg?.id ?? null;
+      }
+      if (mode === "commit" && !organizationId) {
+        return {
+          success: false,
+          message:
+            "wiki_ingest mode=commit requires an organizationId — kernel pages are PR-only (spec §4). Run in mode=propose instead, or supply an organizationId.",
+          error: "Kernel write refused",
+        };
+      }
+
+      const { runIngestPipeline, summarizePipelineResult } = await import(
+        "@/lib/wiki/ingest-pipeline"
+      );
+      const { createProductionInference } = await import(
+        "@/lib/wiki/inference-adapter"
+      );
+
+      // Pull kernel version from the manifest for the audit row.
+      const kernelVersion = await (async () => {
+        try {
+          const fs = await import("fs/promises");
+          const path = await import("path");
+          const manifestPath = path.join(
+            process.cwd(),
+            "docs",
+            "founder-kernel",
+            "manifest.json",
+          );
+          const raw = await fs.readFile(manifestPath, "utf8");
+          return (JSON.parse(raw) as { kernelVersion?: string }).kernelVersion ?? null;
+        } catch {
+          return null;
+        }
+      })();
+
+      // sourceType must be one of the registry values when supplied; the
+      // pipeline rejects unknown strings, so we pass through whatever the
+      // caller gave us and let the source-layer surface the error.
+      const sourceInput = {
+        filePath,
+        ...(sourceKey ? { sourceKey } : {}),
+        ...(sourceType
+          ? {
+              sourceType: sourceType as
+                | "paper"
+                | "article"
+                | "spec"
+                | "doc"
+                | "framework"
+                | "external-url",
+            }
+          : {}),
+        organizationId: mode === "commit" ? organizationId : null,
+        isKernel: false,
+        kernelVersion,
+      };
+
+      try {
+        const result = await runIngestPipeline({
+          source: sourceInput,
+          organizationId: mode === "commit" ? organizationId : null,
+          mode,
+          infer: createProductionInference({ taskType: "wiki_proposal" }),
+          ...(acceptThreshold !== undefined ? { acceptThreshold } : {}),
+          ...(maxBodyDeltaRatio !== undefined ? { maxBodyDeltaRatio } : {}),
+        });
+        return {
+          success: true,
+          message: summarizePipelineResult(result),
+          data: result,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          message: `wiki_ingest failed: ${(err as Error).message ?? String(err)}`,
+          error: (err as Error).message ?? String(err),
+        };
+      }
     }
 
     case "search_knowledge": {

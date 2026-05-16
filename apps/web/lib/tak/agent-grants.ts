@@ -86,6 +86,12 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   wiki_query: ["registry_read"],
   // EP-WIKI-001 Phase 4b2b: on-demand wiki lint trigger
   wiki_lint: ["registry_read"],
+  // EP-WIKI-001 Phase 2.3b: end-to-end ingest pipeline (file → RawSource →
+  // LLM proposal → draft overlay pages). Requires `registry_write` because
+  // commit-mode writes WikiPage / WikiPageRevision / WikiPageSource rows
+  // under the org's overlay. Kernel pages remain PR-only at the engine
+  // layer per spec §4.
+  wiki_ingest: ["registry_write"],
   // Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support
   // over governance principles. Read-only — returns scored options with a
   // contribution ledger; never executes the recommended option itself.
@@ -153,6 +159,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   compare_versions: ["file_read"],
   propose_file_change: ["file_read"],
   propose_improvement: ["decision_record_create"],
+  propose_skill_improvement: ["decision_record_create"],
 
   // Code graph (file-level coverage today; symbol-level deferred)
   get_code_graph_freshness: ["code_graph_read"],

@@ -1035,6 +1035,7 @@ When generating or reviewing UI code, enforce these rules:
       "This page displays the platform user documentation. The documentation specialist agent (AGT-904) assists with Mermaid diagram creation and validation, document structure review, cross-reference integrity checks, and renderer compatibility analysis. It optimizes for accuracy, self-containment, and renderability across GitHub, VS Code, and GitBook.",
     domainTools: [
       "wiki_query",
+      "wiki_ingest",
       "search_knowledge",
       "search_knowledge_base",
       "search_project_files",
