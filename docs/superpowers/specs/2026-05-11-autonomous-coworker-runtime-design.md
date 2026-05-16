@@ -604,6 +604,20 @@ The output should be:
 
 This closes the loop from runtime observation to governed backlog improvement.
 
+### 7.7 Channel fabric integration
+
+The [Employee Communication Fabric](2026-05-15-employee-communication-fabric-design.md) is the transport layer that delivers prompts, action requests, and step-up challenges to humans through Teams, Slack, WhatsApp, email, push, and webhook channels. This runtime is the work layer. Four contracts bind them. The fabric spec mirrors this section in its §14.
+
+**Inbound channel events that create `TaskRun`s.** When a fabric adapter normalizes an inbound webhook and `requiresTaskRun()` (§7.1) returns true, the adapter invokes `tasks/submit` (§13.2) — the same MCP JSON-RPC method any external client uses. The adapter's bearer token resolves to a `Principal`; for unknown senders this is the secretary service principal (`Principal{kind:"service_secretary"}`) with public-safe scope, for bound employees it is the employee principal with full authority intersection. **There is no "Secretary Orchestrator" component** — the channel adapter does identity/policy resolution; this runtime does the work. The fabric's `CommunicationChannelSession.taskRunId` points at the run; the run does not point at the session.
+
+**Step-up over the same channel uses `auth-required`.** When this runtime moves a `TaskRun` to `auth-required` (§5.4 + §5.6), the fabric adapter generates a `ChannelStepUpChallenge` (fabric-owned entity), sends a templated message asking for a single-use nonce, and matches the inbound reply against open challenges. On consumption the runtime advances back to `working`; on expiry or failed-attempts cap the runtime ends as `rejected` with `exceptionClass = "human-rejected"`. The challenge is also reusable for email magic-link confirmations and SMS OTP — adapter-specific rendering, channel-agnostic entity.
+
+**Fabric failures map to this runtime's failure taxonomy.** The fabric does not invent a parallel `exceptionClass` enum. Inbound mappings (full table in fabric §14.3): untrusted-channel free text → `prompt-injection-suspected`; outbound outside Meta's 24-hour window without approved template → `policy-violation`; unbound number attempts bound-employee action → `missing-data`; step-up timeout → `human-rejected`; adapter send exception → `tool-error`; channel binding revoked mid-run → `tool-denied`. Gateway-level rejections (webhook signature mismatch, replay) do not create `TaskRun`s and are recorded as gateway audits only.
+
+**Outbound proactive sends are `source="proactive"` runs.** When this runtime initiates an outbound message — scheduled reminder, SLA-breach nudge, follow-up — the run carries `source="proactive"` (§5.2 enum value) and the outbound call goes through the fabric dispatcher. WhatsApp specifically requires an approved Message Template outside the 24-hour customer-service window; the runtime treats template-required-but-not-available as `policy-violation`, not as a tool-execution success.
+
+Substantive changes to this section must update fabric §14, and vice versa.
+
 ## 8. UI and Operator Experience
 
 The UI principle is:
