@@ -226,6 +226,62 @@ describe("coworker self-assessment tools", () => {
     });
   });
 
+  it.each(["prompt", "convention", "code", "other"] as const)(
+    "accepts %s as a capability-need kind through the MCP tool",
+    async (kind) => {
+      const result = await executeTool(
+        "submit_coworker_capability_need",
+        {
+          verdict: "gaps",
+          confidence: "medium",
+          missionSummary: "Mission.",
+          capabilitySummary: "Capability.",
+          needs: [
+            {
+              kind,
+              severity: "important",
+              need: `Need a ${kind} improvement.`,
+              blocks: "Blocked otherwise.",
+            },
+          ],
+        },
+        "user-1",
+        { agentId: "AGT-WS-MARKETING", routeContext: "/customer/marketing" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(submitCoworkerSelfAssessment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          needs: [expect.objectContaining({ kind })],
+        }),
+      );
+    },
+  );
+
+  it("rejects an unknown capability-need kind through the MCP tool", async () => {
+    const result = await executeTool(
+      "submit_coworker_capability_need",
+      {
+        verdict: "gaps",
+        confidence: "medium",
+        missionSummary: "Mission.",
+        capabilitySummary: "Capability.",
+        needs: [
+          {
+            kind: "made-up",
+            severity: "important",
+            need: "Should reject.",
+            blocks: "Blocked.",
+          },
+        ],
+      },
+      "user-1",
+      { agentId: "AGT-WS-MARKETING", routeContext: "/customer/marketing" },
+    );
+
+    expect(result.success).toBe(false);
+  });
+
   it("lists needs for the execution agent identity", async () => {
     const result = await executeTool(
       "list_my_capability_needs",

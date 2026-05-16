@@ -266,4 +266,49 @@ describe("assembleSystemPrompt", () => {
     expect(boundaryIdx).toBeGreaterThanOrEqual(0);
     expect(boundaryIdx).toBeLessThan(wikiIdx);
   });
+
+  // ─── Block 5 governed Hermes learning Slice 1: coworker skills ──────────────
+
+  it("renders an Available coworker skills block when skills are supplied", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...minimalInput,
+      skills: [
+        { skillId: "build-page", label: "Build a Page", description: "Scaffold a new route page." },
+        { skillId: "review-pr", label: "Review PR", description: "Walk a PR diff." },
+      ],
+    });
+    expect(prompt).toContain("Available coworker skills:");
+    expect(prompt).toContain("- build-page: Build a Page - Scaffold a new route page.");
+    expect(prompt).toContain("- review-pr: Review PR - Walk a PR diff.");
+  });
+
+  it("omits the skills block when no skills are supplied", async () => {
+    const prompt = await assembleSystemPrompt(minimalInput);
+    expect(prompt).not.toContain("Available coworker skills:");
+  });
+
+  it("omits the skills block when an empty skills array is supplied", async () => {
+    const prompt = await assembleSystemPrompt({ ...minimalInput, skills: [] });
+    expect(prompt).not.toContain("Available coworker skills:");
+  });
+
+  it("places the skills block on the dynamic side of the cache boundary, after domain tools", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...fullInput,
+      skills: [{ skillId: "x", label: "X", description: "Does X." }],
+    });
+    const boundaryIdx = indexOf(prompt, "DYNAMIC_BOUNDARY");
+    const toolsIdx = indexOf(prompt, "Available domain tools");
+    const skillsIdx = indexOf(prompt, "Available coworker skills");
+    expect(boundaryIdx).toBeLessThan(skillsIdx);
+    expect(toolsIdx).toBeLessThan(skillsIdx);
+  });
+
+  it("leaves existing domain tools behavior unchanged when skills are also present", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...fullInput,
+      skills: [{ skillId: "x", label: "X", description: "Does X." }],
+    });
+    expect(prompt).toContain("Available domain tools: search_products, create_backlog_item");
+  });
 });

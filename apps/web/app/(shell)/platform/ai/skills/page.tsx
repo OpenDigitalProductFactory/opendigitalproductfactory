@@ -10,16 +10,18 @@ import {
   getFinishingPassActivity,
   getSpecialistExecutions,
   getSkillsObservatoryStats,
+  getSkillTelemetrySummary,
 } from "@/lib/actions/skills-observatory";
 
 export default async function SkillsObservatoryPage() {
-  const [catalogSkills, catalogStats, skills, finishingPasses, executions, stats] = await Promise.all([
+  const [catalogSkills, catalogStats, skills, finishingPasses, executions, stats, telemetry] = await Promise.all([
     getSkillCatalog(),
     getSkillCatalogStats(),
     getSkillsCatalog(),
     getFinishingPassActivity(),
     getSpecialistExecutions(),
     getSkillsObservatoryStats(),
+    getSkillTelemetrySummary(),
   ]);
 
   return (
@@ -60,6 +62,7 @@ export default async function SkillsObservatoryPage() {
           finishingPasses={JSON.parse(JSON.stringify(finishingPasses))}
           specialistExecutions={JSON.parse(JSON.stringify(executions))}
           stats={stats}
+          telemetry={telemetry}
         />
       </div>
     </div>

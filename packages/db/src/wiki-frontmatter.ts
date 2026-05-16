@@ -41,6 +41,14 @@ export type WikiPageFrontmatter = {
   principleDimensionVector?: Record<string, number>;
   principleDimensions?: string[];
   principleAppliesTo?: string[];
+  /** Consumer archetype — see spec §8A and §8A.1 coherence matrix. */
+  principleConsumerArchetype?: string;
+  /**
+   * Route/domain context slugs (kebab-case) scoping a `route-domain-specific`
+   * archetype. Empty / omitted for other archetypes. Required (≥1 entry) when
+   * `principleConsumerArchetype = "route-domain-specific"`.
+   */
+  principleConsumerContexts?: string[];
   principlePublic?: boolean;
   principlePublicRationale?: string;
 };

@@ -9,6 +9,15 @@ principleDimensionVector: {"long_term_maintainability": 1.0, "schema_grounding":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+# principleConsumerArchetype answers "who is expected to consume this principle?"
+# Independent axis from principleAppliesTo. Coherence rules (spec §8A.1):
+#   - universal: requires ≥2 populations in principleAppliesTo (humans + agents).
+#   - ai-coworker-universal | generalist | specialist: must NOT include "human".
+#   - route-domain-specific: must list ≥1 principleConsumerContexts slug below.
+principleConsumerArchetype: ai-coworker-universal
+# principleConsumerContexts is REQUIRED only when archetype = route-domain-specific.
+# Slugs are governed lowercase kebab-case (e.g., build-studio, marketing, compliance).
+principleConsumerContexts: []
 principlePublic: false
 principlePublicRationale: ""
 sources:

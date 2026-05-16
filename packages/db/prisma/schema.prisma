@@ -7163,15 +7163,19 @@ model WikiPage {
   // docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md §9.
   // Storage-layer accepts incomplete principle data; required-field gating
   // lives in lint detectors (spec §14).
-  principleTier            String? // commandment | core | contextual
-  principleDirection       String?  @db.Text
-  principleWeight          Float?
-  principleWeightRationale String?  @db.Text
-  principleDimensionVector Json?
-  principleDimensions      String[] @default([])
-  principleAppliesTo       String[] @default([]) // in_platform_coworker | external_coding_agent | human
-  principlePublic          Boolean  @default(false)
-  principlePublicRationale String?  @db.Text
+  principleTier              String? // commandment | core | contextual
+  principleDirection         String?  @db.Text
+  principleWeight            Float?
+  principleWeightRationale   String?  @db.Text
+  principleDimensionVector   Json?
+  principleDimensions        String[] @default([])
+  principleAppliesTo         String[] @default([]) // in_platform_coworker | external_coding_agent | human
+  // Consumer archetype + contexts — spec §8A. Independent axis from
+  // principleAppliesTo; coherence rules in §8A.1 are enforced by lint.
+  principleConsumerArchetype String? // universal | ai-coworker-universal | generalist | specialist | route-domain-specific
+  principleConsumerContexts  String[] @default([]) // governed kebab-case slugs (e.g., "build-studio")
+  principlePublic            Boolean  @default(false)
+  principlePublicRationale   String?  @db.Text
 
   @@unique([organizationId, slug])
   @@index([slug])
@@ -7181,6 +7185,7 @@ model WikiPage {
   @@index([organizationId])
   @@index([isKernel])
   @@index([principleTier])
+  @@index([principleConsumerArchetype])
   @@index([principlePublic])
 }
 

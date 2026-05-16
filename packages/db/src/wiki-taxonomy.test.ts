@@ -9,6 +9,8 @@ import {
   WIKI_PAGE_STATUSES,
   PRINCIPLE_TIERS,
   PRINCIPLE_APPLIES_TO,
+  PRINCIPLE_CONSUMER_ARCHETYPES,
+  PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES,
   PRINCIPLE_DIMENSIONS,
   PRINCIPLE_TIER_DEFAULT_WEIGHT,
   PRINCIPLE_TIER_CAPS,
@@ -17,6 +19,8 @@ import {
   isWikiPageStatus,
   isPrincipleTier,
   isPrincipleAppliesTo,
+  isPrincipleConsumerArchetype,
+  isPrincipleConsumerContextSlug,
   isPrincipleDimension,
 } from "./wiki-taxonomy";
 
@@ -74,6 +78,52 @@ describe("wiki-taxonomy: PRINCIPLE_APPLIES_TO", () => {
       "external_coding_agent",
       "human",
     ]);
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_CONSUMER_ARCHETYPES", () => {
+  it("orders archetypes from broadest to most-scoped per spec section 8A", () => {
+    expect(PRINCIPLE_CONSUMER_ARCHETYPES).toEqual([
+      "universal",
+      "ai-coworker-universal",
+      "generalist",
+      "specialist",
+      "route-domain-specific",
+    ]);
+  });
+
+  it("contains exactly five archetypes", () => {
+    expect(PRINCIPLE_CONSUMER_ARCHETYPES).toHaveLength(5);
+  });
+
+  it("places universal first so retrieval pulls broadest-scope principles first", () => {
+    expect(PRINCIPLE_CONSUMER_ARCHETYPES[0]).toBe("universal");
+  });
+
+  it("places route-domain-specific last so route filtering is the narrowing step", () => {
+    expect(
+      PRINCIPLE_CONSUMER_ARCHETYPES[PRINCIPLE_CONSUMER_ARCHETYPES.length - 1],
+    ).toBe("route-domain-specific");
+  });
+});
+
+describe("wiki-taxonomy: PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES", () => {
+  it("documents at least the seven canonical route/domain contexts from spec section 8A", () => {
+    for (const slug of [
+      "build-studio",
+      "marketing",
+      "compliance",
+      "discovery",
+      "finance",
+      "storefront",
+      "portfolio",
+    ]) {
+      expect(PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES).toContain(slug);
+    }
+  });
+
+  it("places build-studio first since it is the most-cited consumer context in the kernel", () => {
+    expect(PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES[0]).toBe("build-studio");
   });
 });
 
@@ -195,6 +245,55 @@ describe("wiki-taxonomy: isPrincipleAppliesTo", () => {
     expect(isPrincipleAppliesTo("agent")).toBe(false);
     expect(isPrincipleAppliesTo("all")).toBe(false); // `all` is not in the registry per spec section 5.3
     expect(isPrincipleAppliesTo(null)).toBe(false);
+  });
+});
+
+describe("wiki-taxonomy: isPrincipleConsumerArchetype", () => {
+  it("accepts every documented archetype", () => {
+    for (const archetype of PRINCIPLE_CONSUMER_ARCHETYPES) {
+      expect(isPrincipleConsumerArchetype(archetype)).toBe(true);
+    }
+  });
+
+  it("rejects unknown archetypes and non-strings", () => {
+    expect(isPrincipleConsumerArchetype("aico")).toBe(false);
+    expect(isPrincipleConsumerArchetype("Universal")).toBe(false); // case-sensitive
+    expect(isPrincipleConsumerArchetype("")).toBe(false);
+    expect(isPrincipleConsumerArchetype(null)).toBe(false);
+    expect(isPrincipleConsumerArchetype(undefined)).toBe(false);
+    expect(isPrincipleConsumerArchetype(0)).toBe(false);
+  });
+});
+
+describe("wiki-taxonomy: isPrincipleConsumerContextSlug", () => {
+  it("accepts every documented example slug", () => {
+    for (const slug of PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES) {
+      expect(isPrincipleConsumerContextSlug(slug)).toBe(true);
+    }
+  });
+
+  it("accepts arbitrary kebab-case slugs since contexts are governed slugs, not a closed enum", () => {
+    expect(isPrincipleConsumerContextSlug("ops-runbooks")).toBe(true);
+    expect(isPrincipleConsumerContextSlug("hr")).toBe(true);
+    expect(isPrincipleConsumerContextSlug("ai-routing")).toBe(true);
+  });
+
+  it("rejects malformed slugs", () => {
+    expect(isPrincipleConsumerContextSlug("")).toBe(false);
+    expect(isPrincipleConsumerContextSlug("Build-Studio")).toBe(false); // uppercase
+    expect(isPrincipleConsumerContextSlug("build_studio")).toBe(false); // underscore
+    expect(isPrincipleConsumerContextSlug("build studio")).toBe(false); // space
+    expect(isPrincipleConsumerContextSlug("-leading")).toBe(false); // leading hyphen
+    expect(isPrincipleConsumerContextSlug("trailing-")).toBe(false); // trailing hyphen
+    expect(isPrincipleConsumerContextSlug("double--hyphen")).toBe(false);
+    expect(isPrincipleConsumerContextSlug("build.studio")).toBe(false); // dot
+  });
+
+  it("rejects non-string inputs", () => {
+    expect(isPrincipleConsumerContextSlug(null)).toBe(false);
+    expect(isPrincipleConsumerContextSlug(undefined)).toBe(false);
+    expect(isPrincipleConsumerContextSlug(42)).toBe(false);
+    expect(isPrincipleConsumerContextSlug({})).toBe(false);
   });
 });
 

@@ -244,6 +244,158 @@ describe("seed-wiki-kernel: extractPrinciplePayload", () => {
     expect(payload.principleAppliesTo).toEqual(["human"]);
     expect(payload.principleDirection).toBeUndefined();
   });
+
+  it("forwards principleConsumerArchetype + principleConsumerContexts for principle pages", () => {
+    const payload = extractPrinciplePayload({
+      title: "Build Studio: design review required",
+      pageKind: "principle",
+      principleTier: "core",
+      principleDirection: "Build Studio runs require a passing design review.",
+      principleAppliesTo: ["in_platform_coworker"],
+      principleConsumerArchetype: "route-domain-specific",
+      principleConsumerContexts: ["build-studio"],
+    });
+    expect(payload.principleConsumerArchetype).toBe("route-domain-specific");
+    expect(payload.principleConsumerContexts).toEqual(["build-studio"]);
+  });
+
+  it("forwards empty principleConsumerContexts for non-route archetypes", () => {
+    const payload = extractPrinciplePayload({
+      title: "Specialization Over Generalization",
+      pageKind: "principle",
+      principleTier: "core",
+      principleAppliesTo: ["in_platform_coworker"],
+      principleConsumerArchetype: "ai-coworker-universal",
+      principleConsumerContexts: [],
+    });
+    expect(payload.principleConsumerArchetype).toBe("ai-coworker-universal");
+    expect(payload.principleConsumerContexts).toEqual([]);
+  });
+
+  it("throws when principleConsumerArchetype is outside the registry", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["in_platform_coworker"],
+        principleConsumerArchetype: "imaginary-archetype",
+      }),
+    ).toThrow(/imaginary-archetype/);
+  });
+
+  it("throws when route-domain-specific has no consumer contexts", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["in_platform_coworker"],
+        principleConsumerArchetype: "route-domain-specific",
+        principleConsumerContexts: [],
+      }),
+    ).toThrow(/route-domain-specific.*at least one/i);
+  });
+
+  it("throws when principleConsumerContexts contains a malformed slug", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["in_platform_coworker"],
+        principleConsumerArchetype: "route-domain-specific",
+        principleConsumerContexts: ["Build_Studio"], // uppercase + underscore
+      }),
+    ).toThrow(/Build_Studio/);
+  });
+
+  // Spec §8A.1 coherence matrix — belt-and-suspenders alongside the
+  // principle-incoherent-archetype-applies-to lint detector. Seed-time
+  // rejection prevents an incoherent page from ever entering the DB.
+
+  it("throws when ai-coworker-universal includes human in principleAppliesTo", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["human", "in_platform_coworker"],
+        principleConsumerArchetype: "ai-coworker-universal",
+      }),
+    ).toThrow(/coherence|incoherent|human/i);
+  });
+
+  it("throws when generalist includes human in principleAppliesTo", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["human"],
+        principleConsumerArchetype: "generalist",
+      }),
+    ).toThrow(/coherence|incoherent|human/i);
+  });
+
+  it("throws when specialist includes human in principleAppliesTo", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["human"],
+        principleConsumerArchetype: "specialist",
+      }),
+    ).toThrow(/coherence|incoherent|human/i);
+  });
+
+  it("throws when universal has only one population in principleAppliesTo", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "T",
+        pageKind: "principle",
+        principleTier: "commandment",
+        principleAppliesTo: ["human"],
+        principleConsumerArchetype: "universal",
+      }),
+    ).toThrow(/universal.*at least two|coherence/i);
+  });
+
+  it("accepts universal with two or more populations", () => {
+    const payload = extractPrinciplePayload({
+      title: "T",
+      pageKind: "principle",
+      principleTier: "commandment",
+      principleAppliesTo: ["human", "in_platform_coworker"],
+      principleConsumerArchetype: "universal",
+    });
+    expect(payload.principleConsumerArchetype).toBe("universal");
+  });
+
+  it("accepts route-domain-specific paired with human (per spec §8A.1)", () => {
+    const payload = extractPrinciplePayload({
+      title: "Storefront operator policy",
+      pageKind: "principle",
+      principleTier: "contextual",
+      principleAppliesTo: ["human"],
+      principleConsumerArchetype: "route-domain-specific",
+      principleConsumerContexts: ["storefront"],
+    });
+    expect(payload.principleConsumerArchetype).toBe("route-domain-specific");
+    expect(payload.principleAppliesTo).toEqual(["human"]);
+  });
+
+  it("does not forward consumer-archetype keys on non-principle pages", () => {
+    const payload = extractPrinciplePayload({
+      title: "Edge Node",
+      pageKind: "entity",
+      // These would be invalid on an entity but the helper must short-circuit
+      // before any coherence check fires.
+      principleConsumerArchetype: "route-domain-specific" as never,
+    });
+    expect(payload).toEqual({});
+  });
 });
 
 describe("seed-wiki-kernel: extractWikilinks", () => {

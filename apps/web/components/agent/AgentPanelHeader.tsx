@@ -12,6 +12,12 @@ type Props = {
   agent: AgentInfo;
   userContext: UserContext;
   onSend: (content: string) => void;
+  /**
+   * Governed Hermes learning Slice 1 callback. When set, the skills dropdown
+   * passes the selected skill's metadata up so the parent panel can show
+   * the active-skill chip while the request is in flight.
+   */
+  onSendSkill?: (skill: { skillId: string; label: string; prompt: string }) => void;
   onOpenClearConfirm: () => void;
   onCancelClearConfirm: () => void;
   onConfirmClear: () => void;
@@ -40,6 +46,7 @@ export function AgentPanelHeader({
   agent,
   userContext,
   onSend,
+  onSendSkill,
   onOpenClearConfirm,
   onCancelClearConfirm,
   onConfirmClear,
@@ -93,6 +100,7 @@ export function AgentPanelHeader({
             userContext={userContext}
             marketingSkillRules={marketingSkillRules}
             onSend={onSend}
+            {...(onSendSkill ? { onSendSkill } : {})}
             onCreateSkill={() => {}}
           />
           {onViewProfile && (

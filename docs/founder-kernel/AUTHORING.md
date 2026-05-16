@@ -149,6 +149,34 @@ These aren&#39;t hard rules but they keep the kernel coherent:
 
 ---
 
+## 8A. Authoring a principle
+
+Principle pages have stricter rules than the other kinds because their content drives retrieval injection and (eventually) `principle_decide` scoring. The full required-frontmatter list, the dimension registry, and the coherence matrix live in [`SCHEMA.md` §2 `principle`](SCHEMA.md). This section is the operating-procedure summary.
+
+1. **Copy the template.** `cp _templates/principle.template.md wiki/principles/<slug>.md`. The slug should be a short kebab-case noun phrase (e.g., `architecture-over-shortcuts`, `evidence-before-diagnosis`).
+2. **Set the tier consciously.**
+   - `commandment` — non-negotiable. The kernel hard-caps published commandments at 10 (lint detector `principle-commandment-cap-exceeded` blocks publish above the cap). Reserve for rules that should shape *every* relevant decision. Requires `principleDirection` AND `principleDimensionVector` AND ≥1 source.
+   - `core` — strong default. Soft cap ~30. Requires `principleDirection`; vector recommended.
+   - `contextual` — narrow rules that only matter in a bounded situation. Uncapped.
+3. **Write a signed `principleDimensionVector`.** Inline JSON, keys from [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts) `PRINCIPLE_DIMENSIONS`. Positive values mean "this principle pulls *for* this axis"; negative values mean "this principle pulls *against* this axis" (e.g., `speed_to_value: -0.4` is correct for `architecture-over-shortcuts`). The seed walker rejects unknown dimensions with a clear error.
+4. **Pick a consumer archetype + populations carefully.** The two axes (`principleConsumerArchetype` and `principleAppliesTo`) are independent, but the coherence matrix in [`SCHEMA.md`](SCHEMA.md) constrains valid combinations. The seed walker throws on incoherent pairings (e.g., `ai-coworker-universal` + `human`, or `route-domain-specific` without ≥1 context). When in doubt:
+   - Rule governs humans AND agents anywhere → `universal` (must include ≥2 populations in `principleAppliesTo`).
+   - Rule governs all in-platform AI coworkers → `ai-coworker-universal`.
+   - Rule governs orchestrator/COO-style coworkers → `generalist`.
+   - Rule governs specialist coworkers as a class → `specialist`.
+   - Rule is bound to a specific route or product surface (Build Studio, Marketing, Compliance, Discovery, Finance, Storefront, Portfolio, etc.) → `route-domain-specific` + list the slug(s) in `principleConsumerContexts`.
+5. **Set `principlePublic` deliberately.** Default is `false`. Set to `true` only when the rule is product-facing and safe for the public docs site (`/principles/`). Always pair with `principlePublicRationale`. The public-safety lint detector blocks publish on local paths, secret patterns, and internal-only agent-instruction phrases.
+6. **Cite at least one source.** Required for `commandment` tier; strongly recommended for `core`. Add raw-source slugs to the `sources:` frontmatter array, NOT inline citations in the body.
+7. **Run seed and lint.** `pnpm --filter @dpf/db seed`, then check `/admin/wiki/lint`. Fix any blocking principle finding before opening a PR.
+
+Common back-fill mistakes to avoid:
+- Pairing `ai-coworker-universal` / `generalist` / `specialist` with `human` in `principleAppliesTo` (seed throws — these archetypes describe agent classes).
+- Marking a principle `universal` while listing only one population in `principleAppliesTo` (seed throws — a single-population rule is by definition not universal).
+- Setting `principleConsumerArchetype: route-domain-specific` without listing at least one slug in `principleConsumerContexts` (seed throws).
+- Using underscores, uppercase letters, or whitespace in a context slug (seed throws — slugs are governed lowercase kebab-case).
+
+---
+
 ## 9. Org overlay (later phase)
 
 Customers will be able to override kernel pages with their own takes via the `kernelPageId` foreign key on `WikiPage`. That UX (Phase 6b — propose-edit form) is not yet shipped. For now, all content authored under `docs/founder-kernel/wiki/` becomes part of the kernel; customers see it everywhere.

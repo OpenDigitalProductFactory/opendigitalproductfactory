@@ -17,7 +17,10 @@ import { join } from "path";
 import type { PrismaClient } from "../generated/client/client";
 import { QDRANT_COLLECTIONS, upsertVectors, type VectorPoint } from "./qdrant";
 import {
+  PRINCIPLE_CONSUMER_ARCHETYPES,
   PRINCIPLE_DIMENSIONS,
+  isPrincipleConsumerArchetype,
+  isPrincipleConsumerContextSlug,
   isPrincipleDimension,
 } from "./wiki-taxonomy";
 import {
@@ -125,6 +128,84 @@ export function extractPrinciplePayload(
     }
   }
 
+  // Validate consumer-archetype value against the registry.
+  if (frontmatter.principleConsumerArchetype !== undefined) {
+    if (!isPrincipleConsumerArchetype(frontmatter.principleConsumerArchetype)) {
+      throw new Error(
+        `Unknown principleConsumerArchetype "${frontmatter.principleConsumerArchetype}". ` +
+          `Allowed archetypes: ${PRINCIPLE_CONSUMER_ARCHETYPES.join(", ")}. ` +
+          `Add the archetype to PRINCIPLE_CONSUMER_ARCHETYPES in wiki-taxonomy.ts ` +
+          `via a follow-up spec/PR before referencing it from frontmatter.`,
+      );
+    }
+  }
+
+  // Validate consumer-context slug shape (governed kebab-case slugs, not a
+  // closed enum — new contexts ship via authoring without a schema change).
+  if (frontmatter.principleConsumerContexts) {
+    for (const slug of frontmatter.principleConsumerContexts) {
+      if (!isPrincipleConsumerContextSlug(slug)) {
+        throw new Error(
+          `Malformed principleConsumerContexts slug "${slug}". ` +
+            `Contexts must be lowercase kebab-case strings (alphanumeric and ` +
+            `single hyphens; no leading/trailing hyphen, no double hyphens, ` +
+            `no underscores, no whitespace).`,
+        );
+      }
+    }
+  }
+
+  // route-domain-specific requires at least one consumer context per spec §8A.
+  if (
+    frontmatter.principleConsumerArchetype === "route-domain-specific" &&
+    (!frontmatter.principleConsumerContexts ||
+      frontmatter.principleConsumerContexts.length === 0)
+  ) {
+    throw new Error(
+      `principleConsumerArchetype "route-domain-specific" requires at least ` +
+        `one principleConsumerContexts entry (e.g., "build-studio"). ` +
+        `If this principle truly applies everywhere, use "universal", ` +
+        `"ai-coworker-universal", "generalist", or "specialist" instead.`,
+    );
+  }
+
+  // Coherence matrix (spec §8A.1) — belt-and-suspenders alongside the
+  // principle-incoherent-archetype-applies-to lint detector. Seed-time
+  // rejection prevents an incoherent page from ever entering the DB.
+  if (
+    frontmatter.principleConsumerArchetype !== undefined &&
+    frontmatter.principleAppliesTo !== undefined
+  ) {
+    const archetype = frontmatter.principleConsumerArchetype;
+    const appliesTo = frontmatter.principleAppliesTo;
+    const includesHuman = appliesTo.includes("human");
+
+    if (
+      includesHuman &&
+      (archetype === "ai-coworker-universal" ||
+        archetype === "generalist" ||
+        archetype === "specialist")
+    ) {
+      throw new Error(
+        `Coherence violation (spec §8A.1): principleConsumerArchetype ` +
+          `"${archetype}" cannot include "human" in principleAppliesTo. ` +
+          `These archetypes describe agent classes; humans should use ` +
+          `"universal" (paired with another population) or ` +
+          `"route-domain-specific" instead.`,
+      );
+    }
+
+    if (archetype === "universal" && appliesTo.length < 2) {
+      throw new Error(
+        `Coherence violation (spec §8A.1): principleConsumerArchetype ` +
+          `"universal" requires at least two principleAppliesTo populations. ` +
+          `A principle that targets only one population is not universal — ` +
+          `tighten the archetype to "ai-coworker-universal", "generalist", ` +
+          `"specialist", or "route-domain-specific".`,
+      );
+    }
+  }
+
   const dimensions =
     frontmatter.principleDimensions ??
     (frontmatter.principleDimensionVector
@@ -152,6 +233,14 @@ export function extractPrinciplePayload(
   }
   if (frontmatter.principleAppliesTo !== undefined) {
     payload.principleAppliesTo = frontmatter.principleAppliesTo as never;
+  }
+  if (frontmatter.principleConsumerArchetype !== undefined) {
+    payload.principleConsumerArchetype =
+      frontmatter.principleConsumerArchetype as never;
+  }
+  if (frontmatter.principleConsumerContexts !== undefined) {
+    payload.principleConsumerContexts =
+      frontmatter.principleConsumerContexts as never;
   }
   if (frontmatter.principlePublic !== undefined) {
     payload.principlePublic = frontmatter.principlePublic;

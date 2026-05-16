@@ -22,6 +22,14 @@ export type PromptInput = {
    * Pass `null` to omit the wiki block entirely.
    */
   wikiContext?: string | null;
+  /**
+   * Governed Hermes learning Slice 1: eligible coworker skills.
+   * The assembler renders a concise summary alongside domain context so the
+   * coworker can pick one without flooding the prompt with full SKILL.md
+   * bodies. Telemetry (eligible/loaded SkillUsageEvent rows) is the caller's
+   * responsibility — this layer is pure composition.
+   */
+  skills?: Array<{ skillId: string; label: string; description: string }>;
 };
 
 // ─── Block 1: Identity (static) ─────────────────────────────────────────────
@@ -132,6 +140,12 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   }
   if (input.domainTools.length > 0) {
     domainBlock += `\nAvailable domain tools: ${input.domainTools.join(", ")}`;
+  }
+  if (input.skills && input.skills.length > 0) {
+    domainBlock += "\n\nAvailable coworker skills:";
+    for (const skill of input.skills) {
+      domainBlock += `\n- ${skill.skillId}: ${skill.label} - ${skill.description}`;
+    }
   }
   dynamicBlocks.push(domainBlock);
 

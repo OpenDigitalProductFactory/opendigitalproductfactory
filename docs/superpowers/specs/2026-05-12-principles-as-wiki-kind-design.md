@@ -18,7 +18,7 @@ The direction is right: DPF needs a durable principle layer that is richer than 
    - `docs/founder-kernel/_templates/principle.template.md` exists. `docs/founder-kernel/wiki/principles/` already contains 41 published principle pages — three founder-kernel seed commandments (PR #565), the AI-coworker eight including Principle 9 / Responsible Capacity Utilization (PRs #566, #570), eight commandment-tier promotions from AGENTS.md (PR #579) plus two additional binding commandments (PR #590), fourteen core-tier promotions from AGENTS.md (PR #589), and six contextual-tier promotions from AGENTS.md (PR #592).
    - `docs/founder-kernel/manifest.json` is on `schemaVersion: 0.2.0`, `kernelVersion: 0.2.1`, `pageCount: 62`, `sourceCount: 11`, with the description naming the principle kind explicitly.
    - The AI-coworker principles markdown contains Principles 1–9.
-2. **What this spec now owns.** The remaining net-new work is the **consumer-archetype axis** (§8A), the **back-fill of the 41 existing principle pages**, decision support (`principle_decide`), retrieval integration that respects consumer archetype, lint detectors for the new axis plus public safety and coherence, tier-first UI grouping with consumer-archetype filter chips, the kernel-slug uniqueness gap (a separate small refactor PR), and Jekyll public-docs generation.
+2. **What this spec now owns.** The remaining net-new work is the **consumer-archetype axis** (§8A), the **back-fill of the 41 existing principle pages**, decision support (`principle_decide`), retrieval integration that respects consumer archetype, lint detectors for the new axis plus public safety and coherence, tier-first UI grouping with consumer-archetype filter chips, and Jekyll public-docs generation. The kernel-slug uniqueness gap originally carved out as Phase B is **already shipped** in the prior principle migration — see §9.3 for the verification.
 3. **Decision math is advisory, not authority.** Principles do not "resolve mathematically" in the sense of replacing architecture judgment. The tool produces a scored recommendation with a contribution ledger, missing-data warnings, tie handling, and human override path. The `Principles as vectors` memory commitment is preserved as a *contribution-aggregation* model, not an authority model.
 4. **Structured scoring does not parse prose.** Polarity is carried by an explicit signed `principleDimensionVector`. Prose `principleDirection` is the human-readable statement.
 5. **Public principles are generated from the kernel source, not live DB rows.** The public site under `docs/` is built statically by Jekyll. The kernel markdown is the single source of truth; runtime `WikiPage` rows are seeded projections; the public site is a generated artifact from the same kernel source.
@@ -296,21 +296,23 @@ Notes:
 - No Prisma GIN index on array containment in V1. If `principleAppliesTo` or `principleConsumerContexts` filtering becomes hot, add a hand-written Postgres GIN index in a later migration with metrics evidence.
 - Canonical consumer-archetype string values live in `packages/db/src/wiki-taxonomy.ts` (added by this spec) and are imported by seed, lint, MCP schemas, retrieval, and UI. Consumer contexts use a shared slug-normalization helper rather than a closed enum.
 
-### 9.3 Adjacent refactor — kernel slug uniqueness gap (separate small PR)
+### 9.3 Adjacent refactor — kernel slug uniqueness gap (ALREADY SHIPPED)
 
-While reading the wiki schema, the chief-architect review surfaced a uniqueness gap that is **not principle-specific** and should not be coupled to this work:
+Status: **closed**. Verified post-merge on 2026-05-15.
 
-`WikiPage` carries `@@unique([organizationId, slug])`. In Postgres, a unique index over a nullable column treats `NULL` values as distinct — so two kernel rows (`organizationId IS NULL`) can be inserted with the same `slug`. This is a real wiki-platform correctness gap that affects all eight page kinds, not only principles.
-
-Closing this requires a hand-written partial unique index:
+The earlier chief-architect-review draft of this spec carved this gap out as Phase B, a separate small PR. Subsequent inspection of the migration history shows the partial unique index was already shipped in the **same migration that added the original principle fields**: `20260513000000_add_principle_fields_to_wikipage` lines under `-- Kernel slug uniqueness guard (Prisma-invisible — managed only here)`. The migration includes:
 
 ```sql
-CREATE UNIQUE INDEX IF NOT EXISTS "WikiPage_kernel_slug_key"
-  ON "WikiPage"("slug")
-  WHERE "organizationId" IS NULL;
+CREATE UNIQUE INDEX "WikiPage_kernel_slug_key"
+    ON "WikiPage"("slug")
+    WHERE "organizationId" IS NULL;
 ```
 
-This ships as its own small PR titled `fix(db): guard kernel WikiPage.slug uniqueness when organizationId is NULL` and is not blocked by, nor blocks, principle work. The plan calls it out as a refactor-budget item.
+Background (kept for context only — no work required): `WikiPage` carries `@@unique([organizationId, slug])`, and Postgres treats `NULL` values as distinct under composite unique constraints, so without the partial index two kernel rows could share a slug. The partial index closes the gap at the database layer regardless of which code path performs the write. `wiki-store.ts upsertWikiPage` documents the same constraint at the helper layer.
+
+Prisma cannot model partial indexes in the schema language, so the index lives only in the migration SQL and is intentionally exempt from `prisma migrate dev` drift detection. Do not let a future migration "remove" it.
+
+No follow-up PR is required for this gap.
 
 ## 10. Dimension Registry
 
@@ -578,7 +580,7 @@ The contradiction lint does not auto-resolve. Contradictions can be legitimate; 
 
 ## 15. Migration and Delivery Plan
 
-Earlier revisions of this spec described seven sequential batches starting from scratch. After the 2026-05-15 re-baseline, most of that work is already shipped. The remaining delivery is **one focused phase** (consumer-archetype axis + back-fill + decision support + retrieval + lint + UI + public-docs generator) and **two adjacent small PRs** (kernel-slug uniqueness fix; `principle_decide` advisory tool if it cannot fit cleanly in the main PR).
+Earlier revisions of this spec described seven sequential batches starting from scratch. After the 2026-05-15 re-baseline, most of that work is already shipped. The remaining delivery is **one focused phase** (consumer-archetype axis + back-fill + decision support + retrieval + lint + UI + public-docs generator). The kernel-slug uniqueness fix originally proposed as Phase B is already shipped (§9.3); the `principle_decide` advisory tool may split into its own PR if it does not fit cleanly in the main one.
 
 The detailed implementation plan lives in [`2026-05-12-principles-as-wiki-kind.md`](../plans/2026-05-12-principles-as-wiki-kind.md). The summary below is intentionally short — read the plan for tasks, files, and verification commands.
 
@@ -597,9 +599,9 @@ The detailed implementation plan lives in [`2026-05-12-principles-as-wiki-kind.m
 - **Visual-nav spec.** Update [`2026-05-09-wiki-visual-navigation-design.md`](2026-05-09-wiki-visual-navigation-design.md) for principle awareness in Tier 1 (sidebar), Tier 2 (mini-graph node shape), Tier 3 (atlas grouping), §6.1 (shape), §6.3 (state outlines).
 - **Public docs generation.** `scripts/generate-public-principles.mjs` reads kernel principle markdown with `principlePublic: true`, generates `docs/principles.md` grouped by tier, with snapshot-drift test. Link from `docs/index.html` and `docs/README.md`.
 
-### Phase B — Adjacent refactor-budget PR (independent)
+### Phase B — Retired
 
-`fix(db): guard kernel WikiPage.slug uniqueness when organizationId is NULL` — adds the partial unique index per §9.3. Not coupled to Phase A; can land before, alongside, or after.
+Originally proposed as an independent refactor PR closing the kernel-slug uniqueness gap. Verified post-merge to be **already shipped** in `20260513000000_add_principle_fields_to_wikipage` — see §9.3. No follow-up PR is required.
 
 ### Phase C — Future durable-promotion follow-ups (out of scope here)
 
