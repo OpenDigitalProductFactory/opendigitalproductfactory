@@ -8,6 +8,11 @@
  * See: docs/superpowers/specs/2026-03-20-contract-based-selection-design.md
  */
 
+import type {
+  AdapterCapabilityRequirement,
+  ExecutionAdapterSelector,
+} from "./execution-adapter-types";
+
 // ── RoutedExecutionPlan ──────────────────────────────────────────────────────
 
 export interface RoutedExecutionPlan {
@@ -15,7 +20,22 @@ export interface RoutedExecutionPlan {
   modelId: string;
   recipeId: string | null;
   contractFamily: string;
-  executionAdapter: string;
+  /**
+   * Execution adapter selector. Accepts either a legacy string
+   * ("claude-cli", "codex-cli", "chat", "responses", "embedding", …) OR a
+   * structured `ExecutionAdapterSelector` object. Phase A6 added the
+   * structured form; legacy strings continue to work via
+   * `parseExecutionAdapterSelector` + `resolveExecutionAdapter`.
+   */
+  executionAdapter: string | ExecutionAdapterSelector;
+  /**
+   * Optional capability requirements (Phase A4/A6). When at least one entry
+   * has `required: true`, the resolver gates dispatch on the adapter's
+   * capability profile and throws `CapabilityRequirementUnsatisfiedError`
+   * if unsatisfied. Advisory entries (`required: false`) are a no-op today
+   * and become advisory-with-telemetry once A7 lands.
+   */
+  capabilityRequirements?: AdapterCapabilityRequirement[];
   maxTokens: number;
   temperature?: number;
   providerSettings: Record<string, unknown>;
