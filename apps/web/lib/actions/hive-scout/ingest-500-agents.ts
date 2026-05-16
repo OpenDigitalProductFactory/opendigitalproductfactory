@@ -355,6 +355,45 @@ export function sourceUrlHash(sourceUrl: string): string {
   return createHash("sha256").update(sourceUrl).digest("hex");
 }
 
+const RAW_SOURCE_KEY_PREFIX = "hive-scout:500-ai-agents";
+
+/**
+ * Stable, human-readable key for `RawSource.sourceKey`. Idempotency depends
+ * on this returning the same string for the same source URL across runs.
+ *
+ * Shape: `hive-scout:500-ai-agents:<canonical-slug>` where the slug is
+ * derived from the URL host + path with non-alphanumerics collapsed to
+ * single dashes. Scheme, userinfo, port, query, and fragment are stripped
+ * so cosmetic URL variations do not split a single logical source into
+ * two RawSource rows.
+ */
+export function rawSourceKeyForEntry(entry: Pick<CatalogEntry, "sourceUrl">): string {
+  return `${RAW_SOURCE_KEY_PREFIX}:${canonicalSlugForUrl(entry.sourceUrl)}`;
+}
+
+function canonicalSlugForUrl(rawUrl: string): string {
+  let canonical: string;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    // host (no userinfo, no port) + pathname only; query + fragment dropped.
+    canonical = `${parsed.hostname}${parsed.pathname}`;
+  } catch {
+    // Lenient fallback for malformed URLs — preserves a key rather than
+    // throwing mid-ingest. Strip scheme + userinfo + port + query/fragment.
+    canonical = rawUrl
+      .trim()
+      .replace(/^[a-z]+:\/\//i, "")
+      .replace(/^[^/@]*@/, "")
+      .replace(/:\d+/, "")
+      .split(/[?#]/)[0];
+  }
+  return canonical
+    .toLowerCase()
+    .replace(/\.git$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 // ─── Gap detection ──────────────────────────────────────────────────────────
 
 function normaliseForMatch(text: string): string {

@@ -4,6 +4,7 @@ import {
   itemIdForSource,
   mapIndustryToStream,
   parseReadme,
+  rawSourceKeyForEntry,
   runHiveScoutIngest,
   sourceUrlHash,
 } from "./ingest-500-agents";
@@ -545,5 +546,37 @@ describe("runHiveScoutIngest ambiguity review", () => {
       classification: "needs_human_review",
       rationale: "injection attempt",
     });
+  });
+});
+
+describe("rawSourceKeyForEntry", () => {
+  it("produces a stable key prefixed with the catalog name", () => {
+    expect(rawSourceKeyForEntry({
+      sourceUrl: "https://github.com/harshhh28/hia.git",
+    })).toBe("hive-scout:500-ai-agents:github-com-harshhh28-hia");
+  });
+
+  it("is identical for the same source URL across calls", () => {
+    const entry = { sourceUrl: "https://github.com/foo/bar" };
+    expect(rawSourceKeyForEntry(entry)).toBe(rawSourceKeyForEntry(entry));
+  });
+
+  it("differs across distinct source URLs", () => {
+    const a = rawSourceKeyForEntry({ sourceUrl: "https://github.com/foo/bar" });
+    const b = rawSourceKeyForEntry({ sourceUrl: "https://github.com/foo/baz" });
+    expect(a).not.toBe(b);
+  });
+
+  it("strips trailing .git and normalises case", () => {
+    expect(rawSourceKeyForEntry({
+      sourceUrl: "HTTPS://GitHub.com/Foo/Bar.git",
+    })).toBe("hive-scout:500-ai-agents:github-com-foo-bar");
+  });
+
+  it("treats userinfo, port, query, and fragment as ignorable noise", () => {
+    const baseline = rawSourceKeyForEntry({ sourceUrl: "https://github.com/foo/bar" });
+    expect(rawSourceKeyForEntry({
+      sourceUrl: "https://user:pass@github.com:443/foo/bar?x=1#y",
+    })).toBe(baseline);
   });
 });
