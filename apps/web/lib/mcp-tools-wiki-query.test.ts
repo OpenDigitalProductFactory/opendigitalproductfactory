@@ -35,7 +35,7 @@ describe("wiki_query MCP tool", () => {
 
     expect(res.success).toBe(true);
     expect(res.message).toContain("No matching wiki pages found.");
-    expect(res.data).toEqual({ results: [] });
+    expect(res.data).toEqual({ results: [], retrievalMode: "vector" });
   });
 
   it("forwards organization id, query, pageKind, and limit to searchWikiPages", async () => {

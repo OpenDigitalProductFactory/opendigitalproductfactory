@@ -29,6 +29,7 @@
 
 | Path | What CI proves | What this runbook covers | Status |
 |------|----------------|--------------------------|--------|
+| Repository unit tests | `.github/workflows/ci.yml` runs `pnpm test` with an ephemeral Postgres service and `prisma migrate deploy` before the package tests | Local package-specific repros when a test is tied to host Docker state, platform credentials, or a dirty install | 🧪 **CI informational until issue #104 is drained** |
 | Windows installer | n/a (no CI gate today) | Production usage by real users | ✓ verified |
 | Linux end-to-end install | `install-verification.yml` (ubuntu-latest, dev + release modes) — full compose up, `/api/health=200`, doctor bundle | Distro coverage beyond Ubuntu: Debian 12, Fedora 39. Autostart-after-reboot. | 🙋 **reports wanted** |
 | macOS end-to-end install | dry-run only (`macos-14` can't nest-virt Docker Desktop) | The actual `.dmg` install + Docker Desktop boot + portal up + LaunchAgent reboot survival | 🙋 **reports wanted** |

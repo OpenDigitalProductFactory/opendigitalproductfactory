@@ -2,12 +2,13 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied) |
-| Status | Phase 1 implemented on branch; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied) |
+| Status | Phase 1 merged to `main` via PR #602; Phase 2 implementation plan merged via PR #665 and awaits implementation; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
 | Depends On | `2026-04-05-db-github-delivery-sync-design.md`, `2026-04-20-ship-phase-fork-redesign-design.md`, `2026-04-21-backlog-triage-build-studio-design.md`, `2026-04-23-build-studio-governed-backlog-delivery-design.md`, `2026-05-09-build-execution-provider-design.md`, `2026-05-09-deployment-contracts.md` |
 | Phase 1 Plan | `docs/superpowers/plans/2026-05-14-portal-work-capsule-control-harness-phase-1.md` |
+| Phase 2 Plan | `docs/superpowers/plans/2026-05-16-portal-work-capsule-control-harness-phase-2.md` |
 
 ## 1. Problem Statement
 
@@ -877,9 +878,9 @@ Execute in this order so fresh installs and existing installs both land cleanly:
 
 ### Phase 2: Governed Creation
 
-- create worktree from `origin/main`
-- seed MCP config
-- generate branch/worktree names
+- generate the deterministic `<prefix>/<capsule-slug>` branch and canonical worktree path; persist them on the capsule as `headBranch`, `worktreePath`, and `branchTaxonomy`
+- display the exact `git worktree add ... origin/main` and seed-MCP commands; the operator runs them on the host because production installs mount `dpf-source-code` as a named volume, so in-container worktree creation is invisible to the host
+- defer active in-container worktree creation to a sandbox-runner slice that owns the substrate-mount question
 - record initial scope
 - block root clone active work
 - keep branch push as the in-flight handoff mechanism
@@ -941,6 +942,17 @@ Every phase satisfies the canonical Build Gate (AGENTS.md section 5): unit tests
 5. Authorization tests covering both the human capability gate and the agent grant gate from section 9.3.
 6. UI/data-loader tests that prove `main` is not presented as adoptable work.
 7. UX verification against the Docker-served portal at `AUTH_URL` / `APP_URL`, not `next dev`.
+
+### Phase 2 (Governed Creation)
+
+Adds:
+
+1. Unit tests for deterministic capsule slug, branch-name, and worktree-path helpers.
+2. Scanner tests for local branch-list parsing and collision detection inputs.
+3. Store tests for `planCapsuleWorkspace`: idempotent re-plan, root-clone refusal, branch/worktree collision suffixes, and atomic `workspace-planned` activity creation.
+4. MCP tool tests for `plan_capsule_worktree`, including taxonomy enum parity, human capability gating, and `work_capsule_write` grant gating.
+5. UI tests for the governed-work form and launch panel.
+6. UX verification against the Docker-served portal proving `/build/work` can create a planned capsule, `/build/work/[capsuleId]` renders the operator-paste commands, and already-planned work is not double-listed as adoptable.
 
 ### Phase 3 (Executor Attachment)
 

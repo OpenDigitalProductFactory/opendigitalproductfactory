@@ -54,6 +54,33 @@ vi.mock("@/lib/route-context", () => ({
   getRouteDataContext: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@/lib/wiki/recall", () => ({
+  recallWikiContext: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/tak/governed-memory", () => ({
+  buildGovernedMemoryContext: vi.fn().mockResolvedValue({
+    factsContext: null,
+    recalledContext: null,
+  }),
+}));
+
+vi.mock("@/lib/semantic-memory", () => ({
+  storeConversationMemory: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/tak/user-facts", () => ({
+  extractAndStoreFacts: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/identity/aidoc-resolver", () => ({
+  resolveAIDocForAgent: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/tak/reflection-triggers", () => ({
+  processRuntimeIssueReflection: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/process-observer-hook", () => ({
   observeConversation: vi.fn().mockResolvedValue(undefined),
 }));
