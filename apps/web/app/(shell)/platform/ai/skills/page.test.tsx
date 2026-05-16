@@ -64,6 +64,8 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+import { getSkillReviewDetail } from "@/lib/actions/skills-observatory";
+
 describe("PlatformAiSkillsPage", () => {
   it("renders catalog, observability, and curator under AI Operations", async () => {
     const { default: PlatformAiSkillsPage } = await import("./page");
@@ -78,5 +80,46 @@ describe("PlatformAiSkillsPage", () => {
     expect(html).toContain("skills-observatory-panel");
     expect(html).toContain("Curator");
     expect(html).toContain("skills-curator-report-panel");
+  });
+
+  it("renders scoped evidence for a focused skill detail", async () => {
+    vi.mocked(getSkillReviewDetail).mockResolvedValueOnce({
+      skillId: "build-page",
+      skillMdContent: "v0",
+      category: "build",
+      proposals: [],
+      revisions: [],
+      seedDrift: {
+        inSync: true,
+        dbBody: "v0",
+        seedBody: "v0",
+        seedPath: "skills/build/build-page.skill.md",
+      },
+      evidence: [
+        {
+          kind: "tool_execution",
+          id: "tool-1",
+          label: "apply_patch failed",
+          summary: "Patch failed after timeout while applying skill guidance.",
+          createdAt: "2026-05-15T12:05:00.000Z",
+          refs: {
+            skillId: "build-page",
+            threadId: "thread-1",
+            taskRunId: "TR-1",
+          },
+        },
+      ],
+    });
+
+    const { default: PlatformAiSkillsPage } = await import("./page");
+    const html = renderToStaticMarkup(
+      await PlatformAiSkillsPage({
+        searchParams: Promise.resolve({ skill: "build-page" }),
+      }),
+    );
+
+    expect(html).toContain("Evidence");
+    expect(html).toContain("apply_patch failed");
+    expect(html).toContain("Patch failed after timeout");
   });
 });
