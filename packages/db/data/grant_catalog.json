@@ -202,6 +202,7 @@
         "claim_capsule_scope",
         "create_work_capsule",
         "heartbeat_capsule",
+        "plan_capsule_worktree",
         "record_capsule_evidence",
         "release_capsule_scope",
         "update_work_capsule_status"

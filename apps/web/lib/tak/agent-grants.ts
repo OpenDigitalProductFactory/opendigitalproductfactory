@@ -31,6 +31,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],
   create_work_capsule: ["work_capsule_write"],
+  plan_capsule_worktree: ["work_capsule_write"],
   adopt_worktree: ["work_capsule_adopt"],
   claim_capsule_scope: ["work_capsule_write"],
   record_capsule_evidence: ["work_capsule_write"],

@@ -253,8 +253,10 @@ describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
 
   it("write tools require work_capsule_write", () => {
     expect(isToolAllowedByGrants("create_work_capsule", ["work_capsule_write"])).toBe(true);
+    expect(isToolAllowedByGrants("plan_capsule_worktree", ["work_capsule_write"])).toBe(true);
     expect(isToolAllowedByGrants("record_capsule_evidence", ["work_capsule_write"])).toBe(true);
     expect(isToolAllowedByGrants("heartbeat_capsule", ["work_capsule_read"])).toBe(false);
+    expect(isToolAllowedByGrants("plan_capsule_worktree", ["work_capsule_read"])).toBe(false);
   });
 
   it("adoption requires work_capsule_adopt", () => {

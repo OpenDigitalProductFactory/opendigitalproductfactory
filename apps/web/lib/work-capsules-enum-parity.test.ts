@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { PLATFORM_TOOLS } from "./mcp-tools";
 import {
+  WORK_CAPSULE_BRANCH_TAXONOMIES,
   WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
   WORK_CAPSULE_SOURCES,
@@ -34,5 +35,9 @@ describe("work capsule MCP enum parity", () => {
 
   it("update_work_capsule_status.status mirrors WORK_CAPSULE_STATUSES", () => {
     expect(enumOf("update_work_capsule_status", "status")).toEqual([...WORK_CAPSULE_STATUSES]);
+  });
+
+  it("plan_capsule_worktree.taxonomy mirrors WORK_CAPSULE_BRANCH_TAXONOMIES", () => {
+    expect(enumOf("plan_capsule_worktree", "taxonomy")).toEqual([...WORK_CAPSULE_BRANCH_TAXONOMIES]);
   });
 });

@@ -3,10 +3,12 @@ import { prisma } from "@dpf/db";
 import type { ToolResult } from "@/lib/mcp-tools";
 import {
   WORK_CAPSULE_ACTIVITY_KINDS,
+  WORK_CAPSULE_BRANCH_TAXONOMIES,
   WORK_CAPSULE_EVIDENCE_KINDS,
   WORK_CAPSULE_EXECUTOR_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
+  isWorkCapsuleBranchTaxonomy,
   isWorkCapsuleEvidenceKind,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
@@ -20,11 +22,13 @@ import {
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
+  planCapsuleWorkspace,
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
   updateWorkCapsuleStatus,
   type CapsuleDb,
 } from "./work-capsule-store";
+import { listLocalBranches } from "./git-scanner";
 
 type ToolContext = {
   routeContext?: string;
@@ -39,6 +43,7 @@ export function workCapsuleToolEnums() {
     sources: [...WORK_CAPSULE_SOURCES],
     executors: [...WORK_CAPSULE_EXECUTOR_KINDS],
     activityKinds: [...WORK_CAPSULE_ACTIVITY_KINDS],
+    taxonomies: [...WORK_CAPSULE_BRANCH_TAXONOMIES],
     evidenceKinds: [...WORK_CAPSULE_EVIDENCE_KINDS],
   };
 }
@@ -386,6 +391,61 @@ export async function createWorkCapsuleTool(
     message: `Created Work Capsule ${capsule.capsuleId}.`,
     data: { capsule },
   };
+}
+
+export async function planCapsuleWorktreeTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
+  const capsuleId = stringParam(params, "capsuleId");
+  const taxonomy = stringParam(params, "taxonomy");
+  if (!capsuleId) {
+    return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
+  }
+  if (!taxonomy || !isWorkCapsuleBranchTaxonomy(taxonomy)) {
+    return {
+      success: false,
+      error: "invalid_taxonomy",
+      message: `taxonomy must be one of: ${WORK_CAPSULE_BRANCH_TAXONOMIES.join(", ")}.`,
+    };
+  }
+
+  let existingBranches = new Set<string>();
+  try {
+    const repoRoot = process.env.DPF_REPO_ROOT?.trim() || process.cwd();
+    existingBranches = await listLocalBranches(repoRoot);
+  } catch {
+    // Best-effort collision signal only. DB collision checks still run below.
+  }
+
+  try {
+    const capsule = await planCapsuleWorkspace({
+      db: workCapsuleDb(),
+      capsuleId,
+      taxonomy,
+      os: process.platform,
+      home: process.env.HOME ?? process.env.USERPROFILE,
+      existingBranches,
+      releaseOverride: process.env.DPF_RELEASE_WORKTREE_PATH,
+      actor: await actor(userId, context),
+    });
+    return {
+      success: true,
+      entityId: capsule.capsuleId,
+      message: `Planned ${capsule.headBranch} at ${capsule.worktreePath}.`,
+      data: { capsule },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown failure";
+    if (/root clone/i.test(message)) {
+      return { success: false, error: "root_clone_refused", message };
+    }
+    if (/branch name/i.test(message)) {
+      return { success: false, error: "branch_allocation_failed", message };
+    }
+    throw error;
+  }
 }
 
 export async function heartbeatCapsuleTool(

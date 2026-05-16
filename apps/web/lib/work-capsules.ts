@@ -134,6 +134,10 @@ export function isWorkCapsuleActivityKind(value: unknown): value is WorkCapsuleA
   return typeof value === "string" && ACTIVITY_SET.has(value);
 }
 
+export function isWorkCapsuleBranchTaxonomy(value: unknown): value is WorkCapsuleBranchTaxonomy {
+  return typeof value === "string" && TAXONOMY_SET.has(value);
+}
+
 export function isWorkCapsuleEvidenceKind(value: unknown): value is WorkCapsuleEvidenceKind {
   return typeof value === "string" && EVIDENCE_KIND_SET.has(value);
 }
