@@ -7,25 +7,47 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
+  isWorkCapsuleBranchTaxonomy,
+  type WorkCapsuleBranchTaxonomy,
+} from "@/lib/work-capsules";
+import {
   getWorktreeDirtySummary,
+  listLocalBranches,
   scanGitWorktrees,
   type WorktreeInfo,
 } from "@/lib/work-capsules/git-scanner";
+import {
+  createWorkCapsule,
+  planCapsuleWorkspace,
+  type CapsuleDb,
+} from "@/lib/work-capsules/work-capsule-store";
 import { presentCapsuleRow } from "@/lib/work-capsules/work-capsule-presenter";
 
-async function requireBuildAccess(): Promise<string> {
+async function requireCapability(capability: "view_platform" | "manage_backlog"): Promise<string> {
   const session = await auth();
   const user = session?.user;
-  if (!user?.id || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_platform")) {
+  if (!user?.id || !can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, capability)) {
     throw new Error("Unauthorized");
   }
   return user.id;
+}
+
+async function requireBuildAccess(): Promise<string> {
+  return requireCapability("view_platform");
+}
+
+async function requireGovernedWorkWriteAccess(): Promise<string> {
+  return requireCapability("manage_backlog");
 }
 
 function resolveRepoRoot(): string {
   const override = process.env.DPF_REPO_ROOT?.trim();
   if (override) return path.resolve(override);
   return process.cwd();
+}
+
+function workCapsuleDb(): CapsuleDb {
+  return prisma as unknown as CapsuleDb;
 }
 
 async function loadAdoptableRows(repoRoot: string, adoptedBranches: Set<string>) {
@@ -90,4 +112,66 @@ export async function getWorkControlData() {
     capsules: capsules.map((row) => presentCapsuleRow(row)),
     adoptable,
   };
+}
+
+export async function createGovernedWorkAction(input: {
+  title: string;
+  objective: string;
+  taxonomy: WorkCapsuleBranchTaxonomy;
+  idempotencyKey: string;
+}) {
+  const userId = await requireGovernedWorkWriteAccess();
+  if (!isWorkCapsuleBranchTaxonomy(input.taxonomy)) {
+    throw new Error("Invalid taxonomy");
+  }
+
+  const actor = { userId, agentId: null, principalId: null };
+  const capsule = await createWorkCapsule({
+    db: workCapsuleDb(),
+    input: {
+      title: input.title,
+      objective: input.objective,
+      source: "manual",
+      idempotencyKey: input.idempotencyKey,
+      executorKind: null,
+    },
+    actor,
+  });
+
+  let existingBranches = new Set<string>();
+  try {
+    existingBranches = await listLocalBranches(resolveRepoRoot());
+  } catch {
+    // Best effort only. The store still checks existing active capsules.
+  }
+
+  const planned = await planCapsuleWorkspace({
+    db: workCapsuleDb(),
+    capsuleId: capsule.capsuleId,
+    taxonomy: input.taxonomy,
+    os: process.platform,
+    home: process.env.HOME ?? process.env.USERPROFILE,
+    existingBranches,
+    releaseOverride: process.env.DPF_RELEASE_WORKTREE_PATH,
+    actor,
+  });
+
+  return {
+    capsuleId: planned.capsuleId,
+    headBranch: planned.headBranch,
+    worktreePath: planned.worktreePath,
+  };
+}
+
+export async function getCapsuleDetail(capsuleId: string) {
+  await requireBuildAccess();
+  return prisma.workCapsule.findUnique({
+    where: { capsuleId },
+    include: {
+      activities: {
+        orderBy: { recordedAt: "desc" },
+        take: 25,
+      },
+    },
+  });
 }
