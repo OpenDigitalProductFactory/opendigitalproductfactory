@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { CSSProperties } from "react";
 
@@ -117,6 +118,20 @@ function ProposalRow({
         </span>
         <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>{expanded ? "▲" : "▼"}</span>
       </button>
+
+      {proposal.threadId ? (
+        <div style={evidenceLinkRow}>
+          <Link
+            href={`/platform/ai/skills?skill=${encodeURIComponent(skillId)}&evidenceThread=${encodeURIComponent(proposal.threadId)}#skill-evidence`}
+            style={evidenceLinkStyle}
+          >
+            View evidence
+          </Link>
+          <span style={{ color: "var(--dpf-muted)" }}>
+            thread <code>{proposal.threadId}</code>
+          </span>
+        </div>
+      ) : null}
 
       {expanded && (
         <div style={{ padding: 12, borderTop: "1px solid var(--dpf-border)" }}>
@@ -250,6 +265,20 @@ const primaryBtn: CSSProperties = {
   background: "var(--dpf-accent)",
   color: "white",
   cursor: "pointer",
+};
+
+const evidenceLinkRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "0 12px 10px 12px",
+  fontSize: 11,
+};
+
+const evidenceLinkStyle: CSSProperties = {
+  color: "var(--dpf-accent)",
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
 };
 
 const secondaryBtn: CSSProperties = {
