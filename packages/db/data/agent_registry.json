@@ -1985,7 +1985,10 @@
       "agent_id": "AGT-905",
       "agent_name": "licensing-specialist",
       "displayName": "Licensing & Permit Specialist",
-      "aliases": ["compliance-licensing-specialist", "permit-specialist"],
+      "aliases": [
+        "compliance-licensing-specialist",
+        "permit-specialist"
+      ],
       "tier": "cross-cutting",
       "value_stream": "cross-cutting",
       "capability_domain": "Archetype-aware licensing, permit, legality, display-obligation, and staff-credential readiness investigation across jurisdiction layers. Classifies operating posture, records evidence-backed findings, and raises factual readiness blockers without guessing legal facts.",
@@ -2297,16 +2300,18 @@
           "per_task_limit": 30000
         },
         "tool_grants": [
-          "file_read",
-          "registry_read",
+          "architecture_read",
           "backlog_read",
           "backlog_write",
           "decision_record_create",
-          "architecture_read",
-          "spec_plan_read",
+          "document_publish",
           "document_read",
           "document_write",
-          "document_publish"
+          "file_read",
+          "registry_read",
+          "registry_write",
+          "spec_plan_read",
+          "web_search"
         ],
         "memory": {
           "type": "session",
@@ -2807,7 +2812,9 @@
           "agent_control_read",
           "backlog_read",
           "backlog_write",
-          "registry_read"
+          "registry_read",
+          "registry_write",
+          "web_search"
         ]
       }
     },
@@ -2857,7 +2864,10 @@
       "agent_id": "AGT-WS-SCOUT",
       "agent_name": "external-catalog-scout",
       "displayName": "External Catalog Scout",
-      "aliases": ["hive-scout", "external-catalog-scout"],
+      "aliases": [
+        "hive-scout",
+        "external-catalog-scout"
+      ],
       "tier": "specialist",
       "value_stream": "explore",
       "capability_domain": "External coworker archetype reconnaissance. Scans approved external agent catalogs, detects meaningful platform gaps, and files governed backlog suggestions without importing code.",
@@ -2900,7 +2910,10 @@
       "agent_id": "AGT-WS-INVENTORY",
       "agent_name": "inventory-specialist",
       "displayName": "Digital Product Estate Specialist",
-      "aliases": ["estate-specialist", "inventory-specialist"],
+      "aliases": [
+        "estate-specialist",
+        "inventory-specialist"
+      ],
       "tier": "specialist",
       "value_stream": "explore",
       "capability_domain": "Product Manager. Product lifecycle, maturity, and market fit analysis. Owns the daily Discovery Taxonomy Gap Triage scheduled task that runs run_discovery_triage at 08:00 UTC.",
