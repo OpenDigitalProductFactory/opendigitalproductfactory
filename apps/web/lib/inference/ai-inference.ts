@@ -24,6 +24,7 @@ import {
   parseExecutionAdapterSelector,
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
+import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
 import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
@@ -389,6 +390,14 @@ export async function callProvider(
       ? await resolveExecutionAdapter(selector, effectivePlan.capabilityRequirements)
       : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
+  const telemetryStartedAt = new Date();
+  // Phase A7: telemetry kind derived from the structured selector when
+  // present; legacy-string paths land as "legacy:<adapter>" so analytics can
+  // distinguish unrouted traffic from structured-selector traffic.
+  const telemetryAdapterKind =
+    selector !== null
+      ? selector.kind
+      : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
   let result;
   try {
     result = await adapter.execute({
@@ -407,12 +416,46 @@ export async function callProvider(
     endTimer();
     const errorType = err instanceof InferenceError ? err.code : "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
+    // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
+    // swallows its own errors so we never mask the original throw.
+    const finishedAt = new Date();
+    void writeAdapterTelemetry({
+      adapterKind: telemetryAdapterKind,
+      adapterVersion: selector?.version ?? "unknown",
+      providerId,
+      modelId,
+      executionMode: "single",
+      startedAt: telemetryStartedAt,
+      finishedAt,
+      durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
+      status: err instanceof InferenceError ? "error" : "error",
+      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      refusalReason: err instanceof Error ? err.message.slice(0, 200) : undefined,
+    });
     throw err;
   }
 
   // 4. Record token and cost metrics
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "input" }, result.usage.inputTokens);
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "output" }, result.usage.outputTokens);
+
+  // Phase A7: success-path telemetry row. Fire-and-forget so a DB outage
+  // can't break the user's reply.
+  const telemetryFinishedAt = new Date();
+  void writeAdapterTelemetry({
+    adapterKind: telemetryAdapterKind,
+    adapterVersion: selector?.version ?? "unknown",
+    providerId,
+    modelId,
+    executionMode: "single",
+    startedAt: telemetryStartedAt,
+    finishedAt: telemetryFinishedAt,
+    durationMs: telemetryFinishedAt.getTime() - telemetryStartedAt.getTime(),
+    status: "success",
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    toolCallsTotal: result.toolCalls.length,
+  });
 
   // 5. Map AdapterResult → InferenceResult
   return {
