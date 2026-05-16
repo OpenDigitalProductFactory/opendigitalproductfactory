@@ -145,7 +145,7 @@ V1 must not add a `WorkspaceReadinessSnapshot` table. The recurrence signal is r
 
 - **For `escalate-coworker`**: query `CoworkerCapabilityNeed` for any row with `status` ∈ `{submitted, in-review}` whose `evidenceJson.sourceCell` matches the current (domain, cell). If found, recurrence is already tracked downstream — suppress new emission.
 - **For `escalate-action`**: query `AgentActionProposal` for `status="proposed"` whose `parameters.sourceCell` matches. Same suppression.
-- **For `escalate-platform`**: query `BacklogItem` for `status` ∈ `{triage, open}` whose `metadata.sourceCell` matches. Same suppression.
+- **For `escalate-platform`**: query `BacklogItemActivity` for `kind="readiness-audit-emission"` whose `payload.sourceCell` matches AND whose parent `BacklogItem.status` ∈ `{triage, open}`. Same suppression.
 
 The audit's own state lives in a minimal table:
 
@@ -182,7 +182,7 @@ All three write paths go through governed substrates that already enforce approv
 
 **`escalate-action` → `AgentActionProposal`.** The audit creates a proposal with `actionType="workspace_readiness_remediation"` and `parameters` describing the suggested side-effect action (e.g., "set HITL tier to 2 on agent X"). The proposal sits in `proposed` status until an operator approves it through the existing proposal UI.
 
-**`escalate-platform` → `BacklogItem`.** A new backlog row is created in the `triage` lane with `kind="readiness-gap"` and `metadata.sourceCell` set. The audit does not assign or prioritize; it surfaces the gap for the normal backlog triage flow.
+**`escalate-platform` → `BacklogItem` + `BacklogItemActivity`.** A new `BacklogItem` row is created in the `triage` lane with `type="readiness-gap"` and `body` describing the gap. A companion `BacklogItemActivity` row carries `kind="readiness-audit-emission"` and `payload.sourceCell` for the suppression query. (`BacklogItem` has no JSON metadata column today — `BacklogItemActivity.payload` is the existing substrate for cross-cutting per-item metadata; see [schema.prisma:961](../../../packages/db/prisma/schema.prisma#L961).) The audit does not assign or prioritize; it surfaces the gap for the normal backlog triage flow.
 
 Three rules govern the write paths:
 
@@ -242,7 +242,7 @@ Each criterion is a falsifiable check at landing time.
 - [ ] All three write paths land:
   - [ ] `submit_coworker_capability_need` invocation observed in `ToolExecution` audit; `CoworkerCapabilityNeed` row created with `evidenceJson.sourceCell` populated
   - [ ] `AgentActionProposal` row created with `actionType="workspace_readiness_remediation"` and `parameters.sourceCell` populated
-  - [ ] `BacklogItem` row created with `kind="readiness-gap"` and `metadata.sourceCell` populated
+  - [ ] `BacklogItem` row created with `type="readiness-gap"`; companion `BacklogItemActivity` row carries `kind="readiness-audit-emission"` and `payload.sourceCell`
 - [ ] Suppression test: a second run with the same gap and an open downstream record creates **zero** new writes
 - [ ] `ReadinessGapPanel` renders on `/workspace` with at least one open gap; renders empty-state cleanly with zero gaps
 - [ ] All audit writes carry the audit agent's GAID/principal — not the session user's — verifiable via `ToolExecution.actingPrincipalId`
