@@ -7199,9 +7199,15 @@ export async function executeTool(
       const testsPassed = typeof verification?.testsPassed === "number" ? verification.testsPassed : 0;
       const testsFailed = typeof verification?.testsFailed === "number" ? verification.testsFailed : 0;
 
-      const acceptance = build.acceptanceMet as Array<{ criterion: string; met: boolean }> | null;
-      const acMet = acceptance?.filter((a) => a.met).length ?? 0;
-      const acTotal = acceptance?.length ?? 0;
+      // acceptanceMet (Json?) stores either a bare array or {acceptanceCriteria: [...]} — `.filter` must not assume array shape.
+      const rawAcceptance = build.acceptanceMet as unknown;
+      const acceptance: Array<{ met?: boolean }> = Array.isArray(rawAcceptance)
+        ? (rawAcceptance as Array<{ met?: boolean }>)
+        : rawAcceptance && typeof rawAcceptance === "object" && Array.isArray((rawAcceptance as { acceptanceCriteria?: unknown }).acceptanceCriteria)
+          ? ((rawAcceptance as { acceptanceCriteria: Array<{ met?: boolean }> }).acceptanceCriteria)
+          : [];
+      const acMet = acceptance.filter((a) => a?.met === true).length;
+      const acTotal = acceptance.length;
 
       const prBody = [
         `## ${build.title}`,

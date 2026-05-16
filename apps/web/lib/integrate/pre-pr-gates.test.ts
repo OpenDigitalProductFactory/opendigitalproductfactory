@@ -456,3 +456,30 @@ rename to packages/db/foo.ts
     expect(archGate?.verdict).toBe("pass");
   });
 });
+
+describe("runPrePRGates — BI-E9CD1B92 minimal-diff smoke test", () => {
+  // BI-E9CD1B92 surfaced as "S?.filter is not a function" from create_portal_pr.
+  // Root cause was downstream in mcp-tools.ts acceptance handling, but lock in
+  // that the gate orchestrator itself never throws on a clean single-file token
+  // replacement diff — the exact shape that triggered the original report.
+  it("processes a clean single-file UI token replacement without throwing", () => {
+    const diff = `diff --git a/apps/web/components/my-queue/MyQueue.tsx b/apps/web/components/my-queue/MyQueue.tsx
+index 1111111..2222222 100644
+--- a/apps/web/components/my-queue/MyQueue.tsx
++++ b/apps/web/components/my-queue/MyQueue.tsx
+@@ -10,7 +10,7 @@ export function MyQueue() {
+   return (
+     <div className="my-queue">
+-      <h1>Queue</h1>
++      <h1>My Queue</h1>
+     </div>
+   );
+ }
+`;
+    expect(() => runPrePRGates(diff)).not.toThrow();
+    const result = runPrePRGates(diff);
+    expect(result.canProceed).toBe(true);
+    expect(result.requiresHumanReview).toBe(false);
+    expect(result.gates.every((g) => g.verdict === "pass")).toBe(true);
+  });
+});
