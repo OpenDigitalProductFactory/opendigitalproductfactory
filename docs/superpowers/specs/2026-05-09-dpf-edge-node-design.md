@@ -88,6 +88,18 @@
 >   promise the original spec made) is explicitly downgraded to
 >   Phase 1+ — Phase 0 relies on the mode + owner + volume-isolation
 >   controls listed above.
+> - 2026-05-16 — **runtime decision resolved.** The
+>   "Language for the binary" open question is closed by ADR
+>   [`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md):
+>   Modes 2 (macOS native) and 4 (Windows native) ship in Go. Mode 1
+>   (Linux container, TypeScript shipped in #501) is retrofitted to
+>   Go in a separate epic (`BI-EDGE-XP-04-MODE1-GO-RETROFIT`), gated
+>   on Mode 4 verification passing on real Windows hardware. The
+>   interim Mode 1 / Modes 2-4 runtime split is bounded by a new
+>   wire-contract test suite shipping with the first Mode 4 slice.
+>   The "Language for the binary", deployment-modes table, maturity-
+>   gate row, and endpoint-vs-MCP-tool sections are amended in the
+>   same PR.
 >
 > Source plan: `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`
 > (the "Discovery plane refactor" subsection under Future direction).
@@ -221,8 +233,8 @@ that's compatible with its environment.
 | Platform | Runtime | Notes |
 |---|---|---|
 | Linux native Docker (Mode 1) | Container with `network_mode: host` (scoped first-slice default; see Open question resolutions) | Default for Linux server installs. Phase 0 ships Node.js / TypeScript per [`services/edge-node`](../../../services/edge-node) (PR #501). The first-slice networking choice (`network_mode: host`, observer-only) is resolved in "Open question resolutions" below; `macvlan` is a follow-on slice for LLDP/CDP receive, not Phase 0. |
-| macOS native (Mode 2) | Native LaunchDaemon (or LaunchAgent) | Self-contained binary. The original spec assumed Go or Rust for the native-binary path; Phase 0's Mode 1 actually shipped Node.js / TypeScript (#501). The runtime for Mode 2 is **open**: either re-pack the Node service as a self-contained binary (`bun build --compile`, `pkg`, `nexe`) or revisit the Go choice for the native-binary path. See "Runtime drift — Mode 1 Node.js, Mode 2 TBD" in Open question resolutions. |
-| Windows native (Mode 4) | Native Windows Service | Same runtime decision as Mode 2 — open pending the drift resolution. |
+| macOS native (Mode 2) | Native LaunchDaemon (or LaunchAgent) | Self-contained Go binary per the runtime-decision ADR ([`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md)). Cross-compile target `darwin/arm64` first slice; `darwin/amd64` for Intel Macs. Mode 1 (TypeScript, shipped in #501) is retrofitted to Go in a separate epic (`BI-EDGE-XP-04-MODE1-GO-RETROFIT`) gated on Mode 4 verification. |
+| Windows native (Mode 4) | Native Windows Service | Self-contained Go binary per the runtime-decision ADR ([`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md)). Cross-compile target `windows/amd64` first slice; `windows/arm64` deferred to `BI-EDGE-XP-05-WIN-ARM64`. Windows Service registration via `golang.org/x/sys/windows/svc` (native SCM, no NSSM). |
 | Docker Desktop fallback (Mode 3) | Degraded in-VM container | Sees only the Docker Desktop VM's network; capability set restricted. Acceptable for dev installs that don't need host-LAN visibility. Same Node.js / TypeScript image as Mode 1. |
 | Remote managed host | Native service or container per host class | Same API contract, same auth scope; runtime per the host's mode. |
 
@@ -1059,9 +1071,12 @@ revisit without re-opening the doctrine.
 
 ### Edge Node lifecycle
 
-- **Language for the binary** *(open — drift documented)*:
-  - **Spec's original resolution (durable):** Go. Mature
-    cross-compilation, static linking, ~5 MB binary target,
+- **Language for the binary** *(resolved 2026-05-16 — Go for
+  Modes 2 / 4; Mode 1 retrofit follows. See
+  [`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md)
+  for the full ADR.)*:
+  - **Spec's original resolution (durable, now reaffirmed):** Go.
+    Mature cross-compilation, static linking, ~5 MB binary target,
     well-known signing/notarization toolchains on every platform,
     battle-tested in the comparators (Tailscale, Cloudflare Tunnel
     `cloudflared`, HashiCorp Boundary are Go and closer to what
@@ -1073,32 +1088,28 @@ revisit without re-opening the doctrine.
     `node:24-alpine`. Container image size is ~150 MB (vs Go's
     ~5 MB target). This was a divergence from the spec's resolution
     and was not amended in the spec before merge.
-  - **Status (2026-05-12):** the runtime drift is acknowledged but
-    not resolved. Two acceptable paths forward, both **must** be
-    decided before Mode 2 (macOS native binary) ships:
-    1. **Amend the spec to Node.js + bundling.** Standardize on
-       TypeScript across Modes 1 / 2 / 3 / 4. Use `bun build --compile`
-       (the leading single-file Node bundler in 2026) or `pkg` /
-       `nexe` for the native modes. Trade-offs: larger artifact
-       (~50 MB even bundled), worse cold-start than Go, but uses the
-       team's existing TypeScript fluency end-to-end and avoids a
-       Go/TS impedance mismatch between Mode 1 and Mode 2.
-    2. **Hold the spec's Go decision and rewrite Mode 1.** PR #501's
-       TypeScript service is replaced with a Go service for Mode 1
-       and used as-is for Mode 2 / 4. Trade-offs: smaller artifact,
-       better cold-start, matches the comparators — at the cost of
-       throwing away PR #501's working code and adding a Go
-       toolchain to the build pipeline.
-    The decision must be paired with a Mode 2 binary scaffolding PR.
-    Until then, the Mode 1 service in main is the authoritative
-    runtime and this open-question remains the source of truth on
-    the divergence.
+  - **Resolution (2026-05-16):** Modes 2 (macOS native) and 4
+    (Windows native) ship in Go. Mode 1 continues running the
+    Phase-0 TypeScript service on `main`; a Mode 1 Go retrofit is
+    tracked as `BI-EDGE-XP-04-MODE1-GO-RETROFIT`, gated on Mode 4
+    verification passing on real Windows hardware. The interim
+    period (Mode 1 = TS, Modes 2 / 4 = Go) is bounded by a new
+    wire-contract test suite at
+    `apps/web/app/api/v1/edge/__tests__/wire-contract.test.ts`
+    that ships with the first Mode 4 slice — drift between the two
+    implementations becomes a CI failure, not a runtime surprise.
+    Rationale, trade-off matrix, and validation gates live in
+    [`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md).
   - **Why this matters for security review:** the Phase 0 storage
     downgrade controls (Phase 0 storage downgrade — Linux container
     Mode 1) are scoped to the Node.js container shipped in #501.
-    If the Mode 1 implementation is rewritten in Go, those controls
-    must be re-applied to the Go service before that rewrite ships;
-    they are not transferable for free.
+    The Go retrofit for Mode 1 must re-apply those controls
+    (non-root UID, 0600 perms, owner-UID read-time check, volume
+    isolation, no Docker socket, backup exclusion, log redaction)
+    before it ships; they are not transferable for free. Modes 2 /
+    4 bypass the downgrade entirely — they use Keychain /
+    Credential Manager directly per "Token namespaces and
+    lifecycle" above.
 - **Linux default networking** *(scoped to first slice)*:
   **`network_mode: host`** (observer-only). LLDP/CDP receive and
   segregated scanner roles require `macvlan`; that's a follow-on
@@ -1206,15 +1217,21 @@ revisit without re-opening the doctrine.
 - **Endpoint vs MCP tool** *(durable)*: **REST first
   (`/api/v1/edge/*`), MCP tool follow-up**. Reasoning: the first
   Edge Node populations are non-MCP-aware (the binary itself is a
-  custom HTTP client — currently TypeScript / `undici` per
-  [`services/edge-node`](../../../services/edge-node), not an MCP
-  server) and REST is the straightforward surface. An MCP tool
-  (`submit_discovery_observations`) can wrap the same
+  custom HTTP client) and REST is the straightforward surface. An
+  MCP tool (`submit_discovery_observations`) can wrap the same
   `persistSubmittedDiscoveryRun` function later without changing
-  the contract on the wire. Note: this paragraph previously said
-  "custom Go HTTP client" — that was the pre-#501 expected shape;
-  the runtime drift is documented in "Language for the binary"
-  above and the Mode 1 truth is now TypeScript.
+  the contract on the wire. Per-mode HTTP-client truth:
+  - **Mode 1 (Linux container, Phase 0 shipped):** TypeScript /
+    `undici` per [`services/edge-node`](../../../services/edge-node).
+  - **Modes 2 / 4 (native, planned):** Go's `net/http`, per the
+    runtime-decision ADR
+    ([`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md)).
+  - **Mode 1 Go retrofit:** tracked as `BI-EDGE-XP-04-MODE1-GO-RETROFIT`,
+    gated on Mode 4 verification passing on real Windows hardware.
+  Historical note: the pre-#501 draft of this paragraph said "custom
+  Go HTTP client" — that was the original Go resolution which was
+  drifted from in Phase 0 and is now reaffirmed for Modes 2 / 4 with
+  the Mode 1 retrofit as a follow-on.
 
 ## Research and Benchmarking
 
@@ -1691,11 +1708,13 @@ target misconfiguration.**
       enumerated.
 - [x] Open questions resolved or explicitly deferred — see
       "Open question resolutions" above. **Mode 1 runtime: TypeScript
-      / Node.js (shipped in #501, currently authoritative). Mode 2 /
-      Mode 4 native binary runtime: open** — either repack the
-      TypeScript service via `bun build --compile` / `pkg` / `nexe`,
-      or rewrite for the native path; decision must land before
-      Mode 2 ships. Linux networking locked for first slice
+      / Node.js (Phase 0 shipped in #501; Go retrofit tracked as
+      `BI-EDGE-XP-04-MODE1-GO-RETROFIT`, gated on Mode 4 verification).
+      Modes 2 / 4 native binary runtime: Go** — resolved 2026-05-16
+      in [`2026-05-16-edge-node-runtime-decision.md`](2026-05-16-edge-node-runtime-decision.md).
+      The interim period (Mode 1 = TS, Modes 2 / 4 = Go) is bounded by
+      a new wire-contract test suite that ships with the first Mode 4
+      slice. Linux networking locked for first slice
       (`network_mode: host`); binary distribution locked (GitHub
       Release assets); update path locked (installer-driven, no
       in-binary self-updater); macOS scope locked (LaunchDaemon
