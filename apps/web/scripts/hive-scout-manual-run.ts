@@ -27,9 +27,28 @@ async function main() {
   const first = await runHiveScoutIngest();
   console.log("FIRST RUN:", first);
 
+  const firstRawSources = await prisma.rawSource.count({
+    where: { sourceKey: { startsWith: "hive-scout:500-ai-agents:" } },
+  });
+  console.log(`[hive-scout] RawSource rows after first run: ${firstRawSources}`);
+
   console.log("[hive-scout] second run (expect 0 new created)...");
   const second = await runHiveScoutIngest();
   console.log("SECOND RUN:", second);
+
+  const secondRawSources = await prisma.rawSource.count({
+    where: { sourceKey: { startsWith: "hive-scout:500-ai-agents:" } },
+  });
+  console.log(`[hive-scout] RawSource rows after second run: ${secondRawSources}`);
+
+  if (firstRawSources !== secondRawSources) {
+    console.error(
+      `[hive-scout] IDEMPOTENCE VIOLATION: RawSource count changed ` +
+        `${firstRawSources} -> ${secondRawSources} across runs`,
+    );
+    process.exit(1);
+  }
+  console.log(`[hive-scout] RawSource idempotence OK (${firstRawSources} rows stable)`);
 
   await prisma.$disconnect();
 }
