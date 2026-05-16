@@ -1100,6 +1100,10 @@ model ImprovementProposal {
   rejectionReason     String?
   verifiedAt          DateTime?
   contributionStatus  String    @default("local")
+  // Governed Hermes learning Slice 3: when category="skill", this links the
+  // proposal to the SkillDefinition.skillId it targets. Nullable for the
+  // existing non-skill proposal flow.
+  targetSkillId       String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   reviewedBy          User?     @relation("ImprovementReviews", fields: [reviewedById], references: [id])
@@ -1107,6 +1111,7 @@ model ImprovementProposal {
 
   @@index([status])
   @@index([submittedById])
+  @@index([targetSkillId])
   @@index([routeContext])
 }
 
@@ -6943,6 +6948,7 @@ model SkillDefinition {
   assignments SkillAssignment[]
   metrics     SkillMetric[]
   usageEvents SkillUsageEvent[]
+  revisions   SkillRevision[]
 
   @@index([status])
   @@index([category])
@@ -7008,6 +7014,30 @@ model SkillUsageEvent {
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId, createdAt(sort: Desc)])
   @@index([phase, createdAt(sort: Desc)])
+}
+
+// Governed Hermes learning Slice 3: immutable per-version snapshot of a
+// skill's SKILL.md content. Mirrors PromptRevision shape so operators who
+// already know the prompt revision pattern can navigate this without
+// retraining. Every approve and rollback writes a new row; the DB never
+// mutates SkillDefinition.skillMdContent in place without leaving a trail.
+model SkillRevision {
+  id           String   @id @default(cuid())
+  revisionId   String   @unique
+  skillId      String // SkillDefinition.skillId (business id)
+  version      Int
+  content      String // snapshot of skillMdContent at this version
+  metadata     Json?
+  changeReason String?
+  changedBy    String?
+  proposalId   String? // ImprovementProposal.proposalId when approved via proposal
+  createdAt    DateTime @default(now())
+
+  skill SkillDefinition @relation(fields: [skillId], references: [skillId], onDelete: Cascade)
+
+  @@unique([skillId, version])
+  @@index([skillId, createdAt(sort: Desc)])
+  @@index([proposalId])
 }
 
 // ─── EP-DELEG-001: Delegation Chain (Authority Propagation & Chain of Custody) ─

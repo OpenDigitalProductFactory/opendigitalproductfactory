@@ -175,6 +175,43 @@ export async function getSpecialistExecutions(limit = 100): Promise<SkillExecuti
 }
 
 /**
+ * Governed Hermes learning Slice 3: per-skill detail bundle for the
+ * proposals/revisions/seed-drift panel. Returns null when the skill does
+ * not exist so the caller can render a clean empty state.
+ */
+export async function getSkillReviewDetail(skillId: string): Promise<{
+  skillId: string;
+  skillMdContent: string;
+  category: string;
+  proposals: Awaited<ReturnType<typeof import("@/lib/skills/proposals").listSkillProposals>>;
+  revisions: Awaited<ReturnType<typeof import("@/lib/skills/proposals").listSkillRevisions>>;
+  seedDrift: Awaited<ReturnType<typeof import("@/lib/skills/seed-parity").getSkillSeedDrift>>;
+} | null> {
+  const skill = await prisma.skillDefinition.findUnique({
+    where: { skillId },
+    select: { skillId: true, skillMdContent: true, category: true },
+  });
+  if (!skill) return null;
+
+  const { listSkillProposals, listSkillRevisions } = await import("@/lib/skills/proposals");
+  const { getSkillSeedDrift } = await import("@/lib/skills/seed-parity");
+  const [proposals, revisions, seedDrift] = await Promise.all([
+    listSkillProposals(skillId),
+    listSkillRevisions(skillId),
+    getSkillSeedDrift(skillId),
+  ]);
+
+  return {
+    skillId: skill.skillId,
+    skillMdContent: skill.skillMdContent,
+    category: skill.category,
+    proposals,
+    revisions,
+    seedDrift,
+  };
+}
+
+/**
  * Governed Hermes learning Slice 1: shape SkillUsageEvent + SkillMetric for
  * the observatory's telemetry tab. Returns aggregate counts only — per-row
  * inspection lives in the Skills detail view (later slice).
