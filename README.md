@@ -74,6 +74,9 @@ Both modes include the full platform with AI coworkers, Build Studio sandbox, an
 | **Windows 10/11** | `powershell -ExecutionPolicy Bypass -File install-dpf.ps1` | (see below) | **GA** — production usage by real users |
 | **macOS Apple Silicon** | `bash install-dpf.sh` | [docs/install/macos.md](docs/install/macos.md) | **Early access — try it!** |
 | **Linux (native Docker)** | `bash install-dpf.sh` | [docs/install/linux.md](docs/install/linux.md) | **Early access — try it!** |
+| **Cloud Single VM** (AWS / GCP / Azure) | `bash install-dpf.sh --headless --release` *(inside the VM)* | [docs/install/cloud-single-vm.md](docs/install/cloud-single-vm.md) | **Early access — pilots wanted** |
+
+> **Picking the right row:** Cloud Single VM **is** the Linux installer running on a cloud VM. Same command, same lifecycle, same verify wrapper — the dedicated runbook just adds the cloud-specific provisioning, public-URL/TLS, and persistent-storage guidance you'd want for a customer-cloud deployment. Use Linux directly if you're installing on bare-metal or a Linux VM you provisioned yourself.
 
 #### Calling all macOS / Linux early adopters
 
