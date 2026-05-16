@@ -44,8 +44,10 @@
 > Mode 1 service — plus the same binary cross-compiled for Mode 2
 > (verification deferred). 11 PRs (W1–W11), one concern each per
 > AGENTS.md §4. The decision-shaped slices (W5 nmap-equivalent
-> choice, W8 cert procurement, W9 release workflow design) are
-> flagged inline with the inputs needed before they can land.
+> choice, W9 release workflow design) are flagged inline with the
+> inputs needed before they can land. Q3 (cert) resolved to **EV**
+> 2026-05-16; sub-decision (Azure Trusted Signing vs traditional
+> EV+hardware) still open but does not block W1–W7.
 
 ## T3 scope (what "done" means)
 
@@ -293,36 +295,30 @@ Each slice opens a separate PR per AGENTS.md §4. Slices have explicit dependenc
 
 **Depends on:** W1, W2.
 
-### W8 — Code-signing pipeline + cert procurement (DECISION SLICE) `[M4-ship]`
+### W8 — Code-signing pipeline + cert procurement `[M4-ship]`
 
-**Decision required before this slice can ship completely:** does the project hold an Authenticode code-signing cert?
+**Cert decision (Q3) resolved 2026-05-16: EV** — see Q3 in "Open questions" below for full rationale. Sub-decision (Azure Trusted Signing vs traditional EV+hardware-token) still open; W8a pipeline code is written to support either path.
 
-**Cert procurement status:** unknown as of T3 plan drafting. No code-signing infrastructure detected in `.github/workflows/` (grep for `cosign` / `sigstore` / `signtool` / `authenticode` / `signing` / `release_key`: zero hits). Project lead has flagged this as an open question.
-
-**Two cert paths:**
-
-**Path A — Already hold cert.** Skip procurement, jump to pipeline implementation.
-
-**Path B — Need to procure.**
-- **OV (Organization Validation):** 3 weeks lead time, ~$300/year, software signing only (works for binaries; SmartScreen reputation builds over time as installs accrue).
-- **EV (Extended Validation):** 1–3 days lead time, ~$600/year, hardware token required (YubiKey HSM or equivalent), immediate SmartScreen "clean" status.
-
-**Recommendation:** If procurement is needed, **start with self-signed for W8 + W10 verification (local-host scope only) and procure OV in parallel**. The self-signed binary cannot be distributed to other operators, but it can complete the Mode 4 verification gate on the project lead's own Windows host. Once OV lands, the W8 pipeline switches from self-signed to OV and the binary becomes distributable.
+**Cert procurement status:** no existing code-signing infrastructure in `.github/workflows/` (grep for `cosign` / `sigstore` / `signtool` / `authenticode` / `signing` / `release_key`: zero hits). This is a greenfield implementation.
 
 **W8 PRs split:**
-- **W8a — Code-signing pipeline (signing key abstracted).** Workflow at `.github/workflows/sign-edge-node.yml` with `signtool.exe` step. Secret `WINDOWS_CODE_SIGNING_CERT_BASE64` + `WINDOWS_CODE_SIGNING_CERT_PASSWORD` (or `WINDOWS_CODE_SIGNING_EV_TOKEN_*` for EV). Self-signed cert in secrets for initial bring-up; swapped to OV/EV once procured.
-- **W8b — Cert procurement (operator action, not a PR).** Project lead procures cert; uploads to GitHub Actions secrets. Pipeline switches automatically.
+- **W8a — Code-signing pipeline.** Workflow at `.github/workflows/sign-edge-node.yml` invoked by `release-edge-node.yml` (W9). Supports two backends behind a small adapter so the sub-decision (Azure Trusted Signing vs traditional EV) can land late without rewriting the pipeline. Local-dev self-signed fallback for the project lead's W10 verification on their own Windows host (self-signed binaries cannot be distributed to other operators, but they pass `Get-AuthenticodeSignature` for local verification).
+- **W8b — Cert procurement (operator action, not a PR).** Project lead picks sub-option, completes organization validation, loads credentials into GitHub Actions secrets. Pipeline switches from self-signed to production EV automatically once secrets are present.
 
 **Files (W8a):**
-- `.github/workflows/sign-edge-node.yml` — reusable workflow. Input: artifact path. Output: signed binary uploaded back. Uses `windows-latest` runner for `signtool.exe`.
+- `.github/workflows/sign-edge-node.yml` — reusable workflow. Input: artifact path + backend name (`azure-trusted` | `traditional-ev` | `self-signed`). Output: signed binary uploaded back. Routes to either `windows-latest` runner (Azure Trusted via `Microsoft/trusted-signing-action`) or a self-hosted runner (traditional EV via local `signtool.exe` + hardware token) or `windows-latest` with a generated self-signed cert (local-dev).
 - `services/edge-node-go/scripts/sign-self-signed.ps1` — local dev helper to create a self-signed cert for testing.
-- `docs/install/edge-node-signing.md` — operator guide. Distinguishes "signed by DPF project's OV/EV cert" from "self-signed local-dev artifact." Cert thumbprint pinning notes for the installer's verify-before-install step.
+- `docs/install/edge-node-signing.md` — operator guide. Distinguishes "signed by DPF project's EV cert (production)" from "self-signed local-dev artifact." Cert thumbprint pinning notes for the installer's verify-before-install step.
+
+**Required GitHub Actions secrets (W8b populates):**
+- *Azure Trusted Signing sub-option:* `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `TRUSTED_SIGNING_ACCOUNT_NAME`, `TRUSTED_SIGNING_CERT_PROFILE_NAME`.
+- *Traditional EV sub-option:* requires self-hosted runner with hardware token plugged in; no GitHub Actions secrets path (signing happens on the runner that physically holds the token).
 
 **Exit:**
-- W8a: `release-edge-node.yml` (W9) produces an Authenticode-signed binary. `Get-AuthenticodeSignature dpf-edge-node.exe` returns `Status : Valid`.
-- W8b: cert in production secrets; pipeline produces a binary signed with the DPF project's cert, distributable.
+- W8a: pipeline produces an Authenticode-signed binary using the configured backend. `Get-AuthenticodeSignature dpf-edge-node.exe` returns `Status : Valid`. With self-signed backend, the cert chain doesn't validate against Microsoft trust roots (expected for local-dev).
+- W8b: production EV credentials live in CI; pipeline produces a SmartScreen-clean binary distributable to any Windows operator.
 
-**Depends on:** W1 (something to sign).
+**Depends on:** W1 (something to sign). Q3 sub-decision (Azure Trusted Signing vs traditional EV) needed before W8b operator-procurement starts; W8a pipeline code can land independently of which sub-option is picked.
 
 ### W9 — GitHub Release publishing workflow `[both]`
 
@@ -429,11 +425,31 @@ W8a + W9 are gated on W1 for shape, but otherwise parallel.
 
 **Decision needed before:** W5 PR opens. If Option C is selected, T3 verification gate text needs adjustment.
 
-### Q3 — Authenticode code-signing cert (W8b)
+### Q3 — Authenticode code-signing cert (W8b) — *resolved 2026-05-16: EV*
 
-**Working default:** self-signed for W8 + W10 local-host verification; procure OV in parallel for production distribution.
+**Decision:** **EV (Extended Validation) cert** chosen over OV.
 
-**Decision needed before:** W8a PR can land with self-signed support; W11 install-dpf.ps1 step that pins a thumbprint cannot ship until W8b lands (the production cert thumbprint is what gets pinned).
+**Rationale (recorded for posterity, since this is load-bearing):**
+- **Immediate SmartScreen-clean UX from day 1.** EV-signed binaries never trigger the "Windows protected your PC — Unknown publisher" warning. OV cert reputation accrues over hundreds-to-thousands of installs; until then, every early-access user sees the scary warning. For an open-source platform in adoption-growth phase, that warning is an adoption killer.
+- **Faster lead time.** EV procurement is 1–3 business days vs OV's 3 weeks. T3's W8b–W11 finish line is unblocked sooner.
+- **The extra ~$300/yr cost is irrelevant** against the adoption-friction cost of OV's warning behavior.
+
+**Sub-decision (open):** within EV, two implementation paths:
+1. **Azure Trusted Signing** (preferred). Microsoft's managed signing service (GA 2025). Cert lives in Microsoft's HSM; signing happens via signtool plugin or REST API directly from GitHub Actions runners — no hardware token to manage, no self-hosted runner. ~$10/month base + minimal per-signature fee. Microsoft validates the organization once (1–3 days). Best fit for an open-source project with CI-native release flow.
+2. **Traditional EV cert + hardware token.** DigiCert / Sectigo / GlobalSign issue an EV cert provisioned to a YubiKey FIPS or SafeNet eToken (~$50–100 one-time hardware cost). Token must be physically present where signing happens — requires a self-hosted GitHub Actions runner (or a manual signing step). Cheaper recurring cost (~$600/yr) but more operator burden.
+
+**Recommendation:** **Azure Trusted Signing** unless there's a project constraint against a small Azure subscription. Same UX outcome as the YubiKey path with materially less ops overhead.
+
+**Operator action (parallel to W1–W7 implementation work):**
+1. Decide Azure Trusted Signing vs traditional EV+hardware-token.
+2. Begin organization-validation submission (business registration documents, verifiable phone listing, domain ownership confirmation — all standard EV requirements).
+3. Once validated and cert provisioned, load credentials into GitHub Actions secrets:
+   - Azure Trusted Signing: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `TRUSTED_SIGNING_ACCOUNT_NAME`, `TRUSTED_SIGNING_CERT_PROFILE_NAME`.
+   - Traditional EV: requires self-hosted runner with hardware token plugged in; no GitHub Actions secrets path.
+
+**Bring-up sequencing:** W8a opens against `main` with self-signed cert support (so W10 verification can run on the project lead's Windows host). W8a's signtool step becomes a no-op-with-self-sign-fallback when production EV credentials aren't yet in GitHub Actions secrets, and switches to production signing automatically once the secrets land. **W11's installer step that pins the production cert thumbprint cannot ship until production EV credentials are in CI** — that's the gating dependency.
+
+**Decision needed before:** Sub-decision (Azure Trusted Signing vs traditional EV+hardware) must land before W8b operator-procurement step starts. W8a's pipeline code can be written against either path; small adapter difference.
 
 ### Q4 — Apple Developer ID cert (Mode 2 W7 + W9)
 
