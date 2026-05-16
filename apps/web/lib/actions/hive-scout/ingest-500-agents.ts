@@ -12,6 +12,7 @@
 
 import { createHash } from "crypto";
 import { prisma } from "@dpf/db";
+import { upsertRawSource } from "@dpf/db/wiki-store";
 import type { Prisma, PrismaClient } from "@dpf/db";
 import { z } from "zod";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
@@ -172,6 +173,7 @@ type HiveScoutPrisma = Pick<
   | "backlogItemActivity"
   | "user"
   | "platformConfig"
+  | "rawSource"
 > & {
   taskRun?: unknown;
 };
@@ -352,6 +354,45 @@ export function itemIdForSource(sourceUrl: string): string {
 
 export function sourceUrlHash(sourceUrl: string): string {
   return createHash("sha256").update(sourceUrl).digest("hex");
+}
+
+const RAW_SOURCE_KEY_PREFIX = "hive-scout:500-ai-agents";
+
+/**
+ * Stable, human-readable key for `RawSource.sourceKey`. Idempotency depends
+ * on this returning the same string for the same source URL across runs.
+ *
+ * Shape: `hive-scout:500-ai-agents:<canonical-slug>` where the slug is
+ * derived from the URL host + path with non-alphanumerics collapsed to
+ * single dashes. Scheme, userinfo, port, query, and fragment are stripped
+ * so cosmetic URL variations do not split a single logical source into
+ * two RawSource rows.
+ */
+export function rawSourceKeyForEntry(entry: Pick<CatalogEntry, "sourceUrl">): string {
+  return `${RAW_SOURCE_KEY_PREFIX}:${canonicalSlugForUrl(entry.sourceUrl)}`;
+}
+
+function canonicalSlugForUrl(rawUrl: string): string {
+  let canonical: string;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    // host (no userinfo, no port) + pathname only; query + fragment dropped.
+    canonical = `${parsed.hostname}${parsed.pathname}`;
+  } catch {
+    // Lenient fallback for malformed URLs — preserves a key rather than
+    // throwing mid-ingest. Strip scheme + userinfo + port + query/fragment.
+    canonical = rawUrl
+      .trim()
+      .replace(/^[a-z]+:\/\//i, "")
+      .replace(/^[^/@]*@/, "")
+      .replace(/:\d+/, "")
+      .split(/[?#]/)[0];
+  }
+  return canonical
+    .toLowerCase()
+    .replace(/\.git$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 // ─── Gap detection ──────────────────────────────────────────────────────────
@@ -715,6 +756,24 @@ export async function runHiveScoutIngest(
     const finalStatus = reviewRequiresHuman ? "deferred" : status;
     if (finalStatus === "deferred") deferred++;
 
+    // Upsert a citable RawSource for the catalog entry. Idempotent on
+    // sourceKey — repeat runs do not create duplicate rows. organizationId
+    // is null because the 500-AI-Agents-Projects catalog is platform-shared
+    // (every install reads the same upstream README); WikiPage rows that
+    // cite this source in Slice 3 will be org-scoped per
+    // commitIngestProposal's contract.
+    const rawSource = await upsertRawSource(db, {
+      sourceKey: rawSourceKeyForEntry(entry),
+      sourceType: "external-url",
+      title: entry.name,
+      url: entry.sourceUrl,
+      license: CATALOG_LICENSE,
+      retrievedAt: new Date(),
+      organizationId: null,
+      isKernel: false,
+    });
+    const rawSourceId = (rawSource as { id: string }).id;
+
     const createdItem = await db.backlogItem.create({
       data: {
         itemId,
@@ -741,6 +800,7 @@ export async function runHiveScoutIngest(
           valueStream: match.stream,
           valueStreamConfidence: match.confidence,
           ambiguityReview: review,
+          rawSourceId,
         } as Prisma.InputJsonValue,
         recordedByAgentId: options.actorAgentId ?? null,
       },
