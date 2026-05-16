@@ -1,681 +1,255 @@
 # WhatsApp Secretary Gateway Design
 
-**Date:** 2026-03-21  
-**Status:** Draft  
-**Epic:** EP-SECRETARY-001  
-**Goal:** Add a WhatsApp-first company secretary that can communicate through a single company identity, act within the authority of validated employees, serve unknown/public contacts in a limited mode, and route cross-human asks into the platform's governed queue.
-
-**Relationship:** This is now a channel-specific slice under the broader Employee Communication Fabric design in `docs/superpowers/specs/2026-05-15-employee-communication-fabric-design.md`. Keep WhatsApp-specific runtime, binding, and secretary behavior here; keep cross-channel dispatch, employee reachability, provider priority, and delivery evidence rules in the broader fabric spec.
+**Date:** 2026-03-21 (rewritten 2026-05-16)
+**Status:** Draft — channel-specific slice
+**Epic:** EP-SECRETARY-001
+**Relationship:** This is the WhatsApp-specific slice under the [Employee Communication Fabric](2026-05-15-employee-communication-fabric-design.md) and the [Autonomous Coworker Runtime](2026-05-11-autonomous-coworker-runtime-design.md). Identity, queue, dispatch, failure taxonomy, and step-up substrate are inherited from those specs and **not duplicated here**. This document owns only the WhatsApp-specific concerns: Meta Cloud API posture, the 24-hour customer-service window, Message Templates (HSMs), webhook integrity, OTP-over-WhatsApp binding, and outbound conversation cost.
 
 ---
 
-## 1. Problem Statement
+## 1. Goal
 
-The current AI coworker is built around authenticated in-app usage:
+Add a WhatsApp-first company secretary that:
 
-- `AgentThread` and `AgentMessage` are tied to platform users
-- authority assumes a logged-in employee session
-- human review is modeled mainly as same-user proposal approval
-- the coworker has no external channel identity or channel/session model
+- Operates one outward-facing identity per organization (the secretary).
+- Lets validated employees act through bound WhatsApp numbers, never beyond their actual authority.
+- Serves unknown/public senders in a limited, safe mode.
+- Routes cross-human asks into the shared `WorkItem` queue.
+- Sends proactive reminders within Meta policy (24-hour window + approved templates).
 
-That is not sufficient for a company-facing secretary workflow.
+The secretary is useful, but **never** a backdoor admin user. Authority is always carried from a resolved `Principal`, never from a phone number.
 
-The target experience is:
+## 2. Non-Goals
 
-- a company operates one outward-facing secretary identity
-- employees can message that secretary from WhatsApp while in the field
-- the secretary may act for the validated employee, but never beyond that employee's authority
-- unknown/public senders get only public or narrowly-scoped workflow access
-- when another human must act, the secretary creates a governed ask in the human queue and follows up
+1. Multi-channel substrate — owned by the fabric spec.
+2. Generic identity/queue/dispatch models — already shipped per the fabric spec.
+3. Payments, credential changes, admin actions, or any side effect categorically prohibited from chat (§5.2).
+4. DPF acting as a Meta Solution Partner. See §3.
 
-The secretary must be useful, but it must not become a backdoor admin user.
+## 3. Meta Posture — DPF as Conduit, Not Broker
 
----
+**DPF does not enroll as a Meta Business Solution Provider, does not host a shared WhatsApp Business Account, and does not own any customer's outbound conversations.**
 
-## 2. External Design Reference: OpenClaw
+The supported posture is:
 
-This design is informed by OpenClaw's chat-channel architecture, especially its separation of channel transport from agent runtime and authority policy.
+- The customer owns their Meta Business Account and their WhatsApp Business Account (WABA).
+- The customer registers a phone number through their own Business Manager.
+- The customer creates a system-user access token in their own Business Manager and provides it to DPF via the existing `IntegrationCredential` flow (per AGENTS.md "DPF is a conduit, not a broker").
+- DPF makes WhatsApp Cloud API calls **directly** from the customer's account, using the customer's token, against the customer's WABA. No DPF-hosted intermediary.
+- Webhook callbacks are configured by the customer to point at the install's public DPF endpoint.
 
-Key reference patterns:
+Alternative postures explicitly rejected:
 
-- One running gateway owns channel connections and reconnect behavior
-- Inbound messages are routed deterministically from channel/account/peer bindings
-- Channel sessions are distinct from the agent's internal workspace and memory
-- A bot/channel can have one outward identity while internal routing remains separate
+- **BSP-mediated (Twilio / 360dialog / MessageBird):** pulls DPF into a partner posture, adds per-message margin, and creates a credential bottleneck. Rejected.
+- **DPF-hosted WABA:** makes DPF responsible for Meta policy violations across all installs. Rejected.
 
-Relevant sources:
+The customer-owned-credential posture means: the secretary's WhatsApp identity is **the customer's**, not DPF's. DPF supplies the runtime, governance, and audit; the customer supplies the Meta relationship.
 
-- OpenClaw GitHub: <https://github.com/openclaw/openclaw>
-- Multi-agent routing: <https://docs.openclaw.ai/concepts/multi-agent>
-- Channel routing: <https://docs.openclaw.ai/channels/channel-routing>
-- WhatsApp channel docs: <https://docs.openclaw.ai/channels/whatsapp>
+## 4. Identity, Sessions, and Queue — Inherited from the Fabric
 
-Patterns to copy:
+This spec does **not** introduce new identity, session, or queue tables. The fabric spec already ships the substrate:
 
-- channel adapter as a bounded subsystem
-- channel/account/peer scoped sessions
-- deterministic routing before model execution
-- separate external identity from internal agent state
+| Concept | Substrate (fabric / runtime) |
+| --- | --- |
+| Secretary identity | `Principal{kind:"service_secretary"}` + `PrincipalAlias{aliasType:"whatsapp_waba", aliasValue:"<phone_number_id>"}` |
+| Secretary WhatsApp channel | `CommunicationChannelBinding{channelType:"whatsapp", providerKey:"meta_whatsapp", providerAccountId:"<waba_id>"}` |
+| Employee WhatsApp binding | `PrincipalAlias{aliasType:"whatsapp_msisdn", aliasValue:"+E.164"}` + `CommunicationChannelBinding{channelType:"whatsapp", principalId:<employee>}` |
+| Channel session continuity | `CommunicationChannelSession{channelType:"whatsapp", externalPeerId:"+E.164"}` |
+| Human ask / queue item | `WorkItem` (`sourceType` ∈ `approval | manual-task | scheduled`) + `WorkItemMessage` |
+| Coworker work parent | `TaskRun` (per runtime spec) linked from the channel session (fabric §14.1) |
+| Step-up challenge | `ChannelStepUpChallenge` (fabric §14.2) |
+| Delivery evidence | `CommunicationDeliveryAttempt` (fabric) |
+| Failure taxonomy | runtime `exceptionClass` enum (runtime §5.6 + fabric §14.3) |
 
-Patterns not to copy blindly:
+If the implementation discovers a model that's missing, that model lands in the fabric spec — not here.
 
-- treating the channel identity itself as the authority principal
-- coupling inbound messages directly to unrestricted tool execution
-- assuming the same session model works for both chat transport and business governance
+## 5. Trust Classes and Action Tiers
 
----
+The trust classes from the original draft remain — they are WhatsApp-specific only inasmuch as the channel determines how the sender is identified.
 
-## 3. Design Goals
+### 5.1 Sender trust classes
 
-1. Provide a single company-facing WhatsApp secretary identity.
-2. Let validated employees interact with the secretary through bound phone numbers.
-3. Allow the secretary to act only within the authority envelope of the validated employee.
-4. Support unknown/public senders in a limited, safe mode.
-5. Route cross-human asks into a shared, governed human queue rather than a chat-only approval path.
-6. Preserve HITL, auditability, and current authorization principles.
-7. Reuse the current coworker, proposal, notification, and governance foundations where possible.
+| Class | Resolution | Allowed |
+| --- | --- | --- |
+| Unknown/public | `PrincipalAlias` lookup on `whatsapp_msisdn` returns no match | Public info, store hours, lightweight booking inquiry, "pass a message" |
+| Known customer contact | Match resolves to a `CustomerContact`'s principal | Public-safe + customer-safe workflow actions explicitly whitelisted |
+| Bound employee | Match resolves to an `EmployeeProfile`'s principal, binding verified | Low-risk operational actions within employee's actual authority; cross-human asks; proactive reminders |
 
-## 4. Non-Goals
+These trust classes feed the runtime's `requiresTaskRun()` predicate (runtime §7.1) and the channel adapter's authority resolution before `tasks/submit` (fabric §14.4).
 
-1. Full omnichannel support in the first slice.
-2. Payments, credential changes, or unrestricted admin actions through chat.
-3. Replacing the in-app coworker.
-4. Granting the secretary independent authority.
-5. Solving all customer identity and CRM workflow design in this epic.
+### 5.2 Action trust tiers
 
----
+| Tier | Examples | Requirement |
+| --- | --- | --- |
+| Public | Product/service info, hours, lightweight inquiry | None |
+| Bound-employee operational | Schedule check, low-risk record creation, customer notification, create `BacklogItem` | Bound binding + employee already holds the authority |
+| Bound-employee sensitive | Sensitive customer/HR disclosure, materially consequential workflow change | Step-up via `ChannelStepUpChallenge` (fabric §14.2) |
+| Prohibited in chat | Payments, credentials/secrets, security/admin config, any action beyond employee authority | Refused; surfaces as `policy-violation` (runtime §5.6) |
 
-## 5. Chosen Approach
+## 6. Employee Binding — OTP Over WhatsApp
 
-Three approaches were considered:
+**Binding flow** (no separate SMS or email required — the user is already on WhatsApp):
 
-1. Put WhatsApp transport directly inside the Next.js app
-2. Add a dedicated secretary gateway in front of the existing coworker stack
-3. Use an external inbox/helpdesk as the primary system and let DPF sit behind it
+1. Employee adds a WhatsApp number in DPF (`/employee/<id>/reachability`).
+2. Platform generates a server-side nonce, persists a pending `ChannelStepUpChallenge` keyed by `principalId` + nonce, and sends a templated message to the candidate number through the WhatsApp Cloud API (using an approved utility template — the binding-verification template is one of the templates the customer must pre-approve, see §7).
+3. Employee replies with the nonce in WhatsApp.
+4. Webhook resolves the inbound, matches the nonce against the open challenge, marks the challenge consumed, creates the `PrincipalAlias` + `CommunicationChannelBinding` rows.
+5. Future inbound from that number is treated as employee-authenticated channel traffic.
 
-This spec chooses **option 2**.
+**Lifecycle rules:**
 
-Reasoning:
+- Re-verification required after 90 days of inactivity, or on any change-of-device signal Meta surfaces.
+- Self-revoke: employee replies `STOP` (Meta-policy keyword); revokes binding and opts out of proactive sends.
+- Admin-revoke: platform admin can revoke any binding; written to `AuthorizationDecisionLog`.
+- One employee may bind multiple numbers; one number may **not** bind to multiple employees (enforced by `PrincipalAlias.@@unique([aliasType, aliasValue, issuer])`).
 
-- It matches the strongest OpenClaw pattern: transport concerns are isolated from reasoning and business logic.
-- It keeps reconnect, session, delivery, and proactive outbound messaging out of the main web runtime.
-- It allows DPF to reuse the existing coworker, routing, tool, and audit layers without turning the web app into a channel daemon.
-- It creates a clean path to future SMS or other messaging channels.
+## 7. Message Templates (HSMs) and the 24-Hour Window
 
----
+Meta's WhatsApp Business Messaging Policy splits outbound into two regimes:
 
-## 6. Core Principle
+| Regime | Trigger | Outbound rule |
+| --- | --- | --- |
+| **24-hour customer service window** | Customer sent an inbound message within the past 24 hours | Free-form prose, media, interactive buttons allowed |
+| **Outside the window** | No inbound from this peer within 24 hours | **Only pre-approved Message Templates (HSMs)** in categories `utility`, `marketing`, or `authentication` |
 
-**The secretary has an external identity, but no independent business authority.**
+Most secretary outbound work is *outside* the window — appointment reminders, follow-up nudges, SLA-breach alerts, binding verification. These all require approved templates.
 
-Every action must resolve through:
+**Substrate addition (fabric §6 candidate, owned by the fabric spec):** a `MessageTemplate` entity with `providerKey`, `providerTemplateId`, `category`, `language`, `variableSchema`, `approvalStatus`, `approvedAt`, `lastQualityScore`. The fabric's `CommunicationAdapter.capabilities.templatesRequired` (already shipped) becomes meaningful with this entity behind it.
 
-- sender trust level
-- validated employee authority, if the sender is a bound employee
-- secretary policy ceiling
-- workflow-specific risk rules
-- step-up requirements for sensitive actions
+**Authoring + submission flow:**
 
-Effective rule:
+1. Admin authors a template in DPF (`/platform/tools/integrations/communications/whatsapp/templates`).
+2. DPF submits the template to Meta via Cloud API; stores Meta's response with `approvalStatus = "pending"`.
+3. Meta returns approved/rejected (typically within 24 hours).
+4. Approved templates become eligible for use by `source="proactive"` runs.
 
-**effective secretary authority = validated employee authority ∩ secretary policy ∩ workflow scope**
+**Per-send selection logic:**
 
----
+- Inside the 24-hour window: free-form via the existing coworker reply path.
+- Outside the window: the dispatcher must select an approved template + variable values. If no approved template fits the intent, the run fails with `exceptionClass = "policy-violation"` (per fabric §14.3) — the runtime does not attempt a free-form send Meta will reject.
 
-## 7. Identity Model
+**Quality-rating monitoring:** Meta surfaces a per-number quality rating (GREEN/YELLOW/RED). Drop to RED auto-pauses outbound on that number until quality recovers. DPF must surface the current rating in the admin communications hub and respect the pause.
 
-The design uses three identity layers.
+## 8. Webhook Integrity
 
-### 7.1 Secretary identity
+Meta Cloud API delivers via HTTPS POST with `X-Hub-Signature-256` HMAC. The fabric's WhatsApp adapter must, in order:
 
-The company-facing service identity:
+1. **Verify the signature** against the customer's app secret. Mismatch → reject with 401; record gateway audit; do not create any `TaskRun`.
+2. **Dedupe** on `messages[].id`. Meta delivers at-least-once and replays on missing 200 ack; idempotency is mandatory. Stored on `CommunicationChannelSession` or a dedicated `WhatsAppInboundEvent` ledger if replay durability is needed.
+3. **Acknowledge within 5 seconds** with HTTP 200. Reasoning, agent invocation, and tool execution happen *after* the ack, never before. A slow ack causes Meta to back off the webhook and degrade the number's quality rating.
+4. **Normalize** the event (text, image, audio, video, location, contact card, document, interactive-button reply) into the fabric's `NormalizedChannelEvent` shape.
+5. **Escalate** to `tasks/submit` (fabric §14.4) if `requiresTaskRun()` returns true; otherwise return inline through the adapter.
 
-- one WhatsApp Business number
-- one display name and profile
-- one durable internal identity record
+Webhook signature mismatch and replay are gateway-level rejections — they do not create `TaskRun`s (per runtime §7.7 / fabric §14.3).
 
-This identity is not a human and must never be treated as a substitute employee account.
+## 9. Step-Up Over the Same Channel
 
-### 7.2 Employee principal
+The original draft routed step-up to a portal "queue item / approval task." That doesn't work for a field employee on WhatsApp — they aren't at a portal. Step-up over WhatsApp uses the fabric's `ChannelStepUpChallenge` entity (fabric §14.2):
 
-The validated internal human whose authority may be exercised through the secretary.
+1. Runtime moves the sensitive `TaskRun` to `status = "auth-required"`.
+2. WhatsApp adapter sends a templated step-up message: *"To authorize <action>, reply CONFIRM-A7K2 within 5 minutes. Reply NO to cancel."*
+3. Inbound webhook resolves the reply, matches against open challenges for this session/binding, consumes on match, writes audit row, runtime advances `TaskRun.status` back to `working`.
+4. On expiry or failed-attempts cap: runtime ends as `rejected` with `exceptionClass = "human-rejected"`.
 
-This maps to the current employee/user foundation:
+For categorically-prohibited actions (§5.2 prohibited tier) there is no step-up path — the secretary refuses and may create a `WorkItem` for an authorized human to take the action through the portal.
 
-- `User`
-- `EmployeeProfile`
+## 10. Outbound Cost and Abuse Controls
 
-### 7.3 External contact
+Meta charges per 24-hour **conversation** initiated (per category: utility, marketing, authentication, service). Cost controls:
 
-The outside party messaging the secretary:
+- **Per-org outbound budget** on `OrgSettings` (or an `AiProviderFinanceProfile`-style row): hard stop on outbound when monthly budget exhausted; warn at threshold.
+- **Per-peer inbound rate limit** for unknown senders: N messages per hour; excess returns a generic public template and is not escalated to `tasks/submit`.
+- **Block list** propagating to Meta via the API for confirmed-abuse numbers.
+- **Opt-in record** per `PrincipalAlias` for proactive sends. Meta policy requires documented opt-in; this is stored on the alias (or via a `principalAliasOptInLog`-shape table if richer audit is needed) and is a prerequisite for any `source="proactive"` outbound to that alias.
 
-- known customer contact
-- known customer account contact
-- partner/vendor contact later
-- unknown/public sender
+Cost ceiling and the opt-in record are enforced by the WhatsApp adapter before any Cloud API call; the runtime treats violations as `exceptionClass = "policy-violation"`.
 
-These actors do not inherit employee authority.
+## 11. Security Rules
 
----
+Mandatory:
 
-## 8. Trust Classes
+1. The secretary principal (`kind:"service_secretary"`) is never an admin user and never originates authority.
+2. Bound phone number proves channel possession, not unlimited authority.
+3. Unknown senders remain public/limited by default.
+4. Every non-public action resolves to a human authority context or is refused.
+5. High-risk actions require step-up (§9).
+6. Categorically-prohibited actions (§5.2 prohibited tier) are never executed from WhatsApp.
+7. Inbound free text from unknown senders is treated as a prompt-injection surface; the runtime's `prompt-injection-suspected` exception class applies.
+8. Webhook signature verification is non-bypassable.
 
-### 8.1 Unknown/public sender
+## 12. Rollout — Slice 3 of the Fabric
 
-Allowed:
+Per the [Employee Communication Fabric](2026-05-15-employee-communication-fabric-design.md) §9 slice plan, WhatsApp is **Slice 3** (after Slice 0/1 baseline shipped and Slice 2 Teams adapter lands).
 
-- public information
-- product/service information
-- store/service availability
-- appointment inquiry or lightweight booking request
-- pass a message
+### 12.1 WhatsApp Slice 3a — Inbound + reactive secretary
 
-Not allowed:
+- Cloud API webhook endpoint + signature verification + idempotency + fast ack (§8).
+- OTP-over-WhatsApp binding flow (§6).
+- Unknown-sender public-safe replies (no `TaskRun`).
+- Bound-employee inbound escalates to `tasks/submit` (fabric §14.4).
+- Templated step-up over the channel (§9).
+- `CommunicationChannelSession.taskRunId` schema delta added if not already in Slice 2.
 
-- privileged data access
-- employee-only operational actions
-- financial or administrative actions
+### 12.2 WhatsApp Slice 3b — Proactive sends
 
-### 8.2 Known customer/contact sender
+- `MessageTemplate` substrate (§7) — fabric-owned but lands with this slice.
+- Template authoring + Meta submission flow (admin UI).
+- `source="proactive"` outbound runs (runtime §5.2) with template selection.
+- Per-org budget enforcement + opt-in record (§10).
+- Quality-rating surfacing + auto-pause (§7).
 
-Allowed:
+### 12.3 Deferred
 
-- the same public-safe actions
-- known-contact workflow actions the platform explicitly permits
-- customer-safe scheduling and status workflows
+- Voice notes, video, location, contact-card understanding beyond storage. Slice 5+ depending on customer demand.
+- Customer-side richer self-service authority (booking changes, profile updates).
 
-Not allowed:
+## 13. Files and Components Likely Affected
 
-- employee authority
-- admin/security actions
+**New:**
 
-### 8.3 Bound employee sender
+- `apps/web/lib/communications/adapters/whatsapp/` — Cloud API client, webhook handler, signature verifier, idempotency store, normalizer, template selector.
+- `apps/web/app/api/communications/whatsapp/webhook/route.ts` — webhook endpoint.
+- `apps/web/app/(shell)/platform/tools/integrations/communications/whatsapp/` — admin readiness + template authoring UI.
 
-Allowed:
+**Extended (fabric-owned):**
 
-- low-risk operational actions within the employee's actual authority
-- secretary-assisted coordination
-- queue/ask generation for other humans
-- proactive reminder and follow-up workflows
+- `packages/db/prisma/schema.prisma` — `CommunicationChannelSession.taskRunId` (if not landed in Slice 2), `ChannelStepUpChallenge` (if not landed earlier), `MessageTemplate`.
+- `apps/web/lib/communications/dispatcher.ts` — template selection branch for outside-window outbound.
+- `apps/web/lib/communications/channel-bindings.ts` — `whatsapp_msisdn` validator (E.164).
 
-Sensitive actions may require step-up.
+## 14. Testing Strategy
 
----
+**Unit:**
 
-## 9. Employee Binding Model
+- E.164 validation; binding lifecycle (verify, expire, revoke).
+- 24-hour-window state machine; template eligibility selection.
+- Webhook signature verification; idempotency dedupe; ≤5s ack budget enforcement.
+- Trust-class resolution; nonce match for step-up.
 
-Employee validation is anchored on explicit channel binding, not on heuristic identity recognition.
+**Integration:**
 
-### 9.1 Binding rule
+- Bound employee inbound → `tasks/submit` → `TaskRun` created, session linked.
+- Unknown sender inbound → public-safe reply, no `TaskRun`.
+- Sensitive action → `auth-required` → step-up sent → nonce match → run resumes.
+- Outside-window proactive without approved template → `policy-violation`.
+- Outside-window proactive with approved template → send succeeds, evidence recorded.
+- Webhook replay → deduped, no duplicate run.
 
-Each employee may bind one or more approved WhatsApp numbers to their account.
+**End-to-end:**
 
-Binding flow:
+- Field employee asks secretary to schedule a customer follow-up → `WorkItem` created with `sourceType="manual-task"`, assigned employee notified through their preferred channel via the fabric dispatcher.
+- Customer asks for a callback → `WorkItem` (`sourceType="approval"`) routed to assigned employee, customer follow-up message confirms receipt.
 
-1. Employee signs into DPF
-2. Employee registers a WhatsApp number
-3. Platform initiates a verification challenge
-4. On success, the number is bound to the employee
-5. Future WhatsApp messages from that number are treated as employee-authenticated channel traffic
+**Security verification:**
 
-### 9.2 Why this is required
+- Webhook signature mismatch rejected with 401, no `TaskRun` created.
+- Unknown sender cannot execute privileged action.
+- Bound employee cannot exceed actual authority.
+- Step-up nonce cannot be reused.
+- `STOP` keyword revokes binding and halts proactive outbound to that alias.
 
-- It gives a clear trust anchor for field usage
-- It avoids treating a phone number as authority without proof
-- It keeps channel identity separate from in-app login identity
+## 15. Recommendation
 
----
+Wait for fabric Slice 2 (Teams) to validate the adapter contract end-to-end, then implement WhatsApp as Slice 3. WhatsApp's API constraints (24-hour window, template approval, quality rating, webhook latency budget) are heavier than any other channel; carrying them on a partly-proven adapter contract is the wrong cost. Once Teams is live, the substrate that WhatsApp needs is either already there (per fabric §14 contracts) or has a clear home (`MessageTemplate` lands with Slice 3b).
 
-## 10. Action Trust Tiers
-
-### 10.1 Public
-
-Examples:
-
-- answer product/service questions
-- provide hours or location information
-- pass messages
-- lightweight booking inquiry
-
-Available to unknown/public senders.
-
-### 10.2 Bound-employee operational
-
-Examples:
-
-- check or adjust schedules
-- create low-risk operational records
-- create backlog items
-- notify a customer
-- coordinate internal work
-
-Allowed from a bound employee number without extra approval if the employee already holds the required authority.
-
-### 10.3 Bound-employee sensitive
-
-Examples:
-
-- sensitive customer or HR disclosures
-- materially consequential workflow changes
-- certain compliance or financial commitments
-
-These require step-up confirmation.
-
-### 10.4 Prohibited in chat
-
-Examples:
-
-- payments
-- credentials or secrets
-- security/admin configuration changes
-- any action beyond the employee's real authority
-
-These are never executed directly from WhatsApp.
-
----
-
-## 11. Step-Up Policy
-
-This design chooses:
-
-**bound number only for normal actions, with step-up only for high-risk actions**
-
-### 11.1 Step-up triggers
-
-- action classified as sensitive
-- action touches restricted data or workflow
-- action exceeds secretary policy ceiling
-- action affects another party materially
-
-### 11.2 Step-up method
-
-Primary method in v1:
-
-- create a queue item / approval task in the platform
-- optionally send the employee a confirmation link or notification
-
-Future options:
-
-- one-time approval codes
-- device-bound approval confirmations
-
-### 11.3 Audit
-
-Step-up must log:
-
-- originating WhatsApp session
-- requesting sender
-- validated employee
-- action requested
-- approving human
-- final decision
-
----
-
-## 12. Runtime Architecture
-
-### 12.1 Secretary Gateway
-
-A new bounded subsystem responsible for:
-
-- WhatsApp connection lifecycle
-- channel session tracking
-- inbound message normalization
-- outbound delivery
-- delivery state and retries
-- proactive sends
-
-The gateway is the transport/runtime owner for the secretary channel.
-
-### 12.2 Secretary Orchestrator
-
-Receives normalized channel events and:
-
-- resolves sender trust level
-- resolves bound employee if applicable
-- determines allowed action envelope
-- invokes the existing coworker/routing/tool stack with secretary-specific policy
-
-### 12.3 Shared platform services reused
-
-- `AgentThread`
-- `AgentMessage`
-- `AgentActionProposal`
-- `Notification`
-- `DelegationGrant`
-- `AuthorizationDecisionLog`
-
----
-
-## 13. Session and Thread Model
-
-OpenClaw's channel/peer session pattern should be mirrored here.
-
-### 13.1 Secretary session
-
-Channel-side session of record, keyed by:
-
-- secretary identity
-- channel type
-- channel account
-- peer reference (phone number)
-
-This is distinct from the internal coworker conversation thread.
-
-### 13.2 Agent thread
-
-The internal reasoning/audit conversation already represented by `AgentThread`.
-
-### 13.3 Mapping rule
-
-One active `SecretarySession` links to one active `AgentThread`, but the secretary session remains the source of truth for transport continuity.
-
-This avoids overloading the current `userId + contextKey` thread model with external chat semantics.
-
----
-
-## 14. Human Ask / Queue Model
-
-The secretary should not create a separate WhatsApp-only approval path.
-
-Instead, it should route work into a shared human queue.
-
-### 14.1 Queue item types
-
-The queue needs to support:
-
-- `proposal` — the agent wants to execute an action
-- `ask` — another human must provide input or perform an action
-- `handoff` — responsibility moves to another employee
-- `reminder` — follow-up or nudge on outstanding work
-
-### 14.2 Why proposals alone are not enough
-
-Current `AgentActionProposal` is too narrow for secretary workflows because it is modeled around same-user approval in a conversation thread.
-
-Secretary scenarios include:
-
-- field employee asks finance to act
-- customer asks for a callback
-- employee asks the secretary to get manager approval
-- customer message needs assignment to another employee
-
-These are workflow items, not just chat proposals.
-
-### 14.3 Recommended direction
-
-Keep `AgentActionProposal` as an existing primitive and historical pattern, but evolve toward a broader human work queue as the system of record.
-
-Notifications remain a delivery mechanism, not the record of truth.
-
----
-
-## 15. Authority Resolution Flow
-
-For every inbound message:
-
-1. Normalize inbound WhatsApp event
-2. Resolve `SecretarySession`
-3. Resolve sender class:
-   - bound employee
-   - known customer/contact
-   - unknown/public sender
-4. Determine requested intent/action
-5. Compute effective authority:
-   - sender trust class
-   - bound employee authority if present
-   - secretary policy ceiling
-   - workflow rules
-   - step-up requirement
-6. Choose one result:
-   - direct execution
-   - queue item / ask
-   - step-up request
-   - refusal / public-safe fallback
-7. Log decision and respond
-
----
-
-## 16. Proactive Secretary Behavior
-
-This design is intentionally proactive, not just reactive.
-
-### 16.1 Allowed proactive behaviors
-
-- remind field staff about appointments, tasks, missing inputs, or approvals
-- remind customers about appointments or expected follow-ups
-- prompt employees about queue items awaiting action
-- nudge on SLA breaches or stuck asks
-
-### 16.2 Proactive limits
-
-- no high-risk action without normal authority checks
-- no proactive disclosure of sensitive information to an unverified sender
-- no proactive activity outside tenant-configured policy
-
-### 16.3 Scheduling source
-
-These proactive messages should be driven by real platform workflow state, not ad hoc LLM initiative.
-
----
-
-## 17. Proposed Data Model Additions
-
-Exact naming may shift during implementation, but the boundaries should stay stable.
-
-### 17.1 `SecretaryIdentity`
-
-Represents the durable company-facing secretary identity.
-
-Suggested fields:
-
-- `secretaryId`
-- `organizationId`
-- `name`
-- `status`
-- `policyClassId`
-- `defaultLanguage`
-
-### 17.2 `SecretaryChannel`
-
-Represents one external messaging channel bound to a secretary identity.
-
-Suggested fields:
-
-- `secretaryId`
-- `channelType` (`whatsapp`)
-- `accountRef`
-- `phoneNumber`
-- `status`
-- `transportConfig`
-
-### 17.3 `EmployeeChannelBinding`
-
-Represents a verified employee-owned external number.
-
-Suggested fields:
-
-- `employeeProfileId`
-- `channelType`
-- `externalUserRef`
-- `verifiedAt`
-- `status`
-- `lastSeenAt`
-
-### 17.4 `SecretarySession`
-
-Represents one channel/peer conversation continuity record.
-
-Suggested fields:
-
-- `secretaryId`
-- `channelType`
-- `accountRef`
-- `peerRef`
-- `linkedEmployeeId?`
-- `linkedContactId?`
-- `trustLevel`
-- `activeThreadId?`
-- `lastMessageAt`
-
-### 17.5 `HumanQueueItem` or equivalent generalized queue model
-
-Represents a human action/approval/request item.
-
-Suggested fields:
-
-- `queueItemId`
-- `kind` (`proposal` | `ask` | `handoff` | `reminder`)
-- `requestedByType`
-- `requestedByRef`
-- `actingForUserId?`
-- `targetUserId?`
-- `status`
-- `sourceChannel`
-- `sourceSessionId?`
-- `relatedEntityType?`
-- `relatedEntityId?`
-- `authorityClass`
-- `dueAt?`
-- `resolvedAt?`
-
----
-
-## 18. Reuse of Existing Models
-
-The design should reuse the current governance/audit foundations:
-
-- `DelegationGrant` for bounded authority envelopes where needed
-- `AuthorizationDecisionLog` for final allow/deny/audit records
-- `AgentThread` and `AgentMessage` for internal conversation state
-- `Notification` for in-app and future push delivery
-
-`AgentActionProposal` should be reused where it still fits, but not treated as the final model for all secretary-mediated human work.
-
----
-
-## 19. Security Rules
-
-The following rules are mandatory:
-
-1. The secretary is never an admin user.
-2. The secretary never originates authority.
-3. Bound phone number proves channel possession, not unlimited authority.
-4. Unknown senders remain public/limited by default.
-5. Every non-public action must resolve to a human authority context or be refused.
-6. Cross-human coordination becomes a queue item, not an implicit side effect.
-7. High-risk actions require step-up.
-8. Certain actions are categorically blocked in chat.
-
----
-
-## 20. WhatsApp-First Rollout Plan
-
-### Slice 1
-
-WhatsApp secretary for:
-
-- public-safe interactions
-- employee-bound low-risk operational actions
-- cross-human asks routed into the shared queue
-
-No payments, no admin actions, no secrets.
-
-### Slice 2
-
-Proactive reminders and field coordination:
-
-- appointment reminders
-- follow-up nudges
-- outstanding ask reminders
-- field employee coordination prompts
-
-### Slice 3
-
-Sensitive step-up workflows:
-
-- approval tasks
-- stronger confirmation paths
-- higher-risk action classes
-
-### Slice 4
-
-Multi-channel expansion:
-
-- SMS or other business messaging channels
-- reuse the same secretary identity, session, and authority model
-
----
-
-## 21. Files and Components Likely Affected
-
-### New areas
-
-- `apps/web/lib/secretary/` — gateway/orchestration helpers
-- channel adapter service or worker runtime for WhatsApp
-- queue service/actions for human asks
-
-### Existing areas to extend
-
-- `packages/db/prisma/schema.prisma`
-- `apps/web/lib/actions/agent-coworker.ts`
-- `apps/web/lib/actions/proposals.ts`
-- `apps/web/lib/mcp-tools.ts`
-- notification surfaces and queue UI
-- employee/settings/admin surfaces for channel binding and secretary config
-
----
-
-## 22. Testing Strategy
-
-### Unit tests
-
-- sender trust classification
-- employee binding verification logic
-- authority resolution
-- step-up policy classification
-- queue routing rules
-
-### Integration tests
-
-- bound employee WhatsApp message -> operational action allowed
-- unknown sender -> public-only behavior
-- bound employee sensitive action -> step-up required
-- cross-human request -> queue item created + notification sent
-
-### End-to-end tests
-
-- WhatsApp inbound -> secretary session -> thread mapping -> reply
-- field employee asks for help -> target human queue item -> completion -> secretary follow-up
-
-### Security verification
-
-- blocked actions from unknown senders
-- blocked high-risk actions without step-up
-- blocked actions beyond employee authority
-- audit log written for all non-public decisions
-
----
-
-## 23. Open Questions Deferred
-
-1. Exact WhatsApp provider/runtime choice and ops model.
-2. Whether a separate `SecretaryMessage` raw transport log is needed in slice 1 or later.
-3. Whether the human queue should extend `AgentActionProposal` or introduce a new canonical queue table immediately.
-4. Whether known customer contacts get richer self-service authority in later phases.
-
----
-
-## 24. Recommendation
-
-The first implementation spec after this one should be:
-
-**WhatsApp Secretary Gateway + Employee Channel Binding + Human Ask Queue**
-
-That is the smallest slice that proves the real product value:
-
-- a durable company secretary identity
-- employee-backed authority
-- limited public-safe access for unknown senders
-- governed cross-human coordination
-- proactive field-friendly operation without violating HITL or authorization boundaries
+The first implementation spec **after** this one should be the Slice 3a plan: webhook + binding + reactive secretary, scoped to the contracts above.

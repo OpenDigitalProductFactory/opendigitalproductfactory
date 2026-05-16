@@ -474,17 +474,162 @@ Suggested backlog items:
 6. Convert WhatsApp Secretary Gateway into the WhatsApp channel slice.
 7. Add Telegram as an optional adapter after policy and customer-fit review.
 
-## 13. Open Questions
+## 13. Resolved Decisions
 
-1. Should Teams or Slack ship first after the DPF-owned baseline, or should this be customer-archetype driven?
-2. Should WhatsApp inbound require a separate worker runtime from the first implementation, or can the first slice be webhook-only with delivery constraints?
-3. Should `CommunicationChannelBinding` be introduced immediately, or should `PrincipalAlias` plus a smaller preference table land first?
-4. Which workflows are allowed to include action buttons outside DPF in v1?
-5. What retention policy applies to provider event evidence?
-6. Which Telegram-specific use cases justify bringing it ahead of webhook or SMS?
+These were the original Open Questions; resolutions land here as Slice 0/1 ships and Slice 2 enters planning. Each decision can be revisited if customer evidence contradicts it; the resolution is the current default.
 
-## 14. Recommendation
+### 13.1 Slice 2 channel order: Teams first, Slack second
+
+**Decision:** Microsoft Teams ships first as the Slice 2 enterprise real-time adapter; Slack follows as Slice 2b.
+
+**Reasons:** (a) DPF already has a Microsoft 365 Communications preview surface, so the Teams adapter rides existing credential plumbing; (b) the dominant DPF customer archetype today is Microsoft-first enterprise; (c) Slack's interactive-message contract is similar enough that the Slice 2 adapter contract can be validated against Teams and reused for Slack with minimal rework. Customer-archetype override remains supported through `CommunicationChannelBinding.preferences` — installs that lead with Slack can configure the dispatch policy accordingly without code changes.
+
+### 13.2 WhatsApp inbound: webhook-only first, separate worker only if necessary
+
+**Decision:** Slice 3 WhatsApp inbound is webhook-only — the existing Next.js app accepts the Cloud API webhook, verifies the signature, normalizes the event, and either responds inline or escalates to a coworker via `tasks/submit` (per the Autonomous Coworker Runtime spec §13.2). A separate worker runtime is introduced **only** if (a) Meta's webhook-ack latency budget (≤5s) cannot be met under load, or (b) the customer install needs durable webhook replay storage that exceeds the request-scoped lifetime.
+
+**Reasons:** Adds the simplest viable transport first; defers operational complexity until measured need.
+
+### 13.3 `CommunicationChannelBinding` already shipped — closed
+
+**Decision:** Closed. `CommunicationChannelBinding`, `CommunicationChannelSession`, and `CommunicationDeliveryAttempt` shipped in PR #619; the channel-binding management UX shipped in PR #628. The original alternative (smaller preference table layered over `PrincipalAlias`) is not pursued — the operational benefit of a single binding row carrying preferences + capabilities + verification state outweighed the schema-economy argument.
+
+**Open follow-up:** the binding's `externalSubject` is logically a `PrincipalAlias.aliasValue` for the same `(principalId, channelType)`. A future cleanup may add a `principalAliasId` FK on `CommunicationChannelBinding` to make the relationship explicit and prevent drift; this is not required for Slice 2.
+
+### 13.4 Action-button workflow allowlist for v1
+
+**Decision:** v1 (Slice 2 + Slice 3) supports interactive action buttons **only** for the following workflows:
+
+| Action | Allowed in chat | Notes |
+| --- | --- | --- |
+| Approve / reject a `WorkItem`-bound proposal | Yes | Maps to `WorkItem.status` transitions and writes `WorkItemMessage`. |
+| Status update on a `WorkItem` (started, blocked, completed) | Yes | Same mapping; no new authority required beyond assignee. |
+| Deep-link to web detail | Yes | Always safe; opens the canonical surface in DPF. |
+| Snooze / reschedule a reminder | Yes | Updates `ScheduledAgentTask.nextRunAt` or the targeted `WorkItem.dueAt`. |
+| Decline a meeting / cancel a booking | Yes | Customer-context only; staff-side requires step-up. |
+
+Categorically prohibited from chat in v1, matching the WhatsApp Secretary spec's §10.4: payments, credentials/secrets, security/admin configuration, anything beyond the resolved principal's authority. Sensitive workflows require step-up (see §15 cross-spec reconciliation).
+
+### 13.5 Provider event evidence retention
+
+**Decision:** Default retention bands for `CommunicationDeliveryAttempt` and any future raw-event log:
+
+| Outcome | Default retention | Override |
+| --- | --- | --- |
+| Successful delivery (`sent`/`delivered`/`read`) | 90 days | Per-binding via `CommunicationChannelBinding.preferences.retentionDaysOverride` |
+| Failed delivery (non-systemic) | 90 days | Same |
+| `runtime-defect` exceptions (per Autonomous Coworker Runtime §5.6) | indefinite | Only after the linked defect backlog item closes |
+| Raw provider payloads (when stored — see §13.2) | 30 days | Always redacted per integration-lab redaction policy; PII fields are masked at write time |
+
+Retention is enforced by a scheduled cleanup job, not at write time. PII subject-erasure requests cascade through `PrincipalAlias` → `CommunicationChannelBinding` → `CommunicationChannelSession` → `CommunicationDeliveryAttempt`.
+
+### 13.6 Telegram: deferred pending customer-specific demand
+
+**Decision:** Telegram is deferred. It does not ship in Slice 4 by default. Slice 4 is "Webhook adapter + per-customer adapter pattern" — installs that need Telegram can configure it via the generic webhook adapter or by contributing a Telegram adapter through the hive-mind contribution path.
+
+**Reasons:** No customer has yet articulated a Telegram-specific use case that the SMS or webhook adapter cannot serve. Telegram's bot model has good documentation but its enterprise governance posture (per-bot tokens, no native enterprise SSO, group-membership semantics) means it would carry disproportionate compliance overhead for the current customer mix.
+
+## 13a. Open Questions (post-Slice-1)
+
+These are new questions surfaced by Slice 0/1 implementation experience and the planned Slice 2/3 work:
+
+1. Should `CommunicationChannelSession.taskRunId` be added in Slice 2 (Teams interactive responses that escalate to coworker work need it) or in Slice 3 (when WhatsApp Secretary lands)? See §15.
+2. Should `ChannelStepUpChallenge` be a new entity (recommended) or a `Json` payload on `AgentActionProposal`? See §15.
+3. Microsoft Teams supports both Bot Framework and Graph chatMessage APIs for outbound. Which is the default? Bot Framework offers richer interactive cards; Graph supports more identity contexts. Slice 2 must pick one default + document the override path.
+4. Slack's per-workspace bot-token model is per-tenant; how does this map onto DPF's `CommunicationChannelBinding{providerKey:"slack", providerAccountId:"<workspace-id>"}` when an enterprise has multiple Slack workspaces?
+5. Does the dispatch policy in §6.5 belong in code (`apps/web/lib/communications/dispatch-policy.ts`) long-term, or does it move to a declarative `DispatchPolicy` table once customer overrides become common?
+
+## 14. Runtime Integration
+
+The fabric is the **transport** layer; the [Autonomous Coworker Runtime](2026-05-11-autonomous-coworker-runtime-design.md) is the **work** layer. Inbound channel events that escalate to coworker work, outbound proactive sends originating from coworker decisions, and step-up flows that authorize sensitive actions all cross this boundary. This section defines the four contracts that bind the two specs together. The runtime spec mirrors this section in its §7.7.
+
+### 14.1 TaskRun parenting for inbound channel events
+
+**Contract:** When an inbound channel event escalates to coworker work — i.e. the runtime's `requiresTaskRun()` predicate (runtime spec §7.1) returns true for the resolved intent — the resulting `TaskRun` is the run identity for that channel-originated work. The fabric's `CommunicationChannelSession` points at the run, not the other way around.
+
+**Schema delta (Slice 2 or 3, whichever ships first interactive escalation):**
+
+```prisma
+model CommunicationChannelSession {
+  // ...existing fields...
+  taskRunId     String?
+  // index: @@index([taskRunId])
+}
+```
+
+**Lifecycle:** Inbound webhook → adapter normalizes → fabric resolves `(PrincipalAlias, CommunicationChannelSession)` → if escalation needed, fabric calls `tasks/submit` (see §14.4) → runtime creates `TaskRun` → fabric writes `CommunicationChannelSession.taskRunId`. The session may outlive any single run; the column points at the **most recent** active run for that session.
+
+**Why this direction:** the runtime is the work spine for the platform. Channel sessions are transport context that may be re-used across runs (a customer's WhatsApp thread spans many separate work items). Pointing sessions at runs preserves the runtime's role as the canonical work identity.
+
+### 14.2 Step-up via `auth-required` and `ChannelStepUpChallenge`
+
+**Contract:** Sensitive actions surfaced through a chat channel use the runtime's `auth-required` `TaskRun.status` (runtime spec §5.4 + §5.6) to model the pause. The fabric owns the **challenge entity** that satisfies the pause over the same channel; the runtime owns the **state transition** when the challenge resolves.
+
+**New entity (Slice 2 or Slice 3, fabric-owned):**
+
+```prisma
+model ChannelStepUpChallenge {
+  id                  String   @id @default(cuid())
+  challengeId         String   @unique @default(cuid())
+  taskRunId           String?               // present when challenge gates a TaskRun
+  proposalId          String?               // present when challenge gates an AgentActionProposal
+  channelBindingId    String                // which binding receives the challenge
+  channelSessionId    String?               // which session, if known
+  nonce               String                // single-use, server-generated, ≥6 chars
+  expiresAt           DateTime              // typically now() + 5 minutes
+  consumedAt          DateTime?             // null until satisfied
+  consumedBySender    String?               // peer identifier that replied (audit)
+  failedAttempts      Int      @default(0)  // increment on wrong nonce; lock after N
+  createdAt           DateTime @default(now())
+
+  @@index([taskRunId])
+  @@index([proposalId])
+  @@index([channelBindingId, expiresAt])
+}
+```
+
+**Flow:**
+1. Runtime moves `TaskRun.status = "auth-required"` (or pauses an `AgentActionProposal`).
+2. Fabric adapter calls `sendStepUpChallenge(input)` — generates a `ChannelStepUpChallenge` row, sends a templated message asking for the nonce.
+3. Inbound webhook resolves to a session; fabric matches the reply payload against open challenges for that session/binding; consumes on match.
+4. On consumption: runtime advances `TaskRun.status` back to `working` (or executes the proposal); on `expiresAt` reached or failed-attempts cap: runtime ends as `human-rejected` (runtime spec §5.6 failure class).
+
+**Why a new entity (not a `Json` field on `AgentActionProposal`):** the challenge has its own lifecycle (issued → consumed/expired) that's independent of the proposal lifecycle, and one challenge may gate either a `TaskRun` (no proposal) or a proposal. A small typed table is cheaper to query and audit than a JSON blob inside another model. This resolves §13a question 2.
+
+**Reusable beyond chat:** the same entity backs email magic-link confirmations and SMS OTP flows. Adapter-specific rendering is in the adapter; the entity is channel-agnostic.
+
+### 14.3 Failure taxonomy adoption
+
+**Contract:** Fabric inbound failures use the closed `exceptionClass` enum defined in the runtime spec §5.6, not a parallel fabric-only failure taxonomy. The most relevant mappings:
+
+| Fabric inbound situation | Runtime `exceptionClass` | Disposition |
+| --- | --- | --- |
+| Untrusted-channel free text fed to model | `prompt-injection-suspected` | Quarantine result; do not feed back to model uncritically. |
+| Outbound proactive send outside 24-hour window without an approved template | `policy-violation` | Refuse send at adapter; surface to operator. |
+| Unbound number tries a bound-employee action | `missing-data` | Move run to `input-required`; ask for OTP-bind first. |
+| Step-up challenge timeout or failed-attempts cap | `human-rejected` | End run as `rejected`, not `failed`. |
+| Webhook signature mismatch / replay | (rejected at gateway) | No `TaskRun`; record gateway-level audit only. |
+| Channel adapter exception during send | `tool-error` | Per adapter retry policy. |
+| Channel binding revoked mid-run | `tool-denied` | No retry; file `CoworkerCapabilityNeed`. |
+
+The fabric does not invent classes the runtime doesn't have. If a new class is needed, it lands in the runtime spec first.
+
+### 14.4 `tasks/submit` as the inbound→coworker contract
+
+**Contract:** When a normalized channel event escalates to coworker work, the fabric adapter invokes the coworker via the MCP JSON-RPC `tasks/submit` method (runtime spec §13.2 decision). The adapter is a remote MCP client with bounded token authority — same governance surface as any other external MCP client.
+
+**Why not a direct in-process call:** the channel adapter may run in a separate worker process (Slice 3 if Cloud API webhook latency requires it, see §13.2). Even when in-process, `tasks/submit` keeps one external coworker-invocation contract — token scope intersects with user capability and agent grants (AGENTS.md §8). Two paths into the runtime would mean two governance surfaces.
+
+**Authority resolution:** the channel adapter's token resolves to a `Principal` (per AGENTS.md §11 principal convergence). For unknown senders the resolved principal is the **secretary service principal** (`Principal{kind:"service_secretary"}`), constrained to public-safe scope. For bound employees the resolved principal is the **employee principal**, with full intersection of employee authority + adapter scope + workflow rules + step-up requirements. This eliminates the "Secretary Orchestrator" component the WhatsApp spec originally proposed — the channel adapter does the resolution; the runtime does the work.
+
+### 14.5 Cross-reference
+
+This section is mirrored in the Autonomous Coworker Runtime spec at §7.7 ("Channel fabric integration"). Substantive changes here must update there, and vice versa.
+
+## 15. Recommendation
 
 Proceed with the employee communication fabric, not a custom chat client and not a single-channel WhatsApp or Telegram bet.
 
 The first implementation slice should be the refactor and DPF-owned baseline: shared adapter contract, in-app notification adapter, push/email fallback, employee reachability settings, delivery evidence, and a communication center. After that, add Teams/Slack for enterprise/dev teams and WhatsApp Secretary for field/local workflows. Telegram belongs as an optional adapter once the core fabric proves itself.
+
+Slice 0 + Slice 1 shipped via PRs #619 + #628. Slice 2 (Teams) is the recommended next slice; Slice 3 (WhatsApp Secretary as channel slice) follows. Both depend on the §14 contracts being in place — that is the next planning input.
