@@ -153,6 +153,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   compare_versions: ["file_read"],
   propose_file_change: ["file_read"],
   propose_improvement: ["decision_record_create"],
+  propose_skill_improvement: ["decision_record_create"],
 
   // Code graph (file-level coverage today; symbol-level deferred)
   get_code_graph_freshness: ["code_graph_read"],
