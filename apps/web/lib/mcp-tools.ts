@@ -2113,6 +2113,42 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "proposal",
     sideEffect: true,
   },
+  {
+    name: "propose_skill_improvement",
+    description:
+      "Propose a content change to a specific coworker skill (e.g. tightening instructions, fixing a stale " +
+      "reference). Use when you have observed the current skill prompt produce the wrong behavior and you can " +
+      "draft a better version. Submits an ImprovementProposal(category='skill', targetSkillId=…) that a human " +
+      "reviews on /platform/ai/skills.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        skillId: {
+          type: "string",
+          description: "The SkillDefinition.skillId (business id) the proposal targets, e.g. 'build-page'.",
+        },
+        title: { type: "string", description: "Short title for the change (max 100 chars)" },
+        description: { type: "string", description: "Why the change is needed; cite the friction or failure" },
+        proposedContent: {
+          type: "string",
+          description: "Full proposed SKILL.md body (replaces the current content if approved)",
+        },
+        severity: {
+          type: "string",
+          enum: ["low", "medium", "high", "critical"],
+          description: "Impact severity (default: medium)",
+        },
+        observedFriction: {
+          type: "string",
+          description: "What you observed that prompted this change",
+        },
+      },
+      required: ["skillId", "title", "description", "proposedContent"],
+    },
+    requiredCapability: null,
+    executionMode: "proposal",
+    sideEffect: true,
+  },
   // ─── Provider Management ────────────────────────────────────────────────────
   {
     name: "add_provider",
@@ -8761,6 +8797,56 @@ export async function executeTool(
           content: String(params["description"] ?? ""),
         })
       ).catch(() => {});
+    }
+
+    case "propose_skill_improvement": {
+      const skillId = String(params["skillId"] ?? "").trim();
+      const proposedContent = String(params["proposedContent"] ?? "").trim();
+      const title = String(params["title"] ?? "").trim();
+      const description = String(params["description"] ?? "").trim();
+      if (!skillId || !proposedContent || !title || !description) {
+        return {
+          success: false,
+          error: "Missing required fields",
+          message:
+            "propose_skill_improvement requires skillId, title, description, and proposedContent.",
+        };
+      }
+      const sev = String(params["severity"] ?? "medium");
+      const severity = (["low", "medium", "high", "critical"].includes(sev) ? sev : "medium") as
+        | "low"
+        | "medium"
+        | "high"
+        | "critical";
+      const observedFriction =
+        typeof params["observedFriction"] === "string" ? params["observedFriction"] : null;
+      try {
+        const { submitSkillImprovementProposal } = await import("@/lib/skills/proposals");
+        const result = await submitSkillImprovementProposal({
+          skillId,
+          proposedContent,
+          title,
+          description,
+          severity,
+          submittedById: userId,
+          agentId: context?.agentId ?? "unknown",
+          routeContext: context?.routeContext ?? "unknown",
+          threadId: context?.threadId ?? null,
+          observedFriction,
+        });
+        return {
+          success: true,
+          entityId: result.proposalId,
+          message: `Skill proposal ${result.proposalId} created for ${skillId}. A reviewer must approve before it takes effect.`,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        return {
+          success: false,
+          error: msg,
+          message: `Could not create skill proposal: ${msg}`,
+        };
+      }
     }
 
     case "add_provider": {
