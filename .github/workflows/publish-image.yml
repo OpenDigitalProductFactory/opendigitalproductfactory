@@ -56,7 +56,7 @@ jobs:
       - name: Set up Docker Buildx
         # buildx is required for multi-arch manifest list publishing
         # (a single tag that resolves to amd64 or arm64 per the puller).
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
