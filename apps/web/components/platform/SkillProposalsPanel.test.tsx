@@ -7,6 +7,12 @@ vi.mock("@/lib/actions/skill-proposal-actions", () => ({
   rollbackSkillAction: vi.fn(),
 }));
 
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
+
 import { SkillProposalsPanel } from "./SkillProposalsPanel";
 import type { SkillProposalRow } from "@/lib/skills/proposals";
 
@@ -46,6 +52,21 @@ describe("SkillProposalsPanel", () => {
     );
     expect(html).toContain(baseProposal.title);
     expect(html).toContain("Pending");
+  });
+
+  it("links proposal rows to thread-scoped evidence search when thread evidence exists", () => {
+    const html = renderToStaticMarkup(
+      <SkillProposalsPanel
+        skillId="build-page"
+        currentContent="v0 body"
+        proposals={[baseProposal]}
+      />,
+    );
+
+    expect(html).toContain("View evidence");
+    expect(html).toContain(
+      'href="/platform/ai/skills?skill=build-page&amp;evidenceThread=thread-1#skill-evidence"',
+    );
   });
 
   it("uses only theme tokens — no hardcoded hex colors", () => {

@@ -5,6 +5,7 @@ import { SkillProposalsPanel } from "@/components/platform/SkillProposalsPanel";
 import { SkillRevisionHistoryPanel } from "@/components/platform/SkillRevisionHistoryPanel";
 import { SkillCuratorReportPanel } from "@/components/platform/SkillCuratorReportPanel";
 import { SkillLifecycleControls } from "@/components/platform/SkillLifecycleControls";
+import { SkillEvidencePanel } from "@/components/platform/SkillEvidencePanel";
 import {
   getSkillCatalog,
   getSkillCatalogStats,
@@ -24,11 +25,35 @@ import { isSkillLifecycleState } from "@/lib/skills/lifecycle";
 export default async function SkillsObservatoryPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ skill?: string }>;
+  searchParams?: Promise<{
+    skill?: string;
+    evidenceThread?: string;
+    evidenceTaskRun?: string;
+    evidenceRoute?: string;
+    evidenceQuery?: string;
+  }>;
 }) {
   const resolvedParams = (await searchParams) ?? {};
   const focusedSkillId =
     typeof resolvedParams.skill === "string" ? resolvedParams.skill : null;
+  const evidenceScope = {
+    threadId:
+      typeof resolvedParams.evidenceThread === "string"
+        ? resolvedParams.evidenceThread
+        : null,
+    taskRunId:
+      typeof resolvedParams.evidenceTaskRun === "string"
+        ? resolvedParams.evidenceTaskRun
+        : null,
+    routeContext:
+      typeof resolvedParams.evidenceRoute === "string"
+        ? resolvedParams.evidenceRoute
+        : null,
+    query:
+      typeof resolvedParams.evidenceQuery === "string"
+        ? resolvedParams.evidenceQuery
+        : null,
+  };
 
   const [
     catalogSkills,
@@ -49,7 +74,7 @@ export default async function SkillsObservatoryPage({
     getSpecialistExecutions(),
     getSkillsObservatoryStats(),
     getSkillTelemetrySummary(),
-    focusedSkillId ? getSkillReviewDetail(focusedSkillId) : Promise.resolve(null),
+    focusedSkillId ? getSkillReviewDetail(focusedSkillId, evidenceScope) : Promise.resolve(null),
     getLatestSkillCuratorReport(),
     focusedSkillId ? getSkillLifecycleState(focusedSkillId) : Promise.resolve(null),
   ]);
@@ -159,6 +184,12 @@ export default async function SkillsObservatoryPage({
                   installs where the repo isn&rsquo;t checked out next to the app).
                 </div>
               )}
+              <div className="mb-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
+                  Evidence
+                </h3>
+                <SkillEvidencePanel evidence={review.evidence} activeScope={evidenceScope} />
+              </div>
               <div className="mb-4">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
                   Proposals

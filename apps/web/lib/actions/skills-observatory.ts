@@ -6,6 +6,10 @@
 import { prisma } from "@dpf/db";
 import { ROUTE_CONTEXT_MAP, UNIVERSAL_SKILLS } from "@/lib/tak/route-context-map";
 import { SPECIALIST_AGENT_IDS } from "@/lib/integrate/specialist-prompts";
+import type {
+  SkillEvidenceResult,
+  SkillEvidenceSearchInput,
+} from "@/lib/skills/evidence-search";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -57,6 +61,11 @@ export type SkillTelemetrySummary = {
   /** Period key of the latest SkillMetric row, or null if SkillMetric is empty. */
   latestMetricPeriod: string | null;
 };
+
+export type SkillReviewEvidenceScope = Pick<
+  SkillEvidenceSearchInput,
+  "threadId" | "taskRunId" | "routeContext" | "query" | "limit"
+>;
 
 // ─── Fetchers ───────────────────────────────────────────────────────────────
 
@@ -179,13 +188,17 @@ export async function getSpecialistExecutions(limit = 100): Promise<SkillExecuti
  * proposals/revisions/seed-drift panel. Returns null when the skill does
  * not exist so the caller can render a clean empty state.
  */
-export async function getSkillReviewDetail(skillId: string): Promise<{
+export async function getSkillReviewDetail(
+  skillId: string,
+  evidenceScope: SkillReviewEvidenceScope = {},
+): Promise<{
   skillId: string;
   skillMdContent: string;
   category: string;
   proposals: Awaited<ReturnType<typeof import("@/lib/skills/proposals").listSkillProposals>>;
   revisions: Awaited<ReturnType<typeof import("@/lib/skills/proposals").listSkillRevisions>>;
   seedDrift: Awaited<ReturnType<typeof import("@/lib/skills/seed-parity").getSkillSeedDrift>>;
+  evidence: SkillEvidenceResult[];
 } | null> {
   const skill = await prisma.skillDefinition.findUnique({
     where: { skillId },
@@ -195,10 +208,19 @@ export async function getSkillReviewDetail(skillId: string): Promise<{
 
   const { listSkillProposals, listSkillRevisions } = await import("@/lib/skills/proposals");
   const { getSkillSeedDrift } = await import("@/lib/skills/seed-parity");
-  const [proposals, revisions, seedDrift] = await Promise.all([
+  const { searchSkillEvidence } = await import("@/lib/skills/evidence-search");
+  const [proposals, revisions, seedDrift, evidence] = await Promise.all([
     listSkillProposals(skillId),
     listSkillRevisions(skillId),
     getSkillSeedDrift(skillId),
+    searchSkillEvidence({
+      skillId,
+      threadId: evidenceScope.threadId,
+      taskRunId: evidenceScope.taskRunId,
+      routeContext: evidenceScope.routeContext,
+      query: evidenceScope.query,
+      limit: evidenceScope.limit ?? 25,
+    }),
   ]);
 
   return {
@@ -208,6 +230,7 @@ export async function getSkillReviewDetail(skillId: string): Promise<{
     proposals,
     revisions,
     seedDrift,
+    evidence,
   };
 }
 
