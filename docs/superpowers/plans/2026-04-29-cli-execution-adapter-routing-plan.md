@@ -11,7 +11,7 @@
 **Reference docs:**
 - Spec: [docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md](docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md)
 - Audit: [docs/superpowers/audits/2026-04-29-cli-substrate-status-review.md](docs/superpowers/audits/2026-04-29-cli-substrate-status-review.md)
-- Codex JSONL evidence: [docs/superpowers/audits/evidence/2026-04-29-codex-jsonl-probe.md](docs/superpowers/audits/evidence/2026-04-29-codex-jsonl-probe.md)
+- Codex JSONL evidence: [docs/superpowers/audits/evidence/2026-04-29-codex-cli-jsonl-probe.md](docs/superpowers/audits/evidence/2026-04-29-codex-cli-jsonl-probe.md)
 - Hard dependency (receipts): [docs/superpowers/specs/2026-04-27-artifact-provenance-receipts-design.md](docs/superpowers/specs/2026-04-27-artifact-provenance-receipts-design.md)
 
 ---
@@ -230,7 +230,7 @@ Steps:
 - Create: `apps/web/lib/routing/__fixtures__/codex-jsonl/probe-3-error.jsonl`
 - Create: `apps/web/lib/routing/__fixtures__/codex-jsonl/README.md`
 
-The three probes are documented in [docs/superpowers/audits/evidence/2026-04-29-codex-jsonl-probe.md](docs/superpowers/audits/evidence/2026-04-29-codex-jsonl-probe.md). Convert each `jsonl` block into a fixture file.
+The three probes are documented in [docs/superpowers/audits/evidence/2026-04-29-codex-cli-jsonl-probe.md](docs/superpowers/audits/evidence/2026-04-29-codex-cli-jsonl-probe.md). Convert each `jsonl` block into a fixture file.
 
 - [ ] **Step 1: Read the evidence file** — extract the three JSONL blocks.
 - [ ] **Step 2: Write each as one fixture file** — one event per line, no wrapping JSON. Match the evidence file exactly.

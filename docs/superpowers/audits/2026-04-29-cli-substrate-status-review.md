@@ -317,7 +317,7 @@ If the implementation skips these refactors, it will likely produce a demo that 
 
 ## 9b. Research findings against the open questions
 
-Three background agents plus a live `docker exec dpf-sandbox-1 codex exec --json` probe were run on 2026-04-29 to ground the questions above. Raw transcript at [evidence/2026-04-29-codex-jsonl-probe.md](./evidence/2026-04-29-codex-jsonl-probe.md). Findings below; answers replace assumptions in §3 and §6.
+Three background agents plus a live `docker exec dpf-sandbox-1 codex exec --json` probe were run on 2026-04-29 to ground the questions above. Raw transcript at [evidence/2026-04-29-codex-cli-jsonl-probe.md](./evidence/2026-04-29-codex-cli-jsonl-probe.md). Findings below; answers replace assumptions in §3 and §6.
 
 ### Q1 — Codex structured output: stream exists, schema is unstable, MCP attach is degraded
 

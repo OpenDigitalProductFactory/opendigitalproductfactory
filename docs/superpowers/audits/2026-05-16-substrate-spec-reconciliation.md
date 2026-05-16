@@ -24,7 +24,7 @@ The branch's spec and a completely different spec on main (the Codex-authored Se
 - `docs/superpowers/plans/2026-04-29-cli-execution-adapter-routing-plan.md`
 - `docs/superpowers/audits/2026-04-29-cli-substrate-status-review.md`
 
-Audit's `evidence/2026-04-29-codex-jsonl-probe.md` can stay (no collision).
+Audit's `evidence/2026-04-29-codex-cli-jsonl-probe.md` can stay (no collision).
 
 ## 2. Spec section reconciliation
 

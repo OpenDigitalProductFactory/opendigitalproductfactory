@@ -1,104 +1,146 @@
-# Codex CLI JSONL probe — local evidence
+# Codex probe evidence - 2026-04-29
 
-**Date:** 2026-04-29
-**Container:** dpf-sandbox-1
-**Codex version:** codex-cli 0.125.0
-**Purpose:** Capture actual `codex exec --json` event stream to ground audit Q1.
+This note captures the repo-grounded probes used to repair the coworker substrate design on 2026-04-29. Despite the filename, this is not a raw session dump. It is the distilled evidence record that the audit and spec cite.
 
-## Probe 1 — basic exec with shell command (default model)
+## Scope
 
-Command:
-```
-codex exec --json --skip-git-repo-check --ephemeral --dangerously-bypass-approvals-and-sandbox \
-  "Run the shell command: echo hello-from-codex. Then say done."
-```
+- Verify the real event-bus location and current shape
+- Verify the current task-state vocabulary
+- Verify concrete retry, polling, sequential, and fan-out call sites
+- Verify where current code still returns ambiguous timeout/deferred semantics
+- Verify overlap with the older execution-adapter design
 
-Stream:
-```jsonl
-{"type":"thread.started","thread_id":"019ddb89-fb33-7f31-87cc-6d455b3067fa"}
-{"type":"turn.started"}
-{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/sh -lc 'echo hello-from-codex'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/sh -lc 'echo hello-from-codex'","aggregated_output":"hello-from-codex\n","exit_code":0,"status":"completed"}}
-{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"done"}}
-{"type":"turn.completed","usage":{"input_tokens":28803,"cached_input_tokens":26368,"output_tokens":38,"reasoning_output_tokens":0}}
-```
+## Evidence
 
-## Probe 2 — reasoning effort high, simple answer
+### E1. Event bus is already task-aware, but still thread-keyed
 
-Command:
-```
-codex exec --json -c reasoning.effort=high "Think briefly about 2+2, then answer."
-```
+Files:
 
-Stream:
-```jsonl
-{"type":"thread.started","thread_id":"019ddb8a-21ca-7493-b1bf-eb002585bcc7"}
-{"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"2 + 2 = 4"}}
-{"type":"turn.completed","usage":{"input_tokens":14353,"cached_input_tokens":12160,"output_tokens":21,"reasoning_output_tokens":8}}
-```
+- canonical implementation: [`apps/web/lib/tak/agent-event-bus.ts`](../../../../apps/web/lib/tak/agent-event-bus.ts) (~120 lines)
+- intentional shim: [`apps/web/lib/agent-event-bus.ts`](../../../../apps/web/lib/agent-event-bus.ts) (2 lines, `export * from "./tak/agent-event-bus";`)
 
-Note: `reasoning_output_tokens: 8` is reported in usage, but no `reasoning` item was emitted in the stream for this short turn. May surface as `item.completed` with `type: reasoning` for longer turns.
+Observed:
 
-## Probe 3 — gpt-5 explicitly (failure case for ChatGPT auth)
+- subscribers are keyed by `threadId`
+- current API is `subscribe(threadId, handler)` and `emit(threadId, event)`
+- event union already includes `task:status` and `task:artifact`
+- imports across the codebase use both paths; both resolve to the same module via the shim
 
-Command:
-```
-codex exec --json -m gpt-5 "Reply with one short sentence. Then stop."
-```
+Implication:
 
-Stream:
-```jsonl
-{"type":"thread.started","thread_id":"019ddb89-dca6-7593-afcf-fa9e6ea7b201"}
-{"type":"turn.started"}
-{"type":"error","message":"{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'gpt-5' model is not supported when using Codex with a ChatGPT account.\"}}"}
-{"type":"turn.failed","error":{"message":"..."}}
-```
+- the substrate should extend the `tak/`-scoped implementation rather than propose a net-new task event family from scratch
+- compatibility shims matter because multiple current event families already exist here, and the top-level path is itself a compatibility shim that callers may still rely on
 
-## Surface inventory (`codex --help` and `codex exec --help`)
+### E2. Task-state vocabulary already exists and already matches the intended A2A-shaped direction
 
-Subcommands of interest:
-- `exec` — non-interactive run (with `--json`, `--output-schema`, `--output-last-message`, `--ephemeral`)
-- `exec resume` — resume by session UUID or `--last`
-- `mcp` — list / get / add / remove / login / logout MCP servers (static, in `~/.codex/config.toml`)
-- `mcp-server` — Codex itself runs as an MCP server over stdio
-- `apply` / `a` — applies the latest agent diff via `git apply` to local working tree
-- `sandbox` — run commands in the Codex sandbox
-- `exec-server` (experimental) — standalone exec service
-- `cloud` (experimental) — Codex Cloud task browser
-- `review` — non-interactive code review
+File:
 
-Flags of interest on `exec`:
-- `--json` (JSONL stream)
-- `--output-schema <file>` (JSON Schema for final response — gpt-5 family only per issue #4181)
-- `--output-last-message <file>` (final message only)
-- `--ephemeral` (no session persistence)
-- `-s read-only|workspace-write|danger-full-access` (sandbox modes)
-- `--add-dir <DIR>` (extra writable dirs)
-- `-C, --cd <DIR>` (working root)
-- `--ignore-user-config`, `--ignore-rules`
-- `--skip-git-repo-check`
+- [`apps/web/lib/tak/task-states.ts`](../../../apps/web/lib/tak/task-states.ts)
 
-## Observed event taxonomy
+Observed states:
 
-From these probes plus issue research:
+- `submitted`
+- `working`
+- `input-required`
+- `auth-required`
+- `completed`
+- `failed`
+- `canceled`
+- `rejected`
+- `archived`
 
-| `type` | When | Fields |
-|---|---|---|
-| `thread.started` | first event | `thread_id` (UUID) |
-| `turn.started` | per turn | — |
-| `item.started` | tool/cmd begins | `item.{id,type,...}` |
-| `item.completed` | tool/cmd ends, or message | `item.{id,type,text/command/...}` |
-| `turn.completed` | success | `usage.{input_tokens,cached_input_tokens,output_tokens,reasoning_output_tokens}` |
-| `turn.failed` | failure | `error.{message}` |
-| `error` | mid-turn error | `message` |
+Implication:
 
-`item.type` values seen / documented: `agent_message`, `command_execution`, `reasoning`, `file_change`, `mcp_tool_call`, `web_search`, `plan_update`.
+- the substrate should reuse the existing state vocabulary
+- docs should not present these as a fresh proposal
 
-## Stability caveats (from agent research)
+### E3. Build Studio already contains the substrate-worthy patterns
 
-- `--json` was `--experimental-json` until recently; underlying schema is not versioned.
-- Silent breaking rename observed in recent versions: `item_type` → `type`, `assistant_message` → `agent_message` (issue #4776).
-- `--json` and `--output-schema` are silently ignored when MCP tools are active (issue #15451).
-- MCP lifecycle events (init/ready/failed) are not yet emitted (issue #17501).
-- No schema version field in events.
+File:
+
+- [`apps/web/lib/integrate/build-orchestrator.ts`](../../../apps/web/lib/integrate/build-orchestrator.ts)
+
+Observed:
+
+- bounded retry constant: `MAX_SPECIALIST_RETRIES = 2`
+- sequential phase execution via `for (const phase of phases)`
+- batched parallel dispatch with `Promise.all(...)`
+- optimistic merge retry path around task-result persistence
+
+Implication:
+
+- Build Studio is the best early proving ground for the substrate after low-risk loops
+- the migration can reduce real duplication immediately without starting at the main coworker loop
+
+### E4. Provider fallback still walks a custom retry/backoff chain
+
+File:
+
+- [`apps/web/lib/routing/fallback.ts`](../../../apps/web/lib/routing/fallback.ts)
+
+Observed:
+
+- fallback chain built from routing decision candidates
+- retry/backoff implemented inline in the loop
+- special handling for rate limits, auth failures, and model retirement lives inside the same call path
+
+Implication:
+
+- this path is a strong later `Loop` consumer
+- it should migrate only after the substrate has already proved itself on lower-risk cases
+
+### E5. GitHub fork readiness still returns an ambiguous `"deferred"` status after polling
+
+File:
+
+- [`apps/web/lib/integrate/github-fork.ts`](../../../apps/web/lib/integrate/github-fork.ts)
+
+Observed:
+
+- fork creation polls until ready
+- timeout returns `{ status: "deferred" }`
+
+Implication:
+
+- this is a clean first migration target for typed exhausted or still-pending outcomes
+- it exercises polling semantics without the blast radius of the main coworker runtime
+
+### E6. Deliberation runner is still sequential and branch-oriented
+
+File:
+
+- [`apps/web/lib/queue/functions/deliberation-run.ts`](../../../apps/web/lib/queue/functions/deliberation-run.ts)
+
+Observed:
+
+- branch nodes are separated into worker branches and adjudicator branches
+- worker branches run through a sequential `for` loop
+- route decisions and diversity degradation are persisted/emitted inline
+
+Implication:
+
+- the future `Branch` primitive should model strategic branch semantics here
+- this lane is a semantic upgrade, not just a wrapper extraction
+
+### E7. Older "execution adapter" already means something else in DPF
+
+Files:
+
+- [`docs/superpowers/specs/2026-03-20-execution-adapter-framework-design.md`](../../specs/2026-03-20-execution-adapter-framework-design.md)
+- [`docs/superpowers/plans/2026-03-20-execution-adapter-framework.md`](../../plans/2026-03-20-execution-adapter-framework.md)
+
+Observed:
+
+- execution adapter there means provider-dispatch adapters around `callProvider()`
+- scope is routing/provider execution, not coworker/runtime orchestration
+
+Implication:
+
+- the new lane needs qualified naming to avoid architecture and PR-review confusion
+
+## Conclusions
+
+1. The substrate problem is real and already visible in the repo.
+2. The 2026-04-29 draft had the right instinct but needed tighter repo grounding.
+3. Build Studio should be the first major consumer after the low-risk loop migrations.
+4. The terminology must separate routing execution adapters from coworker execution substrate work.

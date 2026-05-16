@@ -7,7 +7,7 @@
 | **Created** | 2026-04-29 |
 | **Renamed** | 2026-05-16 — original filename `2026-04-29-coworker-execution-adapter-substrate-design.md` collided with a different-content in-process orchestration-primitives spec on main (PR #350). New name signals the routing-layer scope explicitly. |
 | **Author** | Claude Opus 4.7 (1M ctx) for Mark Bodman |
-| **Promotes** | [2026-04-29-cli-substrate-status-review.md](../audits/2026-04-29-cli-substrate-status-review.md) (audit) and its [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-jsonl-probe.md) |
+| **Promotes** | [2026-04-29-cli-substrate-status-review.md](../audits/2026-04-29-cli-substrate-status-review.md) (audit) and its [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md) |
 | **Hard dependency** | [2026-04-27-artifact-provenance-receipts-design.md](./2026-04-27-artifact-provenance-receipts-design.md) — `ToolExecutionReceipt` table required before §7 (custody) can mint full receipts. Already shipped on main as of 2026-04-30 (commit landed migration `20260430023000_artifact_provenance_receipts_slice_1`). |
 | **Related specs** | [2026-04-27-routing-control-data-plane-design.md](./2026-04-27-routing-control-data-plane-design.md) (extends the route plan), [2026-04-27-routing-substrate-attempt-history.md](./2026-04-27-routing-substrate-attempt-history.md) (attempt-history feeds outcome scoring), [2026-05-10-ai-coworker-visual-control-surface-design.md](./2026-05-10-ai-coworker-visual-control-surface-design.md) (Operations Map; consumes this spec's `NormalizedEvent` shape; Phase E cockpit complements it, does not replace it), [2026-05-11-autonomous-coworker-runtime-design.md](./2026-05-11-autonomous-coworker-runtime-design.md) (TaskRun substrate that consumes `AdapterRunTelemetry` as evidence), [2026-05-09-build-execution-provider-design.md](./2026-05-09-build-execution-provider-design.md) (Build Studio's `BuildExecutionProvider`/`BuildAgentRunner` — *parallel layer*, not the same axis; see §3 boundary statement). |
 | **Scope** | `apps/web/lib/routing/*` (adapter registry, route plan, capability profile), `apps/web/lib/routing/cli-adapter.ts` (extended by PR #520 with `--mcp-config` mounting; A6 keeps that intact), new `apps/web/lib/routing/codex-cli-adapter.ts` (already present on main, 360 lines, no `--json` parsing yet), `apps/web/lib/inference/ai-inference.ts` (A6 replaces the `isCliAdapter` short-circuit; the older `apps/web/lib/ai-inference.ts` is a 2-line shim), `apps/web/lib/actions/agent-coworker.ts` (event normalization → panel), `packages/db/prisma/schema.prisma` (`AgentThread.cliSession*` columns, capability-profile cache, adapter telemetry), coworker panel UI components (cockpit shape). |
@@ -620,7 +620,7 @@ Because Codex requires `~/.codex/config.toml` mutation for MCP attach, the Codex
 ### Phase B — Codex CLI adapter + event normalizer
 
 1. New `codex-cli-adapter.ts` modeled on `cli-adapter.ts`.
-2. Event normalizer covering observed event types from [evidence/2026-04-29-codex-jsonl-probe.md](../audits/evidence/2026-04-29-codex-jsonl-probe.md).
+2. Event normalizer covering observed event types from [evidence/2026-04-29-codex-cli-jsonl-probe.md](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md).
 3. Schema-drift detector with version-pinned fixture (Codex 0.125.0 baseline).
 4. MCP-active-with-`--json` refusal guard (issue #15451 mitigation).
 5. ToolExecution minting from `command_execution`, `mcp_tool_call`, `file_change`, `web_search` events.
@@ -729,7 +729,7 @@ adapter_health = healthy
 ## 16. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes
-- [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-jsonl-probe.md) — empirical event taxonomy
+- [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md) — empirical event taxonomy
 - [Artifact Provenance Receipts Design](./2026-04-27-artifact-provenance-receipts-design.md) — hard dependency for §7
 - [Routing Control / Data-Plane Design](./2026-04-27-routing-control-data-plane-design.md) — route plan extension
 - [Routing Substrate Attempt History](./2026-04-27-routing-substrate-attempt-history.md) — feeds outcome scoring
