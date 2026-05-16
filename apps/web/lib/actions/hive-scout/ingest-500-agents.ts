@@ -124,6 +124,8 @@ export interface IngestResult {
   reviewSchemaDropCount?: number;
   reviewParseSuccessRate?: number;
   reviewClassificationHistogram?: Partial<Record<AmbiguityReviewClassification, number>>;
+  reviewClassificationByFramework?: ReviewClassificationBreakdown;
+  reviewClassificationByIndustry?: ReviewClassificationBreakdown;
   reviewCacheHits?: number;
   reviewCacheHitRate?: number;
   reviewLatencyMs?: number | null;
@@ -139,6 +141,11 @@ export type AmbiguityReviewClassification =
   | "duplicate_pattern"
   | "out_of_scope"
   | "needs_human_review";
+
+export type ReviewClassificationBreakdown = Record<
+  string,
+  Partial<Record<AmbiguityReviewClassification, number>>
+>;
 
 export type AmbiguityReviewDecision = {
   sourceUrl: string;
@@ -496,6 +503,27 @@ function incrementClassification(
   histogram[classification] = (histogram[classification] ?? 0) + 1;
 }
 
+function incrementBreakdown(
+  breakdown: ReviewClassificationBreakdown,
+  rawKey: string,
+  classification: AmbiguityReviewClassification,
+): void {
+  const key = rawKey.trim() || "unknown";
+  const bucket = breakdown[key] ?? {};
+  bucket[classification] = (bucket[classification] ?? 0) + 1;
+  breakdown[key] = bucket;
+}
+
+function incrementReviewBreakdowns(
+  entry: CatalogEntry,
+  classification: AmbiguityReviewClassification,
+  byFramework: ReviewClassificationBreakdown,
+  byIndustry: ReviewClassificationBreakdown,
+): void {
+  incrementBreakdown(byFramework, entry.framework ?? "main", classification);
+  incrementBreakdown(byIndustry, entry.industry, classification);
+}
+
 function readPayloadRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -620,6 +648,8 @@ export async function runHiveScoutIngest(
   let reviewLatencyMs: number | null = null;
   let autoPauseTrigger: AutoPauseTrigger | null = null;
   const reviewClassificationHistogram: Partial<Record<AmbiguityReviewClassification, number>> = {};
+  const reviewClassificationByFramework: ReviewClassificationBreakdown = {};
+  const reviewClassificationByIndustry: ReviewClassificationBreakdown = {};
   let created = 0;
   let duplicates = 0;
   let deferred = 0;
@@ -689,6 +719,12 @@ export async function runHiveScoutIngest(
         if (cachedReview) {
           reviewBySource.set(candidate.entry.sourceUrl, cachedReview);
           incrementClassification(reviewClassificationHistogram, cachedReview.classification);
+          incrementReviewBreakdowns(
+            candidate.entry,
+            cachedReview.classification,
+            reviewClassificationByFramework,
+            reviewClassificationByIndustry,
+          );
           reviewCacheHits++;
         }
       }
@@ -721,9 +757,21 @@ export async function runHiveScoutIngest(
           const { decisions, dropped } = validateReviewDecisions(rawDecisions);
           const acceptedDecisions = decisions.filter((decision) => reviewedSourceUrls.has(decision.sourceUrl));
           reviewSchemaDropCount = dropped + (decisions.length - acceptedDecisions.length);
+          const reviewCandidateBySource = new Map(
+            reviewCandidates.map((candidate) => [candidate.entry.sourceUrl, candidate]),
+          );
           for (const decision of acceptedDecisions) {
             reviewBySource.set(decision.sourceUrl, decision);
             incrementClassification(reviewClassificationHistogram, decision.classification);
+            const candidate = reviewCandidateBySource.get(decision.sourceUrl);
+            if (candidate) {
+              incrementReviewBreakdowns(
+                candidate.entry,
+                decision.classification,
+                reviewClassificationByFramework,
+                reviewClassificationByIndustry,
+              );
+            }
           }
           reviewParseSuccessRate = reviewBatchSize > 0 ? acceptedDecisions.length / reviewBatchSize : 1;
         } catch (error) {
@@ -824,6 +872,8 @@ export async function runHiveScoutIngest(
     reviewSchemaDropCount,
     reviewParseSuccessRate,
     reviewClassificationHistogram,
+    reviewClassificationByFramework,
+    reviewClassificationByIndustry,
     reviewCacheHits,
     reviewCacheHitRate,
     reviewLatencyMs,
