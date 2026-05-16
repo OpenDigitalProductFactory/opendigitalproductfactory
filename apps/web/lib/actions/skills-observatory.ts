@@ -212,6 +212,32 @@ export async function getSkillReviewDetail(skillId: string): Promise<{
 }
 
 /**
+ * Governed Hermes learning Slice 4: shape SkillDefinition.lifecycleState for
+ * a single skill so the operator UI can render lifecycle controls. Returns
+ * null when the skill does not exist.
+ */
+export async function getSkillLifecycleState(skillId: string): Promise<{
+  skillId: string;
+  lifecycleState: string;
+} | null> {
+  const row = await prisma.skillDefinition.findUnique({
+    where: { skillId },
+    select: { skillId: true, lifecycleState: true },
+  });
+  return row;
+}
+
+/**
+ * Governed Hermes learning Slice 4: read the latest curator report. Delegates
+ * to apps/web/lib/skills/curator.ts so this action layer stays free of
+ * artifact-shape knowledge.
+ */
+export async function getLatestSkillCuratorReport() {
+  const { getLatestCuratorReport } = await import("@/lib/skills/curator");
+  return getLatestCuratorReport();
+}
+
+/**
  * Governed Hermes learning Slice 1: shape SkillUsageEvent + SkillMetric for
  * the observatory's telemetry tab. Returns aggregate counts only — per-row
  * inspection lives in the Skills detail view (later slice).

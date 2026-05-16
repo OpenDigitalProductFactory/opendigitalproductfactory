@@ -19,6 +19,7 @@ import { tokenExpiryMonitor } from "./token-expiry-monitor";
 import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
+import { skillCurator } from "./skill-curator";
 
 export const allFunctions = [
   prometheusPoll,
@@ -43,4 +44,5 @@ export const allFunctions = [
   wikiLint,
   gitPromotionSandboxVerification,
   skillMetricsAggregator,
+  skillCurator,
 ];
