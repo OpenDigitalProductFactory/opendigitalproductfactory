@@ -92,6 +92,13 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   // under the org's overlay. Kernel pages remain PR-only at the engine
   // layer per spec §4.
   wiki_ingest: ["registry_write"],
+  // EP-WIKI-001 coworker-UX: list pending overlay drafts so the coworker
+  // can walk the user through them in chat. Read-only; same scope guard
+  // as wiki_query.
+  list_wiki_overlay_drafts: ["registry_read"],
+  // EP-WIKI-001 coworker-UX: batch-publish overlay drafts after review.
+  // Writes WikiPage.status + appends a manual revision row per page.
+  publish_wiki_overlay_pages: ["registry_write"],
   // Principles-as-wiki-kind Phase 2 Task 2.7: advisory decision support
   // over governance principles. Read-only — returns scored options with a
   // contribution ledger; never executes the recommended option itself.
