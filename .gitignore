@@ -38,6 +38,15 @@ test-results/
 
 # Local agent / codex caches
 .codex/
+.claude/*.jsonl
+.claude/*.lock
+.claude/autonomous-e2e-progress.md
+.claude/worktrees/
+
+# Local verification and handoff artifacts
+output/
+tmp/
+docs/prompts/
 
 # MCP client configs contain live bearer tokens — must never be committed.
 # .mcp.json (Claude Code CLI) and .vscode/mcp.json (Claude Code VS Code
