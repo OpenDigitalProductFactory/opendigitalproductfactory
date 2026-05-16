@@ -40,7 +40,8 @@
 | TAPPaaS deployment | none — spec only | Pilot deploy into a real TAPPaaS environment | 🧪 **design partner wanted** |
 | DPF Edge Node enrollment (single-host) | none — spec only | First-draft enrollment ceremony executed end-to-end | 🙋 **reports wanted** |
 | DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres + Neo4j | 🙋 **reports wanted** |
-| Cloud deployment (Single VM / Container / k8s) | none — spec only | At least one substrate pilot per packaging target | 🧪 **design partner wanted** |
+| Cloud — Single VM substrate (AWS / GCP / Azure) | runbook + verify-wrapper ready ([cloud-single-vm.md](cloud-single-vm.md)) | First real-cloud pilot report on each major cloud | 🙋 **reports wanted** |
+| Cloud — Managed Container service / Managed k8s | none — spec only | Substrate pilot per packaging target | 🧪 **design partner wanted** |
 
 ## Fastest path: one command for the whole sweep
 
@@ -481,16 +482,19 @@ symptom and the LAN topology and are more useful than no report.
 
 ### 8. Cloud deployment patterns
 
-**Status:** spec-only — no code shipped per substrate.
+Three substrates per the [cloud deployment design](../superpowers/specs/2026-05-09-cloud-deployment-design.md);
+each needs its own pilot to flip from spec to verified.
 
-Each of the three substrates needs its own pilot before declaring the
-substrate verified:
-
-- [ ] **Single VM** — `install-dpf.sh --headless` inside a cloud VM (EC2 / Compute Engine / Azure VM). Validate the same matrix as the Linux install above.
-- [ ] **Managed container service** — ECS / Cloud Run / Azure Container Apps. Pull from GHCR. Validate `/api/health=200`.
-- [ ] **Managed Kubernetes** — Helm chart deploy into a real EKS / GKE / AKS cluster. Validate the same plus a pod-restart survival test.
-
-Linked spec: [docs/superpowers/specs/2026-05-09-cloud-deployment-design.md](../superpowers/specs/2026-05-09-cloud-deployment-design.md).
+- [ ] **Single VM** — runbook + verify-wrapper are ready.
+      Follow [cloud-single-vm.md](cloud-single-vm.md) on AWS / GCP /
+      Azure, then run `bash scripts/verify-install-edge.sh`. Status:
+      🙋 reports wanted (this is the lowest-friction cloud pilot).
+- [ ] **Managed container service** — ECS / Cloud Run / Azure Container
+      Apps. Pull from GHCR. Validate `/api/health=200`. Status:
+      🧪 design partner wanted (spec-only, no runbook yet).
+- [ ] **Managed Kubernetes** — Helm chart deploy into a real EKS / GKE /
+      AKS cluster. Validate the same plus a pod-restart survival test.
+      Status: 🧪 design partner wanted (Helm chart not yet shipped).
 
 ## Reporting verification results
 
