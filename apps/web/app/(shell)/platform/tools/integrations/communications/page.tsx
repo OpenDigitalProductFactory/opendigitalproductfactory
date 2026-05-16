@@ -1,4 +1,5 @@
 import { Bell, Building2, MessagesSquare } from "lucide-react";
+import { listCommunicationChannelBindings } from "@/lib/communications/channel-binding-store";
 
 const groups = [
   {
@@ -31,6 +32,8 @@ const principles = [
 ];
 
 export default async function CommunicationsPage() {
+  const bindingDashboard = await listCommunicationChannelBindings({ take: 8 });
+
   return (
     <main className="space-y-6">
       <header className="space-y-3">
@@ -99,6 +102,94 @@ export default async function CommunicationsPage() {
           );
         })}
       </section>
+
+      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">Channel bindings</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">
+              Employee reachability records that provider adapters can use for governed delivery.
+            </p>
+          </div>
+          <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--dpf-text)]">
+            {bindingDashboard.summary.total} total
+          </span>
+        </header>
+
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <BindingMetric label="Active" value={`${bindingDashboard.summary.active} active`} />
+          <BindingMetric label="Verified" value={`${bindingDashboard.summary.verified} verified`} />
+          <BindingMetric label="Pending" value={`${bindingDashboard.summary.pending} pending`} />
+          <BindingMetric label="Failed" value={`${bindingDashboard.summary.failed} failed`} />
+        </dl>
+
+        {bindingDashboard.bindings.length === 0 ? (
+          <p className="mt-4 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm text-[var(--dpf-muted)]">
+            No employee channel bindings are configured yet.
+          </p>
+        ) : (
+          <ul className="mt-4 divide-y divide-[var(--dpf-border)] border-y border-[var(--dpf-border)]">
+            {bindingDashboard.bindings.map((binding) => (
+              <li
+                key={binding.bindingId}
+                className="grid gap-3 py-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--dpf-text)]">
+                    {binding.displayLabel}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-[var(--dpf-muted)]">
+                    {binding.channelType} via {binding.providerKey}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-[var(--dpf-text)]">
+                    {binding.employeeDisplayName ?? binding.principalDisplayName}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-[var(--dpf-muted)]">
+                    {binding.employeeDisplayName
+                      ? `${binding.externalSubject} - ${binding.principalDisplayName}`
+                      : binding.externalSubject}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-text)]">
+                    {binding.verificationStatus}
+                  </span>
+                  <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-muted)]">
+                    {binding.allowedUrgencies.join(", ")}
+                  </span>
+                  <span className="text-xs text-[var(--dpf-muted)]">
+                    {binding.lastTestedAt ? `Tested ${formatBindingDate(binding.lastTestedAt)}` : "Not tested"}
+                  </span>
+                  {binding.lastError && (
+                    <span className="basis-full text-xs text-[var(--dpf-muted)] lg:text-right">
+                      {binding.lastError}
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
+}
+
+function BindingMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+      <dt className="text-xs font-medium uppercase tracking-wide text-[var(--dpf-muted)]">{label}</dt>
+      <dd className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">{value}</dd>
+    </div>
+  );
+}
+
+function formatBindingDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 }

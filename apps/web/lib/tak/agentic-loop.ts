@@ -2,8 +2,8 @@
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
 
-import { createHash } from "crypto";
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
+import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
 import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import type { ChatMessage } from "@/lib/ai-inference";
@@ -652,6 +652,14 @@ export async function runAgenticLoop(params: {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
+  /**
+   * Governed Hermes learning Slice 1: active coworker skill for this run.
+   * When set, every governed tool call records the same skillId in
+   * ToolExecution audit rows so reflection and metrics can attribute action
+   * evidence to the originating skill. Null when the run was not triggered
+   * by a specific skill invocation.
+   */
+  activeSkillId?: string | null;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -670,6 +678,7 @@ export async function runAgenticLoop(params: {
     agentDisplayName,
     taskRunId,
     apiTokenId,
+    activeSkillId,
   } = params;
 
   const userContext = await resolveUserContext(userId);
@@ -795,72 +804,33 @@ export async function runAgenticLoop(params: {
       break;
     }
 
-    // Repetition detector — sliding window of last 40 tool calls.
-    // Hash tool name + full args: identical hash appearing 3+ times in the window = stuck.
-    // Only recent behavior counts — early calls that were followed by progress are outside
-    // the window and don't trigger the guard.
+    // Repetition detector — extracted to lib/tak/runtime-issues.ts so the
+    // existing "agent stuck" PlatformIssueReport write and the new reflection
+    // trigger share one detection site.
     //
     // No special-casing for review tools. reviewDesignDoc/reviewBuildPlan take no args,
     // so every call hashes identically — 3 calls trips the guard. This caps the agent at
     // 2 revision attempts per review, which is enough. If the design/plan still fails after
     // 2 revisions the user needs to intervene.
-    const WINDOW = 40;
-    const REPEAT_THRESHOLD = 3;
-    const toolCallCounts = new Map<string, number>();
-    // Track the most recent result for each hash to include in the stuck message.
-    const toolLastResult = new Map<string, { success: boolean; error?: string }>();
-
-    const windowSlice = executedTools.slice(-WINDOW);
-    for (let ti = 0; ti < windowSlice.length; ti++) {
-      const t = windowSlice[ti]!;
-
-      // Hash the full args object — keys sorted for a stable canonical form
-      const argsJson = JSON.stringify(t.args ?? {}, Object.keys((t.args as Record<string, unknown>) ?? {}).sort());
-      const argsHash = createHash("sha1").update(argsJson).digest("hex").slice(0, 12);
-
-      const sig = `${t.name}:${argsHash}`;
-      toolCallCounts.set(sig, (toolCallCounts.get(sig) ?? 0) + 1);
-      toolLastResult.set(sig, t.result as { success: boolean; error?: string });
-    }
-
-    const repeatedEntry = [...toolCallCounts.entries()].find(([, count]) => count >= REPEAT_THRESHOLD);
-    if (repeatedEntry && iteration > 5) {
-      const [sig, count] = repeatedEntry;
-      const toolName = sig.split(":")[0] ?? sig;
-      const lastResult = toolLastResult.get(sig);
-      // Surface the reason if the last call failed — helps identify timeouts, auth errors, limits
-      const reasonHint = lastResult && !lastResult.success && lastResult.error
-        ? ` Last error: ${lastResult.error.slice(0, 120)}.`
-        : "";
-      console.warn(`[agentic-loop] stuck: ${toolName} called ${count}x with same args in last ${WINDOW} calls.${reasonHint}`);
+    const repeated = detectRepeatedToolCall({ executedTools, iteration });
+    if (repeated) {
+      console.warn(
+        `[agentic-loop] stuck: ${repeated.toolName} called ${repeated.count}x with same args in last 40 calls.${repeated.reasonHint}`,
+      );
       const content = buildRepeatedToolStopMessage({
-        toolName,
-        count,
+        toolName: repeated.toolName,
+        count: repeated.count,
         routeContext,
-        reasonHint,
+        reasonHint: repeated.reasonHint,
       });
-      if (!BUILD_ROUTE_PATTERN.test(routeContext ?? "")) {
-        await prisma.platformIssueReport.create({
-          data: {
-            reportId: `PIR-${crypto.randomUUID().slice(0, 5).toUpperCase()}`,
-            type: "agent_stuck",
-            severity: "medium",
-            status: "open",
-            title: `Coworker repeated ${toolName} without progress`,
-            description: [
-              `The coworker called ${toolName} ${count} times with the same arguments and the agentic loop stopped the run.`,
-              reasonHint ? reasonHint.trim() : null,
-              `Route: ${routeContext ?? "unknown"}`,
-            ].filter(Boolean).join("\n"),
-            routeContext: routeContext ?? null,
-            reportedById: userId,
-            agentId: agentId ?? null,
-            source: "coworker_runtime",
-          },
-        }).catch((err) => {
-          console.warn("[agentic-loop] failed to record repeated-tool issue:", err);
-        });
-      }
+      await recordRepeatedToolIssue({
+        repeated,
+        routeContext: routeContext ?? null,
+        userId,
+        agentId: agentId ?? null,
+        threadId: threadId ?? null,
+        taskRunId: taskRunId ?? null,
+      });
       // Return immediately — do NOT make another inference call here.
       // The summary inference call was the source of 300s hangs when the preferred provider
       // was unavailable. The executedTools list already contains the full work history.
@@ -1361,6 +1331,7 @@ export async function runAgenticLoop(params: {
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
+            skillId: activeSkillId ?? undefined,
           },
           source: "agentic-loop",
         });
@@ -1382,6 +1353,23 @@ export async function runAgenticLoop(params: {
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
+
+      // Governed Hermes learning Slice 1: attribute tool outcome to the
+      // active skill (if any). Fire-and-forget — the SkillUsageEvent writer
+      // catches DB errors so this can never delay the user response.
+      if (activeSkillId) {
+        const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
+        void recordSkillUsageEvents({
+          phase: toolResult.success ? "completed" : "failed",
+          skillIds: [activeSkillId],
+          agentId,
+          userId,
+          threadId,
+          taskRunId: taskRunId ?? null,
+          routeContext,
+          metadata: { toolName: tc.name, iteration, durationMs },
+        });
+      }
     }
 
     // Append ONE assistant message (with toolCalls preserved) + N tool result messages.

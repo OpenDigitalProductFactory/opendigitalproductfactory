@@ -2,7 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import type { SkillEntry, FinishingPassEntry, SkillExecutionEntry } from "@/lib/actions/skills-observatory";
+import type {
+  SkillEntry,
+  FinishingPassEntry,
+  SkillExecutionEntry,
+  SkillTelemetrySummary,
+} from "@/lib/actions/skills-observatory";
 
 type Props = {
   skills: SkillEntry[];
@@ -17,9 +22,11 @@ type Props = {
     totalToolExecutions: number;
     totalBuildActivities: number;
   };
+  /** Governed Hermes learning Slice 1 telemetry. Optional so existing callers don't break. */
+  telemetry?: SkillTelemetrySummary;
 };
 
-type TabId = "catalog" | "passes" | "executions";
+type TabId = "catalog" | "passes" | "executions" | "telemetry";
 
 const AUDIENCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   user: { bg: "color-mix(in srgb, var(--dpf-success) 12%, transparent)", text: "var(--dpf-success)", label: "User-Facing" },
@@ -27,7 +34,13 @@ const AUDIENCE_STYLES: Record<string, { bg: string; text: string; label: string 
   "specialist-internal": { bg: "color-mix(in srgb, var(--dpf-warning) 12%, transparent)", text: "var(--dpf-warning)", label: "Specialist" },
 };
 
-export function SkillsObservatoryPanel({ skills, finishingPasses, specialistExecutions, stats }: Props) {
+export function SkillsObservatoryPanel({
+  skills,
+  finishingPasses,
+  specialistExecutions,
+  stats,
+  telemetry,
+}: Props) {
   const [tab, setTab] = useState<TabId>("catalog");
   const [audienceFilter, setAudienceFilter] = useState<string | null>(null);
   const [routeFilter, setRouteFilter] = useState<string | null>(null);
@@ -43,6 +56,9 @@ export function SkillsObservatoryPanel({ skills, finishingPasses, specialistExec
     { id: "catalog", label: "Skills Catalog", count: skills.length },
     { id: "passes", label: "Finishing Passes", count: finishingPasses.length },
     { id: "executions", label: "Specialist Executions", count: specialistExecutions.length },
+    ...(telemetry
+      ? [{ id: "telemetry" as TabId, label: "Telemetry", count: telemetry.totalUsageEvents }]
+      : []),
   ];
 
   return (
@@ -160,6 +176,15 @@ export function SkillsObservatoryPanel({ skills, finishingPasses, specialistExec
                 />
                 <span className="text-xs font-medium text-[var(--dpf-text)] w-24 shrink-0">{ex.agentId}</span>
                 <span className="text-xs text-[var(--dpf-text-secondary)] flex-1 truncate">{ex.toolName}</span>
+                {ex.skillId && (
+                  <span
+                    className="text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0"
+                    style={{ background: "var(--dpf-surface-1)", color: "var(--dpf-accent)" }}
+                    title="Active skill at the time of this tool call"
+                  >
+                    {ex.skillId}
+                  </span>
+                )}
                 {ex.durationMs !== null && (
                   <span className="text-[10px] text-[var(--dpf-muted)]">{ex.durationMs}ms</span>
                 )}
@@ -171,11 +196,35 @@ export function SkillsObservatoryPanel({ skills, finishingPasses, specialistExec
           )}
         </div>
       )}
+
+      {tab === "telemetry" && telemetry && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="Eligible" value={telemetry.eligibleEvents} />
+            <StatCard label="Loaded" value={telemetry.loadedEvents} />
+            <StatCard label="Invoked" value={telemetry.invokedEvents} accent="var(--dpf-info)" />
+            <StatCard label="Completed" value={telemetry.completedEvents} accent="var(--dpf-success)" />
+            <StatCard label="Failed" value={telemetry.failedEvents} accent="var(--dpf-error)" />
+            <StatCard label="Metric rows" value={telemetry.metricRowCount} />
+            <StatCard label="Active (skill × agent)" value={telemetry.activeSkillCount} />
+            <StatCard
+              label="Latest period"
+              value={telemetry.latestMetricPeriod ?? "—"}
+              accent="var(--dpf-muted)"
+            />
+          </div>
+          <p className="text-[10px] text-[var(--dpf-muted)]">
+            Aggregates derive from SkillUsageEvent rows. The daily aggregator (cron 0 5 * * *) keeps
+            SkillMetric up to date; the on-demand refresh is available to admins from the
+            scheduled-jobs surface.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function StatCard({ label, value, accent }: { label: string; value: number | string; accent?: string }) {
   return (
     <div className="px-4 py-3 rounded-lg bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] shadow-dpf-xs animate-slide-up">
       <div className="text-xl font-bold" style={{ color: accent ?? "var(--dpf-text)" }}>{value}</div>

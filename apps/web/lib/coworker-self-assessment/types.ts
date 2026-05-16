@@ -5,6 +5,7 @@ export const COWORKER_ASSESSMENT_CONFIDENCE = ["high", "medium", "low"] as const
 export type CoworkerAssessmentConfidence = (typeof COWORKER_ASSESSMENT_CONFIDENCE)[number];
 
 export const COWORKER_CAPABILITY_NEED_KINDS = [
+  // Existing operational gap kinds — DO NOT remove without product review.
   "tool",
   "skill",
   "grant",
@@ -13,6 +14,11 @@ export const COWORKER_CAPABILITY_NEED_KINDS = [
   "data",
   "ui_surface",
   "boundary",
+  // Governed Hermes learning Slice 2 (spec §7.3 additions).
+  "prompt",
+  "convention",
+  "code",
+  "other",
 ] as const;
 export type CoworkerCapabilityNeedKind = (typeof COWORKER_CAPABILITY_NEED_KINDS)[number];
 

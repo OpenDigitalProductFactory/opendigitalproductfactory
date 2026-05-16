@@ -37,7 +37,7 @@ interface CatalogStats {
 
 const STATUS_COLOURS: Record<string, string> = {
   discovered: "var(--dpf-muted)",
-  evaluated: "#60a5fa",
+  evaluated: "var(--dpf-info)",
   approved: "var(--dpf-accent)",
   installed: "var(--dpf-warning)",
   active: "var(--dpf-success)",
@@ -47,7 +47,10 @@ const STATUS_COLOURS: Record<string, string> = {
 const RISK_COLOURS: Record<string, string> = {
   low: "var(--dpf-success)",
   medium: "var(--dpf-warning)",
-  high: "#fb923c",
+  // "high" sits between warning and critical; lacking a dedicated token, map to
+  // the warning token to stay within AGENTS.md §12 theme-token discipline.
+  // If the design system later adds a --dpf-warning-strong, swap here.
+  high: "var(--dpf-warning)",
   critical: "var(--dpf-error)",
 };
 
