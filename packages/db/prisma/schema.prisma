@@ -2138,6 +2138,57 @@ model AdapterCapabilityProfile {
   @@index([adapterKind, probedAt])
 }
 
+// One row per adapter execution attempt. Captures latency, tokens, cost,
+// quota pool, status, refusal/error class, tool-call validity, capability
+// usage, and schema-drift detection. Supports single/shadow/race execution
+// modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
+model AdapterRunTelemetry {
+  id                  String    @id @default(cuid())
+  threadId            String?   // null for non-coworker runs (probes, eval)
+  agentMessageId      String?   // joins to AgentMessage when applicable
+  buildId             String?   // for Build Studio dispatch via the substrate
+  agentId             String?   // attribution (PR #607 convention)
+  skillId             String?   // active skill at run time (PR #623 precedent)
+  adapterKind         String
+  adapterVersion      String
+  providerId          String
+  modelId             String
+
+  executionMode       String    // "single" | "shadow-primary" | "shadow-alt" | "race-primary" | "race-loser"
+  raceCohortId        String?   // groups concurrent race/shadow runs
+
+  startedAt           DateTime
+  finishedAt          DateTime?
+  durationMs          Int?
+  firstEventLatencyMs Int?
+
+  // Outcome dimensions (spec §5.4)
+  status              String    // "success" | "refusal" | "error" | "timeout" | "cancelled" | "policy-block"
+  refusalReason       String?
+  errorClass          String?
+  inputTokens         Int?
+  cachedInputTokens   Int?
+  outputTokens        Int?
+  reasoningTokens     Int?
+  estimatedCostUsd    Decimal?  @db.Decimal(10, 6)
+  quotaPoolConsumed   String?   // "anthropic-api" | "anthropic-oauth" | "openai-api" | "openai-chatgpt" | "local"
+
+  toolCallsTotal      Int       @default(0)
+  toolCallsInvalid    Int       @default(0) // fabricated tool names, schema mismatches
+  capabilitiesUsed    String[]  // which capability booleans were actually exercised this run
+  schemaDriftDetected Boolean   @default(false) // adapter emitted unexpected event shape
+
+  userAccepted        Boolean?  // null = not yet decided; true = message kept; false = retried/discarded
+  acceptedAt          DateTime?
+
+  rawEventDigest      String?   // sha256 of normalized event log, for cross-adapter equivalence checks
+
+  @@index([adapterKind, startedAt])
+  @@index([raceCohortId])
+  @@index([threadId, startedAt])
+  @@index([agentId, startedAt])
+}
+
 model Engagement {
   id            String   @id @default(cuid())
   engagementId  String   @unique // ENG-<uuid>
