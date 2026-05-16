@@ -31,6 +31,12 @@ import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import {
+  extractInvokedSkillId,
+  getSkillsForAgent,
+  toSkillSummariesForPrompt,
+} from "@/lib/skills/runtime";
+import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
@@ -424,6 +430,12 @@ export async function sendMessage(input: {
   const isCrossCuttingOverlay = agent.agentId === "AGT-ORCH-000";
 
   let populatedPrompt: string;
+  // Governed Hermes learning Slice 1: active coworker skill (if any).
+  // Set inside the unified-prompt branch when the user message invokes a
+  // known eligible skill via the canonical `Use the <id> skill.` marker.
+  // Threaded through executeAutonomousAgenticLoop so ToolExecution.skillId
+  // attributes each tool call to the active skill.
+  let activeSkillId: string | null = null;
 
   if (useUnified) {
     // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
@@ -534,6 +546,25 @@ export async function sendMessage(input: {
       limit: 4,
     });
 
+    // Governed Hermes learning Slice 1: eligible skills go into the prompt
+    // alongside domain context, and we emit SkillUsageEvent telemetry for
+    // each eligible skill (and again as `loaded` once the skills block is
+    // included in the composed prompt). Telemetry failures are swallowed
+    // inside recordSkillUsageEvents — they must never break the response.
+    const coworkerSkills = await getSkillsForAgent(agent.agentId);
+    const skillSummaries = toSkillSummariesForPrompt(coworkerSkills);
+    const eligibleSkillIds = skillSummaries.map((s) => s.skillId);
+    if (eligibleSkillIds.length > 0) {
+      void recordSkillUsageEvents({
+        phase: "eligible",
+        skillIds: eligibleSkillIds,
+        agentId: agent.agentId,
+        userId: user.id ?? null,
+        threadId: input.threadId ?? null,
+        routeContext: input.routeContext,
+      });
+    }
+
     populatedPrompt = await assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
@@ -545,7 +576,40 @@ export async function sendMessage(input: {
       routeData: selectedPageData,
       attachmentContext: selectedAttachments,
       wikiContext,
+      skills: skillSummaries,
     });
+
+    if (eligibleSkillIds.length > 0) {
+      void recordSkillUsageEvents({
+        phase: "loaded",
+        skillIds: eligibleSkillIds,
+        agentId: agent.agentId,
+        userId: user.id ?? null,
+        threadId: input.threadId ?? null,
+        routeContext: input.routeContext,
+      });
+    }
+
+    // If the user message explicitly invokes a known skill via the canonical
+    // `Use the <id> skill.` marker (compileSkillInvocationPrompt output), emit
+    // an `invoked` event so reflection and metrics can distinguish offered
+    // vs. selected skills. The active skill id is also propagated through
+    // the autonomous loop in Task 7 so ToolExecution.skillId gets populated.
+    const candidateSkillId = extractInvokedSkillId(input.content);
+    activeSkillId =
+      candidateSkillId && eligibleSkillIds.includes(candidateSkillId)
+        ? candidateSkillId
+        : null;
+    if (activeSkillId) {
+      void recordSkillUsageEvents({
+        phase: "invoked",
+        skillIds: [activeSkillId],
+        agentId: agent.agentId,
+        userId: user.id ?? null,
+        threadId: input.threadId ?? null,
+        routeContext: input.routeContext,
+      });
+    }
   } else {
     // ── Legacy persona-based prompt assembly ──
     const promptSections = [
@@ -1125,6 +1189,7 @@ export async function sendMessage(input: {
       agentDisplayName: agent.agentName,
       buildPhase: activeBuild?.phase ?? null,
       featureBuildId: activeBuild?.id ?? null,
+      activeSkillId,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });

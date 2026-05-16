@@ -8,6 +8,7 @@ import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
+import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
@@ -122,6 +123,11 @@ export function AgentCoworkerPanel({
   const [lastProviderInfo, setLastProviderInfo] = useState<{ providerId: string; modelId: string } | null>(null);
   const [devMode, setDevMode] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  // Governed Hermes learning Slice 1: active skill steering the in-flight
+  // request. Set when the user picks a skill from the dropdown; cleared when
+  // the response arrives. Drives the AgentSkillAttributionChip in the busy
+  // status line.
+  const [activeSkill, setActiveSkill] = useState<{ skillId: string; label: string } | null>(null);
   const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -155,6 +161,15 @@ export function AgentCoworkerPanel({
     const t = setInterval(() => setThinkingSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [isBusy]);
+
+  // Governed Hermes learning Slice 1: clear the active-skill chip when the
+  // turn finishes (isBusy drops false). Keeps the chip visible for the
+  // lifetime of the in-flight request, never longer.
+  useEffect(() => {
+    if (!isBusy && activeSkill) {
+      setActiveSkill(null);
+    }
+  }, [isBusy, activeSkill]);
 
   // SSE for tool-level progress, orchestrator status, and async completion
   useEffect(() => {
@@ -499,6 +514,16 @@ export function AgentCoworkerPanel({
     submitMessage(content);
   }
 
+  /**
+   * Governed Hermes learning Slice 1: skill-attributed send path. Captures
+   * the active skill metadata in state so AgentSkillAttributionChip renders
+   * alongside the busy state for the lifetime of this turn.
+   */
+  function handleSendSkill(skill: { skillId: string; label: string; prompt: string }) {
+    setActiveSkill({ skillId: skill.skillId, label: skill.label });
+    submitMessage(skill.prompt);
+  }
+
   function handleRetry(messageId: string) {
     const failedMessage = messages.find(
       (message) => message.id === messageId && message.role === "user" && message.deliveryState === "failed",
@@ -599,6 +624,7 @@ export function AgentCoworkerPanel({
         agent={agent}
         userContext={userContext}
         onSend={handleSend}
+        onSendSkill={handleSendSkill}
         onOpenClearConfirm={handleOpenClearConfirm}
         onCancelClearConfirm={handleCancelClearConfirm}
         onConfirmClear={handleConfirmClear}
@@ -722,6 +748,8 @@ export function AgentCoworkerPanel({
                   />
                 ))}
               </span>
+              {/* Governed Hermes learning Slice 1: active skill chip */}
+              <AgentSkillAttributionChip skill={activeSkill} />
               {/* EP-ASYNC-COWORKER-001: Cancel button after 15s */}
               {!isClearing && thinkingSeconds >= 15 && threadId && (
                 <button
