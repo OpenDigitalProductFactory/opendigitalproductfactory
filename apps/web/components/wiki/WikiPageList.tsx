@@ -1,10 +1,15 @@
 // EP-WIKI-001 Phase 6a: list view of wiki pages with simple grouping.
-// Principles-as-wiki-kind Phase 0: principles are grouped by tier
-// (Commandments → Core → Contextual) within their kind section.
+// Principles-as-wiki-kind: principles are grouped by consumer archetype first,
+// then tier, so humans can review them by the context that consumes them.
 // Server component. Pages are passed in already filtered + sorted.
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+
+import {
+  PRINCIPLE_CONSUMER_ARCHETYPES,
+  PRINCIPLE_TIERS,
+} from "@dpf/db/wiki-taxonomy";
 
 import { WikiPageKindBadge } from "./WikiPageKindBadge";
 
@@ -18,6 +23,10 @@ export type WikiPageListItem = {
   abstract: string | null;
   /** Only meaningful when pageKind === "principle". Drives tier sub-grouping. */
   principleTier?: string | null;
+  /** Only meaningful when pageKind === "principle". Drives human review grouping. */
+  principleConsumerArchetype?: string | null;
+  /** Route/domain contexts for route-domain-specific principles. */
+  principleConsumerContexts?: string[];
 };
 
 type Props = {
@@ -46,14 +55,19 @@ const KIND_GROUP_LABEL: Record<string, string> = {
   index: "Indices",
 };
 
-// Tier order is fixed — Commandments first (highest weight, smallest cohort),
-// then Core, then Contextual. Reflects PRINCIPLE_TIERS in wiki-taxonomy.
-const PRINCIPLE_TIER_ORDER = ["commandment", "core", "contextual"];
-
 const PRINCIPLE_TIER_LABEL: Record<string, string> = {
   commandment: "Commandments",
   core: "Core",
   contextual: "Contextual",
+};
+
+const PRINCIPLE_CONSUMER_LABEL: Record<string, string> = {
+  universal: "Universal",
+  "ai-coworker-universal": "AI Coworker Universal",
+  generalist: "Generalist / COO",
+  specialist: "Specialists",
+  "route-domain-specific": "Route / Domain Specific",
+  uncategorized: "Uncategorized",
 };
 
 /**
@@ -68,6 +82,19 @@ export type PrincipleTierGroup = {
   items: WikiPageListItem[];
 };
 
+export type PrincipleConsumerContextGroup = {
+  context: string;
+  label: string;
+  tierGroups: PrincipleTierGroup[];
+};
+
+export type PrincipleConsumerArchetypeGroup = {
+  archetype: string;
+  label: string;
+  tierGroups: PrincipleTierGroup[];
+  contextGroups: PrincipleConsumerContextGroup[];
+};
+
 export function groupPrinciplesByTier(
   items: WikiPageListItem[],
 ): PrincipleTierGroup[] {
@@ -77,7 +104,7 @@ export function groupPrinciplesByTier(
     // so misconfigured rows stay visible to the admin instead of vanishing.
     const declared = item.principleTier;
     const tier =
-      declared && PRINCIPLE_TIER_ORDER.includes(declared)
+      declared && (PRINCIPLE_TIERS as readonly string[]).includes(declared)
         ? declared
         : "untiered";
     let bucket = buckets.get(tier);
@@ -89,7 +116,7 @@ export function groupPrinciplesByTier(
   }
 
   const groups: PrincipleTierGroup[] = [];
-  for (const tier of PRINCIPLE_TIER_ORDER) {
+  for (const tier of PRINCIPLE_TIERS) {
     const bucket = buckets.get(tier);
     if (bucket && bucket.length > 0) {
       groups.push({ tier, label: PRINCIPLE_TIER_LABEL[tier] ?? tier, items: bucket });
@@ -101,6 +128,97 @@ export function groupPrinciplesByTier(
     groups.push({ tier: "untiered", label: "Untiered", items: untiered });
   }
   return groups;
+}
+
+function formatConsumerContextLabel(context: string): string {
+  if (context === "unscoped") return "Unscoped";
+  return context
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function groupPrinciplesByConsumerArchetype(
+  items: WikiPageListItem[],
+): PrincipleConsumerArchetypeGroup[] {
+  const buckets = new Map<string, WikiPageListItem[]>();
+  for (const item of items) {
+    const declared = item.principleConsumerArchetype;
+    const archetype =
+      declared &&
+      (PRINCIPLE_CONSUMER_ARCHETYPES as readonly string[]).includes(declared)
+        ? declared
+        : "uncategorized";
+    let bucket = buckets.get(archetype);
+    if (!bucket) {
+      bucket = [];
+      buckets.set(archetype, bucket);
+    }
+    bucket.push(item);
+  }
+
+  const orderedArchetypes = [
+    ...PRINCIPLE_CONSUMER_ARCHETYPES.filter((archetype) =>
+      buckets.has(archetype),
+    ),
+    ...Array.from(buckets.keys()).filter(
+      (archetype) =>
+        !(PRINCIPLE_CONSUMER_ARCHETYPES as readonly string[]).includes(archetype),
+    ),
+  ];
+
+  return orderedArchetypes.map((archetype) => {
+    const groupItems = buckets.get(archetype) ?? [];
+    const contextGroups =
+      archetype === "route-domain-specific"
+        ? groupRouteSpecificPrinciplesByContext(groupItems)
+        : [];
+    return {
+      archetype,
+      label: PRINCIPLE_CONSUMER_LABEL[archetype] ?? archetype,
+      tierGroups: groupPrinciplesByTier(groupItems),
+      contextGroups,
+    };
+  });
+}
+
+function groupRouteSpecificPrinciplesByContext(
+  items: WikiPageListItem[],
+): PrincipleConsumerContextGroup[] {
+  const buckets = new Map<string, WikiPageListItem[]>();
+  for (const item of items) {
+    const contexts =
+      item.principleConsumerContexts && item.principleConsumerContexts.length > 0
+        ? item.principleConsumerContexts
+        : ["unscoped"];
+    for (const context of contexts) {
+      let bucket = buckets.get(context);
+      if (!bucket) {
+        bucket = [];
+        buckets.set(context, bucket);
+      }
+      bucket.push(item);
+    }
+  }
+
+  const contexts = Array.from(buckets.keys()).sort((a, b) => {
+    if (a === "build-studio") return -1;
+    if (b === "build-studio") return 1;
+    if (a === "unscoped") return 1;
+    if (b === "unscoped") return -1;
+    return a.localeCompare(b);
+  });
+
+  return contexts.map((context) => ({
+    context,
+    label: formatConsumerContextLabel(context),
+    tierGroups: groupPrinciplesByTier(buckets.get(context) ?? []),
+  }));
+}
+
+function countTierGroupItems(groups: PrincipleTierGroup[]): number {
+  return groups.reduce((sum, group) => sum + group.items.length, 0);
 }
 
 export function WikiPageList({ pages }: Props): ReactNode {
@@ -136,6 +254,11 @@ export function WikiPageList({ pages }: Props): ReactNode {
   ];
 
   function renderItemRow(p: WikiPageListItem): ReactNode {
+    const consumerLabel = p.principleConsumerArchetype
+      ? PRINCIPLE_CONSUMER_LABEL[p.principleConsumerArchetype] ??
+        p.principleConsumerArchetype
+      : null;
+    const contexts = p.principleConsumerContexts ?? [];
     return (
       <li key={p.id}>
         <Link
@@ -157,6 +280,20 @@ export function WikiPageList({ pages }: Props): ReactNode {
                 · {p.status}
               </span>
             )}
+            {p.pageKind === "principle" && consumerLabel && (
+              <span className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] border border-[var(--dpf-border)] rounded px-1 py-0.5">
+                {consumerLabel}
+              </span>
+            )}
+            {p.pageKind === "principle" &&
+              contexts.map((context) => (
+                <span
+                  key={context}
+                  className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] border border-[var(--dpf-border)] rounded px-1 py-0.5"
+                >
+                  {formatConsumerContextLabel(context)}
+                </span>
+              ))}
           </div>
           <p className="text-xs text-[var(--dpf-muted)] font-mono mt-0.5">
             {p.slug}
@@ -171,28 +308,64 @@ export function WikiPageList({ pages }: Props): ReactNode {
     );
   }
 
+  function renderTierGroups(groups: PrincipleTierGroup[]): ReactNode {
+    return groups.map((tierGroup) => (
+      <div key={tierGroup.tier}>
+        <h4 className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mb-1 ml-1">
+          {tierGroup.label} · {tierGroup.items.length}
+        </h4>
+        <ul className="divide-y divide-[var(--dpf-border)] border border-[var(--dpf-border)] rounded">
+          {tierGroup.items.map(renderItemRow)}
+        </ul>
+      </div>
+    ));
+  }
+
+  function renderRouteContextGroups(
+    groups: PrincipleConsumerContextGroup[],
+  ): ReactNode {
+    return groups.map((contextGroup) => (
+      <div key={contextGroup.context}>
+        <h4 className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mb-1 ml-1">
+          {contextGroup.label} · {countTierGroupItems(contextGroup.tierGroups)}
+        </h4>
+        <div className="space-y-2">
+          {renderTierGroups(contextGroup.tierGroups)}
+        </div>
+      </div>
+    ));
+  }
+
+  function renderPrincipleConsumerGroups(
+    groups: PrincipleConsumerArchetypeGroup[],
+  ): ReactNode {
+    return groups.map((consumerGroup) => (
+      <div key={consumerGroup.archetype}>
+        <h3 className="text-[11px] uppercase tracking-wide text-[var(--dpf-muted)] mb-2 ml-1">
+          {consumerGroup.label} · {countTierGroupItems(consumerGroup.tierGroups)}
+        </h3>
+        <div className="space-y-3">
+          {consumerGroup.archetype === "route-domain-specific"
+            ? renderRouteContextGroups(consumerGroup.contextGroups)
+            : renderTierGroups(consumerGroup.tierGroups)}
+        </div>
+      </div>
+    ));
+  }
+
   return (
     <div className="space-y-6">
       {orderedKinds.map((kind) => {
         const items = byKind.get(kind) ?? [];
         if (kind === "principle") {
-          const tierGroups = groupPrinciplesByTier(items);
+          const consumerGroups = groupPrinciplesByConsumerArchetype(items);
           return (
             <section key={kind}>
               <h2 className="text-xs uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
                 {KIND_GROUP_LABEL[kind] ?? kind} · {items.length}
               </h2>
-              <div className="space-y-3">
-                {tierGroups.map((group) => (
-                  <div key={group.tier}>
-                    <h3 className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)] mb-1 ml-1">
-                      {group.label} · {group.items.length}
-                    </h3>
-                    <ul className="divide-y divide-[var(--dpf-border)] border border-[var(--dpf-border)] rounded">
-                      {group.items.map(renderItemRow)}
-                    </ul>
-                  </div>
-                ))}
+              <div className="space-y-5">
+                {renderPrincipleConsumerGroups(consumerGroups)}
               </div>
             </section>
           );

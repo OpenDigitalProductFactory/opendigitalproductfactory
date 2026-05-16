@@ -9,6 +9,7 @@ principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Adopters configure the organization once and expect every feature to honor that configuration — this is the data-architecture commitment behind that contract.
 sources:

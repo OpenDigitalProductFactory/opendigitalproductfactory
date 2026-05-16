@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "fs";
+import { resolve } from "path";
 import { describe, expect, it } from "vitest";
 import {
   buildKernelQdrantPoints,
@@ -395,6 +397,32 @@ describe("seed-wiki-kernel: extractPrinciplePayload", () => {
       principleConsumerArchetype: "route-domain-specific" as never,
     });
     expect(payload).toEqual({});
+  });
+});
+
+describe("founder-kernel principle frontmatter", () => {
+  it("assigns a consumer archetype to every authored principle page", () => {
+    const principleDir = resolve(
+      process.cwd(),
+      "../../docs/founder-kernel/wiki/principles",
+    );
+    const missing: string[] = [];
+
+    for (const fileName of readdirSync(principleDir)
+      .filter((file) => file.endsWith(".md"))
+      .sort()) {
+      const raw = readFileSync(resolve(principleDir, fileName), "utf8");
+      const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+      if (frontmatter.pageKind !== "principle") continue;
+
+      if (!frontmatter.principleConsumerArchetype) {
+        missing.push(`${fileName}: missing principleConsumerArchetype`);
+        continue;
+      }
+      expect(() => extractPrinciplePayload(frontmatter)).not.toThrow();
+    }
+
+    expect(missing).toEqual([]);
   });
 });
 

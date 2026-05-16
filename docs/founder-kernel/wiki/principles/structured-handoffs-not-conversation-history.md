@@ -9,6 +9,7 @@ principleDimensionVector: {"long_term_maintainability": 0.6, "schema_grounding":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Adopters building multi-phase agent workflows need to know that DPF's handoffs are typed artifacts, not transcripts.
 sources:

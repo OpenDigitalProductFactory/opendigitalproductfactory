@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Documents the transparency expectation around uncommitted state — agents that pivot without disclosing leave the operator wondering what happened to the prior work.
 sources:

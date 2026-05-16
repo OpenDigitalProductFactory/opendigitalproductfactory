@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: This is part of DPF's communication style for coworkers — adopters configuring agents need to know the platform's default voice is terse and outcome-first.
 sources:

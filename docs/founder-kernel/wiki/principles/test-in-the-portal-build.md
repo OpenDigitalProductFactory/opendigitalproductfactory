@@ -9,6 +9,9 @@ principleDimensionVector: {"evidence_density": 1.0, "blast_radius": -0.7, "long_
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - build-studio
 principlePublic: false
 principlePublicRationale: ""
 sources:

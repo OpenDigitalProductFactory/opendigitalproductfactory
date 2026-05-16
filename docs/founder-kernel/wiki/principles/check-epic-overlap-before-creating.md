@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters managing the DPF backlog benefit from the no-parallel-epic discipline — duplicate epics are a real source of confusion.
 sources:
