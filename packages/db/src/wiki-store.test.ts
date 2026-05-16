@@ -182,6 +182,103 @@ describe("upsertWikiPage with principle-only fields", () => {
 
     expect(create).toHaveBeenCalled();
   });
+
+  it("forwards principleConsumerArchetype + principleConsumerContexts on create", async () => {
+    const { db, findFirst, create } = makeWikiPageMocks();
+    findFirst.mockResolvedValueOnce(null);
+    create.mockResolvedValueOnce({ id: "wp_principle_route_specific" });
+
+    await upsertWikiPage(db, {
+      slug: "principles/build-studio-design-review-required",
+      title: "Build Studio: design review required before ship",
+      body: "## Rule\n\nDesign review must pass before Build Studio ships...",
+      pageKind: "principle",
+      isKernel: true,
+      principleTier: "core",
+      principleDirection:
+        "Build Studio runs require a passing design review before ship.",
+      principleAppliesTo: ["in_platform_coworker"],
+      principleConsumerArchetype: "route-domain-specific",
+      principleConsumerContexts: ["build-studio"],
+      principlePublic: false,
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        slug: "principles/build-studio-design-review-required",
+        pageKind: "principle",
+        principleConsumerArchetype: "route-domain-specific",
+        principleConsumerContexts: ["build-studio"],
+      }),
+    });
+  });
+
+  it("forwards principleConsumerArchetype + principleConsumerContexts on update", async () => {
+    const { db, findFirst, update } = makeWikiPageMocks();
+    findFirst.mockResolvedValueOnce({ id: "wp_existing_ca" });
+    update.mockResolvedValueOnce({ id: "wp_existing_ca" });
+
+    await upsertWikiPage(db, {
+      slug: "principles/specialization-over-generalization",
+      title: "Specialization Over Generalization",
+      body: "## Rule\n\nPrefer specialist agents...",
+      pageKind: "principle",
+      isKernel: true,
+      principleTier: "core",
+      principleAppliesTo: ["in_platform_coworker"],
+      principleConsumerArchetype: "ai-coworker-universal",
+      principleConsumerContexts: [],
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "wp_existing_ca" },
+      data: expect.objectContaining({
+        principleConsumerArchetype: "ai-coworker-universal",
+        principleConsumerContexts: [],
+      }),
+    });
+  });
+
+  it("omits principleConsumerArchetype and principleConsumerContexts when pageKind is not principle", async () => {
+    const { db, findFirst, create } = makeWikiPageMocks();
+    findFirst.mockResolvedValueOnce(null);
+    create.mockResolvedValueOnce({ id: "wp_entity_no_ca" });
+
+    await upsertWikiPage(db, {
+      slug: "entities/edge-node",
+      title: "Edge Node",
+      body: "## Definition\n\nAn edge node...",
+      pageKind: "entity",
+      isKernel: true,
+    });
+
+    const createArgs = create.mock.calls[0]?.[0];
+    expect(createArgs.data).not.toHaveProperty("principleConsumerArchetype");
+    expect(createArgs.data).not.toHaveProperty("principleConsumerContexts");
+  });
+
+  it("forwards consumer-archetype fields only when supplied; absence is the contract for unset", async () => {
+    const { db, findFirst, create } = makeWikiPageMocks();
+    findFirst.mockResolvedValueOnce(null);
+    create.mockResolvedValueOnce({ id: "wp_partial_ca" });
+
+    // A principle page that omits the consumer-archetype fields must NOT have
+    // them appear with explicit null or empty values — that breaks the
+    // "absence is the marker" contract from spec §9.2.
+    await upsertWikiPage(db, {
+      slug: "principles/draft-no-archetype",
+      title: "Draft principle",
+      body: "## Rule\n\nTBD",
+      pageKind: "principle",
+      isKernel: true,
+      principleTier: "core",
+      principleAppliesTo: ["human"],
+    });
+
+    const createArgs = create.mock.calls[0]?.[0];
+    expect(createArgs.data).not.toHaveProperty("principleConsumerArchetype");
+    expect(createArgs.data).not.toHaveProperty("principleConsumerContexts");
+  });
 });
 
 function makeWikiPageMocks() {

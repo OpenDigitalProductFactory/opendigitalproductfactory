@@ -54,6 +54,8 @@ Required frontmatter (in addition to `title` and `pageKind: principle`):
 - `principleDirection` — one declarative sentence naming what the principle favors. Used as the canonical retrieval text. Required for `commandment` and `core`.
 - `principleDimensionVector` — inline JSON map keyed by dimensions from the registry in [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts), values signed in `[-1, 1]`. Required for `commandment`; recommended for `core`.
 - `principleAppliesTo` — array; one or more of `in_platform_coworker`, `external_coding_agent`, `human`.
+- `principleConsumerArchetype` — one of `universal`, `ai-coworker-universal`, `generalist`, `specialist`, `route-domain-specific` (spec §8A). Independent axis from `principleAppliesTo`; the coherence rules are in the table below.
+- `principleConsumerContexts` — array of governed kebab-case slugs (e.g., `build-studio`, `marketing`, `compliance`, `discovery`, `finance`, `storefront`, `portfolio`). **Required (≥1 entry) when `principleConsumerArchetype` is `route-domain-specific`**; empty array (or omitted) otherwise.
 - `principlePublic` — `true` if safe to surface on the public docs site, `false` otherwise. Defaults to `false`.
 - `principlePublicRationale` — short justification when `principlePublic: true`.
 
@@ -61,6 +63,21 @@ Optional:
 - `principleWeight` — explicit override of the tier default (`1.0` / `0.4` / `0.1`). Requires `principleWeightRationale`.
 - `principleWeightRationale`.
 - `principleDimensions` — array of dimension keys. Auto-derived from `principleDimensionVector` keys when omitted.
+
+**Coherence matrix (spec §8A.1).** Enforced at seed time by `extractPrinciplePayload` and at lint time by `principle-incoherent-archetype-applies-to`:
+
+| Consumer archetype \ `principleAppliesTo` | `in_platform_coworker` | `external_coding_agent` | `human` |
+|---|---|---|---|
+| `universal` | ✅ valid when paired with at least one other population | ✅ valid when paired with at least one other population | ✅ valid when paired with at least one other population |
+| `ai-coworker-universal` | ✅ valid | ✅ valid | ❌ incoherent |
+| `generalist` | ✅ valid | ✅ valid (broad agents such as Claude Code, Codex CLI) | ❌ incoherent |
+| `specialist` | ✅ valid | ⚠️ rare — requires `principleWeightRationale` (warn at lint, error if missing rationale) | ❌ incoherent |
+| `route-domain-specific` | ✅ valid | ✅ valid | ✅ valid |
+
+Notes:
+- `universal` requires `principleAppliesTo` to contain at least two populations. A single-population principle is by definition not universal.
+- The three agent archetypes (`ai-coworker-universal`, `generalist`, `specialist`) describe agent classes and must not include `human`.
+- `route-domain-specific` is the only archetype that legitimately scopes a `human` policy to a route (e.g., a Storefront-operator rule).
 
 Required body sections (per spec §7.2):
 - **Rule** — one declarative sentence.
