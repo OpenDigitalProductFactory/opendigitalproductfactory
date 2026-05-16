@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Documents DPF's worktree layout convention so contributors don't accidentally turn the root clone into a feature workspace.
 sources:

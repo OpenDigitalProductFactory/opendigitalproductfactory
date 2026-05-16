@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters need to know that DPF's state is the database, not the seed file — agents quoting stale seed values instead of querying lead to incorrect operational decisions.
 sources:

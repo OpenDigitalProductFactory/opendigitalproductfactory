@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: DCO compliance is a public-facing licensing signal — adopters and contributors need to know the platform enforces it on every commit, no exceptions.
 sources:

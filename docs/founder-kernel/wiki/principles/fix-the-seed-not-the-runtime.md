@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters running DPF need to know that data-shape regressions get fixed at the source — patching only the runtime symptom means the bug reappears on every fresh install.
 sources:

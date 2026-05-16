@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters need to see DPF's governance posture — even the maintainer follows the PR-review contract; the platform's audit chain depends on it.
 sources:

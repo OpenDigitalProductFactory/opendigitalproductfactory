@@ -55,8 +55,16 @@ export default async function WikiBrowsePage({
       status: true,
       isKernel: true,
       abstract: true,
+      principleTier: true,
+      principleConsumerArchetype: true,
+      principleConsumerContexts: true,
     },
-    orderBy: [{ pageKind: "asc" }, { title: "asc" }],
+    orderBy: [
+      { pageKind: "asc" },
+      { principleConsumerArchetype: "asc" },
+      { principleTier: "asc" },
+      { title: "asc" },
+    ],
   })) as WikiPageListItem[];
 
   return (

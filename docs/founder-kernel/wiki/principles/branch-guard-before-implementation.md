@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters need to know that DPF agents check branch state before committing — local-only commits and accidental main-branch work are real failure modes the principle prevents.
 sources:

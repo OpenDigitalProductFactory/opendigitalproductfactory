@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Documents the worktree discipline DPF requires for concurrent agent runs — adopters running multiple agents in parallel need to know this before they collide.
 sources:

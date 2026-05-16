@@ -9,6 +9,7 @@ principleDimensionVector: {"schema_grounding": 0.9, "long_term_maintainability":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Documents DPF's identity-convergence stance — adopters need this guidance before adding any new actor type to the platform.
 sources:
