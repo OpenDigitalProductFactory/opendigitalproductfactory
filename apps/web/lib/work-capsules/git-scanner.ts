@@ -57,6 +57,13 @@ export function parseWorktreeList(output: string): WorktreeInfo[] {
     .filter((row) => row.path.length > 0);
 }
 
+export function parseBranchList(output: string): string[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 export function parsePrUrlFromText(text: string | null | undefined): string | null {
   const match = text?.match(/https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/\d+/);
   return match?.[0] ?? null;
@@ -77,6 +84,14 @@ export async function scanGitWorktrees(repoRoot: string): Promise<WorktreeInfo[]
     windowsHide: true,
   });
   return parseWorktreeList(stdout);
+}
+
+export async function listLocalBranches(repoRoot: string): Promise<Set<string>> {
+  const { stdout } = await execFileAsync("git", ["-C", repoRoot, "branch", "--format=%(refname:short)"], {
+    timeout: 5000,
+    windowsHide: true,
+  });
+  return new Set(parseBranchList(stdout));
 }
 
 export async function getWorktreeDirtySummary(worktreePath: string): Promise<GitDirtySummary> {

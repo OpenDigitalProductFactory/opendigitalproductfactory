@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseGitStatusPorcelain,
+  parseBranchList,
   parsePrUrlFromText,
   parseWorktreeList,
   shouldSurfaceAdoptableBranch,
@@ -33,6 +34,14 @@ describe("git scanner parsing", () => {
         "see https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/596",
       ),
     ).toBe("https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/596");
+  });
+
+  it("parses local branch names and trims empty lines", () => {
+    expect(parseBranchList("main\nfeat/work-capsule\n  fix/recovery  \n\n")).toEqual([
+      "main",
+      "feat/work-capsule",
+      "fix/recovery",
+    ]);
   });
 
   it("surfaces dirty worktrees and recent ahead branches", () => {
