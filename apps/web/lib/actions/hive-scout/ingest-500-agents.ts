@@ -172,6 +172,7 @@ type HiveScoutPrisma = Pick<
   | "backlogItemActivity"
   | "user"
   | "platformConfig"
+  | "rawSource"
 > & {
   taskRun?: unknown;
 };
