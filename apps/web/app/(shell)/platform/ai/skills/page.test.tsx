@@ -29,6 +29,15 @@ vi.mock("@/lib/actions/skills-observatory", () => ({
     activeSkillCount: 0,
     latestMetricPeriod: null,
   }),
+  getSkillReviewDetail: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/components/platform/SkillProposalsPanel", () => ({
+  SkillProposalsPanel: () => <div>skills-proposals-panel</div>,
+}));
+
+vi.mock("@/components/platform/SkillRevisionHistoryPanel", () => ({
+  SkillRevisionHistoryPanel: () => <div>skills-revision-history-panel</div>,
 }));
 
 vi.mock("@/components/admin/SkillsCatalogView", () => ({
@@ -48,7 +57,7 @@ vi.mock("next/link", () => ({
 describe("PlatformAiSkillsPage", () => {
   it("renders catalog and observability under AI Operations", async () => {
     const { default: PlatformAiSkillsPage } = await import("./page");
-    const html = renderToStaticMarkup(await PlatformAiSkillsPage());
+    const html = renderToStaticMarkup(await PlatformAiSkillsPage({}));
 
     expect(html).toContain("AI Operations");
     expect(html).toContain("Catalog");
