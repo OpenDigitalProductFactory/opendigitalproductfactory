@@ -38,6 +38,7 @@ export type WorkCapsuleExecutorKind = (typeof WORK_CAPSULE_EXECUTOR_KINDS)[numbe
 export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "created",
   "adopted",
+  "workspace-planned",
   "status-changed",
   "status-override",
   "executor-changed",
@@ -86,6 +87,12 @@ export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[numbe
 export const LEASE_TTL_MS = 30 * 60 * 1000;
 export const STALE_CACHE_MS = 30 * 60 * 1000;
 export const STATUS_OVERRIDE_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const RELEASE_WORKTREE_DEFAULTS = {
+  win32: "D:\\DPF",
+  darwin: "{home}/dpf",
+  linux: "{home}/dpf",
+} as const;
 
 export type ScopeClaim = {
   kind: "path" | "module" | "package" | "route" | "skill" | "prompt";
@@ -136,6 +143,73 @@ export function normalizeBranchTaxonomy(
 ): WorkCapsuleBranchTaxonomy | null {
   const prefix = branch?.split("/")[0]?.trim();
   return prefix && TAXONOMY_SET.has(prefix) ? (prefix as WorkCapsuleBranchTaxonomy) : null;
+}
+
+const MAX_SLUG_LENGTH = 48;
+
+export function buildCapsuleSlug(title: string, capsuleIdFallback?: string): string {
+  const slug = title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, MAX_SLUG_LENGTH)
+    .replace(/-+$/g, "");
+  if (slug.length > 0) return slug;
+  if (!capsuleIdFallback) return "capsule";
+  return capsuleIdFallback
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "capsule";
+}
+
+export function buildCapsuleBranchName(args: {
+  taxonomy: WorkCapsuleBranchTaxonomy;
+  slug: string;
+}): string {
+  if (!TAXONOMY_SET.has(args.taxonomy)) {
+    throw new Error(`Invalid branch taxonomy: ${args.taxonomy}`);
+  }
+  return `${args.taxonomy}/${args.slug}`;
+}
+
+function resolveHome(explicit: string | undefined): string {
+  return explicit ?? process.env.HOME ?? process.env.USERPROFILE ?? "";
+}
+
+export function buildCapsuleWorktreePath(args: {
+  os: NodeJS.Platform;
+  slug: string;
+  home?: string;
+}): string {
+  if (args.os === "win32") return `D:\\DPF-${args.slug}`;
+  const home = resolveHome(args.home).replace(/[\\/]+$/g, "");
+  return `${home}/dpf-worktrees/${args.slug}`;
+}
+
+function normalizeComparablePath(value: string, os: NodeJS.Platform): string {
+  const normalized = value.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  return os === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function releaseWorktreePath(os: NodeJS.Platform, home?: string, override?: string): string {
+  if (override?.trim()) return override.trim();
+  if (os === "win32") return RELEASE_WORKTREE_DEFAULTS.win32;
+  const template = os === "darwin" ? RELEASE_WORKTREE_DEFAULTS.darwin : RELEASE_WORKTREE_DEFAULTS.linux;
+  return template.replace("{home}", resolveHome(home).replace(/[\\/]+$/g, ""));
+}
+
+export function isRootClonePath(
+  candidatePath: string,
+  os: NodeJS.Platform,
+  home?: string,
+  releasePathOverride?: string,
+): boolean {
+  return (
+    normalizeComparablePath(candidatePath, os) ===
+    normalizeComparablePath(releaseWorktreePath(os, home, releasePathOverride), os)
+  );
 }
 
 function isIsoTimestamp(value: unknown): value is string {

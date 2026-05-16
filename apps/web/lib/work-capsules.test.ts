@@ -6,7 +6,12 @@ import {
   WORK_CAPSULE_EXECUTOR_KINDS,
   WORK_CAPSULE_SOURCES,
   WORK_CAPSULE_STATUSES,
+  RELEASE_WORKTREE_DEFAULTS,
+  buildCapsuleBranchName,
+  buildCapsuleSlug,
+  buildCapsuleWorktreePath,
   isWorkCapsuleStatus,
+  isRootClonePath,
   normalizeBranchTaxonomy,
   parseScopeClaims,
 } from "./work-capsules";
@@ -74,5 +79,70 @@ describe("branch taxonomy", () => {
     expect(normalizeBranchTaxonomy("feat/work-capsules")).toBe("feat");
     expect(normalizeBranchTaxonomy("doc/work-capsules")).toBe("doc");
     expect(normalizeBranchTaxonomy("random")).toBe(null);
+  });
+});
+
+describe("buildCapsuleSlug", () => {
+  it("lowercases, replaces non-alnum with hyphens, trims, and caps length", () => {
+    expect(buildCapsuleSlug("Provider routing tool capability")).toBe("provider-routing-tool-capability");
+    expect(buildCapsuleSlug("  Lots   of    spaces  ")).toBe("lots-of-spaces");
+    expect(buildCapsuleSlug("emoji 🎉 and 中文 mixed!")).toBe("emoji-and-mixed");
+    const longTitle = "a".repeat(120);
+    expect(buildCapsuleSlug(longTitle).length).toBeLessThanOrEqual(48);
+  });
+
+  it("falls back to capsuleId tail when the title slugs to empty", () => {
+    expect(buildCapsuleSlug("...", "WC-ABCD1234")).toBe("wc-abcd1234");
+  });
+});
+
+describe("buildCapsuleBranchName", () => {
+  it("uses the chosen taxonomy as prefix", () => {
+    expect(buildCapsuleBranchName({ taxonomy: "feat", slug: "work-capsule" })).toBe("feat/work-capsule");
+    expect(buildCapsuleBranchName({ taxonomy: "doc", slug: "work-capsule-phase-2" })).toBe(
+      "doc/work-capsule-phase-2",
+    );
+  });
+
+  it("rejects an unknown taxonomy", () => {
+    expect(() => buildCapsuleBranchName({ taxonomy: "wat" as any, slug: "x" })).toThrow(/branch taxonomy/i);
+  });
+});
+
+describe("buildCapsuleWorktreePath", () => {
+  it("emits the Windows convention for win32", () => {
+    expect(buildCapsuleWorktreePath({ os: "win32", slug: "work-capsule" })).toBe("D:\\DPF-work-capsule");
+  });
+
+  it("emits the Unix convention for darwin and linux", () => {
+    expect(buildCapsuleWorktreePath({ os: "darwin", slug: "work-capsule", home: "/Users/mark" })).toBe(
+      "/Users/mark/dpf-worktrees/work-capsule",
+    );
+    expect(buildCapsuleWorktreePath({ os: "linux", slug: "work-capsule", home: "/home/mark" })).toBe(
+      "/home/mark/dpf-worktrees/work-capsule",
+    );
+  });
+
+  it("publishes release-worktree defaults for supported host families", () => {
+    expect(RELEASE_WORKTREE_DEFAULTS.win32).toBe("D:\\DPF");
+    expect(RELEASE_WORKTREE_DEFAULTS.darwin).toBe("{home}/dpf");
+    expect(RELEASE_WORKTREE_DEFAULTS.linux).toBe("{home}/dpf");
+  });
+});
+
+describe("isRootClonePath", () => {
+  it("recognizes the canonical Windows root clone", () => {
+    expect(isRootClonePath("D:\\DPF", "win32")).toBe(true);
+    expect(isRootClonePath("d:/DPF", "win32")).toBe(true);
+    expect(isRootClonePath("D:\\DPF-feature", "win32")).toBe(false);
+  });
+
+  it("recognizes the canonical Unix root clone", () => {
+    expect(isRootClonePath("/Users/mark/dpf", "darwin", "/Users/mark")).toBe(true);
+    expect(isRootClonePath("/home/mark/dpf-worktrees/x", "linux", "/home/mark")).toBe(false);
+  });
+
+  it("respects the DPF_RELEASE_WORKTREE_PATH override when supplied", () => {
+    expect(isRootClonePath("/srv/release", "linux", "/home/x", "/srv/release")).toBe(true);
   });
 });
