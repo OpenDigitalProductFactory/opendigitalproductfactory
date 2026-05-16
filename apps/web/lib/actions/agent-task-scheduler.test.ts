@@ -66,7 +66,10 @@ import {
   executeScheduledAgentTask,
   scheduleAgentTask,
 } from "./agent-task-scheduler";
-import { extractDiscoveryTriageSummary } from "./agent-task-scheduler-summary";
+import {
+  extractDiscoveryTriageSummary,
+  extractHiveScoutSummary,
+} from "./agent-task-scheduler-summary";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -169,6 +172,66 @@ describe("extractDiscoveryTriageSummary", () => {
     ]);
 
     expect(summary).toBeNull();
+  });
+});
+
+describe("extractHiveScoutSummary", () => {
+  it("preserves per-framework and per-industry review classification breakdowns", () => {
+    const summary = extractHiveScoutSummary([
+      {
+        name: "run_hive_scout_ingest",
+        args: {},
+        result: {
+          success: true,
+          message: "ok",
+          data: {
+            catalogEntries: 3,
+            gaps: 3,
+            reviewed: 3,
+            created: 2,
+            duplicates: 0,
+            skippedByReview: 1,
+            reviewFailed: 0,
+            reviewBatchSize: 3,
+            reviewBatchUtilization: 0.25,
+            reviewParseSuccessRate: 1,
+            reviewSchemaDropCount: 0,
+            reviewCacheHits: 0,
+            reviewCacheHitRate: 0,
+            reviewLatencyMs: 420,
+            reviewClassificationHistogram: {
+              new_archetype: 1,
+              existing_skill_gap: 1,
+              duplicate_pattern: 1,
+            },
+            reviewClassificationByFramework: {
+              main: { new_archetype: 1 },
+              crewai: { existing_skill_gap: 1 },
+              autogen: { duplicate_pattern: 1 },
+            },
+            reviewClassificationByIndustry: {
+              Cybersecurity: { new_archetype: 1 },
+              Communication: { existing_skill_gap: 1 },
+              Research: { duplicate_pattern: 1 },
+            },
+            deferred: 0,
+          },
+        },
+      },
+    ]);
+
+    expect(summary?.payload?.metrics).toMatchObject({
+      reviewClassificationByFramework: {
+        main: { new_archetype: 1 },
+        crewai: { existing_skill_gap: 1 },
+        autogen: { duplicate_pattern: 1 },
+      },
+      reviewClassificationByIndustry: {
+        Cybersecurity: { new_archetype: 1 },
+        Communication: { existing_skill_gap: 1 },
+        Research: { duplicate_pattern: 1 },
+      },
+    });
   });
 });
 
@@ -548,6 +611,14 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
                 new_archetype: 2,
                 duplicate_pattern: 1,
               },
+              reviewClassificationByFramework: {
+                main: { new_archetype: 1 },
+                crewai: { duplicate_pattern: 1 },
+              },
+              reviewClassificationByIndustry: {
+                Cybersecurity: { new_archetype: 2 },
+                Communication: { duplicate_pattern: 1 },
+              },
               deferred: 1,
               createdItemIds: ["HS-1", "HS-2", "HS-3"],
             },
@@ -580,6 +651,14 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
               metrics: expect.objectContaining({
                 reviewCacheHits: 1,
                 reviewSchemaDropCount: 1,
+                reviewClassificationByFramework: {
+                  main: { new_archetype: 1 },
+                  crewai: { duplicate_pattern: 1 },
+                },
+                reviewClassificationByIndustry: {
+                  Cybersecurity: { new_archetype: 2 },
+                  Communication: { duplicate_pattern: 1 },
+                },
               }),
             }),
           }),

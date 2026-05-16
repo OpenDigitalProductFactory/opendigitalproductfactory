@@ -58,6 +58,8 @@ type HiveScoutSummaryPayload = {
     reviewFailureReason?: string;
     reviewSkipReason?: string;
     reviewClassificationHistogram?: Record<string, number>;
+    reviewClassificationByFramework?: Record<string, Record<string, number>>;
+    reviewClassificationByIndustry?: Record<string, Record<string, number>>;
   };
   createdItemIds?: string[];
 };
@@ -76,6 +78,25 @@ function asString(value: unknown): string | null {
 
 function asBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function asPositiveNumberRecord(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) return null;
+  const entries = Object.entries(value)
+    .map(([key, entryValue]): [string, number] => [key, asNumber(entryValue) ?? 0])
+    .filter(([, entryValue]) => entryValue > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function asPositiveNestedNumberRecord(value: unknown): Record<string, Record<string, number>> | null {
+  if (!isRecord(value)) return null;
+  const groups = Object.entries(value)
+    .map(([group, bucket]): [string, Record<string, number> | null] => [
+      group,
+      asPositiveNumberRecord(bucket),
+    ])
+    .filter((entry): entry is [string, Record<string, number>] => Boolean(entry[1]));
+  return groups.length > 0 ? Object.fromEntries(groups) : null;
 }
 
 export function extractDiscoveryTriageSummary(
@@ -186,6 +207,15 @@ export function extractHiveScoutSummary(
   const createdItemIds = Array.isArray(scoutTool.result.data.createdItemIds)
     ? scoutTool.result.data.createdItemIds.filter((item): item is string => typeof item === "string" && item.length > 0)
     : [];
+  const reviewClassificationHistogram = asPositiveNumberRecord(
+    scoutTool.result.data.reviewClassificationHistogram,
+  );
+  const reviewClassificationByFramework = asPositiveNestedNumberRecord(
+    scoutTool.result.data.reviewClassificationByFramework,
+  );
+  const reviewClassificationByIndustry = asPositiveNestedNumberRecord(
+    scoutTool.result.data.reviewClassificationByIndustry,
+  );
 
   const payload: HiveScoutSummaryPayload = {
     processedAt: new Date().toISOString(),
@@ -211,15 +241,9 @@ export function extractHiveScoutSummary(
       ...(asString(scoutTool.result.data.reviewSkipReason)
         ? { reviewSkipReason: asString(scoutTool.result.data.reviewSkipReason) as string }
         : {}),
-      ...(isRecord(scoutTool.result.data.reviewClassificationHistogram)
-        ? {
-            reviewClassificationHistogram: Object.fromEntries(
-              Object.entries(scoutTool.result.data.reviewClassificationHistogram)
-                .map(([key, value]): [string, number] => [key, asNumber(value) ?? 0])
-                .filter(([, value]) => value > 0),
-            ),
-          }
-        : {}),
+      ...(reviewClassificationHistogram ? { reviewClassificationHistogram } : {}),
+      ...(reviewClassificationByFramework ? { reviewClassificationByFramework } : {}),
+      ...(reviewClassificationByIndustry ? { reviewClassificationByIndustry } : {}),
     },
     ...(createdItemIds.length > 0 ? { createdItemIds } : {}),
   };
