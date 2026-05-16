@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  groupPrinciplesByConsumerArchetype,
   groupPrinciplesByTier,
   type WikiPageListItem,
 } from "./WikiPageList";
@@ -7,6 +8,8 @@ import {
 function makeItem(
   id: string,
   tier: string | null | undefined,
+  archetype?: string | null,
+  contexts?: string[],
 ): WikiPageListItem {
   return {
     id,
@@ -17,6 +20,8 @@ function makeItem(
     isKernel: true,
     abstract: null,
     principleTier: tier,
+    principleConsumerArchetype: archetype,
+    principleConsumerContexts: contexts,
   };
 }
 
@@ -88,5 +93,72 @@ describe("groupPrinciplesByTier", () => {
     ]);
     expect(groups.map((g) => g.tier)).toEqual(["commandment", "untiered"]);
     expect(groups[1].items.map((i) => i.id)).toEqual(["a"]);
+  });
+});
+
+describe("groupPrinciplesByConsumerArchetype", () => {
+  it("groups principles by consumer archetype first and tier second", () => {
+    const groups = groupPrinciplesByConsumerArchetype([
+      makeItem("specialist-core", "core", "specialist"),
+      makeItem("universal-commandment", "commandment", "universal"),
+      makeItem("build-studio-contextual", "contextual", "route-domain-specific", [
+        "build-studio",
+      ]),
+      makeItem("coworker-core", "core", "ai-coworker-universal"),
+      makeItem("generalist-core", "core", "generalist"),
+      makeItem("unknown", "core", undefined),
+    ]);
+
+    expect(groups.map((group) => group.archetype)).toEqual([
+      "universal",
+      "ai-coworker-universal",
+      "generalist",
+      "specialist",
+      "route-domain-specific",
+      "uncategorized",
+    ]);
+    expect(groups.map((group) => group.label)).toEqual([
+      "Universal",
+      "AI Coworker Universal",
+      "Generalist / COO",
+      "Specialists",
+      "Route / Domain Specific",
+      "Uncategorized",
+    ]);
+    expect(groups[0].tierGroups[0].tier).toBe("commandment");
+    expect(groups[4].contextGroups).toEqual([
+      {
+        context: "build-studio",
+        label: "Build Studio",
+        tierGroups: [
+          {
+            tier: "contextual",
+            label: "Contextual",
+            items: [expect.objectContaining({ id: "build-studio-contextual" })],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps route-specific principles without contexts visible", () => {
+    const groups = groupPrinciplesByConsumerArchetype([
+      makeItem("missing-context", "core", "route-domain-specific", []),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].contextGroups).toEqual([
+      {
+        context: "unscoped",
+        label: "Unscoped",
+        tierGroups: [
+          {
+            tier: "core",
+            label: "Core",
+            items: [expect.objectContaining({ id: "missing-context" })],
+          },
+        ],
+      },
+    ]);
   });
 });

@@ -9,6 +9,7 @@ principleDimensionVector: {"long_term_maintainability": 0.5, "human_cognitive_lo
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Adopters building MCP tools or coworker skills need this rule front and center — the tool schema is the contract.
 sources:

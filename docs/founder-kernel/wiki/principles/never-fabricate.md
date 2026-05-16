@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: A non-negotiable AI-agent rule that adopters need to see clearly — agents that fabricate undermine the platform's evidence-based posture.
 sources:

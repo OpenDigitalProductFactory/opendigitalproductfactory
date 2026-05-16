@@ -10,6 +10,7 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters consuming DPF need to know that every rule has exactly one canonical home — duplication is the failure mode the platform actively prevents.
 sources:
