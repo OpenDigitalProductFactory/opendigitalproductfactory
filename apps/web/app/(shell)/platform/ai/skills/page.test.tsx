@@ -18,6 +18,17 @@ vi.mock("@/lib/actions/skills-observatory", () => ({
     totalSkills: 4,
     routes: 3,
   }),
+  getSkillTelemetrySummary: vi.fn().mockResolvedValue({
+    totalUsageEvents: 0,
+    eligibleEvents: 0,
+    loadedEvents: 0,
+    invokedEvents: 0,
+    completedEvents: 0,
+    failedEvents: 0,
+    metricRowCount: 0,
+    activeSkillCount: 0,
+    latestMetricPeriod: null,
+  }),
 }));
 
 vi.mock("@/components/admin/SkillsCatalogView", () => ({

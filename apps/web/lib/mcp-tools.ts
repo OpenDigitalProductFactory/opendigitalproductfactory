@@ -3541,10 +3541,10 @@ function parseCapabilityNeeds(rawNeeds: unknown): CoworkerCapabilityNeedInput[] 
 
   return rawNeeds
     .filter((need): need is Record<string, unknown> => need != null && typeof need === "object")
+    .filter((need): need is Record<string, unknown> =>
+      COWORKER_CAPABILITY_NEED_KINDS.includes(need.kind as CoworkerCapabilityNeedKind))
     .map((need) => ({
-      kind: COWORKER_CAPABILITY_NEED_KINDS.includes(need.kind as CoworkerCapabilityNeedKind)
-        ? need.kind as CoworkerCapabilityNeedKind
-        : "tool",
+      kind: need.kind as CoworkerCapabilityNeedKind,
       severity: COWORKER_CAPABILITY_NEED_SEVERITIES.includes(need.severity as CoworkerCapabilityNeedSeverity)
         ? need.severity as CoworkerCapabilityNeedSeverity
         : "important",
