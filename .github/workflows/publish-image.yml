@@ -51,7 +51,7 @@ jobs:
       - name: Set up QEMU
         # Enables cross-architecture builds (linux/arm64 from an amd64 runner).
         # Required before docker/setup-buildx-action for multi-arch builds.
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         # buildx is required for multi-arch manifest list publishing
