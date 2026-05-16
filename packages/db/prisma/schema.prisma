@@ -6944,6 +6944,15 @@ model SkillDefinition {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // Governed Hermes learning Slice 4: operational-health axis, separate from
+  // adoption-stage `status`. Typed at the application layer in
+  // apps/web/lib/skills/lifecycle.ts as
+  //   "active" | "stale" | "pinned" | "quarantined" | "archived"
+  // The curator writes this column on its scheduled run; operator pin /
+  // quarantine actions also write it. SkillDefinition.skillMdContent is
+  // never mutated by the curator.
+  lifecycleState String @default("active")
+
   evaluation  ToolEvaluation?   @relation(fields: [evaluationId], references: [id])
   assignments SkillAssignment[]
   metrics     SkillMetric[]
@@ -6953,6 +6962,7 @@ model SkillDefinition {
   @@index([status])
   @@index([category])
   @@index([sourceType])
+  @@index([lifecycleState])
 }
 
 model SkillAssignment {
