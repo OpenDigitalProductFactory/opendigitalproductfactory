@@ -2373,6 +2373,13 @@ model Organization {
   address                       Json?
   logoUrl                       String?
   designSystem                  Json?
+  // EP-WIKI-004: per-org retrieval mode for wiki search.
+  // "vector" = the EP-WIKI-001 default (Qdrant cosine similarity only).
+  // "ppr"    = vector seeds → Personalized PageRank over the per-org
+  //            WikiPageLink subgraph → combined ranking. Drop-in
+  //            replacement; falls back to "vector" when the subgraph
+  //            is sparse or PPR fails.
+  wikiRetrievalMode             String                         @default("vector")
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
   brandingConfig                BrandingConfig?
