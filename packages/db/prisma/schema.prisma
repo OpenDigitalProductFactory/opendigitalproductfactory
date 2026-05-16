@@ -2102,6 +2102,42 @@ model RecipePerformance {
   @@unique([recipeId, contractFamily])
 }
 
+// ─── Coworker Execution Adapter Substrate (Phase A1–A3) ──────────────────────
+// Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md
+// Captures observed adapter capabilities per (adapterKind, adapterVersion).
+// Replaces hand-maintained capability tables with probe-populated rows.
+model AdapterCapabilityProfile {
+  id                          String   @id @default(cuid())
+  adapterKind                 String   // "http-anthropic" | "claude-code-cli" | "codex-cli" | "codex-mcp" | "local-ollama"
+  adapterVersion              String   // e.g. "claude-code/1.2.3", "codex-cli/0.125.0", "anthropic-http/2024-06-01"
+  probedAt                    DateTime
+  probedBy                    String   // host/process identity, for cache invalidation across replicas
+
+  // Observed capabilities — booleans, not aspirations
+  supportsStreamingEvents     Boolean
+  supportsMcpAttach           Boolean
+  supportsMcpAttachPerInvoke  Boolean  // Claude Code: yes (--mcp-config); Codex: no (static config only)
+  supportsSubagents           Boolean
+  supportsHooks               Boolean
+  supportsPlanState           Boolean
+  supportsTodoState           Boolean
+  supportsWebFetch            Boolean
+  supportsWebSearch           Boolean
+  supportsSessionResume       Boolean
+  supportsExtendedThinking    Boolean
+  supportsOutputSchema        Boolean
+
+  // Operating envelope
+  maxInteractiveLatencyMs     Int      // wall-clock budget for first event
+  supportedAuthModes          String[] // "api-key" | "oauth" | "local"
+
+  // Known landmines (Codex example: --json silently ignored when MCP active)
+  knownDegradations           Json?    // [{ trigger: string, behavior: string, source: string }]
+
+  @@unique([adapterKind, adapterVersion])
+  @@index([adapterKind, probedAt])
+}
+
 model Engagement {
   id            String   @id @default(cuid())
   engagementId  String   @unique // ENG-<uuid>
