@@ -4,6 +4,7 @@ import {
   adoptWorktreeCapsule,
   createWorkCapsule,
   heartbeatWorkCapsule,
+  planCapsuleWorkspace,
   recordWorkCapsuleEvidence,
   type CapsuleDb,
 } from "./work-capsule-store";
@@ -147,5 +148,191 @@ describe("work capsule store", () => {
         summary: "Vitest passed",
       }),
     }));
+  });
+
+  describe("planCapsuleWorkspace", () => {
+    it("persists deterministic branch + worktree path on first plan and writes a workspace-planned activity", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0001",
+        title: "Provider routing tool capability",
+        status: "draft",
+        baseBranch: null,
+        headBranch: null,
+        worktreePath: null,
+      });
+      db.workCapsule.findFirst.mockResolvedValueOnce(null);
+      db.workCapsule.update.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0001",
+        headBranch: "feat/provider-routing-tool-capability",
+        worktreePath: "D:\\DPF-provider-routing-tool-capability",
+        branchTaxonomy: "feat",
+      });
+
+      const result = await planCapsuleWorkspace({
+        db: capsuleDb(),
+        capsuleId: "WC-PLAN0001",
+        taxonomy: "feat",
+        os: "win32",
+        home: "/Users/mark",
+        existingBranches: new Set(),
+        actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
+      });
+
+      expect(result.headBranch).toBe("feat/provider-routing-tool-capability");
+      expect(result.worktreePath).toBe("D:\\DPF-provider-routing-tool-capability");
+      expect(db.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          baseBranch: "main",
+          branchTaxonomy: "feat",
+          status: "ready",
+        }),
+      }));
+      expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ kind: "workspace-planned" }),
+        }),
+      );
+    });
+
+    it("returns the existing plan on idempotent re-plan without writing a second activity", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0002",
+        title: "Provider routing tool capability",
+        headBranch: "feat/provider-routing-tool-capability",
+        worktreePath: "D:\\DPF-provider-routing-tool-capability",
+        branchTaxonomy: "feat",
+      });
+
+      const result = await planCapsuleWorkspace({
+        db: capsuleDb(),
+        capsuleId: "WC-PLAN0002",
+        taxonomy: "feat",
+        os: "win32",
+        home: "/Users/mark",
+        existingBranches: new Set(),
+        actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
+      });
+
+      expect(result.headBranch).toBe("feat/provider-routing-tool-capability");
+      expect(db.workCapsule.update).not.toHaveBeenCalled();
+      expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
+    });
+
+    it("throws on partial-plan state when only one workspace field is set", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PARTIAL",
+        title: "Half written",
+        headBranch: "feat/half-written",
+        worktreePath: null,
+      });
+
+      await expect(
+        planCapsuleWorkspace({
+          db: capsuleDb(),
+          capsuleId: "WC-PARTIAL",
+          taxonomy: "feat",
+          os: "win32",
+          home: "/Users/mark",
+          existingBranches: new Set(),
+          actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
+        }),
+      ).rejects.toThrow(/partial-plan state/i);
+    });
+
+    it("refuses to propose the root clone as the worktree path", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0003",
+        title: "Danger",
+        status: "draft",
+        baseBranch: null,
+        headBranch: null,
+        worktreePath: null,
+      });
+      db.workCapsule.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        planCapsuleWorkspace({
+          db: capsuleDb(),
+          capsuleId: "WC-PLAN0003",
+          taxonomy: "feat",
+          os: "win32",
+          home: "/Users/mark",
+          releaseOverride: "D:\\DPF-danger",
+          existingBranches: new Set(),
+          actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
+        }),
+      ).rejects.toThrow(/root clone/i);
+    });
+
+    it("appends a numeric suffix when the slug collides with an existing branch", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0004",
+        title: "Work capsule",
+        status: "draft",
+        baseBranch: null,
+        headBranch: null,
+        worktreePath: null,
+      });
+      db.workCapsule.findFirst.mockResolvedValueOnce(null);
+      db.workCapsule.update.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0004",
+        headBranch: "feat/work-capsule-2",
+        worktreePath: "D:\\DPF-work-capsule-2",
+        branchTaxonomy: "feat",
+      });
+
+      const result = await planCapsuleWorkspace({
+        db: capsuleDb(),
+        capsuleId: "WC-PLAN0004",
+        taxonomy: "feat",
+        os: "win32",
+        home: "/Users/mark",
+        existingBranches: new Set(["feat/work-capsule"]),
+        actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
+      });
+
+      expect(result.headBranch).toBe("feat/work-capsule-2");
+    });
+
+    it("appends a numeric suffix when another active capsule already owns the branch", async () => {
+      db.workCapsule.findUnique.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0005",
+        title: "Owned elsewhere",
+        status: "draft",
+        baseBranch: null,
+        headBranch: null,
+        worktreePath: null,
+      });
+      db.workCapsule.findFirst
+        .mockResolvedValueOnce({ id: "row-other", capsuleId: "WC-OTHER" })
+        .mockResolvedValueOnce(null);
+      db.workCapsule.update.mockResolvedValueOnce({
+        id: "row-1",
+        capsuleId: "WC-PLAN0005",
+        headBranch: "feat/owned-elsewhere-2",
+        worktreePath: "D:\\DPF-owned-elsewhere-2",
+        branchTaxonomy: "feat",
+      });
+
+      const result = await planCapsuleWorkspace({
+        db: capsuleDb(),
+        capsuleId: "WC-PLAN0005",
+        taxonomy: "feat",
+        os: "win32",
+        home: "/Users/mark",
+        existingBranches: new Set(),
+        actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
+      });
+
+      expect(result.headBranch).toBe("feat/owned-elsewhere-2");
+    });
   });
 });

@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import {
   LEASE_TTL_MS,
   STATUS_OVERRIDE_TTL_MS,
+  buildCapsuleBranchName,
+  buildCapsuleSlug,
+  buildCapsuleWorktreePath,
+  isRootClonePath,
   isWorkCapsuleEvidenceKind,
   isWorkCapsuleExecutorKind,
   isWorkCapsuleSource,
@@ -11,6 +15,7 @@ import {
   parseScopeClaims,
   type ScopeClaim,
   type WorkCapsuleActivityKind,
+  type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleEvidenceKind,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleSource,
@@ -66,6 +71,15 @@ type CapsuleEvidenceInput = {
 
 type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
 type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
+
+type CapsuleWorkspacePlanInput = {
+  capsuleId: string;
+  taxonomy: WorkCapsuleBranchTaxonomy;
+  os: NodeJS.Platform;
+  home?: string;
+  existingBranches: Set<string>;
+  releaseOverride?: string;
+};
 
 function nextCapsuleId(): string {
   return `WC-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -228,6 +242,101 @@ export async function adoptWorktreeCapsule(args: {
     }
     throw error;
   }
+}
+
+async function hasWorkspaceCollision(
+  db: CapsuleDb,
+  args: { capsuleId: string; headBranch: string; worktreePath: string },
+): Promise<boolean> {
+  const existing = await db.workCapsule.findFirst({
+    where: {
+      capsuleId: { not: args.capsuleId },
+      archivedAt: null,
+      OR: [
+        { headBranch: args.headBranch },
+        { worktreePath: args.worktreePath },
+      ],
+    },
+    select: { id: true },
+  });
+  return Boolean(existing);
+}
+
+export async function planCapsuleWorkspace(args: {
+  db: CapsuleDb;
+  input?: CapsuleWorkspacePlanInput;
+  capsuleId?: string;
+  taxonomy?: WorkCapsuleBranchTaxonomy;
+  os?: NodeJS.Platform;
+  home?: string;
+  existingBranches?: Set<string>;
+  releaseOverride?: string;
+  actor: WorkCapsuleActor;
+}) {
+  const input: CapsuleWorkspacePlanInput = args.input ?? {
+    capsuleId: args.capsuleId ?? "",
+    taxonomy: args.taxonomy as WorkCapsuleBranchTaxonomy,
+    os: args.os ?? process.platform,
+    home: args.home,
+    existingBranches: args.existingBranches ?? new Set<string>(),
+    releaseOverride: args.releaseOverride,
+  };
+
+  const capsule = await args.db.workCapsule.findUnique({
+    where: { capsuleId: input.capsuleId },
+  });
+  if (!capsule) throw new Error(`Work Capsule ${input.capsuleId} not found`);
+
+  if (capsule.headBranch && capsule.worktreePath) return capsule;
+  if (capsule.headBranch || capsule.worktreePath) {
+    throw new Error(
+      `Work Capsule ${input.capsuleId} is in a partial-plan state ` +
+        `(headBranch=${capsule.headBranch ?? "null"}, worktreePath=${capsule.worktreePath ?? "null"}). ` +
+        "Repair the row before re-planning.",
+    );
+  }
+
+  const baseSlug = buildCapsuleSlug(capsule.title, capsule.capsuleId);
+  let slug = baseSlug;
+  let headBranch = buildCapsuleBranchName({ taxonomy: input.taxonomy, slug });
+  let worktreePath = buildCapsuleWorktreePath({ os: input.os, slug, home: input.home });
+  let suffix = 2;
+
+  while (
+    input.existingBranches.has(headBranch) ||
+    await hasWorkspaceCollision(args.db, { capsuleId: input.capsuleId, headBranch, worktreePath })
+  ) {
+    slug = `${baseSlug}-${suffix}`;
+    headBranch = buildCapsuleBranchName({ taxonomy: input.taxonomy, slug });
+    worktreePath = buildCapsuleWorktreePath({ os: input.os, slug, home: input.home });
+    suffix += 1;
+    if (suffix > 99) throw new Error("Could not allocate a unique branch name within 99 attempts");
+  }
+
+  if (isRootClonePath(worktreePath, input.os, input.home, input.releaseOverride)) {
+    throw new Error("Refusing to plan the root clone as an active workspace");
+  }
+
+  return inTransaction(args.db, async (tx) => {
+    const updated = await tx.workCapsule.update({
+      where: { capsuleId: input.capsuleId },
+      data: {
+        headBranch,
+        worktreePath,
+        branchTaxonomy: input.taxonomy,
+        baseBranch: capsule.baseBranch ?? "main",
+        status: capsule.status === "draft" ? "ready" : capsule.status,
+      },
+    });
+    await recordActivity(tx, {
+      workCapsuleId: capsule.id,
+      kind: "workspace-planned",
+      summary: `Planned ${headBranch} at ${worktreePath}`,
+      payload: { headBranch, worktreePath, branchTaxonomy: input.taxonomy },
+      actor: args.actor,
+    });
+    return updated;
+  });
 }
 
 export async function heartbeatWorkCapsule(args: {
