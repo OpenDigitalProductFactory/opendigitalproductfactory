@@ -19,6 +19,11 @@ import {
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
+import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
+import {
+  parseExecutionAdapterSelector,
+  type ExecutionAdapterSelector,
+} from "../routing/execution-adapter-types";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
 import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
@@ -352,16 +357,37 @@ export async function callProvider(
     responsePolicy: {},
   };
 
+  // Phase A6: route the executionAdapter through the structured selector +
+  // capability-aware resolver. Legacy string values for CLI/chat kinds round-trip
+  // through parseExecutionAdapterSelector; legacy strings outside the structured
+  // taxonomy (responses, embedding, image_gen, async, transcription) fall through
+  // to the registry directly so existing routes are unchanged.
+  const executionAdapterRaw = effectivePlan.executionAdapter;
+  let selector: ExecutionAdapterSelector | null;
+  try {
+    selector = parseExecutionAdapterSelector(executionAdapterRaw);
+  } catch (e) {
+    if (typeof executionAdapterRaw !== "string") {
+      // Object input that failed validation — propagate.
+      throw e;
+    }
+    selector = null;
+  }
+
   // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
   // binaries — they do not need HTTP base URL or auth headers.
-  const isCliAdapter = effectivePlan.executionAdapter === "claude-cli"
-    || effectivePlan.executionAdapter === "codex-cli";
+  const isCliAdapter =
+    selector !== null &&
+    (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
   const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
   const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
-  const adapter = getExecutionAdapter(effectivePlan.executionAdapter);
+  const adapter =
+    selector !== null
+      ? await resolveExecutionAdapter(selector, effectivePlan.capabilityRequirements)
+      : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
   let result;
   try {
