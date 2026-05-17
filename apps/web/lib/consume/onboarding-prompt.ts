@@ -1,6 +1,7 @@
 import type { SetupContext, SetupStep, StepStatus } from "../actions/setup-constants";
 import { SETUP_STEPS } from "../actions/setup-constants";
 import { prisma } from "@dpf/db";
+import { MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
 
 const COO_BASE_PROMPT = `You are the platform's Chief Operating Officer — the user's second-in-command.
 You are guiding a new platform owner through initial setup.
@@ -40,7 +41,7 @@ export async function buildOnboardingPrompt(
   let costSummary = "";
   if (currentStep === "ai-providers") {
     const providers = await prisma.modelProvider.findMany({
-      where: { endpointType: "llm", status: { not: "unconfigured" } },
+      where: { endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] }, status: { not: "unconfigured" } },
       select: {
         providerId: true,
         name: true,
