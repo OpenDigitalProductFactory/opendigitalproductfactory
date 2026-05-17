@@ -1,6 +1,6 @@
 # Business Capability and Employee Work Taxonomy Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** This is a governed planning document — it does not implement runtime product changes. Use superpowers:executing-plans only for the backlog-capture and taxonomy chunks (2–5). Chunk 1 research is already completed; do not re-run it. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Establish a business capability and employee-work taxonomy that connects DPF portfolios, current product surfaces, AI coworkers, and native/external integrations, while expanding QuickBooks parity into a long-tail backlog that can be worked alongside other priorities.
 
@@ -163,9 +163,9 @@ AI coworker:
 Portfolio context:
 Taxonomy context:
 Integration anchors:
-Architecture posture: native_dpf | integration_led | hybrid | replacement_candidate
-Maturity target: observe | read | stage | operate | write_back | dual_run | dpf_primary
-Replacement gate:
+Architecture posture: native-dpf | integration-led | hybrid | replacement-candidate
+Maturity target: observe | read | stage | operate | write-back | dual-run | dpf-primary
+Replacement gate: [leave blank unless posture=replacement-candidate; list gates that must all pass before DPF can claim primary ownership, e.g. "read complete, staged import proven, dual-run comparison clean, accountant evidence collected, export completeness verified, rollback criteria met"]
 Smallest buildable slice:
 Acceptance:
 ```
@@ -185,7 +185,7 @@ Examples:
 
 ## First Backlog Batch Created
 
-The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP. Items remain `triaging` with a proposed build outcome so Scrum Master triage can size and sequence them with other priorities.
+The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP without explicit `status + triageOutcome`, so the current MCP tool contract creates them in `triaging`. Scrum Master triage should decide outcome, size, and sequence them against other priorities before implementation.
 
 | Item | Epic | Purpose |
 | --- | --- | --- |
@@ -212,9 +212,11 @@ Create these after the first created items are triaged or when the new taxonomy 
 | Governed QuickBooks write-back gates | `EP-INT-2E7C1A` | Add proposal-mode writes only after read/stage/ownership gates are proven. |
 | DPF system-of-record promotion criteria for accounting | Future finance/accounting epic | Define dual-run thresholds, rollback/export requirements, and entity-family ownership gates. |
 
-## QuickBooks Long-Tail Backlog Sequence
+## QuickBooks Long-Tail Sequence (canonical reference)
 
-The QuickBooks readiness snapshot is the approved starting point, but current `origin/main` does not yet contain the sibling branch's readiness files. Treat the sequence below as the long-tail backlog after that branch lands or its equivalent is rebuilt on main.
+> **Single source of truth for Chunk 3.** The Chunk 3 tasks below implement steps 1–4 of this sequence. Steps 5–11 become backlog items only after the step 4 gate passes. Do not duplicate this sequence elsewhere.
+
+The QuickBooks readiness snapshot is the approved starting point, but current `origin/main` does not yet contain the sibling branch's readiness files. Steps 1–4 can proceed immediately. Steps 5–11 unblock after the sibling branch (`DPF-small-business-os-parity`) merges or its equivalent is rebuilt on main.
 
 1. Read-only company, customer, invoice staging: prove company info, customers, invoices, and invoice lines can be read and displayed with source timestamps.
 2. Vendors, bills, expenses, payments, accounts, and reports: expand read scopes and readiness descriptors before any import or write path.
@@ -240,64 +242,57 @@ The QuickBooks readiness snapshot is the approved starting point, but current `o
 8. **Reserve refactoring budget.** Follow-on implementation slices should reserve roughly 20 percent of effort for refactoring route/catalog/coworker maps into reusable descriptors instead of duplicating labels across pages, prompts, and backlog bodies.
 9. **Commercial market enrichment belongs in taxonomy UX.** The spreadsheet's market/product columns are decision support for buy/build/integrate posture. Surface them as curated fields, not raw JSON, and use progressive disclosure so dense vendor text does not overwhelm the node detail page.
 
+## Decisions & Deferrals
+
+### Decisions Made
+
+| Decision | Rationale |
+| --- | --- |
+| Use `TaxonomyNode` + backlog body fields first; no new schema until template proves stable | Avoids premature field promotion; body context is queryable now |
+| Keep QuickBooks/Stripe/ADP/HubSpot parity work under `EP-INT-2E7C1A` | That epic already owns connector family benchmarks across all integration families |
+| Create a separate `Business Capability and Employee Work Taxonomy` epic | Taxonomy classification, employee-work mapping, and capability-to-surface work are architecturally distinct from provider parity |
+| Replacement is a maturity state, not a project | Gates: read → staged import → entity-link → dual-run → accountant evidence → export completeness → DPF-primary promotion |
+| Payroll and payment execution remain partner-led | DPF owns readiness, approvals, reconciliation, and operating context before claiming regulated execution |
+| Use O*NET/SOC/APQC PCF as role and process language checks only | Not imported wholesale; used to avoid inventing non-standard role language |
+
+### Deferrals
+
+| Deferred item | Unblocked by |
+| --- | --- |
+| `create_epic` MCP tool does not exist — taxonomy epic cannot be created programmatically | Manual admin step: create the epic via the DPF admin UI or database seed, then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`. Capture as a backlog item under `EP-ARCH-8D4F2A` to expose `create_epic` in the MCP surface. |
+| AGENTS.md status table omits `triaging`, while current MCP tools and backlog transitions include it | Treat `apps/web/lib/mcp-tools.ts` and `apps/web/lib/backlog/transitions.ts` as current runtime truth for this plan; update AGENTS.md in a separate workflow-policy slice. |
+| Sibling branch `DPF-small-business-os-parity` readiness files not yet on `origin/main` | Treat as approved branch input. Chunk 3 (QuickBooks long tail) can start on `BI-C61B5202` and `BI-07D76D6B` immediately. Full sequence unblocked when sibling branch merges. |
+| Bank-feed source-of-truth decision | Requires QuickBooks read coverage proven first (step 2 of QuickBooks long-tail sequence) |
+| Governed write-back gates | Requires read, staged import, and entity-link proven first |
+| DPF system-of-record promotion | Requires dual-run + accountant evidence + export completeness per entity family |
+| Xero, Gusto, Slack, Salesforce, service-desk, bank-feed integrations | Coverage gap audit (Chunk 2, Task 3) produces the prioritized list; create backlog items per gap found |
+| First-class `BacklogCapabilityContext` schema fields | Deferred until 10+ items use the body template and query needs are confirmed |
+
 ## Plan Chunks
 
-## Chunk 1: Current Surface And Integration Evaluation
+### Chunk Dependencies
 
-**Files:**
-- Read: `apps/web/app/(shell)/**`
-- Read: `apps/web/lib/tools/native-integration-catalog.ts`
-- Read: `packages/db/prisma/schema.prisma`
-- Read: `packages/db/data/agent_registry.json`
-- Read: `docs/user-guide/**`
-- Read: `docs/superpowers/specs/**`
-- Read: `docs/superpowers/plans/**`
-
-### Task 1: Surface Inventory
-
-- [ ] **Step 1: List visible route families**
-
-Run:
-
-```powershell
-Get-ChildItem -Path 'apps/web/app/(shell)' -Directory | Select-Object -ExpandProperty Name
+```
+Chunk 1 (research)  — COMPLETED during planning; do not re-run
+Chunk 2 (backlog foundation)  — can start immediately
+Chunk 3 (QuickBooks long tail)  — can start BI-C61B5202 / BI-07D76D6B immediately; full sequence unblocks after sibling branch merge
+Chunk 4 (employee work taxonomy)  — depends on Chunk 2 template proven (Task 3, Step 1)
+Chunk 5 (portfolio context)  — depends on Chunk 4 role-to-surface audit
 ```
 
-Expected: route families including finance, customer, employee, storefront, platform, portfolio, workspace, compliance.
+## Chunk 1: Research Completed
 
-- [ ] **Step 2: Map route families to capability families**
+> **Status: DONE.** The surface inventory, integration matrix, and capability-to-surface mapping were completed during planning and are recorded in the sections above. An implementing agent must not re-run this chunk.
 
-Create a table with columns:
+The following artefacts were produced and are live above:
 
-```text
-route family | capability family | current data model | likely employee roles | current integration anchors | known gaps
-```
+- Route family and capability family mapping (§ Current DPF Surface Inventory)
+- Native integration matrix with employee roles (§ Native Integration Spine)
+- Capability-to-surface-to-integration matrix (§ Capability-To-Surface-To-Integration Matrix)
+- Live backlog and epic scan (§ Live Backlog And Source State)
+- Five backlog items created via live DPF MCP (`BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`, `BI-C61B5202`, `BI-07D76D6B`)
 
-- [ ] **Step 3: Validate with docs**
-
-Read user guide pages for finance, customers, storefront, platform tools/integrations, and portfolios. Mark docs as current, shallow, or stale relative to route/code inventory.
-
-### Task 2: Native Integration Matrix
-
-- [ ] **Step 1: Extract integration catalog rows**
-
-Run:
-
-```powershell
-Get-Content -Path apps/web/lib/tools/native-integration-catalog.ts
-```
-
-- [ ] **Step 2: Build matrix**
-
-For every integration, record:
-
-```text
-integrationId | provider | DPF route | category | enables | relevantAgentIds | requiredGrantKeys | employee roles | capability family | posture
-```
-
-- [ ] **Step 3: Identify coverage gaps**
-
-At minimum, flag missing or shallow anchors for Xero, Gusto, Slack, Salesforce, project/work management, service desk, inventory, and bank-feed providers.
+**Remaining gap identified by this research:** integration coverage for Xero, Gusto, Slack, Salesforce, project/work management, service desk, inventory, and bank-feed providers is shallow or absent. Addressed in Chunk 2, Task 3, Step 3.
 
 ## Chunk 2: Backlog Capture Foundation
 
@@ -323,7 +318,11 @@ Can those filters be derived from body text for now?
 Which fields need exact querying in Build Studio or backlog UI?
 ```
 
-- [ ] **Step 3: Decide schema vs manifest**
+- [ ] **Step 3: Audit integration coverage gaps**
+
+After applying the template, record which integration anchors appear in 3+ items but have no native DPF route or shallow read coverage. Minimum gap candidates: Xero, Gusto, Slack, Salesforce, project/work management tools, service desk providers, inventory systems, bank-feed providers. For each gap, create a backlog item under `EP-INT-2E7C1A`.
+
+- [ ] **Step 4: Decide schema vs manifest**
 
 Preferred first implementation:
 
@@ -333,40 +332,46 @@ type BacklogCapabilityContext = {
   employeeRoles: string[];
   dpfSurfaces: string[];
   integrationAnchors: string[];
-  architecturePosture: "native_dpf" | "integration_led" | "hybrid" | "replacement_candidate";
-  maturityTarget: "observe" | "read" | "stage" | "operate" | "write_back" | "dual_run" | "dpf_primary";
+  architecturePosture: "native-dpf" | "integration-led" | "hybrid" | "replacement-candidate";
+  maturityTarget: "observe" | "read" | "stage" | "operate" | "write-back" | "dual-run" | "dpf-primary";
   portfolioContext?: string;
   taxonomyContext?: string;
 };
 ```
 
-Store in a manifest JSON field only if such a field already exists or a separate schema plan is approved. Do not add columns prematurely.
+Store in a manifest JSON field only if such a field already exists or a separate schema plan is approved. Do not add columns prematurely. Schema promotion threshold: 10+ items queried by any field.
 
 ## Chunk 3: QuickBooks Long Tail
 
-**Backlog items:** `BI-C61B5202`, `BI-07D76D6B`, plus proposed follow-on entity-link, reconciliation, tax, reports/close, accountant collaboration, write-back, and DPF-primary promotion items after read/import proof.
+**Canonical sequence:** see `§ QuickBooks Long-Tail Sequence` above. This chunk implements sequence steps 1–4 only. Steps 5–11 become backlog items after step 4 passes.
 
-### Task 4: Sequence Replacement Maturity
+**Backlog items:** `BI-C61B5202` (sequence steps 1–2), `BI-07D76D6B` (sequence step 3), plus entity-link, reconciliation, tax, reports/close, accountant collaboration, write-back, and DPF-primary promotion items created after read/import proof.
 
-- [ ] **Step 1: Keep the next QuickBooks item read-only**
+**Dependency:** can start immediately; full sequence (steps 5–11) unblocks after `DPF-small-business-os-parity` branch merges.
 
-Implement `BI-C61B5202` before import/write work. The readiness descriptor should move entity families from `not-mapped` to `read`.
+### Task 4: Sequence Replacement Maturity (steps 1–4)
 
-- [ ] **Step 2: Stage before ownership**
+- [ ] **Step 1: Keep the next QuickBooks item read-only** (sequence step 1–2)
 
-Implement `BI-07D76D6B` after read expansion. Imported data remains non-editable and source-attributed.
+Implement `BI-C61B5202` before import/write work. The readiness descriptor should move entity families from `not-mapped` to `read` for vendors, bills, expenses, payments, accounts, and reports.
 
-- [ ] **Step 3: Add entity links after staging proves the fields**
+- [ ] **Step 2: Stage before ownership** (sequence step 3)
 
-Create the proposed accounting entity-link item only after staging shows the exact external/local link needs.
+Implement `BI-07D76D6B` after read expansion. Imported data remains non-editable and source-attributed. Each staged record carries: `externalId`, `sourceProvider`, `sourceTimestamp`, `ownerSide`, `proposedLocalLink`.
 
-- [ ] **Step 4: Reconcile payments**
+- [ ] **Step 3: Add entity links after staging proves the fields** (sequence step 3 continued)
 
-Create the proposed Stripe/QuickBooks reconciliation item after DPF has enough QuickBooks and Stripe read data to compare payment facts.
+Create the proposed accounting entity-link backlog item only after staging shows the exact external/local link structure needed. Do not design the link model speculatively.
+
+- [ ] **Step 4: Gate on read data before reconciliation** (sequence step 4)
+
+Create the proposed Stripe/QuickBooks reconciliation item only after DPF has sufficient QuickBooks and Stripe read data to compare payment facts. Gate: both providers have `read` maturity for payment objects.
 
 ## Chunk 4: Employee Work Taxonomy
 
 **Backlog items:** `BI-407125DA`, `BI-0E6D42B3`, proposed native integration coverage matrix item, and future items derived from the coverage audit.
+
+**Principal Convergence constraint (AGENTS.md §11, effective 2026-05-09):** any new identity-bearing entity introduced by this work must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. Employee role taxonomy items that define new identity-bearing entities must follow this pattern. Authorization decisions must resolve on the `Principal`; the alias kind tells the platform which surface authenticated the request.
 
 ### Task 5: Role-To-Work Audit
 
@@ -423,40 +428,50 @@ Where commercial-market text names representative products already present as na
 
 ## Chunk 5: Portfolio Context
 
+**Depends on:** Chunk 4 role-to-surface audit complete.
+
 ### Task 7: Attach Portfolio And Taxonomy Context
 
-- [ ] **Step 1: Search portfolio context for each capability**
+- [ ] **Step 1: Match each capability row to existing taxonomy nodes**
 
-Use `search_portfolio_context` before assigning portfolio/taxonomy. Evidence from this plan showed relevant `for_employees` taxonomy nodes already exist.
+For each capability family in the matrix, run `search_portfolio_context`. Relevant `for_employees` taxonomy nodes already confirmed live:
+- `for_employees/develop_and_manage_business_capabilities`
+- `for_employees/evaluate_and_plan_portfolio_investments/review_and_balance_4_portfolios/refine_employee_facing_portfolio_taxonomy`
+- `for_employees/financial_management/manage_project_accounting`
 
-- [ ] **Step 2: Avoid fake portfolio linkage**
+Link backlog items to portfolio/taxonomy only when the owning `DigitalProduct` is unambiguous. If unclear, leave body context only and note the gap.
 
-Do not force items into a portfolio when the owning digital product is unclear. Use body context until a product or portfolio is clearly responsible.
+- [ ] **Step 2: Schema promotion decision**
 
-- [ ] **Step 3: Propose first-class backlog context only after audit**
-
-If the same fields are needed across 10 or more items, write a separate schema plan for backlog capability context fields or manifest support.
+After applying the body template to 10+ items (Chunk 2, Task 3), review: which fields are queried frequently enough to warrant first-class columns? Write a separate schema plan if any field meets the threshold. Do not add columns in this chunk.
 
 ## Verification
 
-For this planning slice:
+### Planning slice (this document)
 
-- `git diff --check`
-- Confirm plan path exists and is linked to live backlog IDs.
-- Confirm live backlog items are visible under `EP-INT-2E7C1A`.
+- [ ] `git diff --check` — plan file has no whitespace errors.
+- [ ] Plan path confirmed at `docs/superpowers/plans/2026-05-17-business-capability-employee-work-taxonomy.md`.
+- [ ] `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411` visible in live backlog (currently unlinked from taxonomy epic; see Decisions & Deferrals).
+- [ ] `BI-C61B5202`, `BI-07D76D6B` visible and linked under `EP-INT-2E7C1A`.
+- [ ] Taxonomy epic creation noted as a deferred manual admin step with a resolution path.
 
-For future implementation slices:
+### Implementation slices (Chunks 2–5)
 
-- Focused unit tests for any parser, descriptor, or view model.
-- `pnpm --filter web typecheck`.
-- `pnpm exec next build` from `apps/web`.
-- UX verification against Docker-served DPF for any visible route.
-- MCP/backlog status updates after completion.
+- [ ] Focused unit tests for any parser, descriptor, or view model added.
+- [ ] `pnpm --filter web typecheck` passes with zero new errors.
+- [ ] `pnpm exec next build` from `apps/web` passes.
+- [ ] UX verification against Docker-served DPF for any visible route change.
+- [ ] Backlog item status updated to `in-progress` on start and `done` on completion via MCP.
+- [ ] If `BacklogCapabilityContext` type is promoted to schema, a Prisma migration is added and `pnpm --filter @dpf/db exec prisma migrate dev` is run.
 
 ## Recommended Next Smallest Buildable Slice
 
-Build `BI-407125DA` first: a small backlog capability-context foundation that standardizes capture and validates whether backlog needs first-class context fields. This lets every later QuickBooks, Stripe, ADP, HubSpot, employee, and storefront parity item carry the same strategic context without blocking on schema.
+**Step 0 (unblocking admin action):** Create the `Business Capability and Employee Work Taxonomy` epic manually via DPF admin UI or database seed. Then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, and `BI-4C166411`. Capture a backlog item under `EP-ARCH-8D4F2A` to expose `create_epic` in the MCP surface so this step is not manual next time.
 
-Then build `BI-0E6D42B3`: the employee role taxonomy and coworker coverage audit. That gives the product team the actual work map before adding more provider-specific depth.
+**Chunk 2 first:** Build `BI-407125DA` — a small backlog capability-context foundation that standardizes the body template and validates whether first-class context fields are needed. This lets every later QuickBooks, Stripe, ADP, HubSpot, employee, and storefront parity item carry the same strategic context without blocking on schema.
+
+**Then Chunk 4:** Build `BI-0E6D42B3` — the employee role taxonomy and coworker coverage audit. That gives the product team the actual work map before adding more provider-specific depth.
+
+**Chunk 3 in parallel:** `BI-C61B5202` and `BI-07D76D6B` can proceed in parallel with Chunk 2 since they are already linked to `EP-INT-2E7C1A` and do not depend on the taxonomy epic or the body-template proof.
 
 `BI-4C166411` can run next or in parallel with the audit because it is a narrow UI/view-model slice: the data already exists, and the product value is high because operators can finally see the workbook's build-vs-buy and commercial-market guidance directly in taxonomy UX.
