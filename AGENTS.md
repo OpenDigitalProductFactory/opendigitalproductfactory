@@ -100,6 +100,12 @@ External coding agents use the real MCP JSON-RPC 2.0 transport at `/api/mcp/v1` 
 
 MCP bearer tokens use the `dpfmcp_...` pattern and are issued from Admin > Platform Development. Treat `.mcp.json` and `.vscode/mcp.json` as local credential files only; they are ignored by git and must never be committed.
 
+**Token rotation — Claude Code worktrees:** Each git worktree needs its own `.mcp.json` (Claude Code reads only the git-root-level file). All worktrees use a Windows hard link that points at `D:\DPF\.mcp.json`, so editing the root file propagates instantly. After rotating a token or creating a new worktree, run:
+```powershell
+.\scripts\sync-mcp-worktrees.ps1
+```
+Then restart any open Claude Code sessions. No separate `claude mcp add` registration is needed — the project `.mcp.json` is the sole source of truth, identical to how Codex uses it.
+
 Agent `tool_grants` in `agent_registry.json` are enforced at runtime. `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
 
 1. User role capabilities (`PERMISSIONS[capability].roles` for the user's `platformRole`)
