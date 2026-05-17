@@ -28,6 +28,7 @@ import {
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
+import { ensurePostgresBackupScheduledJob } from "./seed-platform-backup.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
@@ -2130,6 +2131,7 @@ async function main(): Promise<void> {
   await seedDefaultAdminUser();
   await ensureDiscoveryTriageScheduledTask(prisma);
   await ensureHiveScoutScheduledTask(prisma);
+  await ensurePostgresBackupScheduledJob(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedProviderRegistry();
