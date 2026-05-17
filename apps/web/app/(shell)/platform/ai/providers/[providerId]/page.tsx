@@ -1,5 +1,5 @@
 // apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -21,6 +21,12 @@ import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
 type Props = { params: Promise<{ providerId: string }> };
 
 export default async function ProviderDetailPage({ params }: Props) {
+  // Guard: this route has no middleware — data-fetching server actions enforce
+  // requireViewAccess() and will throw if called unauthenticated, crashing the
+  // Server Component render. Redirect early before any data fetching occurs.
+  const earlySession = await auth();
+  if (!earlySession?.user) redirect("/login");
+
   const { providerId } = await params;
   const now = new Date();
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
@@ -50,17 +56,22 @@ export default async function ProviderDetailPage({ params }: Props) {
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
 
-  // Fetch hardware info for Ollama
+  // Fetch hardware info for local providers via Neo4j InfraCI.
+  // Wrapped in try/catch — Neo4j is best-effort; a graph error must never crash the page.
   let hardwareInfo: { gpu: string; vramGb: number | null; modelCount: number } | null = null;
   if (providerId === "local" || providerId === "ollama") {
-    const infraCIs = await getInfraCIs("ai-inference");
-    const ollamaCI = infraCIs.find((ci) => ci.id === "CI-ollama-01");
-    if (ollamaCI?.properties.gpu) {
-      hardwareInfo = {
-        gpu: ollamaCI.properties.gpu as string,
-        vramGb: (ollamaCI.properties.vramGb as number) ?? null,
-        modelCount: (ollamaCI.properties.modelCount as number) ?? 0,
-      };
+    try {
+      const infraCIs = await getInfraCIs("ai-inference");
+      const ollamaCI = infraCIs.find((ci) => ci.id === "CI-ollama-01");
+      if (ollamaCI?.properties.gpu) {
+        hardwareInfo = {
+          gpu: String(ollamaCI.properties.gpu),
+          vramGb: ollamaCI.properties.vramGb != null ? Number(ollamaCI.properties.vramGb) : null,
+          modelCount: ollamaCI.properties.modelCount != null ? Number(ollamaCI.properties.modelCount) : 0,
+        };
+      }
+    } catch {
+      // Neo4j unavailable or returns unexpected data — hardware info degrades gracefully to null
     }
   }
 
