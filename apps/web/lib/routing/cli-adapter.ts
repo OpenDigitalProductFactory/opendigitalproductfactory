@@ -448,7 +448,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
         const mcpB64 = Buffer.from(JSON.stringify(mcpConfig)).toString("base64");
         writes.push(
           execAsync(
-            `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${mcpB64}' | base64 -d > ${mcpConfigFile} && chmod 600 ${mcpConfigFile}"`,
+            `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${mcpB64}' | base64 -d > ${mcpConfigFile} && chmod 644 ${mcpConfigFile}"`,
             { timeout: 5_000 },
           ),
         );
