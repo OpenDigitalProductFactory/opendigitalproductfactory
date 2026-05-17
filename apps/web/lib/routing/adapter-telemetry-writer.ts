@@ -52,6 +52,7 @@ export type AdapterTelemetryInput = {
   // Outcome detail
   refusalReason?: string;
   errorClass?: string;
+  httpStatus?: number;
   inputTokens?: number;
   cachedInputTokens?: number;
   outputTokens?: number;
@@ -124,6 +125,7 @@ export async function writeAdapterTelemetry(
     if (input.firstEventLatencyMs !== undefined) data.firstEventLatencyMs = input.firstEventLatencyMs;
     if (input.refusalReason !== undefined) data.refusalReason = input.refusalReason;
     if (input.errorClass !== undefined) data.errorClass = input.errorClass;
+    if (input.httpStatus !== undefined) data.httpStatus = input.httpStatus;
     if (input.inputTokens !== undefined) data.inputTokens = input.inputTokens;
     if (input.cachedInputTokens !== undefined) data.cachedInputTokens = input.cachedInputTokens;
     if (input.outputTokens !== undefined) data.outputTokens = input.outputTokens;
