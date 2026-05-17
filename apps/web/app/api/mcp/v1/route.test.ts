@@ -521,9 +521,34 @@ describe("POST — initialize", () => {
     const body = await res.json();
     expect(body.jsonrpc).toBe("2.0");
     expect(body.id).toBe(1);
-    expect(body.result.protocolVersion).toBe("2025-11-25");
+    // No protocolVersion in params → falls back to oldest supported version
+    expect(body.result.protocolVersion).toBe("2024-11-05");
     expect(body.result.serverInfo.name).toBe("dpf-platform");
     expect(body.result.capabilities.tools).toBeDefined();
+  });
+
+  it("negotiates protocol version — echoes client version when supported", async () => {
+    for (const version of ["2024-11-05", "2025-03-26", "2025-11-25"]) {
+      const res = await POST(
+        makeRequest({
+          bearer: "dpfmcp_X",
+          body: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: version } },
+        }),
+      );
+      const body = await res.json();
+      expect(body.result.protocolVersion).toBe(version);
+    }
+  });
+
+  it("negotiates protocol version — falls back when client version is unknown", async () => {
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2099-01-01" } },
+      }),
+    );
+    const body = await res.json();
+    expect(body.result.protocolVersion).toBe("2024-11-05");
   });
 });
 
