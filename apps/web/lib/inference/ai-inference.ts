@@ -76,7 +76,7 @@ export type InferenceResult = {
 export class InferenceError extends Error {
   constructor(
     message: string,
-    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error",
+    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error" | "transient" | "billing" | "request_too_large",
     public readonly providerId: string,
     public readonly statusCode?: number,
     public readonly headers?: Record<string, string>,
@@ -112,6 +112,12 @@ export function classifyHttpError(
   if (status === 401 || status === 403) {
     return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body);
   }
+  if (status === 402) {
+    return new InferenceError(`Billing error on ${providerId}: ${body.slice(0, 200)}`, "billing", providerId, status, headers, body);
+  }
+  if (status === 413) {
+    return new InferenceError(`Request too large for ${providerId}: ${body.slice(0, 200)}`, "request_too_large", providerId, status, headers, body);
+  }
   if (status === 429) {
     return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body);
   }
@@ -120,6 +126,9 @@ export function classifyHttpError(
   }
   if (status === 404) {
     return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body);
+  }
+  if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
+    return new InferenceError(`Transient error (${status}) from ${providerId}: ${body.slice(0, 200)}`, "transient", providerId, status, headers, body);
   }
   return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body);
 }
