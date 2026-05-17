@@ -84,12 +84,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
       ADMIN_PASSWORD: ci_admin_changeme
-    # Unit Tests runs informationally while the broken-test backlog is drained
-    # (issue #104). It still provisions a CI Postgres database and applies
-    # migrations so Prisma-backed tests fail for product defects, not runner
-    # setup. Typecheck, Production Build, and Routing Tier Contract remain
-    # the binding gates until the full suite is honest again.
-    continue-on-error: true
+    # Unit Tests is now a binding merge gate. The suite reached 0 failures
+    # via #693 (packages/db pool:forks isolation) and #694 (AgentDetailPage
+    # auth mock). All 5 980 tests pass on main as of 2026-05-17.
     steps:
       - uses: actions/checkout@v6
 
