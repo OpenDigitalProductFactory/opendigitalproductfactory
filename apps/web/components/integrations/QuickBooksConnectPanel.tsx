@@ -95,7 +95,7 @@ export function QuickBooksConnectPanel({ initialState }: Props) {
       {initialState.status === "error" && initialState.lastErrorMsg && (
         <div
           role="alert"
-          className="rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700"
+          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm text-[var(--dpf-text)]"
         >
           Last connect attempt failed: {initialState.lastErrorMsg}
         </div>
@@ -186,7 +186,7 @@ export function QuickBooksConnectPanel({ initialState }: Props) {
         {formError && (
           <div
             role="alert"
-            className="rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700"
+            className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm text-[var(--dpf-text)]"
           >
             {formError}
           </div>
@@ -217,7 +217,7 @@ export function QuickBooksConnectPanel({ initialState }: Props) {
 function StatusBadge({ status }: { status: QuickBooksConnectionState["status"] }) {
   if (status === "connected") {
     return (
-      <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700">
+      <span className="rounded-full border border-[var(--dpf-accent)] bg-[color-mix(in_srgb,var(--dpf-accent)_14%,transparent)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)]">
         Connected
       </span>
     );
@@ -225,7 +225,7 @@ function StatusBadge({ status }: { status: QuickBooksConnectionState["status"] }
 
   if (status === "error") {
     return (
-      <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-700">
+      <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)]">
         Error
       </span>
     );
