@@ -9,6 +9,7 @@ import {
   type IssueMcpTokenResult,
   type McpTokenCapability,
 } from "@/lib/auth/mcp-api-token";
+import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { CODING_AGENT_MCP_TOKEN_SCOPES } from "@/lib/mcp-token-scopes";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
@@ -76,55 +77,6 @@ export type IssueTokenActionResult =
       message: string;
     };
 
-function buildSetupSnippets(plaintext: string, baseUrl: string): {
-  claudeCode: string;
-  codex: string;
-  vscode: string;
-} {
-  const url = `${baseUrl}/api/mcp/v1`;
-  const claudeCode = JSON.stringify(
-    {
-      mcpServers: {
-        dpf: {
-          type: "http",
-          url,
-          headers: { Authorization: `Bearer ${plaintext}` },
-        },
-      },
-    },
-    null,
-    2,
-  );
-  // Codex CLI uses similar JSON config
-  const codex = JSON.stringify(
-    {
-      mcpServers: {
-        dpf: {
-          type: "http",
-          url,
-          headers: { Authorization: `Bearer ${plaintext}` },
-        },
-      },
-    },
-    null,
-    2,
-  );
-  // VS Code MCP `.vscode/mcp.json`
-  const vscode = JSON.stringify(
-    {
-      servers: {
-        dpf: {
-          type: "http",
-          url,
-          headers: { Authorization: `Bearer ${plaintext}` },
-        },
-      },
-    },
-    null,
-    2,
-  );
-  return { claudeCode, codex, vscode };
-}
 
 export async function issueMyMcpToken(input: {
   name: string;
