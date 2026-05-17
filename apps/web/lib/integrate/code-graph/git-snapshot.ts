@@ -14,6 +14,23 @@ export function getGitRoot(): string {
     : resolve(process.cwd(), "..", "..");
 }
 
+/**
+ * Returns true if gitRoot is inside a real git working tree.
+ * Runs fast (no file scanning) — just asks git whether it recognises the dir.
+ * Returns false in production containers where only the built app is present.
+ */
+export async function isGitRepo(gitRoot: string): Promise<boolean> {
+  try {
+    const { stdout } = await exec(
+      "git rev-parse --is-inside-work-tree",
+      { cwd: gitRoot, timeout: 5_000 },
+    );
+    return stdout.trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeGitOutput(stdout: string): string[] {
   return stdout
     .split("\n")
