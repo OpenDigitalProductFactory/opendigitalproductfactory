@@ -532,6 +532,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dpf-source-code:/workspace
       - sandbox_workspace:/sandbox-workspace
+      - `${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
     environment:
       DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
       AUTH_SECRET: `${AUTH_SECRET}
@@ -887,12 +888,33 @@ providers:
             # Write dpf-start.ps1 for consumer (no .git dependency)
             @'
 param([switch]$NoBrowser)
-Set-Location $PSScriptRoot
+$DPF_DIR = $PSScriptRoot
+Set-Location $DPF_DIR
 docker compose up -d
-if (-not $NoBrowser) {
+
+Write-Host "Waiting for portal to be ready..." -ForegroundColor Cyan
+$attempts = 0; $maxAttempts = 60; $healthy = $false
+while ($attempts -lt $maxAttempts) {
+    try {
+        $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/health" `
+                    -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
+        if ($resp -and $resp.StatusCode -eq 200) { $healthy = $true; break }
+    } catch {}
     Start-Sleep -Seconds 5
+    $attempts++
+}
+if (-not $healthy) {
+    Write-Host "[!] Portal did not become healthy after 5 minutes." -ForegroundColor Yellow
+} else {
+    $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
+    if ((Test-Path $seedScript) -and (Get-Command claude -ErrorAction SilentlyContinue)) {
+        Write-Host "Auto-seeding MCP token..." -ForegroundColor Cyan
+        try { & $seedScript } catch { Write-Host "[!] MCP seed skipped: $_" -ForegroundColor Yellow }
+    }
+}
+if (-not $NoBrowser) {
     Start-Process "http://localhost:3000"
-    Write-Host "Digital Product Factory is starting at http://localhost:3000" -ForegroundColor Green
+    Write-Host "Digital Product Factory is running at http://localhost:3000" -ForegroundColor Green
 }
 '@ | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding UTF8
 
@@ -1248,6 +1270,26 @@ if (-not (Test-StepDone "started")) {
     }
 
     Save-Progress "started"
+
+# --- Auto-seed MCP token for Claude Code (if .mcp.json already exists) -------
+if (-not (Test-StepDone "mcp_seed")) {
+    $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
+    if (Test-Path $seedScript) {
+        if (Get-Command claude -ErrorAction SilentlyContinue) {
+            Write-Action "Seeding MCP token to worktrees..."
+            try {
+                & $seedScript
+                Write-OK "MCP token seeded. Restart Claude Code to use it."
+            } catch {
+                Write-Warn "MCP seed failed (non-fatal): $_"
+            }
+        } else {
+            Write-Warn "Claude Code CLI not found. After installing Claude Code, run:"
+            Write-Warn "  .\scripts\seed-worktree-mcp.ps1"
+        }
+    }
+    Save-Progress "mcp_seed"
+}
 } else {
     Write-OK "Already running"
 }
