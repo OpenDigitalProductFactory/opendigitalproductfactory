@@ -18,6 +18,16 @@ const mockPrisma = {
   buildActivity: {
     create: vi.fn(),
   },
+  backlogItemActivity: {
+    create: vi.fn(),
+  },
+  workCapsule: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+  },
+  workCapsuleActivity: {
+    create: vi.fn(),
+  },
   $transaction: vi.fn(),
 };
 
@@ -34,6 +44,13 @@ describe("governed backlog tee-up", () => {
       governedBacklogEnabled: true,
       backlogTeeUpDailyCap: 2,
     });
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({});
+    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
+    mockPrisma.workCapsule.create.mockResolvedValue({
+      id: "capsule-row-1",
+      capsuleId: "WC-BUILD01",
+    });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -248,6 +265,35 @@ describe("governed backlog tee-up", () => {
         }),
       }),
     );
+    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          source: "build-studio",
+          executorKind: "build-studio",
+          executorRef: "FB-11111111",
+          status: "working",
+          backlogItemId: "backlog-epic",
+          epicId: "epic-1",
+          featureBuildId: "build-row-1",
+          idempotencyKey: "build-studio:FB-11111111",
+        }),
+      }),
+    );
+    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          backlogItemId: "backlog-epic",
+          kind: "build-studio-capsule-attached",
+          recordedById: "user-1",
+          summary: expect.stringContaining("FB-11111111"),
+          payload: expect.objectContaining({
+            buildId: "FB-11111111",
+            capsuleId: "WC-BUILD01",
+            featureBuildId: "build-row-1",
+          }),
+        }),
+      }),
+    );
   });
 
   it("skips processing when governed backlog mode is disabled", async () => {
@@ -306,7 +352,47 @@ describe("governed backlog tee-up", () => {
       });
 
       expect(result.kind).toBe("success");
+      if (result.kind === "success") {
+        expect(result.capsuleId).toBe("WC-BUILD01");
+      }
       expect(mockPrisma.epic.create).not.toHaveBeenCalled();
+      expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            source: "build-studio",
+            executorKind: "build-studio",
+            executorRef: "FB-12345678",
+            status: "working",
+            backlogItemId: "bi-cuid-1",
+            epicId: "epic-cuid-1",
+            featureBuildId: "build-row-1",
+            idempotencyKey: "build-studio:FB-12345678",
+            workspaceState: expect.objectContaining({
+              buildStudio: expect.objectContaining({
+                buildId: "FB-12345678",
+                phase: "ideate",
+              }),
+              backlogItem: expect.objectContaining({
+                itemId: "BI-EPIC-OK",
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            backlogItemId: "bi-cuid-1",
+            kind: "build-studio-capsule-attached",
+            recordedById: "user-1",
+            payload: expect.objectContaining({
+              buildId: "FB-12345678",
+              capsuleId: "WC-BUILD01",
+              featureBuildId: "build-row-1",
+            }),
+          }),
+        }),
+      );
 
       const createCall = mockPrisma.featureBuild.create.mock.calls[0]![0];
       const intake = createCall.data.plan.happyPathState.intake;

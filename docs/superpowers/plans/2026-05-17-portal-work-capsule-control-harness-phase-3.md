@@ -1,6 +1,6 @@
 # Portal Work Capsule Control Harness Phase 3 Implementation Plan
 
-> **Status (2026-05-17):** Slice 1 implementation committed (`268ea90a`). Three write-tool renewal assertions and one read-tool idempotency assertion are missing before the test contract matches spec §17.3 — add them, then run verification before opening PR.
+> **Status (2026-05-17):** Slice 1 landed as the lease auto-renewal path. Slice 2 is Build Studio attachment: new direct Build Studio builds and backlog-promoted Build Studio drafts create a Work Capsule and, when backlog-linked, write backlog timeline activity. External desktop/CLI executor attachment remains open.
 
 ## Goal
 
@@ -80,6 +80,64 @@ Required before PR:
 
 This slice has no migration and no user-facing UI change, so UX verification is limited to the MCP handler contract exercised by the focused test.
 
+## Slice 2 Scope
+
+In scope:
+
+- Attach newly created direct Build Studio `FeatureBuild` rows to a Work Capsule in the same transaction.
+- Attach backlog-promoted Build Studio drafts to a Work Capsule in the same promotion transaction.
+- Preserve the backlog item row id, epic row id, `FeatureBuild.id`, public `buildId`, and Build Studio phase in capsule linkage/workspace state.
+- Write `BacklogItemActivity` of kind `build-studio-capsule-attached` for backlog-linked builds so the backlog timeline shows that development has started under a capsule.
+- Keep direct Build Studio builds valid without a backlog item while still creating a capsule.
+
+Out of scope for Slice 2:
+
+- Backfilling capsules for pre-existing active `FeatureBuild` rows.
+- External Codex/Claude desktop attachment UX.
+- CLI sandbox executor sessions.
+- `executor-changed` handoff UI.
+- Commit trailer and PR-body `DPF-Capsule:` enforcement.
+
+## Slice 2 Implementation Status
+
+Implemented on `feat/work-capsule-build-studio-attach`:
+
+- Added `attachBuildStudioWorkCapsule` in `apps/web/lib/work-capsules/build-studio-attachment.ts` as the reusable Build Studio-to-capsule policy helper.
+- Extended `createWorkCapsule` input to accept existing linkage fields (`executorRef`, `backlogItemId`, `epicId`, `featureBuildId`, `workspaceState`, and explicit `status`) without changing existing manual/MCP callers.
+- Updated `createFeatureBuild` so direct Build Studio work creates a `source = build-studio`, `executorKind = build-studio`, `status = working` capsule.
+- Updated `promoteBacklogItemToBuildDraft` so backlog-created Build Studio drafts create the same capsule link and write backlog activity.
+
+**Slice 2 test coverage:**
+
+| Assertion | Status |
+|---|---|
+| Direct `createFeatureBuild` creates a Build Studio Work Capsule | explicit in `apps/web/lib/actions/build-governed.test.ts` |
+| Direct `createFeatureBuild` does not write backlog activity without a backlog item | explicit |
+| Backlog tee-up promotion creates a Build Studio Work Capsule | explicit in `apps/web/lib/governed-backlog-tee-up.test.ts` |
+| `promoteBacklogItemToBuildDraft` returns the attached capsule id | explicit |
+| Backlog-linked promotion writes `build-studio-capsule-attached` activity | explicit |
+
+## Slice 2 File Touches
+
+- `apps/web/lib/work-capsules/build-studio-attachment.ts`
+- `apps/web/lib/work-capsules/work-capsule-store.ts`
+- `apps/web/lib/actions/build.ts`
+- `apps/web/lib/governed-backlog-tee-up.ts`
+- `apps/web/lib/actions/build-governed.test.ts`
+- `apps/web/lib/governed-backlog-tee-up.test.ts`
+- `docs/superpowers/specs/2026-05-14-portal-work-capsule-control-harness-design.md`
+- `docs/superpowers/plans/2026-05-17-portal-work-capsule-control-harness-phase-3.md`
+
+## Slice 2 Verification
+
+Required before PR:
+
+- `pnpm --filter web exec vitest run lib/governed-backlog-tee-up.test.ts lib/actions/build-governed.test.ts`
+- `pnpm --filter web typecheck`
+- `pnpm --filter web build`
+
+This slice has no migration and no UI component change. Runtime UX verification is limited to the server-action/workflow contract unless the branch later adds a visible capsule link in Build Studio.
+
 ## Next Phase 3 Slice
 
-After this PR lands, the next smallest Phase 3 slice is executor handoff: add the `executor-changed` write path, record every transition as activity, and surface the current executor in capsule detail without introducing promotion behavior.
+After Slice 2 lands, the next smallest Phase 3 slice is executor handoff: add the `executor-changed` write path, record every transition as activity, and surface the current executor in capsule detail without introducing promotion behavior.
