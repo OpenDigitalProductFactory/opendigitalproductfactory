@@ -59,6 +59,16 @@ export type InferenceResult = {
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
+  /**
+   * Verbatim provider response body (matches AdapterResult.raw). Optional —
+   * adapters may leave it undefined when nothing useful exists beyond `content`.
+   *
+   * Populated for callers that need shape-specific fields the projected
+   * InferenceResult doesn't expose. The transcription path (Voice Slice 1,
+   * spec §6.5) reads `raw.segments[].avg_logprob` from Whisper-family
+   * providers to normalize confidence to 0-1; chat callers can ignore it.
+   */
+  raw?: unknown;
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
@@ -485,6 +495,9 @@ export async function callProvider(
     inferenceMs: result.inferenceMs,
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
+    // Adapters may set result.raw (e.g. transcription adapter for Whisper
+    // verbose_json segments). Passed through verbatim; undefined when absent.
+    ...(result.raw !== undefined && { raw: result.raw }),
   };
 }
 

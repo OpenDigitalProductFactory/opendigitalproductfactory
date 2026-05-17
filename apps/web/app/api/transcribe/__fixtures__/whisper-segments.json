@@ -1,0 +1,33 @@
+{
+  "_fixture_note": "Voice Input Slice 1 / Task 5 — synthetic Whisper verbose_json fixture. Shape matches the OpenAI Whisper API verbose_json schema (https://platform.openai.com/docs/api-reference/audio/createTranscription) which speaches and whisper.cpp server both emit. avg_logprob and no_speech_prob values are realistic for a clean English utterance. Replace with a live capture from `docker compose --profile stt up dpf-stt` + `curl -F file=@clip.webm -F model=Systran/faster-distil-whisper-large-v3 -F response_format=verbose_json http://127.0.0.1:8765/v1/audio/transcriptions` once the image is pulled. Confidence-normalization math does NOT depend on this being a live capture; it depends only on the field shape.",
+  "task": "transcribe",
+  "language": "en",
+  "duration": 3.12,
+  "text": "Schedule the design review with Daisy for Friday.",
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.0,
+      "end": 1.6,
+      "text": " Schedule the design review with Daisy",
+      "tokens": [50364, 32007, 264, 1715, 3131, 365, 19534, 50444],
+      "temperature": 0.0,
+      "avg_logprob": -0.142,
+      "compression_ratio": 1.21,
+      "no_speech_prob": 0.012
+    },
+    {
+      "id": 1,
+      "seek": 0,
+      "start": 1.6,
+      "end": 3.12,
+      "text": " for Friday.",
+      "tokens": [50444, 337, 6531, 13, 50520],
+      "temperature": 0.0,
+      "avg_logprob": -0.213,
+      "compression_ratio": 1.05,
+      "no_speech_prob": 0.018
+    }
+  ]
+}
