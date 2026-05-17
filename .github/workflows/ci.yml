@@ -172,6 +172,7 @@ jobs:
     env:
       AUTH_SECRET: ci-placeholder
       CREDENTIAL_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      COMPOSE_PROJECT_NAME: dpf-ci-${{ github.run_id }}-${{ github.run_attempt }}
     # Brings up the fake-server harness, runs the e2e test suite against it,
     # then tears down. The harness default token matches HARNESS_CONTROL_TOKEN
     # below. No Postgres needed — the credential layer is mocked in the test.
@@ -191,8 +192,8 @@ jobs:
 
       - name: Build and start integration-test-harness
         run: |
-          docker compose --profile integration-test build integration-test-harness
-          docker compose --profile integration-test up -d --wait integration-test-harness
+          node scripts/dpf-compose.mjs --profile integration-test build integration-test-harness
+          node scripts/dpf-compose.mjs --profile integration-test up -d --wait integration-test-harness
 
       - name: Run ADP e2e integration tests
         env:
@@ -203,8 +204,8 @@ jobs:
 
       - name: Capture harness logs on failure
         if: failure()
-        run: docker compose --profile integration-test logs integration-test-harness
+        run: node scripts/dpf-compose.mjs --profile integration-test logs integration-test-harness
 
       - name: Tear down
         if: always()
-        run: docker compose --profile integration-test down --volumes
+        run: node scripts/dpf-compose.mjs --profile integration-test down --volumes
