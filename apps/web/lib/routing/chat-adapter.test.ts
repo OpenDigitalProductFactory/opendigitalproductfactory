@@ -446,6 +446,59 @@ describe("chatAdapter", () => {
     expect(sentBody.tools).toEqual([{ code_execution: {} }]);
   });
 
+  it("Gemini: strips unsupported JSON Schema keywords from function declarations", async () => {
+    stubFetchOk({
+      candidates: [{ content: { parts: [{ text: "ok" }] } }],
+      usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3 },
+    });
+
+    const req = makeRequest({
+      providerId: "gemini",
+      modelId: "gemini-2.5-flash",
+      plan: makePlan({ providerId: "gemini" }),
+      provider: {
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        headers: { "Content-Type": "application/json" },
+      },
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "principle_decide",
+            description: "Score candidate options against principles.",
+            parameters: {
+              type: "object",
+              properties: {
+                options: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      features: {
+                        type: "object",
+                        additionalProperties: { type: "number" },
+                      },
+                    },
+                    required: ["id"],
+                  },
+                },
+              },
+              required: ["options"],
+            },
+          },
+        },
+      ],
+    });
+
+    await chatAdapter.execute(req);
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const parameters = sentBody.tools[0].functionDeclarations[0].parameters;
+    expect(JSON.stringify(parameters)).not.toContain("additionalProperties");
+    expect(parameters.properties.options.items.properties.features).toEqual({ type: "object" });
+  });
+
   // ── 8. Gemini: code_execution response parts extracted as text ──
 
   it("Gemini: code_execution response parts extracted as text", async () => {

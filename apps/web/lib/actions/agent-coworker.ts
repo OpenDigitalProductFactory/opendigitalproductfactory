@@ -41,6 +41,7 @@ import { recallWikiContext } from "@/lib/wiki/recall";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
+import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import { loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
 import type { RoutingMeta } from "@/lib/process-observer-hook";
 import {
@@ -1060,7 +1061,10 @@ export async function sendMessage(input: {
 
   // EP-AI-WORKFORCE-001: Provider pinning is now via AgentModelConfig.pinnedProviderId
   // (resolved in agentic-loop.ts via agentModelConfig lookup). No need to merge here.
-  const modelReqs = { ...agent.modelRequirements };
+  const modelReqs = applyProviderRouteModelPreference(
+    { ...agent.modelRequirements },
+    input.routeContext,
+  );
 
   // --- Task classification and performance profile injection ---
   // EP-INF-009b: Routing is handled by the agentic loop via routeAndCall().
