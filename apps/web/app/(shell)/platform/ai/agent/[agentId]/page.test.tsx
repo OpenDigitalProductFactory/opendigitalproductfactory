@@ -3,9 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    agent: {
-      findFirst: vi.fn(),
-    },
+    agent: { findFirst: vi.fn() },
+    agentModelConfig: { findUnique: vi.fn().mockResolvedValue(null) },
+    modelProvider: { findMany: vi.fn().mockResolvedValue([]) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -14,13 +15,23 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  notFound: () => {
-    throw new Error("notFound");
-  },
+  notFound: () => { throw new Error("notFound"); },
 }));
 
 vi.mock("@/lib/identity/principal-linking", () => ({
   getAgentGaidMap: vi.fn(),
+}));
+
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue({ user: { id: "u1", platformRole: "admin", isSuperuser: true } }),
+}));
+
+vi.mock("@/lib/permissions", () => ({
+  can: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock("@/components/platform/AgentModelRoutingCard", () => ({
+  AgentModelRoutingCard: () => null,
 }));
 
 import { prisma } from "@dpf/db";
