@@ -94,6 +94,10 @@ services:
       # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
       # Read-only from the portal's side — only browser-use should write.
       - browser_evidence:/evidence:ro
+      # Writable host mount: lets the portal write .mcp.json to the install
+      # directory at token generation time. Requires DPF_HOST_INSTALL_PATH
+      # to be set in .env (done by the installer at setup time).
+      - ${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}

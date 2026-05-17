@@ -532,6 +532,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dpf-source-code:/workspace
       - sandbox_workspace:/sandbox-workspace
+      - `${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
     environment:
       DATABASE_URL: postgresql://`${POSTGRES_USER:-dpf}:`${POSTGRES_PASSWORD}@postgres:5432/dpf
       AUTH_SECRET: `${AUTH_SECRET}
