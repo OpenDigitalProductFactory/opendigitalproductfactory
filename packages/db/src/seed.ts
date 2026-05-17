@@ -32,6 +32,7 @@ import { ensurePostgresBackupScheduledJob } from "./seed-platform-backup.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
+import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -1736,9 +1737,8 @@ async function seedModelProfiles(): Promise<void> {
       select: { id: true },
     });
     if (existing) { skipped++; continue; }
-    const { providerId: _pid, modelId: _mid, ...rest } = p;
     try {
-      await prisma.modelProfile.create({ data: { generatedBy: "system:seed", ...rest, providerId, modelId } as never });
+      await prisma.modelProfile.create({ data: toModelProfileSeedCreateData(p) as never });
       created++;
     } catch { skipped++; }
   }

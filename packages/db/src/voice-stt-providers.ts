@@ -12,7 +12,7 @@
  * Per spec §6.0 + plan Task 2: speaches is a TRANSCRIPTION-only provider, not
  * a chat LLM. Its ModelProvider row carries endpointType: "transcription"
  * (set in packages/db/data/providers-registry.json) so the LLM routing layer
- * (loader.loadEndpointManifests filters where endpointType: "llm") does NOT
+ * (loader.loadEndpointManifests filters to model-routing endpoint types) does NOT
  * pick it up for chat traffic.
  */
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET(): Promise<Response> {
       retiredAt: null,
       provider: {
         status: { in: ["active", "degraded"] },
-        endpointType: "llm",
+        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
       },
     },
     select: {

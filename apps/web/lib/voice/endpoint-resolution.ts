@@ -5,7 +5,7 @@
  * Owning spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §6.7
  *
  * The canonical routing layer (loadEndpointManifests) filters by
- * provider.endpointType="llm" so it does NOT load transcription endpoints.
+ * model-routing endpoint types so it does NOT load transcription endpoints.
  * Per spec §6.7, transcription endpoints have endpointType="transcription"
  * and are picked via EndpointTaskPerformance for taskType="transcription".
  *

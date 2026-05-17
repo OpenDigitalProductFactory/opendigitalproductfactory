@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { persistRouteDecision } from "./loader";
+import { loadEndpointManifests, persistRouteDecision } from "./loader";
 import type { RouteDecision } from "./types";
+import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
     routeDecisionLog: {
       create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
+    },
+    modelProfile: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }));
@@ -48,6 +52,27 @@ describe("persistRouteDecision", () => {
         agentId: null,
       }),
     });
+  });
+});
+
+describe("loadEndpointManifests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.modelProfile.findMany.mockResolvedValue([]);
+  });
+
+  it("loads all model-routing endpoint types, including responses providers", async () => {
+    await loadEndpointManifests();
+
+    expect(mockPrisma.modelProfile.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          provider: expect.objectContaining({
+            endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
+          }),
+        }),
+      }),
+    );
   });
 });
 

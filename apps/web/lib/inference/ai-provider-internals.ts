@@ -15,6 +15,10 @@ import {
 import { extractModelCardWithFallback } from "@/lib/routing/adapter-registry";
 import { assignTierFromModelId, TIER_DIMENSION_BASELINES } from "@/lib/routing/quality-tiers";
 import { KNOWN_PROVIDER_MODELS, type KnownModel } from "@/lib/routing/known-provider-models";
+import {
+  backgroundModelEvalSkipReason,
+  canQueueBackgroundModelEvals,
+} from "@/lib/routing/provider-eligibility";
 
 // ─── Shared helpers (exported for use by ai-providers.ts server actions) ─────
 
@@ -972,6 +976,23 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
   // startup revalidation) triggers live quality scoring without manual clicks.
   if (result.profiled > 0) {
     try {
+      const provider = await prisma.modelProvider.findUnique({
+        where: { providerId },
+        select: {
+          providerId: true,
+          endpointType: true,
+          category: true,
+          serviceKind: true,
+          authMethod: true,
+          cliEngine: true,
+        },
+      });
+      if (!canQueueBackgroundModelEvals(provider ?? {})) {
+        console.log(
+          `[auto-discover] Skipping background evals for ${providerId}: ${backgroundModelEvalSkipReason(provider)}`,
+        );
+        return result;
+      }
       const { inngest } = await import("@/lib/queue/inngest-client");
       const models = await prisma.modelProfile.findMany({
         where: { providerId, modelStatus: "active" },

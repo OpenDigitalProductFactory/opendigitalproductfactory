@@ -9,6 +9,7 @@
 import { prisma } from "@dpf/db";
 import { Pool } from "pg";
 import { autoDiscoverAndProfile } from "./ai-provider-internals";
+import { canRunStartupModelDiscovery } from "@/lib/routing/provider-eligibility";
 
 const LOCK_KEY = 0x4d434156; // "MCAV" as int32 (deterministic, stable)
 
@@ -53,10 +54,18 @@ export async function runModelRevalidation(
 
     const activeProviders = await prisma.modelProvider.findMany({
       where: { status: { in: ["active", "degraded"] } },
-      select: { providerId: true },
+      select: {
+        providerId: true,
+        endpointType: true,
+        category: true,
+        serviceKind: true,
+        authMethod: true,
+        cliEngine: true,
+      },
     });
 
-    for (const { providerId } of activeProviders) {
+    for (const provider of activeProviders.filter(canRunStartupModelDiscovery)) {
+      const { providerId } = provider;
       if (Date.now() > totalDeadline) {
         console.warn(
           "[model-revalidation] Total budget exceeded — stopping early",
