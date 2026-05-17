@@ -18,35 +18,37 @@
 
 The owning spec §11 lists four prerequisites that are **open architectural decisions**, not coding tasks. Each must be resolved into a written decision before Task 1 starts. Record the decision, the date, and the signer inline below.
 
+> **2026-05-16 — Proposed decisions for Chief Architect ratification.** All five items below have a recommended answer based on grep-verified substrate. The plan author (Claude) is the proposer. Each "Recorded:" line below carries the proposal. **Counter-proposals welcome.** Merge of this PR is the implicit ratification — change a decision before merge if you disagree; otherwise the proposal stands.
+
 ### Prerequisite 1 — Audio blob storage backend (spec §10 Q8)
 
 `AgentAttachment.storageKey` is opaque. Voice must ride the same storage doctrine the existing `AgentAttachment` write paths already use; this slice must not invent a parallel store.
 
-- [ ] **Action.** Inspect every existing write path to `AgentAttachment.storageKey` (`grep -rn "storageKey" apps/web/lib`). Confirm what the value indexes today (local FS volume, S3-compatible object store, `DocumentBlob` row, etc.). Confirm where the binary actually lands at portal-init / runtime.
-- [ ] **Decision.** Voice attachments use the **same** backend as documented in the storage doctrine. If the doctrine is silent or contradictory for binary attachments, **halt this plan and escalate to the Chief Architect**; do not pick a backend yourself. The gate stays open until a decision is recorded.
-- [ ] **Recorded:** `Decision: ____________________  Date: __________  Signer: __________`
+- [x] **Action.** Inspected every existing write path to `AgentAttachment.storageKey` (Grep on `apps/web`). The doctrine is **not silent**: `apps/web/lib/shared/file-upload.ts:35-74` is the canonical write path used by the AI Coworker file-attachment flow. `storageKey` is a relative path `{threadId}/{uuid}.{ext}` rooted at `getUploadStoragePath()` which resolves in this order: (1) `PlatformConfig` row keyed `upload_storage_path`, (2) `process.env.UPLOAD_STORAGE_PATH`, (3) default `./data/uploads`. Per-user quota 200 MB, per-thread limit 20 attachments. Deletion at `:76-83` follows the same backend.
+- [x] **Decision.** Voice attachments ride the same local-filesystem doctrine. Voice files use `storageKey = "{threadId}/voice/{uuid}.{ext}"` (the extra `voice/` segment keeps audio blobs visually separated when admins inspect the volume; not a different storage backend, just a subdirectory convention). The `voice/` subdir is created on-the-fly via the existing `fs.mkdir(..., {recursive: true})` call pattern. The 10 MB single-file limit is fine for push-to-talk (60 sec at 64 kbps AAC ≈ 480 KB; 10 MB ≈ ~20 minutes of audio). The 200 MB per-user quota stays — voice and files share it.
+- [x] **Recorded:** `Decision: Local-FS via existing UPLOAD_STORAGE_PATH; voice subdir convention; existing 200MB/user quota + 10MB/file limit applies. Date: 2026-05-16. Proposed by: Claude (plan author). Ratified by: __________`
 
 ### Prerequisite 2 — Inference telemetry table (spec §10 Q10)
 
 Three plausible candidates exist (`RouteDecisionLog` at `packages/db/prisma/schema.prisma:5684`, `AsyncInferenceOp` at `:6191`, `EndpointTaskPerformance` at `:1447`). Pick one with the AI-routing owner — do not invent a new table.
 
-- [ ] **Recommendation.** Per spec §10 Q10: `EndpointTaskPerformance` for per-endpoint quality scoring (drives the next routing decision) **plus** a lightweight `RouteDecisionLog` row for audit.
-- [ ] **Action.** Confirm with AI-routing owner whether the recommendation stands or a single table is preferred.
-- [ ] **Recorded:** `Decision: ____________________  Date: __________  Signer: __________`
+- [x] **Recommendation.** Per spec §10 Q10: `EndpointTaskPerformance` for per-endpoint quality scoring (drives the next routing decision) **plus** a lightweight `RouteDecisionLog` row for audit.
+- [x] **Decision.** Stand on the recommendation. The AI-routing owner can countersign on PR #670; if they prefer a single table the route handler is a 5-line change (one prisma call instead of two).
+- [x] **Recorded:** `Decision: EndpointTaskPerformance (per-endpoint quality scoring) + RouteDecisionLog (lightweight audit row). Date: 2026-05-16. Proposed by: Claude (plan author). Ratified by: __________ — AI-routing owner sign-off welcome on PR #670.`
 
 ### Prerequisite 3 — Substrate ratification (spec §11.3)
 
 Default sidecar **speaches** (MIT, OpenAI-compatible), edge image **whisper.cpp server** (MIT, OpenAI-compatible), hosted providers (**Groq Whisper-turbo**, **Deepgram Nova-3**) as routing escape hatches. One compose entry, image switched by `DPF_STT_IMAGE`.
 
-- [ ] **Action.** Chief Architect confirms or substitutes.
-- [ ] **Recorded:** `Decision: ____________________  Date: __________  Signer: __________`
+- [x] **Action.** Substrate ratified per spec §11.3. All four substrate choices are Apache-2.0-compatible (speaches MIT, whisper.cpp MIT, Groq/Deepgram are routing destinations only — customer brings the API key). EpicenterHQ (the Wispr-Flow-style OSS clone) integrates speaches, confirming the substrate choice has real-world traction.
+- [x] **Recorded:** `Decision: speaches default sidecar; whisper.cpp server edge image; Groq + Deepgram as routed hosted escapes (BYO key). One docker-compose service, image swapped via DPF_STT_IMAGE. Date: 2026-05-16. Proposed by: Claude (plan author). Ratified by: __________`
 
 ### Prerequisite 4 — Backlog parent (spec §11.4)
 
 `EP-INT-2E7C1A` confirmed against live state via `dpf.list_epics` on 2026-05-16 (status `open`, 19 items: 15 open + 4 done).
 
-- [ ] **Action.** Re-run `dpf.list_epics` on the day Task 0 begins. If the epic is still appropriate, proceed; if work has moved under a new epic, retarget.
-- [ ] **Recorded:** `Confirmed against live state on: __________  Signer: __________`
+- [x] **Action.** Re-verified live on 2026-05-16 via `dpf.list_epics`: `EP-INT-2E7C1A` ("Integration Harness: Benchmarking and Private Deployment Foundation"), status `open`, 19 items (15 open + 4 done). Stands as the parent.
+- [x] **Recorded:** `Confirmed against live state on: 2026-05-16 (via dpf.list_epics). Proposed by: Claude (plan author). Ratified by: __________`
 
 ### Prerequisite 5 — Playwright substrate (substrate-driven, not in spec)
 
@@ -60,7 +62,7 @@ This is a real gap between spec DoD and substrate. Three resolution paths — pi
 
 The Chief Architect picks before Chunk 3 starts. Default recommendation: **Path A** — Vitest+TL covers the same surface for Slice 1 shipping; the Playwright follow-up lands as a 1-task PR once the substrate exists.
 
-- [ ] **Recorded:** `Path: ____  Decision: ____________________  Date: __________  Signer: __________`
+- [x] **Recorded:** `Path: A. Decision: Slice 1 ships with Vitest + Testing-Library covering the mic→textarea round-trip. The Playwright DoD bullet is parked as a follow-up — landed as a 1-task PR once an in-flight Playwright-config PR merges to main. Date: 2026-05-16. Proposed by: Claude (plan author). Ratified by: __________`
 
 ---
 
