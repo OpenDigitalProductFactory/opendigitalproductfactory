@@ -570,6 +570,33 @@ services:
       retries: 3
       start_period: 40s
 
+  # ─── Voice Input Slice 1 — Speech-to-text sidecar (opt-in via `stt` profile) ──
+  # Owning plan: docs/superpowers/plans/2026-05-16-voice-input-slice-1-portal-mic.md
+  # Owning spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §6.6
+  #
+  # Single service entry — image switched by DPF_STT_IMAGE for deployment-target
+  # variants (speaches default; whisper.cpp for edge / CPU-only installs). Both
+  # expose OpenAI-compatible /v1/audio/transcriptions; the contract is the
+  # endpoint, not the image. Default `docker compose up` does NOT start this —
+  # opt-in via `docker compose --profile stt up`.
+  dpf-stt:
+    image: ${DPF_STT_IMAGE:-ghcr.io/speaches-ai/speaches:latest-cuda}
+    profiles: ["stt"]
+    environment:
+      WHISPER_MODEL: ${DPF_STT_MODEL:-Systran/faster-distil-whisper-large-v3}
+      ENABLE_UI: "false"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      # Localhost-only port binding by default. The portal reaches the sidecar
+      # via the Docker network DNS name (dpf-stt:8000) — the host-port mapping
+      # is for developer-machine smoke testing only.
+      - "127.0.0.1:8765:8000"
+
 volumes:
   pgdata:
   neo4jdata:
