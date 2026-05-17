@@ -36,11 +36,24 @@ export interface TranscribeInput {
   /** Optional capability-tier hint (advisory; routing layer owns selection). */
   tierHint?: TierHint;
   /**
-   * Optional bias prompt as classified tokens. Slice 1 callers pass undefined
-   * or []; Slice 2 vocabulary builder populates this. The classification gate
+   * Optional bias prompt as classified tokens. When omitted, Slice 2 builds
+   * one server-side from `organizationId` + `threadId` context. Test-harness
+   * callers may still pass an explicit value. The classification gate
    * (`bias-classification-gate.ts`) strips off-org-unsafe tokens before send.
    */
   biasPrompt?: BiasClassificationToken[];
+  /**
+   * Org id resolved server-side from the auth session. NEVER trust a
+   * client-supplied value — the route handler fills this from the session,
+   * not from the request body.
+   */
+  organizationId?: string;
+  /**
+   * Slice 2: opt out of the LLM cleanup pass. Defaults false (cleanup runs).
+   * When `tierHint === "high-accuracy"` the route also sets this to true so
+   * users who explicitly asked for raw STT get raw STT.
+   */
+  skipCleanup?: boolean;
 }
 
 export interface TranscribeResult {
@@ -67,6 +80,12 @@ export interface TranscribeResult {
   biasUsed: boolean;
   /** True if the classification gate stripped any tokens before send. */
   biasRedacted: boolean;
+  /** Slice 2: true when the cleanup pass produced a non-suspicious rewrite that was kept. */
+  cleanupApplied?: boolean;
+  /** Slice 2: true when either the heuristic detector or the LLM's escape hatch fired. */
+  cleanupInjectionSuspected?: boolean;
+  /** Slice 2: Levenshtein ratio between raw and cleaned text (0 = identical). */
+  cleanupLevenshteinRatio?: number;
 }
 
 /**

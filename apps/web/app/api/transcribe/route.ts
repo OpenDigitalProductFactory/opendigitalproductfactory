@@ -16,6 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@dpf/db";
 import { transcribe } from "@/lib/voice/transcribe";
 import { NoTranscriptionEndpointError } from "@/lib/voice/endpoint-resolution";
 import { InferenceError } from "@/lib/ai-inference";
@@ -25,6 +26,22 @@ import type {
   TranscribeInput,
 } from "@/lib/voice/types";
 import type { BiasClassificationToken } from "@/lib/voice/bias-classification-gate";
+
+/**
+ * Single-org-per-install resolver (per project_single_org_per_install.md).
+ * Returns null on fresh installs that haven't seeded the Organization row yet,
+ * or when the Prisma layer is unavailable (tests, transient DB issues).
+ * Slice 2 vocabulary builder treats null as "no bias from this source" —
+ * transcription itself never depends on this resolving.
+ */
+async function resolveOrgId(): Promise<string | null> {
+  try {
+    const org = await prisma.organization.findFirst({ select: { id: true } });
+    return org?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +144,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return jsonError(400, "tool-denied", "Could not read audio payload");
   }
 
+  // Resolve org id server-side from the install. NEVER trust a
+  // client-supplied org id — that's a confused-deputy invitation.
+  const organizationId = (await resolveOrgId()) ?? undefined;
+
   const input: TranscribeInput = {
     audioBase64,
     mimeType: audio.type,
@@ -136,12 +157,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     language,
     tierHint,
     biasPrompt,
+    organizationId,
   };
 
   try {
     const result = await transcribe(input);
 
-    // ── 3. Project to spec §6.5 response shape ─────────────────────────────
+    // ── 3. Project to spec §6.5 response shape (+ Slice 2 cleanup fields) ──
     return NextResponse.json({
       text: result.text,
       rawText: result.rawText,
@@ -153,6 +175,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       model: result.model,
       biasUsed: result.biasUsed,
       biasRedacted: result.biasRedacted,
+      cleanupApplied: result.cleanupApplied ?? false,
+      cleanupInjectionSuspected: result.cleanupInjectionSuspected ?? false,
+      cleanupLevenshteinRatio: result.cleanupLevenshteinRatio ?? 0,
     });
   } catch (e) {
     // ── 4. Error mapping per spec §7.2 ─────────────────────────────────────
