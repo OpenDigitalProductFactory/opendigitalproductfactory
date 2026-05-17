@@ -167,3 +167,44 @@ jobs:
             done < "$file"
           done < <(find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) -not -path './node_modules/*' -not -path './.git/*' -print0)
           exit $fail
+
+  adp-integration-tests:
+    name: ADP Integration Tests
+    runs-on: ubuntu-latest
+    needs: typecheck
+    # Brings up the fake-server harness, runs the e2e test suite against it,
+    # then tears down. The harness default token matches HARNESS_CONTROL_TOKEN
+    # below. No Postgres needed — the credential layer is mocked in the test.
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and start integration-test-harness
+        run: |
+          docker compose --profile integration-test build integration-test-harness
+          docker compose --profile integration-test up -d --wait integration-test-harness
+
+      - name: Run ADP e2e integration tests
+        env:
+          HARNESS_E2E: "1"
+          HARNESS_URL: http://localhost:8700
+          HARNESS_CONTROL_TOKEN: integration-test-token
+        run: pnpm --filter dpf-adp-mcp test
+
+      - name: Capture harness logs on failure
+        if: failure()
+        run: docker compose --profile integration-test logs integration-test-harness
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile integration-test down --volumes
