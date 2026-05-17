@@ -1,5 +1,6 @@
 import { Bell, Building2, MessagesSquare } from "lucide-react";
 import { listCommunicationChannelBindings } from "@/lib/communications/channel-binding-store";
+import { SpeechToTextCard } from "@/components/admin/SpeechToTextCard";
 
 const groups = [
   {
@@ -102,6 +103,8 @@ export default async function CommunicationsPage() {
           );
         })}
       </section>
+
+      <SpeechToTextCard />
 
       <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <header className="flex flex-wrap items-start justify-between gap-3">
