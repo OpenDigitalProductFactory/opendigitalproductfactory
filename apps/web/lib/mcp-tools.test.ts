@@ -175,6 +175,20 @@ describe("mcp tools", () => {
     expect(scout!.executionMode).toBe("immediate");
     expect(scout!.sideEffect).toBe(true);
   });
+
+  it("hides plan_capsule_worktree from a view-only platform user", async () => {
+    const tools = await getAvailableTools(inventoryUser, { externalAccessEnabled: false });
+    expect(tools.find((tool) => tool.name === "plan_capsule_worktree")).toBeUndefined();
+  });
+
+  it("exposes plan_capsule_worktree to an admin", async () => {
+    const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
+    const tool = tools.find((candidate) => candidate.name === "plan_capsule_worktree");
+
+    expect(tool).toBeDefined();
+    expect(tool!.requiredCapability).toBe("manage_backlog");
+    expect(tool!.sideEffect).toBe(true);
+  });
 });
 
 describe("sanitizeToolParams", () => {

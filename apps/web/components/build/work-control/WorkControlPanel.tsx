@@ -1,14 +1,17 @@
 import { GitBranch, RefreshCcw } from "lucide-react";
 
 import { AdoptableWorktreeTable, type AdoptableWorktreeRow } from "./AdoptableWorktreeTable";
+import { CreateGovernedWorkForm, type CreateGovernedWorkAction } from "./CreateGovernedWorkForm";
 import { WorkCapsuleTable, type WorkCapsuleRow } from "./WorkCapsuleTable";
 
 export function WorkControlPanel({
   capsules,
   adoptable,
+  createAction,
 }: {
   capsules: WorkCapsuleRow[];
   adoptable: AdoptableWorktreeRow[];
+  createAction: CreateGovernedWorkAction;
 }) {
   return (
     <section className="space-y-6 px-4 py-4">
@@ -34,6 +37,8 @@ export function WorkControlPanel({
           <div className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{adoptable.length}</div>
         </div>
       </div>
+
+      <CreateGovernedWorkForm action={createAction} />
 
       <WorkCapsuleTable capsules={capsules} />
       <AdoptableWorktreeTable rows={adoptable} />

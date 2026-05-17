@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { WorkControlPanel } from "./WorkControlPanel";
 
@@ -20,6 +20,7 @@ describe("WorkControlPanel", () => {
           updatedAt: "2026-05-14T00:00:00.000Z",
         }]}
         adoptable={[]}
+        createAction={vi.fn()}
       />,
     );
 
@@ -29,9 +30,10 @@ describe("WorkControlPanel", () => {
   });
 
   it("renders empty state", () => {
-    const html = renderToStaticMarkup(<WorkControlPanel capsules={[]} adoptable={[]} />);
+    const html = renderToStaticMarkup(<WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} />);
 
     expect(html).toContain("No active capsules yet.");
+    expect(html).toContain("Plan governed work");
   });
 
   it("renders adoptable worktree rows surfaced by the scanner", () => {
@@ -44,6 +46,7 @@ describe("WorkControlPanel", () => {
           modifiedCount: 3,
           untrackedCount: 1,
         }]}
+        createAction={vi.fn()}
       />,
     );
 

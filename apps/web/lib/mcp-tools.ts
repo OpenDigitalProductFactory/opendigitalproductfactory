@@ -468,6 +468,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "plan_capsule_worktree",
+    description: "Generate and persist the deterministic branch and worktree-path plan for a Work Capsule. Idempotent: re-planning returns the existing plan and refuses to propose the root clone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Work Capsule id (WC-*)." },
+        taxonomy: { type: "string", enum: WORK_CAPSULE_TOOL_ENUMS.taxonomies, description: "AGENTS.md branch prefix." },
+      },
+      required: ["capsuleId", "taxonomy"],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "adopt_worktree",
     description: "Adopt an existing local branch/worktree pair into a Work Capsule without creating a new worktree.",
     inputSchema: {
@@ -3737,6 +3752,10 @@ export async function executeTool(
     case "create_work_capsule": {
       const { createWorkCapsuleTool } = await import("@/lib/work-capsules/mcp-handlers");
       return createWorkCapsuleTool(params, userId, context);
+    }
+    case "plan_capsule_worktree": {
+      const { planCapsuleWorktreeTool } = await import("@/lib/work-capsules/mcp-handlers");
+      return planCapsuleWorktreeTool(params, userId, context);
     }
     case "adopt_worktree": {
       const { adoptWorktreeTool } = await import("@/lib/work-capsules/mcp-handlers");

@@ -97,6 +97,65 @@ describe("work capsule MCP tools", () => {
     expect(result.entityId).toBe("WC-ADOPT");
   });
 
+  it("plan_capsule_worktree persists the planned workspace", async () => {
+    mockPrisma.workCapsule.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-PLANMCP",
+      title: "Phase 2 MCP plan",
+      status: "draft",
+      baseBranch: null,
+      headBranch: null,
+      worktreePath: null,
+    });
+    mockPrisma.workCapsule.findFirst.mockResolvedValue(null);
+    mockPrisma.workCapsule.update.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-PLANMCP",
+      title: "Phase 2 MCP plan",
+      status: "ready",
+      baseBranch: "main",
+      headBranch: "feat/phase-2-mcp-plan",
+      worktreePath: "D:\\DPF-phase-2-mcp-plan",
+      branchTaxonomy: "feat",
+    });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "plan_capsule_worktree",
+      { capsuleId: "WC-PLANMCP", taxonomy: "feat" },
+      "user-1",
+      {},
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.entityId).toBe("WC-PLANMCP");
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-PLANMCP" },
+      data: expect.objectContaining({
+        branchTaxonomy: "feat",
+        headBranch: "feat/phase-2-mcp-plan",
+        worktreePath: expect.stringContaining("phase-2-mcp-plan"),
+      }),
+    }));
+    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "workspace-planned" }),
+    }));
+  });
+
+  it("plan_capsule_worktree rejects an unknown taxonomy", async () => {
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "plan_capsule_worktree",
+      { capsuleId: "WC-PLANMCP", taxonomy: "wat" },
+      "user-1",
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("invalid_taxonomy");
+  });
+
   it("claim_capsule_scope stores typed scope claims", async () => {
     mockPrisma.workCapsule.findUnique.mockResolvedValue({
       id: "row-1",
