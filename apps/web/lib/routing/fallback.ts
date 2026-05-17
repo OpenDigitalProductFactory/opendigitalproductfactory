@@ -134,6 +134,7 @@ export async function callWithFallbackChain(
         i === 0 ? plan : undefined,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
+        { agentId },
       );
 
       // EP-INF-004: Record successful request for rate tracking
