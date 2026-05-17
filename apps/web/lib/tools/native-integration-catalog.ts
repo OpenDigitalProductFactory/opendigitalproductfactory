@@ -1,3 +1,5 @@
+import { QUICKBOOKS_READINESS_ENTITY_FAMILIES } from "@/lib/integrate/quickbooks/readiness";
+
 export type NativeIntegrationId =
   | "adp"
   | "quickbooks"
@@ -24,6 +26,9 @@ export type NativeIntegrationDescriptor = {
   enables: string[];
   relevantAgentIds: string[];
   requiredGrantKeys: string[];
+  readiness?: {
+    entityFamilies: readonly string[];
+  };
 };
 
 export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
@@ -56,6 +61,9 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     enables: ["Company context", "Customer context", "Invoice context", "Accounting previews"],
     relevantAgentIds: ["finance-controller", "coo"],
     requiredGrantKeys: ["registry_read"],
+    readiness: {
+      entityFamilies: QUICKBOOKS_READINESS_ENTITY_FAMILIES,
+    },
   },
   {
     id: "stripe",

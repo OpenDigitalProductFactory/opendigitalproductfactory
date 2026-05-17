@@ -56,6 +56,15 @@ docs/prompts/
 .mcp.json
 .vscode/mcp.json
 
+# services/adp ships in its own Docker image (services/adp/Dockerfile) which
+# runs `pnpm install --no-frozen-lockfile` inside an isolated /app/services/adp
+# tree, regenerating the lockfile from package.json on each build. The
+# committed lockfile drifted across 5+ dep-bump PRs without anyone noticing,
+# which is the signal that nothing reads it. Removing it (and ignoring it
+# going forward) eliminates a stale source of Dependabot alerts that don't
+# reflect the runtime container.
+services/adp/pnpm-lock.yaml
+
 # Python bytecode caches
 __pycache__/
 *.pyc

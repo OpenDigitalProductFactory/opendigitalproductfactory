@@ -78,6 +78,10 @@ describe("QuickBooksIntegrationPage", () => {
     expect(html).toContain('data-component="quickbooks-connect-panel"');
     expect(html).toContain('data-company="Old Company"');
     expect(html).toContain('data-status="connected"');
+    expect(html).toContain("QuickBooks Online readiness");
+    expect(html).toContain("Read only");
+    expect(html).toContain("Not mapped");
+    expect(html).toContain("Old Company");
     expect(html).toContain("What this integration enables");
     expect(html).toContain("QuickBooks Online");
   });

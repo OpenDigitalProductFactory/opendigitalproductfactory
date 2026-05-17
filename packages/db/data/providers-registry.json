@@ -760,5 +760,39 @@
       "pricingInfo": "Usage-based pricing",
       "enableUrl": "/admin/services"
     }
+  },
+  {
+    "providerId": "speaches",
+    "name": "Speaches (local STT sidecar)",
+    "category": "direct",
+    "endpointType": "transcription",
+    "baseUrl": "http://dpf-stt:8000",
+    "authMethod": "none",
+    "supportedAuthMethods": [
+      "none"
+    ],
+    "authHeader": null,
+    "costModel": "compute",
+    "families": [],
+    "enabledFamilies": [],
+    "computeWatts": 80,
+    "electricityRateKwh": 0.12,
+    "docsUrl": "https://github.com/speaches-ai/speaches",
+    "consoleUrl": null,
+    "billingLabel": "Local compute · electricity cost only",
+    "costPerformanceNotes": "OpenAI-compatible /v1/audio/transcriptions. Default model: Systran/faster-distil-whisper-large-v3.",
+    "catalogVisibility": "visible",
+    "userFacing": {
+      "plainDescription": "Speech-to-text running entirely on your own hardware via the Speaches sidecar. Audio never leaves your system.",
+      "authExplained": "None needed — the sidecar is reached over the internal Docker network.",
+      "costTier": "free",
+      "costExplained": "Costs only the electricity to run your computer. No per-use charges.",
+      "capabilitySummary": "Transcribes voice notes and dictation. Whisper-derived ASR with high accuracy on English; supports 90+ languages.",
+      "limitations": "Requires the 'stt' Docker Compose profile to be running. Edge-node installs without a GPU may be slower; consider whisper.cpp variant via DPF_STT_IMAGE.",
+      "dataResidency": "Your machine. Audio is processed on the local sidecar; nothing leaves the install.",
+      "setupDifficulty": "automatic",
+      "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."
+    },
+    "supportsToolUse": false
   }
 ]

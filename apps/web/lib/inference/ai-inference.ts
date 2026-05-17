@@ -59,6 +59,16 @@ export type InferenceResult = {
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
+  /**
+   * Verbatim provider response body (matches AdapterResult.raw). Optional —
+   * adapters may leave it undefined when nothing useful exists beyond `content`.
+   *
+   * Populated for callers that need shape-specific fields the projected
+   * InferenceResult doesn't expose. The transcription path (Voice Slice 1,
+   * spec §6.5) reads `raw.segments[].avg_logprob` from Whisper-family
+   * providers to normalize confidence to 0-1; chat callers can ignore it.
+   */
+  raw?: unknown;
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
@@ -66,10 +76,11 @@ export type InferenceResult = {
 export class InferenceError extends Error {
   constructor(
     message: string,
-    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error",
+    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error" | "transient" | "billing" | "request_too_large",
     public readonly providerId: string,
     public readonly statusCode?: number,
     public readonly headers?: Record<string, string>,
+    public readonly rawBody?: string,
   ) {
     super(message);
     this.name = "InferenceError";
@@ -99,18 +110,27 @@ export function classifyHttpError(
     : undefined;
 
   if (status === 401 || status === 403) {
-    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers);
+    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body);
+  }
+  if (status === 402) {
+    return new InferenceError(`Billing error on ${providerId}: ${body.slice(0, 200)}`, "billing", providerId, status, headers, body);
+  }
+  if (status === 413) {
+    return new InferenceError(`Request too large for ${providerId}: ${body.slice(0, 200)}`, "request_too_large", providerId, status, headers, body);
   }
   if (status === 429) {
-    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers);
+    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body);
   }
   if (status === 529 || /\b529\b|overloaded/i.test(body)) {
-    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers);
+    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers, body);
   }
   if (status === 404) {
-    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers);
+    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body);
   }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers);
+  if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
+    return new InferenceError(`Transient error (${status}) from ${providerId}: ${body.slice(0, 200)}`, "transient", providerId, status, headers, body);
+  }
+  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body);
 }
 
 // ─── Build Auth Headers ──────────────────────────────────────────────────────
@@ -340,6 +360,7 @@ export async function callProvider(
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession,
+  attribution?: { agentId?: string | null; threadId?: string | null; skillId?: string | null },
 ): Promise<InferenceResult> {
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -428,9 +449,15 @@ export async function callProvider(
       startedAt: telemetryStartedAt,
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
-      status: err instanceof InferenceError ? "error" : "error",
+      status: "error",
       errorClass: err instanceof InferenceError ? err.code : "unknown",
-      refusalReason: err instanceof Error ? err.message.slice(0, 200) : undefined,
+      httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
+      refusalReason: err instanceof InferenceError
+        ? (err.rawBody ?? err.message)
+        : (err instanceof Error ? err.message : undefined),
+      agentId: attribution?.agentId ?? undefined,
+      threadId: attribution?.threadId ?? undefined,
+      skillId: attribution?.skillId ?? undefined,
     });
     throw err;
   }
@@ -455,6 +482,9 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     toolCallsTotal: result.toolCalls.length,
+    agentId: attribution?.agentId ?? undefined,
+    threadId: attribution?.threadId ?? undefined,
+    skillId: attribution?.skillId ?? undefined,
   });
 
   // 5. Map AdapterResult → InferenceResult
@@ -465,6 +495,9 @@ export async function callProvider(
     inferenceMs: result.inferenceMs,
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
+    // Adapters may set result.raw (e.g. transcription adapter for Whisper
+    // verbose_json segments). Passed through verbatim; undefined when absent.
+    ...(result.raw !== undefined && { raw: result.raw }),
   };
 }
 
