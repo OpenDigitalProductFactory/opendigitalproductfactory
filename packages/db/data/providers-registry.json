@@ -232,12 +232,11 @@
     "authHeader": null,
     "costModel": "compute",
     "families": [
-      "llama3",
-      "llama3.2",
+      "qwen3",
+      "qwen2.5-coder",
+      "gemma4",
       "mistral",
-      "phi3",
-      "gemma2",
-      "gemma4"
+      "nomic-embed"
     ],
     "computeWatts": 150,
     "electricityRateKwh": 0.12,
