@@ -9,6 +9,7 @@ export type McpSetupSnippets = {
   claudeCode: string;
   codex: string;
   vscode: string;
+  syncCommand: string;
 };
 
 export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetupSnippets {
@@ -23,5 +24,6 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   const codex = JSON.stringify({ mcpServers: { dpf: httpEntry } }, null, 2);
   // VS Code: .vscode/mcp.json uses servers (not mcpServers)
   const vscode = JSON.stringify({ servers: { dpf: httpEntry } }, null, 2);
-  return { claudeCode, codex, vscode };
+  const syncCommand = ".\\scripts\\seed-worktree-mcp.ps1";
+  return { claudeCode, codex, vscode, syncCommand };
 }
