@@ -347,6 +347,7 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
   hasAuthoritativeToolExecution?: boolean;
+  allowFirstTurnTextOnlyReply?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
   // to one targeted nudge, it won't respond to more and will just burn tokens.
@@ -368,7 +369,13 @@ export function shouldNudge(params: {
     const text = params.responseText?.trim() ?? "";
     const isAskingClarification = text.length < 250 && CLARIFYING_QUESTION_PATTERN.test(text);
     const isSubstantiveReply = text.length >= 100 && !COMPLETION_CLAIM_PATTERN.test(text) && !NARRATION_PATTERN.test(text);
-    if (isAskingClarification || isSubstantiveReply) return false;
+    const isAllowedDirectReply = !!params.allowFirstTurnTextOnlyReply
+      && text.length > 0
+      && !COMPLETION_CLAIM_PATTERN.test(text)
+      && !NARRATION_PATTERN.test(text)
+      && !PERMISSION_SEEKING_PATTERN.test(text)
+      && !FRUSTRATION_PATTERN.test(text);
+    if (isAskingClarification || isSubstantiveReply || isAllowedDirectReply) return false;
     return true;
   }
 
@@ -429,6 +436,39 @@ export function detectToolRefusedDespiteAvailability(
 export function phaseRequiresToolCall(phase: string | null | undefined): boolean {
   if (!phase) return false;
   return ["ideate", "plan", "build", "review"].includes(phase);
+}
+
+function latestUserText(messages: ChatMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message?.role !== "user" || typeof message.content !== "string") continue;
+    return message.content;
+  }
+  return "";
+}
+
+function shouldAllowProviderStatusTextReply(params: {
+  routeContext: string;
+  taskType?: string;
+  providerId: string;
+  messages: ChatMessage[];
+  responseText: string;
+}): boolean {
+  if (!params.routeContext.startsWith("/platform/ai/providers/")) return false;
+  // Provider-detail status questions are often classified as "unknown" or
+  // platform operations because the route carries most of the intent. The
+  // route and status-language checks below are the durable guard here.
+  if (params.providerId === "local") return false;
+
+  const latestUser = latestUserText(params.messages).toLowerCase();
+  const text = params.responseText.toLowerCase();
+  const userAskedProviderStatus =
+    /\b(?:do you work|are you working|can you respond|provider|model|inference|without using tools|no tools|just answer)\b/.test(latestUser);
+  const answerLooksLikeProviderStatus =
+    /\b(?:chat|inference|provider|model|endpoint|gemini|anthropic|openai|claude|codex)\b/.test(text)
+    && /\b(?:operational|working|available|reachable|responding|unavailable|configured|healthy)\b/.test(text);
+
+  return userAskedProviderStatus || answerLooksLikeProviderStatus;
 }
 
 /**
@@ -1134,6 +1174,13 @@ export async function runAgenticLoop(params: {
             (tool) => tool.name === executedTool.name && tool.sideEffect,
           ),
         ),
+        allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
+          routeContext,
+          taskType,
+          providerId: result.providerId,
+          messages,
+          responseText: trimmed,
+        }),
       });
 
         if (

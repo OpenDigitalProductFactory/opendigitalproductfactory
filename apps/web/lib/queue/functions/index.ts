@@ -20,6 +20,10 @@ import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
+import {
+  postgresDailyBackupScheduled,
+  postgresBackupRequested,
+} from "./postgres-daily-backup";
 
 export const allFunctions = [
   prometheusPoll,
@@ -45,4 +49,6 @@ export const allFunctions = [
   gitPromotionSandboxVerification,
   skillMetricsAggregator,
   skillCurator,
+  postgresDailyBackupScheduled,
+  postgresBackupRequested,
 ];

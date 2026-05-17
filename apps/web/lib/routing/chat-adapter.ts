@@ -58,6 +58,67 @@ function extractResponsesText(
   return text || outputText || "";
 }
 
+const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
+  "$defs",
+  "$id",
+  "$schema",
+  "additionalProperties",
+  "allOf",
+  "anyOf",
+  "const",
+  "default",
+  "definitions",
+  "dependencies",
+  "dependentRequired",
+  "dependentSchemas",
+  "deprecated",
+  "else",
+  "examples",
+  "if",
+  "not",
+  "patternProperties",
+  "propertyNames",
+  "readOnly",
+  "then",
+  "unevaluatedProperties",
+  "writeOnly",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeGeminiSchemaNode(value: unknown, propertyMap = false): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeGeminiSchemaNode(item));
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (!propertyMap && GEMINI_UNSUPPORTED_SCHEMA_KEYS.has(key)) {
+      continue;
+    }
+    sanitized[key] = sanitizeGeminiSchemaNode(child, !propertyMap && key === "properties");
+  }
+  return sanitized;
+}
+
+function toGeminiFunctionDeclarations(tools: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return tools
+    .filter((t) => t.type === "function" && t.function)
+    .map((t) => {
+      const fn = t.function as Record<string, unknown>;
+      return {
+        name: fn.name,
+        description: fn.description,
+        parameters: sanitizeGeminiSchemaNode(fn.parameters),
+      };
+    });
+}
+
 // ─── Chat Adapter ────────────────────────────────────────────────────────────
 
 export const chatAdapter: ExecutionAdapterHandler = {
@@ -158,16 +219,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
       // Convert OpenAI-format function tools to Gemini functionDeclarations format
       if (tools && tools.length > 0) {
-        const functionDeclarations = tools
-          .filter((t: Record<string, unknown>) => t.type === "function" && t.function)
-          .map((t: Record<string, unknown>) => {
-            const fn = t.function as Record<string, unknown>;
-            return {
-              name: fn.name,
-              description: fn.description,
-              parameters: fn.parameters,
-            };
-          });
+        const functionDeclarations = toGeminiFunctionDeclarations(tools);
         if (functionDeclarations.length > 0) {
           body.tools = [...((body.tools as Array<Record<string, unknown>>) ?? []), { functionDeclarations }];
         }

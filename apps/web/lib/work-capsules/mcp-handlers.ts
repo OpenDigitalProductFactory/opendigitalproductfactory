@@ -27,6 +27,7 @@ import {
   recordWorkCapsuleEvidence,
   updateWorkCapsuleStatus,
   type CapsuleDb,
+  type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
 
@@ -80,6 +81,25 @@ function numberParam(params: Record<string, unknown>, key: string): number | nul
 
 function workCapsuleDb(): CapsuleDb {
   return prisma as unknown as CapsuleDb;
+}
+
+async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
+  return heartbeatWorkCapsule({
+    db: workCapsuleDb(),
+    capsuleId,
+    actor: currentActor,
+  });
+}
+
+async function runAutoRenewedCapsuleWrite(args: {
+  capsuleId: string;
+  userId: string;
+  context: ToolContext;
+  write: (currentActor: WorkCapsuleActor) => Promise<unknown>;
+}) {
+  const currentActor = await actor(args.userId, args.context);
+  await args.write(currentActor);
+  return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
 const SCOPE_KINDS = new Set<ScopeClaim["kind"]>(["path", "module", "package", "route", "skill", "prompt"]);
@@ -260,18 +280,24 @@ export async function claimCapsuleScopeTool(
     };
   }
 
-  const capsule = await claimWorkCapsuleScope({
-    db: workCapsuleDb(),
+  const db = workCapsuleDb();
+  const renewedCapsule = await runAutoRenewedCapsuleWrite({
     capsuleId,
-    claims,
-    actor: await actor(userId, context),
+    userId,
+    context,
+    write: (currentActor) => claimWorkCapsuleScope({
+      db,
+      capsuleId,
+      claims,
+      actor: currentActor,
+    }),
   });
 
   return {
     success: true,
-    entityId: capsule.capsuleId,
-    message: `Claimed ${claims.length} scope item(s) for ${capsule.capsuleId}.`,
-    data: { capsule },
+    entityId: renewedCapsule.capsuleId,
+    message: `Claimed ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
+    data: { capsule: renewedCapsule },
   };
 }
 
@@ -291,19 +317,25 @@ export async function updateWorkCapsuleStatusTool(
     };
   }
 
-  const capsule = await updateWorkCapsuleStatus({
-    db: workCapsuleDb(),
+  const db = workCapsuleDb();
+  const renewedCapsule = await runAutoRenewedCapsuleWrite({
     capsuleId,
-    status,
-    reason,
-    actor: await actor(userId, context),
+    userId,
+    context,
+    write: (currentActor) => updateWorkCapsuleStatus({
+      db,
+      capsuleId,
+      status,
+      reason,
+      actor: currentActor,
+    }),
   });
 
   return {
     success: true,
-    entityId: capsule.capsuleId,
-    message: `Updated ${capsule.capsuleId} status to ${status}.`,
-    data: { capsule },
+    entityId: renewedCapsule.capsuleId,
+    message: `Updated ${renewedCapsule.capsuleId} status to ${status}.`,
+    data: { capsule: renewedCapsule },
   };
 }
 
@@ -322,18 +354,24 @@ export async function releaseCapsuleScopeTool(
     };
   }
 
-  const capsule = await releaseWorkCapsuleScope({
-    db: workCapsuleDb(),
+  const db = workCapsuleDb();
+  const renewedCapsule = await runAutoRenewedCapsuleWrite({
     capsuleId,
-    claims,
-    actor: await actor(userId, context),
+    userId,
+    context,
+    write: (currentActor) => releaseWorkCapsuleScope({
+      db,
+      capsuleId,
+      claims,
+      actor: currentActor,
+    }),
   });
 
   return {
     success: true,
-    entityId: capsule.capsuleId,
-    message: `Released ${claims.length} scope item(s) for ${capsule.capsuleId}.`,
-    data: { capsule },
+    entityId: renewedCapsule.capsuleId,
+    message: `Released ${claims.length} scope item(s) for ${renewedCapsule.capsuleId}.`,
+    data: { capsule: renewedCapsule },
   };
 }
 
@@ -512,16 +550,23 @@ export async function recordCapsuleEvidenceTool(
   if (url) evidence.url = url;
   if (Object.prototype.hasOwnProperty.call(params, "result")) evidence.result = params.result;
 
-  await recordWorkCapsuleEvidence({
-    db: workCapsuleDb(),
+  const db = workCapsuleDb();
+  const renewedCapsule = await runAutoRenewedCapsuleWrite({
     capsuleId,
-    evidence,
-    actor: await actor(userId, context),
+    userId,
+    context,
+    write: (currentActor) => recordWorkCapsuleEvidence({
+      db,
+      capsuleId,
+      evidence,
+      actor: currentActor,
+    }),
   });
 
   return {
     success: true,
-    entityId: capsuleId,
-    message: `Recorded evidence for ${capsuleId}.`,
+    entityId: renewedCapsule.capsuleId,
+    message: `Recorded evidence for ${renewedCapsule.capsuleId}.`,
+    data: { capsule: renewedCapsule },
   };
 }

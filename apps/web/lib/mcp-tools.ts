@@ -46,6 +46,7 @@ import {
   listCoworkerCapabilityNeeds,
   submitCoworkerSelfAssessment,
 } from "@/lib/coworker-self-assessment/assessment-service";
+import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import {
   COWORKER_ASSESSMENT_CONFIDENCE,
@@ -110,6 +111,16 @@ export type ToolDefinition = {
     userId: string;
     params?: Record<string, unknown>;
   }) => Promise<boolean>;
+};
+
+export type EndpointTestRunRequest = {
+  endpointId?: string;
+  modelId?: string;
+  taskType?: string;
+  probesOnly: boolean;
+  allEndpoints: boolean;
+  allModels: boolean;
+  error?: string;
 };
 
 /** Derive tool annotations from existing ToolDefinition fields.
@@ -230,6 +241,69 @@ function codeGraphReadToolResult(
     message,
     data: result,
   };
+}
+
+function cleanEndpointTestString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function inferEndpointIdFromRouteContext(routeContext?: string): string | null {
+  return inferProviderIdFromRouteContext(routeContext);
+}
+
+export function buildEndpointTestRunRequest(
+  params: Record<string, unknown>,
+  context?: { routeContext?: string },
+): EndpointTestRunRequest {
+  const explicitEndpointId = cleanEndpointTestString(params["endpointId"]);
+  const inferredEndpointId = inferEndpointIdFromRouteContext(context?.routeContext) ?? undefined;
+  const endpointId = explicitEndpointId ?? inferredEndpointId;
+  const modelId = cleanEndpointTestString(params["modelId"]);
+  const taskType = cleanEndpointTestString(params["taskType"]);
+  const allEndpoints = endpointId ? false : params["allEndpoints"] === true;
+
+  const base: EndpointTestRunRequest = {
+    probesOnly: params["probesOnly"] === false ? false : true,
+    allEndpoints,
+    allModels: params["allModels"] === true,
+    ...(endpointId ? { endpointId } : {}),
+    ...(modelId ? { modelId } : {}),
+    ...(taskType ? { taskType } : {}),
+  };
+
+  if (!endpointId && !allEndpoints) {
+    return {
+      ...base,
+      error: "run_endpoint_tests requires endpointId or allEndpoints=true when it is not used from a provider detail route.",
+    };
+  }
+
+  return base;
+}
+
+async function resolveRepresentativeEndpointModelId(endpointId: string): Promise<string | undefined> {
+  const orderBy = [
+    { toolFidelity: "desc" as const },
+    { reasoning: "desc" as const },
+    { conversational: "desc" as const },
+    { modelId: "asc" as const },
+  ];
+
+  const toolCapable = await prisma.modelProfile.findFirst({
+    where: { providerId: endpointId, modelStatus: "active", supportsToolUse: true },
+    orderBy,
+    select: { modelId: true },
+  });
+  if (toolCapable?.modelId) return toolCapable.modelId;
+
+  const active = await prisma.modelProfile.findFirst({
+    where: { providerId: endpointId, modelStatus: "active" },
+    orderBy,
+    select: { modelId: true },
+  });
+  return active?.modelId;
 }
 
 function optionalString(value: unknown): string | null {
@@ -2780,13 +2854,16 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── Endpoint Testing Tools ──────────────────────────────────────────────
   {
     name: "run_endpoint_tests",
-    description: "Run the agent test harness against one or all endpoints. Tests capability probes (instruction compliance, tool calling, output format) and task scenarios. Results feed into endpoint performance scores and update ModelProfile with evidence.",
+    description: "Run the agent test harness against a scoped endpoint. On provider detail routes, omit endpointId to use the current provider and default to quick probes. Set allEndpoints=true or allModels=true only when the user explicitly asks for exhaustive diagnostics.",
     inputSchema: {
       type: "object",
       properties: {
-        endpointId: { type: "string", description: "Test a specific endpoint (default: all active LLM endpoints)" },
+        endpointId: { type: "string", description: "Provider endpoint to test. Defaults to the current /platform/ai/providers/:providerId route when available." },
+        modelId: { type: "string", description: "Optional model profile to test. Defaults to a representative active model for the endpoint." },
         taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
-        probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: false)" },
+        probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: true for coworker calls)" },
+        allEndpoints: { type: "boolean", description: "Explicitly test every active LLM endpoint. Use only when the user asks for all endpoints." },
+        allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
       },
     },
     requiredCapability: "manage_capabilities",
@@ -10176,11 +10253,23 @@ export async function executeTool(
 
     case "run_endpoint_tests": {
       const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
+      const request = buildEndpointTestRunRequest(params, context);
+
+      if (request.error) {
+        return { success: false, message: request.error };
+      }
+
+      const modelId = request.modelId ?? (
+        request.endpointId && !request.allModels
+          ? await resolveRepresentativeEndpointModelId(request.endpointId)
+          : undefined
+      );
 
       const results = await runEndpointTests({
-        ...(typeof params.endpointId === "string" ? { endpointId: params.endpointId } : {}),
-        ...(typeof params.taskType === "string" ? { taskType: params.taskType } : {}),
-        probesOnly: params.probesOnly === true,
+        ...(request.endpointId ? { endpointId: request.endpointId } : {}),
+        ...(modelId ? { modelId } : {}),
+        ...(request.taskType ? { taskType: request.taskType } : {}),
+        probesOnly: request.probesOnly,
         triggeredBy: userId,
       });
 
@@ -10207,7 +10296,7 @@ export async function executeTool(
         return lines.join("\n");
       }).join("\n\n");
 
-      return { success: true, message: summary || "No endpoints to test.", data: { results } };
+      return { success: true, message: summary || "No endpoints to test.", data: { results, scope: { ...request, ...(modelId ? { modelId } : {}) } } };
     }
 
       case "search_integrations": {

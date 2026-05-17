@@ -597,6 +597,73 @@ describe("runAgenticLoop", () => {
     );
   });
 
+  it("returns direct conversational provider-status answers without forcing diagnostics", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const mockExecuteTool = vi.mocked(executeTool);
+
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Yes - I'm active on the anthropic-sub provider and ready to go.",
+        providerId: "anthropic-sub",
+        modelId: "claude-haiku-4-5-20251001",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Checking endpoint probes.",
+        providerId: "anthropic-sub",
+        modelId: "claude-haiku-4-5-20251001",
+        toolCalls: [
+          {
+            id: "toolu_diagnostics_1",
+            name: "run_endpoint_tests",
+            arguments: { endpointId: "gemini", probesOnly: true },
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Gemini diagnostics are currently failing.",
+        providerId: "anthropic-sub",
+        modelId: "claude-haiku-4-5-20251001",
+      }));
+
+    mockExecuteTool.mockResolvedValueOnce({
+      success: false,
+      message: "Probes 0/8 passed",
+    });
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      chatHistory: [{ role: "user", content: "do you work?" }],
+      routeContext: "/platform/ai/providers/anthropic-sub",
+      agentId: "ai-ops-engineer",
+      taskType: "unknown",
+      tools: [
+        {
+          name: "run_endpoint_tests",
+          description: "Run endpoint diagnostics",
+          inputSchema: {},
+          requiredCapability: null,
+          executionMode: "immediate" as const,
+          sideEffect: false,
+        },
+      ],
+      toolsForProvider: [
+        {
+          type: "function",
+          function: {
+            name: "run_endpoint_tests",
+            description: "Run endpoint diagnostics",
+            parameters: {},
+          },
+        },
+      ],
+    });
+
+    expect(result.content).toBe("Yes - I'm active on the anthropic-sub provider and ready to go.");
+    expect(result.executedTools).toHaveLength(0);
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockRoute).toHaveBeenCalledTimes(1);
+  });
+
   it("returns text-only response when no tool calls (after nudge)", async () => {
     const mockRoute = vi.mocked(routeAndCall);
 
