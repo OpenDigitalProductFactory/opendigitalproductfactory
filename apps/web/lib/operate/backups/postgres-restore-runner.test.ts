@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // the unit tests run without a live DB or live runner.
 vi.mock("@dpf/db", () => ({
   prisma: {
-    backupRun: { findUnique: vi.fn() },
+    backupRun: { findUnique: vi.fn(), upsert: vi.fn() },
     backupRestore: { create: vi.fn(), update: vi.fn() },
   },
 }));
@@ -30,7 +30,10 @@ import { prisma } from "@dpf/db";
 import { runPostgresBackup } from "./postgres-backup-runner";
 
 const mockPrisma = prisma as unknown as {
-  backupRun: { findUnique: ReturnType<typeof vi.fn> };
+  backupRun: {
+    findUnique: ReturnType<typeof vi.fn>;
+    upsert: ReturnType<typeof vi.fn>;
+  };
   backupRestore: {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -127,4 +130,5 @@ describe("runPostgresRestore", () => {
     // past the integrity check.
     expect(mockPrisma.backupRestore.create).not.toHaveBeenCalled();
   });
+
 });
