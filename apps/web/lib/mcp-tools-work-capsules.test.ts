@@ -49,6 +49,9 @@ describe("work capsule MCP tools", () => {
     expect(result.data?.capsules).toEqual([
       expect.objectContaining({ capsuleId: "WC-1", status: "ready" }),
     ]);
+    // read tool — must never touch lease fields
+    expect(mockPrisma.workCapsule.update).not.toHaveBeenCalled();
+    expect(mockPrisma.workCapsuleActivity.create).not.toHaveBeenCalled();
   });
 
   it("get_work_capsule does not renew leases for read-only hydration", async () => {
@@ -225,7 +228,7 @@ describe("work capsule MCP tools", () => {
     const result = await executeTool("claim_capsule_scope", {
       capsuleId: "WC-SCOPE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit" }],
-    }, "user-1");
+    }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
     expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -236,6 +239,17 @@ describe("work capsule MCP tools", () => {
           intent: "edit",
         })],
       }),
+    }));
+    // write tool — must auto-renew the lease after the scope write
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-SCOPE" },
+      data: expect.objectContaining({
+        leaseHolderPrincipalId: "principal-agent",
+        leaseExpiresAt: expect.any(Date),
+      }),
+    }));
+    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });
 
@@ -253,7 +267,7 @@ describe("work capsule MCP tools", () => {
       capsuleId: "WC-STATUS",
       status: "blocked",
       reason: "Provider credential blocked.",
-    }, "user-1");
+    }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
     expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -265,6 +279,17 @@ describe("work capsule MCP tools", () => {
           statusOverride: expect.objectContaining({ reason: "Provider credential blocked." }),
         }),
       }),
+    }));
+    // write tool — must auto-renew the lease after the status write
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-STATUS" },
+      data: expect.objectContaining({
+        leaseHolderPrincipalId: "principal-agent",
+        leaseExpiresAt: expect.any(Date),
+      }),
+    }));
+    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });
 
@@ -296,13 +321,24 @@ describe("work capsule MCP tools", () => {
     const result = await executeTool("release_capsule_scope", {
       capsuleId: "WC-RELEASE",
       claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
-    }, "user-1");
+    }, "user-1", { agentId: "codex" });
 
     expect(result.success).toBe(true);
     expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         scopeClaims: [expect.objectContaining({ kind: "route", value: "/build/work" })],
       }),
+    }));
+    // write tool — must auto-renew the lease after the scope release
+    expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { capsuleId: "WC-RELEASE" },
+      data: expect.objectContaining({
+        leaseHolderPrincipalId: "principal-agent",
+        leaseExpiresAt: expect.any(Date),
+      }),
+    }));
+    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
   });
 });
