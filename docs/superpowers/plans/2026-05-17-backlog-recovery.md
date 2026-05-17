@@ -149,7 +149,7 @@ These are the evidence corpora to scan for Phase B. Each spec or plan typically 
 This plan covers ONLY backlog recovery. Out of scope for this plan but tracked as immediate follow-up:
 
 - ~~**Root-cause analysis of the volume wipe.**~~ **Resolved 2026-05-17T05:30Z** — see §Pre-Phase-A. 5 orphan `dpf-dev-*` containers created from a worktree compose file on 2026-05-12 cause Docker Compose to see project "dpf" as having divergent config_files, which triggers `pgdata` named-volume recreation on subsequent `up` cycles. Fix integrated into Phase A1.0.
-- **Worktree project-name isolation (permanent fix for the same class of bug).** Each worktree should declare a unique `COMPOSE_PROJECT_NAME=dpf-<topic>` so worktree compose state never contaminates the root project. Separate PR after recovery stable. Touches `scripts/seed-worktree-mcp.{ps1,sh}` (the worktree bootstrap) plus an `AGENTS.md` §4 addition forbidding `docker compose up` from a worktree.
+- **Worktree project-name isolation (permanent fix for the same class of bug).** The runtime data-safety guard slice makes `docker-compose.yml` read `${COMPOSE_PROJECT_NAME:-dpf}`, updates `scripts/seed-worktree-mcp.{ps1,sh}` to write a unique ignored `.env` value for linked worktrees, and routes integration-harness Compose calls through `scripts/dpf-compose.mjs` with a unique CI project name.
 - **Postgres backup mechanism (Q2 yes-recommended).** Mark has standing OK to spec an automated `pg_dump` + retention policy. Owned by a separate plan, opened immediately after this recovery completes.
 - **MCP backlog tool grant verification.** If the executor cannot reach the DPF MCP tools, Phase B falls back to direct DB writes — but the executor must verify MCP first and document the fallback choice.
 

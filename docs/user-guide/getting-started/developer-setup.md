@@ -75,6 +75,8 @@ If you have an older install with `packages/db/.env`, Prisma still treats it as 
 
 **Start databases (with ports exposed to host):**
 
+If you are in a linked git worktree, run `scripts/seed-worktree-mcp.ps1` on Windows or `scripts/seed-worktree-mcp.sh` on macOS / Linux before any Compose command. The seeder writes an ignored `.env` value like `COMPOSE_PROJECT_NAME=dpf-<topic>` so worktree containers and volumes cannot join the root `dpf` project.
+
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres neo4j qdrant
 ```
