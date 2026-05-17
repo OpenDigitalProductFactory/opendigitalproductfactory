@@ -93,6 +93,8 @@ model User {
   workSchedule                 WorkSchedule?
   adminActivities              AdminActivity[]
   userFacts                    UserFact[]
+  decisionEscalationsResolved  EscalationCapture[]           @relation("DecisionEscalationResolverUser")
+  triggeredDecisionInteractions DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
   scheduledAgentTasks          ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
   addedLocalities              City[]                        @relation("CityAddedByUser")
 }
@@ -238,6 +240,9 @@ model Principal {
   documentAccessGrants  DocumentAccessGrant[] @relation("DocumentAccessGrantPrincipal")
   documentAccessGrantsCreated DocumentAccessGrant[] @relation("DocumentAccessGrantCreator")
   documentLifecycleEvents DocumentLifecycleEvent[] @relation("DocumentLifecycleActor")
+  ownedDecisionPerspectiveProfiles DecisionPerspectiveProfile[] @relation("DecisionPerspectiveProfileOwner")
+  promotedDecisionPerspectiveVersions DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersionPromoter")
+  decisionEscalationsResolved EscalationCapture[] @relation("DecisionEscalationResolverPrincipal")
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 }
@@ -588,6 +593,7 @@ model DigitalProduct {
   businessModelRoleAssignments BusinessModelRoleAssignment[]
   knowledgeArticles            KnowledgeArticleProduct[]
   workQueues                   WorkQueue[]
+  businessCapabilityLinks      BusinessCapabilityTraceLink[] @relation("BusinessCapabilityProductLinks")
 }
 
 model BusinessModel {
@@ -900,6 +906,7 @@ model TaxonomyNode {
   backlogItems             BacklogItem[]
   products                 DigitalProduct[]
   eaElements               EaElement[]
+  businessCapabilityLinks      BusinessCapabilityTraceLink[] @relation("BusinessCapabilityTaxonomyLinks")
   fingerprintRules         DiscoveryFingerprintRule[]
   inventoryEntities        InventoryEntity[]
   portfolioQualityIssues   PortfolioQualityIssue[]
@@ -954,6 +961,7 @@ model BacklogItem {
   taxonomyNode          TaxonomyNode?            @relation(fields: [taxonomyNodeId], references: [id])
   activities            BacklogItemActivity[]
   coworkerNeeds         CoworkerCapabilityNeed[] @relation("BacklogItemCoworkerCapabilityNeeds")
+  businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
@@ -1523,6 +1531,58 @@ model ScheduledJob {
   lastError  String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+}
+
+// Per-run audit log for platform-managed backups (Postgres in Slice 1; Neo4j/
+// Qdrant in later slices). The ScheduledJob row with jobId
+// "postgres-daily-backup" is the live heartbeat; BackupRun rows are durable
+// history surfaced in the /admin/backups UX.
+// See docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.7.
+model BackupRun {
+  id           String    @id @default(cuid())
+  target       String    @default("postgres")
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  status       String
+  trigger      String
+  schedule     String?
+  sizeBytes    BigInt?
+  durationMs   Int?
+  sha256       String?
+  pgVersion    String?
+  dpfVersion   String?
+  storagePath  String
+  errorMessage String?
+  prunedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  restoresFrom BackupRestore[] @relation("BackupRestoreSource")
+  safetyFor    BackupRestore[] @relation("BackupRestoreSafety")
+
+  @@index([startedAt])
+  @@index([status])
+  @@index([target, status])
+}
+
+// Audit row for every restore operation. Strongly gated in the UX (typed
+// confirmation); never automatic. Each restore writes a pre-restore safety
+// dump first; preRestoreBackupRunId points at that BackupRun.
+model BackupRestore {
+  id                    String    @id @default(cuid())
+  startedAt             DateTime  @default(now())
+  finishedAt            DateTime?
+  status                String
+  initiatedByUserId     String?
+  sourceBackupRunId     String
+  preRestoreBackupRunId String?
+  errorMessage          String?
+  createdAt             DateTime  @default(now())
+
+  sourceBackup     BackupRun  @relation("BackupRestoreSource", fields: [sourceBackupRunId], references: [id])
+  preRestoreBackup BackupRun? @relation("BackupRestoreSafety", fields: [preRestoreBackupRunId], references: [id])
+
+  @@index([startedAt])
+  @@index([status])
 }
 
 model CodeGraphIndexState {
@@ -2190,6 +2250,35 @@ model AdapterRunTelemetry {
   @@index([agentId, startedAt])
 }
 
+// Voice Slice 2 — Transcript cleanup audit row.
+//
+// Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §8 Slice 2, §9
+// Plan: docs/superpowers/plans/2026-05-17-voice-input-slice-2-cleanup-and-bias.md
+//
+// Written only when the cleanup pass either (a) detected injection-shape,
+// or (b) materially rewrote the raw transcript (Levenshtein ratio > 0.3).
+// Per spec §9, no-op cleanups are NOT logged to avoid bloating the table
+// — quality regression is detected from the rows we do write.
+model TranscriptCleanupAudit {
+  id                   String   @id @default(cuid())
+  threadId             String?
+  agentMessageId       String?
+  userId               String?
+  rawText              String   @db.Text
+  cleanedText          String   @db.Text
+  levenshteinRatio     Float
+  injectionSuspected   Boolean  @default(false)
+  injectionIndicators  String[] // populated when injectionSuspected = true
+  providerId           String?  // cleanup-pass provider; null when short-circuited before LLM
+  modelId              String?
+  durationMs           Int?
+  createdAt            DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([injectionSuspected])
+  @@index([threadId, createdAt])
+}
+
 model Engagement {
   id            String   @id @default(cuid())
   engagementId  String   @unique // ENG-<uuid>
@@ -2401,6 +2490,7 @@ model Organization {
   wikiIngestEvents              WikiIngestEvent[]
   wikiLintFindings              WikiLintFinding[]
   documents                     Document[]
+  decisionPerspectiveProfiles   DecisionPerspectiveProfile[]
 }
 
 model BusinessContext {
@@ -3995,6 +4085,7 @@ model FeatureBuild {
   promotionBackups         PromotionBackup[]
   issueReports             PlatformIssueReport[]
   sandboxes                Sandbox[]
+  decisionInteractions     DecisionInteraction[]
 
   @@index([phase])
   @@index([createdById])
@@ -4236,6 +4327,7 @@ model TaskRun {
   messages           TaskMessage[]
   artifacts          TaskArtifact[]
   deliberationRuns   DeliberationRun[]
+  decisionInteractions DecisionInteraction[]
 
   @@index([userId, status])
   @@index([threadId])
@@ -4614,11 +4706,66 @@ model EaElement {
   fromRelationships EaRelationship[]     @relation("FromElement")
   toRelationships   EaRelationship[]     @relation("ToElement")
   viewElements      EaViewElement[]
+  businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityEaElementLinks")
 
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
   @@index([elementTypeId])
+}
+
+
+model BusinessCapability {
+  id                String                        @id @default(cuid())
+  capabilityId      String                        @unique
+  name              String
+  slug              String
+  description       String?
+  level             Int
+  sortOrder         Int                           @default(0)
+  status            String                        @default("active")
+  parentId          String?
+  currentMaturity   Int                           @default(1)
+  targetMaturity    Int                           @default(3)
+  maturityRationale String?
+  it4itValueStreams String[]                      @default([])
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  parent            BusinessCapability?           @relation("BusinessCapabilityTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children          BusinessCapability[]          @relation("BusinessCapabilityTree")
+  traceLinks        BusinessCapabilityTraceLink[]
+
+  @@unique([parentId, slug])
+  @@index([parentId, sortOrder])
+  @@index([level, status])
+}
+
+model BusinessCapabilityTraceLink {
+  id               String             @id @default(cuid())
+  capabilityId     String
+  targetType       String
+  targetId         String
+  relationship     String             @default("supports")
+  note             String?
+  taxonomyNodeId   String?
+  digitalProductId String?
+  backlogItemId    String?
+  eaElementId      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  capability       BusinessCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  taxonomyNode     TaxonomyNode?      @relation("BusinessCapabilityTaxonomyLinks", fields: [taxonomyNodeId], references: [id], onDelete: Cascade)
+  digitalProduct   DigitalProduct?    @relation("BusinessCapabilityProductLinks", fields: [digitalProductId], references: [id], onDelete: Cascade)
+  backlogItem      BacklogItem?       @relation("BusinessCapabilityBacklogLinks", fields: [backlogItemId], references: [id], onDelete: Cascade)
+  eaElement        EaElement?         @relation("BusinessCapabilityEaElementLinks", fields: [eaElementId], references: [id], onDelete: Cascade)
+
+  @@unique([capabilityId, targetType, targetId, relationship])
+  @@index([capabilityId])
+  @@index([targetType, targetId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+  @@index([backlogItemId])
+  @@index([eaElementId])
 }
 
 model EaRelationship {
@@ -7734,6 +7881,7 @@ model DeliberationRun {
   claims          ClaimRecord[]
   evidenceBundles EvidenceBundle[]
   branchNodes     TaskNode[]             @relation("DeliberationRunBranchNodes")
+  decisionInteractions DecisionInteraction[]
 
   @@index([taskRunId])
   @@index([patternId])
@@ -7831,6 +7979,184 @@ model EvidenceSource {
 
   @@index([evidenceBundleId])
   @@index([sourceType])
+}
+
+model DecisionPerspectiveProfile {
+  id                  String                  @id @default(cuid())
+  profileId           String                  @unique
+  name                String
+  kind                String
+  scope               Json                    @default("{}")
+  ownerOrganizationId String?
+  ownerPrincipalId    String?
+  fallbackProfileId   String?
+  currentVersionId    String?                 @unique
+  defaultResolver     Json?
+  autonomyPolicy      Json                    @default("{}")
+  status              String                  @default("active")
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  ownerOrganization   Organization?           @relation(fields: [ownerOrganizationId], references: [id], onDelete: SetNull)
+  ownerPrincipal      Principal?              @relation("DecisionPerspectiveProfileOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  fallbackProfile     DecisionPerspectiveProfile? @relation("DecisionPerspectiveProfileFallback", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  fallbackChildren    DecisionPerspectiveProfile[] @relation("DecisionPerspectiveProfileFallback")
+  currentVersion      DecisionPerspectiveProfileVersion? @relation("DecisionPerspectiveProfileCurrentVersion", fields: [currentVersionId], references: [versionId], onDelete: SetNull)
+  versions            DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersions")
+  materials           PerspectiveMaterial[]
+  interactions        DecisionInteraction[]   @relation("DecisionInteractionProfile")
+  fallbackInteractions DecisionInteraction[]  @relation("DecisionInteractionFallbackProfile")
+
+  @@index([kind, status])
+  @@index([ownerOrganizationId])
+  @@index([ownerPrincipalId])
+  @@index([fallbackProfileId])
+}
+
+model DecisionPerspectiveProfileVersion {
+  id                    String                     @id @default(cuid())
+  versionId             String                     @unique
+  profileId             String
+  versionNumber         Int
+  materialFingerprint   String
+  changeSummary         String?
+  promotedByPrincipalId String?
+  createdAt             DateTime                   @default(now())
+  profile               DecisionPerspectiveProfile @relation("DecisionPerspectiveProfileVersions", fields: [profileId], references: [profileId], onDelete: Cascade)
+  currentForProfile     DecisionPerspectiveProfile? @relation("DecisionPerspectiveProfileCurrentVersion")
+  promotedByPrincipal   Principal?                 @relation("DecisionPerspectiveProfileVersionPromoter", fields: [promotedByPrincipalId], references: [id], onDelete: SetNull)
+  materials             PerspectiveMaterial[]
+  interactions          DecisionInteraction[]
+
+  @@unique([profileId, versionNumber])
+  @@index([profileId])
+  @@index([promotedByPrincipalId])
+}
+
+model PerspectiveMaterial {
+  id               String                     @id @default(cuid())
+  materialId       String                     @unique
+  profileId        String
+  profileVersionId String?
+  sourceType       String
+  sourceRef        Json                       @default("{}")
+  scope            Json                       @default("{}")
+  domainClass      String                     @default("plan-readiness")
+  direction        String                     @default("neutral")
+  domains          String[]                   @default([])
+  freshness        String                     @default("current")
+  evidenceGrade    String                     @default("A")
+  stalenessPolicy  Json?
+  lastValidatedAt  DateTime?
+  confidenceWeight Float                      @default(0.5)
+  reviewStatus     String                     @default("draft")
+  promotionState   String                     @default("candidate")
+  summary          String?                    @db.Text
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  profile          DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion   DecisionPerspectiveProfileVersion? @relation(fields: [profileVersionId], references: [versionId], onDelete: SetNull)
+
+  @@index([profileId, freshness])
+  @@index([profileId, reviewStatus, promotionState])
+  @@index([profileId, domainClass])
+  @@index([profileVersionId])
+  @@index([domainClass])
+  @@index([direction])
+  @@index([evidenceGrade])
+  @@index([sourceType])
+}
+
+model DecisionInteraction {
+  id                String                     @id @default(cuid())
+  interactionId     String                     @unique
+  profileId         String
+  profileVersionId  String
+  fallbackProfileId String?
+  buildId           String?
+  taskRunId         String?
+  deliberationRunId String?
+  triggeredByUserId String?
+  routeContext      String?
+  phaseFrom         String?
+  phaseTo           String?
+  domainClass       String                     @default("plan-readiness")
+  question          String                     @db.Text
+  options           Json                       @default("[]")
+  evidenceBundle    Json                       @default("{}")
+  sources           Json                       @default("[]")
+  rationale         String?                    @db.Text
+  riskTier          String
+  confidenceBefore  Float?
+  confidenceAfter   Float?
+  outcomeType       String
+  principleConflict Boolean                    @default(false)
+  outcomePayload    Json                       @default("{}")
+  humanOutcome      Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  profile           DecisionPerspectiveProfile @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion    DecisionPerspectiveProfileVersion @relation(fields: [profileVersionId], references: [versionId], onDelete: Restrict)
+  fallbackProfile   DecisionPerspectiveProfile? @relation("DecisionInteractionFallbackProfile", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  build             FeatureBuild?              @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  taskRun           TaskRun?                   @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
+  deliberationRun   DeliberationRun?           @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  triggeredByUser   User?                      @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  escalationCapture EscalationCapture?
+  deferralCapture   DeferralCapture?
+
+  @@index([profileId, createdAt])
+  @@index([profileVersionId])
+  @@index([fallbackProfileId])
+  @@index([buildId, createdAt])
+  @@index([taskRunId])
+  @@index([deliberationRunId])
+  @@index([triggeredByUserId])
+  @@index([domainClass, createdAt])
+  @@index([outcomeType, createdAt])
+  @@index([principleConflict, createdAt])
+  @@index([riskTier, createdAt])
+}
+
+model EscalationCapture {
+  id                  String              @id @default(cuid())
+  escalationId        String              @unique
+  interactionId       String              @unique
+  resolverPrincipalId String?
+  resolverUserId      String?
+  prompt              String              @db.Text
+  answer              String?             @db.Text
+  criteria            Json                @default("[]")
+  rationale           String?             @db.Text
+  objectionsResolved  Json                @default("[]")
+  domainClass         String
+  candidateMaterial   Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  interaction         DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  resolverPrincipal   Principal?          @relation("DecisionEscalationResolverPrincipal", fields: [resolverPrincipalId], references: [id], onDelete: SetNull)
+  resolverUser        User?               @relation("DecisionEscalationResolverUser", fields: [resolverUserId], references: [id], onDelete: SetNull)
+
+  @@index([resolverPrincipalId])
+  @@index([resolverUserId])
+  @@index([domainClass])
+  @@index([candidateMaterial])
+}
+
+model DeferralCapture {
+  id                   String              @id @default(cuid())
+  deferralId           String              @unique
+  interactionId        String              @unique
+  domain               String
+  gapReason            String
+  suggestedSourceTypes String[]            @default([])
+  candidateMaterial    Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  interaction          DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([domain, createdAt])
+  @@index([gapReason])
+  @@index([candidateMaterial])
 }
 
 // ── DPF Edge Node (Phase 0 — A1) ────────────────────────────────────────────

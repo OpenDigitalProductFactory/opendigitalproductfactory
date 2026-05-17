@@ -65,6 +65,27 @@ describe("assignTierFromModelId", () => {
     });
   });
 
+  describe("Gemini 3.x tier classification", () => {
+    it("assigns strong to gemini-3-pro-preview", () => {
+      expect(assignTierFromModelId("gemini-3-pro-preview")).toBe("strong");
+    });
+    it("assigns strong to gemini-3-pro-image-preview", () => {
+      expect(assignTierFromModelId("gemini-3-pro-image-preview")).toBe("strong");
+    });
+    it("assigns strong to gemini-3.1-pro-preview", () => {
+      expect(assignTierFromModelId("gemini-3.1-pro-preview")).toBe("strong");
+    });
+    it("assigns strong to gemini-3.1-pro-preview-customtools", () => {
+      expect(assignTierFromModelId("gemini-3.1-pro-preview-customtools")).toBe("strong");
+    });
+    it("assigns adequate to gemini-3-flash-preview (flash stays adequate)", () => {
+      expect(assignTierFromModelId("gemini-3-flash-preview")).toBe("adequate");
+    });
+    it("assigns strong to gemini-2.5-pro (existing)", () => {
+      expect(assignTierFromModelId("gemini-2.5-pro")).toBe("strong");
+    });
+  });
+
   describe("unknown models", () => {
     it("returns adequate as conservative default", () => {
       expect(assignTierFromModelId("some-unknown-model")).toBe("adequate");

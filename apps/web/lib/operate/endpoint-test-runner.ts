@@ -79,6 +79,7 @@ export function mapScoresToCodingCapability(
 async function runProbe(
   probe: CapabilityProbe,
   providerId: string,
+  modelId: string,
 ): Promise<ProbeRunResult> {
   try {
     const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...probe.promptOverrides };
@@ -90,6 +91,7 @@ async function runProbe(
     const result = await routeAndCall(messages, systemPrompt, promptInput.sensitivity, {
       ...(probeToolsFormatted ? { tools: probeToolsFormatted } : {}),
       preferredProviderId: providerId,
+      ...(modelId !== "default" ? { preferredModelId: modelId } : {}),
     });
 
     // Detect failover — if a different endpoint answered, mark as infrastructure failure
@@ -112,6 +114,7 @@ async function runProbe(
 async function runScenario(
   scenario: TestScenario,
   providerId: string,
+  modelId: string,
 ): Promise<ScenarioRunResult> {
   try {
     const promptInput: PromptInput = { ...TEST_PROMPT_DEFAULTS, ...scenario.promptOverrides };
@@ -123,6 +126,7 @@ async function runScenario(
     const result = await routeAndCall(messages, systemPrompt, promptInput.sensitivity, {
       ...(scenarioToolsFormatted ? { tools: scenarioToolsFormatted } : {}),
       preferredProviderId: providerId,
+      ...(modelId !== "default" ? { preferredModelId: modelId } : {}),
     });
 
     if (result.downgraded) {
@@ -237,7 +241,7 @@ export async function runEndpointTests(opts: {
     // Run probes against this model's provider via V2 routing with preferred provider bias.
     const probeResults: ProbeRunResult[] = [];
     for (const probe of CAPABILITY_PROBES) {
-      const result = await runProbe(probe, providerId);
+      const result = await runProbe(probe, providerId, modelId);
       probeResults.push(result);
     }
 
@@ -255,7 +259,7 @@ export async function runEndpointTests(opts: {
       ).filter((s) => s.requiredProbes.every((rp) => probePassMap[rp]));
 
       for (const scenario of eligibleScenarios) {
-        const result = await runScenario(scenario, providerId);
+        const result = await runScenario(scenario, providerId, modelId);
         scenarioResults.push(result);
 
         // Record TaskEvaluation for scenarios with orchestrator scores

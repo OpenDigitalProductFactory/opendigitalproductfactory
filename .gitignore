@@ -12,7 +12,10 @@ packages/db/generated/
 .playwright-cli/
 .pnpm-store/
 docker-compose.override.yml
-backups/
+# Host-side platform-managed backup dumps (root-anchored so the pattern
+# does NOT match source-tree directories like apps/web/lib/operate/backups/
+# or apps/web/app/(shell)/admin/backups/, which are checked in.)
+/backups/
 
 # Git LFS writes generated hook shims into core.hooksPath=.githooks.
 .githooks/post-checkout
@@ -46,6 +49,7 @@ test-results/
 # Local verification and handoff artifacts
 output/
 tmp/
+.codex-runtime/
 docs/prompts/
 
 # MCP client configs contain live bearer tokens — must never be committed.

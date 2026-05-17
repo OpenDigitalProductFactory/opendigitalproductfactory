@@ -15,6 +15,7 @@ import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { BuildListItem } from "./BuildListItem";
+import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
@@ -28,11 +29,13 @@ import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 import { deriveLifecycleLabel } from "@/lib/governed-backlog-workflow";
+import type { PortalContextEnvelope } from "@/lib/portal-context";
 import {
   BUILD_STUDIO_TEST_IDS,
   getBuildStudioGraphPanelClassName,
   getBuildStudioShellClassName,
   getBuildStudioSidebarClassName,
+  shouldOpenBuildStudioSidebarByDefault,
 } from "./build-studio-layout";
 
 type Props = {
@@ -43,6 +46,7 @@ type Props = {
   projectBranch?: string | null;
   submissionBranchShortId?: string | null;
   initialBuildId?: string | null;
+  portalContext?: PortalContextEnvelope | null;
 };
 
 export function BuildStudio({
@@ -53,6 +57,7 @@ export function BuildStudio({
   projectBranch,
   submissionBranchShortId,
   initialBuildId,
+  portalContext,
 }: Props) {
   const router = useRouter();
   const buildRows = Array.isArray(builds) ? builds : [];
@@ -63,7 +68,11 @@ export function BuildStudio({
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    shouldOpenBuildStudioSidebarByDefault(
+      typeof window === "undefined" ? undefined : window.innerWidth,
+    ),
+  );
   const isDevEnvironment = dpfEnvironment === "dev";
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
@@ -139,6 +148,15 @@ export function BuildStudio({
         if (!cancelled) setCodeGraphFreshness(null);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const syncSidebarToViewport = () => {
+      setSidebarOpen(shouldOpenBuildStudioSidebarByDefault(window.innerWidth));
+    };
+    syncSidebarToViewport();
+    window.addEventListener("resize", syncSidebarToViewport);
+    return () => window.removeEventListener("resize", syncSidebarToViewport);
   }, []);
 
   useEffect(() => {
@@ -418,6 +436,7 @@ export function BuildStudio({
 
         {/* Right: Preview or Brief */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
+          <PortalContextStrip envelope={portalContext ?? null} />
           {activeBuild ? (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">

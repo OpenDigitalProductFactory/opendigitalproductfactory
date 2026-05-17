@@ -54,6 +54,10 @@ vi.mock("@/lib/route-context", () => ({
   getRouteDataContext: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@/lib/portal-context", () => ({
+  resolvePortalContextEnvelope: vi.fn(),
+}));
+
 vi.mock("@/lib/wiki/recall", () => ({
   recallWikiContext: vi.fn().mockResolvedValue(null),
 }));
@@ -165,6 +169,7 @@ vi.mock("@dpf/db", () => ({
     // non-build threads (the tests don't cover the build route).
     featureBuild: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
     },
     platformIssueReport: {
       create: vi.fn(),
@@ -178,6 +183,7 @@ import { routeAndCall } from "@/lib/routed-inference";
 import { classifyTask } from "@/lib/task-classifier";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 
@@ -189,6 +195,7 @@ const mockGetAvailableTools = getAvailableTools as ReturnType<typeof vi.fn>;
 const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
 const mockGovernedExecuteTool = governedExecuteTool as ReturnType<typeof vi.fn>;
+const mockResolvePortalContextEnvelope = resolvePortalContextEnvelope as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
 
 describe("agent coworker external access", () => {
@@ -216,6 +223,14 @@ describe("agent coworker external access", () => {
     mockPrisma.agentAttachment.findMany.mockResolvedValue([]);
     mockPrisma.agent.findUnique.mockResolvedValue(null);
     mockPrisma.taskRun.findFirst.mockResolvedValue(null);
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      buildId: "FB-123",
+      phase: "implement",
+      threadId: "thread-1",
+      buildExecState: null,
+      verificationOut: null,
+      taskResults: null,
+    });
     mockPrisma.agentActionProposal.create.mockResolvedValue({
       proposalId: "AP-TRACE",
       actionType: "create_backlog_item",
@@ -226,6 +241,13 @@ describe("agent coworker external access", () => {
     });
     mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
     mockPrisma.toolExecution.create.mockResolvedValue({});
+    mockResolvePortalContextEnvelope.mockResolvedValue({
+      promptDigest: "Route: /build\nBuild: FB-123 phase=implement status=active\nCapsule: WC-123 status=claimed executor=codex",
+      anchors: [
+        { kind: "build", id: "FB-123", label: "Portal context build", href: "/build?buildId=FB-123" },
+        { kind: "capsule", id: "WC-123", label: "Portal context capsule", href: "/build/work/WC-123" },
+      ],
+    });
     mockClassifyTask.mockReturnValue({
       taskType: "conversation",
       confidence: 0.8,
@@ -292,6 +314,55 @@ describe("agent coworker external access", () => {
       },
       expect.objectContaining({ externalAccessEnabled: true }),
     );
+  });
+
+  it("injects portal context digest and stable anchors into supported route prompts", async () => {
+    mockGetAvailableTools.mockReturnValue([]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "I can see the anchored Build Studio context.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+    });
+    mockResolvePortalContextEnvelope.mockResolvedValueOnce({
+      promptDigest: [
+        "Route: /build",
+        "Build: FB-123 phase=implement status=active",
+        "Capsule: WC-123 status=claimed executor=codex",
+      ].join("\n"),
+      anchors: [
+        { kind: "build", id: "FB-123", label: "Portal context build", href: "/build?buildId=FB-123" },
+        { kind: "capsule", id: "WC-123", label: "Portal context capsule", href: "/build/work/WC-123" },
+      ],
+      rawPayload: "TOKEN=abc123",
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "What should happen next?",
+      routeContext: "/build",
+      buildId: "FB-123",
+    });
+
+    expect(mockResolvePortalContextEnvelope).toHaveBeenCalledWith(
+      {
+        pathname: "/build",
+        routeContext: "/build",
+        buildId: "FB-123",
+        threadId: "thread-1",
+      },
+      "user-1",
+    );
+    const prompt = String(mockRouteAndCall.mock.calls[0]?.[1] ?? "");
+    expect(prompt).toContain("--- PORTAL CONTEXT ---");
+    expect(prompt).toContain("Build: FB-123 phase=implement status=active");
+    expect(prompt).toContain("Anchors: build:FB-123, capsule:WC-123");
+    expect(prompt).not.toContain("TOKEN=abc123");
   });
 
   it("adds shared External Access request guidance and audit when web tools are withheld", async () => {

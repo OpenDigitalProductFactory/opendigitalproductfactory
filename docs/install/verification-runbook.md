@@ -30,7 +30,7 @@
 | Path | What CI proves | What this runbook covers | Status |
 |------|----------------|--------------------------|--------|
 | Repository unit tests | `.github/workflows/ci.yml` runs `pnpm test` with an ephemeral Postgres service and `prisma migrate deploy` before the package tests | Local package-specific repros when a test is tied to host Docker state, platform credentials, or a dirty install | 🧪 **CI informational until issue #104 is drained** |
-| Windows installer | n/a (no CI gate today) | Production usage by real users | ✓ verified |
+| Windows installer | n/a (no CI gate today) | One-command wrapper now available (`verify-install-windows.ps1`); community reports wanted | ✓ verified — formal reports now enabled |
 | Linux end-to-end install | `install-verification.yml` (ubuntu-latest, dev + release modes) — full compose up, `/api/health=200`, doctor bundle | Distro coverage beyond Ubuntu: Debian 12, Fedora 39. Autostart-after-reboot. | 🙋 **reports wanted** |
 | macOS end-to-end install | dry-run only (`macos-14` can't nest-virt Docker Desktop) | The actual `.dmg` install + Docker Desktop boot + portal up + LaunchAgent reboot survival | 🙋 **reports wanted** |
 | Discovery collectors (darwin) | unit tests with mocked deps | Real `pkgutil --pkgs` / `brew list` enumeration emits sensible discovery items | 🙋 **reports wanted** |
@@ -46,9 +46,10 @@
 
 ## Fastest path: one command for the whole sweep
 
-If you just want to run **all** the Linux + observability + Edge Node
-verification in one shot and produce one tarball to attach to a GitHub
-issue, use the wrapper:
+### Linux + macOS
+
+Run the bash wrapper to verify the full install + Edge Node path and
+produce one tarball:
 
 ```bash
 # On a host that already has DPF installed and running:
@@ -61,23 +62,47 @@ bash install-dpf.sh --headless --release --no-autostart
 bash scripts/verify-install-edge.sh
 ```
 
-The wrapper covers ledger rows 1–4 in a single sweep:
+The wrapper covers ledger rows 1-4 in a single sweep:
 
 - Captures host fingerprint (uname, sw_vers / os-release, docker / node / pnpm versions, installer version)
+- On macOS: checks architecture (arm64), LaunchAgent loaded, Docker Model Runner reachable
 - Asserts portal `/api/health` returns 200
 - Snapshots Prometheus scrape targets (observability outcome)
 - Issues a bootstrap token via `apps/web/scripts/issue-edge-bootstrap-token.ts`
-- Runs `services/edge-node/scripts/verify-lifecycle.ts` end-to-end (enroll → heartbeat → discovery-run + idempotency)
+- Runs `services/edge-node/scripts/verify-lifecycle.ts` end-to-end (enroll -> heartbeat -> discovery-run + idempotency)
 - Captures `install-dpf.sh doctor` diagnostic bundle
 - Bundles everything into `~/.dpf/verify-bundle-<timestamp>.tar.gz` and prints a paste-able markdown summary
 
-Attach the resulting tarball to a [new install-verification issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md)
-and paste the printed summary into the body. That's a complete
-verification report for the Linux row of the matrix.
+### Windows
 
-The wrapper does **not** cover macOS (no `--bootstrap` path for the
-`.dmg` install yet), real-LAN multi-host, or the TAPPaaS / Edge / cloud
-substrate spikes. Those still need the manual sections below.
+Run the PowerShell wrapper from the repo root:
+
+```powershell
+# On a host that already has DPF installed and running:
+.\scripts\verify-install-windows.ps1
+
+# Override the portal URL (e.g. remote host):
+.\scripts\verify-install-windows.ps1 -AuthorityUrl http://my-host:3000
+```
+
+The wrapper covers the same surface as the bash version, adapted for Windows:
+
+- Captures host fingerprint (Windows edition, architecture, Docker Desktop, Node, pnpm)
+- Checks Docker Desktop is running (`docker info`)
+- Asserts portal `/api/health` returns 200
+- Checks Docker Model Runner reachability (SKIP if using external LLM_BASE_URL)
+- Snapshots Prometheus scrape targets (SKIP if monitoring profile not active)
+- Issues a bootstrap token and runs Edge Node lifecycle verification
+- Bundles everything into `%USERPROFILE%\.dpf\verify-bundle-<timestamp>.zip`
+
+### Filing a report
+
+Attach the resulting bundle (`.tar.gz` on Linux/macOS, `.zip` on Windows)
+to a [new install-verification issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md)
+and paste the printed summary into the body.
+
+The wrappers do **not** cover real-LAN multi-host, TAPPaaS, or cloud
+substrate pilots. Those still need the manual sections below.
 
 ## Local scratch rehearsal before promotion
 

@@ -9,8 +9,12 @@ import { prisma } from "@dpf/db";
 import {
   canTransitionPhase,
   checkPhaseGate,
+  normalizeHappyPathState,
+  type BuildDeliberationSummary,
   type BuildPhase,
+  type ReviewResult,
 } from "@/lib/feature-build-types";
+import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -41,15 +45,19 @@ export async function POST(request: NextRequest): Promise<Response> {
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
+      buildId: true,
+      title: true,
       phase: true,
       originatingBacklogItemId: true,
       draftApprovedAt: true,
       designDoc: true,
       designReview: true,
+      plan: true,
       buildPlan: true,
       planReview: true,
       verificationOut: true,
       acceptanceMet: true,
+      deliberationSummary: true,
       threadId: true,
     },
   });
@@ -94,6 +102,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   const gate = checkPhaseGate(currentPhase, targetPhase, {
     designDoc: build.designDoc,
     designReview: build.designReview,
+    happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
     buildPlan: build.buildPlan,
     planReview: build.planReview,
     verificationOut: build.verificationOut,
@@ -105,6 +114,35 @@ export async function POST(request: NextRequest): Promise<Response> {
       { error: gate.reason ?? "Phase gate check failed", gate },
       { status: 422 },
     );
+  }
+
+  if (currentPhase === "plan" && targetPhase === "build") {
+    const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+      db: prisma,
+      build: {
+        buildId: build.buildId,
+        title: build.title,
+        phase: currentPhase,
+        planReview: build.planReview as ReviewResult | null,
+        deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
+      },
+      triggeredByUserId: user.id ?? null,
+    });
+    if (!decisionGate.allowed) {
+      return NextResponse.json(
+        {
+          error: decisionGate.operatorMessage,
+          decisionInteraction: {
+            interactionId: decisionGate.interactionId,
+            outcomeType: decisionGate.evaluation.outcomeType,
+            confidenceScore: decisionGate.evaluation.confidenceScore,
+            coverageGap: decisionGate.evaluation.coverageGap,
+            principleConflict: decisionGate.evaluation.principleConflict,
+          },
+        },
+        { status: 422 },
+      );
+    }
   }
 
   await prisma.featureBuild.update({

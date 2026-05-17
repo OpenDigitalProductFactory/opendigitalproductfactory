@@ -106,12 +106,23 @@ export async function register() {
     setTimeout(async () => {
       try {
         const { prisma } = await import("@dpf/db");
+        const { canRunStartupModelDiscovery } = await import(
+          "@/lib/routing/provider-eligibility"
+        );
         const activeProviders = await prisma.modelProvider.findMany({
           where: { status: { in: ["active", "degraded"] } },
-          select: { providerId: true },
+          select: {
+            providerId: true,
+            endpointType: true,
+            category: true,
+            serviceKind: true,
+            authMethod: true,
+            cliEngine: true,
+          },
         });
 
-        for (const { providerId } of activeProviders) {
+        for (const provider of activeProviders.filter(canRunStartupModelDiscovery)) {
+          const { providerId } = provider;
           const profileCount = await prisma.modelProfile.count({
             where: { providerId },
           });

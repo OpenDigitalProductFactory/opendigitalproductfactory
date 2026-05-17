@@ -5,6 +5,7 @@ import {
   normalizeHappyPathState,
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
+import type { PortalContextEnvelope } from "@/lib/portal-context";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -210,6 +211,23 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain("Loading graph status...");
   });
 
+  it("renders the portal context strip when a server envelope is provided", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild()]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+        portalContext={makePortalContextEnvelope()}
+      />,
+    );
+
+    expect(html).toContain("Portal context");
+    expect(html).toContain("Build Studio");
+    expect(html).toContain("WC-123");
+  });
+
   it("renders a studio approval control for backlog-linked builds that are missing start approval", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
@@ -281,3 +299,45 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain(">Release<");
   });
 });
+
+function makePortalContextEnvelope(): PortalContextEnvelope {
+  return {
+    envelopeId: "env-1",
+    resolvedAt: "2026-05-17T18:23:30.000Z",
+    route: { pathname: "/build", routeContext: "/build", domain: "Build Studio", sensitivity: "internal", docsPath: null },
+    organization: { organizationId: "ORG-1", name: "Digital Product Factory", archetypeId: "software-platform-operator" },
+    user: { userId: "user-1", principalId: "principal-1", platformRole: "HR-000" },
+    anchors: [],
+    work: {
+      backlogItem: null,
+      epic: null,
+      capsule: {
+        capsuleId: "WC-123",
+        title: "Portal overlay",
+        status: "working",
+        executorKind: "build-studio",
+        leaseExpiresAt: null,
+        isLeaseExpired: false,
+        isStale: false,
+        scopeClaims: [],
+        branchName: "feat/portal-context-overlay-hive-mind",
+        href: "/build/work/WC-123",
+      },
+      featureBuild: null,
+      taskRun: null,
+      agentThread: null,
+      branch: null,
+    },
+    evidence: [],
+    authority: {
+      canActOnCapsule: true,
+      canActOnBuild: true,
+      canReviewPromotion: true,
+      grantedToolKeys: [],
+      proposalModeActive: true,
+    },
+    coworkers: [],
+    attention: [],
+    promptDigest: "Route: /build",
+  };
+}

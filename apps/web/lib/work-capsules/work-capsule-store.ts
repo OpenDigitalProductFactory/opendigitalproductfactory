@@ -21,6 +21,7 @@ import {
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
+import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 
 export type WorkCapsuleActor = {
   userId: string;
@@ -47,6 +48,12 @@ type CapsuleCreateInput = {
   source: WorkCapsuleSource;
   idempotencyKey: string;
   executorKind?: WorkCapsuleExecutorKind | null;
+  executorRef?: string | null;
+  status?: WorkCapsuleStatus;
+  backlogItemId?: string | null;
+  epicId?: string | null;
+  featureBuildId?: string | null;
+  workspaceState?: Record<string, unknown>;
 };
 
 type CapsuleAdoptionInput = {
@@ -111,7 +118,7 @@ async function recordActivity(
     actor: WorkCapsuleActor;
   },
 ) {
-  return db.workCapsuleActivity.create({
+  const activity = await db.workCapsuleActivity.create({
     data: {
       workCapsuleId: input.workCapsuleId,
       kind: input.kind,
@@ -121,6 +128,8 @@ async function recordActivity(
       recordedByAgentId: input.actor.agentId,
     },
   });
+  revalidatePortalContext();
+  return activity;
 }
 
 export async function createWorkCapsule(args: {
@@ -131,6 +140,9 @@ export async function createWorkCapsule(args: {
   if (!isWorkCapsuleSource(args.input.source)) throw new Error("Invalid capsule source");
   if (args.input.executorKind && !isWorkCapsuleExecutorKind(args.input.executorKind)) {
     throw new Error("Invalid executor kind");
+  }
+  if (args.input.status && !isWorkCapsuleStatus(args.input.status)) {
+    throw new Error("Invalid capsule status");
   }
 
   const existing = await args.db.workCapsule.findUnique({
@@ -148,13 +160,18 @@ export async function createWorkCapsule(args: {
           objective: args.input.objective,
           source: args.input.source,
           executorKind: args.input.executorKind ?? null,
+          executorRef: args.input.executorRef ?? null,
+          backlogItemId: args.input.backlogItemId ?? null,
+          epicId: args.input.epicId ?? null,
+          featureBuildId: args.input.featureBuildId ?? null,
+          workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
           leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
             ? args.actor.principalId
             : null,
           leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
           createdByPrincipalId: args.actor.principalId,
-          status: args.input.executorKind ? "ready" : "draft",
+          status: args.input.status ?? (args.input.executorKind ? "ready" : "draft"),
         },
       });
       await recordActivity(tx, {

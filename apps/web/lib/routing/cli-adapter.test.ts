@@ -412,8 +412,9 @@ describe("cliAdapter", () => {
       const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
       const mcpWrite = execCalls.find((c) => c.includes("cli-mcp-"));
       expect(mcpWrite).toBeDefined();
-      // The chmod 600 protects the JWT on disk during the call
-      expect(mcpWrite).toContain("chmod 600");
+      // chown to node user + chmod 644 so the Claude CLI process can read the config
+      expect(mcpWrite).toContain("chown node:node");
+      expect(mcpWrite).toContain("chmod 644");
     });
 
     it("includes --mcp-config + --strict-mcp-config in the runner script", async () => {

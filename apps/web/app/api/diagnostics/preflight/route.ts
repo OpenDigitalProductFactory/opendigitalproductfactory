@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { isModelRoutingProvider, MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
 
 export const dynamic = "force-dynamic";
 
@@ -60,10 +61,19 @@ export async function GET(): Promise<Response> {
   const providerStep = await runStep("1. Provider Configuration", async () => {
     const providers = await prisma.modelProvider.findMany({
       where: { status: { in: ["active", "degraded"] } },
-      select: { providerId: true, name: true, status: true, endpointType: true },
+      select: {
+        providerId: true,
+        name: true,
+        status: true,
+        endpointType: true,
+        category: true,
+        serviceKind: true,
+        authMethod: true,
+        cliEngine: true,
+      },
     });
 
-    const llmProviders = providers.filter(p => p.endpointType === "llm");
+    const llmProviders = providers.filter(isModelRoutingProvider);
     if (llmProviders.length === 0) {
       return {
         status: "fail",
@@ -90,7 +100,10 @@ export async function GET(): Promise<Response> {
   steps.push(await runStep("2. Provider Credentials", async () => {
     // Get active LLM provider IDs, then check their credentials
     const activeProviders = await prisma.modelProvider.findMany({
-      where: { status: { in: ["active", "degraded"] }, endpointType: "llm" },
+      where: {
+        status: { in: ["active", "degraded"] },
+        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
+      },
       select: { providerId: true },
     });
     const activeIds = activeProviders.map(p => p.providerId);
@@ -148,7 +161,10 @@ export async function GET(): Promise<Response> {
       where: {
         modelStatus: { in: ["active", "degraded"] },
         retiredAt: null,
-        provider: { status: { in: ["active", "degraded"] }, endpointType: "llm" },
+        provider: {
+          status: { in: ["active", "degraded"] },
+          endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
+        },
       },
       select: { providerId: true, modelId: true, modelFamily: true, modelClass: true },
     });

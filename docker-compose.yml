@@ -1,4 +1,4 @@
-name: dpf
+name: ${COMPOSE_PROJECT_NAME:-dpf}
 
 services:
   postgres:
@@ -94,6 +94,12 @@ services:
       # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
       # Read-only from the portal's side — only browser-use should write.
       - browser_evidence:/evidence:ro
+      # Platform-managed backups (daily Postgres + future Neo4j/Qdrant).
+      # Host bind mount (NOT a Docker volume) so `docker compose down -v`,
+      # `docker volume rm`, or worktree-induced compose re-labelling cannot
+      # destroy backups. Same path the promoter writes pre-promote dumps to.
+      # See docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md.
+      - ${DPF_HOST_INSTALL_PATH:-.}/backups:/backups
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}

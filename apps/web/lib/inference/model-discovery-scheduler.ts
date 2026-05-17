@@ -4,6 +4,7 @@
 
 import { prisma } from "@dpf/db";
 import { autoDiscoverAndProfile } from "./ai-provider-internals";
+import { canRunStartupModelDiscovery } from "@/lib/routing/provider-eligibility";
 
 const JOB_ID = "model-discovery-refresh";
 
@@ -36,14 +37,23 @@ export async function registerModelDiscoveryJob(): Promise<void> {
 export async function runModelDiscoveryRefresh(): Promise<void> {
   const providers = await prisma.modelProvider.findMany({
     where: { status: { not: "unconfigured" } },
-    select: { providerId: true, name: true },
+    select: {
+      providerId: true,
+      name: true,
+      endpointType: true,
+      category: true,
+      serviceKind: true,
+      authMethod: true,
+      cliEngine: true,
+    },
   });
+  const modelProviders = providers.filter(canRunStartupModelDiscovery);
 
-  console.log(`[model-discovery] Starting daily refresh for ${providers.length} providers`);
+  console.log(`[model-discovery] Starting daily refresh for ${modelProviders.length} model provider(s)`);
 
   const results: { providerId: string; discovered: number; profiled: number; error?: string }[] = [];
 
-  for (const provider of providers) {
+  for (const provider of modelProviders) {
     try {
       const result = await autoDiscoverAndProfile(provider.providerId);
       results.push({

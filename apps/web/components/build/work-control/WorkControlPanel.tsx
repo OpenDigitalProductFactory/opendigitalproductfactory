@@ -1,5 +1,7 @@
 import { GitBranch, RefreshCcw } from "lucide-react";
 
+import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
+import type { PortalContextEnvelope } from "@/lib/portal-context";
 import { AdoptableWorktreeTable, type AdoptableWorktreeRow } from "./AdoptableWorktreeTable";
 import { CreateGovernedWorkForm, type CreateGovernedWorkAction } from "./CreateGovernedWorkForm";
 import { WorkCapsuleTable, type WorkCapsuleRow } from "./WorkCapsuleTable";
@@ -8,10 +10,12 @@ export function WorkControlPanel({
   capsules,
   adoptable,
   createAction,
+  portalContext,
 }: {
   capsules: WorkCapsuleRow[];
   adoptable: AdoptableWorktreeRow[];
   createAction: CreateGovernedWorkAction;
+  portalContext?: PortalContextEnvelope | null;
 }) {
   return (
     <section className="space-y-6 px-4 py-4">
@@ -20,6 +24,8 @@ export function WorkControlPanel({
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">Work Control</h1>
         </div>
       </div>
+
+      <PortalContextStrip envelope={portalContext ?? null} />
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">

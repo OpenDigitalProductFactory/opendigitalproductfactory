@@ -5,6 +5,11 @@ import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewR
 import { normalizeHappyPathState } from "./feature-build-types";
 import type { BuildContext } from "@/lib/build-agent-prompts";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
+import { PLAN_READINESS_DOMAIN_CLASS } from "@/lib/decision-perspective/types";
+import {
+  DECISION_INTERACTION_GATE_SELECT,
+  decisionInteractionRowToGateView,
+} from "@/lib/decision-perspective/view-model";
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
   // Build Studio is internal-cockpit-only and DPF is single-org-per-install
@@ -80,6 +85,16 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
           abandonReason: true,
         },
       },
+      decisionInteractions: {
+        where: {
+          phaseFrom: "plan",
+          phaseTo: "build",
+          domainClass: PLAN_READINESS_DOMAIN_CLASS,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: DECISION_INTERACTION_GATE_SELECT,
+      },
     },
   });
 
@@ -107,6 +122,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       : null,
     originator: r.originator,
     phaseHandoffs: null,
+    decisionInteraction: decisionInteractionRowToGateView(r.decisionInteractions[0] ?? null),
   }));
 });
 
@@ -171,6 +187,16 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
           abandonReason: true,
         },
       },
+      decisionInteractions: {
+        where: {
+          phaseFrom: "plan",
+          phaseTo: "build",
+          domainClass: PLAN_READINESS_DOMAIN_CLASS,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: DECISION_INTERACTION_GATE_SELECT,
+      },
     },
   });
 
@@ -200,6 +226,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       : null,
     originator: r.originator,
     phaseHandoffs: null,
+    decisionInteraction: decisionInteractionRowToGateView(r.decisionInteractions[0] ?? null),
   };
 });
 

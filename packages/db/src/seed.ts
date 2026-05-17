@@ -19,6 +19,7 @@ import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
+import { seedDecisionPerspective } from "./seed-decision-perspective.js";
 import {
   SPEACHES_PROVIDER_ID,
   SPEACHES_MODEL_ID,
@@ -28,9 +29,11 @@ import {
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
+import { ensurePostgresBackupScheduledJob } from "./seed-platform-backup.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
+import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -959,7 +962,7 @@ async function seedCoworkerAgents(): Promise<void> {
     "hr-specialist":        ["registry_read", "consumer_read", "consumer_write"],
     "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"],
     "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
-    "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write"],
+    "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read", "marketing_write", "web_search"],
     "ops-coordinator":      ["backlog_read", "backlog_write", "registry_read", "portfolio_read"],
     "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
     "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read"],
@@ -1735,9 +1738,8 @@ async function seedModelProfiles(): Promise<void> {
       select: { id: true },
     });
     if (existing) { skipped++; continue; }
-    const { providerId: _pid, modelId: _mid, ...rest } = p;
     try {
-      await prisma.modelProfile.create({ data: { providerId, modelId, ...rest } as never });
+      await prisma.modelProfile.create({ data: toModelProfileSeedCreateData(p) as never });
       created++;
     } catch { skipped++; }
   }
@@ -2130,6 +2132,7 @@ async function main(): Promise<void> {
   await seedDefaultAdminUser();
   await ensureDiscoveryTriageScheduledTask(prisma);
   await ensureHiveScoutScheduledTask(prisma);
+  await ensurePostgresBackupScheduledJob(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedProviderRegistry();
@@ -2163,6 +2166,11 @@ async function main(): Promise<void> {
     );
   }
   await seedDeliberationPatterns(prisma);
+  const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
+  console.log(
+    `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
+      `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
+  );
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
   await assertAnthropicSubToolCapability();

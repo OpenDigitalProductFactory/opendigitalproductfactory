@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
 import type {
   CapacityProviderClass,
   CapacityProviderFinanceSignal,
@@ -33,7 +34,7 @@ export async function getCapacityProviderFinanceSignals(): Promise<CapacityProvi
   const profiles = await prisma.aiProviderFinanceProfile.findMany({
     where: {
       provider: {
-        endpointType: "llm",
+        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
       },
     },
     select: {
