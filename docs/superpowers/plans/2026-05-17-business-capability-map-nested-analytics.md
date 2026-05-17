@@ -6,7 +6,7 @@
 
 **Architecture:** Keep `BusinessCapability` as the stable business architecture construct and keep operational records as trace targets. Add tested read-model helpers for evidence summaries, overlay states, and deterministic map rows before changing the UI. Then refactor the current map component into smaller client-side map, control, tile, and detail components while preserving the existing server actions and schema.
 
-**Tech Stack:** Next.js 16 app routes, React 19, Prisma 7 read model, Vitest, DPF theme tokens, `lucide-react`, existing Business Capability schema and server actions.
+**Tech Stack:** Next.js app routes, React, Prisma read model, Vitest, DPF theme tokens, `lucide-react`, existing Business Capability schema and server actions.
 
 ---
 
@@ -14,9 +14,17 @@
 
 - Active backlog item: `BI-03AD102F` ("Nested Business Capability Map implementation").
 - Approved spec: `docs/superpowers/specs/2026-05-17-business-capability-map-nested-analytics-design.md`.
-- Do not add schema in this slice.
+- Do not add DDL migrations or new Prisma model fields in this slice.
 - Do not conflate `BusinessCapability` and `TaxonomyNode`.
 - Reserve refactoring effort for typed read-model helpers and component boundaries.
+
+The spec's control bar lists five elements. This plan implements two of them: **overlay selector** and **maturity legend**. The following three are explicitly deferred to a subsequent plan:
+
+- IT4IT filter (single-select filter to narrow the map to one value stream).
+- Level visibility toggle (show/hide L3 sub-capabilities globally).
+- Search (filter tiles by capability name or description).
+
+Do not implement stubs or placeholders for the deferred controls. Leave blank space in the control bar or add a `{/* TODO: IT4IT filter, level toggle, search */}` comment so the slot is reserved without shipping dead UI.
 
 ## File Map
 
@@ -53,6 +61,8 @@
 - Test: `apps/web/lib/business-capabilities/data.test.ts`
 
 - [ ] **Step 1: Add failing tests for evidence summaries**
+
+Read `data.test.ts` first to understand existing fixtures and test structure. Do not delete or modify any existing test case. Add new `describe` blocks for the new helpers.
 
 Add assertions to `data.test.ts` using the existing `rows` fixture plus backlog and architecture links:
 
@@ -103,6 +113,8 @@ status?: BacklogTraceStatus;
 
 - [ ] **Step 5: Implement evidence summary**
 
+Before writing any code, read `apps/web/lib/business-capabilities/types.ts` to confirm the shape of `BusinessCapabilityNode` — specifically which field holds grouped trace links. Use the confirmed field name throughout the implementation rather than assuming `node.traceGroups`.
+
 Add:
 
 ```ts
@@ -110,13 +122,13 @@ export type CapabilityEvidenceSummary = {
   taxonomyCount: number;
   productCount: number;
   backlogCount: number;
-  activeBacklogCount: number;
+  activeBacklogCount: number; // links with status "open" or "in-progress"
   architectureCount: number;
-  hasOperationalEvidence: boolean;
+  hasOperationalEvidence: boolean; // true when any count above is > 0
 };
 ```
 
-Then implement `buildCapabilityEvidenceSummary(node)` by reading `node.traceGroups`.
+Then implement `buildCapabilityEvidenceSummary(node)` using the confirmed trace-link field from the node type.
 
 - [ ] **Step 6: Run the targeted test and confirm it passes**
 
@@ -206,7 +218,9 @@ The row helper is intentionally simple in this slice. It creates the tested seam
 
 - [ ] **Step 6: Enrich backlog trace status**
 
-In `toTraceRecord`, select and map `backlogItem.status`. In `getBusinessCapabilityMapData`, update the Prisma include:
+Before writing the select, read the `BacklogItem` model in `prisma/schema.prisma` to confirm the exact field name for status. Common alternatives are `status`, `itemStatus`, or `state`. Use the confirmed name in both the Prisma include and the `toTraceRecord` mapping.
+
+In `toTraceRecord`, select and map the status field. In `getBusinessCapabilityMapData`, update the Prisma include, for example:
 
 ```ts
 backlogItem: { select: { itemId: true, title: true, status: true } },
@@ -214,18 +228,17 @@ backlogItem: { select: { itemId: true, title: true, status: true } },
 
 - [ ] **Step 7: Return `mapRows`**
 
-In `getBusinessCapabilityMapData`, build the tree once, then return:
+In `getBusinessCapabilityMapData`, build the tree once, then return. Do not remove any existing return fields — extend the shape:
 
 ```ts
 const tree = buildCapabilityTree(records);
 return {
-  records,
-  tree,
+  ...existingFields,        // preserve all fields currently returned
   mapRows: buildCapabilityMapRows(tree),
-  summary: summarizeCapabilityMap(records),
-  ...
 };
 ```
+
+Read the current return type annotation (or the call sites in `page.tsx`) before writing the updated return to confirm what "existingFields" contains. Do not guess at field names.
 
 - [ ] **Step 8: Run the targeted test**
 
@@ -267,7 +280,7 @@ const [selectedCapabilityId, setSelectedCapabilityId] = useState<string | null>(
 
 - [ ] **Step 2: Move summary metrics into the client shell**
 
-Preserve the current six metrics, but make the control bar visually primary after the header. Use DPF tokens only.
+Read the current `BusinessCapabilityMap.tsx` to confirm which metrics are rendered before touching anything. Preserve all of them — do not drop or rename any metric during the refactor. Use DPF tokens only for all styling.
 
 - [ ] **Step 3: Add overlay segmented controls**
 
@@ -275,15 +288,49 @@ Render `CAPABILITY_OVERLAY_MODES` as buttons with `aria-pressed`.
 
 - [ ] **Step 4: Create `CapabilityMapTiles.tsx`**
 
-Implement pure presentational components:
+Implement pure presentational components with the following prop contracts:
 
-- `CapabilityMapCanvas`
-- `CapabilityFamilyBand`
-- `CapabilityTile`
-- `CapabilitySubCapabilityTile`
-- `EvidenceChips`
+```ts
+// Top-level canvas — owns nothing beyond layout
+type CapabilityMapCanvasProps = {
+  rows: BusinessCapabilityMapRow[];
+  overlayMode: CapabilityOverlayMode;
+  selectedCapabilityId: string | null;
+  onSelectCapability: (id: string | null) => void;
+};
 
-Inputs should include `overlayMode`, `selectedCapabilityId`, and `onSelectCapability`.
+// One L1 family section
+type CapabilityFamilyBandProps = {
+  family: BusinessCapabilityNode;
+  overlayMode: CapabilityOverlayMode;
+  selectedCapabilityId: string | null;
+  onSelectCapability: (id: string | null) => void;
+};
+
+// One L2 tile (holds L3 tiles as children)
+type CapabilityTileProps = {
+  capability: BusinessCapabilityNode;
+  overlayState: CapabilityOverlayState;
+  evidenceSummary: CapabilityEvidenceSummary;
+  isSelected: boolean;
+  onSelect: () => void;
+};
+
+// One L3 nested chip/tile inside an L2 tile
+type CapabilitySubCapabilityTileProps = {
+  capability: BusinessCapabilityNode;
+  overlayState: CapabilityOverlayState;
+  isSelected: boolean;
+  onSelect: () => void;
+};
+
+// Compact evidence row: icons + counts only
+type EvidenceChipsProps = {
+  summary: CapabilityEvidenceSummary;
+};
+```
+
+Derive `overlayState` and `evidenceSummary` inside `CapabilityFamilyBand` using the helpers from `data.ts` so tile components stay purely presentational.
 
 - [ ] **Step 5: Convert `BusinessCapabilityMap.tsx` to server wrapper**
 
@@ -314,7 +361,22 @@ Expected: pass after imports and props are corrected.
 
 - [ ] **Step 1: Add capability flattening helper in client shell**
 
-Use `useMemo` to flatten `mapRows` into a list for selected lookup. Keep this helper local to the client component unless tests prove it belongs in `data.ts`.
+Use `useMemo` to flatten `mapRows` into a `Map<string, BusinessCapabilityNode>` keyed by capability ID. This gives O(1) lookup when the user selects a tile. Keep this helper local to the client component unless tests prove it belongs in `data.ts`.
+
+```ts
+const capabilityById = useMemo(() => {
+  const map = new Map<string, BusinessCapabilityNode>();
+  for (const row of mapRows) {
+    for (const family of row.families) {
+      // recursive walk: add family and all descendants
+      walkCapabilityTree(family, (node) => map.set(node.id, node));
+    }
+  }
+  return map;
+}, [mapRows]);
+```
+
+Implement `walkCapabilityTree` as a small local helper that visits a node and recurses into its children.
 
 - [ ] **Step 2: Create `CapabilityDetailPanel.tsx`**
 
@@ -437,7 +499,15 @@ Run:
 ```powershell
 git status --short
 git add apps/web/lib/business-capabilities apps/web/components/portfolio/architecture apps/web/app/(shell)/portfolio/architecture/page.tsx docs/superpowers/specs/2026-05-17-business-capability-map-nested-analytics-design.md docs/superpowers/plans/2026-05-17-business-capability-map-nested-analytics.md
-git commit -s -m "feat: refine business capability map analytics"
+git commit -s -m "feat(business-capability-map): nested L1/L2/L3 heat map with overlay modes and detail panel
+
+- Add CapabilityOverlayMode, CapabilityEvidenceSummary, and CapabilityOverlayState types
+- Add buildCapabilityEvidenceSummary, deriveCapabilityOverlayState, buildCapabilityMapRows helpers
+- Enrich backlog trace links with status for planning impact overlay
+- Split BusinessCapabilityMap into server wrapper and client map shell
+- Add CapabilityMapTiles nested band/tile/sub-capability components
+- Add CapabilityDetailPanel with planning prompts and grouped trace links
+- Preserve existing forms, server actions, and schema unchanged"
 git push -u origin feat/business-capability-map-nested-analytics
 ```
 
