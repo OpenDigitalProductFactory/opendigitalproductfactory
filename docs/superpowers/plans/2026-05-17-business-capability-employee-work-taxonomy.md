@@ -30,6 +30,16 @@ Recommendation: create a separate epic named `Business Capability and Employee W
 
 The MCP surface available in this session exposed backlog item creation but not a general create-epic tool. The taxonomy foundation items created below are therefore left unlinked and name the recommended epic in their bodies.
 
+Follow-up evidence from `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` showed the original taxonomy workbook carries commercial-market and representative-product guidance, especially:
+
+- `Common Commercial Market and Products`
+- `Generic Commercial Market and Products`
+- sector-specific commercial market/product columns such as banking, insurance, healthcare provider, retail/eCommerce, telecommunications, manufacturing, energy, chemicals, and utilities
+
+That workbook-derived detail is already partly in seeded data. `packages/db/data/taxonomy_v3.json` includes `enrichment.sampleServices`, `enrichment.offeringConsiderations`, and `enrichment.commercialMarket`, and `packages/db/src/seed.ts` writes that object to `TaxonomyNode.enrichment`. Current portfolio taxonomy UX does not show it: `apps/web/lib/portfolio/portfolio-node-view-model.ts` only projects enrichment `standards`, `patterns`, and `references`, and `apps/web/components/portfolio/PortfolioNodeEnrichment.tsx` only renders those fields.
+
+Implication: the gap is not a source-data gap. It is a taxonomy UX/view-model gap that hides market/product intelligence that should help connect capabilities, integrations, and build-vs-buy posture.
+
 Portfolio context search found relevant taxonomy nodes already in live portfolio data:
 
 - `for_employees/develop_and_manage_business_capabilities`
@@ -181,12 +191,13 @@ The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-IN
 | --- | --- | --- |
 | `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | Recommended new taxonomy epic; currently unlinked | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
 | `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | Recommended new taxonomy epic; currently unlinked | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
+| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | Recommended new taxonomy epic; currently unlinked | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
 | `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Move QuickBooks entity families from not-mapped to read, still with no writes. |
 | `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for company, customers, invoices, vendors, bills, and payments | `EP-INT-2E7C1A` | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
 
 ## Proposed Follow-On Backlog Batch
 
-Create these after the first four items are triaged or when the new taxonomy epic exists:
+Create these after the first created items are triaged or when the new taxonomy epic exists:
 
 | Proposed title | Preferred epic | Purpose |
 | --- | --- | --- |
@@ -227,6 +238,7 @@ The QuickBooks readiness snapshot is the approved starting point, but current `o
 6. **Payroll and payment execution remain partner-led until proven otherwise.** DPF should own readiness, approvals, evidence, reconciliation, and operating context before it owns regulated execution.
 7. **AI coworkers submit needs; they do not mutate strategy silently.** Existing `CoworkerCapabilityNeed` and capability inventory flows should feed taxonomy gaps into reviewed backlog, not direct hidden changes.
 8. **Reserve refactoring budget.** Follow-on implementation slices should reserve roughly 20 percent of effort for refactoring route/catalog/coworker maps into reusable descriptors instead of duplicating labels across pages, prompts, and backlog bodies.
+9. **Commercial market enrichment belongs in taxonomy UX.** The spreadsheet's market/product columns are decision support for buy/build/integrate posture. Surface them as curated fields, not raw JSON, and use progressive disclosure so dense vendor text does not overwhelm the node detail page.
 
 ## Plan Chunks
 
@@ -299,7 +311,7 @@ At minimum, flag missing or shallow anchors for Xero, Gusto, Slack, Salesforce, 
 
 - [ ] **Step 1: Apply the context template to 10 existing or new backlog items**
 
-Start with the four items created in this plan, proposed follow-on items once approved, and the existing `BI-INT-A5B9E3` and `BI-INT-F23BC6`.
+Start with the five items created in this plan, proposed follow-on items once approved, and the existing `BI-INT-A5B9E3` and `BI-INT-F23BC6`.
 
 - [ ] **Step 2: Review query needs**
 
@@ -386,9 +398,32 @@ Use `packages/db/data/agent_registry.json` and live coworker capability-needs su
 
 Use native integrations first. Only propose new external products after checking the integration catalog and current benchmark family items.
 
+### Task 6: Surface Commercial Market Enrichment
+
+- [ ] **Step 1: Extend the typed enrichment view model**
+
+Add explicit fields for:
+
+```text
+sampleServices
+offeringConsiderations
+commercialMarket
+sectorCommercialMarkets
+```
+
+Keep unknown raw enrichment hidden from UI output.
+
+- [ ] **Step 2: Render market/product guidance in taxonomy UX**
+
+Expose the fields on taxonomy node detail using a compact full-width section with progressive disclosure. Do not use nested cards, raw JSON, or hardcoded colors.
+
+- [ ] **Step 3: Connect to integrations and backlog capture**
+
+Where commercial-market text names representative products already present as native anchors, the coverage matrix should call that out explicitly. Examples include QuickBooks, Stripe, ADP, Microsoft 365, HubSpot, Mailchimp, Google Business Profile, and Google/Facebook social channels.
+
 ## Chunk 5: Portfolio Context
 
-### Task 6: Attach Portfolio And Taxonomy Context
+### Task 7: Attach Portfolio And Taxonomy Context
 
 - [ ] **Step 1: Search portfolio context for each capability**
 
@@ -423,3 +458,5 @@ For future implementation slices:
 Build `BI-407125DA` first: a small backlog capability-context foundation that standardizes capture and validates whether backlog needs first-class context fields. This lets every later QuickBooks, Stripe, ADP, HubSpot, employee, and storefront parity item carry the same strategic context without blocking on schema.
 
 Then build `BI-0E6D42B3`: the employee role taxonomy and coworker coverage audit. That gives the product team the actual work map before adding more provider-specific depth.
+
+`BI-4C166411` can run next or in parallel with the audit because it is a narrow UI/view-model slice: the data already exists, and the product value is high because operators can finally see the workbook's build-vs-buy and commercial-market guidance directly in taxonomy UX.
