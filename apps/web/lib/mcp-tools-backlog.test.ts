@@ -18,6 +18,15 @@ const mockPrisma = {
   featureBuild: {
     create: vi.fn(),
   },
+  workCapsule: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+  },
+  workCapsuleActivity: {
+    create: vi.fn(),
+  },
   platformDevConfig: {
     findUnique: vi.fn(),
   },
@@ -43,6 +52,12 @@ describe("backlog MCP tool execution", () => {
       governedBacklogEnabled: true,
       backlogTeeUpDailyCap: 3,
     });
+    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
+    mockPrisma.workCapsule.create.mockResolvedValue({
+      id: "capsule-row-1",
+      capsuleId: "WC-BUILD-1234",
+    });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);

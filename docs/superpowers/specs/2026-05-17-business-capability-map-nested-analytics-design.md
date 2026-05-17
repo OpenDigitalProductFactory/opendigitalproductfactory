@@ -214,7 +214,7 @@ The nested map should follow these rules:
 - Each L1 band has a title, optional description, maturity summary, and child count.
 - L2 capabilities render as stable tiles inside the family.
 - L3 sub-capabilities render within their parent L2 tile when space allows; on narrow screens they collapse into a count plus expandable list.
-- Empty L1 and L2 containers are allowed but visibly incomplete.
+- Empty L1 and L2 containers are allowed but visibly incomplete: render a dimmed container with a short inline prompt ("Add a capability") that opens the authoring panel pre-filled with the parent set. Do not hide the container or collapse it into a zero-count row.
 - Tile dimensions should use responsive grid constraints and minimum heights so hover states, labels, chips, and counts do not shift the layout.
 
 The visual target is closer to the user's provided examples: parent containers visibly hold child capability tiles. The UI should not look like unrelated cards separated by page whitespace.
@@ -253,7 +253,14 @@ The detail panel should answer four planning questions without requiring the use
 - What work is planned or active?
 - What gaps remain unsupported by products, architecture, or backlog work?
 
-For the first refinement, these answers can be derived from existing maturity fields and trace links. Later slices may add richer assessment history, ownership, time horizons, or investment measures if usage proves the need.
+For the first refinement, the answers are derived as follows:
+
+- **Target state:** `targetMaturity` label and `maturityRationale` from the capability record.
+- **Supports today:** all trace links grouped by type (taxonomy, products, architecture elements).
+- **Active or planned work:** backlog trace links where status is `open` or `in-progress`.
+- **Unsupported gap:** maturity gap exists (`targetMaturity > currentMaturity`) AND no linked backlog item is `open` or `in-progress`.
+
+Later slices may add richer assessment history, ownership, time horizons, or investment measures if usage proves the need.
 
 ## View-Model Design
 
@@ -262,13 +269,20 @@ No new schema is required for the next refinement. Add view-model helpers around
 Recommended additions:
 
 - `CapabilityOverlayMode = "maturity" | "coverage" | "planning" | "it4it"`.
-- `CapabilityEvidenceSummary` with counts for taxonomy, products, backlog, architecture, active backlog, and missing evidence.
-- `CapabilityOverlayState` with `tone`, `label`, `shortLabel`, `description`, and `sortWeight`.
+- `CapabilityEvidenceSummary` with counts for taxonomy, products, backlog, architecture, active backlog, and missing evidence. `hasOperationalEvidence` is `true` when any of `taxonomyCount`, `productCount`, `backlogCount`, or `architectureCount` is greater than zero.
+- `CapabilityOverlayTone = "aligned" | "watch" | "gap" | "unassessed" | "neutral" | "covered" | "active"`. Each mode maps capabilities to tones as follows:
+  - `maturity`: `unassessed` when either maturity value is null or zero; `aligned` when current ≥ target; `watch` when target exceeds current by 1; `gap` when target exceeds current by 2 or more.
+  - `coverage`: `covered` when `hasOperationalEvidence` is true; `gap` when false.
+  - `planning`: `active` when `activeBacklogCount > 0`; `gap` when a maturity gap exists and `activeBacklogCount === 0`; `aligned` when no maturity gap and no active work required.
+  - `it4it`: `covered` when the capability has at least one value-stream tag; `neutral` when none. When a capability aligns to multiple value streams, `tone` is `covered` and `label` lists all tags separated by commas. The IT4IT overlay does not filter out unaligned capabilities; they remain visible at `neutral`.
+- `CapabilityOverlayState` with `tone`, `label`, `shortLabel`, `description`, and `sortWeight`. `sortWeight` drives ordering within an L1 band when the UI offers a sort-by-overlay option: lower values sort first so critical gaps surface at the top-left of each band.
 - `buildCapabilityEvidenceSummary(node)`.
 - `deriveCapabilityOverlayState(node, mode)`.
-- `buildCapabilityMapRows(tree)` if deterministic row grouping is needed after testing real child counts.
+- `buildCapabilityMapRows(tree)` — for this refinement, implement as a single identity row: `[{ id: "row-1", families: tree }]`. This creates a stable, tested seam for future density-aware row grouping without block-breaking the current slice.
 
-The `getBusinessCapabilityMapData()` query should enrich backlog trace links with status where possible, because planning impact needs to distinguish open/in-progress work from done/deferred work. If the current select shape does not include backlog status, add it as a read-model field only.
+The `getBusinessCapabilityMapData()` query should enrich backlog trace links with status because planning impact needs to distinguish open/in-progress work from done/deferred work. Planning verification on 2026-05-17 confirmed that the current query selects backlog item ID and title but not status. The implementation plan will add status to the Prisma include as a read-model field only; no DDL change is required.
+
+**Clarification on "no new schema":** This constraint means no new tables and no new columns added via Prisma migration. Adding fields to an existing `select` or `include` clause that already exists in the database is permitted.
 
 ## UI Implementation Guidance
 
@@ -298,16 +312,18 @@ Later implementation must follow DPF theme rules:
 - Overlay mode can switch between maturity, operational coverage, planning impact, and IT4IT alignment.
 - Traceability to taxonomy, products, backlog, and architecture is visible as compact map evidence and full detail-panel links.
 - IT4IT alignment uses the existing platform slugs.
-- No new database schema is added for this refinement unless an implementation spike proves a blocker and updates this spec first.
-- Unit tests cover evidence summary and overlay-state derivation.
+- No DDL changes (no new tables, no new columns via migration) are added for this refinement unless an implementation spike proves a blocker and updates this spec first.
+- Unit tests cover evidence summary, all four overlay-state modes, and deterministic map-row grouping.
+- `BacklogItem.status` is included in the `getBusinessCapabilityMapData` read model. This was confirmed absent on 2026-05-17 and is added as a `select` field in the implementation plan.
 - UX verification captures desktop and mobile screenshots of the nested map and selected-capability detail panel.
 
 ## Implementation Slices After Spec Approval
 
 1. **Read-model tests and helpers.** Add failing tests for evidence summaries, backlog-status-aware planning overlay, and overlay-state derivation. Implement helpers in `apps/web/lib/business-capabilities/`.
 2. **Nested map UI.** Replace the flat section/card rendering with nested L1/L2/L3 containers while preserving existing create and maturity behavior.
-3. **Overlay controls and detail panel.** Add overlay selector, compact evidence chips, selected-capability state, and detail panel grouped by trace target.
-4. **Responsive and UX verification.** Exercise `/portfolio/architecture` in desktop and mobile viewports, capture screenshots, and adjust layout until tiles and labels are stable.
+3. **Overlay controls and evidence chips.** Add overlay selector, compact evidence chips per tile, and selected-capability state management.
+4. **Detail panel.** Add the drill-down panel grouped by trace target (taxonomy, products, backlog, architecture) with relationship labels, notes, and planning prompts.
+5. **Responsive and UX verification.** Exercise `/portfolio/architecture` in desktop and mobile viewports, capture screenshots, and adjust layout until tiles and labels are stable.
 
 ## Risks And Mitigations
 

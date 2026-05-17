@@ -1738,7 +1738,7 @@ async function seedModelProfiles(): Promise<void> {
     if (existing) { skipped++; continue; }
     const { providerId: _pid, modelId: _mid, ...rest } = p;
     try {
-      await prisma.modelProfile.create({ data: { providerId, modelId, ...rest } as never });
+      await prisma.modelProfile.create({ data: { generatedBy: "system:seed", ...rest, providerId, modelId } as never });
       created++;
     } catch { skipped++; }
   }
