@@ -18,7 +18,11 @@
 
 The live DPF MCP backlog tools were used first. No DB fallback was used.
 
-Open epic scan on 2026-05-17 found no dedicated business-capability or employee-work taxonomy epic. The closest active containers are:
+Initial open epic scan on 2026-05-17 found no dedicated business-capability or employee-work taxonomy epic. A later reviewed/backlog continuation found the dedicated epic now exists:
+
+- `EP-BIZ-CAP` - Business Capability Map / Taxonomy / Employee Work.
+
+Adjacent active containers remain:
 
 - `EP-INT-2E7C1A` - Integration Harness: Benchmarking and Private Deployment Foundation.
 - `EP-ARCH-8D4F2A` - Archetype Model V2: Unified Business Archetypes.
@@ -26,9 +30,9 @@ Open epic scan on 2026-05-17 found no dedicated business-capability or employee-
 
 `EP-INT-2E7C1A` already owns connector family benchmarks for finance/payments, CRM/sales, communications, HR/payroll, identity, service desk, knowledge, project/work, and device management. That makes it the right main epic for the integration/provider parity long tail.
 
-Recommendation: create a separate epic named `Business Capability and Employee Work Taxonomy: Portfolio, Coworker, and Integration Alignment`. It should own the employee-work taxonomy, capability-to-surface matrix, coworker coverage map, and backlog context model. `EP-INT-2E7C1A` should continue to own provider parity and integration harness work.
+Current decision: use `EP-BIZ-CAP` for employee-work taxonomy, capability-to-surface matrix, coworker coverage map, commercial-market taxonomy UX, and backlog context model. `EP-INT-2E7C1A` continues to own provider parity and integration harness work.
 
-The MCP surface available in this session exposed backlog item creation but not a general create-epic tool. The taxonomy foundation items created below are therefore left unlinked and name the recommended epic in their bodies.
+The MCP surface available in this session exposed backlog item creation and item-to-epic linking but not a general create-epic tool. `BI-BCCC9C7B` captures that durable MCP gap under `EP-ARCH-8D4F2A`; this taxonomy track is no longer blocked because `EP-BIZ-CAP` now exists.
 
 Follow-up evidence from `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` showed the original taxonomy workbook carries commercial-market and representative-product guidance, especially:
 
@@ -183,17 +187,25 @@ Examples:
 - `Employee: HR admin can verify ADP worker/payroll readiness - integration-led`
 - `Setup: owner can declare books/payments/payroll/tax systems once - observe/read`
 
-## First Backlog Batch Created
+## First Backlog Batch Created And Current State
 
-The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP without explicit `status + triageOutcome`, so the current MCP tool contract creates them in `triaging`. Scrum Master triage should decide outcome, size, and sequence them against other priorities before implementation.
+The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP and has since been triaged/updated in live backlog.
 
-| Item | Epic | Purpose |
-| --- | --- | --- |
-| `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | Recommended new taxonomy epic; currently unlinked | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
-| `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | Recommended new taxonomy epic; currently unlinked | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
-| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | Recommended new taxonomy epic; currently unlinked | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
-| `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Move QuickBooks entity families from not-mapped to read, still with no writes. |
-| `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for company, customers, invoices, vendors, bills, and payments | `EP-INT-2E7C1A` | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
+| Item | Epic | Current status | Purpose |
+| --- | --- | --- | --- |
+| `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | `EP-BIZ-CAP` | Done | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
+| `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | `EP-BIZ-CAP` | Done | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
+| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | `EP-BIZ-CAP` | Open | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
+| `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Open | Move QuickBooks entity families from not-mapped to read, still with no writes. |
+| `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for core accounting records | `EP-INT-2E7C1A` | Open | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
+
+Additional live `EP-BIZ-CAP` open slices now present:
+
+- `BI-861433C0` - Capability taxonomy: publish native integration coverage matrix for employee work roles.
+- `BI-80A71362` - Capability taxonomy: define bookkeeper/accountant operating lane and finance coworker handoffs.
+- `BI-9A86E2A7` - Capability taxonomy: define customer support lane across storefront inbox, queues, and service coworker coverage.
+- `BI-E1CFC8FB` - Capability taxonomy: define inventory and procurement admin lane across suppliers, purchases, assets, and storefront items.
+- `BI-F9E7B780` - Capability coverage: expose all-coworker capability-needs report for taxonomy audits.
 
 ## Proposed Follow-On Backlog Batch
 
@@ -250,7 +262,7 @@ The QuickBooks readiness snapshot is the approved starting point, but current `o
 | --- | --- |
 | Use `TaxonomyNode` + backlog body fields first; no new schema until template proves stable | Avoids premature field promotion; body context is queryable now |
 | Keep QuickBooks/Stripe/ADP/HubSpot parity work under `EP-INT-2E7C1A` | That epic already owns connector family benchmarks across all integration families |
-| Create a separate `Business Capability and Employee Work Taxonomy` epic | Taxonomy classification, employee-work mapping, and capability-to-surface work are architecturally distinct from provider parity |
+| Use `EP-BIZ-CAP` as the taxonomy epic | Taxonomy classification, employee-work mapping, and capability-to-surface work are architecturally distinct from provider parity |
 | Replacement is a maturity state, not a project | Gates: read → staged import → entity-link → dual-run → accountant evidence → export completeness → DPF-primary promotion |
 | Payroll and payment execution remain partner-led | DPF owns readiness, approvals, reconciliation, and operating context before claiming regulated execution |
 | Use O*NET/SOC/APQC PCF as role and process language checks only | Not imported wholesale; used to avoid inventing non-standard role language |
@@ -259,7 +271,7 @@ The QuickBooks readiness snapshot is the approved starting point, but current `o
 
 | Deferred item | Unblocked by |
 | --- | --- |
-| `create_epic` MCP tool does not exist — taxonomy epic cannot be created programmatically | Manual admin step: create the epic via the DPF admin UI or database seed, then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`. `BI-BCCC9C7B` captures the governed MCP tool gap under `EP-ARCH-8D4F2A`. |
+| `create_epic` MCP tool does not exist — future non-build epics still cannot be created programmatically | `EP-BIZ-CAP` now exists for this track. `BI-BCCC9C7B` captures the governed MCP tool gap under `EP-ARCH-8D4F2A` so future planning workflows do not require manual admin setup. |
 | AGENTS.md status table omits `triaging`, while current MCP tools and backlog transitions include it | Treat `apps/web/lib/mcp-tools.ts` and `apps/web/lib/backlog/transitions.ts` as current runtime truth for this plan; update AGENTS.md in a separate workflow-policy slice. |
 | Sibling branch `DPF-small-business-os-parity` readiness files not yet on `origin/main` | Treat as approved branch input. Chunk 3 (QuickBooks long tail) can start on `BI-C61B5202` and `BI-07D76D6B` immediately. Full sequence unblocked when sibling branch merges. |
 | Bank-feed source-of-truth decision | Requires QuickBooks read coverage proven first (step 2 of QuickBooks long-tail sequence) |
@@ -274,9 +286,9 @@ The QuickBooks readiness snapshot is the approved starting point, but current `o
 
 ```
 Chunk 1 (research)  — COMPLETED during planning; do not re-run
-Chunk 2 (backlog foundation)  — can start immediately
+Chunk 2 (backlog foundation)  — completed for the first batch; schema promotion remains deferred
 Chunk 3 (QuickBooks long tail)  — can start BI-C61B5202 / BI-07D76D6B immediately; full sequence unblocks after sibling branch merge
-Chunk 4 (employee work taxonomy)  — depends on Chunk 2 template proven (Task 3, Step 1)
+Chunk 4 (employee work taxonomy)  — first audit item complete; remaining role-lane and UX slices can proceed
 Chunk 5 (portfolio context)  — depends on Chunk 4 role-to-surface audit
 ```
 
@@ -290,7 +302,7 @@ The following artefacts were produced and are live above:
 - Native integration matrix with employee roles (§ Native Integration Spine)
 - Capability-to-surface-to-integration matrix (§ Capability-To-Surface-To-Integration Matrix)
 - Live backlog and epic scan (§ Live Backlog And Source State)
-- Five backlog items created via live DPF MCP (`BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`, `BI-C61B5202`, `BI-07D76D6B`)
+- Five backlog items created via live DPF MCP (`BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`, `BI-C61B5202`, `BI-07D76D6B`), with the taxonomy items now linked to `EP-BIZ-CAP`
 
 **Remaining gap identified by this research:** integration coverage for Xero, Gusto, Slack, Salesforce, project/work management, service desk, inventory, and bank-feed providers is shallow or absent. Addressed in Chunk 2, Task 3, Step 3.
 
@@ -304,9 +316,9 @@ The following artefacts were produced and are live above:
 
 ### Task 3: Prove Body-Template Use
 
-- [ ] **Step 1: Apply the context template to 10 existing or new backlog items**
+- [x] **Step 1: Apply the context template to 10 existing or new backlog items**
 
-Start with the five items created in this plan, proposed follow-on items once approved, and the existing `BI-INT-A5B9E3` and `BI-INT-F23BC6`.
+Completed for the first batch and adjacent integration-family rows. Keep using the context block for new items until query pressure justifies schema.
 
 - [ ] **Step 2: Review query needs**
 
@@ -369,7 +381,7 @@ Create the proposed Stripe/QuickBooks reconciliation item only after DPF has suf
 
 ## Chunk 4: Employee Work Taxonomy
 
-**Backlog items:** `BI-407125DA`, `BI-0E6D42B3`, proposed native integration coverage matrix item, and future items derived from the coverage audit.
+**Backlog items:** `BI-407125DA` and `BI-0E6D42B3` are done. Open follow-on slices are `BI-4C166411`, `BI-861433C0`, `BI-80A71362`, `BI-9A86E2A7`, `BI-E1CFC8FB`, and `BI-F9E7B780`.
 
 **Principal Convergence constraint (AGENTS.md §11, effective 2026-05-09):** any new identity-bearing entity introduced by this work must be modeled as a `PrincipalAlias` linked to a single `Principal`, not as a parallel identity table. Employee role taxonomy items that define new identity-bearing entities must follow this pattern. Authorization decisions must resolve on the `Principal`; the alias kind tells the platform which surface authenticated the request.
 
@@ -451,9 +463,9 @@ After applying the body template to 10+ items (Chunk 2, Task 3), review: which f
 
 - [ ] `git diff --check` — plan file has no whitespace errors.
 - [ ] Plan path confirmed at `docs/superpowers/plans/2026-05-17-business-capability-employee-work-taxonomy.md`.
-- [ ] `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411` visible in live backlog (currently unlinked from taxonomy epic; see Decisions & Deferrals).
+- [x] `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411` visible in live backlog and linked to `EP-BIZ-CAP`.
 - [ ] `BI-C61B5202`, `BI-07D76D6B` visible and linked under `EP-INT-2E7C1A`.
-- [ ] Taxonomy epic creation noted as a deferred manual admin step with resolution path `BI-BCCC9C7B`.
+- [x] Taxonomy epic exists as `EP-BIZ-CAP`; durable MCP `create_epic` gap remains captured as `BI-BCCC9C7B`.
 
 ### Implementation slices (Chunks 2–5)
 
@@ -466,12 +478,12 @@ After applying the body template to 10+ items (Chunk 2, Task 3), review: which f
 
 ## Recommended Next Smallest Buildable Slice
 
-**Step 0 (unblocking admin action):** Create the `Business Capability and Employee Work Taxonomy` epic manually via DPF admin UI or database seed. Then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, and `BI-4C166411`. `BI-BCCC9C7B` tracks the MCP `create_epic` gap so this step is not manual next time.
+**Step 0 (resolved):** The taxonomy epic exists as `EP-BIZ-CAP`, and the taxonomy items are linked there. `BI-BCCC9C7B` still tracks the MCP `create_epic` gap so future planning tracks do not depend on manual admin setup.
 
-**Chunk 2 first:** Build `BI-407125DA` — a small backlog capability-context foundation that standardizes the body template and validates whether first-class context fields are needed. This lets every later QuickBooks, Stripe, ADP, HubSpot, employee, and storefront parity item carry the same strategic context without blocking on schema.
+**Completed:** `BI-407125DA` and `BI-0E6D42B3` are done, so the body-template foundation and first employee-role/coworker audit no longer block the next slice.
 
-**Then Chunk 4:** Build `BI-0E6D42B3` — the employee role taxonomy and coworker coverage audit. That gives the product team the actual work map before adding more provider-specific depth.
+**Next smallest UI slice:** build `BI-4C166411` - expose commercial market and product enrichment from `TaxonomyNode.enrichment` on the portfolio taxonomy UX. The data already exists, and the implementation scope is view-model plus presentation/tests.
 
-**Chunk 3 in parallel:** `BI-C61B5202` and `BI-07D76D6B` can proceed in parallel with Chunk 2 since they are already linked to `EP-INT-2E7C1A` and do not depend on the taxonomy epic or the body-template proof.
+**Next taxonomy/data slice:** build `BI-861433C0` - publish the native integration coverage matrix for employee work roles. This should consume the same backlog context model and avoid creating a parallel taxonomy system.
 
-`BI-4C166411` can run next or in parallel with the audit because it is a narrow UI/view-model slice: the data already exists, and the product value is high because operators can finally see the workbook's build-vs-buy and commercial-market guidance directly in taxonomy UX.
+**QuickBooks can proceed in parallel:** `BI-C61B5202` and `BI-07D76D6B` remain under `EP-INT-2E7C1A` and do not depend on `EP-BIZ-CAP`.
