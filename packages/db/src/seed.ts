@@ -19,6 +19,12 @@ import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
+import {
+  SPEACHES_PROVIDER_ID,
+  SPEACHES_MODEL_ID,
+  SPEACHES_MODEL_PROFILE_CONFIG,
+  SPEACHES_ENDPOINT_PERFORMANCE_BASELINE,
+} from "./voice-stt-providers.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
@@ -1738,6 +1744,104 @@ async function seedModelProfiles(): Promise<void> {
   console.log(`  Seeded ${created} model profiles (${skipped} already existed)`);
 }
 
+/**
+ * Voice Input Slice 1 / Task 2 — speaches transcription model + perf baseline.
+ *
+ * Owning plan: docs/superpowers/plans/2026-05-16-voice-input-slice-1-portal-mic.md
+ *
+ * Idempotent: re-running this seed updates the profile fields (per the standard
+ * codex/chatgpt seed pattern, profileSource="seed" rows get refreshed on
+ * re-seed; evaluated/admin-tuned rows are preserved).
+ *
+ * Depends on: seedProviderRegistry() having already created the speaches
+ * provider row from packages/db/data/providers-registry.json with
+ * endpointType="transcription". If that row is missing, this seed logs a
+ * warning and skips — the provider catalog is the source of truth, not
+ * this function.
+ */
+async function seedSpeachesTranscriptionModel(): Promise<void> {
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId: SPEACHES_PROVIDER_ID },
+  });
+  if (!provider) {
+    console.warn(
+      `[seed] speaches provider not found in ModelProvider — packages/db/data/providers-registry.json must include providerId='${SPEACHES_PROVIDER_ID}'. Skipping transcription model seed.`,
+    );
+    return;
+  }
+
+  // Upsert the ModelProfile. profileSource="seed" + profileSource check at
+  // refresh time mirror the codex pattern (seed.ts seedCodexModels).
+  const { providerId: _pid, modelId: _mid, ...profileData } = SPEACHES_MODEL_PROFILE_CONFIG;
+  const existingProfile = await prisma.modelProfile.findUnique({
+    where: { providerId_modelId: { providerId: SPEACHES_PROVIDER_ID, modelId: SPEACHES_MODEL_ID } },
+    select: { id: true, profileSource: true },
+  });
+
+  let profileId: string;
+  if (!existingProfile) {
+    const created = await prisma.modelProfile.create({
+      data: {
+        providerId: SPEACHES_PROVIDER_ID,
+        modelId: SPEACHES_MODEL_ID,
+        ...profileData,
+        bestFor: profileData.bestFor as Prisma.InputJsonValue,
+        avoidFor: profileData.avoidFor as Prisma.InputJsonValue,
+        inputModalities: profileData.inputModalities as Prisma.InputJsonValue,
+        outputModalities: profileData.outputModalities as Prisma.InputJsonValue,
+        capabilities: profileData.capabilities as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+    profileId = created.id;
+    console.log(`  Seeded speaches transcription profile (${SPEACHES_MODEL_ID})`);
+  } else if (existingProfile.profileSource === "seed") {
+    // Refresh from catalog when the row hasn't been overridden by eval or admin.
+    await prisma.modelProfile.update({
+      where: { id: existingProfile.id },
+      data: {
+        ...profileData,
+        bestFor: profileData.bestFor as Prisma.InputJsonValue,
+        avoidFor: profileData.avoidFor as Prisma.InputJsonValue,
+        inputModalities: profileData.inputModalities as Prisma.InputJsonValue,
+        outputModalities: profileData.outputModalities as Prisma.InputJsonValue,
+        capabilities: profileData.capabilities as Prisma.InputJsonValue,
+      },
+    });
+    profileId = existingProfile.id;
+    console.log(`  Refreshed speaches transcription profile (${SPEACHES_MODEL_ID})`);
+  } else {
+    profileId = existingProfile.id;
+    console.log(
+      `  Preserved speaches transcription profile (profileSource=${existingProfile.profileSource})`,
+    );
+  }
+
+  // Upsert the EndpointTaskPerformance baseline. endpointId is the profile cuid.
+  // The unique constraint is (endpointId, taskType), so upsert by that pair.
+  await prisma.endpointTaskPerformance.upsert({
+    where: {
+      endpointId_taskType: {
+        endpointId: profileId,
+        taskType: SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.taskType,
+      },
+    },
+    create: {
+      endpointId: profileId,
+      modelId: SPEACHES_MODEL_ID,
+      ...SPEACHES_ENDPOINT_PERFORMANCE_BASELINE,
+      recentScores: [...SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.recentScores] as number[],
+      dimensionScores: SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.dimensionScores as Prisma.InputJsonValue,
+    },
+    update: {
+      // Re-seed does NOT clobber accumulated evaluation history — only ensures
+      // the row exists. Real telemetry from inference traffic owns the scores.
+      modelId: SPEACHES_MODEL_ID,
+    },
+  });
+  console.log(`  Ensured EndpointTaskPerformance(${SPEACHES_PROVIDER_ID}/${SPEACHES_MODEL_ID}, taskType=${SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.taskType})`);
+}
+
   /**
    * Keep Anthropic subscription profiles in a healthy fallback state for
    * Build Studio and coworker flows when Codex is unavailable.
@@ -2033,6 +2137,7 @@ async function main(): Promise<void> {
   await seedChatGPTModels();
   await seedLocalModels();
   await seedModelProfiles();
+  await seedSpeachesTranscriptionModel();
   await seedAnthropicSubScope();
   await ensureBuildStudioModelConfig();
   await seedModelPricing();

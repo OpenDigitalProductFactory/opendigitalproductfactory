@@ -2164,6 +2164,7 @@ model AdapterRunTelemetry {
 
   // Outcome dimensions (spec §5.4)
   status              String    // "success" | "refusal" | "error" | "timeout" | "cancelled" | "policy-block"
+  httpStatus          Int?      // raw HTTP status code from the provider (null for CLI adapters and successes without errors)
   refusalReason       String?
   errorClass          String?
   inputTokens         Int?

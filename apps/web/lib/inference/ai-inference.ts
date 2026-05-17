@@ -70,6 +70,7 @@ export class InferenceError extends Error {
     public readonly providerId: string,
     public readonly statusCode?: number,
     public readonly headers?: Record<string, string>,
+    public readonly rawBody?: string,
   ) {
     super(message);
     this.name = "InferenceError";
@@ -99,18 +100,18 @@ export function classifyHttpError(
     : undefined;
 
   if (status === 401 || status === 403) {
-    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers);
+    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body);
   }
   if (status === 429) {
-    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers);
+    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body);
   }
   if (status === 529 || /\b529\b|overloaded/i.test(body)) {
-    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers);
+    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers, body);
   }
   if (status === 404) {
-    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers);
+    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body);
   }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers);
+  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body);
 }
 
 // ─── Build Auth Headers ──────────────────────────────────────────────────────
@@ -340,6 +341,7 @@ export async function callProvider(
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession,
+  attribution?: { agentId?: string | null; threadId?: string | null; skillId?: string | null },
 ): Promise<InferenceResult> {
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
@@ -428,9 +430,15 @@ export async function callProvider(
       startedAt: telemetryStartedAt,
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
-      status: err instanceof InferenceError ? "error" : "error",
+      status: "error",
       errorClass: err instanceof InferenceError ? err.code : "unknown",
-      refusalReason: err instanceof Error ? err.message.slice(0, 200) : undefined,
+      httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
+      refusalReason: err instanceof InferenceError
+        ? (err.rawBody ?? err.message)
+        : (err instanceof Error ? err.message : undefined),
+      agentId: attribution?.agentId ?? undefined,
+      threadId: attribution?.threadId ?? undefined,
+      skillId: attribution?.skillId ?? undefined,
     });
     throw err;
   }
@@ -455,6 +463,9 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     toolCallsTotal: result.toolCalls.length,
+    agentId: attribution?.agentId ?? undefined,
+    threadId: attribution?.threadId ?? undefined,
+    skillId: attribution?.skillId ?? undefined,
   });
 
   // 5. Map AdapterResult → InferenceResult

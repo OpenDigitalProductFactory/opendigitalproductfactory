@@ -1,9 +1,11 @@
 # DPF Worktree Hygiene — Janitor Design
 
-> Status: **DRAFT** — proposed 2026-05-16. Per AGENTS.md §10, the
-> Research & Benchmarking section below must remain populated before
-> this spec is finalized. Implementation waits on operator approval;
-> no behavior changes until the matching plan is approved.
+> Status: **APPROVED** — proposed and operator-decisions resolved
+> 2026-05-16; original PR #653 merged into `main`. Per AGENTS.md §10,
+> the Research & Benchmarking section below remains populated.
+> Implementation waits on the matching plan
+> (`docs/superpowers/plans/2026-05-16-worktree-hygiene-plan.md`)
+> and the dry-run gate in §11.
 >
 > Owner: platform / dev-experience.
 > Related: AGENTS.md §4 (branching + worktrees), `feedback_worktree_per_session.md`,
@@ -98,7 +100,7 @@ not by a wildcard sweep. Adding a new client = adding a row.
 |---|---|---|---|
 | Claude Code (sessions + subagent isolation) | `D:\DPF\.claude\worktrees\` | **In** | Auto-generated, no owner, accumulates. |
 | Manual `git worktree add`, per AGENTS.md §4 | `D:\DPF-<topic>` | **Out** (read-only inventory) | Human-named, intentional; janitor surfaces stale ones in its log but never removes. |
-| Legacy repo-internal manual worktrees | `D:\DPF\.worktrees\` | **Out** (flagged) | Non-standard per AGENTS.md §4; janitor flags for human triage rather than acting. |
+| Repo-internal human-named worktrees | `D:\DPF\.worktrees\` | **In** | Active human-named work area parallel to `.claude/worktrees\` (14 entries observed 2026-05-16, 13 actively used in the prior 3 days, 1 clearly abandoned). Same safety predicates as the harness root. Long-term consolidation to `D:\DPF-<topic>` per AGENTS.md §4 is tracked as follow-up (§10). |
 | Codex CLI (direct user invocation) | `~/.codex/worktrees/` | **Out** | Not under DPF management; Codex owns its hygiene. The janitor's log lists count + size for visibility only. |
 | Build Studio / in-platform sandbox | n/a — Docker | **Out** | No worktrees created. |
 | VS Code / Cursor / Cline / Continue / Copilot | n/a — file-level only | **Out** for creation; **In** for safety predicate | These clients don't create worktrees, but a VS Code window can hold a directory open. The janitor's safety predicate must check for an open editor on the target before removal. |
@@ -106,7 +108,9 @@ not by a wildcard sweep. Adding a new client = adding a row.
 The registry lives in code (`scripts/worktree-janitor-lib.psm1`) as
 `$ManagedRoots` and `$InventoryOnlyRoots`. Any path outside both
 lists is invisible to the janitor — opt-in by enumeration, never
-implicit.
+implicit. `$ManagedRoots` carries both `D:\DPF\.claude\worktrees\`
+and `D:\DPF\.worktrees\` (per §9.1); both use the same 7-day
+predicates documented in §4.3.
 
 ## 4. Design
 
@@ -207,8 +211,10 @@ A local branch is deleted if and only if all of these hold:
    `spec/`, `plan/`, `chore/` are **never** touched automatically;
    those are human-authored intent.
 3. Merged into `origin/main` (after fetch), OR upstream `[gone]`.
-4. Branch tip ≥ 1 day old (in case a branch was just created and
-   the worktree hasn't been added yet).
+4. Branch tip ≥ **7 days old**. Matches the worktree mtime threshold
+   so "no differences with main + hasn't been touched in a while"
+   applies uniformly across worktree and branch hygiene (bumped from
+   the original 1-day proposal per §9.2).
 
 Deletions use `git branch -d` (refuses on unmerged). The reflog
 retains the tip for the default 90-day window for recovery.
@@ -384,28 +390,56 @@ heterogeneous tools create worktrees in a shared repo and the host
 OS prevents self-cleanup. The registry-driven, two-tier janitor is
 the synthesis.
 
-## 9. Open questions
+## 9. Operator decisions (resolved 2026-05-16)
 
-1. **Repo-internal `D:\DPF\.worktrees\`** (5 entries today) — leave
-   alone (current proposal), fold into janitor scope, or migrate
-   contents to the `D:\DPF-<topic>` convention and remove the
-   directory? Triage decision belongs to the operator.
-2. **`claude/*` zombie branches without worktrees** (~50+ today) —
-   the spec authorizes auto-deletion when merged into
-   `origin/main`. Acceptable as default, or require explicit
-   operator opt-in?
-3. **Cross-platform parity timing** — is the bash sibling a
-   follow-up issue (current proposal), or a Phase 1 deliverable
-   alongside the Windows implementation?
+These were the three open questions in the original draft. Operator
+answers below are now load-bearing for §3, §4.4, and §10.
+
+1. **Repo-internal `D:\DPF\.worktrees\`** — **add to managed scope
+   with the same 7-day predicates as `.claude/worktrees\`.**
+   Pre-decision inventory (2026-05-16) showed the directory is not
+   the legacy/non-standard accumulator the original draft assumed:
+   14 worktrees were present, 13 actively used in the prior 3 days,
+   and only one (`reference-data-progressive-admin`: 16 days idle,
+   0 ahead of `origin/main`, upstream `[gone]`) was clearly
+   abandoned. The directory functions as a human-named work area
+   indistinguishable in lifecycle from the harness root — same
+   safety net applies, the one zombie is exactly what the janitor
+   exists to clean. A follow-up backlog item tracks long-term
+   consolidation to `D:\DPF-<topic>` per AGENTS.md §4 (see §10).
+
+2. **`claude/*` (and `codex/*`) zombie branches without worktrees**
+   — **default on**, gated by the §4.4 predicates: no referencing
+   worktree, merged into `origin/main` (after fetch) **or** upstream
+   `[gone]`, and branch tip ≥ 7 days old (bumped from 1 day for
+   consistency with the worktree mtime threshold; "no differences
+   with main + hasn't been touched in a while" applies uniformly).
+   Human-named branches (`feat/`, `fix/`, `doc/`, `spec/`, `plan/`,
+   `chore/`) remain excluded from auto-deletion. Reflog retention
+   (90 days) and `git branch -d`'s built-in unmerged-refuse provide
+   defense in depth.
+
+3. **Cross-platform parity timing** — **follow-up backlog item, not
+   Phase 1.** Windows-first ships now (operator environment); the
+   bash / launchd / systemd sibling is tracked in §10 alongside the
+   existing macOS/Linux native plan.
 
 ## 10. Future work
 
-- **Bash sibling.** `scripts/worktree-janitor.sh` +
-  launchd plist (macOS) + systemd timer (Linux) installer. Same
+- **Bash sibling (per §9.3 decision).** `scripts/worktree-janitor.sh`
+  + launchd plist (macOS) + systemd timer (Linux) installer. Same
   registry, same safety predicates, ported semantics. Tracked as
   follow-up backlog item once the macOS/Linux native plan
   (`docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`)
   picks up implementation work.
+- **`D:\DPF\.worktrees\` consolidation (per §9.1 decision).** AGENTS.md
+  §4 names `D:\DPF-<topic>` as the canonical sibling-of-repo location
+  for human-named worktrees. The parallel `D:\DPF\.worktrees\` root is
+  now scoped into the janitor (so it stops accumulating debt
+  silently), but the long-term answer is to migrate any live entries
+  to `D:\DPF-<topic>` and retire the path. Tracked as follow-up
+  backlog work after the janitor lands and the operator has
+  observed a quarter of clean operation.
 - **Codex CLI hygiene.** If `~/.codex/worktrees/` accumulation
   becomes a pain point, raise upstream as a Codex bug; the
   janitor's inventory-only mode already surfaces the count and
@@ -426,12 +460,14 @@ the synthesis.
 
 This spec is implementation-ready when:
 
-- All open questions in §9 have operator decisions captured.
+- All operator decisions in §9 are captured (resolved 2026-05-16).
 - The matching plan at
   `docs/superpowers/plans/2026-05-16-worktree-hygiene-plan.md`
   exists and decomposes the work into reviewable slices.
 - Section §3 registry covers every client the operator currently
   uses (Claude Code confirmed; Codex confirmed as out-of-scope;
   others to be confirmed during plan review).
-- A dry-run pass over the current 33-worktree inventory produces
-  an action list the operator approves before any code merges.
+- A dry-run pass over the current accumulated inventory
+  (33 registered worktrees + the recount of `D:\DPF\.worktrees\`
+  documented in §9.1) produces an action list the operator
+  approves before any code merges.
