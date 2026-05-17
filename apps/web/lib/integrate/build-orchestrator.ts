@@ -322,9 +322,14 @@ export async function runBuildReviewDeliberation(
   // roles the orchestrator materialized. If counts don't match (pattern
   // expanded extra branches we don't have content for), we let the
   // synthesizer count them as incomplete — that's truthful.
+  // IMPORTANT: fall back to null (not art.branchNodeId) when no persisted
+  // node exists. art.branchNodeId may be a placeholder string like
+  // "reviewer-1" that doesn't exist in TaskNode, which causes a FK
+  // violation on ClaimRecord.branchNodeId -> TaskNode(id).
+  // branchNodeId is nullable (ON DELETE SET NULL) so null is safe.
   const alignedArtifacts = branchArtifacts.map((art, idx) => ({
     ...art,
-    branchNodeId: nodesByRole[idx]?.id ?? art.branchNodeId,
+    branchNodeId: nodesByRole[idx]?.id ?? null,
   }));
 
   const synth = await synthesizeDeliberation({
