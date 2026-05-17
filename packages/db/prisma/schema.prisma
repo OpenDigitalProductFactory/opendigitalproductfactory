@@ -2242,6 +2242,35 @@ model AdapterRunTelemetry {
   @@index([agentId, startedAt])
 }
 
+// Voice Slice 2 — Transcript cleanup audit row.
+//
+// Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §8 Slice 2, §9
+// Plan: docs/superpowers/plans/2026-05-17-voice-input-slice-2-cleanup-and-bias.md
+//
+// Written only when the cleanup pass either (a) detected injection-shape,
+// or (b) materially rewrote the raw transcript (Levenshtein ratio > 0.3).
+// Per spec §9, no-op cleanups are NOT logged to avoid bloating the table
+// — quality regression is detected from the rows we do write.
+model TranscriptCleanupAudit {
+  id                   String   @id @default(cuid())
+  threadId             String?
+  agentMessageId       String?
+  userId               String?
+  rawText              String   @db.Text
+  cleanedText          String   @db.Text
+  levenshteinRatio     Float
+  injectionSuspected   Boolean  @default(false)
+  injectionIndicators  String[] // populated when injectionSuspected = true
+  providerId           String?  // cleanup-pass provider; null when short-circuited before LLM
+  modelId              String?
+  durationMs           Int?
+  createdAt            DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([injectionSuspected])
+  @@index([threadId, createdAt])
+}
+
 model Engagement {
   id            String   @id @default(cuid())
   engagementId  String   @unique // ENG-<uuid>
