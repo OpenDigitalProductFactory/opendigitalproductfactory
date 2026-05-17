@@ -271,3 +271,22 @@ report — we'll integrate findings as they arrive.
 - [Installer-parity roadmap](../superpowers/plans/2026-05-09-macos-linux-native-support.md)
 - [Deployment doctrine](../superpowers/specs/2026-05-09-deployment-contracts.md) — the 10 canonical contracts every install path wraps.
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — for contributing back to the platform.
+
+### Connecting Claude Code or VS Code via MCP
+
+Once the platform is running, you can connect Claude Code, Codex CLI, or VS Code to your install's MCP server at `/api/mcp/v1`.
+
+**Option A — CLI (fastest, no browser needed):**
+
+```bash
+pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts > .mcp.json
+```
+
+This issues a read-only token with the coding-agent scope set and writes a ready-to-paste `.mcp.json` in one step. Restart Claude Code to pick up the `dpf` connector.
+
+```bash
+# VS Code instead:
+pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format vscode > .vscode/mcp.json
+```
+
+**Option B — Admin UI:** Log in → Admin > Platform Development > MCP Token Manager → generate a token → paste the displayed snippet into `.mcp.json`.
