@@ -18,7 +18,11 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "ea-architect", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "hr-specialist", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "customer-advisor", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
-  { agentId: "marketing-specialist", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  // minimumContextTokens: 0 — no static context floor. Routing uses a dynamic
+  // floor computed from actual message size (estimatedInputTokens × 1.5), which
+  // naturally scales with each subtask. The prompt instructs the agent to work
+  // in focused atomic turns so any available model — including local — can serve.
+  { agentId: "marketing-specialist", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 0 },
   { agentId: "storefront-advisor", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "onboarding-coo", minimumTier: "basic", budgetClass: "minimize_cost", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
   { agentId: "doc-specialist", minimumTier: "adequate", budgetClass: "balanced", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },

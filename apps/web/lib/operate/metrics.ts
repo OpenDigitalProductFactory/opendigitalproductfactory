@@ -175,3 +175,20 @@ export const postgresBackupDurationSeconds = new Histogram({
   buckets: [1, 2, 5, 10, 30, 60, 300, 900],
   registers: [metricsRegistry],
 });
+
+// ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
+
+export const voiceCleanupRunsTotal = new Counter({
+  name: "dpf_voice_cleanup_runs_total",
+  help: "Transcript cleanup runs by outcome and whether injection was suspected",
+  labelNames: ["outcome", "injection_suspected"] as const,
+  registers: [metricsRegistry],
+});
+
+export const voiceCleanupLevenshteinRatio = new Histogram({
+  name: "dpf_voice_cleanup_levenshtein_ratio",
+  help: "Levenshtein distance ratio between raw and cleaned transcript (0=identical, 1=totally different)",
+  buckets: [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9],
+  registers: [metricsRegistry],
+});

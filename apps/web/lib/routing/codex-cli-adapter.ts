@@ -25,6 +25,68 @@ import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 180_000; // 3 minutes
 
+// ─── Container file writer ─────────────────────────────────────────────────
+
+/**
+ * Write base64-encoded data to a file inside the sandbox container via stdin.
+ *
+ * Root cause fix for BI-2685C1E5: the old approach —
+ *   docker exec CONTAINER sh -c "echo '${largeB64}' | base64 -d > file"
+ * — passes the entire base64 payload as a shell argument inside the `sh -c`
+ * string, which itself is an argument to `docker exec`. On Linux the combined
+ * size of all arguments + the environment must stay below ARG_MAX (~2 MB).
+ * With 58+ tools each carrying full JSON parameter schemas the base64-encoded
+ * prompt easily exceeds that limit and the OS rejects the spawn with POSIX
+ * E2BIG ("Argument list too long").
+ *
+ * Piping through stdin is unlimited in size. `docker exec -i` connects the
+ * host's stdin to the container's stdin; `base64 -d` reads from stdin when no
+ * file argument is given. The command line for `docker exec` stays short
+ * regardless of payload size.
+ */
+export async function writeContainerFileViaStdin(
+  b64Data: string,
+  destPath: string,
+  mode = "644",
+): Promise<void> {
+  const spawn = lazyChildProcess().spawn;
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn(
+      "docker",
+      ["exec", "-i", SANDBOX_CONTAINER, "sh", "-c", `base64 -d > ${destPath} && chmod ${mode} ${destPath}`],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+
+    let stderr = "";
+    let settled = false;
+    const settle = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(writeTimeout); fn(); } };
+
+    // 10 s is generous for any realistic payload over a loopback socket.
+    const writeTimeout = setTimeout(() => {
+      proc.kill("SIGTERM");
+      settle(() => reject(new Error(`Container file write timed out: ${destPath}`)));
+    }, 10_000);
+
+    proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+    proc.stdin!.write(b64Data, (writeErr) => {
+      if (writeErr) settle(() => reject(new Error(`Container file write stdin error: ${writeErr.message}`)));
+    });
+    proc.stdin!.end();
+
+    proc.on("close", (code: number | null) => {
+      settle(() => {
+        if (code === 0) resolve();
+        else reject(new Error(`Container file write failed (exit ${code ?? "?"}): ${stderr.slice(0, 200)}`));
+      });
+    });
+
+    proc.on("error", (err: Error) => {
+      settle(() => reject(err));
+    });
+  });
+}
+
 export const TOOL_TRACE_KEYWORD_PATTERN = /\b(read_sandbox_file|write_sandbox_file|edit_sandbox_file|search_sandbox|list_sandbox_files|run_sandbox_command|check_sandbox|start_sandbox|saveBuildEvidence|save_build_notes|save_phase_handoff|reviewDesignDoc|reviewBuildPlan|search_project_files|read_project_file|list_project_directory|get_code_graph_freshness|inspect_build_code_impact|search_code_graph|trace_code_surface|find_related_tests|generate_design_system|search_design_intelligence|describe_model|deploy_feature|execute_promotion)\b/g;
 
 export function extractMentionedPlatformToolNames(text: string): string[] {
@@ -88,11 +150,10 @@ async function injectAuth(providerId: string): Promise<{ mode: "oauth" } | { mod
   });
 
   const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
+  // mkdir is a tiny command — safe to run via execAsync.
+  await execAsync(`docker exec ${SANDBOX_CONTAINER} mkdir -p /root/.codex`, { timeout: 5_000 });
   const authB64 = Buffer.from(authJson).toString("base64");
-  await execAsync(
-    `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.codex && echo '${authB64}' | base64 -d > /root/.codex/auth.json"`,
-    { timeout: 5_000 },
-  );
+  await writeContainerFileViaStdin(authB64, "/root/.codex/auth.json");
 
   return { mode: "oauth" };
 }
@@ -166,11 +227,10 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const spawnCb = cp.spawn;
 
     try {
+      // Write prompt via stdin to avoid the POSIX ARG_MAX limit (BI-2685C1E5).
+      // See writeContainerFileViaStdin for full rationale.
       const promptB64 = Buffer.from(prompt).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${promptB64}' | base64 -d > ${promptFile} && chmod 644 ${promptFile}"`,
-        { timeout: 5_000 },
-      );
+      await writeContainerFileViaStdin(promptB64, promptFile);
 
       // 4. Build runner script
       const modelFlag = modelId ? `-m ${modelId}` : "";
@@ -190,10 +250,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       ].join("\n");
 
       const scriptB64 = Buffer.from(script).toString("base64");
-      await execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > ${runnerScript} && chmod 755 ${runnerScript}"`,
-        { timeout: 5_000 },
-      );
+      await writeContainerFileViaStdin(scriptB64, runnerScript, "755");
 
       // 5. Spawn the CLI process
       console.log(`[codex-cli-adapter] Dispatching: model=${modelId}, provider=${providerId}, messages=${messages.length}`);
@@ -259,9 +316,16 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
 
         proc.on("error", (err: Error) => {
           clearTimeout(timer);
+          // E2BIG / ENOMEM: combined arg+env exceeded OS ARG_MAX.
+          // After the stdin-pipe fix this should not occur for prompt writes,
+          // but classify correctly if it ever does so the fallback chain can
+          // skip this provider rather than retrying a doomed request.
+          const isArgTooLong =
+            /E2BIG|ENOMEM/i.test(err.message) ||
+            /argument.*too.*long/i.test(err.message);
           reject(new InferenceError(
             `Codex CLI spawn error: ${err.message}`,
-            "network",
+            isArgTooLong ? "request_too_large" : "network",
             providerId,
           ));
         });
