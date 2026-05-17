@@ -48,21 +48,44 @@ export const FAMILY_TIERS: Record<string, QualityTier> = {
   "gemini-2.0-flash": "adequate",
   "gemma4":           "adequate",
   "gemma":            "basic",
-  // Local / open-source
+  // Local / open-source — versioned families first (longest-prefix wins)
+  "qwen3":            "strong",   // Qwen3 8B+: F1 0.93–0.97 tool calling, matches Haiku
+  "qwen2.5-coder":    "strong",   // Coding-specialised with strong tool use
+  "qwen":             "basic",    // Unversioned Qwen fallback
   "llama":            "basic",
   "phi":              "basic",
-  "qwen":             "basic",
   "mistral":          "basic",
   "deepseek":         "basic",
   "command-r":        "adequate",
 };
 
 /**
+ * Normalise a raw model ID to a bare family name for prefix matching.
+ * Handles Docker Model Runner and Ollama naming conventions:
+ *   "ai/qwen3:8b"             → "qwen3"
+ *   "docker.io/ai/gemma4:latest" → "gemma4"
+ *   "claude-sonnet-4-5"       → "claude-sonnet-4-5"  (unchanged)
+ */
+function normaliseFamilyId(modelId: string): string {
+  let s = modelId.toLowerCase();
+  // Strip namespace prefix — take the last path segment
+  if (s.includes("/")) {
+    s = s.split("/").pop()!;
+  }
+  // Strip tag suffix (e.g. ":8b", ":latest")
+  const colon = s.indexOf(":");
+  if (colon > 0) {
+    s = s.substring(0, colon);
+  }
+  return s;
+}
+
+/**
  * Assign a quality tier to a model using longest-prefix match.
  * Returns "adequate" for unknown models (conservative default).
  */
 export function assignTierFromModelId(modelId: string): QualityTier {
-  const normalised = modelId.toLowerCase();
+  const normalised = normaliseFamilyId(modelId);
   let bestMatch = "";
   let bestTier: QualityTier = "adequate";
 
