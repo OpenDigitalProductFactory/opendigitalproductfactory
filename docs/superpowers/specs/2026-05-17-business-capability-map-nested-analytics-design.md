@@ -266,9 +266,11 @@ Recommended additions:
 - `CapabilityOverlayState` with `tone`, `label`, `shortLabel`, `description`, and `sortWeight`.
 - `buildCapabilityEvidenceSummary(node)`.
 - `deriveCapabilityOverlayState(node, mode)`.
-- `buildCapabilityMapRows(tree)` if deterministic row grouping is needed after testing real child counts.
+- `buildCapabilityMapRows(tree)` - required for deterministic row grouping; implement as an identity pass if child counts are small, so the nested-map slice has a stable seam and a tested boundary regardless of data volume.
 
 The `getBusinessCapabilityMapData()` query should enrich backlog trace links with status where possible, because planning impact needs to distinguish open/in-progress work from done/deferred work. If the current select shape does not include backlog status, add it as a read-model field only.
+
+Planning verification on 2026-05-17 confirmed that `getBusinessCapabilityMapData()` currently selects backlog item ID and title but not status. The implementation plan will add status to the read model only; no schema change is required.
 
 ## UI Implementation Guidance
 
@@ -300,14 +302,16 @@ Later implementation must follow DPF theme rules:
 - IT4IT alignment uses the existing platform slugs.
 - No new database schema is added for this refinement unless an implementation spike proves a blocker and updates this spec first.
 - Unit tests cover evidence summary and overlay-state derivation.
+- Slice 1 confirms whether `BacklogItem` status is already returned by `getBusinessCapabilityMapData()`; if absent, it is added as a read-model field and this spec is updated to record the decision before planning proceeds.
 - UX verification captures desktop and mobile screenshots of the nested map and selected-capability detail panel.
 
 ## Implementation Slices After Spec Approval
 
 1. **Read-model tests and helpers.** Add failing tests for evidence summaries, backlog-status-aware planning overlay, and overlay-state derivation. Implement helpers in `apps/web/lib/business-capabilities/`.
 2. **Nested map UI.** Replace the flat section/card rendering with nested L1/L2/L3 containers while preserving existing create and maturity behavior.
-3. **Overlay controls and detail panel.** Add overlay selector, compact evidence chips, selected-capability state, and detail panel grouped by trace target.
-4. **Responsive and UX verification.** Exercise `/portfolio/architecture` in desktop and mobile viewports, capture screenshots, and adjust layout until tiles and labels are stable.
+3. **Overlay controls and evidence chips.** Add overlay selector, compact evidence chips per tile, and selected-capability state management.
+4. **Detail panel.** Add the drill-down panel grouped by trace target (taxonomy, products, backlog, architecture) with relationship labels, notes, and planning prompts.
+5. **Responsive and UX verification.** Exercise `/portfolio/architecture` in desktop and mobile viewports, capture screenshots, and adjust layout until tiles and labels are stable.
 
 ## Risks And Mitigations
 

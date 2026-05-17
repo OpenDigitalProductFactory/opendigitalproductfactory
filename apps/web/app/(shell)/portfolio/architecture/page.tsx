@@ -32,8 +32,16 @@ export default async function PortfolioArchitecturePage() {
         </div>
       </header>
 
-      <BusinessCapabilityForms capabilities={data.records} targetOptions={data.targetOptions} />
-      <BusinessCapabilityMap tree={data.tree} summary={data.summary} />
+      <BusinessCapabilityMap mapRows={data.mapRows} summary={data.summary} />
+
+      <details className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
+          Capability authoring
+        </summary>
+        <div className="mt-4">
+          <BusinessCapabilityForms capabilities={data.records} targetOptions={data.targetOptions} />
+        </div>
+      </details>
     </div>
   );
 }

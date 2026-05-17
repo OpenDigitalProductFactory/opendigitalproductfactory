@@ -30,10 +30,20 @@ export const TRACE_RELATIONSHIPS = [
   { value: "realized_by", label: "Realized By" },
 ] as const;
 
+export const CAPABILITY_OVERLAY_MODES = [
+  { value: "maturity", label: "Maturity Gap" },
+  { value: "coverage", label: "Operational Coverage" },
+  { value: "planning", label: "Planning Impact" },
+  { value: "it4it", label: "IT4IT Alignment" },
+] as const;
+
 export type It4itValueStream = (typeof IT4IT_VALUE_STREAMS)[number]["slug"];
 export type MaturityValue = (typeof MATURITY_LEVELS)[number]["value"];
 export type TraceTargetType = (typeof TRACE_TARGET_TYPES)[number]["value"];
 export type CapabilityMaturityBand = "aligned" | "watch" | "gap";
+export type CapabilityOverlayMode = (typeof CAPABILITY_OVERLAY_MODES)[number]["value"];
+export type CapabilityOverlayTone = CapabilityMaturityBand | "neutral" | "covered" | "active";
+export type BacklogTraceStatus = "triaging" | "open" | "in-progress" | "done" | "deferred" | null;
 
 export const IT4IT_VALUE_STREAM_SET = new Set<string>(
   IT4IT_VALUE_STREAMS.map((stream) => stream.slug),

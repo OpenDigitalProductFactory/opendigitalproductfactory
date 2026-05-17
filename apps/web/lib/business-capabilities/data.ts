@@ -3,9 +3,11 @@ import { prisma } from "@dpf/db";
 import {
   IT4IT_VALUE_STREAMS,
   TRACE_TARGET_TYPES,
+  type BacklogTraceStatus,
   type CapabilityMaturityBand,
   type TraceTargetType,
 } from "./types";
+import { buildCapabilityMapRows } from "./view-model";
 
 export type BusinessCapabilityTraceRecord = {
   id: string;
@@ -14,6 +16,7 @@ export type BusinessCapabilityTraceRecord = {
   note: string | null;
   label: string;
   href: string | null;
+  status?: BacklogTraceStatus;
 };
 
 export type BusinessCapabilityRecord = {
@@ -140,6 +143,19 @@ function taxonomyHref(nodeId: string | null): string | null {
   return nodeId ? `/portfolio/${nodeId}` : null;
 }
 
+function toBacklogTraceStatus(status: string | null | undefined): BacklogTraceStatus {
+  if (
+    status === "triaging" ||
+    status === "open" ||
+    status === "in-progress" ||
+    status === "done" ||
+    status === "deferred"
+  ) {
+    return status;
+  }
+  return null;
+}
+
 function toTraceRecord(link: {
   id: string;
   targetType: string;
@@ -147,7 +163,7 @@ function toTraceRecord(link: {
   note: string | null;
   taxonomyNode: { nodeId: string; name: string } | null;
   digitalProduct: { id: string; productId: string; name: string } | null;
-  backlogItem: { itemId: string; title: string } | null;
+  backlogItem: { itemId: string; title: string; status: string } | null;
   eaElement: { id: string; name: string; elementType: { name: string } } | null;
 }): BusinessCapabilityTraceRecord {
   if (link.targetType === "taxonomy_node" && link.taxonomyNode) {
@@ -180,6 +196,7 @@ function toTraceRecord(link: {
       note: link.note,
       label: `${link.backlogItem.itemId} ${link.backlogItem.title}`,
       href: null,
+      status: toBacklogTraceStatus(link.backlogItem.status),
     };
   }
 
@@ -215,7 +232,7 @@ export async function getBusinessCapabilityMapData() {
           include: {
             taxonomyNode: { select: { nodeId: true, name: true } },
             digitalProduct: { select: { id: true, productId: true, name: true } },
-            backlogItem: { select: { itemId: true, title: true } },
+            backlogItem: { select: { itemId: true, title: true, status: true } },
             eaElement: { select: { id: true, name: true, elementType: { select: { name: true } } } },
           },
         },
@@ -260,10 +277,12 @@ export async function getBusinessCapabilityMapData() {
     it4itValueStreams: capability.it4itValueStreams,
     traceLinks: capability.traceLinks.map(toTraceRecord),
   }));
+  const tree = buildCapabilityTree(records);
 
   return {
     records,
-    tree: buildCapabilityTree(records),
+    tree,
+    mapRows: buildCapabilityMapRows(tree),
     summary: summarizeCapabilityMap(records),
     targetOptions: {
       taxonomyNodes: taxonomyNodes.map((node) => ({ id: node.id, label: `${node.name} (${node.nodeId})` })),

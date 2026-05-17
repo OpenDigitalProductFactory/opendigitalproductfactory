@@ -7,6 +7,11 @@ import {
   summarizeCapabilityMap,
   type BusinessCapabilityRecord,
 } from "./data";
+import {
+  buildCapabilityEvidenceSummary,
+  buildCapabilityMapRows,
+  deriveCapabilityOverlayState,
+} from "./view-model";
 
 const rows: BusinessCapabilityRecord[] = [
   {
@@ -56,6 +61,32 @@ const rows: BusinessCapabilityRecord[] = [
         label: "Customer Pipeline",
         href: "/portfolio/product/prod-1",
       },
+      {
+        id: "link-3",
+        targetType: "backlog_item",
+        relationship: "impacted_by",
+        note: "Open improvement work",
+        label: "BI-OPEN Improve lead routing",
+        href: null,
+        status: "in-progress",
+      },
+      {
+        id: "link-4",
+        targetType: "backlog_item",
+        relationship: "impacted_by",
+        note: "Completed evidence",
+        label: "BI-DONE Finish CRM mapping",
+        href: null,
+        status: "done",
+      },
+      {
+        id: "link-5",
+        targetType: "ea_element",
+        relationship: "realized_by",
+        note: "Architecture trace",
+        label: "CRM Context (Application Component)",
+        href: "/ea",
+      },
     ],
   },
   {
@@ -97,8 +128,8 @@ describe("business capability map data helpers", () => {
 
     expect(grouped.taxonomy_node).toHaveLength(1);
     expect(grouped.digital_product).toHaveLength(1);
-    expect(grouped.backlog_item).toEqual([]);
-    expect(grouped.ea_element).toEqual([]);
+    expect(grouped.backlog_item).toHaveLength(2);
+    expect(grouped.ea_element).toHaveLength(1);
   });
 
   it("summarizes maturity posture across the map", () => {
@@ -109,5 +140,54 @@ describe("business capability map data helpers", () => {
     expect(summary.gapCount).toBe(1);
     expect(summary.watchCount).toBe(1);
     expect(summary.alignedCount).toBe(1);
+  });
+
+  it("summarizes operational evidence and active backlog work", () => {
+    const tree = buildCapabilityTree(rows);
+    const capability = tree[0]!.children[0]!;
+
+    const summary = buildCapabilityEvidenceSummary(capability);
+
+    expect(summary.taxonomyCount).toBe(1);
+    expect(summary.productCount).toBe(1);
+    expect(summary.backlogCount).toBe(2);
+    expect(summary.activeBacklogCount).toBe(1);
+    expect(summary.architectureCount).toBe(1);
+    expect(summary.hasOperationalEvidence).toBe(true);
+  });
+
+  it("derives overlay state for maturity, coverage, planning, and IT4IT modes", () => {
+    const tree = buildCapabilityTree(rows);
+    const family = tree[0]!;
+    const capability = family.children[0]!;
+    const subCapability = capability.children[0]!;
+
+    expect(deriveCapabilityOverlayState(capability, "maturity")).toMatchObject({
+      tone: "watch",
+      shortLabel: "3/4",
+    });
+    expect(deriveCapabilityOverlayState(capability, "coverage")).toMatchObject({
+      tone: "covered",
+      shortLabel: "5 links",
+    });
+    expect(deriveCapabilityOverlayState(capability, "planning")).toMatchObject({
+      tone: "active",
+      shortLabel: "1 active",
+    });
+    expect(deriveCapabilityOverlayState(subCapability, "planning")).toMatchObject({
+      tone: "aligned",
+      shortLabel: "Aligned",
+    });
+    expect(deriveCapabilityOverlayState(family, "it4it")).toMatchObject({
+      tone: "covered",
+      shortLabel: "2 streams",
+    });
+  });
+
+  it("builds deterministic map rows for the nested map seam", () => {
+    const tree = buildCapabilityTree(rows);
+
+    expect(buildCapabilityMapRows(tree)).toEqual([{ id: "row-1", families: tree }]);
+    expect(buildCapabilityMapRows([])).toEqual([]);
   });
 });
