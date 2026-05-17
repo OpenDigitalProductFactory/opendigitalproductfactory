@@ -235,6 +235,17 @@ export async function runPostgresRestore(
     }
 
     // ── 2. Pre-restore safety dump ────────────────────────────────────────
+    //
+    // CRITICAL: pg_restore --clean drops + recreates ALL tables, which wipes
+    // any rows we INSERT before running it — including the safety-dump
+    // BackupRun row and our own BackupRestore audit row. So we capture the
+    // safety dump's metadata in MEMORY here, run the restore, then re-insert
+    // both rows AFTER the restore lands. This keeps the audit trail visible
+    // to operators in the admin UX (otherwise the table would always be
+    // empty after a successful restore).
+    //
+    // The safety dump's FILE on disk is unaffected by pg_restore (host bind
+    // mount), so even if the re-insert fails, manual recovery is possible.
     restoreTraceLog("writing pre-restore safety dump");
     const safetyTake = args.takeSafetyBackup
       ? args.takeSafetyBackup
@@ -252,18 +263,20 @@ export async function runPostgresRestore(
     }
     restoreTraceLog(`safety dump ok runId=${safety.runId}`);
 
-    // ── 3. Insert the BackupRestore row in "running" state ────────────────
-    const created = await prisma.backupRestore.create({
-      data: {
-        status: "running",
-        sourceBackupRunId: source.id,
-        preRestoreBackupRunId: safety.runId,
-        initiatedByUserId: args.initiatedByUserId ?? null,
-      },
-      select: { id: true },
+    // Snapshot the safety BackupRun row so we can re-insert it after the
+    // restore wipes the DB. We read it back rather than reconstruct from
+    // memory so the audit captures the exact field values (sizeBytes,
+    // sha256, finishedAt, etc.).
+    const safetyRowSnapshot = await prisma.backupRun.findUnique({
+      where: { id: safety.runId },
     });
+    if (!safetyRowSnapshot) {
+      throw new RestoreIntegrityError(
+        "Safety dump BackupRun row not found after creation; aborting restore.",
+      );
+    }
 
-    // ── 4. Run the restore script ─────────────────────────────────────────
+    // ── 3. Run the restore script ─────────────────────────────────────────
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       DUMP_PATH: dumpPath,
@@ -277,33 +290,62 @@ export async function runPostgresRestore(
     const finishedAt = now();
     const durationMs = finishedAt.getTime() - startedAt.getTime();
 
+    // ── 4. Re-insert audit rows AFTER the restore ─────────────────────────
+    // The DB is now in the source-dump state. The safety BackupRun row is
+    // gone; our BackupRestore row was never inserted. Re-insert both so the
+    // operator sees the restore in history and can find the safety dump.
+    //
+    // We use upsert on BackupRun because the safety dump's id may collide
+    // with whatever the dump contains (extremely unlikely with cuids but
+    // defensive). We use create on BackupRestore because it's fresh.
+    await prisma.backupRun.upsert({
+      where: { id: safetyRowSnapshot.id },
+      update: {}, // if it somehow exists, leave alone
+      create: {
+        id: safetyRowSnapshot.id,
+        target: safetyRowSnapshot.target,
+        startedAt: safetyRowSnapshot.startedAt,
+        finishedAt: safetyRowSnapshot.finishedAt,
+        status: safetyRowSnapshot.status,
+        trigger: safetyRowSnapshot.trigger,
+        schedule: safetyRowSnapshot.schedule,
+        sizeBytes: safetyRowSnapshot.sizeBytes,
+        durationMs: safetyRowSnapshot.durationMs,
+        sha256: safetyRowSnapshot.sha256,
+        pgVersion: safetyRowSnapshot.pgVersion,
+        dpfVersion: safetyRowSnapshot.dpfVersion,
+        storagePath: safetyRowSnapshot.storagePath,
+        errorMessage: safetyRowSnapshot.errorMessage,
+        prunedAt: safetyRowSnapshot.prunedAt,
+        createdAt: safetyRowSnapshot.createdAt,
+      },
+    });
+
+    const created = await prisma.backupRestore.create({
+      data: {
+        startedAt,
+        finishedAt: outcome.ok ? finishedAt : finishedAt,
+        status: outcome.ok ? "ok" : "failed",
+        sourceBackupRunId: source.id,
+        preRestoreBackupRunId: safety.runId,
+        initiatedByUserId: args.initiatedByUserId ?? null,
+        errorMessage: outcome.ok ? null : summarizeScriptFailure(outcome),
+      },
+      select: { id: true },
+    });
+
     if (outcome.ok) {
-      await prisma.backupRestore.update({
-        where: { id: created.id },
-        data: {
-          status: "ok",
-          finishedAt,
-        },
-      });
       postgresRestoreRunsTotal.inc({ status: "ok" });
       postgresRestoreDurationSeconds.observe(durationMs / 1000);
       restoreTraceLog(`restore ok id=${created.id} duration_ms=${durationMs}`);
       return { restoreId: created.id, status: "ok" };
     }
 
-    // Failure path — safety dump is still on disk, operator can retry.
-    const errorMessage = summarizeScriptFailure(outcome);
-    await prisma.backupRestore.update({
-      where: { id: created.id },
-      data: {
-        status: "failed",
-        finishedAt,
-        errorMessage,
-      },
-    });
     postgresRestoreRunsTotal.inc({ status: "failed" });
     postgresRestoreDurationSeconds.observe(durationMs / 1000);
-    restoreTraceLog(`restore failed id=${created.id} reason=${errorMessage}`);
+    restoreTraceLog(
+      `restore failed id=${created.id} reason=${summarizeScriptFailure(outcome)}`,
+    );
     return { restoreId: created.id, status: "failed" };
   } finally {
     release();
