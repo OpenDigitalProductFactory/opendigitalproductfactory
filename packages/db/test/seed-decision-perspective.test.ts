@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   MARK_DPF_PLATFORM_PROFILE_ID,
+  PLAN_READINESS_DOMAIN_CLASS,
   buildDecisionPerspectiveSeed,
   seedDecisionPerspective,
 } from "../src/seed-decision-perspective";
@@ -16,7 +17,8 @@ describe("buildDecisionPerspectiveSeed", () => {
     expect(first.version.materialFingerprint).toBe(second.version.materialFingerprint);
     expect(first.materials.length).toBeGreaterThanOrEqual(5);
     expect(first.materials.every((material) => material.profileId === MARK_DPF_PLATFORM_PROFILE_ID)).toBe(true);
-    expect(first.materials.every((material) => material.domains.includes("build-studio-plan-advancement"))).toBe(true);
+    expect(first.materials.every((material) => material.domainClass === PLAN_READINESS_DOMAIN_CLASS)).toBe(true);
+    expect(first.materials.every((material) => material.domains.includes(PLAN_READINESS_DOMAIN_CLASS))).toBe(true);
     expect(first.materials.every((material) => material.evidenceGrade === "A")).toBe(true);
   });
 });

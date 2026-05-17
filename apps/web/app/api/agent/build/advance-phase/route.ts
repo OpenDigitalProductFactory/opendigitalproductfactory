@@ -126,6 +126,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         planReview: build.planReview as ReviewResult | null,
         deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
       },
+      triggeredByUserId: user.id ?? null,
     });
     if (!decisionGate.allowed) {
       return NextResponse.json(

@@ -6,12 +6,15 @@ import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
   DecisionPerspectiveProfile,
+  DecisionDomainClass,
   DecisionRiskTier,
   PerspectiveMaterial,
   PerspectiveMaterialScore,
 } from "./types";
 
 export { scorePerspectiveMaterial } from "./material";
+
+export const RECENT_OVERRIDE_WINDOW_DAYS = 30;
 
 const RISK_RANK: Record<DecisionRiskTier, number> = {
   low: 1,
@@ -59,7 +62,7 @@ function orderedProfileChain(
 function scoreProfileCoverage(input: {
   profile: DecisionPerspectiveProfile;
   materials: PerspectiveMaterial[];
-  questionDomain: string;
+  questionDomain: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   recentOverrideCount: number;
 }): {
@@ -106,7 +109,7 @@ function hasPrincipleConflict(materials: PerspectiveMaterial[]): boolean {
       .filter((material) => material.freshness === "current")
       .filter((material) => material.reviewStatus === "approved")
       .filter((material) => material.promotionState === "promoted")
-      .map((material) => material.principleDirection)
+      .map((material) => material.direction ?? material.principleDirection)
       .filter((direction): direction is "support" | "oppose" => direction === "support" || direction === "oppose"),
   );
 
@@ -141,6 +144,7 @@ export function evaluateDecisionPerspective(
       confidenceScore: 0,
       coverageGap: true,
       principleConflict: false,
+      domainClass: input.questionDomain,
       resolvedProfileChain,
       materialCount: 0,
       freshnessDistribution: { current: 0, stale: 0, superseded: 0, contradicted: 0 },
@@ -185,6 +189,7 @@ export function evaluateDecisionPerspective(
     confidenceScore: confidence,
     coverageGap: false,
     principleConflict,
+    domainClass: input.questionDomain,
     resolvedProfileChain,
     materialCount: selectedCoverage.applicableMaterials.length,
     freshnessDistribution: summarizeFreshness(selectedCoverage.materialScores),

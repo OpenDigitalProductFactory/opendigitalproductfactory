@@ -20,6 +20,9 @@ This is not the standalone Ask WWMD surface and not the marketing article. Those
 - Rule-based confidence ships first. Model-assessed evidence fit waits until the ledger has enough human correction data.
 - Build Studio owner is the first resolver. Mark is only the escalation target for platform doctrine beyond owner authority.
 - Marketing/public article work is deferred until implementation evidence exists.
+- **Failure semantics: fail-closed.** If the evaluator throws or the profile/material loader fails, advancement is blocked and a `DecisionInteraction` is written with `outcomeType: "escalate"` and `rationale` carrying the error class. The operator sees an escalation; the cause is logged. WWMD never silently allows advancement on its own failure — the whole point of the kernel is that a missing decision is a deferred decision, not an automatic yes.
+- **Idempotency: keyed on `(featureBuildId, phaseFrom, phaseTo, profileVersionId)`.** Re-invoking the gate for the same build/phase transition within the same profile version returns the existing `DecisionInteraction` row rather than creating a duplicate, unless the operator has explicitly written an `EscalationCapture` clearing the prior outcome. This prevents double-write on accidental retries and preserves a single audit trail per advancement attempt.
+- **Recent override window: rolling 30-day window scoped to the same `domainClass` and `profileId`.** The confidence formula's `recentOverrideCount` counts `EscalationCapture` rows where the human's resolution disagreed with the gate's recommendation. The window is a constant in `evaluator.ts` and changes require a deliberate code update with a test case.
 
 ## Existing Seams Verified
 
@@ -57,9 +60,9 @@ Models:
 - `DecisionPerspectiveProfileVersion`
   - `versionId`, `profileId`, `versionNumber`, `materialFingerprint`, `changeSummary`, `promotedByPrincipalId`, timestamps.
 - `PerspectiveMaterial`
-  - `materialId`, `profileId`, optional `profileVersionId`, `sourceType`, `sourceRef`, `scope`, `freshness`, `confidenceWeight`, `reviewStatus`, `promotionState`, validation timestamps, summary.
+  - `materialId`, `profileId`, optional `profileVersionId`, `sourceType`, `sourceRef`, `scope`, `domainClass` (the decision class this material applies to — e.g. `plan-readiness`, `architecture-tradeoff`, `risk-assessment`), `direction` (signed stance vector for principle conflict detection — see Slice 2), `evidenceGrade` (`A` | `B` | `C` | `D`, per the deliberation framework's grade scale), `freshness`, `confidenceWeight`, `reviewStatus`, `promotionState`, validation timestamps, summary.
 - `DecisionInteraction`
-  - `interactionId`, `profileId`, `profileVersionId`, optional `fallbackProfileId`, optional `featureBuildId`, optional `taskRunId`, optional `deliberationRunId`, `routeContext`, `phaseFrom`, `phaseTo`, `question`, `options`, `evidenceBundle`, `sources`, `rationale`, `riskTier`, `confidenceBefore`, `confidenceAfter`, `outcomeType`, `outcomePayload`, `humanOutcome`, timestamps.
+  - `interactionId`, `profileId`, `profileVersionId`, optional `fallbackProfileId`, optional `featureBuildId`, optional `taskRunId`, optional `deliberationRunId`, `triggeredByUserId` (FK to the user/principal who caused the gate to fire), `routeContext`, `phaseFrom`, `phaseTo`, `domainClass`, `question`, `options`, `evidenceBundle`, `sources`, `rationale`, `riskTier`, `confidenceBefore`, `confidenceAfter`, `outcomeType`, `outcomePayload`, `humanOutcome`, `principleConflict` (boolean), timestamps. Composite unique index on `(featureBuildId, phaseFrom, phaseTo, profileVersionId)` to enforce idempotency.
 - `EscalationCapture`
   - `interactionId`, resolver principal/user, prompt, answer, criteria, rationale, objectionsResolved, `domainClass` (string — the decision class that was escalated; required for drift detection in later backlog), candidateMaterial flag, timestamps.
 - `DeferralCapture`
@@ -82,6 +85,7 @@ Write failing tests before production code.
    - Confidence score for a set of all-`current` Grade A sources meets the `recommend` threshold.
    - Confidence score for a mix of `stale` and Grade C sources stays below `arbitrate` threshold.
    - Principle conflict where both sides are equally weighted produces `escalate`, not a synthetic recommendation.
+   - Evaluator throwing on malformed input is caught by the gate service and produces a fail-closed `escalate` outcome with the error class recorded in `rationale` — never a thrown exception that bubbles to the operator without a ledger row.
 2. Build Studio gate tests in `apps/web/lib/decision-perspective/build-studio-gate.test.ts`
    - Builds a plan-advancement question from `FeatureBuild` evidence.
    - Includes compact deliberation summary when present.
@@ -141,6 +145,12 @@ Files:
 
 The Build Studio gate uses the resolver before calling the evaluator, so runtime chain traversal stays outside the scoring function. The evaluator remains pure and may evaluate an already-supplied in-memory profile chain for tests and future non-DB callers, but it does not query or mutate persistence.
 
+#### Material selection logic
+
+"Applicable material" for a question is determined by exact match on `domainClass`. Free-text matching of question content against `summary` is explicitly out of scope for v1 — it adds nondeterminism and makes the evaluator untestable. Material that does not declare a `domainClass` matching the current question's `domainClass` is not included in the resolved set, even if it lives in the active profile.
+
+The Build Studio plan-advancement gate uses `domainClass: "plan-readiness"` as its single v1 class. Adding new gate sites adds new domain classes; the constant union lives in `types.ts` and is exported alongside the `RiskTier` and `OutcomeType` unions.
+
 #### Confidence formula (v1 rule-based)
 
 `confidenceScore` is a float in `[0, 1]` computed as:
@@ -188,10 +198,21 @@ Files:
 - `apps/web/lib/decision-perspective/persistence.ts`
 - `apps/web/lib/decision-perspective/build-studio-gate.test.ts`
 
+The gate service is the orchestrator: it builds the question/context, calls `resolveProfileMaterial`, invokes the pure evaluator, persists the result, and emits `[tool-trace]` lines. It catches evaluator exceptions and converts them into fail-closed `escalate` outcomes (per Reviewed Decisions).
+
+#### Idempotency check
+
+Before invoking the evaluator, the service queries for an existing `DecisionInteraction` matching `(featureBuildId, phaseFrom, phaseTo, profileVersionId)`. If one exists and it does not have a clearing `EscalationCapture`, the service emits `wwmd.idempotent.hit` and returns the existing row's outcome — no second evaluation, no second ledger write. This handles double-clicks and retry storms cleanly.
+
+If the matched row does have an `EscalationCapture` that the operator wrote to clear it, the service treats the current invocation as a fresh evaluation and writes a new row.
+
 Exit:
 
 - Service reads Build Studio plan context, current profile version, applicable material, and deliberation evidence.
-- Service writes one ledger interaction per gate invocation.
+- Service writes one ledger interaction per gate invocation, respecting the idempotency key.
+- Re-invocation with the same key returns the existing row and emits `wwmd.idempotent.hit`.
+- Re-invocation after `EscalationCapture` clearing produces a new row.
+- Evaluator exception is caught, logged as `wwmd.evaluator.failed`, and persisted as fail-closed `escalate`.
 - Service returns a typed gate result that the action and API can share.
 
 ### Slice 4 - Advance path integration
@@ -270,6 +291,28 @@ UX verification (manual, against Docker-served app):
 - Confirm the `DecisionInteraction` row was written (query the decision ledger inspector or admin DB view).
 - Trigger an escalation scenario (use a build with thin plan material to force a low-confidence result) and confirm the phase does not advance until `EscalationCapture` is written.
 - Confirm `skipPhaseCheck` builds do not appear in the ledger.
+
+## Observability
+
+Every WWMD invocation emits structured `[tool-trace]` log lines matching the platform-wide convention. The trace key is the `interactionId`. Required events:
+
+| Event | When | Fields |
+| --- | --- | --- |
+| `wwmd.gate.invoked` | Gate fires (before evaluation) | `interactionId`, `profileId`, `profileVersionId`, `domainClass`, `riskTier`, `featureBuildId`, `triggeredByUserId` |
+| `wwmd.profile.resolved` | After fallback chain traversal | `interactionId`, `resolvedProfileChain` (array of profile ids hit), `materialCount`, `coverageGap` |
+| `wwmd.evaluator.complete` | After scoring | `interactionId`, `confidenceScore`, `outcomeType`, `principleConflict`, `freshnessDistribution` |
+| `wwmd.evaluator.failed` | On evaluator throw | `interactionId`, `errorClass`, `errorMessage` (no stack to logs unless DEBUG) |
+| `wwmd.ledger.written` | After `DecisionInteraction` insert | `interactionId`, `outcomeType` |
+| `wwmd.idempotent.hit` | When the composite key matches an existing row | `interactionId` (existing), `featureBuildId`, `phaseFrom`, `phaseTo` |
+
+These traces are the diagnostic substrate. Without them, debugging stuck advancement flows requires query-by-query DB inspection — exactly the pattern the `[tool-trace]` convention was created to eliminate. The gate service is responsible for emitting; the evaluator emits nothing (purity).
+
+Counters for telemetry (no new stack — fold into whatever counter surface the portal already uses):
+
+- Invocations per `outcomeType`, per `domainClass`
+- Average `confidenceScore` per `outcomeType`
+- Override rate per `domainClass` (computed from `EscalationCapture` rows)
+- Fail-closed rate (evaluator errors / total invocations)
 
 ## MCP Future Seam
 

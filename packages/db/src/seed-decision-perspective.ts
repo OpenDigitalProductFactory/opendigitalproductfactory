@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "../generated/client/client";
 
 export const MARK_DPF_PLATFORM_PROFILE_ID = "mark-dpf-platform";
 export const MARK_DPF_PLATFORM_VERSION_ID = "mark-dpf-platform-v1";
-export const BUILD_STUDIO_PLAN_ADVANCEMENT_DOMAIN = "build-studio-plan-advancement";
+export const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness";
 
 type SeedProfile = {
   profileId: string;
@@ -31,6 +31,8 @@ type SeedMaterial = {
   sourceType: string;
   sourceRef: Prisma.InputJsonValue;
   scope: Prisma.InputJsonValue;
+  domainClass: string;
+  direction: string;
   domains: string[];
   freshness: string;
   evidenceGrade: string;
@@ -109,7 +111,9 @@ export function buildDecisionPerspectiveSeed(): DecisionPerspectiveSeed {
       routes: ["/build"],
       products: ["dpf-platform"],
     },
-    domains: [BUILD_STUDIO_PLAN_ADVANCEMENT_DOMAIN, "platform-product"],
+    domainClass: PLAN_READINESS_DOMAIN_CLASS,
+    direction: "support",
+    domains: [PLAN_READINESS_DOMAIN_CLASS, "platform-product"],
     freshness: "current",
     evidenceGrade: "A",
     lastValidatedAt: seedDate,
@@ -127,7 +131,7 @@ export function buildDecisionPerspectiveSeed(): DecisionPerspectiveSeed {
       scope: {
         routes: ["/build"],
         products: ["dpf-platform"],
-        domains: [BUILD_STUDIO_PLAN_ADVANCEMENT_DOMAIN, "platform-product"],
+        domains: [PLAN_READINESS_DOMAIN_CLASS, "platform-product"],
       },
       fallbackProfileId: null,
       defaultResolver: { type: "build-studio-owner" },
@@ -189,6 +193,8 @@ export async function seedDecisionPerspective(db: DecisionPerspectiveSeedClient)
         sourceType: material.sourceType,
         sourceRef: material.sourceRef,
         scope: material.scope,
+        domainClass: material.domainClass,
+        direction: material.direction,
         domains: material.domains,
         freshness: material.freshness,
         evidenceGrade: material.evidenceGrade,

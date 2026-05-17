@@ -422,6 +422,7 @@ export async function advanceBuildPhase(
         planReview: build.planReview as ReviewResult | null,
         deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
       },
+      triggeredByUserId: userId,
     });
     if (!decisionGate.allowed) {
       throw new Error(decisionGate.operatorMessage);

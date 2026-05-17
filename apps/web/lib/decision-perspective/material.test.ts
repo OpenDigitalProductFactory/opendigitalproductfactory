@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { resolveProfileMaterial } from "./material";
+import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 
 describe("resolveProfileMaterial", () => {
   it("walks profile fallback order and returns the first profile with applicable material", async () => {
@@ -31,7 +32,9 @@ describe("resolveProfileMaterial", () => {
               sourceType: "principle",
               sourceRef: { path: "docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md", principleDirection: "support" },
               summary: "Architecture over shortcuts.",
-              domains: ["build-studio-plan-advancement"],
+              domainClass: PLAN_READINESS_DOMAIN_CLASS,
+              direction: "support",
+              domains: [PLAN_READINESS_DOMAIN_CLASS],
               freshness: "current",
               evidenceGrade: "B",
               confidenceWeight: 1,
@@ -46,7 +49,7 @@ describe("resolveProfileMaterial", () => {
     const result = await resolveProfileMaterial({
       db: db as never,
       profileId: "customer-profile",
-      domainClass: "build-studio-plan-advancement",
+      domainClass: PLAN_READINESS_DOMAIN_CLASS,
     });
 
     expect(result.coverageGap).toBe(false);
@@ -58,7 +61,15 @@ describe("resolveProfileMaterial", () => {
     ]);
     expect(result.materials).toHaveLength(1);
     expect(result.materials[0].principleDirection).toBe("support");
+    expect(result.materials[0].domainClass).toBe(PLAN_READINESS_DOMAIN_CLASS);
+    expect(result.materials[0].direction).toBe("support");
     expect(result.materials[0].evidenceGrade).toBe("B");
+    expect(db.perspectiveMaterial.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({ domainClass: PLAN_READINESS_DOMAIN_CLASS }),
+      }),
+    );
   });
 
   it("returns a coverage gap when no profile in the chain has material", async () => {
@@ -81,7 +92,7 @@ describe("resolveProfileMaterial", () => {
     const result = await resolveProfileMaterial({
       db: db as never,
       profileId: "customer-profile",
-      domainClass: "unknown-domain",
+      domainClass: "risk-assessment",
     });
 
     expect(result.coverageGap).toBe(true);

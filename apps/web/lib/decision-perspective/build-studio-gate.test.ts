@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { evaluateBuildStudioPlanAdvancementGate } from "./build-studio-gate";
+import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
@@ -103,7 +104,9 @@ function makeDb() {
           sourceType: "principle",
           sourceRef: { path: "docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md", principleDirection: "support" },
           summary: "Architecture over shortcuts.",
-          domains: ["build-studio-plan-advancement"],
+          domainClass: PLAN_READINESS_DOMAIN_CLASS,
+          direction: "support",
+          domains: [PLAN_READINESS_DOMAIN_CLASS],
           freshness: "current",
           evidenceGrade: "A",
           confidenceWeight: 1,
@@ -114,10 +117,14 @@ function makeDb() {
       ]),
     },
     decisionInteraction: {
+      findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockImplementation(async (args) => ({
         id: "interaction-row-1",
         ...args.data,
       })),
+    },
+    escalationCapture: {
+      count: vi.fn().mockResolvedValue(0),
     },
   };
 }
@@ -125,14 +132,18 @@ function makeDb() {
 describe("evaluateBuildStudioPlanAdvancementGate", () => {
   it("persists a decision interaction and allows a high-confidence recommendation", async () => {
     const db = makeDb();
+    const trace = vi.spyOn(console, "info").mockImplementation(() => {});
 
     const result = await evaluateBuildStudioPlanAdvancementGate({
       db: db as never,
       build: makeBuild(),
+      triggeredByUserId: "user-1",
+      now: new Date("2026-05-17T12:00:00.000Z"),
     });
 
     expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("recommend");
+    expect(result.evaluation.domainClass).toBe(PLAN_READINESS_DOMAIN_CLASS);
     expect(result.evaluation.question).toContain("Start implementation");
     expect(result.evaluation.sources.length).toBeGreaterThan(0);
     expect(result.evaluation.resolvedProfileChain).toContain(MARK_DPF_PLATFORM_PROFILE.profileId);
@@ -140,6 +151,9 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           buildId: "FB-WWMD001",
+          triggeredByUserId: "user-1",
+          domainClass: PLAN_READINESS_DOMAIN_CLASS,
+          principleConflict: false,
           deliberationRunId: "delib-1",
           phaseFrom: "plan",
           phaseTo: "build",
@@ -147,6 +161,9 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
         }),
       }),
     );
+    expect(trace).toHaveBeenCalledWith(expect.stringContaining("[tool-trace] wwmd.gate.invoked"));
+    expect(trace).toHaveBeenCalledWith(expect.stringContaining("[tool-trace] wwmd.ledger.written"));
+    trace.mockRestore();
   });
 
   it("blocks advancement when the profile has a coverage gap", async () => {
@@ -161,5 +178,127 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     expect(result.allowed).toBe(false);
     expect(result.evaluation.outcomeType).toBe("defer");
     expect(result.operatorMessage).toContain("coverage gap");
+  });
+
+  it("returns an existing open interaction for the same build and profile version without creating a duplicate", async () => {
+    const db = makeDb();
+    db.decisionInteraction.findFirst.mockResolvedValue({
+      interactionId: "DI-EXISTING",
+      profileId: MARK_DPF_PLATFORM_PROFILE.profileId,
+      profileVersionId: MARK_DPF_PLATFORM_PROFILE.currentVersion.versionId,
+      fallbackProfileId: null,
+      buildId: "FB-WWMD001",
+      taskRunId: null,
+      deliberationRunId: "delib-1",
+      routeContext: "/build",
+      phaseFrom: "plan",
+      phaseTo: "build",
+      domainClass: PLAN_READINESS_DOMAIN_CLASS,
+      question: "Start implementation for an existing plan?",
+      options: ["Start implementation"],
+      evidenceBundle: {
+        materialCount: 1,
+        freshnessDistribution: { current: 1, stale: 0, superseded: 0, contradicted: 0 },
+        resolvedProfileChain: [MARK_DPF_PLATFORM_PROFILE.profileId],
+      },
+      sources: [{ materialId: "source-1", sourceType: "principle", summary: "Architecture.", effectiveWeight: 1 }],
+      rationale: "Existing recommendation.",
+      riskTier: "medium",
+      confidenceBefore: 0.9,
+      confidenceAfter: 0.9,
+      outcomeType: "recommend",
+      outcomePayload: {
+        confidenceScore: 0.9,
+        coverageGap: false,
+        principleConflict: false,
+        materialCount: 1,
+        freshnessDistribution: { current: 1, stale: 0, superseded: 0, contradicted: 0 },
+        resolvedProfileChain: [MARK_DPF_PLATFORM_PROFILE.profileId],
+      },
+      humanOutcome: null,
+      escalationCapture: null,
+    });
+    const trace = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.interactionId).toBe("DI-EXISTING");
+    expect(db.decisionInteraction.create).not.toHaveBeenCalled();
+    expect(trace).toHaveBeenCalledWith(expect.stringContaining("[tool-trace] wwmd.idempotent.hit"));
+    trace.mockRestore();
+  });
+
+  it("writes a new interaction when the previous gate result has been cleared by escalation capture", async () => {
+    const db = makeDb();
+    db.decisionInteraction.findFirst.mockResolvedValue({
+      interactionId: "DI-CLEARED",
+      profileVersionId: MARK_DPF_PLATFORM_PROFILE.currentVersion.versionId,
+      humanOutcome: { clearsGate: true },
+      escalationCapture: { escalationId: "ESC-1" },
+    });
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+    });
+
+    expect(result.interactionId).not.toBe("DI-CLEARED");
+    expect(db.decisionInteraction.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses recent same-domain overrides to lower confidence for the current gate", async () => {
+    const db = makeDb();
+    db.escalationCapture.count.mockResolvedValue(3);
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      now: new Date("2026-05-17T12:00:00.000Z"),
+    });
+
+    expect(db.escalationCapture.count).toHaveBeenCalledWith({
+      where: {
+        domainClass: PLAN_READINESS_DOMAIN_CLASS,
+        createdAt: { gte: new Date("2026-04-17T12:00:00.000Z") },
+        interaction: { profileId: MARK_DPF_PLATFORM_PROFILE.profileId },
+      },
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.evaluation.outcomeType).toBe("escalate");
+    expect(result.evaluation.confidenceScore).toBe(0.6);
+  });
+
+  it("fails closed and writes an escalation interaction when evaluation throws", async () => {
+    const db = makeDb();
+    const trace = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      evaluator: () => {
+        const error = new Error("Malformed material payload");
+        error.name = "MalformedPerspectiveInputError";
+        throw error;
+      },
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.evaluation.outcomeType).toBe("escalate");
+    expect(result.evaluation.rationale).toContain("MalformedPerspectiveInputError");
+    expect(db.decisionInteraction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          outcomeType: "escalate",
+          domainClass: PLAN_READINESS_DOMAIN_CLASS,
+          rationale: expect.stringContaining("MalformedPerspectiveInputError"),
+        }),
+      }),
+    );
+    expect(trace).toHaveBeenCalledWith(expect.stringContaining("[tool-trace] wwmd.evaluator.failed"));
+    trace.mockRestore();
   });
 });

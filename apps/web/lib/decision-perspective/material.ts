@@ -1,3 +1,4 @@
+import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "./types";
 import type {
   DecisionAutonomyPolicy,
   DecisionPerspectiveProfile,
@@ -29,6 +30,8 @@ type DbPerspectiveMaterial = {
   sourceType: string;
   sourceRef: Record<string, unknown>;
   summary: string | null;
+  domainClass: DecisionDomainClass;
+  direction: "support" | "oppose" | "neutral";
   domains: string[];
   freshness: PerspectiveMaterialFreshness;
   evidenceGrade: PerspectiveEvidenceGrade;
@@ -94,9 +97,8 @@ function clamp01(value: number): number {
   return value;
 }
 
-export function isMaterialApplicable(material: PerspectiveMaterial, domain: string): boolean {
-  if (material.domains.length === 0) return true;
-  return material.domains.includes(domain) || material.domains.includes("*");
+export function isMaterialApplicable(material: PerspectiveMaterial, domain: DecisionDomainClass): boolean {
+  return material.domainClass === domain;
 }
 
 export function scorePerspectiveMaterial(material: PerspectiveMaterial): PerspectiveMaterialScore {
@@ -142,6 +144,18 @@ function normalizePrincipleDirection(value: unknown): PerspectiveMaterial["princ
     : undefined;
 }
 
+function normalizeDomainClass(value: unknown): DecisionDomainClass {
+  return typeof value === "string" && (DECISION_DOMAIN_CLASSES as readonly string[]).includes(value)
+    ? value as DecisionDomainClass
+    : "plan-readiness";
+}
+
+function normalizeDirection(value: unknown): PerspectiveMaterial["direction"] {
+  return value === "support" || value === "oppose" || value === "neutral"
+    ? value
+    : "neutral";
+}
+
 function normalizeEvidenceGrade(value: unknown): PerspectiveEvidenceGrade {
   return value === "A" || value === "B" || value === "C" || value === "D"
     ? value
@@ -155,6 +169,8 @@ function toPerspectiveMaterial(row: DbPerspectiveMaterial): PerspectiveMaterial 
     sourceType: row.sourceType,
     sourceRef: row.sourceRef,
     summary: row.summary ?? "",
+    domainClass: normalizeDomainClass(row.domainClass),
+    direction: normalizeDirection(row.direction ?? row.sourceRef?.principleDirection),
     domains: row.domains,
     freshness: row.freshness,
     evidenceGrade: normalizeEvidenceGrade(row.evidenceGrade),
@@ -208,7 +224,7 @@ function toDecisionPerspectiveProfile(row: DbDecisionPerspectiveProfile): Decisi
 export async function resolveProfileMaterial(input: {
   db: PerspectiveMaterialClient;
   profileId: string;
-  domainClass: string;
+  domainClass: DecisionDomainClass;
   maxDepth?: number;
 }): Promise<ResolvedProfileMaterial> {
   const resolvedProfileChain: string[] = [];
@@ -242,7 +258,7 @@ export async function resolveProfileMaterial(input: {
     const rows = await input.db.perspectiveMaterial.findMany({
       where: {
         profileId: profile.profileId,
-        domains: { has: input.domainClass },
+        domainClass: input.domainClass,
         reviewStatus: "approved",
         promotionState: "promoted",
       },

@@ -12,8 +12,9 @@ import type {
   DecisionPerspectiveProfile,
   PerspectiveMaterial,
 } from "./types";
+import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 
-const DOMAIN = "build-studio-plan-advancement";
+const DOMAIN = PLAN_READINESS_DOMAIN_CLASS;
 
 function profile(overrides: Partial<DecisionPerspectiveProfile> = {}): DecisionPerspectiveProfile {
   return {
@@ -48,6 +49,8 @@ function material(overrides: Partial<PerspectiveMaterial> = {}): PerspectiveMate
     sourceType: "principle",
     sourceRef: { path: "docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md" },
     summary: "Prefer the architecture that preserves future autonomy over a tactical shortcut.",
+    domainClass: DOMAIN,
+    direction: "support",
     domains: [DOMAIN],
     freshness: "current",
     evidenceGrade: "A",
@@ -59,7 +62,9 @@ function material(overrides: Partial<PerspectiveMaterial> = {}): PerspectiveMate
   };
 }
 
-function baseInput(overrides: Partial<Parameters<typeof evaluateDecisionPerspective>[0]> = {}) {
+function baseInput(
+  overrides: Partial<Parameters<typeof evaluateDecisionPerspective>[0]> = {},
+): Parameters<typeof evaluateDecisionPerspective>[0] {
   return {
     profile: profile(),
     fallbackProfiles: [],
@@ -173,13 +178,13 @@ describe("evaluateDecisionPerspective", () => {
           material({
             materialId: "principle-support",
             sourceType: "principle",
-            principleDirection: "support",
+            direction: "support",
             confidenceWeight: 0.95,
           }),
           material({
             materialId: "principle-oppose",
             sourceType: "principle",
-            principleDirection: "oppose",
+            direction: "oppose",
             confidenceWeight: 0.95,
           }),
         ],

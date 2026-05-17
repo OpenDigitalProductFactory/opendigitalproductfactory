@@ -94,6 +94,7 @@ model User {
   adminActivities              AdminActivity[]
   userFacts                    UserFact[]
   decisionEscalationsResolved  EscalationCapture[]           @relation("DecisionEscalationResolverUser")
+  triggeredDecisionInteractions DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
   scheduledAgentTasks          ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
   addedLocalities              City[]                        @relation("CityAddedByUser")
 }
@@ -8039,6 +8040,8 @@ model PerspectiveMaterial {
   sourceType       String
   sourceRef        Json                       @default("{}")
   scope            Json                       @default("{}")
+  domainClass      String                     @default("plan-readiness")
+  direction        String                     @default("neutral")
   domains          String[]                   @default([])
   freshness        String                     @default("current")
   evidenceGrade    String                     @default("A")
@@ -8055,7 +8058,10 @@ model PerspectiveMaterial {
 
   @@index([profileId, freshness])
   @@index([profileId, reviewStatus, promotionState])
+  @@index([profileId, domainClass])
   @@index([profileVersionId])
+  @@index([domainClass])
+  @@index([direction])
   @@index([evidenceGrade])
   @@index([sourceType])
 }
@@ -8069,9 +8075,11 @@ model DecisionInteraction {
   buildId           String?
   taskRunId         String?
   deliberationRunId String?
+  triggeredByUserId String?
   routeContext      String?
   phaseFrom         String?
   phaseTo           String?
+  domainClass       String                     @default("plan-readiness")
   question          String                     @db.Text
   options           Json                       @default("[]")
   evidenceBundle    Json                       @default("{}")
@@ -8081,6 +8089,7 @@ model DecisionInteraction {
   confidenceBefore  Float?
   confidenceAfter   Float?
   outcomeType       String
+  principleConflict Boolean                    @default(false)
   outcomePayload    Json                       @default("{}")
   humanOutcome      Json?
   createdAt         DateTime                   @default(now())
@@ -8091,6 +8100,7 @@ model DecisionInteraction {
   build             FeatureBuild?              @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
   taskRun           TaskRun?                   @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
   deliberationRun   DeliberationRun?           @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  triggeredByUser   User?                      @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
   escalationCapture EscalationCapture?
   deferralCapture   DeferralCapture?
 
@@ -8100,7 +8110,10 @@ model DecisionInteraction {
   @@index([buildId, createdAt])
   @@index([taskRunId])
   @@index([deliberationRunId])
+  @@index([triggeredByUserId])
+  @@index([domainClass, createdAt])
   @@index([outcomeType, createdAt])
+  @@index([principleConflict, createdAt])
   @@index([riskTier, createdAt])
 }
 

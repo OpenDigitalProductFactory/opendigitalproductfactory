@@ -1,4 +1,5 @@
 import type { DecisionPerspectiveProfile } from "./types";
+import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 
 const snapshotDate = new Date("2026-05-17T00:00:00.000Z");
 
@@ -15,7 +16,7 @@ export const DPF_ORGANIZATIONAL_PRINCIPLES_PROFILE: DecisionPerspectiveProfile =
   name: "DPF Organizational Principles",
   kind: "organization",
   scope: {
-    domains: ["platform-governance", "build-studio-plan-advancement"],
+    domains: ["platform-governance", PLAN_READINESS_DOMAIN_CLASS],
   },
   fallbackProfileId: null,
   defaultResolver: { type: "build-studio-owner" },
@@ -34,7 +35,7 @@ export const DPF_PRODUCT_DOCTRINE_PROFILE: DecisionPerspectiveProfile = {
   name: "DPF Product Doctrine",
   kind: "platform",
   scope: {
-    domains: ["platform-product", "build-studio-plan-advancement"],
+    domains: ["platform-product", PLAN_READINESS_DOMAIN_CLASS],
   },
   fallbackProfileId: DPF_ORGANIZATIONAL_PRINCIPLES_PROFILE.profileId,
   defaultResolver: { type: "build-studio-owner" },
@@ -53,7 +54,7 @@ export const MARK_DPF_PLATFORM_PROFILE: DecisionPerspectiveProfile = {
   name: "Mark / DPF Platform",
   kind: "platform",
   scope: {
-    domains: ["platform-product", "build-studio-plan-advancement"],
+    domains: ["platform-product", PLAN_READINESS_DOMAIN_CLASS],
   },
   fallbackProfileId: DPF_PRODUCT_DOCTRINE_PROFILE.profileId,
   defaultResolver: { type: "build-studio-owner" },
