@@ -10,6 +10,7 @@ import {
   type McpTokenCapability,
 } from "@/lib/auth/mcp-api-token";
 import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
+import { writeMcpJsonToHost } from "@/lib/auth/mcp-host-writer";
 import { CODING_AGENT_MCP_TOKEN_SCOPES } from "@/lib/mcp-token-scopes";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
@@ -69,6 +70,7 @@ export type IssueTokenActionResult =
         claudeCode: string;
         codex: string;
         vscode: string;
+        syncCommand: string;
       };
     }
   | {
@@ -101,6 +103,7 @@ export async function issueMyMcpToken(input: {
   if (!result.ok) {
     return { ok: false, error: result.error, message: result.message };
   }
+  writeMcpJsonToHost(result.plaintext, input.baseUrl);
   return {
     ok: true,
     tokenId: result.tokenId,
