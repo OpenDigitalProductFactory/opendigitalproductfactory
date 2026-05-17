@@ -11,6 +11,11 @@
 # gitignored on purpose -- they carry a local bearer token -- so they do not
 # travel with `git worktree add`.
 #
+# For linked worktrees, this also writes a worktree-scoped COMPOSE_PROJECT_NAME
+# into the target .env file. docker-compose.yml defaults to the root project
+# name "dpf"; linked worktrees must override it so their containers and volumes
+# cannot contaminate the live install project.
+#
 # Usage:
 #   ./scripts/seed-worktree-mcp.sh                  # seed current directory
 #   ./scripts/seed-worktree-mcp.sh <path>           # seed a specific worktree
@@ -40,6 +45,62 @@ step() { printf '\n-> %s\n' "$1"; }
 ok()   { printf '  [OK] %s\n' "$1"; }
 skip() { printf '  [SKIP] %s\n' "$1"; }
 
+compose_project_name_for() {
+    local base slug
+    base="$(basename "$1")"
+    slug="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+    if [ -z "$slug" ] || [ "$slug" = "dpf" ]; then
+        slug="worktree"
+    fi
+    case "$slug" in
+        dpf-*) printf '%s\n' "$slug" ;;
+        *) printf 'dpf-%s\n' "$slug" ;;
+    esac
+}
+
+set_compose_project_env() {
+    local env_file="$1" project_name="$2" desired current tmp
+    desired="COMPOSE_PROJECT_NAME=$project_name"
+
+    if [ ! -f "$env_file" ]; then
+        {
+            printf '# Worktree-scoped Docker Compose project.\n'
+            printf '# Prevents linked worktree containers and volumes from joining the root dpf project.\n'
+            printf '%s\n' "$desired"
+        } > "$env_file"
+        ok "Set $desired in $env_file"
+        return 0
+    fi
+
+    if grep -Eq '^[[:space:]]*COMPOSE_PROJECT_NAME[[:space:]]*=' "$env_file"; then
+        current="$(sed -nE 's/^[[:space:]]*COMPOSE_PROJECT_NAME[[:space:]]*=[[:space:]]*(.*)$/\1/p' "$env_file" | tail -n 1)"
+        if [ "$force" -eq 1 ] || [ -z "$current" ] || [ "$current" = "dpf" ]; then
+            tmp="${env_file}.tmp.$$"
+            awk -v desired="$desired" '
+                /^[[:space:]]*COMPOSE_PROJECT_NAME[[:space:]]*=/ {
+                    if (!done) {
+                        print desired
+                        done = 1
+                    }
+                    next
+                }
+                { print }
+            ' "$env_file" > "$tmp"
+            mv "$tmp" "$env_file"
+            ok "Set $desired in $env_file"
+        else
+            skip "Existing COMPOSE_PROJECT_NAME in $env_file is already custom."
+        fi
+        return 0
+    fi
+
+    {
+        printf '\n'
+        printf '%s\n' "$desired"
+    } >> "$env_file"
+    ok "Set $desired in $env_file"
+}
+
 if [ ! -d "$target" ]; then
     printf '  [FAIL] Target is not a directory: %s\n' "$target" >&2
     exit 1
@@ -64,6 +125,9 @@ if [ "$main_abs" = "$target_abs" ]; then
     ok "Target IS the main worktree -- nothing to seed."
     exit 0
 fi
+
+step "Configuring worktree Compose project"
+set_compose_project_env "$target_abs/.env" "$(compose_project_name_for "$target_abs")"
 
 step "Copying MCP config"
 

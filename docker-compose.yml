@@ -1,4 +1,4 @@
-name: dpf
+name: ${COMPOSE_PROJECT_NAME:-dpf}
 
 services:
   postgres:

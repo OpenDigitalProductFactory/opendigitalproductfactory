@@ -10,6 +10,11 @@
 # gitignored on purpose -- they carry a local bearer token -- so they do not
 # travel with `git worktree add`.
 #
+# For linked worktrees, this also writes a worktree-scoped COMPOSE_PROJECT_NAME
+# into the target .env file. docker-compose.yml defaults to the root project
+# name "dpf"; linked worktrees must override it so their containers and volumes
+# cannot contaminate the live install project.
+#
 # Usage:
 #   .\scripts\seed-worktree-mcp.ps1                    # seed current directory
 #   .\scripts\seed-worktree-mcp.ps1 -Target <path>     # seed a specific worktree
@@ -26,6 +31,81 @@ function Write-Step { param($msg) Write-Host "`n-> $msg" -ForegroundColor Yellow
 function Write-Ok   { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
 function Write-Skip { param($msg) Write-Host "  [SKIP] $msg" -ForegroundColor Yellow }
 function Write-Fail { param($msg) Write-Host "  [FAIL] $msg" -ForegroundColor Red; exit 1 }
+
+function Get-WorktreeComposeProjectName {
+    param([string]$Path)
+
+    $leaf = Split-Path -Leaf $Path
+    $slug = $leaf.ToLowerInvariant() -replace '[^a-z0-9]+', '-'
+    $slug = $slug.Trim('-')
+
+    if ([string]::IsNullOrWhiteSpace($slug) -or $slug -ieq "dpf") {
+        $slug = "worktree"
+    }
+
+    if ($slug.StartsWith("dpf-")) {
+        return $slug
+    }
+
+    return "dpf-$slug"
+}
+
+function Set-WorktreeComposeProjectEnv {
+    param(
+        [string]$EnvPath,
+        [string]$ProjectName,
+        [bool]$ForceProjectName
+    )
+
+    $desired = "COMPOSE_PROJECT_NAME=$ProjectName"
+
+    if (-not (Test-Path -LiteralPath $EnvPath)) {
+        Set-Content -LiteralPath $EnvPath -Value @(
+            "# Worktree-scoped Docker Compose project.",
+            "# Prevents linked worktree containers and volumes from joining the root dpf project.",
+            $desired
+        ) -Encoding ascii
+        return "Set $desired in $EnvPath"
+    }
+
+    $lines = @(Get-Content -LiteralPath $EnvPath)
+    $found = $false
+    $changed = $false
+    $preserved = $false
+    $out = New-Object System.Collections.Generic.List[string]
+
+    foreach ($line in $lines) {
+        if ($line -match '^\s*COMPOSE_PROJECT_NAME\s*=(.*)$') {
+            $found = $true
+            $current = $Matches[1].Trim()
+            if ($ForceProjectName -or [string]::IsNullOrWhiteSpace($current) -or $current -ieq "dpf") {
+                $out.Add($desired)
+                $changed = $true
+            } else {
+                $out.Add($line)
+                $preserved = $true
+            }
+        } else {
+            $out.Add($line)
+        }
+    }
+
+    if (-not $found) {
+        $out.Add($desired)
+        $changed = $true
+    }
+
+    if ($changed) {
+        Set-Content -LiteralPath $EnvPath -Value $out -Encoding ascii
+        return "Set $desired in $EnvPath"
+    }
+
+    if ($preserved) {
+        return "Existing COMPOSE_PROJECT_NAME in $EnvPath is already custom."
+    }
+
+    return "No Compose project change needed for $EnvPath"
+}
 
 $Target = (Resolve-Path -LiteralPath $Target).Path
 
@@ -51,6 +131,19 @@ Write-Ok "Target worktree: $Target"
 if ($mainAbs -ieq $Target) {
     Write-Ok "Target IS the main worktree -- nothing to seed."
     exit 0
+}
+
+Write-Step "Configuring worktree Compose project"
+$composeProjectName = Get-WorktreeComposeProjectName -Path $Target
+$composeResult = Set-WorktreeComposeProjectEnv `
+    -EnvPath (Join-Path $Target ".env") `
+    -ProjectName $composeProjectName `
+    -ForceProjectName:$Force.IsPresent
+
+if ($composeResult -like "Existing*") {
+    Write-Skip $composeResult
+} else {
+    Write-Ok $composeResult
 }
 
 $pairs = @(
