@@ -101,6 +101,7 @@ describe("reconcileCodeGraph", () => {
           stderr: "",
         };
       }
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -145,6 +146,7 @@ describe("reconcileCodeGraph", () => {
           stderr: "",
         };
       }
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -195,6 +197,7 @@ describe("reconcileCodeGraph", () => {
           stderr: "",
         };
       }
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -239,6 +242,7 @@ describe("reconcileCodeGraph", () => {
           stderr: "",
         };
       }
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -275,6 +279,7 @@ describe("reconcileCodeGraph", () => {
       if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
       if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
       if (command === "git status --porcelain") return { stdout: " M apps/web/lib/foo.ts\n", stderr: "" };
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -308,6 +313,7 @@ describe("reconcileCodeGraph", () => {
           stderr: "",
         };
       }
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
