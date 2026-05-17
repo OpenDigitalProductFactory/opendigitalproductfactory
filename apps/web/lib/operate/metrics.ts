@@ -176,6 +176,23 @@ export const postgresBackupDurationSeconds = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Postgres Restore (Slice 2) ────────────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.6
+
+export const postgresRestoreRunsTotal = new Counter({
+  name: "dpf_postgres_restore_runs_total",
+  help: "Postgres restore runs by status (ok | failed)",
+  labelNames: ["status"] as const,
+  registers: [metricsRegistry],
+});
+
+export const postgresRestoreDurationSeconds = new Histogram({
+  name: "dpf_postgres_restore_duration_seconds",
+  help: "Wall-clock duration of Postgres restore runs (includes pre-restore safety dump)",
+  buckets: [5, 10, 30, 60, 120, 300, 600, 1800],
+  registers: [metricsRegistry],
+});
+
 // ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
 

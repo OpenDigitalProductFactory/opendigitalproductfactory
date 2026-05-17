@@ -4,7 +4,15 @@
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md
  */
 
-export type BackupTrigger = "scheduled" | "manual";
+/**
+ * Trigger discriminator on BackupRun.
+ *
+ * `scheduled` / `manual` come from Slice 1 (cron + manual button).
+ * `pre-restore-safety` is added by Slice 2: every restore writes a safety
+ * dump first, recorded as a BackupRun row so it shows up in history and is
+ * subject to the same GFS retention as any other successful backup.
+ */
+export type BackupTrigger = "scheduled" | "manual" | "pre-restore-safety";
 export type BackupRunStatus = "running" | "ok" | "failed";
 
 /** GFS retention policy. Tunable via Platform Config in a later slice. */
