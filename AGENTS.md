@@ -19,6 +19,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 - **Architecture over shortcuts.** Choose the architecturally sound solution. Quick fixes that bypass the design create more debt than they save. → [kernel principle](docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md)
 - **Plan before acting on install/seed/template paths.** A symptom on one install is usually a defect for every install. Use `writing-plans` for anything touching setup, seeds, or shared templates. → [kernel principle](docs/founder-kernel/wiki/principles/plan-before-install-paths.md)
 - **Use paid AI capacity responsibly.** → [kernel principle](docs/founder-kernel/wiki/principles/responsible-capacity-utilization.md)
+- **Never assume — verify.** Ambiguous terms get resolved by inspecting the environment (installed apps, running processes, files, live DB), not by pattern-matching against project context. A wrong action taken confidently costs more than one verification step. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/no-assumptions.md)
 
 ## 2. Project Architecture (current as of 2026-04-27)
 
