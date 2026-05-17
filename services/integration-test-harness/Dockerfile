@@ -1,7 +1,7 @@
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY services/integration-test-harness/package.json ./
-RUN corepack enable && pnpm install
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate && pnpm install
 
 FROM node:24-alpine AS build
 WORKDIR /app
@@ -9,7 +9,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY services/integration-test-harness/package.json services/integration-test-harness/tsconfig.json ./
 COPY services/integration-test-harness/src ./src
 COPY services/integration-test-harness/vendors ./vendors
-RUN corepack enable && pnpm build
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate && pnpm build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
