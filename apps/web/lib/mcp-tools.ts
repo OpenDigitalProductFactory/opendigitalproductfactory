@@ -5653,15 +5653,35 @@ export async function executeTool(
       // Reject design docs that skip codebase research — they lead to builds
       // with wrong auth patterns, wrong field names, and wrong imports.
       // Accept "no existing code found" as valid research for new features.
+      // When updating an existing doc (revising for review feedback), auto-merge
+      // the audit from the saved doc so the coworker doesn't loop retrying.
       if (field === "designDoc") {
         const doc = normalizedValue as Record<string, unknown> | null;
         const audit = String(doc?.existingCodeAudit ?? doc?.existingFunctionalityAudit ?? "");
         if (!audit || audit.length < 20) {
-          return {
-            success: false,
-            error: "Design doc missing codebase research.",
-            message: "REJECTED: existingCodeAudit is empty or too short. Research the codebase first with search_project_files and describe_model. If this is a new feature with no existing code, write 'No existing implementation found. Searched for [terms]. This is a new feature.' — that counts as valid research.",
-          };
+          // Check whether the build already has a valid audit saved — if so,
+          // carry it forward rather than forcing a full re-research on revision.
+          const existing = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { designDoc: true },
+          });
+          const existingDoc = existing?.designDoc as Record<string, unknown> | null;
+          const existingAudit = String(
+            existingDoc?.existingCodeAudit ?? existingDoc?.existingFunctionalityAudit ?? ""
+          );
+          if (existingAudit.length >= 20) {
+            // Carry forward the existing audit so the revision can be saved.
+            normalizedValue = {
+              ...doc,
+              existingFunctionalityAudit: existingAudit,
+            };
+          } else {
+            return {
+              success: false,
+              error: "Design doc missing codebase research.",
+              message: "REJECTED: existingCodeAudit is empty or too short. Research the codebase first with search_project_files and describe_model. If this is a new feature with no existing code, write 'No existing implementation found. Searched for [terms]. This is a new feature.' — that counts as valid research.",
+            };
+          }
         }
       }
 
