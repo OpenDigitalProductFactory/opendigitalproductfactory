@@ -31,7 +31,7 @@ import { computeEvidenceBadge } from "./evidence";
 /* -------------------------------------------------------------------------- */
 
 export interface BranchArtifact {
-  branchNodeId: string;
+  branchNodeId: string | null;
   role: string;
   completed: boolean;
   /** Short free-text recommendation / position. Used for consensus detection
@@ -82,7 +82,7 @@ export interface SynthesizedOutcome {
 }
 
 export interface BranchRosterEntry {
-  branchNodeId: string;
+  branchNodeId: string | null;
   role: string;
   completed: boolean;
   failureReason?: string;
@@ -371,7 +371,7 @@ async function persistBranchClaims(
     const created = await prisma.claimRecord.create({
       data: {
         deliberationRunId,
-        branchNodeId: branch.branchNodeId,
+        branchNodeId: branch.branchNodeId ?? null,
         claimText: c.claimText,
         claimType,
         status: "unresolved",
