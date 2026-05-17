@@ -10,6 +10,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 ## 1. First Principles
 
+- **Never ask the user to run commands.** The user is non-technical. The agent runs the system. No "you can verify by running …", no "open a terminal", no SQL/shell/`gh`/`docker` for the user to copy-paste. Run it yourself via Bash / DPF MCP / Chrome MCP / computer-use MCP and report results. **Commandment tier.** → [kernel principle](docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md)
 - **Never fabricate.** Ground claims in code, specs, or DB state. → [kernel principle](docs/founder-kernel/wiki/principles/never-fabricate.md)
 - **Research and use standards.** Cite sources; recommend the standard unless you have a project-specific reason to deviate. → [kernel principle](docs/founder-kernel/wiki/principles/research-and-use-standards.md)
 - **Fix the seed, not the runtime.** Patch the source script, then add an invariant guard. → [kernel principle](docs/founder-kernel/wiki/principles/fix-the-seed-not-the-runtime.md)
