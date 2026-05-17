@@ -2,13 +2,14 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied) |
-| Status | Phase 1 merged to `main` via PR #602; Phase 2 implements display-and-record governed creation pending verification/PR; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied); 2026-05-17 (Phase 2 merged and Phase 3 lease auto-renewal slice applied) |
+| Status | Phase 1 merged to `main` via PR #602; Phase 2 merged to `main` via PR #675; Phase 3 first slice implements lease auto-renewal for existing-capsule MCP writes while broader executor attachment remains open; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
 | Depends On | `2026-04-05-db-github-delivery-sync-design.md`, `2026-04-20-ship-phase-fork-redesign-design.md`, `2026-04-21-backlog-triage-build-studio-design.md`, `2026-04-23-build-studio-governed-backlog-delivery-design.md`, `2026-05-09-build-execution-provider-design.md`, `2026-05-09-deployment-contracts.md` |
 | Phase 1 Plan | `docs/superpowers/plans/2026-05-14-portal-work-capsule-control-harness-phase-1.md` |
 | Phase 2 Plan | `docs/superpowers/plans/2026-05-16-portal-work-capsule-control-harness-phase-2.md` |
+| Phase 3 Plan | `docs/superpowers/plans/2026-05-17-portal-work-capsule-control-harness-phase-3.md` |
 
 ## 1. Problem Statement
 
@@ -576,6 +577,7 @@ External desktop executors (Codex, Claude, human) cannot be supervised by the po
 
 - On capsule attach (`create_work_capsule` or `adopt_worktree` with an external executor), the server issues a lease: `leaseHolderPrincipalId` is set and `leaseExpiresAt = now() + LEASE_TTL` (default 30 minutes; constant: `LEASE_TTL_MS` in `apps/web/lib/work-capsules.ts`).
 - The executor must call `heartbeat_capsule` before expiry. The MCP middleware MAY auto-heartbeat **only on capsule-scoped *write* tool calls** (`create_work_capsule`, `adopt_worktree`, `claim_capsule_scope`, `record_capsule_evidence`, `heartbeat_capsule`, `update_work_capsule_status`, `release_capsule_scope`). Auto-renewal MUST NOT trigger from read tools (`list_work_capsules`, `get_work_capsule`)  -  a reader checking on a stale capsule should not silently extend that capsule's lease, and read tools must remain idempotent in a way an MCP client can rely on. The auto-heartbeat middleware ships in **Phase 3** alongside external executor attachment; Phase 1 supports only the explicit `heartbeat_capsule` call.
+- The first Phase 3 lease slice (2026-05-17) implements handler-level auto-renewal after successful existing-capsule write tools: `claim_capsule_scope`, `record_capsule_evidence`, `update_work_capsule_status`, and `release_capsule_scope`. `create_work_capsule` and `adopt_worktree` continue to issue the initial external-executor lease during attach, and `heartbeat_capsule` remains the explicit single-renewal path so it does not emit duplicate renewal activities.
 - A capsule whose lease has expired surfaces as `lease-expired` in the daily steward and is eligible for reassignment or abandonment recommendations. Expiry does not change `status`; the work itself may still be sound on disk.
 - Build Studio capsules do not consume the lease; their liveness comes from `FeatureBuild` execution state. The lease applies to `codex-desktop`, `claude-desktop`, `human`, and any future external executor kind.
 
@@ -888,6 +890,7 @@ Execute in this order so fresh installs and existing installs both land cleanly:
 
 ### Phase 3: Executor Attachment
 
+- add handler-level lease auto-renewal for existing-capsule MCP write tools while preserving read-tool idempotence
 - attach Build Studio builds to capsules
 - attach Codex/Claude desktop sessions through MCP tools
 - attach Codex CLI and Claude Code CLI sandbox sessions as first-class capsule executors
@@ -958,7 +961,7 @@ Adds:
 
 Adds:
 
-1. Lease auto-renewal middleware tests  -  write tools renew, read tools do not.
+1. Lease auto-renewal middleware tests  -  existing-capsule write tools renew, read tools do not, and explicit `heartbeat_capsule` renews once.
 2. Collision-detection tests for overlapping `(kind, value)` scope claims across active capsules.
 3. External executor handoff tests  -  `executor-changed` activity is written on every transition.
 4. CLI hive tests proving Codex CLI and Claude Code CLI sessions attach as separate executor sessions, record separate evidence, and do not receive raw provider/OAuth secrets.
@@ -1034,7 +1037,7 @@ These decisions close the chief-architect review questions so implementation pla
 
 1. **Lease TTL default.** External executor leases default to 30 minutes (`LEASE_TTL_MS`). Renewal model phases in over two slices:
    - **Phase 1:** `heartbeat_capsule` is the only renewal path. Clients are responsible for calling it before `leaseExpiresAt`.
-   - **Phase 3:** MCP middleware adds auto-renewal on capsule-scoped *write* tool calls (see section 9.5 for the allowlist). Read tools never auto-renew.
+   - **Phase 3:** MCP middleware adds auto-renewal on capsule-scoped *write* tool calls (see section 9.5 for the allowlist). The first delivered slice renews after successful existing-capsule writes; read tools never auto-renew.
 2. **Capsule-to-PR cardinality.** V1 is 1:1: one capsule links to at most one active PR. Split-PR or stacked-PR work is deferred to a later slice after adoption and collision detection are reliable.
 3. **GitPromotionCandidate ordering.** A git webhook first tries to find an existing capsule by `DPF-Capsule:` trailer, PR metadata, or `(repositoryFullName, headBranch)`. If no capsule exists, it creates a capsule with `source = git-promotion`. The deterministic idempotency key is `git-promotion:<repositoryFullName>:<afterSha>`.
 4. **Branch-name allocation.** Portal-created capsules generate `<prefix>/<capsule-slug>` deterministically from branch taxonomy and title. Adopted branches keep their existing names; the portal infers taxonomy and warns when the name does not match AGENTS.md section 4.

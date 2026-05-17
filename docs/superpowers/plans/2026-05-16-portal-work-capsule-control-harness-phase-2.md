@@ -1,5 +1,7 @@
 # Portal Work Capsule Control Harness Phase 2 Implementation Plan
 
+> **Status (2026-05-17):** Shipped and merged to `main` via PR #675. The plan remains as the durable record of the Phase 2 display-and-record architecture, scope narrowing, and verification expectations.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development if the harness offers subagents; otherwise use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship governed-creation planning so the portal generates deterministic branch + worktree allocations for new Work Capsules, displays the exact commands the operator runs on the host, blocks the root clone from becoming an active workspace, and records initial scope — without the portal itself mutating the host filesystem.
