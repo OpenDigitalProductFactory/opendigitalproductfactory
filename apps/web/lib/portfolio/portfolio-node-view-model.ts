@@ -32,10 +32,19 @@ export interface EnrichmentReference {
   href: string;
 }
 
+export interface SectorCommercialMarket {
+  sector: string;
+  market: string;
+}
+
 export interface EnrichmentView {
   standards: string[] | null;
   patterns: string[] | null;
   references: EnrichmentReference[] | null;
+  sampleServices: string | null;
+  offeringConsiderations: string | null;
+  commercialMarket: string | null;
+  sectorCommercialMarkets: SectorCommercialMarket[] | null;
   /** Entire JSON for debugging/hover display. JSON-cloned. */
   raw: Record<string, unknown> | null;
 }
@@ -164,18 +173,69 @@ function projectReferences(enrichment: Record<string, unknown>): EnrichmentRefer
   return projected;
 }
 
+function projectTextField(enrichment: Record<string, unknown>, key: string): string | null {
+  if (!(key in enrichment)) return null;
+  const value = enrichment[key];
+  if (typeof value !== "string") {
+    warn(`enrichment.${key} is not a string; ignoring`);
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function projectSectorCommercialMarkets(
+  enrichment: Record<string, unknown>,
+): SectorCommercialMarket[] | null {
+  const source = enrichment.industryMarkets ?? enrichment.sectorCommercialMarkets;
+  if (source === undefined) return null;
+  if (!isPlainObject(source)) {
+    warn("enrichment.industryMarkets is not an object; ignoring");
+    return null;
+  }
+
+  const projected = Object.entries(source)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .map(([sector, market]) => ({ sector, market: market.trim() }))
+    .filter((entry) => entry.sector.trim() !== "" && entry.market !== "");
+
+  return projected.length > 0 ? projected : null;
+}
+
 function projectEnrichment(enrichment: unknown): EnrichmentView {
   if (enrichment === null || enrichment === undefined) {
-    return { standards: null, patterns: null, references: null, raw: null };
+    return {
+      standards: null,
+      patterns: null,
+      references: null,
+      sampleServices: null,
+      offeringConsiderations: null,
+      commercialMarket: null,
+      sectorCommercialMarkets: null,
+      raw: null,
+    };
   }
   if (!isPlainObject(enrichment)) {
     warn("enrichment is not an object; ignoring");
-    return { standards: null, patterns: null, references: null, raw: null };
+    return {
+      standards: null,
+      patterns: null,
+      references: null,
+      sampleServices: null,
+      offeringConsiderations: null,
+      commercialMarket: null,
+      sectorCommercialMarkets: null,
+      raw: null,
+    };
   }
   return {
     standards: projectStandards(enrichment),
     patterns: projectPatterns(enrichment),
     references: projectReferences(enrichment),
+    sampleServices: projectTextField(enrichment, "sampleServices"),
+    offeringConsiderations: projectTextField(enrichment, "offeringConsiderations"),
+    commercialMarket: projectTextField(enrichment, "commercialMarket"),
+    sectorCommercialMarkets: projectSectorCommercialMarkets(enrichment),
     raw: cloneObject(enrichment),
   };
 }

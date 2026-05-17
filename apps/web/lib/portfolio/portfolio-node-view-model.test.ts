@@ -93,6 +93,32 @@ describe("toPortfolioNodeViewModel", () => {
       expect(vm.enrichment.references).toEqual([{ label: "RFC", href: "https://example.com" }]);
     });
 
+    it("projects workbook-derived market and product guidance", () => {
+      const vm = toPortfolioNodeViewModel({
+        description: null,
+        governance: null,
+        enrichment: {
+          sampleServices: "Capability mapping; Product fit review",
+          offeringConsiderations: "Lightweight advisory vs managed program",
+          commercialMarket: "Representative vendors: ServiceNow SPM; Planview; Jira.",
+          industryMarkets: {
+            retail: "Shopify; Square; Lightspeed",
+            banking: "Fiserv; Temenos",
+          },
+        },
+      });
+
+      expect(vm.enrichment).toMatchObject({
+        sampleServices: "Capability mapping; Product fit review",
+        offeringConsiderations: "Lightweight advisory vs managed program",
+        commercialMarket: "Representative vendors: ServiceNow SPM; Planview; Jira.",
+        sectorCommercialMarkets: [
+          { sector: "retail", market: "Shopify; Square; Lightspeed" },
+          { sector: "banking", market: "Fiserv; Temenos" },
+        ],
+      });
+    });
+
     it("warns and returns null for malformed enrichment shape", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const vm = toPortfolioNodeViewModel({
