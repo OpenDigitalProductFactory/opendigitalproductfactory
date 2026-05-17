@@ -49,6 +49,7 @@ test-results/
 # Local verification and handoff artifacts
 output/
 tmp/
+.codex-runtime/
 docs/prompts/
 
 # MCP client configs contain live bearer tokens — must never be committed.
