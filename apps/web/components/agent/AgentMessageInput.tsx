@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { MAX_MESSAGE_LENGTH } from "@/lib/agent-coworker-types";
 import { AgentFileUpload } from "./AgentFileUpload";
+import { MicButton } from "./MicButton";
+import { useVoiceCapture } from "./hooks/useVoiceCapture";
 
 type PendingFile = {
   attachmentId: string;
@@ -23,6 +25,33 @@ type Props = {
 export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear }: Props) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Voice input wiring (Slice 1 Task 10) ─────────────────────────────────
+  // Splices the transcript into the textarea at the current cursor position
+  // so users can review + edit before sending. We do NOT auto-send — the
+  // transcript is treated like text the user typed.
+  const insertTranscriptAtCursor = useCallback((text: string) => {
+    if (!text) return;
+    const el = textareaRef.current;
+    setValue((current) => {
+      const trimmed = text.trim();
+      if (!el) return current ? `${current} ${trimmed}` : trimmed;
+      const start = el.selectionStart ?? current.length;
+      const end = el.selectionEnd ?? current.length;
+      const before = current.slice(0, start);
+      const after = current.slice(end);
+      const sep = before && !before.endsWith(" ") ? " " : "";
+      return `${before}${sep}${trimmed}${after}`;
+    });
+    // Refocus so the user can press Enter to send or edit further.
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
+
+  const voice = useVoiceCapture({
+    threadId,
+    onTranscript: insertTranscriptAtCursor,
+    context: "coworker_panel",
+  });
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -48,6 +77,20 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
+      return;
+    }
+    // Spacebar push-to-talk per spec §10 Q1: only when textarea is empty +
+    // focused. Otherwise spacebar inserts a space normally.
+    if (e.key === " " && value.length === 0 && voice.state === "idle" && voice.supported) {
+      e.preventDefault();
+      void voice.start();
+      return;
+    }
+    // Escape cancels in-flight dictation per spec §5.1 ("hit Esc to stop").
+    if (e.key === "Escape" && voice.state === "recording") {
+      e.preventDefault();
+      voice.stop();
+      return;
     }
   }
 
@@ -133,6 +176,16 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
             {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
           </span>
         )}
+        <MicButton
+          state={voice.state}
+          errorMessage={voice.error}
+          errorCode={voice.errorCode}
+          supported={voice.supported}
+          onStart={() => void voice.start()}
+          onStop={voice.stop}
+          onReset={voice.reset}
+          disabled={disabled || !!busy}
+        />
         <AgentFileUpload
           threadId={threadId}
           disabled={disabled || !!busy}
