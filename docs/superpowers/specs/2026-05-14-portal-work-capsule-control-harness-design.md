@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied); 2026-05-17 (Phase 2 merged and Phase 3 lease auto-renewal slice applied) |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied); 2026-05-17 (Phase 2 merged and Phase 3 lease auto-renewal slice applied); 2026-05-17 (chief-architect review: §9.3 MCP table updated with `plan_capsule_worktree`, §9.5 auto-renewal allowlist corrected, §17.3 per-tool test names added) |
 | Status | Phase 1 merged to `main` via PR #602; Phase 2 merged to `main` via PR #675; Phase 3 first slice implements lease auto-renewal for existing-capsule MCP writes while broader executor attachment remains open; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
@@ -522,6 +522,7 @@ Required MCP tools:
 | `get_work_capsule` | hydrate context before acting | read-only |
 | `create_work_capsule` | create a governed work unit | `idempotencyKey` required; conflict returns existing capsule |
 | `adopt_worktree` | attach an existing path/branch | natural key `(repositoryFullName, headBranch)` returns existing capsule |
+| `plan_capsule_worktree` | generate deterministic branch name, worktree path, and taxonomy; display operator-paste launch commands | idempotent re-plan; collision with existing branch adds numeric suffix; issues initial lease on external-executor assignment |
 | `claim_capsule_scope` | declare intended files/modules | merging set on `(capsuleId, kind, value)` |
 | `record_capsule_evidence` | persist tests, builds, screenshots, notes | append-only |
 | `heartbeat_capsule` | renew external executor lease | replaces `leaseExpiresAt` |
@@ -576,8 +577,7 @@ Soft leases keep work moving while making collisions visible early.
 External desktop executors (Codex, Claude, human) cannot be supervised by the portal directly. The capsule therefore models *liveness* with an explicit lease.
 
 - On capsule attach (`create_work_capsule` or `adopt_worktree` with an external executor), the server issues a lease: `leaseHolderPrincipalId` is set and `leaseExpiresAt = now() + LEASE_TTL` (default 30 minutes; constant: `LEASE_TTL_MS` in `apps/web/lib/work-capsules.ts`).
-- The executor must call `heartbeat_capsule` before expiry. The MCP middleware MAY auto-heartbeat **only on capsule-scoped *write* tool calls** (`create_work_capsule`, `adopt_worktree`, `claim_capsule_scope`, `record_capsule_evidence`, `heartbeat_capsule`, `update_work_capsule_status`, `release_capsule_scope`). Auto-renewal MUST NOT trigger from read tools (`list_work_capsules`, `get_work_capsule`)  -  a reader checking on a stale capsule should not silently extend that capsule's lease, and read tools must remain idempotent in a way an MCP client can rely on. The auto-heartbeat middleware ships in **Phase 3** alongside external executor attachment; Phase 1 supports only the explicit `heartbeat_capsule` call.
-- The first Phase 3 lease slice (2026-05-17) implements handler-level auto-renewal after successful existing-capsule write tools: `claim_capsule_scope`, `record_capsule_evidence`, `update_work_capsule_status`, and `release_capsule_scope`. `create_work_capsule` and `adopt_worktree` continue to issue the initial external-executor lease during attach, and `heartbeat_capsule` remains the explicit single-renewal path so it does not emit duplicate renewal activities.
+- The executor must call `heartbeat_capsule` before expiry. From Phase 3, the MCP layer also auto-renews after successful **existing-capsule write** calls: `claim_capsule_scope`, `record_capsule_evidence`, `update_work_capsule_status`, and `release_capsule_scope`. Three tools are deliberately excluded from auto-renewal: `create_work_capsule` and `adopt_worktree` *issue* the initial lease at attach time rather than renewing it; `heartbeat_capsule` *is* the explicit single-renewal path and wrapping it in auto-renewal would emit duplicate `lease-renewed` activities. Auto-renewal MUST NOT trigger from read tools (`list_work_capsules`, `get_work_capsule`)  -  a reader checking on a stale capsule should not silently extend that capsule's lease, and read tools must remain idempotent in a way an MCP client can rely on. Phase 1 supports only the explicit `heartbeat_capsule` call; the auto-renewal layer ships with the first Phase 3 slice (2026-05-17, commit `268ea90a`).
 - A capsule whose lease has expired surfaces as `lease-expired` in the daily steward and is eligible for reassignment or abandonment recommendations. Expiry does not change `status`; the work itself may still be sound on disk.
 - Build Studio capsules do not consume the lease; their liveness comes from `FeatureBuild` execution state. The lease applies to `codex-desktop`, `claude-desktop`, `human`, and any future external executor kind.
 
@@ -961,7 +961,7 @@ Adds:
 
 Adds:
 
-1. Lease auto-renewal middleware tests  -  existing-capsule write tools renew, read tools do not, and explicit `heartbeat_capsule` renews once.
+1. Lease auto-renewal middleware tests — one test per tool, named explicitly: `claim_capsule_scope`, `record_capsule_evidence`, `update_work_capsule_status`, and `release_capsule_scope` each assert that `workCapsule.update` is called with `leaseHolderPrincipalId` + `leaseExpiresAt` and that a `lease-renewed` activity is written; `list_work_capsules` and `get_work_capsule` each assert that no update or activity write occurs; `heartbeat_capsule` asserts renewal fires exactly once. A single "proof-of-concept" test covering only one write tool is insufficient because the wrapper is applied per-handler and a misconfigured handler is only caught by its own assertion.
 2. Collision-detection tests for overlapping `(kind, value)` scope claims across active capsules.
 3. External executor handoff tests  -  `executor-changed` activity is written on every transition.
 4. CLI hive tests proving Codex CLI and Claude Code CLI sessions attach as separate executor sessions, record separate evidence, and do not receive raw provider/OAuth secrets.
