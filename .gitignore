@@ -12,7 +12,10 @@ packages/db/generated/
 .playwright-cli/
 .pnpm-store/
 docker-compose.override.yml
-backups/
+# Host-side platform-managed backup dumps (root-anchored so the pattern
+# does NOT match source-tree directories like apps/web/lib/operate/backups/
+# or apps/web/app/(shell)/admin/backups/, which are checked in.)
+/backups/
 
 # Git LFS writes generated hook shims into core.hooksPath=.githooks.
 .githooks/post-checkout

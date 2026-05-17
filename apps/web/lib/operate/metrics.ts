@@ -145,3 +145,33 @@ export const utilityInferenceLatency = new Histogram({
   buckets: [0.5, 1, 2, 5, 10],
   registers: [metricsRegistry],
 });
+
+// ─── Postgres Daily Backup (Slice 1) ───────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §8
+
+export const postgresBackupRunsTotal = new Counter({
+  name: "dpf_postgres_backup_runs_total",
+  help: "Postgres backup runs by status and trigger",
+  labelNames: ["status", "trigger"] as const,
+  registers: [metricsRegistry],
+});
+
+export const postgresBackupLastSuccessSeconds = new Gauge({
+  name: "dpf_postgres_backup_last_success_seconds",
+  help: "Epoch seconds at which the last successful Postgres backup finished",
+  registers: [metricsRegistry],
+});
+
+export const postgresBackupStorageBytes = new Gauge({
+  name: "dpf_postgres_backup_storage_bytes",
+  help: "Total bytes used by retained Postgres backup dumps",
+  registers: [metricsRegistry],
+});
+
+export const postgresBackupDurationSeconds = new Histogram({
+  name: "dpf_postgres_backup_duration_seconds",
+  help: "Wall-clock duration of Postgres backup runs",
+  labelNames: ["trigger"] as const,
+  buckets: [1, 2, 5, 10, 30, 60, 300, 900],
+  registers: [metricsRegistry],
+});

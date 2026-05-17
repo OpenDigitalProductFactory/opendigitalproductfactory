@@ -1525,6 +1525,58 @@ model ScheduledJob {
   updatedAt  DateTime  @updatedAt
 }
 
+// Per-run audit log for platform-managed backups (Postgres in Slice 1; Neo4j/
+// Qdrant in later slices). The ScheduledJob row with jobId
+// "postgres-daily-backup" is the live heartbeat; BackupRun rows are durable
+// history surfaced in the /admin/backups UX.
+// See docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.7.
+model BackupRun {
+  id           String    @id @default(cuid())
+  target       String    @default("postgres")
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  status       String
+  trigger      String
+  schedule     String?
+  sizeBytes    BigInt?
+  durationMs   Int?
+  sha256       String?
+  pgVersion    String?
+  dpfVersion   String?
+  storagePath  String
+  errorMessage String?
+  prunedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  restoresFrom BackupRestore[] @relation("BackupRestoreSource")
+  safetyFor    BackupRestore[] @relation("BackupRestoreSafety")
+
+  @@index([startedAt])
+  @@index([status])
+  @@index([target, status])
+}
+
+// Audit row for every restore operation. Strongly gated in the UX (typed
+// confirmation); never automatic. Each restore writes a pre-restore safety
+// dump first; preRestoreBackupRunId points at that BackupRun.
+model BackupRestore {
+  id                    String    @id @default(cuid())
+  startedAt             DateTime  @default(now())
+  finishedAt            DateTime?
+  status                String
+  initiatedByUserId     String?
+  sourceBackupRunId     String
+  preRestoreBackupRunId String?
+  errorMessage          String?
+  createdAt             DateTime  @default(now())
+
+  sourceBackup     BackupRun  @relation("BackupRestoreSource", fields: [sourceBackupRunId], references: [id])
+  preRestoreBackup BackupRun? @relation("BackupRestoreSafety", fields: [preRestoreBackupRunId], references: [id])
+
+  @@index([startedAt])
+  @@index([status])
+}
+
 model CodeGraphIndexState {
   graphKey                 String              @id
   graphVersion             Int                 @default(1)
