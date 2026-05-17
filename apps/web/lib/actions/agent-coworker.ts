@@ -31,6 +31,8 @@ import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import { resolvePortalContextEnvelope } from "@/lib/portal-context";
+import type { PortalObjectAnchor } from "@/lib/portal-context";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -76,6 +78,69 @@ async function requireAuthUser() {
   const user = session?.user;
   if (!user?.id) throw new Error("Unauthorized");
   return user;
+}
+
+async function buildPortalContextPromptSection(input: {
+  routeContext: string;
+  threadId: string;
+  buildId?: string | null;
+}, userId: string): Promise<string | null> {
+  const pathname = normalizePortalContextPathname(input.routeContext);
+  if (!isPortalContextSupportedPath(pathname)) return null;
+
+  try {
+    const capsuleId = resolveCapsuleIdFromPathname(pathname);
+    const buildId = input.buildId ?? resolveBuildIdFromRouteContext(input.routeContext);
+    const envelope = await resolvePortalContextEnvelope(
+      {
+        pathname,
+        routeContext: normalizePortalContextRoute(pathname),
+        ...(buildId ? { buildId } : {}),
+        ...(capsuleId ? { capsuleId } : {}),
+        threadId: input.threadId,
+      },
+      userId,
+    );
+
+    return formatPortalContextPromptSection(envelope.promptDigest, envelope.anchors);
+  } catch (error) {
+    console.warn("[portal-context] Failed to resolve coworker prompt context", error);
+    return null;
+  }
+}
+
+function formatPortalContextPromptSection(promptDigest: string, anchors: PortalObjectAnchor[]): string | null {
+  const digest = promptDigest.trim();
+  const anchorLine = anchors.length
+    ? `Anchors: ${anchors.map((anchor) => `${anchor.kind}:${anchor.id}`).join(", ")}`
+    : null;
+  const lines = ["--- PORTAL CONTEXT ---", digest, anchorLine].filter((line): line is string => Boolean(line));
+  return lines.length > 1 ? lines.join("\n") : null;
+}
+
+function normalizePortalContextPathname(routeContext: string): string {
+  return routeContext.split("#")[0]?.split("?")[0] || routeContext;
+}
+
+function normalizePortalContextRoute(pathname: string): string {
+  if (pathname === "/build" || pathname.startsWith("/build/")) {
+    return pathname.startsWith("/build/work") ? "/build/work" : "/build";
+  }
+  return pathname;
+}
+
+function isPortalContextSupportedPath(pathname: string): boolean {
+  return pathname === "/build" || pathname.startsWith("/build/work");
+}
+
+function resolveBuildIdFromRouteContext(routeContext: string): string | null {
+  const hash = routeContext.match(/^\/build#([^?#/]+)$/);
+  return hash?.[1] ? decodeURIComponent(hash[1]) : null;
+}
+
+function resolveCapsuleIdFromPathname(pathname: string): string | null {
+  const match = pathname.match(/^\/build\/work\/([^/]+)$/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
 /**
@@ -369,6 +434,14 @@ export async function sendMessage(input: {
 
   // Track build ID at function scope — used in both prompt assembly and post-inference research dispatch
   let resolvedBuildId = input.buildId;
+  const portalContextPrompt = await buildPortalContextPromptSection(
+    {
+      routeContext: input.routeContext,
+      threadId: input.threadId,
+      buildId: resolvedBuildId ?? null,
+    },
+    user.id!,
+  );
 
   // Build inference context: recent window + semantic recall for older context.
   // Build phases need more context (research findings, schema details, tool results)
@@ -484,9 +557,17 @@ export async function sendMessage(input: {
     const contextSources = [
       // L1: Route-essential context
       { tier: "L1" as const, priority: 0, content: domainBlock, tokenCount: countTokens(domainBlock), source: "domain", compressible: false },
+      ...(portalContextPrompt ? [{
+        tier: "L1" as const,
+        priority: 1,
+        content: portalContextPrompt,
+        tokenCount: countTokens(portalContextPrompt),
+        source: "portal-context",
+        compressible: false,
+      }] : []),
       // L1: User facts — structured memory from prior conversations
       ...(factsContext ? [{
-        tier: "L1" as const, priority: 1, content: factsContext, tokenCount: countTokens(factsContext),
+        tier: "L1" as const, priority: 2, content: factsContext, tokenCount: countTokens(factsContext),
         source: "user-facts", compressible: true,
         compressedContent: factsCompressed ?? "",
         compressedTokenCount: countTokens(factsCompressed ?? ""),
@@ -621,6 +702,10 @@ export async function sendMessage(input: {
       `- User role: ${user.platformRole ?? "none"}`,
       `- Page sensitivity: ${agent.sensitivity}`,
     ];
+
+    if (portalContextPrompt) {
+      promptSections.push("", portalContextPrompt);
+    }
 
     if (input.elevatedFormFillEnabled && input.formAssistContext) {
       promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
