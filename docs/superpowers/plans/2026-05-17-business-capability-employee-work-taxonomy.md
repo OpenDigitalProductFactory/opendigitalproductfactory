@@ -259,7 +259,7 @@ The QuickBooks readiness snapshot is the approved starting point, but current `o
 
 | Deferred item | Unblocked by |
 | --- | --- |
-| `create_epic` MCP tool does not exist — taxonomy epic cannot be created programmatically | Manual admin step: create the epic via the DPF admin UI or database seed, then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`. Capture as a backlog item under `EP-ARCH-8D4F2A` to expose `create_epic` in the MCP surface. |
+| `create_epic` MCP tool does not exist — taxonomy epic cannot be created programmatically | Manual admin step: create the epic via the DPF admin UI or database seed, then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`. `BI-BCCC9C7B` captures the governed MCP tool gap under `EP-ARCH-8D4F2A`. |
 | AGENTS.md status table omits `triaging`, while current MCP tools and backlog transitions include it | Treat `apps/web/lib/mcp-tools.ts` and `apps/web/lib/backlog/transitions.ts` as current runtime truth for this plan; update AGENTS.md in a separate workflow-policy slice. |
 | Sibling branch `DPF-small-business-os-parity` readiness files not yet on `origin/main` | Treat as approved branch input. Chunk 3 (QuickBooks long tail) can start on `BI-C61B5202` and `BI-07D76D6B` immediately. Full sequence unblocked when sibling branch merges. |
 | Bank-feed source-of-truth decision | Requires QuickBooks read coverage proven first (step 2 of QuickBooks long-tail sequence) |
@@ -453,7 +453,7 @@ After applying the body template to 10+ items (Chunk 2, Task 3), review: which f
 - [ ] Plan path confirmed at `docs/superpowers/plans/2026-05-17-business-capability-employee-work-taxonomy.md`.
 - [ ] `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411` visible in live backlog (currently unlinked from taxonomy epic; see Decisions & Deferrals).
 - [ ] `BI-C61B5202`, `BI-07D76D6B` visible and linked under `EP-INT-2E7C1A`.
-- [ ] Taxonomy epic creation noted as a deferred manual admin step with a resolution path.
+- [ ] Taxonomy epic creation noted as a deferred manual admin step with resolution path `BI-BCCC9C7B`.
 
 ### Implementation slices (Chunks 2–5)
 
@@ -466,7 +466,7 @@ After applying the body template to 10+ items (Chunk 2, Task 3), review: which f
 
 ## Recommended Next Smallest Buildable Slice
 
-**Step 0 (unblocking admin action):** Create the `Business Capability and Employee Work Taxonomy` epic manually via DPF admin UI or database seed. Then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, and `BI-4C166411`. Capture a backlog item under `EP-ARCH-8D4F2A` to expose `create_epic` in the MCP surface so this step is not manual next time.
+**Step 0 (unblocking admin action):** Create the `Business Capability and Employee Work Taxonomy` epic manually via DPF admin UI or database seed. Then run `link_backlog_item_to_epic` to attach `BI-407125DA`, `BI-0E6D42B3`, and `BI-4C166411`. `BI-BCCC9C7B` tracks the MCP `create_epic` gap so this step is not manual next time.
 
 **Chunk 2 first:** Build `BI-407125DA` — a small backlog capability-context foundation that standardizes the body template and validates whether first-class context fields are needed. This lets every later QuickBooks, Stripe, ADP, HubSpot, employee, and storefront parity item carry the same strategic context without blocking on schema.
 
