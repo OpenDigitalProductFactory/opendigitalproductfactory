@@ -30,6 +30,7 @@ import {
   normalizeRouteDecisionActor,
   type RouteDecisionActor,
 } from "./route-decision-attribution";
+import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -101,7 +102,7 @@ export async function loadEndpointManifests(): Promise<EndpointManifest[]> {
       retiredAt: null,
       provider: {
         status: { in: ["active", "degraded"] },
-        endpointType: "llm",
+        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
       },
     },
     include: {

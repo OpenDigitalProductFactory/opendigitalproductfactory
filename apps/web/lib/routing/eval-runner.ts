@@ -17,6 +17,7 @@ import {
   scoreRetrieval,
   scoreDimension,
 } from "./eval-scoring";
+import { BACKGROUND_EVAL_ENDPOINT_TYPES } from "./provider-eligibility";
 
 // ── Score Computation ────────────────────────────────────────────────────────
 
@@ -392,7 +393,11 @@ export async function runAllDimensionEvals(triggeredBy: string): Promise<EvalRun
     where: {
       modelStatus: "active",
       retiredAt: null,
-      provider: { status: { in: ["active", "degraded"] }, endpointType: "llm" },
+      provider: {
+        status: { in: ["active", "degraded"] },
+        endpointType: { in: [...BACKGROUND_EVAL_ENDPOINT_TYPES] },
+        NOT: { authMethod: "oauth2_authorization_code" },
+      },
     },
     select: { providerId: true, modelId: true },
   });
