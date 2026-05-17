@@ -16,7 +16,7 @@
 
 ## Live Backlog And Source State
 
-The live DPF MCP backlog tools were used first. No DB fallback was used.
+The live DPF MCP backlog tools were used first for backlog, epic, and portfolio-context work. During `BI-407125DA`, no DB fallback was used. During `BI-0E6D42B3`, the current-coworker MCP tools existed but failed because this external Codex session has no current coworker `agentId`; direct live PostgreSQL fallback was used only to confirm seeded coworker status and `CoworkerCapabilityNeed` coverage. Seed files were not used as live status.
 
 Open epic scan on 2026-05-17 found no dedicated business-capability or employee-work taxonomy epic. The closest active containers are:
 
@@ -140,16 +140,16 @@ The first taxonomy pass should use these top-level capability families:
 | --- | --- | --- | --- | --- | --- | --- |
 | Owner/operator: daily command center | Strong command-center substrate; needs capability vocabulary | `/workspace`, `/workspace/my-queue`, `/platform/ai/authority` | `ops-coordinator`, `portfolio-advisor`, onboarding COO | Cross-domain signals from QuickBooks, Stripe, ADP, HubSpot, Microsoft 365 | Native DPF | Add capability context to readiness/audit findings after the backlog template is proven |
 | Owner/operator: portfolio and product investment | Strong portfolio/product/backlog spine | `/portfolio`, product detail, backlog, Build Studio | `portfolio-advisor`, `inventory-specialist`, `ops-coordinator` | External issue/code systems later | Native DPF | Attach employee-work capability context to selected backlog and product records |
-| Bookkeeper/accountant: AR, invoicing, collections | Partial finance coverage; QuickBooks read path in progress | `/finance/invoices`, `/finance/payments`, QuickBooks integration page | `finance-agent`; missing bookkeeper/accountant coworker | QuickBooks, Stripe | Hybrid now; eventual replacement candidate | Expand read-only QuickBooks customer, invoice, payment, and report coverage |
-| Bookkeeper/accountant: AP, vendors, expenses | Partial finance coverage; accounting parity gaps remain | `/finance/bills`, `/finance/suppliers`, `/finance/expense-claims`, `/finance/purchase-orders` | `finance-agent`; missing bookkeeper/accountant coworker | QuickBooks; ADP for payroll expense context | Hybrid | Stage vendors, bills, expenses, and payments with source attribution |
-| Bookkeeper/accountant: bank rec, tax, close | Finance routes exist; full accounting/close posture is not yet DPF-owned | `/finance/banking`, `/finance/reconcile`, `/finance/reports`, `/finance/close`, tax settings | `finance-agent`; missing reconciliation specialist | QuickBooks, Stripe, future bank-feed provider | Integration-led until dual-run evidence | Decide bank-feed source posture, then add reconciliation evidence model |
+| Bookkeeper/accountant: AR, invoicing, collections | Partial finance coverage; QuickBooks read path in progress | `/finance/invoices`, `/finance/payments`, QuickBooks integration page | `finance-agent`, `finance-controller`; missing role-specific bookkeeper/accountant lane | QuickBooks, Stripe | Hybrid now; eventual replacement candidate | Expand read-only QuickBooks customer, invoice, payment, and report coverage |
+| Bookkeeper/accountant: AP, vendors, expenses | Partial finance coverage; accounting parity gaps remain | `/finance/bills`, `/finance/suppliers`, `/finance/expense-claims`, `/finance/purchase-orders` | `finance-agent`, `finance-controller`; missing role-specific bookkeeper/accountant lane | QuickBooks; ADP for payroll expense context | Hybrid | Stage vendors, bills, expenses, and payments with source attribution |
+| Bookkeeper/accountant: bank rec, tax, close | Finance routes exist; full accounting/close posture is not yet DPF-owned | `/finance/banking`, `/finance/banking/[id]/reconcile`, `/finance/reports`, `/finance/close`, tax settings | `finance-agent`, `finance-controller`; missing reconciliation lane | QuickBooks, Stripe, future bank-feed provider | Integration-led until dual-run evidence | Decide bank-feed source posture, then add reconciliation evidence model |
 | Sales/BD: leads to quotes/orders | CRM and storefront coverage exists | `/customer`, opportunities, quotes, sales orders, `/storefront/inbox` | `customer-advisor`; missing sales/BD coworker | HubSpot, Facebook Lead Ads, Google Business Profile, Mailchimp | Hybrid | Normalize lead/source context across storefront inbox and CRM opportunities |
 | Marketing: campaigns and local presence | Marketing/customer route and native anchors exist | `/customer/marketing`, Google/Facebook/Mailchimp integration pages | `marketing-specialist` | Mailchimp, Google Marketing, Google Business Profile, Facebook Pages, Instagram Business | Integration-led with DPF orchestration | Add marketing capability rows to the integration coverage matrix |
 | Service delivery/operations: work intake and delivery | Strong DPF work/backlog/build foundation; service-delivery vocabulary needs alignment | `/workspace/my-queue`, `/ops`, `/build`, `/customer`, `/storefront/team` | `ops-coordinator`, Build specialist | Microsoft 365, communications fabric, future project/work tools | Native DPF for work; integration-led for channels | Map work queues and storefront team workflows to employee roles |
-| Customer support: support and account follow-up | Partial customer/storefront inbox support coverage | `/customer`, `/storefront/inbox`, workspace queue | `customer-advisor`; service-support agent exists in IT4IT context but SMB support specialist is missing | HubSpot, Microsoft 365, WhatsApp Business, Facebook Pages | Hybrid | Identify whether SMB customer support needs its own coworker and queue template |
+| Customer support: support and account follow-up | Partial customer/storefront inbox support coverage | `/customer`, `/storefront/inbox`, workspace queue | `customer-advisor`, `service-support-agent`; missing SMB support lane definition | HubSpot, Microsoft 365, WhatsApp Business, Facebook Pages | Hybrid | Define the support lane across intake, queue ownership, customer records, and communications |
 | HR/payroll/admin: employees, payroll, access | Employee route and ADP anchor exist; payroll execution remains external | `/employee`, `/platform/tools/integrations/adp`, compliance/admin surfaces | `hr-specialist`; missing payroll specialist | ADP, Microsoft 365 | Integration-led for payroll; native DPF for roles/authority | Map ADP worker/payroll readiness into employee-work taxonomy |
 | Inventory/assets/procurement: assets and purchasing | Finance assets, suppliers, POs exist; inventory/procurement depth varies by archetype | `/finance/assets`, `/finance/suppliers`, `/finance/purchase-orders`, inventory/product surfaces | `inventory-specialist`; missing procurement/assets coworker | QuickBooks, vendor systems later | Hybrid | Decide when inventory/procurement is native DPF vs provider-led per archetype |
-| IT/security/compliance: evidence, identity, risk | Strong platform/compliance surfaces | `/compliance`, `/platform/tools`, `/platform/ai`, `/platform/edge-nodes` | `platform-engineer`, security auditor, licensing specialist | Microsoft 365, identity, device, service-desk providers | Native DPF governance with integration-led evidence | Extend coverage matrix to identity, device, service-desk, and licensing anchors |
+| IT/security/compliance: evidence, identity, risk | Strong platform/compliance surfaces | `/compliance`, `/platform/tools`, `/platform/ai`, `/platform/edge-nodes`, `/ea` | `platform-engineer`, `licensing-specialist`, `ux-accessibility-agent`, `ea-architect` | Microsoft 365, identity, device, service-desk providers | Native DPF governance with integration-led evidence | Extend coverage matrix to identity, device, service-desk, and licensing anchors |
 
 ## Backlog Context Template
 
@@ -185,23 +185,34 @@ Examples:
 
 ## First Backlog Batch Created
 
-The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP. Items remain `triaging` with a proposed build outcome so Scrum Master triage can size and sequence them with other priorities.
+The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP, then restored and build-triaged on 2026-05-17 so Scrum Master and Build Studio workflows can sequence them with other priorities.
 
 | Item | Epic | Purpose |
 | --- | --- | --- |
-| `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | Recommended new taxonomy epic; currently unlinked | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
-| `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | Recommended new taxonomy epic; currently unlinked | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
-| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | Recommended new taxonomy epic; currently unlinked | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
+| `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | `EP-BIZ-CAP` | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
+| `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | `EP-BIZ-CAP` | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
+| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | `EP-BIZ-CAP` | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
 | `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Move QuickBooks entity families from not-mapped to read, still with no writes. |
 | `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for company, customers, invoices, vendors, bills, and payments | `EP-INT-2E7C1A` | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
 
-## Proposed Follow-On Backlog Batch
+Execution update on 2026-05-17: the batch above was restored and linked through live DPF MCP. The first three items are now under `EP-BIZ-CAP`; the QuickBooks items remain under `EP-INT-2E7C1A`. `BI-407125DA` was moved through `in-progress` while this foundation slice was executed. No DB fallback was used.
 
-Create these after the first created items are triaged or when the new taxonomy epic exists:
+## Second Backlog Batch Created From Role Audit
+
+The role-to-work audit created these additional items through live DPF MCP under `EP-BIZ-CAP` on 2026-05-17:
+
+| Item | Epic | Purpose |
+| --- | --- | --- |
+| `BI-80A71362` Capability taxonomy: define bookkeeper/accountant operating lane and finance coworker handoffs | `EP-BIZ-CAP` | Consolidate finance routes, QuickBooks/Stripe readiness, accounting ownership posture, and finance coworker handoffs. |
+| `BI-9A86E2A7` Capability taxonomy: define customer support lane across storefront inbox, queues, and service coworker coverage | `EP-BIZ-CAP` | Separate support work from sales/marketing and map intake, queue, customer-record, and service-support coworker ownership. |
+| `BI-E1CFC8FB` Capability taxonomy: define inventory and procurement admin lane across suppliers, purchases, assets, and storefront items | `EP-BIZ-CAP` | Decide the lane and native/provider posture for suppliers, POs, assets, inventory, and storefront items. |
+| `BI-861433C0` Capability taxonomy: publish native integration coverage matrix for employee work roles | `EP-BIZ-CAP` | Turn native and benchmark integration coverage into a maintained role-provider-posture matrix. |
+| `BI-F9E7B780` Capability coverage: expose all-coworker capability-needs report for taxonomy audits | `EP-BIZ-CAP` | Remove the need for direct SQL fallback when future audits need all-coworker capability-needs coverage. |
+
+Remaining integration-provider follow-ons stay with `EP-INT-2E7C1A` unless a later epic split is approved:
 
 | Proposed title | Preferred epic | Purpose |
 | --- | --- | --- |
-| Native integration capability and employee-role coverage matrix | Business Capability and Employee Work Taxonomy | Audit native integrations against common SMB employee jobs and DPF surfaces. |
 | Accounting entity link and ownership posture model | `EP-INT-2E7C1A` | Define external/local links and owner-side states for accounting and payment objects. |
 | Stripe and QuickBooks payment reconciliation posture | `EP-INT-2E7C1A` | Define read-first reconciliation across DPF, Stripe, QuickBooks, fees, payouts, and deposits. |
 | Bank feeds and reconciliation source-of-truth decision | `EP-INT-2E7C1A` | Decide whether DPF reads bank facts from QuickBooks, a bank-feed provider, CSV, or direct open-banking later. |
@@ -309,11 +320,11 @@ At minimum, flag missing or shallow anchors for Xero, Gusto, Slack, Salesforce, 
 
 ### Task 3: Prove Body-Template Use
 
-- [ ] **Step 1: Apply the context template to 10 existing or new backlog items**
+- [x] **Step 1: Apply the context template to 10 existing or new backlog items**
 
 Start with the five items created in this plan, proposed follow-on items once approved, and the existing `BI-INT-A5B9E3` and `BI-INT-F23BC6`.
 
-- [ ] **Step 2: Review query needs**
+- [x] **Step 2: Review query needs**
 
 Ask:
 
@@ -323,7 +334,7 @@ Can those filters be derived from body text for now?
 Which fields need exact querying in Build Studio or backlog UI?
 ```
 
-- [ ] **Step 3: Decide schema vs manifest**
+- [x] **Step 3: Decide schema vs manifest**
 
 Preferred first implementation:
 
@@ -341,6 +352,13 @@ type BacklogCapabilityContext = {
 ```
 
 Store in a manifest JSON field only if such a field already exists or a separate schema plan is approved. Do not add columns prematurely.
+
+Execution result for `BI-407125DA` on 2026-05-17:
+
+- Applied the `Backlog capability context` block to these 10 live backlog items through DPF MCP: `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`, `BI-C61B5202`, `BI-07D76D6B`, `BI-INT-A5B9E3`, `BI-INT-F23BC6`, `BI-INT-E76A95`, `BI-INT-8D4F72`, and `BI-INT-1AB7D8`.
+- Query need: operators will eventually need exact filters for employee role, business capability, posture, maturity target, integration anchor, and DPF surface. For the current planning and triage stage, body text is acceptable because the first use case is human-readable prioritization, not automated Build Studio routing.
+- Schema decision: do not add `BacklogItem` columns or a JSON manifest in this slice. Current schema has `BusinessCapability` and `BusinessCapabilityTraceLink`, while `BacklogItem` has body text plus existing links to taxonomy, digital product, agent, accountable employee, and capability trace links. The next structural slice should expose governed MCP/UI support for capability trace links before adding another backlog context storage shape.
+- Build Studio decision: exact routing should wait until at least 10-20 real items prove which fields are queried in practice. The first future automation should parse or normalize the body block into a read model, then graduate repeated fields into a schema or trace-link writer only if Build Studio and backlog UI need deterministic filtering.
 
 ## Chunk 3: QuickBooks Long Tail
 
@@ -370,11 +388,11 @@ Create the proposed Stripe/QuickBooks reconciliation item after DPF has enough Q
 
 ### Task 5: Role-To-Work Audit
 
-- [ ] **Step 1: Use O*NET and SOC as role language checks**
+- [x] **Step 1: Use O*NET and SOC as role language checks**
 
 Do not import their taxonomy wholesale. Use them to avoid inventing nonstandard role language for bookkeeping, sales, customer service, HR, and administrative work.
 
-- [ ] **Step 2: Map employee jobs to DPF surfaces**
+- [x] **Step 2: Map employee jobs to DPF surfaces**
 
 Minimum rows:
 
@@ -390,13 +408,22 @@ it_security_compliance
 inventory_procurement_admin
 ```
 
-- [ ] **Step 3: Map employee jobs to AI coworkers**
+- [x] **Step 3: Map employee jobs to AI coworkers**
 
 Use `packages/db/data/agent_registry.json` and live coworker capability-needs surfaces. Where no coworker exists or the coworker lacks grants/tools, create reviewed capability needs or backlog items.
 
-- [ ] **Step 4: Map employee jobs to integration anchors**
+- [x] **Step 4: Map employee jobs to integration anchors**
 
 Use native integrations first. Only propose new external products after checking the integration catalog and current benchmark family items.
+
+Execution result for `BI-0E6D42B3` on 2026-05-17:
+
+- Evidence sources: shell route inventory under `apps/web/app/(shell)`, user-guide docs, `apps/web/lib/tools/native-integration-catalog.ts`, `packages/db/prisma/schema.prisma`, live MCP portfolio context search, live MCP backlog state, and official reference-language checks from O*NET, BLS SOC, and APQC PCF.
+- The coverage matrix above now covers the nine required roles: `owner_operator`, `bookkeeper_accountant`, `sales_bd`, `marketer`, `service_ops`, `customer_support`, `hr_payroll_admin`, `it_security_compliance`, and `inventory_procurement_admin`.
+- MCP limitation: `get_my_coworker_profile` and `list_my_capability_needs` were available but failed because this external Codex token has no current coworker `agentId`. Direct live PostgreSQL fallback was used only to confirm active seeded coworker rows and that `CoworkerCapabilityNeed` currently has no submitted rows.
+- Live coworker status: the running database has active rows for `finance-agent`, `finance-controller`, `customer-advisor`, `marketing-specialist`, `hr-specialist`, `inventory-specialist`, `ops-coordinator`, `portfolio-advisor`, and `service-support-agent`.
+- Gap pattern: DPF has many surfaces and coworkers, but several employee lanes are not yet explicit operating lanes. The audit therefore created `BI-80A71362`, `BI-9A86E2A7`, `BI-E1CFC8FB`, `BI-861433C0`, and `BI-F9E7B780` under `EP-BIZ-CAP`.
+- Architecture decision: use these backlog lanes to deepen existing DPF finance, customer, storefront, employee, workspace, compliance, and integration surfaces. Do not create a chat-only "employee taxonomy" layer, and do not promote QuickBooks replacement claims before read, stage, reconciliation, evidence, accountant review, export, and rollback gates are proven.
 
 ### Task 6: Surface Commercial Market Enrichment
 
@@ -442,8 +469,8 @@ If the same fields are needed across 10 or more items, write a separate schema p
 For this planning slice:
 
 - `git diff --check`
-- Confirm plan path exists and is linked to live backlog IDs.
-- Confirm live backlog items are visible under `EP-INT-2E7C1A`.
+- Confirm plan path exists and names live backlog IDs.
+- Confirm live backlog items are visible under `EP-BIZ-CAP` and provider-parity items remain under `EP-INT-2E7C1A`.
 
 For future implementation slices:
 
@@ -455,8 +482,8 @@ For future implementation slices:
 
 ## Recommended Next Smallest Buildable Slice
 
-Build `BI-407125DA` first: a small backlog capability-context foundation that standardizes capture and validates whether backlog needs first-class context fields. This lets every later QuickBooks, Stripe, ADP, HubSpot, employee, and storefront parity item carry the same strategic context without blocking on schema.
+`BI-407125DA` is complete, and `BI-0E6D42B3` is now the completed audit slice captured by this document.
 
-Then build `BI-0E6D42B3`: the employee role taxonomy and coworker coverage audit. That gives the product team the actual work map before adding more provider-specific depth.
+Build `BI-4C166411` next. It is the smallest UI/product slice because the workbook-derived commercial-market fields already exist in seeded taxonomy data; the gap is view-model and presentation. That gives operators visible buy/build/integrate context before deeper provider or employee-lane implementation.
 
-`BI-4C166411` can run next or in parallel with the audit because it is a narrow UI/view-model slice: the data already exists, and the product value is high because operators can finally see the workbook's build-vs-buy and commercial-market guidance directly in taxonomy UX.
+After that, build `BI-861433C0` so the native integration coverage matrix becomes a maintained product surface rather than a static planning table.

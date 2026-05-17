@@ -150,9 +150,13 @@ Debate and synthesis outputs must cite evidence and label fuzzy memory as fuzzy 
 
 ### 5.7 Principle Contradiction Resolution
 
-When two active principles conflict on a specific question, the gate does not pick a winner by position order. It applies the weighted vector model established in `2026-05-12-principles-as-wiki-kind-design.md`: each principle carries a direction, weight, and applicable dimensions. Contradictory principles on the same dimensions are synthesized into a weighted net vector. The decision record must show which principles pulled in which direction and what the net resolution was.
+When two active principles conflict on a specific question, the gate does not pick a winner by position order.
 
-If two principles conflict and neither clearly dominates the vector (net confidence below threshold), the gate escalates rather than fabricating synthesis. Principle conflict is never hidden.
+**V1 behavior:** detect the conflict, force `escalate`, and record `principleConflict: true` on the `DecisionInteraction`. The decision record identifies which principles are in tension and on which domain. The human resolution is captured via `EscalationCapture` and becomes candidate profile material. This gives the system real conflict data before any synthesis model is built.
+
+**V2 target:** apply the weighted vector model established in `2026-05-12-principles-as-wiki-kind-design.md`, where each principle carries a direction, weight, and applicable dimensions. Contradictory principles on the same dimensions are resolved into a weighted net vector. If the net confidence is above threshold, the gate may recommend rather than escalate. The v1 conflict ledger provides the calibration data v2 needs.
+
+Principle conflict is never hidden in either version.
 
 ### 5.8 Decision Service Discipline
 

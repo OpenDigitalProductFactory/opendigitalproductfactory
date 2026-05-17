@@ -22,6 +22,15 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     buildActivity: {
       create: vi.fn(),
     },
+    phaseHandoff: {
+      create: vi.fn(),
+    },
+    employeeProfile: {
+      findFirst: vi.fn(),
+    },
+    calendarEvent: {
+      upsert: vi.fn(),
+    },
     backlogItemActivity: {
       create: vi.fn(),
     },
@@ -53,6 +62,10 @@ const { mockListReleasableSandboxFiles } = vi.hoisted(() => ({
   mockListReleasableSandboxFiles: vi.fn(),
 }));
 
+const { mockEvaluateBuildStudioPlanAdvancementGate } = vi.hoisted(() => ({
+  mockEvaluateBuildStudioPlanAdvancementGate: vi.fn(),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -78,6 +91,10 @@ vi.mock("@/lib/integrate/sandbox/sandbox", () => ({
   listReleasableSandboxFiles: mockListReleasableSandboxFiles,
 }));
 
+vi.mock("@/lib/decision-perspective/build-studio-gate", () => ({
+  evaluateBuildStudioPlanAdvancementGate: mockEvaluateBuildStudioPlanAdvancementGate,
+}));
+
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
@@ -96,6 +113,9 @@ describe("governed build start approvals", () => {
       },
     });
     mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockPrisma.phaseHandoff.create.mockResolvedValue({});
+    mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
+    mockPrisma.calendarEvent.upsert.mockResolvedValue({});
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
     mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
     mockPrisma.workCapsule.create.mockResolvedValue({
@@ -111,6 +131,15 @@ describe("governed build start approvals", () => {
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
     mockQueueBuildReviewVerification.mockResolvedValue(undefined);
+    mockEvaluateBuildStudioPlanAdvancementGate.mockResolvedValue({
+      allowed: true,
+      interactionId: "DI-ALLOW",
+      operatorMessage: "WWMD recommends starting implementation.",
+      evaluation: {
+        outcomeType: "recommend",
+        confidenceScore: 0.9,
+      },
+    });
     mockSaveBuildArtifactRevision.mockResolvedValue({
       revisionId: "rev-1",
       revisionNumber: 1,
@@ -516,6 +545,117 @@ describe("governed build start approvals", () => {
       }),
     );
     expect(mockQueueBuildReviewVerification).toHaveBeenCalledWith("FB-123");
+    expect(mockEvaluateBuildStudioPlanAdvancementGate).not.toHaveBeenCalled();
+  });
+
+  it("advanceBuildPhase invokes WWMD only for plan to build after deterministic gates pass", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "build-row-1",
+      phase: "plan",
+      createdById: "user-1",
+      originatingBacklogItemId: "backlog-row-1",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      designDoc: { problemStatement: "Add WWMD gate" },
+      designReview: { decision: "pass", summary: "ok", issues: [] },
+      plan: {
+        happyPathState: {
+          intake: {
+            status: "ready",
+            taxonomyNodeId: "taxonomy-1",
+            backlogItemId: "BI-WWMD",
+            epicId: "EP-WWMD",
+            constrainedGoal: "Add WWMD gate",
+            failureReason: null,
+          },
+        },
+      },
+      brief: { acceptanceCriteria: ["Decision ledger row is written."] },
+      buildPlan: {
+        fileStructure: [{ path: "apps/web/lib/decision-perspective/build-studio-gate.ts", action: "create", purpose: "Gate service" }],
+        tasks: [{ title: "Gate service", testFirst: "Add tests", implement: "Write service", verify: "Run checks" }],
+      },
+      planReview: { decision: "pass", summary: "ready", issues: [] },
+      taskResults: null,
+      verificationOut: null,
+      acceptanceMet: null,
+      uxTestResults: null,
+      uxVerificationStatus: null,
+      sandboxId: null,
+      deliberationSummary: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+
+    await advanceBuildPhase("FB-123", "build");
+
+    expect(mockEvaluateBuildStudioPlanAdvancementGate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        build: expect.objectContaining({ buildId: "FB-123", phase: "plan" }),
+      }),
+    );
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-123" },
+        data: expect.objectContaining({ phase: "build" }),
+      }),
+    );
+  });
+
+  it("advanceBuildPhase blocks plan to build when WWMD escalates or defers", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "build-row-1",
+      phase: "plan",
+      createdById: "user-1",
+      originatingBacklogItemId: "backlog-row-1",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      designDoc: { problemStatement: "Add WWMD gate" },
+      designReview: { decision: "pass", summary: "ok", issues: [] },
+      plan: {
+        happyPathState: {
+          intake: {
+            status: "ready",
+            taxonomyNodeId: "taxonomy-1",
+            backlogItemId: "BI-WWMD",
+            epicId: "EP-WWMD",
+            constrainedGoal: "Add WWMD gate",
+            failureReason: null,
+          },
+        },
+      },
+      brief: { acceptanceCriteria: ["Decision ledger row is written."] },
+      buildPlan: {
+        fileStructure: [{ path: "apps/web/lib/decision-perspective/build-studio-gate.ts", action: "create", purpose: "Gate service" }],
+        tasks: [{ title: "Gate service", testFirst: "Add tests", implement: "Write service", verify: "Run checks" }],
+      },
+      planReview: { decision: "pass", summary: "ready", issues: [] },
+      taskResults: null,
+      verificationOut: null,
+      acceptanceMet: null,
+      uxTestResults: null,
+      uxVerificationStatus: null,
+      sandboxId: null,
+      deliberationSummary: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
+    mockEvaluateBuildStudioPlanAdvancementGate.mockResolvedValue({
+      allowed: false,
+      interactionId: "DI-BLOCK",
+      operatorMessage: "WWMD requires escalation before implementation starts.",
+      evaluation: {
+        outcomeType: "escalate",
+        confidenceScore: 0.42,
+      },
+    });
+
+    await expect(advanceBuildPhase("FB-123", "build")).rejects.toThrow(
+      "WWMD requires escalation before implementation starts.",
+    );
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-123" },
+        data: expect.objectContaining({ phase: "build" }),
+      }),
+    );
   });
 
   it("runBuildReviewVerification resets UX evidence and enqueues a fresh review pass", async () => {

@@ -17,10 +17,12 @@ import {
   type BuildDesignDoc,
   type BuildPlanDoc,
   type ReviewResult,
+  type BuildDeliberationSummary,
 } from "@/lib/feature-build-types";
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
+import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
 import {
   type BusinessBriefEvidenceKind,
   type BusinessBuildBriefSource,
@@ -316,6 +318,8 @@ export async function advanceBuildPhase(
     where: { buildId },
     select: {
       id: true,
+      buildId: true,
+      title: true,
       phase: true,
       createdById: true,
       originatingBacklogItemId: true,
@@ -332,6 +336,7 @@ export async function advanceBuildPhase(
       uxTestResults: true,
       uxVerificationStatus: true,
       sandboxId: true,
+      deliberationSummary: true,
     },
   });
   if (!build) throw new Error("Build not found");
@@ -404,6 +409,23 @@ export async function advanceBuildPhase(
       }).catch(() => {});
     } else {
       throw new Error(gate.reason ?? "Phase gate check failed");
+    }
+  }
+
+  if (currentPhase === "plan" && targetPhase === "build") {
+    const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
+      db: prisma,
+      build: {
+        buildId,
+        title: build.title ?? buildId,
+        phase: currentPhase,
+        planReview: build.planReview as ReviewResult | null,
+        deliberationSummary: build.deliberationSummary as BuildDeliberationSummary | null,
+      },
+      triggeredByUserId: userId,
+    });
+    if (!decisionGate.allowed) {
+      throw new Error(decisionGate.operatorMessage);
     }
   }
 
