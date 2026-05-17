@@ -6,6 +6,7 @@ import {
   getCurrentBranch,
   getCurrentHeadSha,
   getGitRoot,
+  isGitRepo,
   isWorkspaceDirty,
   listTrackedFiles,
 } from "./git-snapshot";
@@ -92,6 +93,21 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
   const graphKey = input.graphKey ?? CODE_GRAPH_GRAPH_KEY;
   const gitRoot = getGitRoot();
   const observedAt = new Date();
+
+  // Guard: production containers only ship the compiled app, not the source
+  // git repository. Running git commands in a non-git directory hangs until
+  // the timeout fires (SIGTERM), marking the code graph as failed on every
+  // scheduled run. Skip gracefully instead.
+  if (!(await isGitRepo(gitRoot))) {
+    return {
+      mode: "noop",
+      graphKey,
+      headSha: null,
+      branch: null,
+      workspaceDirty: false,
+      changedFiles: [],
+    };
+  }
   let state = await findCodeGraphIndexState(graphKey);
   let headSha: string | null = null;
   let branch: string | null = null;
