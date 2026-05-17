@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 
+import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { WorkCapsuleLaunchPanel } from "@/components/build/work-control/WorkCapsuleLaunchPanel";
 import { getCapsuleDetail } from "@/lib/actions/work-capsules";
+import { auth } from "@/lib/auth";
+import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { presentLaunchInstructions } from "@/lib/work-capsules/launch-presenter";
 
 export default async function CapsuleDetailPage({
@@ -10,8 +13,20 @@ export default async function CapsuleDetailPage({
   params: Promise<{ capsuleId: string }>;
 }) {
   const { capsuleId } = await params;
+  const session = await auth();
   const capsule = await getCapsuleDetail(capsuleId);
   if (!capsule) notFound();
+  const portalContext = session?.user?.id
+    ? await resolvePortalContextEnvelope(
+        {
+          pathname: `/build/work/${capsuleId}`,
+          routeContext: "/build/work",
+          capsuleId,
+          params: { capsuleId },
+        },
+        session.user.id,
+      )
+    : null;
 
   const steps = presentLaunchInstructions(
     {
@@ -29,6 +44,7 @@ export default async function CapsuleDetailPage({
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">{capsule.title}</h1>
         <div className="font-mono text-xs text-[var(--dpf-muted)]">{capsule.capsuleId}</div>
       </header>
+      <PortalContextStrip envelope={portalContext} />
       <WorkCapsuleLaunchPanel steps={steps} />
     </section>
   );

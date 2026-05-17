@@ -33,6 +33,32 @@
 - The A2A team orchestration item is still in progress. Hive-mind child work must use existing `TaskRun` parentage and typed metadata without changing task-state vocabulary.
 - This slice must not add a new durable context model, rewrite Build Studio phases, replace Work Control, or change the main coworker loop.
 
+## Implementation Status - 2026-05-17
+
+Implemented in branch `feat/portal-context-overlay-hive-mind`:
+
+- Added the projection foundation under `apps/web/lib/portal-context/`: typed envelopes, cache keys/tags, route/work/evidence/authority resolvers, registry-backed hive-mind recommendations, prompt digest generation, and broad cache invalidation.
+- Integrated server-resolved envelopes into `/build`, `/build/work`, and `/build/work/[capsuleId]`.
+- Added the portal context strip and overlay drawer with accessible `Context`, `Work`, `Hive`, and `Evidence` tabs, DPF theme-token styling, empty states, and desktop/mobile smoke screenshots in `output/playwright/`.
+- Injected the portal context digest and stable anchor IDs into coworker prompts for supported Build/Work routes without passing full envelope JSON or raw tool payloads.
+- Revalidated the broad `portal-context` cache tag after Work Capsule activity writes so evidence/capsule updates do not stay stale.
+
+Verified:
+
+- `pnpm --filter web exec vitest run lib/portal-context/portal-context.test.ts lib/portal-context/prompt-digest.test.ts components/portal-context/PortalContextOverlayDrawer.test.tsx components/portal-context/PortalContextStrip.test.tsx components/build/BuildStudioHeaderLayout.test.tsx components/build/work-control/WorkControlPanel.test.tsx lib/actions/agent-coworker-external.test.ts lib/work-capsules/work-capsule-store.test.ts` - 8 files, 41 tests passed.
+- `pnpm --filter web typecheck` - passed.
+- `pnpm --filter web build` - passed. Existing Turbopack/NFT broad-trace warnings remain in backlog/spec search and discovery catalog import traces.
+- Playwright production smoke against the worktree server on `localhost:3101` passed for `/build`, drawer tabs, `/build/work`, and mobile strip width. Screenshots: `output/playwright/portal-context-build-desktop.png`, `output/playwright/portal-context-drawer-desktop.png`, `output/playwright/portal-context-work-control-desktop.png`, `output/playwright/portal-context-build-mobile.png`.
+
+Deferred from this slice:
+
+- Explicit hive invocation UI and child `TaskRun` dedupe/persistence.
+- Full `source_unavailable` and `envelope_timeout` partial-envelope fallback around every sub-resolver.
+- Narrower entity-specific invalidation for `TaskRun.status` and `FeatureBuild.phase` mutation points.
+- URL-backed active-build selection to replace the current client-only `build-studio-active-build` event limitation.
+
+These are now tracked as `BI-3FCA9CB0` under `EP-CAPSULE`.
+
 ## File Structure
 
 Create:
