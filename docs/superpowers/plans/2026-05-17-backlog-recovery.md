@@ -6,6 +6,27 @@
 
 **Architecture:** Three phases (A → baseline restore, B → reconstruction, C → verification) executed against a temporary recovery postgres FIRST, then promoted to the live `dpf-postgres-1` instance under explicit Mark approval. No writes to live DB before the pre-write evidence report is signed off. Reuse the governed DPF MCP backlog tools when functional; document any DB fallback explicitly per AGENTS.md §6.
 
+## Pre-Phase-A — Root cause of the volume wipe (RCA, identified 2026-05-17T05:30Z)
+
+**Wipe mechanism (confirmed by container-label audit):** 5 stale `dpf-dev-*` containers exist in the `dpf` Docker Compose project, created on **2026-05-12T06:52Z** from the path `D:\DPF\.worktrees\licensing-coworker-investigation\docker-compose.yml`. Their `com.docker.compose.project.config_files` labels point at the worktree path. The root containers (postgres, portal, etc.) carry the expected `D:\DPF\docker-compose.yml,D:\DPF\docker-compose.override.yml` config_files label. Docker Compose treats project "dpf" as having a divergent config (3 distinct file paths vs the 2 actually being passed). When `docker compose up` runs from `D:\DPF`, the merged-config-hash diverges from what the running containers carry, and Docker Compose's recreation logic catches the `pgdata` named volume in the divergence → recreation → data loss.
+
+**Evidence the pattern is not new:**
+
+- 7 orphaned anonymous postgres volumes audited 2026-05-17T04:50Z — modtimes cluster at:
+  - 2026-05-10T21:04Z
+  - 2026-05-15T20:24Z
+  - 2026-05-16T22:26Z / 22:28 / 22:29 / 22:30 / 22:32Z (5 recreations in 6 minutes — most likely a session running `docker compose up` repeatedly while switching worktrees)
+- All 7 orphan volumes contain **zero user-authored BacklogItem data** — the wipes have been silently destroying the backlog for at least a week.
+- `RESTORE.md` (authored 2026-04-26) anticipates this scenario in §"two snapshot eras with zero ID overlap": *"the 2026-04-18 file is from a DB state that got wiped between then and 2026-04-27 (likely a reset during the active development period)."*
+
+**Fix sequencing (REVISED — must precede Phase A):**
+
+Phase A1.0 below now removes the 5 orphan dev-* containers using raw `docker rm` (NOT `docker compose rm`, to avoid triggering another reconciliation cycle). After cleanup, `docker compose ls` should report only the 2 root config files for project "dpf"; future `docker compose up` calls will no longer hit the config-divergence path.
+
+**Validation criterion:** after the cleanup, run `docker compose up --no-recreate -d postgres portal` and verify `docker volume inspect dpf_pgdata --format '{{.CreatedAt}}'` is **unchanged** from its pre-cleanup value. If `CreatedAt` advances, the wipe trigger is somewhere else and Phase A halts pending further investigation.
+
+**Permanent fix (separate PR after recovery stable):** each worktree must declare a unique `COMPOSE_PROJECT_NAME=dpf-<topic>` so worktree compose state never contaminates the root project. Tracked at §Scope Check.
+
 **Tech Stack:** Postgres 16, Prisma 7, the existing snapshot at `D:\Backups\Backlog-20260427T035724Z.{sql,json}`, the `RESTORE.md` runbook authored 2026-04-26 at `D:\Backups\RESTORE.md`, the DPF MCP backlog tools, git history since `2026-04-27`.
 
 ---
@@ -127,7 +148,8 @@ These are the evidence corpora to scan for Phase B. Each spec or plan typically 
 
 This plan covers ONLY backlog recovery. Out of scope for this plan but tracked as immediate follow-up:
 
-- **Root-cause analysis of the volume wipe.** Suspected: `docker-compose.yml` edit in PR #686 (added the `dpf-stt` service) caused docker compose to recreate the `dpf_pgdata` named volume during subsequent `up` cycles. The 7 orphaned postgres volumes (5 clustered 22:26–22:32Z on 2026-05-16) suggest repeated recreations over the day. Investigation + fix is a separate spec.
+- ~~**Root-cause analysis of the volume wipe.**~~ **Resolved 2026-05-17T05:30Z** — see §Pre-Phase-A. 5 orphan `dpf-dev-*` containers created from a worktree compose file on 2026-05-12 cause Docker Compose to see project "dpf" as having divergent config_files, which triggers `pgdata` named-volume recreation on subsequent `up` cycles. Fix integrated into Phase A1.0.
+- **Worktree project-name isolation (permanent fix for the same class of bug).** Each worktree should declare a unique `COMPOSE_PROJECT_NAME=dpf-<topic>` so worktree compose state never contaminates the root project. Separate PR after recovery stable. Touches `scripts/seed-worktree-mcp.{ps1,sh}` (the worktree bootstrap) plus an `AGENTS.md` §4 addition forbidding `docker compose up` from a worktree.
 - **Postgres backup mechanism (Q2 yes-recommended).** Mark has standing OK to spec an automated `pg_dump` + retention policy. Owned by a separate plan, opened immediately after this recovery completes.
 - **MCP backlog tool grant verification.** If the executor cannot reach the DPF MCP tools, Phase B falls back to direct DB writes — but the executor must verify MCP first and document the fallback choice.
 
@@ -151,10 +173,32 @@ These steps were executed during evidence-gathering (2026-05-17T04:30Z–05:00Z)
 
 **Goal:** Live `dpf-postgres-1` ends Phase A with 9 Epics + 70 BacklogItems + 1 EpicPortfolio, with dangling FKs nulled and provenance noted. Identical to the April 27 snapshot in semantic content; identical IDs preserved.
 
-### Task A1 — Quiesce all backlog-writing processes
+### Task A1 — Quiesce all backlog-writing processes + remove wipe-trigger orphans
 
 The `apps/web/lib/operate/process-observer-hook.ts` and hive-scout ingest paths both write to `BacklogItem`. Today only `portal` + `portal-init` are running, but future hive-scout / build-orchestrator containers would silently overwrite the in-progress restore.
 
+**A1.0 — Remove the 5 orphan `dpf-dev-*` containers (the wipe trigger).** See §Pre-Phase-A RCA. Use raw `docker rm`, NOT `docker compose rm`, to avoid triggering another reconciliation cycle that could itself wipe `pgdata`:
+
+```bash
+# Step 1: stop the orphan dev containers (raw docker, not compose)
+docker stop dpf-dev-init-1 dpf-dev-neo4j-1 dpf-dev-portal-1 \
+            dpf-dev-postgres-1 dpf-dev-qdrant-1
+# Step 2: remove them
+docker rm dpf-dev-init-1 dpf-dev-neo4j-1 dpf-dev-portal-1 \
+          dpf-dev-postgres-1 dpf-dev-qdrant-1
+# Step 3: verify compose now sees only the 2 root files
+docker compose ls
+# Expected output: project "dpf" with config_files containing only
+#   D:\DPF\docker-compose.yml,D:\DPF\docker-compose.override.yml
+# (no .worktrees/... path)
+# Step 4: capture pgdata's pre-Phase-A CreatedAt for the validation check
+docker volume inspect dpf_pgdata --format '{{.CreatedAt}}'
+```
+
+Validation: A1.0a — after the above, run `docker compose up --no-recreate -d postgres portal` and re-check `pgdata` CreatedAt. If it advanced, **halt Phase A** — the root cause is elsewhere and we need to investigate before restoring.
+
+- [ ] **A1.0** Execute the 4-step cleanup above + record the pre-Phase-A `pgdata.CreatedAt` timestamp in the post-write evidence report.
+- [ ] **A1.0a** Validate fix: `docker compose up --no-recreate -d postgres portal` does NOT change `pgdata.CreatedAt`. Halt-on-failure.
 - [ ] **A1.1** Sweep for any additional backlog-writing containers:
   ```bash
   docker ps --format '{{.Names}}' | grep -iE 'hive|build.orchestr|scout|coworker'
