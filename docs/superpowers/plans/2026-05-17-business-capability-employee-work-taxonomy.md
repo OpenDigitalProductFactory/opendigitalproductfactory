@@ -185,15 +185,17 @@ Examples:
 
 ## First Backlog Batch Created
 
-The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP. Items remain `triaging` with a proposed build outcome so Scrum Master triage can size and sequence them with other priorities.
+The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-INT-A5B9E3`, but not these exact slices. The following minimal batch was created through live DPF MCP, then restored and build-triaged on 2026-05-17 so Scrum Master and Build Studio workflows can sequence them with other priorities.
 
 | Item | Epic | Purpose |
 | --- | --- | --- |
-| `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | Recommended new taxonomy epic; currently unlinked | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
-| `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | Recommended new taxonomy epic; currently unlinked | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
-| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | Recommended new taxonomy epic; currently unlinked | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
+| `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | `EP-BIZ-CAP` | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
+| `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | `EP-BIZ-CAP` | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
+| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | `EP-BIZ-CAP` | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
 | `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Move QuickBooks entity families from not-mapped to read, still with no writes. |
 | `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for company, customers, invoices, vendors, bills, and payments | `EP-INT-2E7C1A` | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
+
+Execution update on 2026-05-17: the batch above was restored and linked through live DPF MCP. The first three items are now under `EP-BIZ-CAP`; the QuickBooks items remain under `EP-INT-2E7C1A`. `BI-407125DA` was moved through `in-progress` while this foundation slice was executed. No DB fallback was used.
 
 ## Proposed Follow-On Backlog Batch
 
@@ -309,11 +311,11 @@ At minimum, flag missing or shallow anchors for Xero, Gusto, Slack, Salesforce, 
 
 ### Task 3: Prove Body-Template Use
 
-- [ ] **Step 1: Apply the context template to 10 existing or new backlog items**
+- [x] **Step 1: Apply the context template to 10 existing or new backlog items**
 
 Start with the five items created in this plan, proposed follow-on items once approved, and the existing `BI-INT-A5B9E3` and `BI-INT-F23BC6`.
 
-- [ ] **Step 2: Review query needs**
+- [x] **Step 2: Review query needs**
 
 Ask:
 
@@ -323,7 +325,7 @@ Can those filters be derived from body text for now?
 Which fields need exact querying in Build Studio or backlog UI?
 ```
 
-- [ ] **Step 3: Decide schema vs manifest**
+- [x] **Step 3: Decide schema vs manifest**
 
 Preferred first implementation:
 
@@ -341,6 +343,13 @@ type BacklogCapabilityContext = {
 ```
 
 Store in a manifest JSON field only if such a field already exists or a separate schema plan is approved. Do not add columns prematurely.
+
+Execution result for `BI-407125DA` on 2026-05-17:
+
+- Applied the `Backlog capability context` block to these 10 live backlog items through DPF MCP: `BI-407125DA`, `BI-0E6D42B3`, `BI-4C166411`, `BI-C61B5202`, `BI-07D76D6B`, `BI-INT-A5B9E3`, `BI-INT-F23BC6`, `BI-INT-E76A95`, `BI-INT-8D4F72`, and `BI-INT-1AB7D8`.
+- Query need: operators will eventually need exact filters for employee role, business capability, posture, maturity target, integration anchor, and DPF surface. For the current planning and triage stage, body text is acceptable because the first use case is human-readable prioritization, not automated Build Studio routing.
+- Schema decision: do not add `BacklogItem` columns or a JSON manifest in this slice. Current schema has `BusinessCapability` and `BusinessCapabilityTraceLink`, while `BacklogItem` has body text plus existing links to taxonomy, digital product, agent, accountable employee, and capability trace links. The next structural slice should expose governed MCP/UI support for capability trace links before adding another backlog context storage shape.
+- Build Studio decision: exact routing should wait until at least 10-20 real items prove which fields are queried in practice. The first future automation should parse or normalize the body block into a read model, then graduate repeated fields into a schema or trace-link writer only if Build Studio and backlog UI need deterministic filtering.
 
 ## Chunk 3: QuickBooks Long Tail
 
