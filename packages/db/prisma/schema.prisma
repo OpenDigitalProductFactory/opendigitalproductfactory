@@ -93,6 +93,7 @@ model User {
   workSchedule                 WorkSchedule?
   adminActivities              AdminActivity[]
   userFacts                    UserFact[]
+  decisionEscalationsResolved  EscalationCapture[]           @relation("DecisionEscalationResolverUser")
   scheduledAgentTasks          ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
   addedLocalities              City[]                        @relation("CityAddedByUser")
 }
@@ -238,6 +239,9 @@ model Principal {
   documentAccessGrants  DocumentAccessGrant[] @relation("DocumentAccessGrantPrincipal")
   documentAccessGrantsCreated DocumentAccessGrant[] @relation("DocumentAccessGrantCreator")
   documentLifecycleEvents DocumentLifecycleEvent[] @relation("DocumentLifecycleActor")
+  ownedDecisionPerspectiveProfiles DecisionPerspectiveProfile[] @relation("DecisionPerspectiveProfileOwner")
+  promotedDecisionPerspectiveVersions DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersionPromoter")
+  decisionEscalationsResolved EscalationCapture[] @relation("DecisionEscalationResolverPrincipal")
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 }
@@ -2485,6 +2489,7 @@ model Organization {
   wikiIngestEvents              WikiIngestEvent[]
   wikiLintFindings              WikiLintFinding[]
   documents                     Document[]
+  decisionPerspectiveProfiles   DecisionPerspectiveProfile[]
 }
 
 model BusinessContext {
@@ -4079,6 +4084,7 @@ model FeatureBuild {
   promotionBackups         PromotionBackup[]
   issueReports             PlatformIssueReport[]
   sandboxes                Sandbox[]
+  decisionInteractions     DecisionInteraction[]
 
   @@index([phase])
   @@index([createdById])
@@ -4320,6 +4326,7 @@ model TaskRun {
   messages           TaskMessage[]
   artifacts          TaskArtifact[]
   deliberationRuns   DeliberationRun[]
+  decisionInteractions DecisionInteraction[]
 
   @@index([userId, status])
   @@index([threadId])
@@ -7873,6 +7880,7 @@ model DeliberationRun {
   claims          ClaimRecord[]
   evidenceBundles EvidenceBundle[]
   branchNodes     TaskNode[]             @relation("DeliberationRunBranchNodes")
+  decisionInteractions DecisionInteraction[]
 
   @@index([taskRunId])
   @@index([patternId])
@@ -7970,6 +7978,168 @@ model EvidenceSource {
 
   @@index([evidenceBundleId])
   @@index([sourceType])
+}
+
+model DecisionPerspectiveProfile {
+  id                  String                  @id @default(cuid())
+  profileId           String                  @unique
+  name                String
+  kind                String
+  scope               Json                    @default("{}")
+  ownerOrganizationId String?
+  ownerPrincipalId    String?
+  fallbackProfileId   String?
+  currentVersionId    String?                 @unique
+  defaultResolver     Json?
+  autonomyPolicy      Json                    @default("{}")
+  status              String                  @default("active")
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  ownerOrganization   Organization?           @relation(fields: [ownerOrganizationId], references: [id], onDelete: SetNull)
+  ownerPrincipal      Principal?              @relation("DecisionPerspectiveProfileOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  fallbackProfile     DecisionPerspectiveProfile? @relation("DecisionPerspectiveProfileFallback", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  fallbackChildren    DecisionPerspectiveProfile[] @relation("DecisionPerspectiveProfileFallback")
+  currentVersion      DecisionPerspectiveProfileVersion? @relation("DecisionPerspectiveProfileCurrentVersion", fields: [currentVersionId], references: [versionId], onDelete: SetNull)
+  versions            DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersions")
+  materials           PerspectiveMaterial[]
+  interactions        DecisionInteraction[]   @relation("DecisionInteractionProfile")
+  fallbackInteractions DecisionInteraction[]  @relation("DecisionInteractionFallbackProfile")
+
+  @@index([kind, status])
+  @@index([ownerOrganizationId])
+  @@index([ownerPrincipalId])
+  @@index([fallbackProfileId])
+}
+
+model DecisionPerspectiveProfileVersion {
+  id                    String                     @id @default(cuid())
+  versionId             String                     @unique
+  profileId             String
+  versionNumber         Int
+  materialFingerprint   String
+  changeSummary         String?
+  promotedByPrincipalId String?
+  createdAt             DateTime                   @default(now())
+  profile               DecisionPerspectiveProfile @relation("DecisionPerspectiveProfileVersions", fields: [profileId], references: [profileId], onDelete: Cascade)
+  currentForProfile     DecisionPerspectiveProfile? @relation("DecisionPerspectiveProfileCurrentVersion")
+  promotedByPrincipal   Principal?                 @relation("DecisionPerspectiveProfileVersionPromoter", fields: [promotedByPrincipalId], references: [id], onDelete: SetNull)
+  materials             PerspectiveMaterial[]
+  interactions          DecisionInteraction[]
+
+  @@unique([profileId, versionNumber])
+  @@index([profileId])
+  @@index([promotedByPrincipalId])
+}
+
+model PerspectiveMaterial {
+  id               String                     @id @default(cuid())
+  materialId       String                     @unique
+  profileId        String
+  profileVersionId String?
+  sourceType       String
+  sourceRef        Json                       @default("{}")
+  scope            Json                       @default("{}")
+  domains          String[]                   @default([])
+  freshness        String                     @default("current")
+  stalenessPolicy  Json?
+  lastValidatedAt  DateTime?
+  confidenceWeight Float                      @default(0.5)
+  reviewStatus     String                     @default("draft")
+  promotionState   String                     @default("candidate")
+  summary          String?                    @db.Text
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  profile          DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion   DecisionPerspectiveProfileVersion? @relation(fields: [profileVersionId], references: [versionId], onDelete: SetNull)
+
+  @@index([profileId, freshness])
+  @@index([profileId, reviewStatus, promotionState])
+  @@index([profileVersionId])
+  @@index([sourceType])
+}
+
+model DecisionInteraction {
+  id                String                     @id @default(cuid())
+  interactionId     String                     @unique
+  profileId         String
+  profileVersionId  String
+  fallbackProfileId String?
+  buildId           String?
+  taskRunId         String?
+  deliberationRunId String?
+  routeContext      String?
+  phaseFrom         String?
+  phaseTo           String?
+  question          String                     @db.Text
+  options           Json                       @default("[]")
+  evidenceBundle    Json                       @default("{}")
+  sources           Json                       @default("[]")
+  rationale         String?                    @db.Text
+  riskTier          String
+  confidenceBefore  Float?
+  confidenceAfter   Float?
+  outcomeType       String
+  outcomePayload    Json                       @default("{}")
+  humanOutcome      Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  profile           DecisionPerspectiveProfile @relation("DecisionInteractionProfile", fields: [profileId], references: [profileId], onDelete: Cascade)
+  profileVersion    DecisionPerspectiveProfileVersion @relation(fields: [profileVersionId], references: [versionId], onDelete: Restrict)
+  fallbackProfile   DecisionPerspectiveProfile? @relation("DecisionInteractionFallbackProfile", fields: [fallbackProfileId], references: [profileId], onDelete: SetNull)
+  build             FeatureBuild?              @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  taskRun           TaskRun?                   @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
+  deliberationRun   DeliberationRun?           @relation(fields: [deliberationRunId], references: [id], onDelete: SetNull)
+  escalationCapture EscalationCapture?
+  deferralCapture   DeferralCapture?
+
+  @@index([profileId, createdAt])
+  @@index([profileVersionId])
+  @@index([fallbackProfileId])
+  @@index([buildId, createdAt])
+  @@index([taskRunId])
+  @@index([deliberationRunId])
+  @@index([outcomeType, createdAt])
+  @@index([riskTier, createdAt])
+}
+
+model EscalationCapture {
+  id                  String              @id @default(cuid())
+  escalationId        String              @unique
+  interactionId       String              @unique
+  resolverPrincipalId String?
+  resolverUserId      String?
+  prompt              String              @db.Text
+  answer              String?             @db.Text
+  criteria            Json                @default("[]")
+  rationale           String?             @db.Text
+  objectionsResolved  Json                @default("[]")
+  candidateMaterial   Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  interaction         DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  resolverPrincipal   Principal?          @relation("DecisionEscalationResolverPrincipal", fields: [resolverPrincipalId], references: [id], onDelete: SetNull)
+  resolverUser        User?               @relation("DecisionEscalationResolverUser", fields: [resolverUserId], references: [id], onDelete: SetNull)
+
+  @@index([resolverPrincipalId])
+  @@index([resolverUserId])
+  @@index([candidateMaterial])
+}
+
+model DeferralCapture {
+  id                   String              @id @default(cuid())
+  deferralId           String              @unique
+  interactionId        String              @unique
+  domain               String
+  gapReason            String
+  suggestedSourceTypes String[]            @default([])
+  candidateMaterial    Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  interaction          DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([domain, createdAt])
+  @@index([gapReason])
+  @@index([candidateMaterial])
 }
 
 // ── DPF Edge Node (Phase 0 — A1) ────────────────────────────────────────────
