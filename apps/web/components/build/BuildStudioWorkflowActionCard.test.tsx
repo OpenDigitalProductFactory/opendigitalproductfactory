@@ -11,8 +11,9 @@ import {
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
 
-const { mockAdvanceBuildPhase } = vi.hoisted(() => ({
+const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction } = vi.hoisted(() => ({
   mockAdvanceBuildPhase: vi.fn(),
+  mockCaptureDecisionInteraction: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -30,8 +31,14 @@ vi.mock("@/lib/actions/build", () => ({
   runBuildReviewVerification: vi.fn(),
 }));
 
+vi.mock("@/lib/actions/decision-perspective", () => ({
+  captureDecisionInteraction: mockCaptureDecisionInteraction,
+}));
+
 beforeEach(() => {
   mockAdvanceBuildPhase.mockReset();
+  mockCaptureDecisionInteraction.mockReset();
+  mockCaptureDecisionInteraction.mockResolvedValue({ status: "captured", captureType: "escalation" });
 });
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
@@ -155,6 +162,42 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
 
     await waitFor(() => {
       expect(screen.getByText("WWMD requires escalation before implementation starts.")).toBeInTheDocument();
+    });
+    expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists WWMD human direction from the action card", async () => {
+    const onCompleted = vi.fn();
+
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild()}
+        action={implementationAction()}
+        onCompleted={onCompleted}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
+    fireEvent.change(screen.getByLabelText("Human direction"), {
+      target: { value: "Proceed after the owner confirms the implementation scope." },
+    });
+    fireEvent.change(screen.getByLabelText("Decision criteria"), {
+      target: { value: "Owner accepted scope" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save WWMD capture" }));
+
+    await waitFor(() => {
+      expect(mockCaptureDecisionInteraction).toHaveBeenCalledWith({
+        buildId: "FB-9B19098C",
+        interactionId: "DI-ABC123",
+        outcomeType: "escalate",
+        answer: "Proceed after the owner confirms the implementation scope.",
+        criteriaText: "Owner accepted scope",
+        rationale: "",
+        objectionsResolvedText: "",
+        suggestedSourceTypesText: "",
+        candidateMaterial: false,
+      });
     });
     expect(onCompleted).toHaveBeenCalledTimes(1);
   });
