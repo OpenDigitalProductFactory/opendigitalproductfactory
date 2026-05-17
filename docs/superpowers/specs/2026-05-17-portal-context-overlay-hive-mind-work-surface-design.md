@@ -50,11 +50,11 @@ MCP backlog checks showed:
 - `EP-CAPSULE` is in progress with the new item `BI-7529B658` for this spec.
 - Work Capsule Phase 1 and Phase 2 items are done.
 - Work Capsule Phase 3 planning remains in progress.
-- `BI-20E6AC44`, Build Studio attachment to capsules and backlog activity, is marked done in live backlog, but the corresponding implementation is still on `origin/feat/work-capsule-build-studio-attach` rather than merged into `origin/main` in this worktree.
+- `BI-20E6AC44`, Build Studio attachment to capsules and backlog activity, is done and merged to `origin/main` via PR #724. Current code includes `attachBuildStudioWorkCapsule` and stores Build Studio linkage on `WorkCapsule.featureBuildId`, `backlogItemId`, `epicId`, and `workspaceState`.
 - `EP-A2A` has `BI-9DB7C332` in progress for coworker team orchestration.
 - `EP-BUILD-STUDIO` still has open blockers around runtime crash, backlog-to-Build-Studio handoff, and ideate stall visibility.
 
-Design consequence: this spec must compose with the pending Build Studio attachment branch, but the first implementation plan must re-check the branch/PR state before coding.
+Design consequence: this spec must compose with the landed Build Studio attachment implementation and still tolerate historical or manually created builds that do not have a linked capsule.
 
 ### 3.2 Work Capsule Foundation
 
@@ -66,7 +66,7 @@ Design consequence: this spec must compose with the pending Build Studio attachm
 - `/build/work` Work Control UI and `/build/work/[capsuleId]` detail route.
 - Launch instruction presenter for creating a worktree and seeding MCP credentials.
 - Scope claims stored in `WorkCapsule.scopeClaims`.
-- Lease and stale-cache health projection in `work-capsule-presenter.ts`.
+- Lease and stale-cache health projection in `apps/web/lib/work-capsules/work-capsule-presenter.ts`.
 
 The overlay should read and enrich those records; it should not replace the Work Capsule UI.
 
@@ -118,6 +118,16 @@ The AI coworker visual control surface spec is directly relevant. It says the ma
 - project handoffs from existing queue/orchestrator/task events before adding new discriminants
 
 The context overlay follows the same rule.
+
+### 3.6 Dependency Status
+
+The following dependency states must be explicitly accommodated before or during implementation.
+
+| Item | Status | Impact on this spec |
+|---|---|---|
+| Build Studio Work Capsule attachment (BI-20E6AC44, PR #724) | Landed on main | The overlay should read the landed `WorkCapsule` linkage fields, but it must still include a typed `capsule_not_linked` attention signal and create/link fallback for historical or unlinked builds. |
+| EP-A2A / BI-9DB7C332 — coworker team orchestration | In progress | Hive-mind `TaskRun` child creation must not conflict with A2A team orchestration records. Child task source and parentage must remain compatible with whatever `BI-9DB7C332` lands. Check for schema/API overlap before opening the implementation PR. |
+| EP-BUILD-STUDIO open blockers (runtime crash, ideate stall) | Open | Overlay must not depend on Build Studio being crash-free; all envelope resolution must tolerate a build in an error or stall phase and surface that as an attention signal. |
 
 ## 4. Research and Benchmarking
 
@@ -238,6 +248,133 @@ export type PortalContextEnvelope = {
 };
 ```
 
+### 7.1 Anchor and Signal Types
+
+All types referenced in `PortalContextEnvelope` are defined below. They are pure TypeScript projection shapes; none map to Prisma models in V1.
+
+```ts
+export type PortalObjectAnchor = {
+  kind: "backlogItem" | "epic" | "capsule" | "build" | "taskRun" | "agentThread" | "branch";
+  id: string;
+  label: string;
+  href?: string | null;
+};
+
+export type WorkBacklogAnchor = {
+  backlogItemId: string;
+  title: string;
+  status: string;
+  epicId: string | null;
+  href: string;
+};
+
+export type WorkEpicAnchor = {
+  epicId: string;
+  title: string;
+  status: string;
+  href: string;
+};
+
+export type WorkCapsuleAnchor = {
+  capsuleId: string;
+  title: string;
+  status: string;
+  executorKind: string;
+  leaseExpiresAt: string | null;
+  isLeaseExpired: boolean;
+  isStale: boolean;
+  scopeClaims: string[];
+  branchName: string | null;
+  href: string;
+};
+
+export type FeatureBuildAnchor = {
+  buildId: string;
+  title: string;
+  phase: string;
+  status: string;
+  evidenceComplete: boolean;
+  href: string;
+};
+
+export type TaskRunAnchor = {
+  taskRunId: string;
+  contextId: string;
+  status: string;
+  authorityScope: string;
+  parentTaskRunId: string | null;
+};
+
+export type AgentThreadAnchor = {
+  threadId: string;
+  routeContext: string;
+  buildId: string | null;
+};
+
+export type GitBranchAnchor = {
+  branchName: string;
+  worktreePath: string | null;
+  commitSha: string | null;
+};
+
+export type EvidenceSummary = {
+  kind: string;
+  source:
+    | "capsule_activity"
+    | "backlog_activity"
+    | "tool_execution"
+    | "task_artifact"
+    | "external_evidence"
+    | "build_evidence";
+  recordId: string;
+  label: string;
+  recordedAt: string;
+  isGap: boolean;
+};
+
+export type AuthoritySummary = {
+  canActOnCapsule: boolean;
+  canActOnBuild: boolean;
+  canReviewPromotion: boolean;
+  grantedToolKeys: string[];
+  proposalModeActive: boolean;
+};
+
+export type AttentionSignal = {
+  kind:
+    | "missing_evidence"
+    | "lease_expired"
+    | "scope_overlap"
+    | "build_stalled"
+    | "capsule_not_linked"
+    | "missing_grants"
+    | "context_conflict"
+    | "source_unavailable"
+    | "envelope_timeout"
+    | "unknown_route";
+  severity: "info" | "warning" | "error";
+  message: string;
+  actionLabel?: string | null;
+  actionHref?: string | null;
+};
+```
+
+### 7.2 Resolver Input Type
+
+The public API of `resolvePortalContextEnvelope` accepts:
+
+```ts
+export type PortalContextInput = {
+  pathname: string;
+  routeContext: string;
+  buildId?: string | null;
+  capsuleId?: string | null;
+  threadId?: string | null;
+  params?: Record<string, string>;
+  searchParams?: Record<string, string>;
+};
+```
+
 Rules:
 
 1. `envelopeId` is a deterministic hash of route/object/work anchors plus `resolvedAt` bucket. It is used for UI caching and logs, not as durable truth.
@@ -247,6 +384,17 @@ Rules:
 5. Prompt injection defense applies at the projection boundary: user-authored free text is summarized into `promptDigest` and not blindly copied into tool instructions.
 
 ## 8. Context Resolution
+
+The public entry point is a single server-side function:
+
+```ts
+export async function resolvePortalContextEnvelope(
+  input: PortalContextInput,
+  userId: string
+): Promise<PortalContextEnvelope>
+```
+
+It must not be called from Client Components. The result is passed as a prop from RSC page or layout into Client Components as needed. See Section 15.2 for component boundary rules.
 
 Create `apps/web/lib/portal-context/` as the first implementation home:
 
@@ -348,6 +496,19 @@ export type HiveMindCandidate = {
   taskType: "conversation" | "analysis" | "code_generation" | "verification";
 };
 ```
+
+### 8.5 Envelope Caching
+
+`PortalContextEnvelope` is produced by server-side code and cached with Next.js `unstable_cache`.
+
+Rules:
+
+- `resolvedAt` bucket: floor timestamp to the nearest 30 seconds. This keeps the cache warm across sibling render calls on the same page load without serving staleness longer than one work action cycle.
+- `envelopeId`: `sha256(pathname + buildId + capsuleId + threadId + userId + bucketedTimestamp).hex().slice(0, 16)`. Implementers must use Node's built-in `crypto.createHash` — no additional dependency.
+- Cache key tags: `["portal-context", userId, buildId ?? "", capsuleId ?? "", threadId ?? ""]`. Tag the call so Next.js can targeted-revalidate it.
+- Cache `revalidate`: 30 seconds. This is the outer ceiling; internal resolution may be faster.
+- Invalidation: call `revalidateTag("portal-context")` scoped to the relevant entity ID when `WorkCapsuleActivity`, `TaskRun.status`, or `FeatureBuild.phase` changes.
+- The browser receives the resolved envelope as a serialized prop or via a server action; it does not cache the envelope or construct its fields. A Client Component may hold a local reference for the lifetime of the current render only.
 
 ## 9. Hive-Mind Activation Model
 
@@ -518,6 +679,9 @@ Not approved:
 | Route data provider fails | Render route definition plus object/work anchors; log structured error |
 | Hive candidate lacks grants | Show candidate as unavailable with missing grant summary, no activation button |
 | Context conflicts across sources | Prefer canonical durable records over cache, surface conflict as attention signal |
+| Envelope resolution times out | Return a partial envelope with `source_unavailable` and `envelope_timeout` attention signals; never throw at the page level |
+| Route not registered in resolver | Return a route-only envelope with `unknown_route` attention signal; overlay renders in read-only info mode with no work anchors |
+| All hive candidates lack grants | Render the Hive tab as empty with a single `missing_grants` attention signal listing the required grant keys; show no activation buttons |
 
 ## 15. First Implementation Slice
 
@@ -549,6 +713,8 @@ Integrate with:
 - `BuildStudio.tsx`
 - `WorkControlPanel.tsx`
 - `AgentCoworkerShell.tsx` or the nearest shell-level AI chrome, using the existing panel rather than a parallel floating product
+
+**Server vs Client boundary**: `resolvePortalContextEnvelope` runs in RSC page or layout. The resolved `PortalContextEnvelope` is passed as a serializable prop to Client Component boundaries. The `PortalContextOverlayDrawer` and `PortalContextStrip` are Client Components so they can respond to user interaction. `PortalContextSummaryRows`, `HiveMindCandidateList`, and `EvidenceSummaryList` may be Server Components if they receive static envelope slices, or Client Components when they need interactive controls. Mark the boundary explicitly with `"use client"`; do not leave it implicit. Use the existing local tab pattern from `apps/web/components/build-studio/ArtifactTabs.tsx` for the drawer tab bar. Do not add Radix or another component-library dependency in V1.
 
 ### 15.3 Coworker Runtime
 
@@ -620,9 +786,15 @@ The first shipped overlay slice is acceptable when:
 ## 19. Open Questions
 
 1. Should the overlay drawer live as part of the existing `AgentCoworkerShell` or a sibling shell-level component that the coworker panel can also call into?
-2. Should Build Studio attachment from `origin/feat/work-capsule-build-studio-attach` merge before the overlay implementation starts, or should the overlay include a create/link fallback in its first slice?
-3. Should child hive-mind `TaskRun` records use `source = "coworker"` initially, or should a new strongly typed `source = "hive-mind"` be added with enum/test/MCP parity in the same implementation PR?
-4. Should `PortalContextEnvelope.promptDigest` be persisted as a `TaskArtifact` for high-assurance work, or remain ephemeral until audit need is proven?
+
+**Resolved: Q2 — Build Studio attachment dependency.**
+Build Studio attachment has landed on `origin/main` via PR #724. The overlay implementation should consume the landed Work Capsule linkage fields and keep the create/link fallback only for historical or unlinked builds.
+
+**Resolved: Q3 — hive-mind `TaskRun` source value.**
+Use `source = "coworker"` in V1 and carry hive-mind identity in a typed `a2aMetadata` field on the `TaskRun` (e.g. `hiveMindContextId`, `hiveMindRole`). Adding a new `source` enum value requires Prisma migration, MCP enum parity, and test updates across multiple packages — cost is disproportionate for V1 and `a2aMetadata` is already present and JSON-typed.
+
+**Resolved: Q4 — `promptDigest` persistence.**
+Keep `promptDigest` ephemeral in V1. The spec's rule 1 (envelope is not a durable record) and rule 4 (tool execution uses server-resolved stable IDs, not client facts) already remove the audit-trail need for the digest itself. If high-assurance audit is later required, the stable IDs in the envelope are sufficient to reconstruct context; persist those as `TaskArtifact` fields at that point, not the digest string.
 
 ## 20. Recommendation
 
