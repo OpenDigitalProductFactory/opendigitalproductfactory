@@ -588,6 +588,7 @@ model DigitalProduct {
   businessModelRoleAssignments BusinessModelRoleAssignment[]
   knowledgeArticles            KnowledgeArticleProduct[]
   workQueues                   WorkQueue[]
+  businessCapabilityLinks      BusinessCapabilityTraceLink[] @relation("BusinessCapabilityProductLinks")
 }
 
 model BusinessModel {
@@ -900,6 +901,7 @@ model TaxonomyNode {
   backlogItems             BacklogItem[]
   products                 DigitalProduct[]
   eaElements               EaElement[]
+  businessCapabilityLinks      BusinessCapabilityTraceLink[] @relation("BusinessCapabilityTaxonomyLinks")
   fingerprintRules         DiscoveryFingerprintRule[]
   inventoryEntities        InventoryEntity[]
   portfolioQualityIssues   PortfolioQualityIssue[]
@@ -954,6 +956,7 @@ model BacklogItem {
   taxonomyNode          TaxonomyNode?            @relation(fields: [taxonomyNodeId], references: [id])
   activities            BacklogItemActivity[]
   coworkerNeeds         CoworkerCapabilityNeed[] @relation("BacklogItemCoworkerCapabilityNeeds")
+  businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
@@ -4614,11 +4617,66 @@ model EaElement {
   fromRelationships EaRelationship[]     @relation("FromElement")
   toRelationships   EaRelationship[]     @relation("ToElement")
   viewElements      EaViewElement[]
+  businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityEaElementLinks")
 
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
   @@index([elementTypeId])
+}
+
+
+model BusinessCapability {
+  id                String                        @id @default(cuid())
+  capabilityId      String                        @unique
+  name              String
+  slug              String
+  description       String?
+  level             Int
+  sortOrder         Int                           @default(0)
+  status            String                        @default("active")
+  parentId          String?
+  currentMaturity   Int                           @default(1)
+  targetMaturity    Int                           @default(3)
+  maturityRationale String?
+  it4itValueStreams String[]                      @default([])
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  parent            BusinessCapability?           @relation("BusinessCapabilityTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children          BusinessCapability[]          @relation("BusinessCapabilityTree")
+  traceLinks        BusinessCapabilityTraceLink[]
+
+  @@unique([parentId, slug])
+  @@index([parentId, sortOrder])
+  @@index([level, status])
+}
+
+model BusinessCapabilityTraceLink {
+  id               String             @id @default(cuid())
+  capabilityId     String
+  targetType       String
+  targetId         String
+  relationship     String             @default("supports")
+  note             String?
+  taxonomyNodeId   String?
+  digitalProductId String?
+  backlogItemId    String?
+  eaElementId      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  capability       BusinessCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  taxonomyNode     TaxonomyNode?      @relation("BusinessCapabilityTaxonomyLinks", fields: [taxonomyNodeId], references: [id], onDelete: Cascade)
+  digitalProduct   DigitalProduct?    @relation("BusinessCapabilityProductLinks", fields: [digitalProductId], references: [id], onDelete: Cascade)
+  backlogItem      BacklogItem?       @relation("BusinessCapabilityBacklogLinks", fields: [backlogItemId], references: [id], onDelete: Cascade)
+  eaElement        EaElement?         @relation("BusinessCapabilityEaElementLinks", fields: [eaElementId], references: [id], onDelete: Cascade)
+
+  @@unique([capabilityId, targetType, targetId, relationship])
+  @@index([capabilityId])
+  @@index([targetType, targetId])
+  @@index([taxonomyNodeId])
+  @@index([digitalProductId])
+  @@index([backlogItemId])
+  @@index([eaElementId])
 }
 
 model EaRelationship {

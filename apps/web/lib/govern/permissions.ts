@@ -257,7 +257,7 @@ const SHELL_ITEMS: ShellNavItem[] = [
   {
     key: "ea_modeler",
     label: "Architecture",
-    href: "/ea",
+    href: "/portfolio/architecture",
     description: "Reference models, capabilities, and structure.",
     sectionKey: "products",
     capabilityKey: "view_ea_modeler",
