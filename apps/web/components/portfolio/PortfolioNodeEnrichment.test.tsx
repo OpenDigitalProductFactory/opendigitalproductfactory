@@ -7,8 +7,16 @@ const empty: EnrichmentView = {
   standards: null,
   patterns: null,
   references: null,
+  sampleServices: null,
+  offeringConsiderations: null,
+  commercialMarket: null,
+  sectorCommercialMarkets: null,
   raw: null,
 };
+
+function view(overrides: Partial<EnrichmentView>): EnrichmentView {
+  return { ...empty, ...overrides };
+}
 
 describe("PortfolioNodeEnrichment", () => {
   it("returns null when all fields are null", () => {
@@ -20,6 +28,10 @@ describe("PortfolioNodeEnrichment", () => {
       standards: [],
       patterns: [],
       references: [],
+      sampleServices: null,
+      offeringConsiderations: null,
+      commercialMarket: null,
+      sectorCommercialMarkets: [],
       raw: null,
     };
     expect(renderToStaticMarkup(<PortfolioNodeEnrichment enrichment={allEmpty} />)).toBe("");
@@ -28,12 +40,9 @@ describe("PortfolioNodeEnrichment", () => {
   it("renders standards list when present", () => {
     const html = renderToStaticMarkup(
       <PortfolioNodeEnrichment
-        enrichment={{
+        enrichment={view({
           standards: ["ISO 27001", "NIST CSF"],
-          patterns: null,
-          references: null,
-          raw: null,
-        }}
+        })}
       />,
     );
     expect(html).toContain(">Enrichment<");
@@ -47,12 +56,9 @@ describe("PortfolioNodeEnrichment", () => {
   it("renders patterns list when present", () => {
     const html = renderToStaticMarkup(
       <PortfolioNodeEnrichment
-        enrichment={{
-          standards: null,
+        enrichment={view({
           patterns: ["circuit-breaker", "saga"],
-          references: null,
-          raw: null,
-        }}
+        })}
       />,
     );
     expect(html).toContain(">Patterns<");
@@ -63,14 +69,11 @@ describe("PortfolioNodeEnrichment", () => {
   it("renders references as anchors with rel/target", () => {
     const html = renderToStaticMarkup(
       <PortfolioNodeEnrichment
-        enrichment={{
-          standards: null,
-          patterns: null,
+        enrichment={view({
           references: [
             { label: "ISO 27001 overview", href: "https://example.com/iso27001" },
           ],
-          raw: null,
-        }}
+        })}
       />,
     );
     expect(html).toContain(">References<");
@@ -80,15 +83,48 @@ describe("PortfolioNodeEnrichment", () => {
     expect(html).toContain('rel="noopener noreferrer"');
   });
 
+  it("renders commercial market guidance with progressive disclosure", () => {
+    const enrichment = {
+      standards: null,
+      patterns: null,
+      references: null,
+      sampleServices: "Capability mapping; Product fit review",
+      offeringConsiderations: "Lightweight advisory vs managed program",
+      commercialMarket: "Representative vendors: ServiceNow SPM; Planview; Jira.",
+      sectorCommercialMarkets: [
+        { sector: "Retail / eCommerce", market: "Shopify; Square; Lightspeed" },
+      ],
+      raw: {
+        industryMarkets: { retail: "Shopify; Square; Lightspeed" },
+        secretKey: "should-not-leak",
+      },
+    };
+
+    const html = renderToStaticMarkup(<PortfolioNodeEnrichment enrichment={enrichment} />);
+
+    expect(html).toContain(">Sample services<");
+    expect(html).toContain("Capability mapping; Product fit review");
+    expect(html).toContain("<details");
+    expect(html).toContain(">Offering considerations<");
+    expect(html).toContain(">Commercial market and products<");
+    expect(html).toContain("Representative vendors: ServiceNow SPM; Planview; Jira.");
+    expect(html).toContain(">Sector market guidance<");
+    expect(html).toContain("Retail / eCommerce");
+    expect(html).toContain("Shopify; Square; Lightspeed");
+    expect(html).not.toContain("industryMarkets");
+    expect(html).not.toContain("secretKey");
+    expect(html).not.toContain("should-not-leak");
+  });
+
   it("does not render raw JSON blob in output", () => {
     const html = renderToStaticMarkup(
       <PortfolioNodeEnrichment
-        enrichment={{
+        enrichment={view({
           standards: ["ISO 27001"],
           patterns: ["saga"],
           references: [{ label: "Doc", href: "https://example.com" }],
           raw: { standards: ["ISO 27001"], secretKey: "should-not-leak" },
-        }}
+        })}
       />,
     );
     expect(html).not.toContain('"standards"');
@@ -100,12 +136,10 @@ describe("PortfolioNodeEnrichment", () => {
   it("uses theme tokens only", () => {
     const html = renderToStaticMarkup(
       <PortfolioNodeEnrichment
-        enrichment={{
+        enrichment={view({
           standards: ["ISO 27001"],
-          patterns: null,
           references: [{ label: "Doc", href: "https://example.com" }],
-          raw: null,
-        }}
+        })}
       />,
     );
     expect(html).not.toMatch(/text-white|text-black|text-gray-|bg-white|bg-black|bg-gray-/);
