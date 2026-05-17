@@ -42,7 +42,9 @@ export const FAMILY_TIERS: Record<string, QualityTier> = {
   "o4":               "frontier",
   "gpt-4o":           "strong",
   "gpt-4o-mini":      "adequate",
-  // Google
+  // Google — versioned families, longest prefix wins
+  "gemini-3.1-pro":   "strong",   // Gemini 3.1 Pro: next-gen, matches GPT-4o class
+  "gemini-3-pro":     "strong",   // Gemini 3 Pro: flagship 3.x gen
   "gemini-2.5-pro":   "strong",
   "gemini-2.5-flash": "adequate",
   "gemini-2.0-flash": "adequate",
