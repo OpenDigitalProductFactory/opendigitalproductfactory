@@ -4,6 +4,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import { normalizeHappyPathState } from "@/lib/feature-build-types";
+import { PLAN_READINESS_DOMAIN_CLASS } from "@/lib/decision-perspective/types";
+import {
+  DECISION_INTERACTION_GATE_SELECT,
+  decisionInteractionRowToGateView,
+} from "@/lib/decision-perspective/view-model";
 
 export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow | null> {
   const session = await auth();
@@ -29,6 +34,16 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
       },
       activities: { orderBy: { createdAt: "desc" }, take: 50 },
       phaseHandoffs: { orderBy: { createdAt: "asc" }, select: { fromPhase: true, toPhase: true, fromAgentId: true, toAgentId: true, summary: true, decisionsMade: true, openIssues: true, userPreferences: true, compressedSummary: true, evidenceDigest: true, createdAt: true } },
+      decisionInteractions: {
+        where: {
+          phaseFrom: "plan",
+          phaseTo: "build",
+          domainClass: PLAN_READINESS_DOMAIN_CLASS,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: DECISION_INTERACTION_GATE_SELECT,
+      },
     },
   });
 
@@ -65,5 +80,6 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
       ...h,
       evidenceDigest: h.evidenceDigest as Record<string, string>,
     })),
+    decisionInteraction: decisionInteractionRowToGateView(build.decisionInteractions[0] ?? null),
   } as FeatureBuildRow;
 }
