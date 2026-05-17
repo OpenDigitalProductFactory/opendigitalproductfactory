@@ -71,21 +71,25 @@ export async function seedOnboardingAgent(): Promise<void> {
 }
 
 /**
- * Gemma 4 model tiers ordered largest-first.
+ * Model tiers ordered largest-first for auto-pull on first run.
  * Each entry specifies the Docker Model Runner tag and the minimum VRAM
- * required to run it at Q4 quantization with ~30% headroom.
+ * required to run it at Q4 quantization with ~15% headroom.
  *
  * Sizing estimates (Q4_K_M quantization, ~0.55 GB per billion params):
- *   - ai/gemma4  (31B dense)     → ~18 GB VRAM → needs 24 GB+ GPU
- *   - ai/gemma3  (12B)           → ~7 GB  VRAM → needs 10 GB+ GPU
- *   - ai/gemma3  (4B tag)        → ~2.5 GB     → needs 4 GB+ GPU
- *   - tinyllama  (1.1B fallback) → ~0.6 GB     → runs on anything
+ *   - ai/qwen3:32b  (32B) → ~20 GB VRAM → needs 24 GB+ GPU / 48 GB+ unified
+ *   - ai/qwen3:14b  (14B) → ~10 GB VRAM → needs 12 GB+ GPU / 24 GB+ unified
+ *   - ai/qwen3:8b   (8B)  → ~6 GB  VRAM → needs 8 GB+ GPU (most consumer GPUs)
+ *   - ai/qwen3:4b   (4B)  → ~3 GB  VRAM → needs 4 GB+ GPU
+ *
+ * Qwen3 is preferred over Gemma: Docker's benchmarks show Qwen3:8B matches
+ * Claude Haiku for tool calling (F1 0.93) and Qwen3:14B exceeds it (F1 0.97).
+ * Tool calling accuracy is critical for coworker routing.
  */
 const MODEL_TIERS: { model: string; minVramGb: number }[] = [
-  { model: "ai/gemma4",   minVramGb: 20 },  // 31B — RTX 4090 / A6000+
-  { model: "ai/gemma3",   minVramGb: 8 },   // 12B default — RTX 3060+
-  { model: "ai/gemma3",   minVramGb: 4 },   // 4B variant — budget GPUs
-  { model: "tinyllama",   minVramGb: 0 },   // CPU-only fallback
+  { model: "ai/qwen3:32b", minVramGb: 22 },  // 32B — RTX 4090 24 GB / Apple M4 Max 48 GB+
+  { model: "ai/qwen3:14b", minVramGb: 10 },  // 14B — RTX 3080 12 GB / Apple M4 Pro 24 GB+
+  { model: "ai/qwen3:8b",  minVramGb: 6 },   // 8B  — RTX 3060 8 GB / most consumer GPUs
+  { model: "ai/qwen3:4b",  minVramGb: 0 },   // 4B  — CPU-only fallback
 ];
 
 /**
@@ -104,10 +108,10 @@ async function selectModelForHardware(baseUrl: string): Promise<string> {
       }
     }
     // Should never reach here (last tier has minVramGb=0), but be safe
-    return "tinyllama";
+    return "ai/qwen3:4b";
   } catch {
-    // Can't detect hardware — use mid-range default
-    return "ai/gemma3";
+    // Can't detect hardware — use the broadly compatible mid-range default
+    return "ai/qwen3:8b";
   }
 }
 

@@ -3,7 +3,10 @@
 import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
+import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Orchestrator",
@@ -46,7 +49,61 @@ export default async function AgentDetailPage({
 
   if (!agent) return notFound();
 
-  const gaid = (await getAgentGaidMap([agent.agentId])).get(agent.agentId) ?? null;
+  const [gaid, session, modelConfig, lastModelRows, activeProviders] = await Promise.all([
+    getAgentGaidMap([agent.agentId]).then((m) => m.get(agent.agentId) ?? null),
+    auth(),
+    prisma.agentModelConfig.findUnique({ where: { agentId: agent.agentId } }).catch(() => null),
+    prisma.$queryRaw<Array<{ agentId: string; providerId: string }>>`
+      SELECT DISTINCT ON ("agentId") "agentId", "providerId"
+      FROM "AgentMessage"
+      WHERE "role" = 'assistant' AND "agentId" = ${agent.agentId} AND "providerId" IS NOT NULL
+      ORDER BY "agentId", "createdAt" DESC
+      LIMIT 1
+    `.catch(() => [] as Array<{ agentId: string; providerId: string }>),
+    prisma.modelProvider.findMany({
+      where: { status: { in: ["active", "degraded"] } },
+      orderBy: { name: "asc" },
+      select: {
+        providerId: true,
+        name: true,
+        modelProfiles: {
+          where: { modelStatus: "active" },
+          select: { modelId: true, friendlyName: true, supportsToolUse: true },
+          orderBy: { friendlyName: "asc" },
+        },
+      },
+    }).catch(() => []),
+  ]);
+
+  const canWrite = !!session?.user && can(
+    { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+    "manage_platform",
+  );
+
+  const providerNames: Record<string, string> = {};
+  for (const p of activeProviders) providerNames[p.providerId] = p.name;
+  const lastModelRow = lastModelRows[0];
+  const lastModelLabel = lastModelRow
+    ? `${lastModelRow.providerId} (${providerNames[lastModelRow.providerId] ?? lastModelRow.providerId})`
+    : null;
+
+  const routingConfig = {
+    minimumTier: modelConfig?.minimumTier ?? "adequate",
+    budgetClass: modelConfig?.budgetClass ?? "balanced",
+    pinnedProviderId: modelConfig?.pinnedProviderId ?? null,
+    pinnedModelId: modelConfig?.pinnedModelId ?? null,
+    minimumCapabilities: (modelConfig?.minimumCapabilities as Record<string, boolean> | null) ?? {},
+  };
+
+  const providerList = activeProviders.map((p) => ({
+    providerId: p.providerId,
+    name: p.name,
+    models: p.modelProfiles.map((m) => ({
+      modelId: m.modelId,
+      friendlyName: m.friendlyName ?? m.modelId,
+      supportsToolUse: m.supportsToolUse ?? false,
+    })),
+  }));
 
   return (
     <div>
@@ -132,6 +189,21 @@ export default async function AgentDetailPage({
             </>
           )}
         </div>
+      </Section>
+
+      {/* Model Routing Section */}
+      <Section title="Model Routing">
+        <AgentModelRoutingCard
+          agentId={agent.agentId}
+          minimumTier={routingConfig.minimumTier}
+          budgetClass={routingConfig.budgetClass}
+          pinnedProviderId={routingConfig.pinnedProviderId}
+          pinnedModelId={routingConfig.pinnedModelId}
+          lastModel={lastModelLabel}
+          minimumCapabilities={routingConfig.minimumCapabilities}
+          providers={providerList}
+          canWrite={canWrite}
+        />
       </Section>
 
       {/* Skills Section */}

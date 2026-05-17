@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { saveAgentModelConfig } from "@/lib/actions/agent-model-config";
 import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
 
@@ -159,7 +160,14 @@ export function AgentModelAssignmentTable({
                 <td style={cellStyle}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div>
-                      <span style={{ fontWeight: 500 }}>{row.agentName}</span>
+                      <Link
+                        href={`/platform/ai/agent/${row.agentId}`}
+                        style={{ fontWeight: 500, color: "var(--dpf-text)", textDecoration: "none" }}
+                        onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "var(--dpf-accent)"; }}
+                        onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "var(--dpf-text)"; }}
+                      >
+                        {row.agentName}
+                      </Link>
                       <span
                         style={{
                           display: "block",
