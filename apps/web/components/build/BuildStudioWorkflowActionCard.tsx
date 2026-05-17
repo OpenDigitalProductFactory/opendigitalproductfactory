@@ -10,8 +10,9 @@ import {
   resumeBuildImplementation,
   retryBuildExecution,
 } from "@/lib/actions/build";
+import { captureDecisionInteraction } from "@/lib/actions/decision-perspective";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
-import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
+import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
 import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 
@@ -119,17 +120,21 @@ export function BuildStudioWorkflowActionCard({
     );
   }
 
-  function handleDecisionCapture(interaction: DecisionInteractionGateView) {
-    document.dispatchEvent(
-      new CustomEvent("open-agent-panel", {
+  async function handleDecisionCapture(capture: DecisionGateCaptureDraft) {
+    await captureDecisionInteraction({
+      buildId: build.buildId,
+      ...capture,
+    });
+    window.dispatchEvent(
+      new CustomEvent("build-progress-update", {
         detail: {
-          autoMessage:
-            `Capture the human direction for WWMD interaction ${interaction.interactionId}. `
-            + "Ask me for the decision criteria, rationale, unresolved objections, and whether this should become durable decision material.",
-          targetBuildId: build.buildId,
+          type: "wwmd:capture",
+          buildId: build.buildId,
         },
       }),
     );
+    router.refresh();
+    await onCompleted?.();
   }
 
   return (
@@ -143,7 +148,7 @@ export function BuildStudioWorkflowActionCard({
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--dpf-muted)]">
+            <p className="text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
               Studio Control
             </p>
             <h4 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
@@ -153,7 +158,7 @@ export function BuildStudioWorkflowActionCard({
               {action.message}
             </p>
           </div>
-          <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--dpf-text)]">
+          <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--dpf-text)]">
             {build.phase}
           </span>
         </div>

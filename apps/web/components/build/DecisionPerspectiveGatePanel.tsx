@@ -1,16 +1,18 @@
 "use client";
 
+import { type FormEvent, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   MessageSquarePlus,
   ShieldCheck,
 } from "lucide-react";
+import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
 
 type Props = {
   interaction: DecisionInteractionGateView | null | undefined;
-  onCapture?: (interaction: DecisionInteractionGateView) => void;
+  onCapture?: (capture: DecisionGateCaptureDraft) => Promise<void> | void;
 };
 
 type ConfidenceTier = "High" | "Medium" | "Low";
@@ -79,26 +81,79 @@ function SourceList({ sources }: { sources: DecisionInteractionGateView["sources
 }
 
 export function DecisionPerspectiveGatePanel({ interaction, onCapture }: Props) {
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [criteriaText, setCriteriaText] = useState("");
+  const [rationale, setRationale] = useState("");
+  const [objectionsResolvedText, setObjectionsResolvedText] = useState("");
+  const [suggestedSourceTypesText, setSuggestedSourceTypesText] = useState("");
+  const [candidateMaterial, setCandidateMaterial] = useState(false);
+  const [pendingCapture, setPendingCapture] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [captureSaved, setCaptureSaved] = useState(false);
+
   if (!interaction) {
     return null;
   }
 
-  const label = outcomeLabel(interaction.outcomeType);
-  const tier = confidenceTier(interaction.confidenceScore);
-  const prompt = actionPrompt(interaction);
-  const buttonLabel = captureLabel(interaction.outcomeType);
+  const activeInteraction = interaction;
+  const label = outcomeLabel(activeInteraction.outcomeType);
+  const tier = confidenceTier(activeInteraction.confidenceScore);
+  const prompt = actionPrompt(activeInteraction);
+  const buttonLabel = captureLabel(activeInteraction.outcomeType);
   const captured =
-    (interaction.outcomeType === "escalate" && interaction.escalationCaptured)
-    || (interaction.outcomeType === "defer" && interaction.deferralCaptured);
+    (activeInteraction.outcomeType === "escalate" && activeInteraction.escalationCaptured)
+    || (activeInteraction.outcomeType === "defer" && activeInteraction.deferralCaptured)
+    || captureSaved;
   const statusLabel =
-    interaction.outcomeType === "escalate"
+    activeInteraction.outcomeType === "escalate"
       ? captured ? "Escalation captured" : "Escalation open"
-      : interaction.outcomeType === "defer"
+      : activeInteraction.outcomeType === "defer"
         ? captured ? "Deferral captured" : "Deferral open"
         : null;
-  const Icon = interaction.outcomeType === "recommend" || interaction.outcomeType === "arbitrate"
+  const Icon = activeInteraction.outcomeType === "recommend" || activeInteraction.outcomeType === "arbitrate"
     ? CheckCircle2
     : AlertTriangle;
+  const captureOutcomeType =
+    activeInteraction.outcomeType === "escalate" || activeInteraction.outcomeType === "defer"
+      ? activeInteraction.outcomeType
+      : null;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!captureOutcomeType) return;
+
+    const trimmedAnswer = answer.trim();
+    if (!trimmedAnswer) {
+      setCaptureError(
+        captureOutcomeType === "escalate"
+          ? "Human direction is required."
+          : "Missing evidence detail is required.",
+      );
+      return;
+    }
+
+    setPendingCapture(true);
+    setCaptureError(null);
+    try {
+      await onCapture?.({
+        interactionId: activeInteraction.interactionId,
+        outcomeType: captureOutcomeType,
+        answer: trimmedAnswer,
+        criteriaText,
+        rationale,
+        objectionsResolvedText,
+        suggestedSourceTypesText,
+        candidateMaterial,
+      });
+      setCaptureSaved(true);
+      setCaptureOpen(false);
+    } catch (error) {
+      setCaptureError(error instanceof Error ? error.message : "WWMD capture could not be saved.");
+    } finally {
+      setPendingCapture(false);
+    }
+  }
 
   return (
     <section
@@ -121,7 +176,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture }: Props) 
               <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--dpf-text)]">
                 {tier} confidence
               </span>
-              {interaction.principleConflict && (
+              {activeInteraction.principleConflict && (
                 <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--dpf-text)]">
                   Principle conflict
                 </span>
@@ -134,34 +189,34 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture }: Props) 
             </div>
           </div>
           <div className="max-w-full text-right text-[10px] text-[var(--dpf-muted)]">
-            <div className="font-mono text-[var(--dpf-text)]">{interaction.profileVersionId}</div>
-            <div>{interaction.domainClass}</div>
+            <div className="font-mono text-[var(--dpf-text)]">{activeInteraction.profileVersionId}</div>
+            <div>{activeInteraction.domainClass}</div>
           </div>
         </div>
 
-        {interaction.rationale && (
+        {activeInteraction.rationale && (
           <p className="text-xs leading-relaxed text-[var(--dpf-muted)]">
-            {interaction.rationale}
+            {activeInteraction.rationale}
           </p>
         )}
 
         <div className="grid gap-2 text-xs text-[var(--dpf-muted)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
             <span className="font-semibold text-[var(--dpf-text)]">Sources: </span>
-            <SourceList sources={interaction.sources} />
+            <SourceList sources={activeInteraction.sources} />
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] uppercase sm:justify-end">
             <span className="whitespace-nowrap">
-              Before {confidenceLabel(interaction.confidenceBefore)}
+              Before {confidenceLabel(activeInteraction.confidenceBefore)}
             </span>
             <span className="whitespace-nowrap">
-              After {confidenceLabel(interaction.confidenceAfter)}
+              After {confidenceLabel(activeInteraction.confidenceAfter)}
             </span>
             <span className="whitespace-nowrap">
-              {interaction.sources.length} source{interaction.sources.length === 1 ? "" : "s"}
+              {activeInteraction.sources.length} source{activeInteraction.sources.length === 1 ? "" : "s"}
             </span>
             <span className="whitespace-nowrap">
-              {interaction.materialCount} material{interaction.materialCount === 1 ? "" : "s"}
+              {activeInteraction.materialCount} material{activeInteraction.materialCount === 1 ? "" : "s"}
             </span>
           </div>
         </div>
@@ -175,13 +230,113 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture }: Props) 
               type="button"
               data-testid="wwmd-gate-capture"
               disabled={captured}
-              onClick={() => onCapture?.(interaction)}
+              onClick={() => {
+                setCaptureError(null);
+                setCaptureOpen(true);
+              }}
               className="inline-flex items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden="true" />
               {buttonLabel}
             </button>
           </div>
+        )}
+
+        {captureOpen && captureOutcomeType && !captured && (
+          <form
+            onSubmit={handleSubmit}
+            className="border-t border-[var(--dpf-border)] pt-3"
+            data-testid="wwmd-gate-capture-form"
+          >
+            <div className="grid gap-3">
+              <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
+                {captureOutcomeType === "escalate" ? "Human direction" : "Missing evidence"}
+                <textarea
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  rows={3}
+                  required
+                  className="min-h-20 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                />
+              </label>
+
+              {captureOutcomeType === "escalate" ? (
+                <>
+                  <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
+                    Decision criteria
+                    <textarea
+                      value={criteriaText}
+                      onChange={(event) => setCriteriaText(event.target.value)}
+                      rows={2}
+                      className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
+                    Rationale
+                    <textarea
+                      value={rationale}
+                      onChange={(event) => setRationale(event.target.value)}
+                      rows={2}
+                      className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
+                    Resolved objections
+                    <textarea
+                      value={objectionsResolvedText}
+                      onChange={(event) => setObjectionsResolvedText(event.target.value)}
+                      rows={2}
+                      className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                    />
+                  </label>
+                </>
+              ) : (
+                <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
+                  Suggested source types
+                  <textarea
+                    value={suggestedSourceTypesText}
+                    onChange={(event) => setSuggestedSourceTypesText(event.target.value)}
+                    rows={2}
+                    className="min-h-16 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 text-xs font-normal leading-relaxed text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                  />
+                </label>
+              )}
+
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--dpf-text)]">
+                <input
+                  type="checkbox"
+                  checked={candidateMaterial}
+                  onChange={(event) => setCandidateMaterial(event.target.checked)}
+                  className="h-4 w-4 rounded border-[var(--dpf-border)] bg-[var(--dpf-bg)]"
+                />
+                Promote as candidate decision material
+              </label>
+
+              {captureError && (
+                <p className="text-xs text-[var(--dpf-error)]" role="alert">
+                  {captureError}
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={pendingCapture}
+                  className="inline-flex items-center rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {pendingCapture ? "Saving WWMD capture..." : "Save WWMD capture"}
+                </button>
+                <button
+                  type="button"
+                  disabled={pendingCapture}
+                  onClick={() => setCaptureOpen(false)}
+                  className="inline-flex items-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs font-semibold text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
         )}
       </div>
     </section>
