@@ -7,6 +7,10 @@ export type DecisionRiskTier = typeof DECISION_RISK_TIERS[number];
 export const DECISION_OUTCOME_TYPES = ["recommend", "arbitrate", "escalate", "defer"] as const;
 export type DecisionOutcomeType = typeof DECISION_OUTCOME_TYPES[number];
 
+export const DECISION_DOMAIN_CLASSES = ["plan-readiness", "architecture-tradeoff", "risk-assessment"] as const;
+export type DecisionDomainClass = typeof DECISION_DOMAIN_CLASSES[number];
+export const PLAN_READINESS_DOMAIN_CLASS = "plan-readiness" satisfies DecisionDomainClass;
+
 export const PERSPECTIVE_MATERIAL_FRESHNESS = ["current", "stale", "superseded", "contradicted"] as const;
 export type PerspectiveMaterialFreshness = typeof PERSPECTIVE_MATERIAL_FRESHNESS[number];
 
@@ -65,10 +69,13 @@ export type PerspectiveMaterial = {
   sourceType: string;
   sourceRef: Record<string, unknown>;
   summary: string;
+  domainClass: DecisionDomainClass;
+  direction: "support" | "oppose" | "neutral";
   domains: string[];
   freshness: PerspectiveMaterialFreshness;
   evidenceGrade: PerspectiveEvidenceGrade;
   confidenceWeight: number;
+  principleDirection?: "support" | "oppose" | "neutral";
   reviewStatus: PerspectiveReviewStatus;
   promotionState: PerspectivePromotionState;
   lastValidatedAt: Date | null;
@@ -100,10 +107,11 @@ export type DecisionPerspectiveEvaluationInput = {
   fallbackProfiles?: DecisionPerspectiveProfile[];
   materials: PerspectiveMaterial[];
   question: string;
-  questionDomain: string;
+  questionDomain: DecisionDomainClass;
   options: string[];
   riskTier: DecisionRiskTier;
   evidence?: DecisionEvidenceItem[];
+  recentOverrideCount?: number;
 };
 
 export type DecisionPerspectiveEvaluationResult = {
@@ -113,6 +121,13 @@ export type DecisionPerspectiveEvaluationResult = {
   profileVersionId: string;
   confidenceBefore: number;
   confidenceAfter: number;
+  confidenceScore: number;
+  coverageGap: boolean;
+  principleConflict: boolean;
+  domainClass: DecisionDomainClass;
+  resolvedProfileChain: string[];
+  materialCount: number;
+  freshnessDistribution: Record<PerspectiveMaterialFreshness, number>;
   riskTier: DecisionRiskTier;
   question: string;
   options: string[];
