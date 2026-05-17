@@ -6,6 +6,13 @@ vi.mock("@dpf/db", () => ({
     agent: {
       findFirst: vi.fn(),
     },
+    agentModelConfig: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    modelProvider: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -17,6 +24,10 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("notFound");
   },
+}));
+
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/identity/principal-linking", () => ({
