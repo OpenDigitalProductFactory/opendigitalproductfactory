@@ -33,13 +33,13 @@ type Issued = {
   plaintext: string;
   prefix: string;
   expiresAt: string | null;
-  setupSnippets: { claudeCode: string; codex: string; vscode: string };
+  setupSnippets: { claudeCode: string; codex: string; vscode: string; syncCommand: string };
 };
 
 type View =
   | { kind: "idle" }
   | { kind: "form"; error: string | null }
-  | { kind: "issued"; payload: Issued; activeTab: "claudeCode" | "vscode" | "codex" };
+  | { kind: "issued"; payload: Issued };
 
 export function McpTokenManager(props: McpTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
@@ -111,7 +111,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         setView({ kind: "form", error: result.message });
         return;
       }
-      setView({ kind: "issued", payload: result, activeTab: "claudeCode" });
+      setView({ kind: "issued", payload: result });
       refresh();
     });
   }
@@ -367,25 +367,24 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             </div>
 
             <div className="mt-5">
-              <div className="flex gap-2 border-b border-[var(--dpf-border)]">
-                {(["claudeCode", "vscode", "codex"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setView({ kind: "issued", payload: view.payload, activeTab: tab })}
-                    className={`px-3 py-1.5 text-xs ${
-                      view.activeTab === tab
-                        ? "border-b-2 border-[var(--dpf-accent)] text-[var(--dpf-text)]"
-                        : "text-[var(--dpf-muted)]"
-                    }`}
-                  >
-                    {tab === "claudeCode" ? "Claude Code" : tab === "vscode" ? "VS Code" : "Codex"}
-                  </button>
-                ))}
+              <p className="mb-1 text-xs font-medium text-[var(--dpf-text)]">
+                Run this command to configure Claude Code automatically:
+              </p>
+              <div className="flex items-start gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+                <code className="flex-1 break-all text-xs text-[var(--dpf-text)]">
+                  {view.payload.setupSnippets.syncCommand}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(view.payload.setupSnippets.syncCommand)}
+                  className="shrink-0 rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                >
+                  Copy
+                </button>
               </div>
-              <pre className="mt-2 overflow-auto rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-text)]">
-                {view.payload.setupSnippets[view.activeTab]}
-              </pre>
+              <p className="mt-2 text-xs text-[var(--dpf-muted)]">
+                Restart Claude Code after running the command for it to pick up the new token.
+              </p>
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
