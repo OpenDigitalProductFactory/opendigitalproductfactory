@@ -33,6 +33,7 @@ import {
   getBuildStudioGraphPanelClassName,
   getBuildStudioShellClassName,
   getBuildStudioSidebarClassName,
+  shouldOpenBuildStudioSidebarByDefault,
 } from "./build-studio-layout";
 
 type Props = {
@@ -63,7 +64,11 @@ export function BuildStudio({
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    shouldOpenBuildStudioSidebarByDefault(
+      typeof window === "undefined" ? undefined : window.innerWidth,
+    ),
+  );
   const isDevEnvironment = dpfEnvironment === "dev";
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
@@ -139,6 +144,15 @@ export function BuildStudio({
         if (!cancelled) setCodeGraphFreshness(null);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const syncSidebarToViewport = () => {
+      setSidebarOpen(shouldOpenBuildStudioSidebarByDefault(window.innerWidth));
+    };
+    syncSidebarToViewport();
+    window.addEventListener("resize", syncSidebarToViewport);
+    return () => window.removeEventListener("resize", syncSidebarToViewport);
   }, []);
 
   useEffect(() => {

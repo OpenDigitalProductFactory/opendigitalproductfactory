@@ -3,6 +3,7 @@
 
 import * as crypto from "crypto";
 import type { BuildExecutionState } from "@/lib/build-exec-types";
+import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -268,6 +269,7 @@ export type FeatureBuildRow = {
     createdAt: Date;
   }> | null;
   happyPathState: HappyPathState;
+  decisionInteraction?: DecisionInteractionGateView | null;
 };
 
 export type FeaturePackRow = {

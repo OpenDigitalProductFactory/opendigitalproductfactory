@@ -11,6 +11,8 @@ import {
   retryBuildExecution,
 } from "@/lib/actions/build";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
+import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
 import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 
 type Props = {
@@ -31,6 +33,10 @@ export function BuildStudioWorkflowActionCard({
   const [error, setError] = useState<string | null>(null);
 
   const primaryEnabled = action.kind !== "review-only" && action.disabledReason == null;
+  const decisionInteraction =
+    action.kind === "advance-phase" && action.targetPhase === "build"
+      ? build.decisionInteraction ?? null
+      : null;
   const primaryLabel = useMemo(() => {
     if (action.primaryLabel == null) {
       return null;
@@ -95,6 +101,8 @@ export function BuildStudioWorkflowActionCard({
       await onCompleted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The action could not be completed.");
+      router.refresh();
+      await onCompleted?.();
     } finally {
       setPending(false);
     }
@@ -105,6 +113,19 @@ export function BuildStudioWorkflowActionCard({
       new CustomEvent("open-agent-panel", {
         detail: {
           autoMessage: action.coworkerPrompt,
+          targetBuildId: build.buildId,
+        },
+      }),
+    );
+  }
+
+  function handleDecisionCapture(interaction: DecisionInteractionGateView) {
+    document.dispatchEvent(
+      new CustomEvent("open-agent-panel", {
+        detail: {
+          autoMessage:
+            `Capture the human direction for WWMD interaction ${interaction.interactionId}. `
+            + "Ask me for the decision criteria, rationale, unresolved objections, and whether this should become durable decision material.",
           targetBuildId: build.buildId,
         },
       }),
@@ -148,6 +169,11 @@ export function BuildStudioWorkflowActionCard({
             {error}
           </div>
         )}
+
+        <DecisionPerspectiveGatePanel
+          interaction={decisionInteraction}
+          onCapture={handleDecisionCapture}
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           {primaryLabel && (

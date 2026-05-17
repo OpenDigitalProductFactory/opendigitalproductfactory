@@ -4,6 +4,7 @@ import {
   getBuildStudioGraphPanelClassName,
   getBuildStudioShellClassName,
   getBuildStudioSidebarClassName,
+  shouldOpenBuildStudioSidebarByDefault,
 } from "@/components/build/build-studio-layout";
 import { resolveBuildStudioBranchBadge } from "@/components/build/build-studio-branch-badge";
 
@@ -29,6 +30,12 @@ describe("build-studio-layout", () => {
     expect(BUILD_STUDIO_TEST_IDS.shell).toBe("build-studio-shell");
     expect(BUILD_STUDIO_TEST_IDS.graphPanel).toBe("build-studio-graph-panel");
     expect(BUILD_STUDIO_TEST_IDS.buildListItem).toBe("build-studio-build-list-item");
+  });
+
+  it("starts with the Build Studio sidebar collapsed on mobile viewports", () => {
+    expect(shouldOpenBuildStudioSidebarByDefault(390)).toBe(false);
+    expect(shouldOpenBuildStudioSidebarByDefault(1024)).toBe(true);
+    expect(shouldOpenBuildStudioSidebarByDefault(undefined)).toBe(true);
   });
 });
 

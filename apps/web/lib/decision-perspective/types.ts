@@ -141,3 +141,21 @@ export type DecisionPerspectiveEvaluationResult = {
   }>;
   gapReason?: "no-applicable-material" | "material-below-confidence";
 };
+
+export type DecisionInteractionGateView = {
+  interactionId: string;
+  profileId: string;
+  profileVersionId: string;
+  domainClass: DecisionDomainClass;
+  outcomeType: DecisionOutcomeType;
+  confidenceBefore: number | null;
+  confidenceAfter: number | null;
+  confidenceScore: number;
+  materialCount: number;
+  principleConflict: boolean;
+  rationale: string | null;
+  createdAt: Date;
+  sources: DecisionPerspectiveEvaluationResult["sources"];
+  escalationCaptured: boolean;
+  deferralCaptured: boolean;
+};

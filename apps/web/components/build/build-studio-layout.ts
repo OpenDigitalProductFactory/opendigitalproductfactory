@@ -26,6 +26,10 @@ export function getBuildStudioSidebarClassName(sidebarOpen: boolean) {
     : `${base} w-0 overflow-hidden border-r-0`;
 }
 
+export function shouldOpenBuildStudioSidebarByDefault(viewportWidth?: number) {
+  return viewportWidth == null || viewportWidth >= 1024;
+}
+
 export function getBuildStudioGraphPanelClassName() {
   return "flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3";
 }
