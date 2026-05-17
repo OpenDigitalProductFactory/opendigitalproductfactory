@@ -20,11 +20,13 @@ export function writeMcpJsonToHost(plaintext: string, baseUrl: string): void {
   const mcpJson = JSON.stringify({ mcpServers: { dpf: httpEntry } }, null, 2);
   const vscodeMcpJson = JSON.stringify({ servers: { dpf: httpEntry } }, null, 2);
 
+  // Use path.posix so paths always use forward slashes — this code runs inside
+  // a Linux Docker container regardless of the OS running the build/tests.
   try {
-    fs.writeFileSync(path.join(mountPath, ".mcp.json"), mcpJson, "utf-8");
-    const vsDir = path.join(mountPath, ".vscode");
+    fs.writeFileSync(path.posix.join(mountPath, ".mcp.json"), mcpJson, "utf-8");
+    const vsDir = path.posix.join(mountPath, ".vscode");
     if (!fs.existsSync(vsDir)) fs.mkdirSync(vsDir, { recursive: true });
-    fs.writeFileSync(path.join(vsDir, "mcp.json"), vscodeMcpJson, "utf-8");
+    fs.writeFileSync(path.posix.join(vsDir, "mcp.json"), vscodeMcpJson, "utf-8");
   } catch (err) {
     console.error("[mcp-host-writer] Failed to write .mcp.json to host:", err);
   }
