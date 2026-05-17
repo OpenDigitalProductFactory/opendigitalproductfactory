@@ -42,7 +42,8 @@
       "node-forge": "1.4.0",
       "postcss": "^8.5.10",
       "uuid": "^14.0.0",
-      "@opentelemetry/otlp-transformer>protobufjs": "^8.3.0"
+      "@opentelemetry/otlp-transformer>protobufjs": "^8.3.0",
+      "fast-uri": "^3.1.2"
     },
     "onlyBuiltDependencies": [
       "msw",
