@@ -1,0 +1,631 @@
+# Portal Context Overlay and Hive-Mind Work Surface Design
+
+| Field | Value |
+|---|---|
+| Status | Draft for review |
+| Date | 2026-05-17 |
+| Backlog | EP-CAPSULE / BI-7529B658 |
+| Author | Codex + Mark Bodman |
+| Primary audience | Platform architecture, Build Studio, coworker runtime, Work Capsule UX |
+| Related repo areas | `apps/web/components/agent/*`, `apps/web/lib/actions/agent-coworker.ts`, `apps/web/lib/tak/*`, `apps/web/lib/work-capsules/*`, `apps/web/app/(shell)/build/*`, `packages/db/prisma/schema.prisma` |
+| Related artifacts | `2026-05-14-portal-work-capsule-control-harness-design.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-04-29-coworker-execution-adapter-substrate-design.md`, `2026-04-01-phase-handoff-and-human-authority-engagement-design.md` |
+
+## 1. Purpose
+
+DPF should move development work into the portal in a way that tests the portal's own work process while keeping the backlog, Work Capsules, evidence, route context, and coworker runtime live and useful.
+
+The goal is not to make the portal a novelty code editor. The goal is to make every development surface carry the surrounding operational context:
+
+- what object the user is looking at
+- which backlog item, epic, build, capsule, task, branch, and evidence chain it belongs to
+- which coworkers should be involved
+- what the platform already knows about the user, organization, route, permissions, design, and verification state
+- what must be recorded back to the backlog/capsule instead of being trapped in chat
+
+This spec defines the context overlay and hive-mind work surface that sits on top of the existing Work Capsule and coworker runtime. It is a projection layer first. It must not create a second source of truth for work, evidence, routing, or agent events.
+
+## 2. Problem Statement
+
+The current portal has strong pieces, but the user experience still separates them too much:
+
+- Build Studio knows the active feature build.
+- Work Control knows active/adoptable Work Capsules.
+- The coworker panel knows route context and active build thread context.
+- Backlog items and epics own intake and prioritization.
+- `TaskRun`, `TaskMessage`, and `TaskArtifact` are emerging as the task-native coworker substrate.
+- `ToolExecution`, `ToolExecutionReceipt`, `BacklogItemActivity`, `WorkCapsuleActivity`, and `ExternalEvidenceRecord` provide evidence and audit trails.
+
+The missing layer is a consistent, portal-native context envelope that follows the user across work surfaces. Without it, the platform keeps re-solving context in each route, and AI coworkers can still drift into chat-only reasoning instead of acting through the portal's instituted structure.
+
+The user direction is explicit: development can still happen outside the portal, but portal development needs to be integrated with the portal's design. As people use the portal, their context should become an overlay, and the hive mind should join from that shared context.
+
+## 3. Current Repo Truth
+
+This section reflects `origin/main` at `5c700df4` on 2026-05-17, plus live backlog checks through the DPF MCP server.
+
+### 3.1 Live Backlog
+
+MCP backlog checks showed:
+
+- `EP-CAPSULE` is in progress with the new item `BI-7529B658` for this spec.
+- Work Capsule Phase 1 and Phase 2 items are done.
+- Work Capsule Phase 3 planning remains in progress.
+- `BI-20E6AC44`, Build Studio attachment to capsules and backlog activity, is marked done in live backlog, but the corresponding implementation is still on `origin/feat/work-capsule-build-studio-attach` rather than merged into `origin/main` in this worktree.
+- `EP-A2A` has `BI-9DB7C332` in progress for coworker team orchestration.
+- `EP-BUILD-STUDIO` still has open blockers around runtime crash, backlog-to-Build-Studio handoff, and ideate stall visibility.
+
+Design consequence: this spec must compose with the pending Build Studio attachment branch, but the first implementation plan must re-check the branch/PR state before coding.
+
+### 3.2 Work Capsule Foundation
+
+`origin/main` already has:
+
+- `WorkCapsule` and `WorkCapsuleActivity` models.
+- `apps/web/lib/work-capsules.ts` enum constants for status, source, executor kind, activity kind, branch taxonomy, and evidence kind.
+- MCP handlers for capsule list/get/create/adopt/plan/claim/release/heartbeat/status/evidence.
+- `/build/work` Work Control UI and `/build/work/[capsuleId]` detail route.
+- Launch instruction presenter for creating a worktree and seeding MCP credentials.
+- Scope claims stored in `WorkCapsule.scopeClaims`.
+- Lease and stale-cache health projection in `work-capsule-presenter.ts`.
+
+The overlay should read and enrich those records; it should not replace the Work Capsule UI.
+
+### 3.3 Coworker Context Foundation
+
+The coworker shell already:
+
+- resolves route-local context through `routeContext`
+- tracks active Build Studio build IDs on `/build`
+- scopes Build Studio threads as `/build#<buildId>` so one build does not pollute another build's chat history
+- defaults `/build` coworker mode to `act`, while other routes default to `advise`
+- streams progress through `/api/agent/stream?threadId=...`
+
+The server action `sendMessage` already assembles:
+
+- route data context
+- route context definition and sensitivity
+- model tier by route
+- skills and page actions
+- Build Studio context when the route starts with `/build`
+- wiki/context recall
+- task classification and autonomous work run metadata
+- governed tool execution context including route, thread, build, attachment, and task references
+
+Design consequence: the context overlay should be resolved server-side and exposed to the coworker panel as a compact envelope. It should not let the browser invent context fields that later become audit truth.
+
+### 3.4 Task and Evidence Foundation
+
+The schema already includes:
+
+- `TaskRun` with `taskRunId`, `contextId`, `buildId`, `parentTaskRunId`, `routeContext`, A2A-shaped `status`, `authorityScope`, `a2aMetadata`, and `progressPayload`.
+- `TaskMessage` and `TaskArtifact`.
+- `AgentThread` and `AgentMessage` for current presentation context.
+- `ToolExecution` with `threadId`, `agentId`, `userId`, `toolName`, `routeContext`, `taskRunId`, `skillId`, and audit metadata.
+- `ToolExecutionReceipt`.
+- `BacklogItemActivity` and `WorkCapsuleActivity`.
+- `ExternalEvidenceRecord`.
+
+Existing helpers already project coworker chat into task messages and project persisted task progress back into stream events.
+
+Design consequence: hive-mind collaboration should create or extend task-native records and artifacts. It must not remain a free-form chat transcript.
+
+### 3.5 AI Operations Map Guardrail
+
+The AI coworker visual control surface spec is directly relevant. It says the map must:
+
+- project from canonical `AgentEvent`, `ToolExecution`, `ToolExecutionReceipt`, `BacklogItemActivity`, `ExternalEvidenceRecord`, and task-state primitives
+- avoid a parallel event union, state machine, transport, or evidence ledger
+- project handoffs from existing queue/orchestrator/task events before adding new discriminants
+
+The context overlay follows the same rule.
+
+## 4. Research and Benchmarking
+
+### 4.1 Open-Source References
+
+**OpenHands.** OpenHands documents runtimes as environments where agents can edit files and run commands, with Docker as the default isolation path and managed sandboxes in cloud mode. DPF should adopt the runtime boundary lesson: the portal may coordinate work, but actual execution environments must remain explicit and inspectable. DPF rejects making the portal pretend all execution is local to the web page. Reference: [OpenHands runtime overview](https://docs.openhands.dev/openhands/usage/v0/runtimes/V0_overview).
+
+**LangGraph / LangSmith threads.** LangGraph treats a thread as a persistent state container across runs, and Studio can inspect a thread's execution history, state changes, and checkpoints. DPF should adopt the persistent-state inspection pattern, but DPF's primary state carrier must be the Work Capsule and `TaskRun` envelope, not a generic graph thread alone. Reference: [LangGraph threads](https://docs.langchain.com/langgraph-platform/use-threads).
+
+**LangGraph human-in-the-loop.** LangGraph's server API supports human review/edit/approval of tool calls through interrupts. DPF should adopt the mid-task interruption model, but keep approval authority in DPF's capability, grant, and proposal-mode controls. Reference: [LangGraph human-in-the-loop](https://docs.langchain.com/langgraph-platform/add-human-in-the-loop).
+
+**AutoGen Studio.** AutoGen Studio provides team building, live message streaming, control transition graph visibility, pause/stop controls, and a gallery/deployment surface, while warning that Studio itself is not production-ready and lacks security features expected in deployed apps. DPF should adopt the team/run visibility pattern and reject research-prototype security assumptions. Reference: [AutoGen Studio docs](https://microsoft.github.io/autogen/0.5.4/user-guide/autogenstudio-user-guide/index.html).
+
+**A2A protocol.** The current A2A specification centers task operations, task status, messages, parts, artifacts, streaming events, agent cards, and context/task identifier semantics. DPF should keep aligning internal coworker work with `TaskRun`, `TaskMessage`, and `TaskArtifact` so future A2A projection is a projection task, not a rewrite. Reference: [A2A latest specification](https://a2a-protocol.org/latest/specification/).
+
+### 4.2 Commercial References
+
+**GitHub Copilot cloud agent.** GitHub's cloud agent can research a repository, create a plan, make branch changes, and optionally open a PR; GitHub positions branch logs and commits as transparency/collaboration surfaces. DPF should adopt the branch/commit transparency pattern, but keep PR creation as merge-ready only per AGENTS.md and the Work Capsule spec. Reference: [GitHub Copilot cloud agent docs](https://docs.github.com/en/copilot/using-github-copilot/coding-agent/about-assigning-tasks-to-copilot).
+
+**Cursor background agents.** Cursor background agents run asynchronously in isolated remote environments, work on separate branches, push to the repo, and can be viewed, followed up with, or taken over. DPF should adopt the "view status, follow up, take over" pattern, but route all ownership, leases, scope claims, and evidence through Work Capsules. Reference: [Cursor background agents](https://docs.cursor.com/en/background-agents).
+
+**Linear triage and issue relations.** Linear makes incoming work reviewable before it enters team workflow; its issue relations expose blocked, blocking, related, and duplicate links in the issue sidebar, while Triage Intelligence suggests assignee/labels/related issues from workspace history. DPF should adopt contextual relationship surfacing and reject a flat task list. The overlay should show blockers, related capsules, duplicate risk, and likely reviewers near the work. References: [Linear triage](https://linear.app/docs/triage) and [Linear issue relations](https://linear.app/docs/issue-relations/).
+
+### 4.3 Synthesis
+
+The strongest pattern across the benchmarks is not "chat with agents." It is durable object context plus transparent execution state:
+
+- persistent thread/task context
+- visible branch/run state
+- inspectable history and evidence
+- explicit human interruption points
+- team composition that can be paused, resumed, or taken over
+- relationships and blockers surfaced near the work object
+
+DPF's differentiator should be that those pieces are governed by the portal's business/work structures instead of by an external issue tracker, IDE sidebar, or research prototype state store.
+
+## 5. Design Decision
+
+DPF should implement a **Portal Context Overlay** that resolves a server-side `PortalContextEnvelope` for the current route and object, then uses that envelope to power:
+
+1. a quiet UI overlay inside the portal shell and Build/Work surfaces
+2. coworker prompt/context assembly
+3. hive-mind coworker participation
+4. evidence and progress presentation
+5. backlog and Work Capsule updates
+
+The first implementation target is Build Studio plus Work Capsules:
+
+- `/build`
+- `/build?buildId=...`
+- `/build/work`
+- `/build/work/[capsuleId]`
+
+The contract must be global from day one so later routes can attach their own object anchors without redesigning the overlay.
+
+## 6. Options Considered
+
+### Option A: Global chat overlay only
+
+Put a smarter chat panel on every route and add more prompt context.
+
+Rejected because it keeps the work model chat-first. It may feel helpful in the moment, but it does not guarantee backlog/capsule/task/evidence updates.
+
+### Option B: Full task-native rewrite first
+
+Finish the A2A-shaped task runtime and then build the overlay.
+
+Rejected as the first step because it blocks portal adoption on a larger runtime migration. The current `TaskRun`/`TaskMessage`/`TaskArtifact` foundation is sufficient for a projection-first overlay.
+
+### Option C: Work Capsule-first context projection
+
+Resolve a context envelope from current route/object/work records, project it into the UI and coworker runtime, and write actions/evidence back through existing primitives.
+
+Recommended. It improves the user experience now while making the portal's instituted structure more central, not less.
+
+## 7. Core Concept: PortalContextEnvelope
+
+`PortalContextEnvelope` is a server-resolved projection. It is not a Prisma model in V1.
+
+Suggested TypeScript shape:
+
+```ts
+export type PortalContextEnvelope = {
+  envelopeId: string;
+  resolvedAt: string;
+  route: {
+    pathname: string;
+    routeContext: string;
+    domain: string;
+    sensitivity: string;
+    docsPath?: string | null;
+  };
+  organization: {
+    organizationId: string | null;
+    name: string | null;
+    archetypeId?: string | null;
+  };
+  user: {
+    userId: string;
+    principalId: string | null;
+    platformRole: string;
+  };
+  anchors: PortalObjectAnchor[];
+  work: {
+    backlogItem?: WorkBacklogAnchor | null;
+    epic?: WorkEpicAnchor | null;
+    capsule?: WorkCapsuleAnchor | null;
+    featureBuild?: FeatureBuildAnchor | null;
+    taskRun?: TaskRunAnchor | null;
+    agentThread?: AgentThreadAnchor | null;
+    branch?: GitBranchAnchor | null;
+  };
+  evidence: EvidenceSummary[];
+  authority: AuthoritySummary;
+  coworkers: HiveMindCandidate[];
+  attention: AttentionSignal[];
+  promptDigest: string;
+};
+```
+
+Rules:
+
+1. `envelopeId` is a deterministic hash of route/object/work anchors plus `resolvedAt` bucket. It is used for UI caching and logs, not as durable truth.
+2. The browser can request an envelope but cannot submit envelope facts as authority.
+3. Tool execution receives stable IDs from the server-resolved context, not client-invented context.
+4. If a source is unavailable, the envelope includes a typed missing-source signal and still renders from remaining sources.
+5. Prompt injection defense applies at the projection boundary: user-authored free text is summarized into `promptDigest` and not blindly copied into tool instructions.
+
+## 8. Context Resolution
+
+Create `apps/web/lib/portal-context/` as the first implementation home:
+
+- `types.ts`
+- `route-resolver.ts`
+- `work-resolver.ts`
+- `evidence-resolver.ts`
+- `hive-mind-resolver.ts`
+- `prompt-digest.ts`
+- `index.ts`
+
+### 8.1 Route Resolver
+
+Inputs:
+
+- `pathname`
+- `routeContext`
+- optional `buildId`
+- optional `capsuleId`
+- optional `threadId`
+
+Sources:
+
+- `resolveRouteContext(routeContext)`
+- `getRouteDataContext(routeContext, userId)`
+- `ROUTE_CONTEXT_MAP`
+- `buildCoworkerContextKey(routeContext)`
+
+Output:
+
+- route domain/sensitivity/docs path
+- current object anchors
+- available skills/page actions
+- route-level data summary
+
+### 8.2 Work Resolver
+
+Sources:
+
+- `WorkCapsule`
+- `FeatureBuild`
+- `BacklogItem`
+- `Epic`
+- `TaskRun`
+- `AgentThread`
+- git branch/worktree fields already stored on the capsule
+
+Resolution order for Build Studio:
+
+1. If `capsuleId` is present, load that capsule and its linked build/backlog/task records.
+2. Else if `buildId` is present, load the build and linked capsule when available.
+3. Else if route is `/build` and the active build thread context is known, resolve active build from the explicit build ID, not from latest build heuristics.
+4. Else resolve route context only and show "no active work object" as a typed signal.
+
+Resolution order for generic routes:
+
+1. route-specific object ID from URL
+2. route context data provider
+3. linked active TaskRun for current thread
+4. linked active Work Capsule if a route or path scope claim matches
+5. related open backlog items from MCP/DB-backed search only when explicitly requested by the user or by a hive-mind trigger
+
+### 8.3 Evidence Resolver
+
+V1 reads, summarizes, and links:
+
+- `WorkCapsuleActivity`
+- `BacklogItemActivity` where `kind = "evidence"` or work-link activity kinds
+- `ToolExecution`
+- `ToolExecutionReceipt`
+- `TaskArtifact`
+- `ExternalEvidenceRecord`
+- Build Studio evidence fields on `FeatureBuild`
+
+It does not create a new evidence ledger.
+
+### 8.4 Hive-Mind Resolver
+
+The resolver recommends coworkers by combining:
+
+- route domain and skills
+- `Agent` registry metadata
+- route capability requirements
+- current capsule executor and scope claims
+- task state and stall/failure signals
+- evidence gaps
+- user intent from the current action
+
+The output is a ranked list of `HiveMindCandidate` values:
+
+```ts
+export type HiveMindCandidate = {
+  agentId: string;
+  label: string;
+  role: "builder" | "reviewer" | "architect" | "tester" | "operator" | "specialist";
+  reason: string;
+  activation: "passive-suggestion" | "ask-now" | "required-before-promotion";
+  requiredGrantKeys: string[];
+  taskType: "conversation" | "analysis" | "code_generation" | "verification";
+};
+```
+
+## 9. Hive-Mind Activation Model
+
+The hive mind is not a separate product mode. It is a coordination pattern over one context envelope.
+
+### 9.1 Passive Context
+
+Every supported work route can show:
+
+- current owner/executor
+- suggested reviewers
+- missing evidence
+- blocked or overlapping capsules
+- likely next handoff
+- recent tool/evidence activity
+
+This should be quiet and scannable. It must not interrupt normal page use.
+
+### 9.2 Explicit Invocation
+
+The user can ask:
+
+- "ask an architect to review this"
+- "bring in the UI reviewer"
+- "have the tester check this before we continue"
+- "compare two approaches"
+- "what does the hive think is risky here?"
+
+The system creates or reuses a child `TaskRun` with:
+
+- same `contextId`
+- `parentTaskRunId`
+- same Work Capsule and Build Studio anchors in metadata
+- current route context and sensitivity
+- clear expected artifact type
+
+The coworker output becomes a `TaskArtifact` and, when it affects delivery state, Work Capsule or backlog evidence.
+
+### 9.3 Automatic Triggers
+
+Automatic hive-mind suggestions appear when:
+
+- Build Studio stalls or reaches a typed exhausted outcome.
+- a build/test/UX verification fails.
+- scope claims overlap with another active capsule.
+- a production-visible promotion is being prepared.
+- evidence is missing for the next phase.
+- a high-risk route or schema area is touched.
+- the user asks for broad changes without a backlog/capsule anchor.
+- a route-specific agent lacks the needed grant or skill.
+
+Automatic activation must remain advisory unless the existing governance model requires review or approval. The overlay may recommend; it does not silently delegate side-effect work.
+
+## 10. UI Design
+
+The overlay should feel like an operational layer inside the portal, not like a marketing surface or separate app.
+
+### 10.1 Placement
+
+V1 uses:
+
+- a compact context strip in Build Studio and Work Control showing active build/capsule/backlog/evidence health
+- a right-side overlay drawer opened from existing coworker/AI shell chrome
+- inline links from Work Control rows and Build Studio header to the relevant envelope detail
+
+It must not add a competing top-level navigation model.
+
+### 10.2 Drawer Layout
+
+Suggested tabs:
+
+- `Context`: route, object anchors, current objective, active user/principal, sensitivity
+- `Work`: capsule, build, backlog, task, branch, scope claims, lease/stale health
+- `Hive`: recommended coworkers, why they matter, active child tasks
+- `Evidence`: latest evidence, receipts, failed checks, missing proof
+
+The drawer should use dense, scan-friendly rows and small controls. No nested cards inside cards. No decorative blobs/orbs. Theme tokens only.
+
+### 10.3 Build Studio First Screen
+
+For `/build`, the first overlay slice should show:
+
+- current `FeatureBuild.buildId` and phase
+- linked Work Capsule when available
+- linked backlog item/epic when available
+- active `TaskRun` and thread context
+- Build Studio evidence completeness
+- next expected evidence or gate
+- recommended coworker for the next review/handoff
+
+If the Build Studio attachment branch is not merged yet, the UI should show "Capsule not linked" with an action to create/link a capsule through the same Work Capsule store.
+
+### 10.4 Work Control First Screen
+
+For `/build/work` and `/build/work/[capsuleId]`, the overlay should show:
+
+- capsule status, executor, branch, lease, health, and scope claims
+- linked Build Studio build when present
+- linked backlog and epic
+- latest capsule activities
+- launch state
+- missing evidence before PR/promotion readiness
+
+### 10.5 Accessibility and Theme Rules
+
+All UI follows AGENTS.md and `docs/platform-usability-standards.md`:
+
+- no hardcoded colors
+- use DPF CSS variables
+- 44px touch targets for interactive controls
+- semantic buttons and tabs
+- keyboard-visible focus states
+- no hidden-only context that screen readers cannot reach
+- no text that explains obvious application behavior inside the app
+
+## 11. Data and Source-of-Truth Rules
+
+1. `PortalContextEnvelope` is a projection, not a new durable record in V1.
+2. Work ownership stays with `WorkCapsule`.
+3. Intake and prioritization stay with `BacklogItem` and `Epic`.
+4. Build execution stays with `FeatureBuild`.
+5. Coworker execution stays with `TaskRun`, `TaskMessage`, and `TaskArtifact`.
+6. Chat presentation stays with `AgentThread` and `AgentMessage` during migration.
+7. Tool audit stays with `ToolExecution` and `ToolExecutionReceipt`.
+8. Evidence stays with existing Work Capsule, backlog, task artifact, external evidence, receipt, and Build Studio evidence surfaces.
+9. Identity uses `Principal` and `PrincipalAlias`; do not add a parallel user/agent identity model.
+10. Route knowledge uses route context providers and wiki/context recall; do not add a hardcoded overlay prompt registry.
+
+## 12. Refactoring Budget
+
+Every implementation plan from this spec must reserve at least 20 percent of implementation capacity for refactoring the seams it touches.
+
+Approved refactoring targets:
+
+- extract Build Studio active context normalization out of component-local string handling
+- centralize route/object/work context resolution in `apps/web/lib/portal-context/`
+- replace one-off `/build#<buildId>` handling with a helper that documents the compatibility boundary
+- collapse duplicated Build Studio context loading between coworker prompt assembly and overlay rendering
+- introduce typed presenter functions for overlay rows instead of formatting raw Prisma rows in components
+- remove any new helper that becomes redundant after the context resolver lands
+
+Not approved:
+
+- redesigning Build Studio phases in this slice
+- replacing Work Control
+- rewriting the main coworker loop
+- changing A2A task-state vocabulary
+- adding a new durable context table before projection evidence proves it is needed
+
+## 13. Security and Governance
+
+- All envelope reads are scoped by the current user's platform role and existing route permissions.
+- Sensitive `ToolExecution.parameters` and `result` stay summarized unless the user has auditor-level access.
+- The overlay must not expose secrets, provider tokens, environment values, or raw MCP bearer tokens.
+- Agent recommendations are filtered by user capability and agent tool grants.
+- Side-effecting hive-mind work runs through existing proposal/tool execution controls.
+- Any automatic action suggestion must identify the underlying work object before asking a coworker to act.
+- External/desktop executor state is never trusted from local files alone; the portal reads capsule metadata and recorded evidence first, then treats git scanner data as refreshable cache.
+
+## 14. Failure Handling
+
+| Failure | Behavior |
+|---|---|
+| Work Capsule source unavailable | Render route/build context and show missing capsule source signal |
+| Build ID has no linked capsule | Render build context and offer create/link action |
+| Capsule has expired lease | Show lease-expired signal and recommend heartbeat/reassignment |
+| Tool evidence query fails | Render remaining evidence sources and show evidence-source warning |
+| Route data provider fails | Render route definition plus object/work anchors; log structured error |
+| Hive candidate lacks grants | Show candidate as unavailable with missing grant summary, no activation button |
+| Context conflicts across sources | Prefer canonical durable records over cache, surface conflict as attention signal |
+
+## 15. First Implementation Slice
+
+The first code slice after review should be small and Build Studio-centered.
+
+### 15.1 Foundation
+
+Add `apps/web/lib/portal-context/` with:
+
+- `resolvePortalContextEnvelope(input, userId)`
+- route resolver for `/build` and `/build/work`
+- Work Capsule/FeatureBuild/Backlog/TaskRun anchor resolver
+- evidence summary resolver for Work Capsule and Build Studio evidence fields
+- hive-mind candidate resolver with deterministic, testable rules
+- prompt digest generator
+
+### 15.2 UI
+
+Add:
+
+- `PortalContextStrip` for Build Studio and Work Control
+- `PortalContextOverlayDrawer`
+- `PortalContextSummaryRows`
+- `HiveMindCandidateList`
+- `EvidenceSummaryList`
+
+Integrate with:
+
+- `BuildStudio.tsx`
+- `WorkControlPanel.tsx`
+- `AgentCoworkerShell.tsx` or the nearest shell-level AI chrome, using the existing panel rather than a parallel floating product
+
+### 15.3 Coworker Runtime
+
+Update `sendMessage` context assembly so the server can resolve a portal context digest for supported routes and include it alongside the current route/build context. The prompt should receive a compact summary and stable IDs, not the full envelope JSON by default.
+
+### 15.4 Tests
+
+Required focused tests:
+
+- route resolver maps `/build` with `buildId` to build/capsule/backlog/task anchors
+- route resolver maps `/build/work/[capsuleId]` to capsule/build/backlog anchors
+- missing capsule does not crash envelope resolution
+- evidence resolver deduplicates equivalent Build Studio and activity evidence
+- hive resolver recommends UI reviewer for user-facing UI changes
+- hive resolver recommends architect/reviewer before promotion or high-risk scope
+- drawer renders with theme tokens and no hardcoded colors
+- coworker prompt digest includes stable IDs and excludes raw tool payloads
+
+## 16. Verification Plan
+
+For the first implementation slice:
+
+1. Focused Vitest for `apps/web/lib/portal-context/*`.
+2. Component tests for the strip/drawer/list components.
+3. `pnpm --filter web typecheck`.
+4. `pnpm --filter web exec vitest run <focused files>`.
+5. `cd apps/web && pnpm exec next build` or the repo-pinned equivalent required by AGENTS.md at implementation time.
+6. UX verification against the Docker-served portal:
+   - log in as `admin@dpf.local`
+   - open `/build`
+   - select or create a build
+   - verify the context strip shows build/capsule/backlog/task state
+   - open the overlay drawer
+   - verify Hive and Evidence tabs render useful state without overlap
+   - open `/build/work`
+   - open a capsule detail route and verify the overlay follows the capsule
+
+For this doc-only spec branch:
+
+- Markdown sanity check
+- `git diff --check`
+- record spec-review evidence on `BI-7529B658`
+
+## 17. Acceptance Criteria
+
+The first shipped overlay slice is acceptable when:
+
+1. `/build` shows active context without relying on chat history.
+2. `/build/work` and `/build/work/[capsuleId]` show capsule context and evidence health.
+3. The coworker prompt for supported routes gets the same stable work anchors shown in the UI.
+4. Hive-mind recommendations are explainable, grant-aware, and tied to the current work object.
+5. Any coworker participation writes to `TaskRun`/`TaskArtifact` and relevant Work Capsule/backlog evidence, not only chat.
+6. The UI uses DPF theme tokens and remains dense, calm, and scan-friendly.
+7. No new durable evidence/event/context source of truth is introduced.
+8. At least 20 percent of implementation work is spent on reducing duplicated context seams.
+
+## 18. Non-Goals
+
+- Solving database backup or recovery. That is tracked separately.
+- Replacing Work Capsules.
+- Replacing Build Studio.
+- Replacing the AI Operations Map.
+- Creating public A2A endpoints.
+- Full task-native runtime cutover.
+- Adding a new portal-wide command center route in V1.
+- Creating PRs before merge readiness.
+- Letting the browser author audit truth.
+
+## 19. Open Questions
+
+1. Should the overlay drawer live as part of the existing `AgentCoworkerShell` or a sibling shell-level component that the coworker panel can also call into?
+2. Should Build Studio attachment from `origin/feat/work-capsule-build-studio-attach` merge before the overlay implementation starts, or should the overlay include a create/link fallback in its first slice?
+3. Should child hive-mind `TaskRun` records use `source = "coworker"` initially, or should a new strongly typed `source = "hive-mind"` be added with enum/test/MCP parity in the same implementation PR?
+4. Should `PortalContextEnvelope.promptDigest` be persisted as a `TaskArtifact` for high-assurance work, or remain ephemeral until audit need is proven?
+
+## 20. Recommendation
+
+Proceed with the Work Capsule-first context projection.
+
+The overlay should make the portal feel like the active work environment even when some execution still happens in Codex desktop, Claude desktop, or a sandbox. The user should see what the portal knows, what the work is attached to, what evidence exists, who should help, and what must happen next. The hive mind should join through that shared envelope and leave artifacts/evidence behind in the product.
