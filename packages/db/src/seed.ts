@@ -19,6 +19,7 @@ import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
+import { seedDecisionPerspective } from "./seed-decision-perspective.js";
 import {
   SPEACHES_PROVIDER_ID,
   SPEACHES_MODEL_ID,
@@ -2165,6 +2166,11 @@ async function main(): Promise<void> {
     );
   }
   await seedDeliberationPatterns(prisma);
+  const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
+  console.log(
+    `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
+      `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
+  );
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
   await assertAnthropicSubToolCapability();

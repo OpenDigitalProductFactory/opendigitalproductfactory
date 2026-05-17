@@ -69,6 +69,7 @@ export type PerspectiveMaterial = {
   freshness: PerspectiveMaterialFreshness;
   evidenceGrade: PerspectiveEvidenceGrade;
   confidenceWeight: number;
+  principleDirection?: "support" | "oppose" | "neutral";
   reviewStatus: PerspectiveReviewStatus;
   promotionState: PerspectivePromotionState;
   lastValidatedAt: Date | null;
@@ -104,6 +105,7 @@ export type DecisionPerspectiveEvaluationInput = {
   options: string[];
   riskTier: DecisionRiskTier;
   evidence?: DecisionEvidenceItem[];
+  recentOverrideCount?: number;
 };
 
 export type DecisionPerspectiveEvaluationResult = {
@@ -113,6 +115,12 @@ export type DecisionPerspectiveEvaluationResult = {
   profileVersionId: string;
   confidenceBefore: number;
   confidenceAfter: number;
+  confidenceScore: number;
+  coverageGap: boolean;
+  principleConflict: boolean;
+  resolvedProfileChain: string[];
+  materialCount: number;
+  freshnessDistribution: Record<PerspectiveMaterialFreshness, number>;
   riskTier: DecisionRiskTier;
   question: string;
   options: string[];

@@ -102,6 +102,7 @@ describe("evaluateDecisionPerspective", () => {
           ...MARK_DPF_PLATFORM_PROFILE,
           fallbackProfileId: DPF_PRODUCT_DOCTRINE_PROFILE.profileId,
         },
+        riskTier: "low",
         fallbackProfiles: [DPF_PRODUCT_DOCTRINE_PROFILE],
         materials: [
           material({
@@ -118,6 +119,78 @@ describe("evaluateDecisionPerspective", () => {
     expect(result.fallbackProfileId).toBe(DPF_PRODUCT_DOCTRINE_PROFILE.profileId);
   });
 
+  it("keeps current Grade A material above the recommendation threshold", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        riskTier: "low",
+        materials: [
+          material({ materialId: "source-1", confidenceWeight: 0.9 }),
+          material({ materialId: "source-2", confidenceWeight: 0.8 }),
+        ],
+      }),
+    );
+
+    expect(result.outcomeType).toBe("recommend");
+    expect(result.confidenceScore).toBeGreaterThanOrEqual(0.7);
+    expect(result.coverageGap).toBe(false);
+    expect(result.freshnessDistribution).toEqual({
+      current: 2,
+      stale: 0,
+      superseded: 0,
+      contradicted: 0,
+    });
+  });
+
+  it("keeps stale Grade C material below the arbitration threshold", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        riskTier: "low",
+        profile: profile({
+          autonomyPolicy: {
+            allowRecommendation: true,
+            allowArbitration: true,
+            maxRiskForArbitration: "low",
+            minimumConfidenceForRecommendation: 0.4,
+            minimumConfidenceForArbitration: 0.9,
+          },
+        }),
+        materials: [
+          material({ materialId: "stale-1", freshness: "stale", evidenceGrade: "C", confidenceWeight: 1 }),
+          material({ materialId: "stale-2", freshness: "stale", evidenceGrade: "C", confidenceWeight: 1 }),
+        ],
+      }),
+    );
+
+    expect(result.outcomeType).toBe("escalate");
+    expect(result.confidenceScore).toBeLessThan(0.9);
+  });
+
+  it("escalates principle conflict instead of synthesizing a recommendation", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        riskTier: "low",
+        materials: [
+          material({
+            materialId: "principle-support",
+            sourceType: "principle",
+            principleDirection: "support",
+            confidenceWeight: 0.95,
+          }),
+          material({
+            materialId: "principle-oppose",
+            sourceType: "principle",
+            principleDirection: "oppose",
+            confidenceWeight: 0.95,
+          }),
+        ],
+      }),
+    );
+
+    expect(result.outcomeType).toBe("escalate");
+    expect(result.principleConflict).toBe(true);
+    expect(result.rationale).toContain("Principle conflict");
+  });
+
   it("escalates high-risk decisions even when coverage is strong", () => {
     const result = evaluateDecisionPerspective(
       baseInput({
@@ -127,20 +200,20 @@ describe("evaluateDecisionPerspective", () => {
     );
 
     expect(result.outcomeType).toBe("escalate");
-    expect(result.confidenceBefore).toBeGreaterThanOrEqual(0.9);
+    expect(result.confidenceScore).toBeGreaterThanOrEqual(0.7);
     expect(result.rationale).toContain("high-risk");
   });
 
-  it("recommends when confidence is sufficient but arbitration is not allowed", () => {
+  it("recommends high-confidence medium-risk decisions when arbitration is not allowed", () => {
     const result = evaluateDecisionPerspective(
       baseInput({
         riskTier: "medium",
-        materials: [material({ confidenceWeight: 0.75 })],
+        materials: [material({ confidenceWeight: 1 })],
       }),
     );
 
     expect(result.outcomeType).toBe("recommend");
-    expect(result.confidenceBefore).toBeGreaterThanOrEqual(0.7);
+    expect(result.confidenceScore).toBeGreaterThanOrEqual(0.9);
   });
 
   it("arbitrates only when low risk, high confidence, and autonomy policy allow it", () => {

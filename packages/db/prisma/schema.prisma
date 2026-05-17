@@ -8041,6 +8041,7 @@ model PerspectiveMaterial {
   scope            Json                       @default("{}")
   domains          String[]                   @default([])
   freshness        String                     @default("current")
+  evidenceGrade    String                     @default("A")
   stalenessPolicy  Json?
   lastValidatedAt  DateTime?
   confidenceWeight Float                      @default(0.5)
@@ -8055,6 +8056,7 @@ model PerspectiveMaterial {
   @@index([profileId, freshness])
   @@index([profileId, reviewStatus, promotionState])
   @@index([profileVersionId])
+  @@index([evidenceGrade])
   @@index([sourceType])
 }
 
@@ -8113,6 +8115,7 @@ model EscalationCapture {
   criteria            Json                @default("[]")
   rationale           String?             @db.Text
   objectionsResolved  Json                @default("[]")
+  domainClass         String
   candidateMaterial   Boolean             @default(false)
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
@@ -8122,6 +8125,7 @@ model EscalationCapture {
 
   @@index([resolverPrincipalId])
   @@index([resolverUserId])
+  @@index([domainClass])
   @@index([candidateMaterial])
 }
 
