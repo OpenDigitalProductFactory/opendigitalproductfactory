@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/portal-context/invalidation", () => ({
+  revalidatePortalContext: vi.fn(),
+}));
+
 import {
   adoptWorktreeCapsule,
   createWorkCapsule,
@@ -8,6 +12,7 @@ import {
   recordWorkCapsuleEvidence,
   type CapsuleDb,
 } from "./work-capsule-store";
+import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 
 const db = {
   workCapsule: {
@@ -21,6 +26,7 @@ const db = {
   },
   $transaction: vi.fn(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db)),
 };
+const mockRevalidatePortalContext = revalidatePortalContext as ReturnType<typeof vi.fn>;
 
 function resetDbMocks() {
   db.workCapsule.create.mockReset();
@@ -30,6 +36,7 @@ function resetDbMocks() {
   db.workCapsuleActivity.create.mockReset();
   db.$transaction.mockReset();
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
+  mockRevalidatePortalContext.mockReset();
 }
 
 function capsuleDb(): CapsuleDb {
@@ -148,6 +155,7 @@ describe("work capsule store", () => {
         summary: "Vitest passed",
       }),
     }));
+    expect(mockRevalidatePortalContext).toHaveBeenCalledTimes(1);
   });
 
   describe("planCapsuleWorkspace", () => {

@@ -6,6 +6,7 @@ import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
+import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import Link from "next/link";
 import { execSync } from "child_process";
 
@@ -105,6 +106,18 @@ export default async function BuildPage({ searchParams }: PageProps) {
     getFeatureBuilds(session.user.id),
     getPortfoliosForSelect(),
   ]);
+  const portalContext = await resolvePortalContextEnvelope(
+    {
+      pathname: "/build",
+      routeContext: "/build",
+      buildId: buildId ?? null,
+      searchParams: {
+        ...(v ? { v } : {}),
+        ...(buildId ? { buildId } : {}),
+      },
+    },
+    session.user.id,
+  );
 
   const projectBranch = getProjectBranch();
   const submissionBranchShortId = devConfig.clientId
@@ -121,6 +134,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
         projectBranch={projectBranch}
         submissionBranchShortId={submissionBranchShortId}
         initialBuildId={buildId}
+        portalContext={portalContext}
       />
     </section>
   );

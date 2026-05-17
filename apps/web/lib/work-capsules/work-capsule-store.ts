@@ -21,6 +21,7 @@ import {
   type WorkCapsuleSource,
   type WorkCapsuleStatus,
 } from "@/lib/work-capsules";
+import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
 
 export type WorkCapsuleActor = {
   userId: string;
@@ -117,7 +118,7 @@ async function recordActivity(
     actor: WorkCapsuleActor;
   },
 ) {
-  return db.workCapsuleActivity.create({
+  const activity = await db.workCapsuleActivity.create({
     data: {
       workCapsuleId: input.workCapsuleId,
       kind: input.kind,
@@ -127,6 +128,8 @@ async function recordActivity(
       recordedByAgentId: input.actor.agentId,
     },
   });
+  revalidatePortalContext();
+  return activity;
 }
 
 export async function createWorkCapsule(args: {

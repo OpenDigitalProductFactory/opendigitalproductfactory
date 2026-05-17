@@ -93,6 +93,8 @@ The server action `sendMessage` already assembles:
 
 Design consequence: the context overlay should be resolved server-side and exposed to the coworker panel as a compact envelope. It should not let the browser invent context fields that later become audit truth.
 
+**Active-build state limitation.** `BuildStudio.tsx` tracks the currently selected build through a client-side `build-studio-active-build` event, not through the URL. The server-side envelope can only resolve an exact build anchor when `buildId` is present in URL search params. Until active-build selection is URL-backed, the envelope for `/build` without a `buildId` param resolves route-only context and emits a `no_active_build` attention signal rather than guessing from latest-build heuristics. The UI must make this limitation visible and give the user a way to anchor the build in the URL.
+
 ### 3.4 Task and Evidence Foundation
 
 The schema already includes:
@@ -347,6 +349,7 @@ export type AttentionSignal = {
     | "scope_overlap"
     | "build_stalled"
     | "capsule_not_linked"
+    | "no_active_build"
     | "missing_grants"
     | "context_conflict"
     | "source_unavailable"
@@ -359,7 +362,15 @@ export type AttentionSignal = {
 };
 ```
 
-### 7.2 Resolver Input Type
+### 7.2 Envelope Design Rules
+
+1. `envelopeId` is a deterministic hash of route/object/work anchors plus `resolvedAt` bucket. It is used for UI caching and logs, not as durable truth.
+2. The browser can request an envelope but cannot submit envelope facts as authority.
+3. Tool execution receives stable IDs from the server-resolved context, not client-invented context.
+4. If a source is unavailable, the envelope includes a typed missing-source signal and still renders from remaining sources.
+5. Prompt injection defense applies at the projection boundary: user-authored free text is summarized into `promptDigest` and not blindly copied into tool instructions.
+
+### 7.3 Resolver Input Type
 
 The public API of `resolvePortalContextEnvelope` accepts:
 
@@ -375,13 +386,7 @@ export type PortalContextInput = {
 };
 ```
 
-Rules:
-
-1. `envelopeId` is a deterministic hash of route/object/work anchors plus `resolvedAt` bucket. It is used for UI caching and logs, not as durable truth.
-2. The browser can request an envelope but cannot submit envelope facts as authority.
-3. Tool execution receives stable IDs from the server-resolved context, not client-invented context.
-4. If a source is unavailable, the envelope includes a typed missing-source signal and still renders from remaining sources.
-5. Prompt injection defense applies at the projection boundary: user-authored free text is summarized into `promptDigest` and not blindly copied into tool instructions.
+`buildId` must come from URL search params, not from client-side active-build state. See the active-build state limitation in Section 3.3.
 
 ## 8. Context Resolution
 
@@ -444,10 +449,9 @@ Sources:
 
 Resolution order for Build Studio:
 
-1. If `capsuleId` is present, load that capsule and its linked build/backlog/task records.
-2. Else if `buildId` is present, load the build and linked capsule when available.
-3. Else if route is `/build` and the active build thread context is known, resolve active build from the explicit build ID, not from latest build heuristics.
-4. Else resolve route context only and show "no active work object" as a typed signal.
+1. If `capsuleId` is present, load that capsule and its linked build/backlog/task records using `WorkCapsule.featureBuildId`, `backlogItemId`, `epicId`, and `workspaceState`.
+2. Else if `buildId` is present (from URL search params), load the build and its linked capsule via `WorkCapsule.featureBuildId`.
+3. Else resolve route context only and emit a `no_active_build` attention signal. Do not attempt to infer the active build from client state, session data, or latest-build heuristics — the server cannot see the client-selected build without URL backing.
 
 Resolution order for generic routes:
 
@@ -497,17 +501,21 @@ export type HiveMindCandidate = {
 };
 ```
 
+`taskType` maps to the `TaskRun.taskType` field used by the existing coworker runtime for routing and model-tier selection. The resolver must emit a `taskType` that is valid per the current `TaskRun` schema enum; do not invent new values. The UI uses `taskType` only for display labelling; the runtime uses it for dispatch.
+
 ### 8.5 Envelope Caching
 
-`PortalContextEnvelope` is produced by server-side code and cached with Next.js `unstable_cache`.
+`PortalContextEnvelope` is produced by server-side code and cached using Next.js server caching.
 
-Rules:
+**Caching API:** Before implementing, check `next.config.js` for `dynamicIO: true`. If set, use the `"use cache"` directive with `cacheTag()` and `cacheLife()` from `next/cache` — this is the Next.js 15/16 preferred path. If not set, use `unstable_cache` from `next/cache`. Both expose `revalidateTag` for invalidation. Do not mix both patterns in the same file.
+
+Caching rules:
 
 - `resolvedAt` bucket: floor timestamp to the nearest 30 seconds. This keeps the cache warm across sibling render calls on the same page load without serving staleness longer than one work action cycle.
-- `envelopeId`: `sha256(pathname + buildId + capsuleId + threadId + userId + bucketedTimestamp).hex().slice(0, 16)`. Implementers must use Node's built-in `crypto.createHash` — no additional dependency.
+- `envelopeId`: `sha256(pathname + buildId + capsuleId + threadId + userId + bucketedTimestamp).hex().slice(0, 16)`. Use Node's built-in `crypto.createHash` — no additional dependency.
 - Cache key tags: `["portal-context", userId, buildId ?? "", capsuleId ?? "", threadId ?? ""]`. Tag the call so Next.js can targeted-revalidate it.
 - Cache `revalidate`: 30 seconds. This is the outer ceiling; internal resolution may be faster.
-- Invalidation: call `revalidateTag("portal-context")` scoped to the relevant entity ID when `WorkCapsuleActivity`, `TaskRun.status`, or `FeatureBuild.phase` changes.
+- Invalidation: call `revalidateTag("portal-context")` when `WorkCapsuleActivity`, `TaskRun.status`, or `FeatureBuild.phase` changes.
 - The browser receives the resolved envelope as a serialized prop or via a server action; it does not cache the envelope or construct its fields. A Client Component may hold a local reference for the lifetime of the current render only.
 
 ## 9. Hive-Mind Activation Model
@@ -541,9 +549,12 @@ The system creates or reuses a child `TaskRun` with:
 
 - same `contextId`
 - `parentTaskRunId`
-- same Work Capsule and Build Studio anchors in metadata
+- same Work Capsule and Build Studio anchors in `a2aMetadata`
+- `a2aMetadata.hiveMindContextId` and `a2aMetadata.hiveMindRole` to identify the hive invocation
 - current route context and sensitivity
 - clear expected artifact type
+
+**Dedup rule:** Before creating a child `TaskRun`, query for an existing child with the same `parentTaskRunId`, `contextId`, and `hiveMindRole` that is not in a terminal state (`completed`, `failed`, `cancelled`). If one exists, reuse it rather than create a duplicate. Parallel hive invocations for different roles are allowed; parallel invocations for the same role against the same parent are not.
 
 The coworker output becomes a `TaskArtifact` and, when it affects delivery state, Work Capsule or backlog evidence.
 
@@ -599,7 +610,7 @@ For `/build`, the first overlay slice should show:
 - next expected evidence or gate
 - recommended coworker for the next review/handoff
 
-If the Build Studio attachment branch is not merged yet, the UI should show "Capsule not linked" with an action to create/link a capsule through the same Work Capsule store.
+For builds that predate capsule linkage or that were created without a capsule, the UI should show "Capsule not linked" with an action to create/link a capsule through the same Work Capsule store.
 
 ### 10.4 Work Control First Screen
 
@@ -643,11 +654,10 @@ Every implementation plan from this spec must reserve at least 20 percent of imp
 
 Approved refactoring targets:
 
-- extract Build Studio active context normalization out of component-local string handling
-- centralize route/object/work context resolution in `apps/web/lib/portal-context/`
-- replace one-off `/build#<buildId>` handling with a helper that documents the compatibility boundary
-- collapse duplicated Build Studio context loading between coworker prompt assembly and overlay rendering
+- centralize route/object/work context resolution in `apps/web/lib/portal-context/` — this collapses the duplicated Build Studio context assembly that currently lives separately in component-local state, coworker prompt assembly, and overlay rendering
+- replace one-off `/build#<buildId>` handling with a named helper that documents the URL-hash vs search-param compatibility boundary
 - introduce typed presenter functions for overlay rows instead of formatting raw Prisma rows in components
+- extract `BuildStudioHeaderLayout` from `BuildStudio.tsx` to separate header-context concerns from phase-workflow rendering
 - remove any new helper that becomes redundant after the context resolver lands
 
 Not approved:
@@ -674,6 +684,7 @@ Not approved:
 |---|---|
 | Work Capsule source unavailable | Render route/build context and show missing capsule source signal |
 | Build ID has no linked capsule | Render build context and offer create/link action |
+| `/build` route with no `buildId` in URL | Render route-only context with `no_active_build` signal; direct user to select or anchor a build in the URL |
 | Capsule has expired lease | Show lease-expired signal and recommend heartbeat/reassignment |
 | Tool evidence query fails | Render remaining evidence sources and show evidence-source warning |
 | Route data provider fails | Render route definition plus object/work anchors; log structured error |
@@ -725,11 +736,15 @@ Update `sendMessage` context assembly so the server can resolve a portal context
 Required focused tests:
 
 - route resolver maps `/build` with `buildId` to build/capsule/backlog/task anchors
-- route resolver maps `/build/work/[capsuleId]` to capsule/build/backlog anchors
-- missing capsule does not crash envelope resolution
+- route resolver maps `/build` without `buildId` to route-only context with `no_active_build` attention signal
+- route resolver maps `/build/work/[capsuleId]` to capsule/build/backlog anchors using `WorkCapsule.featureBuildId`
+- unknown route returns `unknown_route` attention signal and does not throw
+- missing capsule does not crash envelope resolution; `capsule_not_linked` signal is emitted
 - evidence resolver deduplicates equivalent Build Studio and activity evidence
 - hive resolver recommends UI reviewer for user-facing UI changes
 - hive resolver recommends architect/reviewer before promotion or high-risk scope
+- all hive candidates lacking grants renders empty Hive tab with `missing_grants` signal, no activation buttons
+- hive dedup rule: second invocation with same parent + role + non-terminal state returns existing TaskRun, not a new one
 - drawer renders with theme tokens and no hardcoded colors
 - coworker prompt digest includes stable IDs and excludes raw tool payloads
 
@@ -785,7 +800,8 @@ The first shipped overlay slice is acceptable when:
 
 ## 19. Open Questions
 
-1. Should the overlay drawer live as part of the existing `AgentCoworkerShell` or a sibling shell-level component that the coworker panel can also call into?
+**Open: Q1 — Overlay drawer placement.**
+Should `PortalContextOverlayDrawer` live inside the existing `AgentCoworkerShell` (sharing its open/close state) or as a sibling shell-level component that the coworker panel can also invoke? The trade-off is coupling vs. coordination overhead. This decision affects where the drawer open control sits and whether the coworker panel and overlay drawer can be open simultaneously. **Resolution required before the first implementation PR is opened.**
 
 **Resolved: Q2 — Build Studio attachment dependency.**
 Build Studio attachment has landed on `origin/main` via PR #724. The overlay implementation should consume the landed Work Capsule linkage fields and keep the create/link fallback only for historical or unlinked builds.
