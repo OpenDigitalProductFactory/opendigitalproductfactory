@@ -1,5 +1,9 @@
 import * as crypto from "crypto";
 import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
+import {
+  attachBuildStudioWorkCapsule,
+  type BuildStudioCapsuleDb,
+} from "@/lib/work-capsules/build-studio-attachment";
 
 const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
 const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
@@ -27,12 +31,8 @@ type GovernedBacklogConfig = {
   backlogTeeUpDailyCap: number | null;
 } | null;
 
-type GovernedBacklogTeeUpPrisma = {
-  platformDevConfig: {
-    findUnique(args: any): Promise<any>;
-  };
+type GovernedBacklogTeeUpTx = {
   backlogItem: {
-    findMany(args: any): Promise<any>;
     findUnique(args: any): Promise<any>;
     update(args: any): Promise<any>;
   };
@@ -45,11 +45,32 @@ type GovernedBacklogTeeUpPrisma = {
   buildActivity: {
     create(args: any): Promise<any>;
   };
-  $transaction<T>(callback: (tx: GovernedBacklogTeeUpPrisma) => Promise<T>): Promise<T>;
+  backlogItemActivity: {
+    create(args: any): Promise<any>;
+  };
+  workCapsule: {
+    create(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+    findFirst?(args: any): Promise<any>;
+    update?(args: any): Promise<any>;
+  };
+  workCapsuleActivity: {
+    create(args: any): Promise<any>;
+  };
+};
+
+type GovernedBacklogTeeUpPrisma = GovernedBacklogTeeUpTx & {
+  platformDevConfig: {
+    findUnique(args: any): Promise<any>;
+  };
+  backlogItem: GovernedBacklogTeeUpTx["backlogItem"] & {
+    findMany(args: any): Promise<any>;
+  };
+  $transaction<T>(callback: (tx: GovernedBacklogTeeUpTx) => Promise<T>): Promise<T>;
 };
 
 type PromoteBacklogItemToBuildDraftInput = {
-  tx: GovernedBacklogTeeUpPrisma;
+  tx: GovernedBacklogTeeUpTx;
   itemId: string;
   userId: string;
   governedBacklogEnabled: boolean;
@@ -66,6 +87,7 @@ type PromoteBacklogItemToBuildDraftResult =
     kind: "success";
     build: { id: string; buildId: string };
     backlogItemId: string;
+    capsuleId: string;
   }
   | {
     kind: "error";
@@ -141,6 +163,7 @@ export async function promoteBacklogItemToBuildDraft(
   // BacklogItem isn't linked, mint a solo epic from the item title and link it
   // so the ideate→plan gate clears at promote time.
   let epicSemanticId: string;
+  let epicRowId: string | null = item.epicId ?? null;
   if (item.epicId && item.epic?.epicId) {
     epicSemanticId = item.epic.epicId;
   } else {
@@ -150,6 +173,7 @@ export async function promoteBacklogItemToBuildDraft(
       data: { epicId: epicSemanticId, title: epicTitle, status: "open" },
       select: { id: true, epicId: true },
     });
+    epicRowId = createdEpic.id;
     await tx.backlogItem.update({
       where: { itemId },
       data: { epicId: createdEpic.id },
@@ -193,6 +217,27 @@ export async function promoteBacklogItemToBuildDraft(
     },
   });
 
+  const capsule = await attachBuildStudioWorkCapsule({
+    db: tx as unknown as BuildStudioCapsuleDb,
+    build: {
+      id: created.id,
+      buildId: created.buildId,
+      title: item.title,
+      description: item.body,
+      phase: "ideate",
+    },
+    backlogItem: {
+      id: item.id,
+      itemId: item.itemId,
+      title: item.title,
+      body: item.body,
+      epicId: epicRowId,
+      epicSemanticId,
+      taxonomyNodeId: item.taxonomyNodeId ?? null,
+    },
+    actor: { userId, agentId: null, principalId: null },
+  });
+
   if (activity) {
     await tx.buildActivity.create({
       data: {
@@ -207,6 +252,7 @@ export async function promoteBacklogItemToBuildDraft(
     kind: "success",
     build: created,
     backlogItemId: itemId,
+    capsuleId: capsule.capsuleId,
   };
 }
 
