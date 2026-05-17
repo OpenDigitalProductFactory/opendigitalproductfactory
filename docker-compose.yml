@@ -100,6 +100,10 @@ services:
       # destroy backups. Same path the promoter writes pre-promote dumps to.
       # See docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md.
       - ${DPF_HOST_INSTALL_PATH:-.}/backups:/backups
+      # Writable host mount: lets the portal write .mcp.json to the install
+      # directory at token generation time. Requires DPF_HOST_INSTALL_PATH
+      # to be set in .env (done by the installer at setup time).
+      - ${DPF_HOST_INSTALL_PATH:-.}:/host-dpf
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
