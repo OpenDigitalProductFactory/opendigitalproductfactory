@@ -43,6 +43,7 @@ apps/web/lib/portal-context/cache.ts
 apps/web/lib/portal-context/route-resolver.ts
 apps/web/lib/portal-context/work-resolver.ts
 apps/web/lib/portal-context/evidence-resolver.ts
+apps/web/lib/portal-context/authority-resolver.ts                   # resolves AuthoritySummary from platform role, capsule ownership, and grants
 apps/web/lib/portal-context/hive-mind-resolver.ts
 apps/web/lib/portal-context/prompt-digest.ts
 apps/web/lib/portal-context/index.ts
@@ -53,10 +54,14 @@ apps/web/components/portal-context/PortalContextOverlayDrawer.tsx
 apps/web/components/portal-context/PortalContextTabs.tsx
 apps/web/components/portal-context/PortalContextSummaryRows.tsx
 apps/web/components/portal-context/HiveMindCandidateList.tsx
-apps/web/components/portal-context/EvidenceSummaryList.tsx
+apps/web/components/portal-context/EvidenceSummaryList.tsx          # named *List to avoid collision with existing build/EvidenceSummary.tsx
 apps/web/components/portal-context/PortalContextOverlayDrawer.test.tsx
 apps/web/components/portal-context/PortalContextStrip.test.tsx
+apps/web/components/build/BuildStudioHeaderLayout.tsx               # extracted by Phase 4 refactoring budget; test scaffold already exists
+apps/web/lib/actions/build-read.test.ts                             # does not exist yet; create alongside Phase 8 invalidation wiring
 ```
+
+> **Naming note:** `EvidenceSummaryList.tsx` deliberately differs from the existing `apps/web/components/build/EvidenceSummary.tsx`. `EvidenceSummary.tsx` is Build Studio phase-specific; `EvidenceSummaryList.tsx` is the overlay's cross-surface evidence projection. Do not merge them.
 
 Modify:
 
@@ -176,21 +181,23 @@ pnpm --filter web exec vitest run apps/web/lib/portal-context/portal-context.tes
 - [ ] Unknown routes must return a route-only projection plus an `unknown_route` attention signal, not throw.
 - [ ] Create `apps/web/lib/portal-context/work-resolver.ts`.
 - [ ] Resolve work anchors in this order:
-  - [ ] explicit `capsuleId`
-  - [ ] explicit `buildId`
-  - [ ] explicit `threadId`
-  - [ ] route-only fallback
-- [ ] Query the existing records needed for anchors in one contained resolver. Start with the fields required by `WorkCapsuleAnchor`, `FeatureBuildAnchor`, `WorkBacklogAnchor`, `WorkEpicAnchor`, `TaskRunAnchor`, `AgentThreadAnchor`, and `GitBranchAnchor`.
+  - [ ] explicit `capsuleId` — load `WorkCapsule` and follow `featureBuildId`, `backlogItemId`, `epicId`
+  - [ ] explicit `buildId` — load `FeatureBuild` and follow `WorkCapsule.featureBuildId` in reverse (find capsule where `featureBuildId = buildId`)
+  - [ ] explicit `threadId` — load `AgentThread` by `threadId`; if the thread has a linked `TaskRun`, follow its `contextId` and `buildId` to produce `TaskRunAnchor` and `AgentThreadAnchor` only; do not attempt capsule or backlog resolution from thread alone
+  - [ ] route-only fallback — emit `no_active_build` and return empty work anchors
+- [ ] Query the existing records needed for anchors in one contained resolver. Start with the fields required by `WorkCapsuleAnchor`, `FeatureBuildAnchor`, `WorkBacklogAnchor`, `WorkEpicAnchor`, `TaskRunAnchor`, `AgentThreadAnchor`, and `GitBranchAnchor`. For capsule-to-build linking, read the PR #724 fields already on `WorkCapsule`: `featureBuildId`, `backlogItemId`, `epicId`, and `workspaceState`; do not re-derive these from the build record.
 - [ ] If a build has no linked capsule, emit `capsule_not_linked` with an action href to Work Control/create-link when the existing action surface supports it.
 - [ ] If a capsule lease is expired or stale, emit `lease_expired` or `build_stalled` as appropriate.
 - [ ] Create `apps/web/lib/portal-context/evidence-resolver.ts`.
 - [ ] Summarize existing evidence from Work Capsule activity, backlog evidence activity, tool execution receipts, task artifacts, external evidence, and FeatureBuild evidence fields.
 - [ ] Deduplicate equivalent records by source and canonical record ID.
 - [ ] On source failure, return partial evidence plus `source_unavailable` instead of failing page render.
+- [ ] Create `apps/web/lib/portal-context/authority-resolver.ts`.
+- [ ] Resolve `AuthoritySummary` from: (a) the user's `platformRole`, (b) whether the user is the current capsule executor or has an active scope claim, (c) whether the user holds the promotion reviewer grant for the active build, and (d) the `proposalModeActive` flag from the current route's agent context. Do not duplicate permission checks — read existing role and grant models; do not add new ones.
 - [ ] Create `apps/web/lib/portal-context/hive-mind-resolver.ts`.
-- [ ] Produce deterministic candidates from route domain, current work object, evidence gaps, stalled/build-risk signals, and grants.
+- [ ] Produce deterministic candidates by querying the `Agent` registry for agents whose declared capability tags overlap with the current route domain. Rank by: (1) required-before-promotion agents first, (2) agents matching evidence gap types, (3) agents matching stall/failure signals. Do not use a hardcoded role-to-agent map; read the registry.
 - [ ] Filter activation controls by the current user's capabilities and agent tool grants; unavailable candidates may render as explanation-only rows.
-- [ ] Add tests for build route resolution, capsule route resolution, missing capsule, evidence dedupe, and hive candidate ranking.
+- [ ] Add tests for build route resolution, capsule route resolution, missing capsule, evidence dedupe, hive candidate ranking, unknown route returning `unknown_route` attention signal without throwing, and authority resolver correctly reflecting platform role and capsule executor status.
 
 Expected test command:
 
@@ -209,10 +216,20 @@ pnpm --filter web exec vitest run apps/web/lib/portal-context/portal-context.tes
 export function createPortalContextPromptDigest(envelope: Omit<PortalContextEnvelope, "promptDigest">): string {
   return [
     `Route: ${envelope.route.routeContext}`,
-    envelope.work.featureBuild ? `Build: ${envelope.work.featureBuild.buildId} (${envelope.work.featureBuild.phase})` : null,
-    envelope.work.capsule ? `Capsule: ${envelope.work.capsule.capsuleId} (${envelope.work.capsule.status})` : null,
-    envelope.work.backlogItem ? `Backlog: ${envelope.work.backlogItem.backlogItemId} (${envelope.work.backlogItem.status})` : null,
-    envelope.attention.length ? `Attention: ${envelope.attention.map((item) => item.kind).join(", ")}` : null,
+    envelope.work.featureBuild
+      ? `Build: ${envelope.work.featureBuild.buildId} phase=${envelope.work.featureBuild.phase} status=${envelope.work.featureBuild.status}`
+      : null,
+    envelope.work.capsule
+      ? `Capsule: ${envelope.work.capsule.capsuleId} status=${envelope.work.capsule.status} executor=${envelope.work.capsule.executorKind}`
+      : null,
+    envelope.work.epic ? `Epic: ${envelope.work.epic.epicId}` : null,
+    envelope.work.backlogItem
+      ? `Backlog: ${envelope.work.backlogItem.backlogItemId} status=${envelope.work.backlogItem.status}`
+      : null,
+    envelope.work.branch ? `Branch: ${envelope.work.branch.branchName}` : null,
+    envelope.attention.length
+      ? `Attention: ${envelope.attention.map((s) => `${s.kind}(${s.severity})`).join(", ")}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -230,8 +247,11 @@ export async function resolvePortalContextEnvelope(
 }
 ```
 
-- [ ] Wrap the uncached resolver with `unstable_cache` at the public entry point. Use a 30-second revalidate value and the tags from `portalContextCacheTags`.
-- [ ] Enforce a soft timeout around sub-resolvers. Timeout returns partial route/user context plus `source_unavailable` and `envelope_timeout` attention signals.
+- [ ] Wrap the uncached resolver with Next.js server caching at the public entry point using a 30-second revalidation window and the tags from `portalContextCacheTags`.
+
+  > **Caching API check (Next.js 16):** The codebase currently uses neither `unstable_cache` nor the `"use cache"` directive. Before implementing, check `next.config.js` for `dynamicIO` or `cacheHandlers` flags. If `dynamicIO: true` is set, use the `"use cache"` directive with `cacheTag()`/`cacheLife()` from `next/cache`. If not set, use `unstable_cache` from `next/cache`. Both provide the same tag invalidation API (`revalidateTag`). Do not mix both patterns in the same file.
+
+- [ ] Enforce a soft timeout around sub-resolvers using `Promise.race` with a `setTimeout`-based rejection. Timeout returns partial route/user context plus `source_unavailable` and `envelope_timeout` attention signals. Set the timeout to 3 seconds; do not make it configurable in V1.
 - [ ] Add `revalidatePortalContext(input, userId)` or entity-specific helpers that call `revalidateTag("portal-context")` first, with entity tags ready for narrower invalidation later.
 - [ ] Add tests proving prompt digest includes stable IDs and excludes raw tool payload fields.
 
@@ -240,6 +260,11 @@ Expected test command:
 ```powershell
 pnpm --filter web exec vitest run apps/web/lib/portal-context/prompt-digest.test.ts
 ```
+
+- [ ] Create component stubs required by Phase 4 and Phase 5 before those phases begin:
+  - [ ] `apps/web/components/portal-context/PortalContextStrip.tsx` — stub: accepts `envelope: PortalContextEnvelope | null`, renders `null`
+  - [ ] `apps/web/components/portal-context/PortalContextOverlayDrawer.tsx` — stub: accepts `envelope`, `open`, `onClose`, renders `null`
+  - [ ] Mark both with `// TODO: implement in Phase 6` so they are easy to locate
 
 ---
 
@@ -250,7 +275,7 @@ pnpm --filter web exec vitest run apps/web/lib/portal-context/prompt-digest.test
 - [ ] Add `portalContext?: PortalContextEnvelope | null` to `BuildStudio` props.
 - [ ] Render `PortalContextStrip` near the Build Studio header where it is visible but does not replace existing phase controls.
 - [ ] Add a drawer open control in the strip. The drawer must be controlled by local client state and receive only the serialized envelope.
-- [ ] For the no-explicit-build state, render a route-only strip with "No active work object" as state, not as explanatory instructional copy.
+- [ ] For the no-explicit-build state (`no_active_build` signal), render a route-only strip showing the signal with a link to select a build. Use a compact status label, not explanatory instructional prose.
 - [ ] Keep existing `build-studio-active-build` behavior intact. Do not try to server-resolve the client-selected build until the active build is URL-backed.
 
 Refactoring budget in this phase:
@@ -290,30 +315,33 @@ pnpm --filter web exec vitest run apps/web/components/build/work-control/WorkCon
 
 ## Phase 6 - Overlay UI Components
 
-- [ ] Create `PortalContextStrip.tsx` as a compact client component.
-- [ ] Create `PortalContextOverlayDrawer.tsx` as a right-side drawer using existing portal styling, not a new dependency.
-- [ ] Create `PortalContextTabs.tsx` using local tab markup:
-  - [ ] `role="tablist"` on the tab container
-  - [ ] `role="tab"` on each tab button
-  - [ ] `aria-selected`
-  - [ ] `aria-controls`
-  - [ ] visible focus states
-  - [ ] keyboard arrow navigation if focus movement is not already supplied by a local helper
+- [ ] Replace the stubs from Phase 3 with full implementations: `PortalContextStrip.tsx` as a compact client component, `PortalContextOverlayDrawer.tsx` as a right-side drawer using existing portal styling.
+- [ ] Create `PortalContextTabs.tsx` with correct ARIA tab pattern — do not copy `ArtifactTabs.tsx` verbatim as it uses `aria-pressed` instead of the proper tab role:
+  - [ ] `role="tablist"` on the container
+  - [ ] `role="tab"` + `aria-selected` on each tab button (not `aria-pressed`)
+  - [ ] `id` on each tab panel; `aria-controls` on each button pointing to its panel id
+  - [ ] `tabIndex={selected ? 0 : -1}` so only the active tab is in the tab order
+  - [ ] Arrow key navigation: left/right arrows move focus between tabs, Home/End jump to first/last
+  - [ ] Visible focus ring using `focus-visible` styles
 - [ ] Create dense row/list components:
   - [ ] `PortalContextSummaryRows`
   - [ ] `HiveMindCandidateList`
   - [ ] `EvidenceSummaryList`
 - [ ] Use lucide icons where they clarify status or actions.
-- [ ] Use only DPF theme variables:
-  - [ ] `text-[var(--dpf-text)]`
-  - [ ] `text-[var(--dpf-muted)]`
-  - [ ] `bg-[var(--dpf-surface-1)]`
-  - [ ] `bg-[var(--dpf-surface-2)]`
-  - [ ] `border-[var(--dpf-border)]`
-  - [ ] `text-[var(--dpf-accent)]`
-  - [ ] `bg-[var(--dpf-bg)]`
+- [ ] Use only DPF theme variables. All exist in `apps/web/app/globals.css`:
+  - [ ] `text-[var(--dpf-text)]` — primary text
+  - [ ] `text-[var(--dpf-text-secondary)]` — inactive tabs, secondary labels
+  - [ ] `text-[var(--dpf-muted)]` — placeholder / faint text
+  - [ ] `bg-[var(--dpf-surface-1)]` — elevated surface (selected tab, cards)
+  - [ ] `bg-[var(--dpf-surface-2)]` — base surface (tab bar background)
+  - [ ] `bg-[var(--dpf-surface-3)]` — recessed surface where needed
+  - [ ] `border-[var(--dpf-border)]` — standard border
+  - [ ] `border-[var(--dpf-border-strong)]` — emphasis border
+  - [ ] `text-[var(--dpf-accent)]` — primary action / link colour
+  - [ ] `bg-[var(--dpf-bg)]` — page background
+  - [ ] For `AttentionSignal.severity` colouring: `--dpf-error` (error), `--dpf-warning` (warning), `--dpf-info` (info), `--dpf-success` (success). Use `--dpf-state-error` and `--dpf-state-warning` for background chips.
 - [ ] Avoid nested cards. Use full-width bands, rows, and compact panels.
-- [ ] Add component tests for tabs, missing grants, empty hive state, evidence gaps, and attention signals.
+- [ ] Add component tests for tabs (correct ARIA attributes, keyboard navigation), missing grants, empty hive state, evidence gaps, and all three attention signal severity levels.
 - [ ] Add a static test or assertion that component source does not introduce hardcoded Tailwind color classes or inline hex colors.
 
 Expected focused tests:
@@ -330,13 +358,16 @@ pnpm --filter web exec vitest run apps/web/components/portal-context/PortalConte
 - [ ] Include `promptDigest` and stable anchor IDs in coworker prompt assembly alongside the current route/build context.
 - [ ] Do not include full envelope JSON by default.
 - [ ] Preserve existing agent routing, grant checks, proposal controls, and `ToolExecution` audit writes.
-- [ ] For explicit hive invocation, create or reuse a child `TaskRun` with:
-  - [ ] same `contextId`
-  - [ ] `parentTaskRunId`
-  - [ ] current Work Capsule and Build Studio anchors in typed metadata
-  - [ ] `source = "coworker"`
-  - [ ] `a2aMetadata.hiveMindContextId`
-  - [ ] `a2aMetadata.hiveMindRole`
+- [ ] For explicit hive invocation, apply the dedup rule before creating a child `TaskRun`:
+  - [ ] Query for an existing child where `parentTaskRunId` matches, `a2aMetadata.hiveMindRole` matches, and `status` is not in `["completed", "failed", "cancelled"]`
+  - [ ] If a matching non-terminal child exists, reuse it; do not create a duplicate
+  - [ ] If no match, create a new child `TaskRun` with:
+    - [ ] same `contextId`
+    - [ ] `parentTaskRunId`
+    - [ ] current Work Capsule and Build Studio anchors in `a2aMetadata`
+    - [ ] `source = "coworker"`
+    - [ ] `a2aMetadata.hiveMindContextId`
+    - [ ] `a2aMetadata.hiveMindRole`
 - [ ] Persist meaningful coworker outputs as `TaskArtifact`, and when delivery state changes, record Work Capsule or backlog evidence through existing actions.
 - [ ] Add tests proving prompt digest appears for supported Build Studio/Work Control routes and raw tool payloads do not.
 
@@ -349,6 +380,8 @@ pnpm --filter web exec vitest run apps/web/lib/actions/agent-coworker-server.tes
 ---
 
 ## Phase 8 - Invalidation Hooks
+
+> **Ordering note:** Wiring invalidation at Phase 8 means the cache may be stale during Phases 4–7 testing. That is acceptable for CI test runs. For live UX verification in Phase 9, wire at least the broad `revalidateTag("portal-context")` call into `WorkCapsuleActivity` creation before running the Phase 9 steps.
 
 - [ ] Identify existing mutation points for:
   - [ ] `WorkCapsuleActivity` creation
@@ -372,8 +405,9 @@ pnpm --filter web exec vitest run apps/web/lib/actions/work-capsules.test.ts app
 - [ ] Start or rebuild the Docker-served portal using the repo-approved process for this worktree.
 - [ ] Read `ADMIN_PASSWORD` from repo-root `.env`.
 - [ ] Log in as `admin@dpf.local`.
-- [ ] Open `/build`.
-- [ ] Verify the context strip renders without overlap at desktop and mobile widths.
+- [ ] Open `/build` (no `buildId` in URL).
+- [ ] Verify the context strip renders the `no_active_build` attention signal and a link to select a build — not a blank strip or an error.
+- [ ] Verify the strip renders without layout overlap at desktop and mobile widths.
 - [ ] Open `/build?buildId=<known-build-id>`.
 - [ ] Verify build, capsule/backlog if linked, evidence, and attention signals are correct.
 - [ ] Open the overlay drawer.
@@ -398,7 +432,7 @@ pnpm --filter web exec vitest run apps/web/lib/portal-context/portal-context.tes
 - [ ] Run affected existing tests.
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/build/BuildStudioHeaderLayout.test.tsx apps/web/components/build/work-control/WorkControlPanel.test.tsx apps/web/lib/actions/agent-coworker-server.test.ts apps/web/lib/actions/agent-coworker-external.test.ts
+pnpm --filter web exec vitest run apps/web/components/build/BuildStudioHeaderLayout.test.tsx apps/web/components/build/work-control/WorkControlPanel.test.tsx apps/web/lib/actions/agent-coworker-server.test.ts apps/web/lib/actions/agent-coworker-external.test.ts apps/web/lib/actions/work-capsules.test.ts apps/web/lib/actions/build-read.test.ts
 ```
 
 - [ ] Run typecheck.
@@ -424,7 +458,8 @@ pnpm --filter web build
 
 ## Acceptance Checklist
 
-- [ ] `/build` shows active context without relying on chat history.
+- [ ] `/build` without a `buildId` shows `no_active_build` attention signal and a select-build link, not a blank or error state.
+- [ ] `/build?buildId=...` shows active context without relying on chat history.
 - [ ] `/build/work` and `/build/work/[capsuleId]` show capsule context and evidence health.
 - [ ] Coworker prompts for supported routes receive the same stable work anchors shown in the UI.
 - [ ] Hive-mind recommendations are explainable, grant-aware, and tied to the current work object.
