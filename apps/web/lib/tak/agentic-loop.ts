@@ -856,12 +856,32 @@ export async function runAgenticLoop(params: {
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
-    const result = await routeAndCall(
-      compactAgenticMessages(messages),
-      systemPrompt,
-      sensitivity,
-      { ...enrichedRouteOptions, previousResponseId },
-    );
+    let result: RoutedInferenceResult;
+    try {
+      result = await routeAndCall(
+        compactAgenticMessages(messages),
+        systemPrompt,
+        sensitivity,
+        { ...enrichedRouteOptions, previousResponseId },
+      );
+    } catch (routeErr) {
+      const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
+      console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
+      const isTooLarge = msg.startsWith("REQUEST_TOO_LARGE:");
+      return {
+        content: isTooLarge
+          ? "Your conversation is too long for this AI provider. Please start a new thread to continue."
+          : "The AI provider is temporarily unavailable. Please try again in about 30 seconds.",
+        providerId: "unknown",
+        modelId: "unknown",
+        downgraded: false,
+        downgradeMessage: null,
+        totalInputTokens,
+        totalOutputTokens,
+        executedTools,
+        proposal: null,
+      };
+    }
     // Track response ID for conversation chaining (Responses API)
     if (result.responseId) {
       previousResponseId = result.responseId;

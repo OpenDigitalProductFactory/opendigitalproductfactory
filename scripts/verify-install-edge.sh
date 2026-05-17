@@ -2,16 +2,21 @@
 # scripts/verify-install-edge.sh
 #
 # One-command hardware verification for the DPF installer + Edge Node
-# end-to-end path. Produces one tarball + one paste-able summary so an
-# operator can run a single command and file the result against the
-# install_verification.md issue template (.github/ISSUE_TEMPLATE/).
+# end-to-end path on Linux and macOS. Produces one tarball + one
+# paste-able summary so an operator can run a single command and file
+# the result against the install_verification.md issue template.
 #
 # Covers verification ledger rows 1, 2, 3, and 4 in a single sweep:
 #   1. Installer ran successfully (Outcome 1/2: hardware verification)
-#   2. Portal /api/health responds (Outcome 2: Linux end-to-end)
+#   2. Portal /api/health responds (Outcome 2: Linux / macOS end-to-end)
 #   3. Prometheus targets are scrape-healthy (Outcome 3: observability)
 #   4. Edge Node enrolls + heartbeats + submits a discovery run
 #      (Outcome 4: Edge Node end-to-end)
+#
+# On macOS (Darwin) the script additionally checks:
+#   - Architecture (arm64 = Apple Silicon = supported)
+#   - LaunchAgent autostart registration
+#   - Docker Desktop Model Runner reachability
 #
 # Designed to be safe to run on a host that already has DPF installed
 # (default), OR to bootstrap a fresh host first (--bootstrap).
@@ -157,6 +162,56 @@ step "Capturing host fingerprint"
   grep "^DPF_INSTALLER_VERSION" install-dpf.sh 2>&1 || echo "install-dpf.sh not found"
 } > "$WORK_DIR/env-fingerprint.txt" 2>&1
 ok "Fingerprint captured ($(wc -l < "$WORK_DIR/env-fingerprint.txt") lines)"
+
+# ── Step 1b: macOS-specific checks (Darwin only) ──────────────────────────
+if [ "$(uname -s)" = "Darwin" ]; then
+  step "macOS-specific checks"
+
+  # Architecture — Apple Silicon (arm64) is the supported target.
+  ARCH="$(uname -m)"
+  if [ "$ARCH" = "arm64" ]; then
+    ok "Architecture: arm64 (Apple Silicon)"
+    record_step "Architecture (macOS)" "PASS" "arm64 — Apple Silicon"
+  else
+    warn "Architecture: $ARCH — Intel Macs run under Rosetta with a performance penalty"
+    record_step "Architecture (macOS)" "FAIL" "$ARCH — pass --force-unsupported-host to install-dpf.sh if needed"
+  fi
+
+  # LaunchAgent autostart (installed by default; skip with --no-autostart).
+  LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/local.dpf-autostart.plist"
+  if [ -f "$LAUNCH_AGENT_PLIST" ]; then
+    if launchctl list 2>/dev/null | grep -q "local.dpf-autostart"; then
+      ok "LaunchAgent loaded: local.dpf-autostart"
+      record_step "LaunchAgent autostart (macOS)" "PASS" "plist present and loaded by launchctl"
+    else
+      warn "LaunchAgent plist present but not loaded by launchctl"
+      record_step "LaunchAgent autostart (macOS)" "FAIL" "run: launchctl load '$LAUNCH_AGENT_PLIST'"
+    fi
+  else
+    warn "LaunchAgent not found at $LAUNCH_AGENT_PLIST"
+    record_step "LaunchAgent autostart (macOS)" "SKIP" "plist missing — was --no-autostart used?"
+  fi
+
+  # Docker Desktop Model Runner (requires Docker Desktop ≥ 4.40).
+  # SKIP rather than FAIL if unreachable — LLM_BASE_URL may point to an external provider.
+  MODEL_RUNNER_URL="http://model-runner.docker.internal/engines/v1/models"
+  if curl --silent --max-time 5 --fail "$MODEL_RUNNER_URL" -o /dev/null 2>/dev/null; then
+    ok "Docker Model Runner reachable"
+    record_step "Docker Model Runner (macOS)" "PASS"
+  else
+    warn "Docker Model Runner not reachable — OK if LLM_BASE_URL is set to an external provider"
+    record_step "Docker Model Runner (macOS)" "SKIP" "unreachable at $MODEL_RUNNER_URL"
+  fi
+
+  # Note the known bridge-mode limitation in the fingerprint for context.
+  {
+    echo
+    echo "## macOS Edge Node note"
+    echo "Edge Node runs inside Docker Desktop's Linux VM (bridge mode)."
+    echo "Discovery sees VM interfaces (172.x.x.x), not your Mac's real NICs."
+    echo "This is expected until the native macOS Edge Node binary (T3) ships."
+  } >> "$WORK_DIR/env-fingerprint.txt"
+fi
 
 # ── Step 2: optional install ──────────────────────────────────────────────
 if [ "$DPF_VERIFY_BOOTSTRAP" = "1" ]; then

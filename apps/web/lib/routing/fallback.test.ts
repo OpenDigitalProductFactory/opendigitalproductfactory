@@ -409,15 +409,104 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
     });
   });
 
-  describe("provider overload (529)", () => {
-    it("degrades the model and schedules recovery without disabling the provider", async () => {
-      const err = new InferenceError(
-        "API Error: 529 Overloaded. This is a server-side issue, usually temporary.",
-        "overloaded",
-        "prov1",
-        529,
+  // ── transient (5xx / 408) ──────────────────────────────────────────────────
+
+  describe("transient errors (500/502/503/504/408)", () => {
+    it("retries the pinned endpoint once after 10 s on transient error then succeeds", async () => {
+      const transientErr = new InferenceError("Transient error (500) from prov1", "transient", "prov1", 500);
+      mockCallProvider
+        .mockRejectedValueOnce(transientErr)
+        .mockResolvedValueOnce({ content: "ok", inputTokens: 10, outputTokens: 5, inferenceMs: 100 });
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
       );
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+
+      expect(result.content).toBe("ok");
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("degrades model and schedules recovery after transient retry also fails", async () => {
+      const err = new InferenceError("Transient error (503) from prov1", "transient", "prov1", 503);
       mockCallProvider.mockRejectedValue(err);
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
+        where: { providerId: "prov1", modelId: "model1" },
+        data: { modelStatus: "degraded" },
+      });
+      expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+    });
+
+    it("does not retry transient on a fallback endpoint", async () => {
+      const decision: RouteDecision = {
+        selectedEndpoint: "prov1",
+        selectedModelId: "model1",
+        reason: "test",
+        fitnessScore: 1,
+        fallbackChain: ["fallback-prov"],
+        candidates: [
+          { endpointId: "prov1", providerId: "prov1", modelId: "model1",
+            endpointName: "Prov1", fitnessScore: 1, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+          { endpointId: "fallback-prov", providerId: "fallback-prov", modelId: "fb-model",
+            endpointName: "Fallback", fitnessScore: 0.5, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+        ],
+        excludedCount: 0, excludedReasons: [], policyRulesApplied: [],
+        taskType: "test", sensitivity: "internal" as SensitivityLevel, timestamp: new Date(),
+      };
+
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "fallback-prov", name: "Fallback" });
+
+      const pinnedErr = new InferenceError("pinned rate limit", "rate_limit", "prov1", 429);
+      const fallbackTransient = new InferenceError("Transient 502 from fallback", "transient", "fallback-prov", 502);
+      // pinned: rate_limit → retry (30s wait) → rate_limit → degrade → fallback: transient (no retry)
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(fallbackTransient);
+
+      const pending = callWithFallbackChain(
+        decision,
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      // pinned×2 (rate limit + retry) + fallback×1 (no transient retry)
+      expect(mockCallProvider).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ── billing (402) ──────────────────────────────────────────────────────────
+
+  describe("billing error (402)", () => {
+    function throwBilling() {
+      const err = new InferenceError("Billing error on prov1", "billing", "prov1", 402);
+      mockCallProvider.mockRejectedValue(err);
+    }
+
+    it("disables the entire provider", async () => {
+      throwBilling();
 
       await expect(
         callWithFallbackChain(
@@ -427,12 +516,146 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
+      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
+        where: { providerId: "prov1" },
+        data: { status: "disabled" },
+      });
+    });
+
+    it("does not degrade the model", async () => {
+      throwBilling();
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── request_too_large (413) ────────────────────────────────────────────────
+
+  describe("request_too_large (413)", () => {
+    it("throws immediately without trying fallback endpoints", async () => {
+      const err = new InferenceError("Request too large for prov1", "request_too_large", "prov1", 413);
+      mockCallProvider.mockRejectedValueOnce(err);
+
+      const decision: RouteDecision = {
+        selectedEndpoint: "prov1",
+        selectedModelId: "model1",
+        reason: "test",
+        fitnessScore: 1,
+        fallbackChain: ["fallback-prov"],
+        candidates: [
+          { endpointId: "prov1", providerId: "prov1", modelId: "model1",
+            endpointName: "Prov1", fitnessScore: 1, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+          { endpointId: "fallback-prov", providerId: "fallback-prov", modelId: "fb-model",
+            endpointName: "Fallback", fitnessScore: 0.5, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+        ],
+        excludedCount: 0, excludedReasons: [], policyRulesApplied: [],
+        taskType: "test", sensitivity: "internal" as SensitivityLevel, timestamp: new Date(),
+      };
+
+      await expect(
+        callWithFallbackChain(
+          decision,
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow("REQUEST_TOO_LARGE");
+
+      expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── provider overload (529) ────────────────────────────────────────────────
+
+  describe("provider overload (529)", () => {
+    it("degrades model and schedules recovery without disabling provider when retry also fails", async () => {
+      const err = new InferenceError("Provider overloaded on prov1", "overloaded", "prov1", 529);
+      mockCallProvider.mockRejectedValue(err);
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "prov1", modelId: "model1" },
         data: { modelStatus: "degraded" },
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+    });
+
+    it("retries the pinned endpoint once after 15 s on overload then succeeds", async () => {
+      const overloadErr = new InferenceError("Provider overloaded on prov1", "overloaded", "prov1", 529);
+      mockCallProvider
+        .mockRejectedValueOnce(overloadErr)
+        .mockResolvedValueOnce({ content: "ok after retry", inputTokens: 10, outputTokens: 5, inferenceMs: 100 });
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      const result = await pending;
+
+      expect(result.content).toBe("ok after retry");
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("does not retry overload on a fallback (non-pinned) endpoint", async () => {
+      const decision: RouteDecision = {
+        selectedEndpoint: "prov1",
+        selectedModelId: "model1",
+        reason: "test",
+        fitnessScore: 1,
+        fallbackChain: ["fallback-prov"],
+        candidates: [
+          { endpointId: "prov1", providerId: "prov1", modelId: "model1",
+            endpointName: "Prov1", fitnessScore: 1, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+          { endpointId: "fallback-prov", providerId: "fallback-prov", modelId: "fb-model",
+            endpointName: "Fallback", fitnessScore: 0.5, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+        ],
+        excludedCount: 0, excludedReasons: [], policyRulesApplied: [],
+        taskType: "test", sensitivity: "internal" as SensitivityLevel, timestamp: new Date(),
+      };
+
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "fallback-prov", name: "Fallback" });
+
+      const pinnedErr = new InferenceError("pinned auth fail", "auth", "prov1", 401);
+      const overloadErr = new InferenceError("Provider overloaded on fallback", "overloaded", "fallback-prov", 529);
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(overloadErr);
+
+      const pending = callWithFallbackChain(
+        decision,
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
     });
   });
 });
