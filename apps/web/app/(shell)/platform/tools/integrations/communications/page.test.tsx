@@ -9,6 +9,14 @@ vi.mock("@/lib/communications/channel-binding-store", () => ({
   listCommunicationChannelBindings: mocks.listCommunicationChannelBindings,
 }));
 
+// Slice 1 / Task 11: stub the STT card so its prisma-touching server logic
+// doesn't run during this page-level test (the card has its own unit tests).
+// Return a sync element rather than an async server component — the test's
+// `renderToStaticMarkup` cannot suspend on async children.
+vi.mock("@/components/admin/SpeechToTextCard", () => ({
+  SpeechToTextCard: () => "[SpeechToTextCard]",
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.listCommunicationChannelBindings.mockResolvedValue({
