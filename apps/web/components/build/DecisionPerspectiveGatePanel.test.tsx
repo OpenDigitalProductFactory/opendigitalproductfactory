@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -100,5 +102,50 @@ describe("DecisionPerspectiveGatePanel", () => {
     expect(html).toContain("Deferral open");
     expect(html).toContain("Capture missing evidence");
     expect(html).toContain("No sources");
+  });
+
+  it("collects human direction before submitting an escalation capture", async () => {
+    const onCapture = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DecisionPerspectiveGatePanel
+        interaction={interaction({
+          outcomeType: "escalate",
+          confidenceScore: 0.6,
+          confidenceBefore: 0.78,
+          confidenceAfter: 0.6,
+        })}
+        onCapture={onCapture}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
+    fireEvent.change(screen.getByLabelText("Human direction"), {
+      target: { value: "Proceed after the owner confirms the implementation scope." },
+    });
+    fireEvent.change(screen.getByLabelText("Decision criteria"), {
+      target: { value: "Owner accepted scope\nNo unresolved objections" },
+    });
+    fireEvent.change(screen.getByLabelText("Rationale"), {
+      target: { value: "The escalation resolved the ambiguity and preserved the decision criteria." },
+    });
+    fireEvent.change(screen.getByLabelText("Resolved objections"), {
+      target: { value: "Timing concern resolved" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Promote as candidate decision material" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save WWMD capture" }));
+
+    await waitFor(() => {
+      expect(onCapture).toHaveBeenCalledWith({
+        interactionId: "DI-ABC123",
+        outcomeType: "escalate",
+        answer: "Proceed after the owner confirms the implementation scope.",
+        criteriaText: "Owner accepted scope\nNo unresolved objections",
+        rationale: "The escalation resolved the ambiguity and preserved the decision criteria.",
+        objectionsResolvedText: "Timing concern resolved",
+        suggestedSourceTypesText: "",
+        candidateMaterial: true,
+      });
+    });
   });
 });
