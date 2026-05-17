@@ -10,11 +10,23 @@ import {
   type BackupRunListItem,
   type BackupRunLog,
 } from "@/lib/actions/backups";
+import {
+  listRestoreRunsAction,
+  previewRestoreAction,
+} from "@/lib/actions/backup-restore";
 import type { ReadinessSummary } from "@/lib/operate/backups/types";
+import type {
+  RestoreImpactPreview,
+  RestoreRunListItem,
+} from "@/lib/operate/backups/restore-types";
+
+import { RestoreConfirmModal } from "./RestoreConfirmModal";
+import { RestoreHistorySection } from "./RestoreHistorySection";
 
 interface Props {
   initialReadiness: ReadinessSummary;
   initialRuns: BackupRunListItem[];
+  initialRestoreRuns: RestoreRunListItem[];
 }
 
 function formatBytes(n: number | null): string {
@@ -59,21 +71,50 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-export function BackupsClient({ initialReadiness, initialRuns }: Props) {
+export function BackupsClient({
+  initialReadiness,
+  initialRuns,
+  initialRestoreRuns,
+}: Props) {
   const [readiness, setReadiness] = useState(initialReadiness);
   const [runs, setRuns] = useState(initialRuns);
+  const [restoreRuns, setRestoreRuns] = useState(initialRestoreRuns);
   const [pending, startTransition] = useTransition();
   const [openLog, setOpenLog] = useState<{ runId: string; data: BackupRunLog } | null>(null);
   const [loadingLog, setLoadingLog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restorePreview, setRestorePreview] = useState<RestoreImpactPreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
 
   async function refresh() {
-    const [next, list] = await Promise.all([
+    const [next, list, restores] = await Promise.all([
       getBackupReadinessAction(),
       listBackupRunsAction({ limit: 50 }),
+      listRestoreRunsAction({ limit: 20 }),
     ]);
     setReadiness(next);
     setRuns(list);
+    setRestoreRuns(restores);
+  }
+
+  async function handleOpenRestore(runId: string) {
+    setError(null);
+    setLoadingPreview(runId);
+    try {
+      const preview = await previewRestoreAction(runId);
+      setRestorePreview(preview);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingPreview(null);
+    }
+  }
+
+  function handleRestoreConfirmed() {
+    setRestorePreview(null);
+    refresh().catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : String(e)),
+    );
   }
 
   function handleTrigger() {
@@ -253,6 +294,17 @@ export function BackupsClient({ initialReadiness, initialRuns }: Props) {
                     <Td>{formatBytes(r.sizeBytes)}</Td>
                     <Td>{formatDurationMs(r.durationMs)}</Td>
                     <Td className="text-right">
+                      {r.status === "ok" && !r.prunedAt && (
+                        <button
+                          onClick={() => handleOpenRestore(r.id)}
+                          disabled={loadingPreview !== null}
+                          className="mr-3 hover:underline disabled:opacity-50"
+                          style={{ color: "#f87171" }}
+                          title="Restore the database from this backup"
+                        >
+                          {loadingPreview === r.id ? "Loading…" : "Restore…"}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleOpenLog(r.id)}
                         disabled={loadingLog}
@@ -276,6 +328,18 @@ export function BackupsClient({ initialReadiness, initialRuns }: Props) {
           </div>
         )}
       </section>
+
+      {/* ─── Restore history (Slice 2) ──────────────────────────────────── */}
+      <RestoreHistorySection runs={restoreRuns} />
+
+      {/* ─── Restore wizard modal (Slice 2) ─────────────────────────────── */}
+      {restorePreview && (
+        <RestoreConfirmModal
+          preview={restorePreview}
+          onClose={() => setRestorePreview(null)}
+          onConfirmed={handleRestoreConfirmed}
+        />
+      )}
 
       {/* ─── Log drawer ─────────────────────────────────────────────────── */}
       {openLog && (
