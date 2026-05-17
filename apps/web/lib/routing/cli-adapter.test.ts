@@ -412,7 +412,8 @@ describe("cliAdapter", () => {
       const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
       const mcpWrite = execCalls.find((c) => c.includes("cli-mcp-"));
       expect(mcpWrite).toBeDefined();
-      // chmod 644 so the Claude CLI process (different user) can read the config
+      // chown to node user + chmod 644 so the Claude CLI process can read the config
+      expect(mcpWrite).toContain("chown node:node");
       expect(mcpWrite).toContain("chmod 644");
     });
 

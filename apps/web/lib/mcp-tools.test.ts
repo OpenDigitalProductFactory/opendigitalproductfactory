@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getAvailableTools, sanitizeToolParams } from "./mcp-tools";
+import {
+  buildEndpointTestRunRequest,
+  getAvailableTools,
+  inferEndpointIdFromRouteContext,
+  sanitizeToolParams,
+} from "./mcp-tools";
 import { getActionsForRoute } from "./agent-action-registry";
 
 describe("mcp tools", () => {
@@ -246,6 +251,44 @@ describe("sanitizeToolParams", () => {
     // All string fields are empty but there's a non-string field — string check still applies
     // to string-typed fields only. Both string fields are empty → stripped.
     expect(result).not.toHaveProperty("proposeNew");
+  });
+});
+
+describe("endpoint test tool scope", () => {
+  it("infers the provider page endpoint and defaults coworker diagnostics to probes only", () => {
+    expect(inferEndpointIdFromRouteContext("/platform/ai/providers/gemini")).toBe("gemini");
+
+    const request = buildEndpointTestRunRequest({}, { routeContext: "/platform/ai/providers/gemini" });
+
+    expect(request).toEqual({
+      endpointId: "gemini",
+      probesOnly: true,
+      allEndpoints: false,
+      allModels: false,
+    });
+  });
+
+  it("requires explicit all-endpoint scope away from a provider route", () => {
+    const request = buildEndpointTestRunRequest({}, { routeContext: "/workspace" });
+
+    expect(request.error).toMatch(/endpointId or allEndpoints/);
+  });
+
+  it("preserves explicit full all-model endpoint test requests", () => {
+    const request = buildEndpointTestRunRequest({
+      endpointId: "gemini",
+      modelId: "gemini-2.5-flash",
+      probesOnly: false,
+      allModels: true,
+    }, { routeContext: "/platform/ai/providers/anthropic-sub" });
+
+    expect(request).toEqual({
+      endpointId: "gemini",
+      modelId: "gemini-2.5-flash",
+      probesOnly: false,
+      allEndpoints: false,
+      allModels: true,
+    });
   });
 });
 
