@@ -33,7 +33,10 @@ type ResolvedAuth = ResolvedMcpToken & {
   source: "pat" | "session-jwt";
 };
 
-const PROTOCOL_VERSION = "2025-11-25";
+// Versions we can speak, newest first. We echo back the highest version the
+// client supports so older clients (e.g. Claude Code pre-2025-11-25) connect.
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"] as const;
+const FALLBACK_PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "dpf-platform";
 const SERVER_VERSION = "1.0.0";
 
@@ -254,9 +257,11 @@ async function handleTasksSubmit(
   return jsonRpcOk(id, outcome.result);
 }
 
-async function handleInitialize(id: JsonRpcId): Promise<Response> {
+async function handleInitialize(id: JsonRpcId, params?: Record<string, unknown>): Promise<Response> {
+  const requested = typeof params?.["protocolVersion"] === "string" ? params["protocolVersion"] : null;
+  const negotiated = SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === requested) ?? FALLBACK_PROTOCOL_VERSION;
   return jsonRpcOk(id, {
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion: negotiated,
     capabilities: {
       tools: { listChanged: false },
     },
@@ -452,7 +457,7 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleInitialize(body.id ?? null);
+        return await handleInitialize(body.id ?? null, body.params);
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });
