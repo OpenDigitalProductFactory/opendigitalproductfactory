@@ -233,26 +233,41 @@ the path from "early access" to "GA" runs through the community.
 If you ran the install above on a real Mac, **please file a quick
 report** — happy paths and failures are equally valuable.
 
-**One-minute report:**
+**One-command report (fastest path):**
 
-1. Open a [new GitHub issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new)
-   titled `Install verification — macOS <version> <arch>`
-   (example: `Install verification — macOS 14.5 arm64 (M2 Pro)`).
-2. Paste the output of:
+```bash
+# Already installed — just run the verifier:
+bash scripts/verify-install-edge.sh
+
+# Fresh host — bootstrap + verify in one shot:
+bash scripts/verify-install-edge.sh --bootstrap
+```
+
+The script captures a `~/.dpf/verify-bundle-<timestamp>.tar.gz` with a
+host fingerprint, portal health, Prometheus targets, Edge Node lifecycle
+log, and a paste-able summary — including macOS-specific checks for
+architecture (arm64), LaunchAgent autostart, and Docker Model Runner.
+
+Open a [new GitHub issue](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new)
+titled `Install verification — macOS <version> <arch>`
+(example: `Install verification — macOS 14.5 arm64 (M2 Pro)`) and
+attach the tarball. Secrets in the bundle are redacted automatically.
+
+**Manual report (if the verifier itself fails to run):**
+
+1. Paste the output of:
    ```bash
    sw_vers && uname -srm
    docker --version 2>/dev/null
    echo "DPF version: $(grep DPF_INSTALLER_VERSION install-dpf.sh)"
    ```
-3. Note which steps you completed from the
+2. Note which steps you completed from the
    [verification runbook §2](verification-runbook.md#2-macos-apple-silicon-end-to-end-install)
    and which (if any) failed.
-4. Attach the doctor bundle:
+3. Attach the doctor bundle:
    ```bash
    bash install-dpf.sh doctor
-   # Then attach ~/.dpf/doctor-<timestamp>.tar.gz to the issue.
-   # Secrets are redacted automatically; you can review the bundle
-   # before sending.
+   # Attach ~/.dpf/doctor-<timestamp>.tar.gz to the issue.
    ```
 
 The verification runbook also covers:

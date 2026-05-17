@@ -99,6 +99,8 @@ export async function callWithFallbackChain(
 
   const attempts: Array<{ endpointId: string; error: string }> = [];
   let rateLimitRetried = false;
+  let overloadRetried = false;
+  let transientRetried = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
 
   for (let i = 0; i < chain.length; i++) {
@@ -212,11 +214,51 @@ export async function callWithFallbackChain(
           scheduleRecovery(entry.providerId, entry.modelId);
 
         } else if (e.code === "overloaded") {
-          // Claude/Anthropic 529 is provider-side overload, not bad auth or
-          // model retirement. Remove this model from preference briefly and
-          // let fallback continue through the approved chain.
+          // 529 is transient — retry once on the pinned endpoint before degrading.
+          // Overload clears in seconds to minutes; 15 s is a safe conservative wait.
+          if (i === 0 && !overloadRetried) {
+            overloadRetried = true;
+            console.log(`[callWithFallbackChain] Provider ${entry.providerId} overloaded (529). Waiting 15s before retry...`);
+            await new Promise(r => setTimeout(r, 15_000));
+            i--;
+            continue;
+          }
           await markModelDegraded(entry.providerId, entry.modelId, "overload");
           scheduleRecovery(entry.providerId, entry.modelId);
+
+        } else if (e.code === "transient") {
+          // 5xx / 408 are transient server-side errors — retry once on the pinned
+          // endpoint with a shorter wait (10 s) before degrading and falling through.
+          if (i === 0 && !transientRetried) {
+            transientRetried = true;
+            console.log(`[callWithFallbackChain] Transient error (${e.statusCode}) from ${entry.providerId}. Waiting 10s before retry...`);
+            await new Promise(r => setTimeout(r, 10_000));
+            i--;
+            continue;
+          }
+          await markModelDegraded(entry.providerId, entry.modelId, `transient_${e.statusCode ?? "5xx"}`);
+          scheduleRecovery(entry.providerId, entry.modelId);
+
+        } else if (e.code === "billing") {
+          // 402: billing lapse is account-level and permanent until fixed.
+          // Disable the entire provider — same treatment as auth failure.
+          await prisma.modelProvider
+            .update({
+              where: { providerId: entry.providerId },
+              data: { status: "disabled" },
+            })
+            .catch((err) =>
+              console.error(`[callWithFallbackChain] failed to disable ${entry.providerId} after billing error:`, err),
+            );
+
+        } else if (e.code === "request_too_large") {
+          // 413: falling through to the next provider won't help — the same
+          // messages will be sent. Throw immediately so the agentic loop can
+          // surface a specific "start a new thread" message.
+          throw new Error(
+            `REQUEST_TOO_LARGE: ${entry.providerId} rejected the request as too large (413). ` +
+            `Start a new thread to reduce context size.`,
+          );
 
         } else if (e.code === "model_not_found") {
           // EP-INF-004: Retire the specific model, not the provider
