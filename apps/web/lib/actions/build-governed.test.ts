@@ -22,6 +22,16 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     buildActivity: {
       create: vi.fn(),
     },
+    backlogItemActivity: {
+      create: vi.fn(),
+    },
+    workCapsule: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    workCapsuleActivity: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -73,7 +83,7 @@ vi.mock("next/cache", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { approveBuildStart, advanceBuildPhase, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
+import { approveBuildStart, advanceBuildPhase, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -86,6 +96,13 @@ describe("governed build start approvals", () => {
       },
     });
     mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({});
+    mockPrisma.workCapsule.findUnique.mockResolvedValue(null);
+    mockPrisma.workCapsule.create.mockResolvedValue({
+      id: "capsule-row-direct",
+      capsuleId: "WC-DIRECT1",
+    });
+    mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
     mockPrisma.businessBuildBrief.findUnique.mockResolvedValue({ status: "accepted" });
     mockPrisma.businessBuildBrief.upsert.mockResolvedValue({});
@@ -103,6 +120,44 @@ describe("governed build start approvals", () => {
       errors: [],
     });
     mockListReleasableSandboxFiles.mockResolvedValue(["apps/web/components/build/BuildStudio.tsx"]);
+  });
+
+  it("createFeatureBuild attaches a Work Capsule to direct Build Studio work", async () => {
+    mockPrisma.featureBuild.create.mockImplementation(async (args) => ({
+      id: "build-row-direct",
+      buildId: args.data.buildId,
+      title: "Harden portal work capsule routing",
+      description: "Keep portal-started development inside governed work.",
+      phase: "ideate",
+    }));
+
+    const result = await createFeatureBuild({
+      title: "Harden portal work capsule routing",
+      description: "Keep portal-started development inside governed work.",
+    });
+
+    expect(result.buildId).toMatch(/^FB-[A-F0-9]{8}$/);
+    expect(mockPrisma.workCapsule.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          source: "build-studio",
+          executorKind: "build-studio",
+          executorRef: result.buildId,
+          status: "working",
+          featureBuildId: "build-row-direct",
+          backlogItemId: null,
+          epicId: null,
+          idempotencyKey: `build-studio:${result.buildId}`,
+          workspaceState: expect.objectContaining({
+            buildStudio: expect.objectContaining({
+              buildId: result.buildId,
+              phase: "ideate",
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(mockPrisma.backlogItemActivity.create).not.toHaveBeenCalled();
   });
 
   it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {

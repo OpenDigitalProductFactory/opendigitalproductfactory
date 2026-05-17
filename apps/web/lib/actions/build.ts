@@ -30,6 +30,10 @@ import {
 import { routeAndCall } from "@/lib/routed-inference";
 import * as crypto from "crypto";
 import { listReleasableSandboxFiles } from "@/lib/integrate/sandbox/sandbox";
+import {
+  attachBuildStudioWorkCapsule,
+  type BuildStudioCapsuleDb,
+} from "@/lib/work-capsules/build-studio-attachment";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -73,17 +77,33 @@ export async function createFeatureBuild(input: {
 
   const buildId = generateBuildId();
 
-  await prisma.featureBuild.create({
-    data: {
-      buildId,
-      title: input.title.trim(),
-      ...(input.description !== undefined && { description: input.description.trim() || null }),
-      ...(input.portfolioId !== undefined && { portfolioId: input.portfolioId || null }),
-      createdById: userId,
-    },
+  const result = await prisma.$transaction(async (tx) => {
+    const created = await tx.featureBuild.create({
+      data: {
+        buildId,
+        title: input.title.trim(),
+        ...(input.description !== undefined && { description: input.description.trim() || null }),
+        ...(input.portfolioId !== undefined && { portfolioId: input.portfolioId || null }),
+        createdById: userId,
+      },
+    });
+
+    await attachBuildStudioWorkCapsule({
+      db: tx as unknown as BuildStudioCapsuleDb,
+      build: {
+        id: created.id,
+        buildId: created.buildId,
+        title: created.title,
+        description: created.description,
+        phase: created.phase,
+      },
+      actor: { userId, agentId: null, principalId: null },
+    });
+
+    return { buildId: created.buildId };
   });
 
-  return { buildId };
+  return result;
 }
 
 export async function approveBuildStart(buildId: string): Promise<{ approvedAt: Date }> {

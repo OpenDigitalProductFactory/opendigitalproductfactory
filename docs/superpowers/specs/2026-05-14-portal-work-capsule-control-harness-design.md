@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied); 2026-05-17 (Phase 2 merged and Phase 3 lease auto-renewal slice applied); 2026-05-17 (chief-architect review: §9.3 MCP table updated with `plan_capsule_worktree`, §9.5 auto-renewal allowlist corrected, §17.3 per-tool test names added) |
-| Status | Phase 1 merged to `main` via PR #602; Phase 2 merged to `main` via PR #675; Phase 3 first slice implements lease auto-renewal for existing-capsule MCP writes while broader executor attachment remains open; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
+| Date | 2026-05-13 (initial); 2026-05-14 (chief-architect review applied); 2026-05-14 (second chief-architect pass after Phase 1 plan review); 2026-05-14 (branch/PR and scratch-install doctrine applied); 2026-05-16 (Phase 1 merged and verification refresh applied); 2026-05-16 (Phase 2 display-and-record scope applied); 2026-05-17 (Phase 2 merged and Phase 3 lease auto-renewal slice applied); 2026-05-17 (chief-architect review: §9.3 MCP table updated with `plan_capsule_worktree`, §9.5 auto-renewal allowlist corrected, §17.3 per-tool test names added); 2026-05-17 (Phase 3 Build Studio attachment slice applied) |
+| Status | Phase 1 merged to `main` via PR #602; Phase 2 merged to `main` via PR #675; Phase 3 now implements lease auto-renewal for existing-capsule MCP writes and capsule attachment for newly created direct/backlog-promoted Build Studio builds; external desktop/CLI executor attachment remains open; PR opens only when ready to merge; Phase 2/3/5 doctrine tightened |
 | Author | Codex + Mark Bodman; chief-architect review by Claude (Opus 4.7) |
 | Scope | Portal-coordinated work capsules for Build Studio, external Claude/Codex desktop sessions, manual worktrees, sandbox promotion, and portal self-update governance |
 | Depends On | `2026-04-05-db-github-delivery-sync-design.md`, `2026-04-20-ship-phase-fork-redesign-design.md`, `2026-04-21-backlog-triage-build-studio-design.md`, `2026-04-23-build-studio-governed-backlog-delivery-design.md`, `2026-05-09-build-execution-provider-design.md`, `2026-05-09-deployment-contracts.md` |
@@ -891,7 +891,7 @@ Execute in this order so fresh installs and existing installs both land cleanly:
 ### Phase 3: Executor Attachment
 
 - add handler-level lease auto-renewal for existing-capsule MCP write tools while preserving read-tool idempotence
-- attach Build Studio builds to capsules
+- attach newly created Build Studio builds to capsules
 - attach Codex/Claude desktop sessions through MCP tools
 - attach Codex CLI and Claude Code CLI sandbox sessions as first-class capsule executors
 - record external execution evidence
@@ -962,9 +962,10 @@ Adds:
 Adds:
 
 1. Lease auto-renewal middleware tests — one test per tool, named explicitly: `claim_capsule_scope`, `record_capsule_evidence`, `update_work_capsule_status`, and `release_capsule_scope` each assert that `workCapsule.update` is called with `leaseHolderPrincipalId` + `leaseExpiresAt` and that a `lease-renewed` activity is written; `list_work_capsules` and `get_work_capsule` each assert that no update or activity write occurs; `heartbeat_capsule` asserts renewal fires exactly once. A single "proof-of-concept" test covering only one write tool is insufficient because the wrapper is applied per-handler and a misconfigured handler is only caught by its own assertion.
-2. Collision-detection tests for overlapping `(kind, value)` scope claims across active capsules.
-3. External executor handoff tests  -  `executor-changed` activity is written on every transition.
-4. CLI hive tests proving Codex CLI and Claude Code CLI sessions attach as separate executor sessions, record separate evidence, and do not receive raw provider/OAuth secrets.
+2. Build Studio attachment tests proving direct `createFeatureBuild` creates a `source = build-studio` capsule, backlog promotion creates the same capsule link, and backlog-linked promotion writes `BacklogItemActivity.kind = build-studio-capsule-attached`.
+3. Collision-detection tests for overlapping `(kind, value)` scope claims across active capsules.
+4. External executor handoff tests  -  `executor-changed` activity is written on every transition.
+5. CLI hive tests proving Codex CLI and Claude Code CLI sessions attach as separate executor sessions, record separate evidence, and do not receive raw provider/OAuth secrets.
 
 ### Phase 4 (Daily Steward)
 
@@ -990,7 +991,7 @@ Adds:
 The "first enforced from" annotation tells implementers when each invariant becomes testable. Earlier-phase invariants stay in force in every later phase.
 
 1. The root clone is never an active implementation workspace. *(Phase 2.)*
-2. Every active Build Studio build should have or create a Work Capsule. *(Phase 3.)*
+2. Every newly created direct/backlog-promoted Build Studio build should have or create a Work Capsule. Existing active builds are reconciler/backfill work. *(Phase 3.)*
 3. Every external desktop coding session should attach to a Work Capsule before making non-trivial changes. *(Phase 3.)*
 4. Every capsule with production-visible intent must link to verification evidence. *(Phase 5.)*
 5. Portal replacement cannot proceed without backup evidence. *(Phase 5.)*
