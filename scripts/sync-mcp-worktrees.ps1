@@ -1,84 +1,98 @@
 # sync-mcp-worktrees.ps1
 #
-# Creates a hardlink to D:\DPF\.mcp.json in every D-drive git worktree so
-# that all Claude Code sessions share a single token source.
-#
-# Run this after creating a new worktree. You do NOT need to run this after
-# token rotation — token rotation only requires updating the env var (see below).
+# Full token rotation script for the DPF MCP server in Claude Code.
+# Run this whenever you generate a new token in Admin > Platform Development.
 #
 # Usage:
+#   .\scripts\sync-mcp-worktrees.ps1 -Token dpfmcp_XXXX
+#
+# Also run after creating a new worktree (omit -Token to reuse current token):
 #   .\scripts\sync-mcp-worktrees.ps1
 #
-# Token rotation workflow (applies to both Claude Code and Codex):
+# What it does:
+#   1. Updates D:\DPF\.mcp.json with the new token (in-place, preserving hardlinks)
+#   2. Creates/refreshes hardlinks in every D-drive worktree (.mcp.json is gitignored
+#      so worktrees don't get it from git; Claude Code reads the git-root-level file only)
+#   3. Re-registers the user-scope entry in ~/.claude.json via claude mcp add
+#      NOTE: ${ENV_VAR} expansion in HTTP headers is a known open bug in Claude Code
+#      (issue #51581) — the literal string is sent, not the value. Token must be hardcoded.
+#   4. Reminds you to restart Claude Code (no live session reload exists)
+#
+# Token rotation workflow:
 #   1. Admin > Platform Development > generate new token
-#   2. [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', '<new-token>', 'User')
-#   3. Restart open Claude Code sessions
-#   That's it. No file edits. No re-registration.
-#
-# How it works:
-#   D:\DPF\.mcp.json references ${DPF_MCP_BEARER_TOKEN} (env var) instead of
-#   a hardcoded token. Claude Code expands it at session start. Codex does the
-#   same via bearer_token_env_var = "DPF_MCP_BEARER_TOKEN" in ~/.codex/config.toml.
-#
-#   Since .mcp.json is gitignored, each worktree needs its own copy. A hard link
-#   makes every worktree point at the same file as D:\DPF\.mcp.json — one file,
-#   many paths, zero token duplication.
-#
-#   C-drive Codex worktrees are skipped (cross-volume hard links are not supported).
+#   2. .\scripts\sync-mcp-worktrees.ps1 -Token <new-token>
+#   3. Restart Claude Code
 
 param(
+    [string]$Token = "",
     [string]$RepoRoot = "D:\DPF"
 )
 
-$source = Join-Path $RepoRoot ".mcp.json"
+$mcpJsonPath = Join-Path $RepoRoot ".mcp.json"
+$mcpUrl = "http://localhost:3000/api/mcp/v1"
 
-if (-not (Test-Path $source)) {
-    Write-Error ".mcp.json not found at $source"
-    exit 1
+# ── Step 1: Resolve token ─────────────────────────────────────────────────────
+
+if (-not $Token) {
+    if (Test-Path $mcpJsonPath) {
+        $content = Get-Content $mcpJsonPath -Raw
+        if ($content -match '"Bearer (dpfmcp_[A-Z0-9]+)"') {
+            $Token = $matches[1]
+            Write-Host "Using existing token from .mcp.json: $($Token.Substring(0,16))..."
+        }
+    }
+    if (-not $Token) {
+        Write-Error "No token found. Supply one: .\sync-mcp-worktrees.ps1 -Token dpfmcp_XXXX"
+        exit 1
+    }
 }
 
-# Verify env var is set
-$token = [System.Environment]::GetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'User')
-if (-not $token) {
-    Write-Warning "DPF_MCP_BEARER_TOKEN is not set. Claude Code sessions will fail to authenticate."
-    Write-Warning "Set it with: [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', '<token>', 'User')"
-}
+# ── Step 2: Update .mcp.json in-place ────────────────────────────────────────
 
-Write-Host "Source: $source"
+Write-Host "Updating $mcpJsonPath..."
+$newContent = "{`n  `"mcpServers`": {`n    `"dpf`": {`n      `"url`": `"$mcpUrl`",`n      `"headers`": {`n        `"Authorization`": `"Bearer $Token`"`n      }`n    }`n  }`n}`n"
+[System.IO.File]::WriteAllText($mcpJsonPath, $newContent)
+Write-Host "  [ok] .mcp.json updated"
+
+# ── Step 3: Hardlink worktrees ────────────────────────────────────────────────
+
 Write-Host ""
-
+Write-Host "Syncing hardlinks to all D-drive worktrees..."
 $lines = git -C $RepoRoot worktree list --porcelain
 $worktrees = @()
 foreach ($line in $lines) {
     if ($line -match "^worktree (.+)$") {
         $path = $matches[1].Replace("/", "\")
-        # Skip main repo (has the real file) and C-drive worktrees (cross-volume)
         if ($path -match "^D:\\" -and $path -ne $RepoRoot) {
             $worktrees += $path
         }
     }
 }
 
-Write-Host "Found $($worktrees.Count) worktrees to sync"
-Write-Host ""
-
 $created = 0; $failed = 0
 foreach ($wt in $worktrees) {
     $link = Join-Path $wt ".mcp.json"
     if (Test-Path $link) { Remove-Item $link -Force }
-    & fsutil hardlink create $link $source | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $created++
-        Write-Host "  [ok] $wt"
-    } else {
-        $failed++
-        Write-Host "  [!!] FAILED: $wt"
-    }
+    & fsutil hardlink create $link $mcpJsonPath | Out-Null
+    if ($LASTEXITCODE -eq 0) { $created++ } else { $failed++; Write-Host "  [!!] FAILED: $wt" }
 }
+Write-Host "  [ok] $created worktrees linked ($failed failed)"
+
+# ── Step 4: Re-register user-scope MCP ───────────────────────────────────────
 
 Write-Host ""
-if ($failed -eq 0) {
-    Write-Host "Done — $created worktrees synced. Restart any open Claude Code sessions." -ForegroundColor Green
+Write-Host "Re-registering user-scope MCP (Claude Code bug #51581: env vars broken in HTTP headers)..."
+& claude mcp remove dpf -s user 2>$null | Out-Null
+& claude mcp add --scope user dpf --transport http $mcpUrl --header "Authorization: Bearer $Token" | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "  [ok] ~/.claude.json updated"
 } else {
-    Write-Host "Done — $created synced, $failed failed. Check the worktree paths above." -ForegroundColor Yellow
+    Write-Host "  [!!] Failed — run manually:"
+    Write-Host "       claude mcp remove dpf -s user"
+    Write-Host "       claude mcp add --scope user dpf --transport http `"$mcpUrl`" --header `"Authorization: Bearer $Token`""
 }
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+
+Write-Host ""
+Write-Host "Done. Restart open Claude Code sessions to pick up the new token." -ForegroundColor Green
