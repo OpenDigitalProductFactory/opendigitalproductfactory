@@ -195,6 +195,28 @@ describe("mcp tools", () => {
     expect(tool!.requiredCapability).toBe("manage_backlog");
     expect(tool!.sideEffect).toBe(true);
   });
+
+  it("exposes reviewDesignDoc and reviewBuildPlan to the build-specialist agent (architecture_read + build_plan_write grants)", async () => {
+    // Regression: mcp-tools.ts was using the sync JSON-backed getAgentToolGrants which
+    // returned stale grants missing architecture_read / build_plan_write. The ideate phase
+    // then could not call reviewDesignDoc (required for Ideate→Plan transition) because the
+    // tool was filtered out. Fix: switched to getAgentToolGrantsAsync (DB-first, JSON fallback).
+    const tools = await getAvailableTools(adminUser, {
+      externalAccessEnabled: false,
+      agentId: "build-specialist",
+    });
+    const toolNames = tools.map((t) => t.name);
+
+    expect(toolNames).toContain("reviewDesignDoc");
+    expect(toolNames).toContain("reviewBuildPlan");
+    expect(toolNames).toContain("saveBuildEvidence");
+    // Ensure sandbox tools are also present (build phase needs them)
+    expect(toolNames).toContain("start_sandbox");
+    expect(toolNames).toContain("run_sandbox_tests");
+    // Ensure the grant filter is actually applied (work_capsule tools are NOT in build-specialist's grants)
+    expect(toolNames).not.toContain("list_work_capsules");
+    expect(toolNames).not.toContain("get_work_capsule");
+  });
 });
 
 describe("sanitizeToolParams", () => {

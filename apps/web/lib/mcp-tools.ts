@@ -3689,11 +3689,13 @@ export async function getAvailableTools(
       && (options?.mode !== "advise" || !tool.sideEffect),
   );
 
-  // Agent-scoped filtering: intersection of user capabilities and agent tool grants
+  // Agent-scoped filtering: intersection of user capabilities and agent tool grants.
+  // EP-AI-WORKFORCE-001: use the async DB-first resolver so grants written via
+  // the DB (e.g. via seed or Admin UI) take precedence over the JSON fallback.
   if (options?.agentId) {
-    const { getAgentToolGrants, isToolAllowedByGrants } = await import("./agent-grants");
-    const agentGrants = getAgentToolGrants(options.agentId);
-    if (agentGrants) {
+    const { getAgentToolGrantsAsync, isToolAllowedByGrants } = await import("./agent-grants");
+    const agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
   }
