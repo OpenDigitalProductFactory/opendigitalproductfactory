@@ -10,6 +10,55 @@
 
 ---
 
+## Architect Review (2026-05-18)
+
+This review applies the "verify substrate before proposing new substrate" rule. The original draft introduces `RuntimeTarget` as a parallel spine with ~25 columns, several of which duplicate fields that already exist on `WorkCapsule`, `Sandbox`, `SandboxSlot`, `FeatureBuild`, and `GitPromotionCandidate`. The corrected design below is additive, not parallel.
+
+**What already exists and stays authoritative:**
+
+- `WorkCapsule` already carries `repositoryFullName`, `baseBranch`/`headBranch`, `baseSha`/`headSha`, `worktreePath`, `pullRequestUrl`/`pullRequestNumber`, `sandboxProviderId`/`sandboxId`, executor, lease, scope claims, and verification state. Source/PR/branch ownership is solved.
+- `Sandbox` already carries `buildId`, `providerId`, `agentId`, `portalInstanceId`, `state`, `previewUrl`, `capabilitiesSnapshot`. Build-sandbox runtime state is solved at the per-instance level.
+- `SandboxSlot` already carries `slotIndex`, `containerId`, `port`, `status`, `buildId`. Slot leasing is solved.
+- `FeatureBuild` already carries `sandboxId`, `sandboxPort`, `buildBranch`, `gitCommitHashes`, `uxVerificationStatus`, `uxTestResults`. Build-side verification state is solved (though under-populated).
+- `GitPromotionCandidate` already carries `verificationStartedAt`/`verificationCompletedAt`/`verificationResult`. Promotion-path verification is solved for one specific lane.
+
+**What is genuinely missing (the real gap):**
+
+1. No first-class record for the **root portal** (`dpf-portal-1`) or the **dev-portal** as a queryable runtime — they exist as Compose services but are invisible to the platform.
+2. No record for **ad-hoc / external-preview** runtimes that aren't tied to a `FeatureBuild`.
+3. No reconciliation between DB-advertised `SandboxSlot` rows and live Docker services (live check shows 3 DB slots, 1 running container).
+4. No typed, queryable **verification timeline** that crosses the boundary between build sandbox, root portal, and external-agent checks. `GitPromotionCandidate.verificationResult` and `FeatureBuild.uxTestResults` are JSON islands.
+5. No platform-owned **acceptance gate** that distinguishes "passed in sandbox" from "passed on the customer-zero Docker portal."
+
+**Design correction — collapse, don't parallel:**
+
+- `RuntimeTarget` is added, but slimmed: it represents *runtimes the platform did not previously model* (root portal, dev portal, ad-hoc debug) and *cross-cuts existing runtimes by adding a single normalized record* for build sandboxes and promotion sandboxes. Owner, branch, SHA, and PR data are **read through** `workCapsuleId` / `featureBuildId` / `sandboxId` rather than duplicated.
+- `RuntimeVerification` is added as a typed, queryable event log that can attach to either a `RuntimeTarget`, a `FeatureBuild`, a `GitPromotionCandidate`, or a `WorkCapsule`. It is the one new spine; JSON islands stop being the source of truth.
+- `acceptanceRole` is **derived** from `kind` via a fixed mapping, not stored (one less drift surface). Stored only for `ad-hoc-debug` where the role isn't implied.
+
+**Standards alignment:**
+
+- OpenTelemetry `service.version` lands on root-portal targets as a real column (`serviceVersion`), so the image version + git SHA are queryable, not metadata-blob.
+- GitHub Deployments stays deferred per the draft's recommendation.
+- SLSA provenance vocabulary maps cleanly: capsule = work identity, build = builder, runtime target = run metadata.
+
+**Open Questions — decided, not punted:**
+
+| Question | Decision |
+| --- | --- |
+| Top-level nav vs Build/Work Control? | Inside Build/Work Control. Operational, not promotional. |
+| `dev-portal` (3001) allowed for external agents? | Allowed when registered; never satisfies final acceptance. |
+| Phantom slots — delete or mark misconfigured? | Mark `misconfigured`. DB rows can represent intended capacity. |
+| Emit GitHub Deployments? | Deferred. Mirror later for PR visibility. |
+
+**Process notes baked into the revised slices:**
+
+- Seed + migration must move together (project rule). Slice 1 adds the migration and seeds the root-portal target on install/upgrade.
+- Backfill is explicit: existing `Sandbox`/`SandboxSlot`/active `FeatureBuild` rows get `RuntimeTarget` mirror rows before the UI ships, so day-one is not empty.
+- Guardrails (Slice 5) ship before the UI (Slice 6) so the UI surfaces real violations.
+
+---
+
 ## Grounding
 
 This plan is based on repo inspection, DPF MCP backlog/spec queries, live Docker state, and live Postgres fallback.
@@ -145,81 +194,117 @@ A queryable record for a check against a runtime target. It answers:
 
 ### Proposed Data Model
 
-Add small first-class tables instead of burying the primary runtime truth in JSON. JSON may still hold snapshots, but the queryable contract needs relational ownership.
+Two slim tables. Owner/branch/SHA/PR are **read through** existing FKs, not duplicated. The runtime-specific columns are what the platform did not previously model.
 
 ```prisma
 model RuntimeTarget {
-  id                      String    @id @default(cuid())
-  targetId                String    @unique
-  kind                    String
-  environment             String
-  status                  String
-  ownerUserId             String?
-  ownerAgentId            String?
-  workCapsuleId           String?
-  featureBuildId          String?
-  backlogItemId           String?
-  epicId                  String?
-  gitPromotionCandidateId String?
-  pullRequestUrl          String?
-  pullRequestNumber       Int?
-  repositoryFullName      String?
-  baseBranch              String?
-  headBranch              String?
-  baseSha                 String?
-  headSha                 String?
-  worktreePath            String?
-  composeProjectName      String?
-  serviceName             String?
-  containerName           String?
-  internalUrl             String?
-  hostUrl                 String?
-  port                    Int?
-  slotId                  String?
-  sandboxProviderId       String?
-  acceptanceRole          String
-  debugReason             String?
-  expiresAt               DateTime?
-  lastHeartbeatAt         DateTime?
-  metadata                Json?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  targetId           String    @unique
+  kind               String    // see enum list below
+  status             String    // see enum list below
 
-  verifications           RuntimeVerification[]
+  // Source-of-truth FKs. Ownership/branch/SHA/PR are read through these.
+  workCapsuleId      String?
+  featureBuildId     String?
+  sandboxId          String?   // -> existing Sandbox.id when applicable
+  slotId             String?   // -> existing SandboxSlot.id when applicable
+
+  // Runtime locator (the part NOT covered by existing models)
+  composeProjectName String?
+  serviceName        String?
+  containerName      String?
+  hostUrl            String?
+  internalUrl        String?
+  port               Int?
+
+  // Acceptance / debug surface (root-portal + ad-hoc only need these)
+  serviceVersion     String?   // OpenTelemetry service.version: image tag + git SHA
+  acceptanceRoleOverride String? // null = derive from kind; set only for ad-hoc-debug overrides
+  debugReason        String?   // required when kind = ad-hoc-debug
+  expiresAt          DateTime?
+  lastHeartbeatAt    DateTime?
+
+  metadata           Json?     // free-form snapshots; never the source of truth
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  verifications      RuntimeVerification[]
+
+  @@index([kind, status])
+  @@index([workCapsuleId])
+  @@index([featureBuildId])
+  @@index([sandboxId])
+  @@index([slotId])
 }
 
 model RuntimeVerification {
-  id              String   @id @default(cuid())
-  verificationId  String   @unique
-  runtimeTargetId String
-  kind            String
-  status          String
-  command         String?
-  url             String?
-  evidenceUrl     String?
-  screenshotUrl   String?
-  toolExecutionId String?
-  buildActivityId String?
-  backlogActivityId String?
-  capsuleActivityId String?
-  startedAt       DateTime?
-  completedAt     DateTime?
-  result          Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  verificationId     String    @unique
+  kind               String
+  status             String
 
-  runtimeTarget   RuntimeTarget @relation(fields: [runtimeTargetId], references: [id], onDelete: Cascade)
+  // Exactly one of these should be set as the primary attach point.
+  // Verifications can pre-exist a RuntimeTarget (e.g. typecheck before deploy).
+  runtimeTargetId    String?
+  workCapsuleId      String?
+  featureBuildId     String?
+  gitPromotionCandidateId String?
+
+  command            String?
+  url                String?
+  evidenceUrl        String?
+  screenshotUrl      String?
+
+  // Cross-links into existing evidence tables (mirrors, not source of truth)
+  toolExecutionId    String?
+  buildActivityId    String?
+  backlogActivityId  String?
+  capsuleActivityId  String?
+
+  startedAt          DateTime?
+  completedAt        DateTime?
+  result             Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  runtimeTarget      RuntimeTarget? @relation(fields: [runtimeTargetId], references: [id], onDelete: Cascade)
+
+  @@index([runtimeTargetId, createdAt(sort: Desc)])
+  @@index([featureBuildId, kind, status])
+  @@index([workCapsuleId, kind, status])
+  @@index([kind, status])
 }
 ```
 
-Use strongly typed string arrays in TypeScript and MCP tool schemas, matching existing DPF enum practice:
+**Field rationale (what was removed and why):**
+
+- `ownerUserId` / `ownerAgentId` — removed. Ownership is on `WorkCapsule` (`createdByPrincipalId`, `leaseHolderPrincipalId`) or `FeatureBuild` (`createdById`, `claimedByAgentId`). Joining is cheaper than duplicating.
+- `repositoryFullName`, `baseBranch`, `headBranch`, `baseSha`, `headSha`, `worktreePath`, `pullRequestUrl`, `pullRequestNumber` — removed. All exist on `WorkCapsule`. A `RuntimeTarget` without a capsule (rare; only debug exceptions) records these in `metadata`.
+- `backlogItemId`, `epicId`, `gitPromotionCandidateId` (on `RuntimeTarget`) — removed. Read through `WorkCapsule` and `FeatureBuild`. `RuntimeVerification.gitPromotionCandidateId` is kept because promotion verification is a verification primary attachment point, not a target attribute.
+- `environment` — removed. Collapsed into `kind`. Each `kind` implies its environment.
+- `acceptanceRole` — derived from `kind` (see mapping below). Stored only when an override is needed (`acceptanceRoleOverride`).
+- `sandboxProviderId` — removed. Read through `sandboxId -> Sandbox.providerId`.
+
+**`acceptanceRole` derivation (code, not column):**
+
+| `kind` | derived `acceptanceRole` |
+| --- | --- |
+| `root-portal` | `final-acceptance` |
+| `dev-portal` | `non-prod-verification` |
+| `build-sandbox` | `non-prod-verification` |
+| `git-promotion-sandbox` | `non-prod-verification` |
+| `external-preview` | `non-prod-verification` |
+| `ad-hoc-debug` | `debug-only` |
+
+Strongly typed string arrays in TypeScript and MCP tool schemas, matching existing DPF enum practice:
 
 - `RuntimeTarget.kind`: `root-portal`, `dev-portal`, `build-sandbox`, `git-promotion-sandbox`, `external-preview`, `ad-hoc-debug`.
-- `RuntimeTarget.environment`: `acceptance`, `non-prod`, `debug`.
-- `RuntimeTarget.status`: `planned`, `assigned`, `starting`, `running`, `verifying`, `verified`, `failed`, `released`, `expired`, `blocked`.
-- `RuntimeTarget.acceptanceRole`: `none`, `non-prod-verification`, `final-acceptance`, `debug-only`.
-- `RuntimeVerification.kind`: `health`, `typecheck`, `production-build`, `unit-test`, `ux`, `migration`, `manual-review`, `ci`.
-- `RuntimeVerification.status`: `pending`, `running`, `passed`, `failed`, `skipped`, `superseded`.
+- `RuntimeTarget.status`: `planned`, `assigned`, `starting`, `running`, `verifying`, `verified`, `failed`, `released`, `expired`, `blocked`, `misconfigured`.
+- `RuntimeTarget.acceptanceRoleOverride` (rare; null in nearly all rows): `debug-only`.
+- `RuntimeVerification.kind`: `health`, `typecheck`, `production-build`, `unit-test`, `ux`, `migration`, `manual-review`, `ci`, `final-acceptance`.
+- `RuntimeVerification.status`: `pending`, `running`, `passed`, `failed`, `skipped`, `superseded`, `waived`.
+
+`misconfigured` is added so phantom `SandboxSlot` rows (DB-advertised, no Compose service) surface as a real state rather than silent `available`. `waived` is added so the acceptance waiver path is queryable, not buried in a comment.
 
 ### Runtime Rules
 
@@ -274,17 +359,13 @@ Use strongly typed string arrays in TypeScript and MCP tool schemas, matching ex
 
 #### External Agent Registration
 
-External agents must complete this handshake before runtime testing:
+The durable principle (one rule, not seven steps):
 
-1. `create_work_capsule` or `adopt_worktree`.
-2. `claim_capsule_scope` for the files/modules being edited.
-3. `register_runtime_target` with `kind=build-sandbox`, `dev-portal`, or `ad-hoc-debug`.
-4. `heartbeat_capsule` while working.
-5. `record_runtime_verification` for typecheck/build/UX/migration checks.
-6. `record_capsule_evidence` and `record_execution_evidence` for screenshots, logs, and decisions.
-7. Link PR metadata before status `ready-for-review`.
+> **Before any runtime verification action, an external agent must hold a Work Capsule and have registered a Runtime Target. Evidence references both.**
 
-If no backlog item exists, the agent must register an explicit reason such as `doc-only`, `incident-investigation`, or `pre-backlog-discovery`. This keeps legitimate exploratory work visible without forcing false backlog links.
+That principle implies a minimum 3-call handshake — `create_work_capsule` (or `adopt_worktree`), `register_runtime_target`, and `record_runtime_verification` — plus `heartbeat_capsule` while working. `claim_capsule_scope`, `record_capsule_evidence`, and PR linkage remain available but are no longer enumerated as gates; their absence is detected and reported by the existing capsule contract.
+
+If no backlog item exists, the capsule carries an explicit `noBacklogReason` (e.g. `doc-only`, `incident-investigation`, `pre-backlog-discovery`). This keeps legitimate exploratory work visible without forcing false backlog links.
 
 #### Concurrent Threads
 
@@ -321,13 +402,20 @@ If no backlog item exists, the agent must register an explicit reason such as `d
 
 ## Implementation Plan
 
-### Slice 1: Runtime Coordination Types and Schema
+### Slice 1: Runtime Coordination Types, Schema, Seed, and Backfill
 
 - [ ] Add `RuntimeTarget` and `RuntimeVerification` models to `packages/db/prisma/schema.prisma`.
 - [ ] Add a migration with `pnpm --filter @dpf/db exec prisma migrate dev --name runtime_coordination_targets`.
+- [ ] Update `packages/db/seed/**` so a fresh install seeds the root-portal `RuntimeTarget` (`kind=root-portal`, `serviceName=portal`, `containerName=dpf-portal-1`, `hostUrl=APP_URL`, `port=3000`) and a single dev-portal target (`kind=dev-portal`, `port=3001`). Seed and migration ship together (project rule: DB fix = seed + migration).
+- [ ] Add a migration-time backfill (or one-shot script gated by an invariant guard) that mirrors existing rows into `RuntimeTarget`:
+  - one row per live `Sandbox` (kind=`build-sandbox`, populate `sandboxId`/`featureBuildId`/`hostUrl=previewUrl`/`containerName`),
+  - one row per `SandboxSlot` whose Compose service is absent → status `misconfigured`,
+  - one row per `GitPromotionCandidate` currently mid-verification (kind=`git-promotion-sandbox`).
+  Backfill is idempotent: re-running produces no duplicates.
 - [ ] Add TypeScript enum arrays and union types in a new module:
   - `apps/web/lib/runtime-coordination/types.ts`
   - `apps/web/lib/runtime-coordination/runtime-targets.ts`
+- [ ] Add the `acceptanceRole` derivation function and its inverse (`canSatisfyFinalAcceptance(kind)`).
 - [ ] Add query helpers:
   - `createRuntimeTarget`
   - `registerRuntimeTarget`
@@ -335,14 +423,17 @@ If no backlog item exists, the agent must register an explicit reason such as `d
   - `releaseRuntimeTarget`
   - `recordRuntimeVerification`
   - `getRuntimeCoordinationMap`
-- [ ] Add tests for type guards, status transitions, and idempotency:
+  - `resolveOwnership(target)` — joins through capsule/build to return owner principal and PR metadata without storing them on the target.
+- [ ] Add tests for type guards, status transitions, idempotent backfill, derivation function, and ownership resolution:
   - `apps/web/lib/runtime-coordination/runtime-targets.test.ts`
+  - `apps/web/lib/runtime-coordination/backfill.test.ts`
 
 Acceptance:
 
-- Runtime target records can be created and updated idempotently.
+- Fresh `pnpm db:seed` produces a `root-portal` `RuntimeTarget` and a `dev-portal` row.
+- Backfill is idempotent and reflects the live Sandbox/SandboxSlot/GitPromotionCandidate state without manual intervention (addresses fresh-install pain rule).
 - Invalid enum values fail before reaching the database.
-- A runtime target can link to backlog, feature build, work capsule, PR, and git commit metadata.
+- Querying a target returns owner/branch/SHA/PR via FK joins; the target row itself does not duplicate those columns.
 
 ### Slice 2: Work Capsule and MCP Runtime Registration
 
@@ -524,15 +615,17 @@ Acceptance:
 
 ## Implementation Order
 
-1. Land schema/types/helpers with tests.
-2. Expose MCP runtime target registration and evidence tools.
-3. Attach Build Studio and sandbox flow to runtime targets.
-4. Add external agent registration helper and docs.
-5. Add guardrails for unmanaged local servers.
-6. Build the runtime coordination UI.
-7. Add final portal acceptance gate.
-8. Normalize evidence links.
-9. Run full verification and capture evidence.
+Re-ordered so guardrails and evidence normalization land before the UI surfaces them, and acceptance gating lands after the evidence model is normalized (not before).
+
+1. **Slice 1** — Schema, types, seed, backfill, helpers, tests.
+2. **Slice 2** — MCP runtime target registration + evidence tools.
+3. **Slice 3** — Build Studio + sandbox flow attaches to runtime targets.
+4. **Slice 4** — External agent registration helper + docs.
+5. **Slice 5** — Guardrails for unmanaged local servers.
+6. **Slice 8** — Evidence normalization (run before UI and acceptance gate).
+7. **Slice 7** — Final portal acceptance gate (depends on normalized evidence + guardrails).
+8. **Slice 6** — Runtime coordination UI (surfaces real state, including guardrail violations and waivers).
+9. **Slice 9** — Full verification with Docker portal acceptance evidence captured against the new spine.
 
 ## Refactoring Budget
 
@@ -544,20 +637,31 @@ Spend implementation effort on these refactors instead of piling behavior into e
 - Keep evidence mirroring in `runtime-coordination/evidence-links.ts`, not duplicated across Build Studio, backlog, and capsule handlers.
 - Keep UI state derivation in a server-side query helper so the React surface stays mostly presentational.
 
-## Open Questions
+## Decisions (formerly Open Questions)
 
-- Should DPF expose Runtime Targets as a top-level navigation item, or only inside Build/Work Control? Recommendation: start inside Build/Work Control to keep this operational, not promotional.
-- Should `dev-portal` on 3001 be an allowed runtime target for external agents, or only for human local development? Recommendation: allow it only when registered and never for final acceptance.
-- Should phantom sandbox slots be deleted from DB or marked `misconfigured`? Recommendation: mark `misconfigured` first, because DB slots may be intended capacity even when Compose services are not currently running.
-- Should GitHub Deployments be emitted for DPF runtime targets? Recommendation: not in the first slice. Store DPF runtime state first; GitHub Deployments can mirror it later for PR visibility.
+Resolved in the Architect Review (2026-05-18) so implementation does not branch:
+
+- **Navigation:** Inside Build/Work Control. Operational, not promotional.
+- **`dev-portal` (3001) for external agents:** Allowed when registered; never satisfies final acceptance.
+- **Phantom sandbox slots:** Mark `misconfigured`, do not delete. Reconciler reuses the slot when Compose service returns.
+- **GitHub Deployments:** Deferred. Mirror later for PR visibility once the local spine is stable.
+
+## Remaining Risks
+
+- **Migration scope.** Two new tables + backfill + seed touch a hot schema. Mitigation: backfill is idempotent and gated by an invariant guard; seed is additive; migration runs `migrate dev` locally and `migrate deploy` against Docker portal in Slice 9.
+- **Capsule absence.** Live DB has 0 `WorkCapsule` rows. Slice 3's backfill of active `FeatureBuild`s into capsules is the riskiest sub-step. Mitigation: `attachBuildStudioWorkCapsule` already exists and is idempotent; call it for each active build in a single transaction with logging.
+- **Reconciler thrash.** Sandbox pool reconciliation runs against live Docker; transient Docker errors must not flip slots to `misconfigured`. Mitigation: require N consecutive misses before flipping status; surface the count in metadata.
+- **External agent adoption.** Existing agents must change their handshake. Mitigation: the worktree seed script prints the required calls; the helper's "refuse" path returns the approved options instead of erroring opaquely.
 
 ## Immediate Next Slice
 
-Start with Slice 1 and Slice 2 together:
+Start with Slice 1 + Slice 2 together — they share the same Prisma migration window and the same MCP grant additions:
 
-- Add `RuntimeTarget` / `RuntimeVerification`.
-- Add service helpers and enum validation.
-- Expose MCP registration tools.
-- Add one end-to-end test where a Work Capsule registers a sandbox runtime target and records a passing UX verification.
+- Add `RuntimeTarget` / `RuntimeVerification` (slim shape; no duplicated owner/branch/SHA/PR columns).
+- Seed the root-portal target and dev-portal target as part of the migration window.
+- Run idempotent backfill from `Sandbox` / `SandboxSlot` / `GitPromotionCandidate`.
+- Add service helpers, enum validation, and `acceptanceRole` derivation.
+- Expose MCP registration tools: `register_runtime_target`, `heartbeat_runtime_target`, `release_runtime_target`, `record_runtime_verification`, `get_runtime_coordination_map`.
+- Add one end-to-end test where a Work Capsule registers a sandbox runtime target and records a passing UX verification that mirrors into `BuildActivity` and `WorkCapsuleActivity`.
 
-This is the smallest slice that changes the platform from "agents can write evidence after the fact" to "the platform knows where the work is being tested before evidence is accepted."
+This is the smallest slice that flips the platform from "agents write evidence after the fact" to "the platform knows where the work is being tested before evidence is accepted," and it leaves the schema in a shape that does not need a follow-up migration to remove duplicated columns later.
