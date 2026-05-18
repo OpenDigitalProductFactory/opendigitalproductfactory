@@ -523,7 +523,8 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
     }
     return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : "Network error" };
+    const detail = err instanceof Error ? err.message : "Network error";
+    return { ok: false, message: `${detail} — tried ${testUrl}` };
   }
 }
 
