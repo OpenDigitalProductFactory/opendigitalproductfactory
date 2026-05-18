@@ -46,4 +46,9 @@ describe("buildSetupSnippets", () => {
     expect(() => JSON.parse(codex)).not.toThrow();
     expect(() => JSON.parse(vscode)).not.toThrow();
   });
+
+  it("syncCommand contains the seed script path", () => {
+    const { syncCommand } = buildSetupSnippets(TOKEN, BASE);
+    expect(syncCommand).toContain("seed-worktree-mcp.ps1");
+  });
 });
