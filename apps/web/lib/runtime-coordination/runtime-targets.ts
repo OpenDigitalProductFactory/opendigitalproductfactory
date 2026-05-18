@@ -1,0 +1,262 @@
+import {
+  RUNTIME_ACCEPTANCE_ROLE_OVERRIDES,
+  RUNTIME_TARGET_KINDS,
+  RUNTIME_TARGET_STATUSES,
+  RUNTIME_VERIFICATION_KINDS,
+  RUNTIME_VERIFICATION_STATUSES,
+  type RuntimeAcceptanceRole,
+  type RuntimeTargetInput,
+  type RuntimeTargetKind,
+  type RuntimeTargetStatus,
+  type RuntimeVerificationInput,
+  type RuntimeVerificationKind,
+  type RuntimeVerificationStatus,
+} from "./types";
+
+export type RuntimeCoordinationActor = {
+  userId?: string | null;
+  agentId?: string | null;
+  principalId?: string | null;
+};
+
+export type RuntimeCoordinationDb = {
+  runtimeTarget: {
+    create(args: unknown): Promise<any>;
+    findUnique(args: unknown): Promise<any>;
+    findMany?(args: unknown): Promise<any[]>;
+    update(args: unknown): Promise<any>;
+  };
+  runtimeVerification: {
+    create(args: unknown): Promise<any>;
+  };
+  workCapsuleActivity?: {
+    create(args: unknown): Promise<any>;
+  };
+  $transaction?<T>(fn: (tx: RuntimeCoordinationDb) => Promise<T>): Promise<T>;
+};
+
+const TARGET_KIND_SET = new Set<string>(RUNTIME_TARGET_KINDS);
+const TARGET_STATUS_SET = new Set<string>(RUNTIME_TARGET_STATUSES);
+const VERIFICATION_KIND_SET = new Set<string>(RUNTIME_VERIFICATION_KINDS);
+const VERIFICATION_STATUS_SET = new Set<string>(RUNTIME_VERIFICATION_STATUSES);
+const ACCEPTANCE_OVERRIDE_SET = new Set<string>(RUNTIME_ACCEPTANCE_ROLE_OVERRIDES);
+
+export function isRuntimeTargetKind(value: unknown): value is RuntimeTargetKind {
+  return typeof value === "string" && TARGET_KIND_SET.has(value);
+}
+
+export function isRuntimeTargetStatus(value: unknown): value is RuntimeTargetStatus {
+  return typeof value === "string" && TARGET_STATUS_SET.has(value);
+}
+
+export function isRuntimeVerificationKind(value: unknown): value is RuntimeVerificationKind {
+  return typeof value === "string" && VERIFICATION_KIND_SET.has(value);
+}
+
+export function isRuntimeVerificationStatus(value: unknown): value is RuntimeVerificationStatus {
+  return typeof value === "string" && VERIFICATION_STATUS_SET.has(value);
+}
+
+export function deriveAcceptanceRole(kind: RuntimeTargetKind): RuntimeAcceptanceRole {
+  switch (kind) {
+    case "root-portal":
+      return "final-acceptance";
+    case "dev-portal":
+    case "build-sandbox":
+    case "git-promotion-sandbox":
+    case "external-preview":
+      return "non-prod-verification";
+    case "ad-hoc-debug":
+      return "debug-only";
+  }
+}
+
+export function canSatisfyFinalAcceptance(kind: RuntimeTargetKind): boolean {
+  return deriveAcceptanceRole(kind) === "final-acceptance";
+}
+
+async function inTransaction<T>(
+  db: RuntimeCoordinationDb,
+  fn: (tx: RuntimeCoordinationDb) => Promise<T>,
+): Promise<T> {
+  return db.$transaction ? db.$transaction(fn) : fn(db);
+}
+
+function compactTargetData(input: RuntimeTargetInput, now: Date) {
+  return {
+    targetId: input.targetId,
+    kind: input.kind,
+    status: input.status,
+    workCapsuleId: input.workCapsuleId ?? null,
+    featureBuildId: input.featureBuildId ?? null,
+    sandboxId: input.sandboxId ?? null,
+    slotId: input.slotId ?? null,
+    composeProjectName: input.composeProjectName ?? null,
+    serviceName: input.serviceName ?? null,
+    containerName: input.containerName ?? null,
+    hostUrl: input.hostUrl ?? null,
+    internalUrl: input.internalUrl ?? null,
+    port: input.port ?? null,
+    serviceVersion: input.serviceVersion ?? null,
+    acceptanceRoleOverride: input.acceptanceRoleOverride ?? null,
+    debugReason: input.debugReason ?? null,
+    expiresAt: input.expiresAt ?? null,
+    lastHeartbeatAt: now,
+    metadata: input.metadata ?? {},
+  };
+}
+
+function validateTargetInput(input: RuntimeTargetInput) {
+  if (!input.targetId?.trim()) throw new Error("targetId is required");
+  if (!isRuntimeTargetKind(input.kind)) throw new Error("Invalid runtime target kind");
+  if (!isRuntimeTargetStatus(input.status)) throw new Error("Invalid runtime target status");
+  if (
+    input.acceptanceRoleOverride &&
+    !ACCEPTANCE_OVERRIDE_SET.has(input.acceptanceRoleOverride)
+  ) {
+    throw new Error("Invalid acceptanceRoleOverride");
+  }
+  if (input.kind === "ad-hoc-debug" && !input.debugReason?.trim()) {
+    throw new Error("debugReason is required for ad-hoc-debug runtime targets");
+  }
+  if (input.port != null && (!Number.isInteger(input.port) || input.port <= 0)) {
+    throw new Error("port must be a positive integer");
+  }
+}
+
+function verificationActivityKind(status: RuntimeVerificationStatus) {
+  return status === "failed" ? "runtime-verification-failed" : "runtime-verification-passed";
+}
+
+async function recordCapsuleActivity(args: {
+  db: RuntimeCoordinationDb;
+  workCapsuleId?: string | null;
+  kind: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  actor?: RuntimeCoordinationActor;
+}) {
+  if (!args.workCapsuleId || !args.db.workCapsuleActivity) return null;
+  return args.db.workCapsuleActivity.create({
+    data: {
+      workCapsuleId: args.workCapsuleId,
+      kind: args.kind,
+      summary: args.summary,
+      payload: args.payload,
+      recordedById: args.actor?.userId ?? null,
+      recordedByAgentId: args.actor?.agentId ?? null,
+    },
+  });
+}
+
+export async function registerRuntimeTarget(args: {
+  db: RuntimeCoordinationDb;
+  input: RuntimeTargetInput;
+  actor?: RuntimeCoordinationActor;
+  now?: Date;
+}) {
+  validateTargetInput(args.input);
+  const now = args.now ?? new Date();
+  const data = compactTargetData(args.input, now);
+
+  return inTransaction(args.db, async (tx) => {
+    const existing = await tx.runtimeTarget.findUnique({
+      where: { targetId: args.input.targetId },
+    });
+    const target = existing
+      ? await tx.runtimeTarget.update({
+        where: { targetId: args.input.targetId },
+        data,
+      })
+      : await tx.runtimeTarget.create({ data });
+
+    await recordCapsuleActivity({
+      db: tx,
+      workCapsuleId: args.input.workCapsuleId ?? existing?.workCapsuleId ?? null,
+      kind: "runtime-target-registered",
+      summary: `Registered runtime target ${args.input.targetId}.`,
+      payload: {
+        targetId: args.input.targetId,
+        kind: args.input.kind,
+        status: args.input.status,
+        acceptanceRole: deriveAcceptanceRole(args.input.kind),
+        canSatisfyFinalAcceptance: canSatisfyFinalAcceptance(args.input.kind),
+      },
+      actor: args.actor,
+    });
+
+    return target;
+  });
+}
+
+function primaryAttachPointCount(input: RuntimeVerificationInput): number {
+  const directCount = [
+    input.runtimeTargetId,
+    input.featureBuildId,
+    input.gitPromotionCandidateId,
+  ].filter((value) => typeof value === "string" && value.trim().length > 0).length;
+
+  if (directCount > 0) return directCount;
+  return input.workCapsuleId?.trim() ? 1 : 0;
+}
+
+function validateVerificationInput(input: RuntimeVerificationInput) {
+  if (!input.verificationId?.trim()) throw new Error("verificationId is required");
+  if (!isRuntimeVerificationKind(input.kind)) throw new Error("Invalid runtime verification kind");
+  if (!isRuntimeVerificationStatus(input.status)) throw new Error("Invalid runtime verification status");
+  if (primaryAttachPointCount(input) !== 1) {
+    throw new Error("Runtime verification requires exactly one primary attach point");
+  }
+}
+
+export async function recordRuntimeVerification(args: {
+  db: RuntimeCoordinationDb;
+  input: RuntimeVerificationInput;
+  actor?: RuntimeCoordinationActor;
+}) {
+  validateVerificationInput(args.input);
+  return inTransaction(args.db, async (tx) => {
+    const verification = await tx.runtimeVerification.create({
+      data: {
+        verificationId: args.input.verificationId,
+        kind: args.input.kind,
+        status: args.input.status,
+        runtimeTargetId: args.input.runtimeTargetId ?? null,
+        workCapsuleId: args.input.workCapsuleId ?? null,
+        featureBuildId: args.input.featureBuildId ?? null,
+        gitPromotionCandidateId: args.input.gitPromotionCandidateId ?? null,
+        command: args.input.command ?? null,
+        url: args.input.url ?? null,
+        evidenceUrl: args.input.evidenceUrl ?? null,
+        screenshotUrl: args.input.screenshotUrl ?? null,
+        toolExecutionId: args.input.toolExecutionId ?? null,
+        buildActivityId: args.input.buildActivityId ?? null,
+        backlogActivityId: args.input.backlogActivityId ?? null,
+        capsuleActivityId: args.input.capsuleActivityId ?? null,
+        startedAt: args.input.startedAt ?? null,
+        completedAt: args.input.completedAt ?? null,
+        result: args.input.result ?? {},
+      },
+    });
+
+    await recordCapsuleActivity({
+      db: tx,
+      workCapsuleId: args.input.workCapsuleId,
+      kind: verificationActivityKind(args.input.status),
+      summary: `Runtime verification ${args.input.verificationId} ${args.input.status}.`,
+      payload: {
+        verificationId: args.input.verificationId,
+        kind: args.input.kind,
+        status: args.input.status,
+        runtimeTargetId: args.input.runtimeTargetId ?? null,
+        evidenceUrl: args.input.evidenceUrl ?? null,
+        screenshotUrl: args.input.screenshotUrl ?? null,
+      },
+      actor: args.actor,
+    });
+
+    return verification;
+  });
+}
+
+export { RUNTIME_TARGET_KINDS, RUNTIME_TARGET_STATUSES, RUNTIME_VERIFICATION_KINDS, RUNTIME_VERIFICATION_STATUSES };

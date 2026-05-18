@@ -48,6 +48,7 @@ import {
 } from "@/lib/coworker-self-assessment/assessment-service";
 import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
+import { runtimeCoordinationToolEnums } from "@/lib/runtime-coordination/mcp-handlers";
 import {
   COWORKER_ASSESSMENT_CONFIDENCE,
   COWORKER_ASSESSMENT_VERDICTS,
@@ -327,6 +328,7 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
 // ─── Tool Registry ───────────────────────────────────────────────────────────
 
 const WORK_CAPSULE_TOOL_ENUMS = workCapsuleToolEnums();
+const RUNTIME_COORDINATION_TOOL_ENUMS = runtimeCoordinationToolEnums();
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
@@ -673,6 +675,119 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+  },
+  // ─── Runtime coordination (plan 2026-05-18) ────────────────────────────────
+  {
+    name: "register_runtime_target",
+    description: "Register or refresh the governed runtime surface where work is being verified. Source ownership is read through Work Capsule, FeatureBuild, Sandbox, or GitPromotionCandidate links.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetId: { type: "string", description: "Stable runtime target id, e.g. RT-ROOT-PORTAL or RT-SANDBOX-<sandboxRowId>." },
+        kind: { type: "string", enum: RUNTIME_COORDINATION_TOOL_ENUMS.targetKinds, description: "Runtime target kind." },
+        status: { type: "string", enum: RUNTIME_COORDINATION_TOOL_ENUMS.targetStatuses, description: "Runtime target status." },
+        capsuleId: { type: "string", description: "Optional semantic Work Capsule id (WC-*)." },
+        workCapsuleId: { type: "string", description: "Optional internal WorkCapsule row id; prefer capsuleId for external agents." },
+        buildId: { type: "string", description: "Optional semantic FeatureBuild id (FB-*)." },
+        featureBuildId: { type: "string", description: "Optional internal FeatureBuild row id; prefer buildId for external agents." },
+        sandboxId: { type: "string", description: "Optional Sandbox row id." },
+        slotId: { type: "string", description: "Optional SandboxSlot row id." },
+        composeProjectName: { type: "string", description: "Compose project name when applicable." },
+        serviceName: { type: "string", description: "Compose service name when applicable." },
+        containerName: { type: "string", description: "Docker container name when applicable." },
+        hostUrl: { type: "string", description: "Host-reachable URL." },
+        internalUrl: { type: "string", description: "Container/internal URL." },
+        port: { type: "number", description: "Host port when applicable." },
+        serviceVersion: { type: "string", description: "OpenTelemetry service.version style artifact string, e.g. image + git SHA." },
+        acceptanceRoleOverride: { type: "string", enum: ["debug-only"], description: "Rare override. Most roles are derived from kind." },
+        debugReason: { type: "string", description: "Required for ad-hoc-debug targets." },
+        expiresAt: { type: "string", description: "Optional ISO timestamp for temporary targets." },
+        metadata: { type: "object", description: "Free-form snapshot data; never the source of truth." },
+      },
+      required: ["targetId", "kind", "status"],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "heartbeat_runtime_target",
+    description: "Refresh the heartbeat for a governed runtime target.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetId: { type: "string", description: "Stable runtime target id." },
+      },
+      required: ["targetId"],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "release_runtime_target",
+    description: "Mark a governed runtime target released so another thread can safely use the surface.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetId: { type: "string", description: "Stable runtime target id." },
+      },
+      required: ["targetId"],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "record_runtime_verification",
+    description: "Record a typed verification event against exactly one primary runtime/build/promotion attach point, with optional evidence links.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        verificationId: { type: "string", description: "Stable verification id." },
+        kind: { type: "string", enum: RUNTIME_COORDINATION_TOOL_ENUMS.verificationKinds, description: "Verification kind." },
+        status: { type: "string", enum: RUNTIME_COORDINATION_TOOL_ENUMS.verificationStatuses, description: "Verification status." },
+        targetId: { type: "string", description: "Optional stable RuntimeTarget id (RT-*)." },
+        runtimeTargetId: { type: "string", description: "Optional RuntimeTarget row id; RT-* targetId is also accepted for compatibility." },
+        capsuleId: { type: "string", description: "Optional semantic Work Capsule id (WC-*) for capsule-only or mirrored evidence." },
+        workCapsuleId: { type: "string", description: "Optional WorkCapsule row id; prefer capsuleId for external agents." },
+        buildId: { type: "string", description: "Optional semantic FeatureBuild id (FB-*)." },
+        featureBuildId: { type: "string", description: "Optional FeatureBuild row id; prefer buildId for external agents." },
+        candidateId: { type: "string", description: "Optional semantic GitPromotionCandidate id." },
+        gitPromotionCandidateId: { type: "string", description: "Optional GitPromotionCandidate row id; prefer candidateId for external agents." },
+        command: { type: "string", description: "Command that produced the verification." },
+        url: { type: "string", description: "URL checked." },
+        evidenceUrl: { type: "string", description: "Evidence URL." },
+        screenshotUrl: { type: "string", description: "Screenshot URL." },
+        toolExecutionId: { type: "string", description: "ToolExecution row id." },
+        buildActivityId: { type: "string", description: "BuildActivity row id." },
+        backlogActivityId: { type: "string", description: "BacklogItemActivity row id." },
+        capsuleActivityId: { type: "string", description: "WorkCapsuleActivity row id." },
+        startedAt: { type: "string", description: "Optional ISO start timestamp." },
+        completedAt: { type: "string", description: "Optional ISO completion timestamp." },
+        result: { type: "object", description: "Structured result payload." },
+      },
+      required: ["verificationId", "kind", "status"],
+    },
+    requiredCapability: "manage_backlog",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "get_runtime_coordination_map",
+    description: "List governed runtime targets with recent verification events so operators can see what is deployed where and what is safe to merge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: RUNTIME_COORDINATION_TOOL_ENUMS.targetKinds, description: "Filter by target kind." },
+        status: { type: "string", enum: RUNTIME_COORDINATION_TOOL_ENUMS.targetStatuses, description: "Filter by target status." },
+        limit: { type: "number", description: "Max targets (default 50, max 100)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
   },
   // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────────
   {
@@ -3857,6 +3972,26 @@ export async function executeTool(
     case "record_capsule_evidence": {
       const { recordCapsuleEvidenceTool } = await import("@/lib/work-capsules/mcp-handlers");
       return recordCapsuleEvidenceTool(params, userId, context);
+    }
+    case "register_runtime_target": {
+      const { registerRuntimeTargetTool } = await import("@/lib/runtime-coordination/mcp-handlers");
+      return registerRuntimeTargetTool(params, userId, context);
+    }
+    case "heartbeat_runtime_target": {
+      const { heartbeatRuntimeTargetTool } = await import("@/lib/runtime-coordination/mcp-handlers");
+      return heartbeatRuntimeTargetTool(params);
+    }
+    case "release_runtime_target": {
+      const { releaseRuntimeTargetTool } = await import("@/lib/runtime-coordination/mcp-handlers");
+      return releaseRuntimeTargetTool(params);
+    }
+    case "record_runtime_verification": {
+      const { recordRuntimeVerificationTool } = await import("@/lib/runtime-coordination/mcp-handlers");
+      return recordRuntimeVerificationTool(params, userId, context);
+    }
+    case "get_runtime_coordination_map": {
+      const { getRuntimeCoordinationMapTool } = await import("@/lib/runtime-coordination/mcp-handlers");
+      return getRuntimeCoordinationMapTool(params);
     }
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()

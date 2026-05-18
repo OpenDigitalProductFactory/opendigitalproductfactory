@@ -1023,6 +1023,8 @@ model WorkCapsule {
   lastSyncedAt            DateTime?
   archivedAt              DateTime?
   activities              WorkCapsuleActivity[]
+  runtimeTargets          RuntimeTarget[]
+  runtimeVerifications    RuntimeVerification[]
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -1052,6 +1054,74 @@ model WorkCapsuleActivity {
   @@index([kind, recordedAt(sort: Desc)])
 }
 
+model RuntimeTarget {
+  id                     String                @id @default(cuid())
+  targetId               String                @unique
+  kind                   String
+  status                 String
+  workCapsuleId          String?
+  featureBuildId         String?
+  sandboxId              String?
+  slotId                 String?
+  composeProjectName     String?
+  serviceName            String?
+  containerName          String?
+  hostUrl                String?
+  internalUrl            String?
+  port                   Int?
+  serviceVersion         String?
+  acceptanceRoleOverride String?
+  debugReason            String?
+  expiresAt              DateTime?
+  lastHeartbeatAt        DateTime?
+  metadata               Json                  @default("{}")
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  featureBuild           FeatureBuild?         @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+  sandbox                Sandbox?              @relation(fields: [sandboxId], references: [id], onDelete: SetNull)
+  slot                   SandboxSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  verifications          RuntimeVerification[]
+  workCapsule            WorkCapsule?          @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+
+  @@index([kind, status])
+  @@index([workCapsuleId])
+  @@index([featureBuildId])
+  @@index([sandboxId])
+  @@index([slotId])
+}
+
+model RuntimeVerification {
+  id                      String                 @id @default(cuid())
+  verificationId          String                 @unique
+  kind                    String
+  status                  String
+  runtimeTargetId         String?
+  workCapsuleId           String?
+  featureBuildId          String?
+  gitPromotionCandidateId String?
+  command                 String?
+  url                     String?
+  evidenceUrl             String?
+  screenshotUrl           String?
+  toolExecutionId         String?
+  buildActivityId         String?
+  backlogActivityId       String?
+  capsuleActivityId       String?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  result                  Json                   @default("{}")
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  featureBuild            FeatureBuild?          @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+  gitPromotionCandidate   GitPromotionCandidate? @relation(fields: [gitPromotionCandidateId], references: [id], onDelete: SetNull)
+  runtimeTarget           RuntimeTarget?         @relation(fields: [runtimeTargetId], references: [id], onDelete: SetNull)
+  workCapsule             WorkCapsule?           @relation(fields: [workCapsuleId], references: [id], onDelete: SetNull)
+
+  @@index([runtimeTargetId, createdAt(sort: Desc)])
+  @@index([featureBuildId, kind, status])
+  @@index([workCapsuleId, kind, status])
+  @@index([kind, status])
+}
 model Epic {
   id                    String           @id @default(cuid())
   epicId                String           @unique
@@ -4084,6 +4154,8 @@ model FeatureBuild {
   productVersions          ProductVersion[]
   promotionBackups         PromotionBackup[]
   issueReports             PlatformIssueReport[]
+  runtimeTargets           RuntimeTarget[]
+  runtimeVerifications     RuntimeVerification[]
   sandboxes                Sandbox[]
   decisionInteractions     DecisionInteraction[]
 
@@ -4174,6 +4246,7 @@ model Sandbox {
   previewUrl           String?
   capabilitiesSnapshot Json
   featureBuild         FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+  runtimeTargets       RuntimeTarget[]
 
   @@index([buildId])
   @@index([state, startedAt])
@@ -4201,6 +4274,7 @@ model GitPromotionCandidate {
   payload                 Json?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
+  runtimeVerifications    RuntimeVerification[]
 
   @@index([status, createdAt])
   @@index([repositoryFullName, afterSha])
@@ -4218,6 +4292,7 @@ model SandboxSlot {
   releasedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  runtimeTargets           RuntimeTarget[]
 
   @@index([status])
 }

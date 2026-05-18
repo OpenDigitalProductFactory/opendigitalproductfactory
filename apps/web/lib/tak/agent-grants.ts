@@ -38,6 +38,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
+  get_runtime_coordination_map: ["work_capsule_read"],
+  register_runtime_target: ["work_capsule_write"],
+  heartbeat_runtime_target: ["work_capsule_write"],
+  release_runtime_target: ["work_capsule_write"],
+  record_runtime_verification: ["work_capsule_write"],
 
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
