@@ -11,6 +11,7 @@ import { ReviewPanel } from "./ReviewPanel";
 import { PreviewUrlCard } from "./PreviewUrlCard";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
+import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
 import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
@@ -21,7 +22,9 @@ import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { createFeatureBuild, deleteFeatureBuild } from "@/lib/actions/build";
 import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
+import { getBuildProgressVisibilityAction } from "@/lib/actions/build-progress-visibility";
 import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
+import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
@@ -67,7 +70,7 @@ export function BuildStudio({
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [buildView, setBuildView] = useState<"preview" | "docs" | "graph">("graph");
+  const [buildView, setBuildView] = useState<"progress" | "topology" | "preview" | "docs">("progress");
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     shouldOpenBuildStudioSidebarByDefault(
       typeof window === "undefined" ? undefined : window.innerWidth,
@@ -103,14 +106,17 @@ export function BuildStudio({
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
+  const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
-    const [fresh, nextFlow] = await Promise.all([
+    const [fresh, nextFlow, nextProgress] = await Promise.all([
       getFeatureBuild(buildId),
       getBuildFlowStateAction(buildId),
+      getBuildProgressVisibilityAction(buildId),
     ]);
     if (fresh) setActiveBuild(fresh);
     setFlowState(nextFlow);
+    setProgressVisibility(nextProgress);
   }, []);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
@@ -128,12 +134,24 @@ export function BuildStudio({
 
   // Fetch initial flow state when the active build changes so the first
   // paint shows substep counts and fork nodes without waiting for an SSE
-  // event. debouncedRefetch handles subsequent updates.
+  // event. Progress visibility rides the same refresh channels rather than
+  // starting a separate polling loop. debouncedRefetch handles subsequent
+  // updates.
   useEffect(() => {
-    if (!activeBuild) { setFlowState(null); return; }
+    if (!activeBuild) {
+      setFlowState(null);
+      setProgressVisibility(null);
+      return;
+    }
     let cancelled = false;
-    getBuildFlowStateAction(activeBuild.buildId).then((s) => {
-      if (!cancelled) setFlowState(s);
+    Promise.all([
+      getBuildFlowStateAction(activeBuild.buildId),
+      getBuildProgressVisibilityAction(activeBuild.buildId),
+    ]).then(([nextFlow, nextProgress]) => {
+      if (!cancelled) {
+        setFlowState(nextFlow);
+        setProgressVisibility(nextProgress);
+      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [activeBuild?.buildId]);
@@ -330,6 +348,12 @@ export function BuildStudio({
       setCreating(false);
     }
   }
+
+  const getTabStyle = (selected: boolean) => ({
+    background: selected ? "var(--dpf-surface-2)" : "transparent",
+    color: selected ? "var(--dpf-text)" : "var(--dpf-muted)",
+    borderBottom: selected ? "2px solid var(--dpf-accent)" : "2px solid transparent",
+  });
 
   return (
     <div className={getBuildStudioShellClassName()} data-testid={BUILD_STUDIO_TEST_IDS.shell}>
@@ -533,17 +557,23 @@ export function BuildStudio({
                 <div role="tablist" aria-label="Workflow view tabs" className="flex gap-1 px-4 pt-3 pb-0">
                   <button
                     role="tab"
-                    aria-selected={buildView === "graph"}
-                    aria-controls="panel-graph"
-                    onClick={() => setBuildView("graph")}
+                    aria-selected={buildView === "progress"}
+                    aria-controls="panel-progress"
+                    onClick={() => setBuildView("progress")}
                     className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                    style={{
-                      background: buildView === "graph" ? "var(--dpf-surface-2)" : "transparent",
-                      color: buildView === "graph" ? "var(--dpf-text)" : "var(--dpf-muted)",
-                      borderBottom: buildView === "graph" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                    }}
+                    style={getTabStyle(buildView === "progress")}
                   >
-                    Workflow
+                    Progress
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={buildView === "topology"}
+                    aria-controls="panel-topology"
+                    onClick={() => setBuildView("topology")}
+                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
+                    style={getTabStyle(buildView === "topology")}
+                  >
+                    Topology
                   </button>
                   {/* Details tab — always available so design doc / brief is visible during ideate/plan */}
                   <button
@@ -552,11 +582,7 @@ export function BuildStudio({
                     aria-controls="panel-docs"
                     onClick={() => setBuildView("docs")}
                     className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                    style={{
-                      background: buildView === "docs" ? "var(--dpf-surface-2)" : "transparent",
-                      color: buildView === "docs" ? "var(--dpf-text)" : "var(--dpf-muted)",
-                      borderBottom: buildView === "docs" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                    }}
+                    style={getTabStyle(buildView === "docs")}
                   >
                     {activeBuild.phase === "ship"
                       ? "Release"
@@ -571,18 +597,15 @@ export function BuildStudio({
                       aria-controls="panel-preview"
                       onClick={() => setBuildView("preview")}
                       className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                      style={{
-                        background: buildView === "preview" ? "var(--dpf-surface-2)" : "transparent",
-                        color: buildView === "preview" ? "var(--dpf-text)" : "var(--dpf-muted)",
-                        borderBottom: buildView === "preview" ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-                      }}
+                      style={getTabStyle(buildView === "preview")}
                     >
                       Preview
                     </button>
                   )}
                 </div>
-                {buildView === "graph" && (
+                {buildView === "topology" && (
                   <div
+                    id="panel-topology"
                     className={getBuildStudioGraphPanelClassName()}
                     data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                   >
@@ -599,9 +622,14 @@ export function BuildStudio({
                     />
                   </div>
                 )}
-                {buildView !== "graph" && (
-                  <div className="flex min-h-0 flex-1 gap-4 p-4">
-                    {buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
+                {buildView !== "topology" && (
+                  <div
+                    id={`panel-${buildView}`}
+                    className={buildView === "progress" ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-0 flex-1 gap-4 p-4"}
+                  >
+                    {buildView === "progress" ? (
+                      <BuildProgressOperationalPanel projection={progressVisibility} />
+                    ) : buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
                       <PreviewUrlCard
                         buildId={activeBuild.buildId}
                         phase={activeBuild.phase}
@@ -654,7 +682,7 @@ export function BuildStudio({
         </div>
       </div>
 
-      {activeBuild && buildView !== "graph" && (
+      {activeBuild && buildView !== "topology" && (
         <PhaseIndicator currentPhase={activeBuild.phase} flowState={flowState} />
       )}
     </div>

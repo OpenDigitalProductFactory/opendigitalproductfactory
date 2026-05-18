@@ -4,9 +4,26 @@ import {
   type BuildPhase,
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
+import { normalizeTaskResults, type NormalizedTaskResult, type NormalizedTaskResults } from "@/lib/build/task-results";
+import {
+  classifyVerificationFailureAxis,
+  normalizeVerificationOutput,
+  type NormalizedVerificationOutput,
+} from "@/lib/build/verification-output";
+import type {
+  BuildFailureAxis,
+  ResumeImplementationModeDetail,
+  TruthNumericSnapshot,
+} from "@/lib/build/progress-visibility-types";
+
+type BuildStudioWorkflowActionMetadata = {
+  failureAxis?: BuildFailureAxis | null;
+  truthSources?: TruthNumericSnapshot[];
+  resumeMode?: ResumeImplementationModeDetail;
+};
 
 export type BuildStudioWorkflowAction =
-  | {
+  | ({
     kind: "approve-start";
     title: string;
     message: string;
@@ -15,8 +32,8 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  }
-  | {
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "advance-phase";
     title: string;
     message: string;
@@ -25,8 +42,8 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  }
-  | {
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "run-review-verification";
     title: string;
     message: string;
@@ -35,8 +52,8 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  }
-  | {
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "record-acceptance";
     title: string;
     message: string;
@@ -45,8 +62,8 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  }
-  | {
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "retry-build";
     title: string;
     message: string;
@@ -55,8 +72,8 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  }
-  | {
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "resume-implementation";
     title: string;
     message: string;
@@ -65,8 +82,8 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  }
-  | {
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "review-only";
     title: string;
     message: string;
@@ -75,7 +92,7 @@ export type BuildStudioWorkflowAction =
     disabledReason: string | null;
     coworkerLabel: string;
     coworkerPrompt: string;
-  };
+  } & BuildStudioWorkflowActionMetadata);
 
 export type WorkflowStageGuidance = {
   title: string;
@@ -129,22 +146,153 @@ function describeApprovalGap(build: FeatureBuildRow): string {
   return "This linked backlog build reached planning without a recorded start approval. Record the approval in Build Studio now so the governance trail reflects the approval that should have happened before planning.";
 }
 
-function hasRecoverableImplementationConcerns(build: FeatureBuildRow): boolean {
-  const taskResults = build.taskResults as
-    | {
-      tasks?: Array<{ outcome?: string | null }>;
-    }
-    | null;
-  const hasTaskConcern = taskResults?.tasks?.some((task) => task.outcome !== "DONE") ?? false;
+type ImplementationConcernState = {
+  taskResults: NormalizedTaskResults;
+  verification: NormalizedVerificationOutput;
+  nonCleanTasks: NormalizedTaskResult[];
+  failureAxis: BuildFailureAxis | null;
+  resumeMode: ResumeImplementationModeDetail;
+  hasRecoverableConcern: boolean;
+};
 
-  const verification = build.verificationOut as
-    | {
-      typecheckPassed?: boolean;
-    }
-    | null;
-  const hasVerificationFailure = verification?.typecheckPassed === false;
+function getImplementationConcernState(build: FeatureBuildRow): ImplementationConcernState {
+  const taskResults = normalizeTaskResults(build.taskResults);
+  const verification = normalizeVerificationOutput(build.verificationOut);
+  const nonCleanTasks = taskResults.tasks.filter((task) => task.outcome !== "DONE");
+  const explicitFailureAxis = explicitFailureAxisOrNull(build.verificationOut);
+  const verificationFailed =
+    verification.typecheckPassed === false
+    || explicitFailureAxis != null;
+  const failureAxis = deriveFailureAxis(nonCleanTasks, verification, explicitFailureAxis);
+  const resumeMode = deriveResumeMode({
+    build,
+    taskResults,
+    nonCleanTasks,
+    verificationFailed,
+  });
 
-  return hasTaskConcern || hasVerificationFailure;
+  return {
+    taskResults,
+    verification,
+    nonCleanTasks,
+    failureAxis,
+    resumeMode,
+    hasRecoverableConcern: nonCleanTasks.length > 0 || verificationFailed,
+  };
+}
+
+function deriveFailureAxis(
+  nonCleanTasks: NormalizedTaskResult[],
+  verification: NormalizedVerificationOutput,
+  explicitFailureAxis: BuildFailureAxis | null,
+): BuildFailureAxis | null {
+  for (const task of nonCleanTasks) {
+    const axis = classifyVerificationFailureAxis({
+      typecheckPassed: null,
+      testsFailed: null,
+      output: task.summary,
+    });
+    if (axis) {
+      return axis;
+    }
+  }
+
+  return explicitFailureAxis ?? verification.failureAxis;
+}
+
+function explicitFailureAxisOrNull(value: unknown): BuildFailureAxis | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const failureAxis = (value as { failureAxis?: unknown }).failureAxis;
+  if (typeof failureAxis !== "string") {
+    return null;
+  }
+  return (
+    failureAxis === "rate-limit"
+    || failureAxis === "usage-limit"
+    || failureAxis === "auth"
+    || failureAxis === "timeout"
+    || failureAxis === "test-failure"
+    || failureAxis === "typecheck-failure"
+    || failureAxis === "out-of-scope-noise"
+    || failureAxis === "provider-unavailable"
+    || failureAxis === "unknown"
+  ) ? failureAxis : null;
+}
+
+function deriveResumeMode(args: {
+  build: FeatureBuildRow;
+  taskResults: NormalizedTaskResults;
+  nonCleanTasks: NormalizedTaskResult[];
+  verificationFailed: boolean;
+}): ResumeImplementationModeDetail {
+  if (args.nonCleanTasks.length > 0) {
+    const count = args.nonCleanTasks.length;
+    return {
+      mode: "reset-blocked",
+      label: "Reset blocked tasks",
+      reason: `${count} non-clean task${count === 1 ? "" : "s"} will be reset before the existing resume path is queued.`,
+    };
+  }
+
+  if (args.build.phase === "review" && args.verificationFailed) {
+    return {
+      mode: "rerun-verification",
+      label: "Rerun verification",
+      reason: "Review has failed verification evidence but no blocked task rows, so the recovery path reopens verification from the existing build state.",
+    };
+  }
+
+  if (args.taskResults.tasks.length === 0) {
+    return {
+      mode: "replan-and-dispatch",
+      label: "Re-plan and dispatch",
+      reason: "No persisted task rows exist, so the existing resume path must dispatch from the current plan.",
+    };
+  }
+
+  return {
+    mode: "already-running",
+    label: "Already running",
+    reason: "The build already has observable implementation state; wait for the next dispatch, database write, or activity row.",
+  };
+}
+
+function buildResumeAction(args: {
+  state: ImplementationConcernState;
+  coworkerLabel: string;
+  coworkerPrompt: string;
+}): BuildStudioWorkflowAction {
+  const { state } = args;
+  const blockedCount = state.nonCleanTasks.length;
+  const axis = state.failureAxis ?? "unknown";
+  const title =
+    axis === "out-of-scope-noise"
+      ? "Review workspace noise before retrying this build"
+      : blockedCount > 0
+        ? `Click Resume to re-execute ${blockedCount} blocked task${blockedCount === 1 ? "" : "s"}`
+        : state.resumeMode.mode === "replan-and-dispatch"
+          ? "Click Resume to re-plan and dispatch tasks"
+          : "Click Resume to rerun verification";
+  const message =
+    axis === "out-of-scope-noise"
+      ? "Failure axis: out-of-scope-noise. Verification failures appear to come from outside this build's source surface; review the scoped evidence before retrying."
+      : `Failure axis: ${axis}. ${state.resumeMode.reason} Resume from a healthy sandbox before review continues.`;
+
+  return {
+    kind: "resume-implementation",
+    title,
+    message,
+    primaryLabel: "Resume Implementation",
+    targetPhase: null,
+    disabledReason: null,
+    coworkerLabel: args.coworkerLabel,
+    coworkerPrompt: args.coworkerPrompt,
+    failureAxis: state.failureAxis,
+    truthSources: [state.taskResults.source],
+    resumeMode: state.resumeMode,
+  };
 }
 
 function hasCompletedUxVerification(build: FeatureBuildRow): boolean {
@@ -221,18 +369,14 @@ export function deriveBuildStudioWorkflowAction({
   }
 
   if (build.phase === "build") {
-    if (hasRecoverableImplementationConcerns(build)) {
-      return {
-        kind: "resume-implementation",
-        title: "Implementation Needs Recovery",
-        message: "This build recorded execution or verification concerns. Reopen implementation so the coworker can rerun the non-clean tasks on a healthy sandbox before review continues.",
-        primaryLabel: "Resume Implementation",
-        targetPhase: null,
-        disabledReason: null,
+    const concernState = getImplementationConcernState(build);
+    if (concernState.hasRecoverableConcern) {
+      return buildResumeAction({
+        state: concernState,
         coworkerLabel: "Review failures with coworker",
         coworkerPrompt:
           "The current build still has flagged execution or verification concerns. Explain what failed, then rerun the non-clean implementation work on a healthy sandbox and tell me when verification is genuinely ready.",
-      };
+      });
     }
 
     return {
@@ -248,18 +392,16 @@ export function deriveBuildStudioWorkflowAction({
     };
   }
 
-  if (build.phase === "review" && hasRecoverableImplementationConcerns(build)) {
-    return {
-      kind: "resume-implementation",
-      title: "Implementation Needs Recovery",
-      message: "Review surfaced implementation-side failures rather than a clean verification pass. Resume implementation from Build Studio, rerun the non-clean tasks, and come back to review with real sandbox evidence.",
-      primaryLabel: "Resume Implementation",
-      targetPhase: null,
-      disabledReason: null,
-      coworkerLabel: "Recover with coworker",
-      coworkerPrompt:
-        "The current review state reflects implementation failures, not a clean verification pass. Recover the build from the live product path: rerun the non-clean implementation work on a healthy sandbox, then tell me the next approval when verification is truly ready.",
-    };
+  if (build.phase === "review") {
+    const concernState = getImplementationConcernState(build);
+    if (concernState.hasRecoverableConcern) {
+      return buildResumeAction({
+        state: concernState,
+        coworkerLabel: "Recover with coworker",
+        coworkerPrompt:
+          "The current review state reflects implementation failures, not a clean verification pass. Recover the build from the live product path: rerun the non-clean implementation work on a healthy sandbox, then tell me the next approval when verification is truly ready.",
+      });
+    }
   }
 
   if (build.phase === "review") {

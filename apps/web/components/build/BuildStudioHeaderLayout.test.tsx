@@ -29,6 +29,10 @@ vi.mock("@/lib/actions/build-flow", () => ({
   getBuildFlowStateAction: vi.fn(),
 }));
 
+vi.mock("@/lib/actions/build-progress-visibility", () => ({
+  getBuildProgressVisibilityAction: vi.fn(),
+}));
+
 vi.mock("@/components/build/PhaseIndicator", () => ({
   PhaseIndicator: () => <div data-testid="phase-indicator" />,
 }));
@@ -196,7 +200,7 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/class=\"truncate\">dpf\/fb8783b9\/fix-build-studio-header-content-overlap-in-workflo/);
   });
 
-  it("renders code intelligence status in the workflow view", () => {
+  it("defaults to the operational progress view and keeps topology available", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -207,8 +211,11 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("code-intelligence-status-card");
-    expect(html).toContain("Loading graph status...");
+    expect(html).toContain(">Progress<");
+    expect(html).toContain(">Topology<");
+    expect(html).toContain("Loading build progress...");
+    expect(html).not.toContain("code-intelligence-status-card");
+    expect(html).not.toContain("process-graph");
   });
 
   it("renders the portal context strip when a server envelope is provided", () => {

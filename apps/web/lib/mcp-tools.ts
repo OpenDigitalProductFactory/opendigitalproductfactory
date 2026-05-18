@@ -1558,6 +1558,82 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
     buildPhases: ["ideate", "plan", "build", "review"],
   },
+  {
+    name: "get_build_progress_visibility",
+    description: "Read the Build Studio progress projection for a build: source-labelled DB task progress, stale chat conflicts, sandbox state, dispatch history, scoped verification, and quiet-agent status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "get_build_sandbox_state",
+    description: "Read the source-bounded sandbox/git state for a Build Studio build, including branch, head SHA, source diffstat, ignored generated/dependency paths, and expected plan files.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "get_build_dispatch_history",
+    description: "Read bounded codex-dispatch attempts for a Build Studio build, including model, duration, exit code, sanitized stdout/stderr excerpts, and classified failure axis.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "get_build_scoped_verification",
+    description: "Read build-scoped verification for a Build Studio build, separating failures on the build's changed surface from workspace-wide/global-health noise.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "list_build_activity_since",
+    description: "List recent BuildActivity rows for a Build Studio build after an optional ISO timestamp cursor. Use this for polling-friendly observer updates.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+        cursor: { type: "string", description: "Optional ISO timestamp cursor; only rows after this timestamp are returned." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
     name: "saveBuildEvidence",
@@ -5789,6 +5865,95 @@ export async function executeTool(
       }
 
       return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
+    }
+
+    case "get_build_progress_visibility": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getBuildProgressVisibility } = await import("@/lib/build/progress-visibility");
+      const projection = await getBuildProgressVisibility(buildId);
+      if (!projection) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Build progress visibility loaded for ${buildId}: ${projection.progress.primary.completed}/${projection.progress.primary.total} tasks from ${projection.progress.primary.source}.`,
+        data: projection as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "get_build_sandbox_state": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+      const state = await getSandboxStateForBuild(buildId);
+      if (!state) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Sandbox state loaded for ${buildId}: branch ${state.branch ?? "unknown"}, ${state.sourceDiffstat.length} source file(s) changed.`,
+        data: state as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "get_build_dispatch_history": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getDispatchHistoryForBuild } = await import("@/lib/build/dispatch-attempts");
+      const history = await getDispatchHistoryForBuild(buildId);
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Dispatch history loaded for ${buildId}: ${history.length} attempt(s).`,
+        data: { buildId, attempts: history },
+      };
+    }
+
+    case "get_build_scoped_verification": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
+      const verification = await getScopedVerificationForBuild(buildId);
+      if (!verification) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Scoped verification loaded for ${buildId}: ${verification.buildScoped.failureAxis ?? "no failure"} axis.`,
+        data: verification as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "list_build_activity_since": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const cursor = typeof params["cursor"] === "string" && params["cursor"].trim()
+        ? new Date(params["cursor"])
+        : null;
+      if (cursor != null && !Number.isFinite(cursor.getTime())) {
+        return { success: false, error: "Invalid cursor", message: "cursor must be an ISO timestamp when provided." };
+      }
+      const activities = await prisma.buildActivity.findMany({
+        where: {
+          buildId,
+          ...(cursor ? { createdAt: { gt: cursor } } : {}),
+        },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+        select: { id: true, buildId: true, tool: true, summary: true, createdAt: true },
+      });
+      const rows = activities.map((activity) => ({
+        ...activity,
+        createdAt: activity.createdAt.toISOString(),
+      }));
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Loaded ${rows.length} build activit${rows.length === 1 ? "y" : "ies"} for ${buildId}.`,
+        data: {
+          buildId,
+          activities: rows,
+          nextCursor: rows.at(-1)?.createdAt ?? params["cursor"] ?? null,
+        },
+      };
     }
 
     // ─── Build Studio Lifecycle Tool Handlers (EP-SELF-DEV-002) ─────────────
