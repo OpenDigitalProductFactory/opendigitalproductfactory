@@ -1,6 +1,6 @@
 ---
 title: Build Studio thread management & scoped task context — design validation
-status: post-merge validation (rev 3)
+status: post-merge validation (rev 4 — chief-architect pass)
 author: Claude (validation pass)
 date: 2026-05-18
 related:
@@ -15,15 +15,27 @@ references:
   - apps/web/lib/decision-perspective/build-studio-gate.ts (live WWMD gate)
 ---
 
-> **Status banner (rev 3).** PR #756 merged to `main` as commit `538bc685`
-> while this validation was in progress. The §6 Option B amendments are
-> therefore no longer executable as "in PR #756" — items 1 (decisions
-> ledger), 4 (drop dep-titles), and 5 (skip duplicate PhaseHandoff write)
-> become **fast-follow PRs**. Items 2 (file signatures) and 3 (retry
-> context) remain as originally scoped. The recommendation in §7 is
-> unchanged in substance; only the delivery vehicle shifts from "amend"
-> to "follow-up." See §12 for the post-merge action plan and the
-> evidence-not-provenance governance precedent.
+> **Status banner (rev 4).** PR #756 landed as commit `538bc685`. This
+> document is now the durable design record, not a pre-merge proposal.
+> §6/§7 below are rewritten in **landed / fast-follow** tense rather than
+> the original "amend before merge" framing. Rev 4 also incorporates
+> chief-architect feedback (2026-05-18) on:
+>
+> - decisions-ledger persistence (single source of truth via `DecisionInteraction`;
+>   regex extractor dropped — see §6 item 1)
+> - decisions-slot eviction policy (recency / topic-overlap, not confidence
+>   — see §10.3)
+> - file-signature extraction (downgraded from "cheap `tsc` step" to its
+>   own BI exploring AST vs. specialist-emitted signatures — see §6 item 2)
+> - `PhaseHandoff` consumer audit prerequisite (§6 item 5)
+> - evidence-not-provenance principle scoped to gate-evidence evaluation,
+>   trust-boundary controls still apply (§12.2)
+> - caching-friendly slot order promoted from C8 ⚠️ to a concrete §6 item
+>   (new item 6)
+> - §13 test-coverage audit of the landed commits added
+>
+> See §12 for the post-merge action plan and the evidence-not-provenance
+> governance precedent.
 
 # Build Studio thread management & scoped task context — design validation
 
@@ -220,85 +232,152 @@ For a Build Studio task dispatch to be right-sized, it should:
 | C5 | Retries see the prior failure context, not the post-hoc summary | ❌ retry dispatch identical to fresh dispatch |
 | C6 | No semantic drift from repurposed tool calls (e.g., unintended phase advances) | ✅ guarded by `resolveSavePhaseHandoffTransition` |
 | C7 | Persistence has a single source of truth | ⚠️ duplicated between `taskResults` and `PhaseHandoff` |
-| C8 | Caching-friendly composition (stable prefix, variable suffix) | ⚠️ artifact summary is always variable; could be structured to maximise cache hit |
+| C8 | Caching-friendly composition (stable prefix, variable suffix) | ⚠️ slot order today defeats cache; **addressed in §6.2 item 6** (FF-PR-1) |
 
-## 6. Options
+## 6. Options considered and what landed
 
-### Option A — Ratify PR #756 as-is; file follow-up BI
+PR #756 landed as commit `538bc685`. Functionally that is **Option A** below
+(ship the runaway fix, defer the gap-closers). The fast-follow plan in §7
+executes a narrowed form of **Option B**, with the chief-architect feedback
+from rev 4 already folded in. **Option C** (hierarchical planner-worker)
+remains the recorded alternative; it was not taken and is not on the active
+roadmap.
 
-Merge the PR. The acceptance criteria of BI-0789AF6B are mechanically met. C1,
-C2, C6 are solid. C3-C5, C7-C8 become a follow-up BI: *"Build Studio scoped
-context — decisions ledger, file-signature carry-forward, retry context."*
+### 6.1 Option A (landed) — Scoped context as merged
 
-**Pro.** Ships the 125K runaway fix today. Iterative; the follow-up has a
-clear scope.
-**Con.** C3 (decisions survival) is the most user-visible quality gap and
-will surface as "the build works but the design is incoherent" exactly when
-this fix is supposed to prevent that.
+The acceptance criteria of BI-0789AF6B are mechanically met by `538bc685`.
+C1, C2, C6 are solid. C3 (decisions survival), C4 (file shapes), C5 (retry
+context), C7 (single source of truth), C8 (cache-friendly composition) are
+acknowledged gaps that fast-follows address.
 
-### Option B — Amend PR #756 before merge
+**Why this was the right call.** The 125K runaway was actively breaking
+builds. Shipping the cap unblocked operators. The gaps named in §4.2 / §4.3
+do not cause the build to fail mechanically — they erode design coherence
+over long builds. That is a real cost, but a survivable one for the days
+between Option A and the fast-follow PRs.
 
-Add to the existing PR:
-1. **Decisions ledger, hydrated from WWMD.** A separate `decisions[]` field on
-   `taskResults`, append-only across tasks. **The primary writer is the WWMD
-   Decision Perspective gate** (see §10). When a specialist hits an open
-   question during execution, it calls WWMD; WWMD's outcome (`recommend` /
-   `arbitrate` / `escalate` / `defer`) along with the `interactionId`,
-   confidence score, and rationale gets recorded into `decisions[]`. A
-   secondary regex extractor (like `verification` hints today) catches
-   spontaneous "I chose X over Y because…" prose. Rendered into scoped
-   context as its own slot, ~800 chars, separate from artifact summary so it
-   doesn't get LRU-evicted.
-2. **File signature carry-forward.** When a task writes a file, the
-   orchestrator runs a cheap signature extractor (TypeScript `tsc --emitDeclarationOnly`
-   on the touched files, or a simpler line-based heuristic) and stores the
-   exported symbol list. Subsequent tasks see `auth.ts → exports
-   { signJwt, verifyJwt, AuthError }` instead of just the path.
+**What it leaves on the table.** C3 in particular: "the build works but the
+design is incoherent" is the failure mode this fix is *supposed* to prevent.
+Until §7 lands, long builds remain exposed to architectural drift between
+early and late tasks.
+
+### 6.2 Option B (fast-follow execution) — Close the gaps
+
+Items below are sized for individual follow-up PRs, in priority order:
+
+1. **Decisions ledger, hydrated from WWMD — single writer, single store.**
+   - **Writer:** WWMD only. New tool `ask_decision_perspective` (see §10)
+     is the sole path for a specialist to record an architectural choice.
+     If a specialist makes a decision without calling it, that is a profile
+     coverage gap (captured as a `defer` outcome on the next caller), not
+     an extraction problem to paper over with regex. **The rev 3 regex
+     extractor for spontaneous "I chose X because Y" prose is dropped** —
+     it would create a false sense of coverage and quietly let undocumented
+     decisions accumulate.
+   - **Authoritative store:** `DecisionInteraction` rows. These already
+     exist in the schema and already carry confidence, rationale, and
+     audit fields.
+   - **Projection into scoped context:** `featureBuild.taskResults.decisions[]`
+     holds **`interactionId` references only**, not duplicated rationale.
+     Rendering the decisions slot in `buildScopedTaskContext` looks the
+     rationale up at dispatch time. This avoids the same dual-persistence
+     smell that §4.3 flagged for `PhaseHandoff` rows.
+   - **Slot:** dedicated, ~800 chars, separate from artifact summary so
+     it does not get LRU-evicted as artifacts accumulate. Eviction policy
+     when the slot itself overflows: **recency + topic-overlap with the
+     current task**, not confidence (a low-confidence `arbitrate` is
+     exactly the fragile commitment subsequent tasks must respect; see
+     §10.3 for the rationale).
+
+2. **File signature carry-forward — its own BI, not a "cheap step".**
+   The rev 3 framing of `tsc --emitDeclarationOnly` as cheap was wrong:
+   it adds a compile step per task, needs a writable sandbox, requires a
+   specific tsconfig in a multi-tsconfig monorepo, and only covers
+   `.ts`/`.tsx`. The "simpler line-based heuristic" alternative would be
+   wrong precisely on re-exports, namespace exports, and generic
+   signatures — the cases that matter. **This becomes a scoped BI that
+   evaluates three paths:** (a) AST extraction via `ts-morph`,
+   (b) on-demand `tsc --emitDeclarationOnly` with workspace-aware
+   tsconfig resolution, (c) **asking the specialist to emit a signature
+   block in its structured outcome** (likely cheapest and most robust;
+   structured output beats post-hoc extraction). The chosen approach
+   must work for non-TypeScript file types touched by builds (SQL
+   migrations, JSON schemas, `.prisma`).
+
 3. **Retry context preservation.** When `outcome === "BLOCKED"`, the next
-   retry of that same task gets the prior raw output (clipped to 1500 chars)
-   as a `Prior attempt blocked because:` slot, replacing the dep-titles slot
-   for that one dispatch.
-4. **Drop the dep-titles slot** entirely. Artifact summary already covers it.
-5. **Skip the `PhaseHandoff` write for internal task handoffs.** The
-   `taskResults` field is canonical; the duplicate row is noise.
+   retry of the same task receives the prior raw output (clipped to 1500
+   chars) as a `Prior attempt blocked because:` slot, replacing the
+   dep-titles slot for that one dispatch only. Unchanged from rev 3.
 
-**Pro.** All 8 criteria addressed in one merge. Single review surface.
-**Con.** Doubles the PR size. Decisions extraction is heuristic and could
-miss real decisions; needs an explicit tool surface for the specialist to
-record decisions deliberately.
+4. **Drop the dep-titles slot entirely.** Artifact summary already covers
+   it. Unchanged from rev 3.
 
-### Option C — Reject; redesign as hierarchical planner-worker
+5. **Skip the `PhaseHandoff` write for internal task handoffs — after a
+   consumer audit.** Before removal, grep for `PhaseHandoff` readers
+   (status views, lifecycle dashboards, audit panels, replay tooling).
+   If any consumer relies on internal-handoff rows, the right fix is a
+   schema-level `kind: 'internal_task' | 'phase_transition'` discriminator
+   with consumers filtering — not silent removal. Resolution lives in the
+   fast-follow BI.
 
-Discard PR #756. Introduce a **build planner** thread that maintains the
+6. **Cache-friendly slot order (new — was C8 in rev 3).** Anthropic
+   prompt caching rewards stable-prefix / variable-suffix composition.
+   Today `buildScopedTaskContext` places the current-task block mid-
+   template, defeating the cache. Reorder slots so the stable bits come
+   first: header + policy → plan files (stable per build) → decisions
+   ledger (append-only, stable within a build) → artifact summary
+   (variable, LRU) → current task (always changing). Measure cache hit
+   rate before and after via the Anthropic API usage headers. This is a
+   real per-dispatch cost lever the prior revision deferred without
+   analysis.
+
+### 6.3 Option C (recorded, not taken) — Hierarchical planner-worker
+
+Discard PR #756 and introduce a **build planner** thread that maintains the
 mission-constant state (plan + decisions + open issues) and dispatches workers
-via `spawnWorkThread` (FB-E6BE8D3B — not yet implemented, may not exist).
-Workers receive scoped context derived by the planner, not by orchestrator
-code. The planner sees worker artefacts and decides what to carry forward.
+via `spawnWorkThread` (FB-E6BE8D3B — does not currently exist as a backlog
+item; verified). Workers receive scoped context derived by the planner, not
+by orchestrator code.
 
-**Pro.** Architecturally cleanest. Maps onto Cursor's multi-agent kernels
-direction.
-**Con.** Strictly larger scope than the BI was written for. FB-E6BE8D3B
-doesn't currently exist as a backlog item (verified). Pushes the 125K fix out
-weeks. The branch already has a working solution that fixes the reported bug.
+**Why not now.** Strictly larger scope than the BI was written for. The
+branch already had a working solution that fixed the reported bug. The
+fast-follow plan in §6.2 closes the gaps incrementally without a rewrite.
 
-## 7. Recommendation
+**Why still on the record.** It maps onto Cursor's multi-agent kernels
+direction and is the architecturally cleanest endpoint. The Level-3
+EaView-driven orchestrator in §11 is in the same family. If we ever revisit
+the orchestrator's structure, this is the option to revisit.
 
-**Option B — amend PR #756 before merge** — with the following narrowing:
+## 7. Fast-follow plan
 
-- **In this PR**: add the decisions ledger (item 1) and drop the dep-titles
-  slot (item 4). Skip the duplicate `PhaseHandoff` write (item 5).
-- **In a fast-follow PR after this one merges**: file signature
-  carry-forward (item 2) and retry-context preservation (item 3).
+The §6.2 items become three follow-up PRs against `main`, in priority order:
 
-Rationale: C3 (decisions survival) is the gap most likely to materially
-degrade user-visible build quality. Adding it now is small (one new field on
-`taskResults`, one new context slot, one tool definition for the specialist to
-record decisions explicitly). C4 and C5 are wins but mechanically larger —
-signature extraction touches the sandbox tooling boundary; retry context
-needs new outcome plumbing. Splitting them out keeps this PR reviewable.
+- **FF-PR-1 — decisions ledger + dep-titles drop + cache-friendly slot
+  order.** Items 1, 4, 6. Single review surface; all three are slot-shape
+  changes to `buildScopedTaskContext`. Pre-req: `ask_decision_perspective`
+  tool exists (work tracked under BI-FOLLOWUP-WWMD-PERTASK; see §12.3).
 
-C7 (single source of truth) becomes free if we accept item 5 — the
-`PhaseHandoff` row is genuinely redundant for internal handoffs.
+- **FF-PR-2 — PhaseHandoff consumer audit + duplicate-write removal.**
+  Item 5. The audit may invalidate the assumption that the row is purely
+  noise; the BI captures both branches (silent removal vs. schema
+  discriminator).
+
+- **FF-PR-3 — retry context preservation.** Item 3. Needs new outcome
+  plumbing on `BLOCKED` retries; smallest blast radius if shipped last.
+
+- **Separate BI (not a PR yet) — file signature carry-forward.** Item 2.
+  Decision-shaped work; the BI's first task is to choose between AST
+  extraction, on-demand `tsc`, and specialist-emitted signatures, with
+  the non-TS file-type story explicit in the success criteria.
+
+Rationale for the split: FF-PR-1 lands the user-visible quality gain
+(decisions survive long builds, fewer cache misses) in one reviewable
+diff. FF-PR-2 is gated on the audit. FF-PR-3 and the signature BI are
+independent and can land in any order after FF-PR-1.
+
+C7 (single source of truth) is now resolved by §6.2 item 1's
+`DecisionInteraction`-only persistence model **plus** item 5's
+PhaseHandoff resolution — together rather than separately.
 
 ## 8. Acceptance criteria for the chosen design
 
@@ -315,9 +394,12 @@ A measurable definition of "right-sized" for the amended PR:
 
 3. **No semantic drift**: A test asserting that `save_phase_handoff` called
    with the orchestrator's `(AGT-ORCH-300, /build, autoAdvance=false, toPhase=build)`
-   tuple does **not** create a `PhaseHandoff` row and does **not** advance
-   the build phase. (After item 5; before item 5 it must continue to skip
-   advance but may still write the row.)
+   tuple does **not** advance the build phase. After FF-PR-2 lands and the
+   consumer audit resolves: the call additionally does **not** create a
+   `PhaseHandoff` row (silent-removal branch) **or** creates a row with
+   `kind: 'internal_task'` that the orchestrator's auto-advance path filters
+   out (discriminator branch). Until FF-PR-2 lands, the test asserts only
+   the no-advance behaviour and tolerates the row.
 
 4. **No regression on the runaway**: Replay the 14-task fixture that
    originally produced 125K-char payloads; assert task 14's payload size
@@ -333,15 +415,21 @@ A measurable definition of "right-sized" for the amended PR:
 
 ## 9. Open questions for the operator
 
-1. **Per-PR vs. follow-up split.** Is the proposed split (decisions ledger
-   wired to WWMD + drop dep-titles + drop duplicate handoff write in this PR;
-   signatures + retry context in a fast-follow) acceptable, or would you
-   prefer everything in one PR / everything as follow-ups?
+1. **Fast-follow PR ordering.** §7 proposes FF-PR-1 (decisions ledger +
+   dep-titles drop + cache-friendly slot order), FF-PR-2 (PhaseHandoff
+   audit + duplicate-write resolution), FF-PR-3 (retry context), and a
+   separate BI for file signature carry-forward. FF-PR-1 is gated on the
+   `ask_decision_perspective` tool existing — should that tool's PR be
+   filed inside FF-PR-1, or as its own PR (BI-FOLLOWUP-WWMD-PERTASK)
+   landing first? My read: separate PR landing first, since the tool has
+   security-surface implications (a new build-phase tool) that deserve
+   their own review focus.
 
-2. **Build Studio lifecycle re-entry.** The active build `FB-60DCE69A` is
-   still in `phase: ideate` despite the implementation existing. If we amend
-   PR #756 directly, do we mark the BS draft `complete` retroactively, or
-   run it through review/ship gates against this design doc as the spec?
+2. **Build Studio lifecycle re-entry — answered by §12.2 precedent.**
+   FB-60DCE69A advances based on the evidence already on the record
+   (vitest 49 ✓, typecheck ✓, CI green on `538bc685`). This question is
+   left in place as the historical record of how the precedent was
+   established.
 
 3. **WWMD scope expansion.** Current WWMD wiring covers only the plan→build
    advancement gate (`build-studio-gate.ts:planAdvancementQuestion`). §10
@@ -405,8 +493,11 @@ Add a tool surface for specialists during the build phase:
 
 ### 10.3 How decisions enter the scoped context
 
-The new `decisions[]` ledger (§6 Option B item 1) is rendered into
-`buildScopedTaskContext` as a dedicated slot, ~800 chars, formatted as:
+The new `decisions[]` projection (§6.2 item 1) is rendered into
+`buildScopedTaskContext` as a dedicated slot, ~800 chars. The projection
+itself holds `interactionId` references only; the renderer hydrates each
+reference from the authoritative `DecisionInteraction` row at dispatch
+time. Formatted as:
 
 ```
 Decisions on record:
@@ -418,10 +509,25 @@ Decisions on record:
 ```
 
 This slot is **separate from the artifact summary** so it does not get
-LRU-evicted as tasks accumulate. The decisions slot only evicts when its
-own budget is exceeded, and even then it evicts the lowest-confidence
-entries first (high-confidence decisions are by definition the
-load-bearing ones).
+LRU-evicted as tasks accumulate.
+
+**Eviction policy when the slot itself overflows: recency + topic-overlap
+with the current task, not confidence.** A 0.4-confidence `arbitrate`
+outcome with `requiresReview: true` is precisely the fragile commitment
+that subsequent tasks must respect or else re-litigate. High-confidence
+"obvious" decisions are by definition the ones a fresh specialist could
+re-derive without the ledger. Evicting by confidence is therefore
+backwards — it sheds the entries most expensive to lose. Preferred
+ordering when trimming:
+
+1. Drop decisions whose `interactionId` has not been referenced by the
+   current task's `task.files` or title keywords (low topic-overlap).
+2. Among remaining, drop oldest first (recency tail).
+3. If the slot still overflows, clip rationales (not entries) — keep the
+   `interactionId` and one-line summary, drop the long-form rationale.
+
+Never drop a `requiresReview: true` decision unless it is older than the
+two prior phase boundaries.
 
 ### 10.4 Why this is a win beyond just "carry decisions forward"
 
@@ -451,10 +557,15 @@ In addition to §8:
    build-phase specialist with `view_platform`. (Test:
    `mcp-tools.test.ts` shows it in build-phase tool list.)
 
-7. **Decision recorded in both stores.** Calling
+7. **Decision recorded with a single source of truth.** Calling
    `ask_decision_perspective` from a build-phase specialist creates a
-   `DecisionInteraction` row AND appends to
-   `featureBuild.taskResults.decisions[]`, with matching `interactionId`.
+   `DecisionInteraction` row (authoritative). The `interactionId` is
+   appended to `featureBuild.taskResults.decisions[]` as a reference
+   only — rationale/confidence/outcome are never duplicated into
+   `taskResults`. The rendering layer hydrates the reference at dispatch
+   time. Test asserts that mutating the `DecisionInteraction` row is
+   immediately visible in the next scoped-context dispatch (proves there
+   is no shadow copy).
 
 8. **Escalation halts the build.** A WWMD outcome of `escalate` causes
    the calling task to return `BLOCKED` with reason
@@ -577,11 +688,12 @@ Plus a `main`-merge commit for fast-forward parity.
 
 ### 12.2 Governance precedent — evidence, not provenance
 
-> **A Build Studio draft can advance through phases when the evidence
-> required by `checkPhaseGate` is present and passes review, regardless of
-> whether BS dispatched the specialists that produced it.** Governance
-> approves the evidence and the gate result, not the path that produced
-> the evidence.
+> **Build Studio gate functions (`checkPhaseGate`, `reviewDesignDoc`,
+> `reviewBuildPlan`, etc.) evaluate the persisted evidence fields they
+> name; they do not require that BS dispatch produced those fields.**
+> A draft can advance through phases when the named evidence is present
+> and passes review, regardless of whether the specialists that produced
+> it ran inside BS, on an external branch, or by an operator's hand.
 
 This is operator-ratified (2026-05-18) and should become a wiki principle
 candidate under `docs/founder-kernel/wiki/principles/` with a short title
@@ -591,8 +703,23 @@ like `governance-approves-evidence-not-provenance`. It generalises to:
 - Operator-driven hotfixes that bypass BS dispatch
 - Hand-coded BIs where the implementer is human
 
-The principle constrains *what* governance evaluates (evidence) without
-constraining *who* produced it.
+**Scope limit — trust-boundary controls still apply.** This principle
+governs only gate-evidence evaluation. It does **not** bypass the
+platform's trust-boundary controls:
+
+- **DCO sign-off** is still required on every commit
+- **Signed-off-by** identity rules still apply to contributors
+- **Contribution-mode rules** (PR provenance, capsule scope, hive
+  contribution checks) still apply to anything entering the public
+  repository
+- **Security review** (secrets scan, backdoor detection, dependency
+  vulnerabilities) is not gate-evidence — it is a hard prerequisite that
+  runs independently
+
+A contribution that fails any trust-boundary check cannot ride this
+precedent past those checks, no matter how clean its gate evidence is.
+Evidence-not-provenance is about *who produced the artefact*, not about
+*who is allowed to commit it*.
 
 ### 12.3 Post-merge action plan
 
@@ -611,18 +738,26 @@ constraining *who* produced it.
      CI green on commit `538bc685`
    - **`ship`**: the merge itself
 
-3. **Three follow-up BIs** to be filed (substrate gap: no
+3. **Follow-up BIs** to be filed (substrate gap: no
    `create_backlog_item` in current MCP surface — see §12.5):
 
-   - **BI-FOLLOWUP-CONTEXT-AMEND**: PR #756 fast-follow amendments —
-     decisions ledger hydrated from WWMD; drop dep-titles slot from
-     `buildScopedTaskContext`; skip duplicate PhaseHandoff write for
-     internal task handoffs.
-   - **BI-FOLLOWUP-WWMD-PERTASK**: WWMD scope expansion —
-     `ask_decision_perspective` tool for build-phase specialists;
-     escalate/defer halt semantics on the orchestrator; profile material
-     for build-time question classes (`IMPLEMENTATION_TRADEOFF`,
-     `API_SHAPE_CHOICE`, `MISSING_CONSTRAINT`).
+   - **BI-FOLLOWUP-WWMD-PERTASK** (prerequisite for FF-PR-1): WWMD scope
+     expansion — `ask_decision_perspective` tool for build-phase
+     specialists; escalate/defer halt semantics on the orchestrator;
+     profile material for build-time question classes
+     (`IMPLEMENTATION_TRADEOFF`, `API_SHAPE_CHOICE`, `MISSING_CONSTRAINT`).
+   - **BI-FOLLOWUP-CONTEXT-FFPR1** (FF-PR-1): decisions-ledger slot wired
+     to `DecisionInteraction` (reference-only projection), drop dep-titles
+     slot, reorder slots for cache-friendly composition.
+   - **BI-FOLLOWUP-CONTEXT-FFPR2** (FF-PR-2): `PhaseHandoff` consumer
+     audit; resolve duplicate-write via silent removal *or* schema
+     discriminator based on audit outcome.
+   - **BI-FOLLOWUP-CONTEXT-FFPR3** (FF-PR-3): retry-context preservation
+     for `BLOCKED` retries.
+   - **BI-FOLLOWUP-SIGNATURE-EXTRACT**: file signature carry-forward —
+     decision-shaped BI evaluating AST extraction, on-demand `tsc`, and
+     specialist-emitted signature blocks; must address non-TS file types
+     (SQL, JSON schemas, `.prisma`).
    - **BI-FOLLOWUP-EA-PROCESS-L1**: Author the Build Studio lifecycle as
      a single swimlane `EaView` (Level 1 of §11).
 
@@ -662,10 +797,73 @@ for.
 These gaps are not failures of this design; they are surfaced
 substrate questions that should themselves be tracked work.
 
+## 13. Test-coverage audit of the landed commits
+
+The acceptance criteria in §8 / §10.5 describe what "right-sized" looks
+like. This section pins which of those criteria the merged commits
+(`dfc25c56` + `e5c9bea9` on `538bc685`) actually verify today and which
+remain assertions on paper. The point is to prevent a fast-follow PR
+from quietly "fixing" a known gap via heuristic without anyone noticing
+the regression test never existed.
+
+### 13.1 Audit matrix
+
+| Criterion | Covered by landed test? | Notes / gap |
+|---|---|---|
+| C1 — 8K cap after 15 tasks (§8 #1) | TBD — audit step 1 below | If absent, FF-PR-1 must add a unit test that constructs 15 stub artefact entries and asserts `clipText` enforces the cap |
+| C1 — replay of 14-task fixture (§8 #4) | TBD — audit step 1 | Same |
+| C2 — test/implement/verify carried (§8 #5) | TBD — audit step 1 | Behavioural test on `buildScopedTaskContext` output |
+| C3 — decisions survive eviction (§8 #2) | ❌ not covered (feature does not exist yet) | Lands with FF-PR-1; pin a regression test that records a decision in synthetic task 3, evicts task 3's artifact summary via LRU, and asserts the decision still renders |
+| C4 — file shapes carry forward | ❌ not covered (feature does not exist yet) | Lands with the signature-extract BI |
+| C5 — retry context preserved | ❌ not covered (feature does not exist yet) | Lands with FF-PR-3; pin a test that runs a `BLOCKED` task twice and asserts the second dispatch contains the prior failure prose |
+| C6 — no semantic drift (§8 #3) | ✅ likely covered by `resolveSavePhaseHandoffTransition` tests | Audit step 2: confirm a test asserts the no-advance behaviour for the `(AGT-ORCH-300, /build, autoAdvance=false)` tuple |
+| C7 — single source of truth | ❌ not applicable yet (dual-store smell not introduced) | Pin C7 as a *prohibition test* in FF-PR-1: assert that `taskResults.decisions[]` contains only `interactionId` references, no rationale fields |
+| C8 — cache-friendly slot order | ❌ not covered (slot order currently defeats cache) | Lands with FF-PR-1; assert via snapshot test that the stable prefix appears before any variable slot |
+
+### 13.2 Audit steps to run before FF-PR-1 opens
+
+These are not blockers for shipping the fast-follows; they are
+preconditions for trusting that the fast-follows do not silently
+regress the merged behaviour.
+
+1. **Inventory landed tests.** Grep `apps/web/lib/integrate/__tests__/`
+   (or wherever build-orchestrator tests live) for tests that touch
+   `buildScopedTaskContext`, `buildTaskArtifactSummary`,
+   `buildTaskArtifactEntry`. Catalogue what each asserts. Any of C1, C2
+   without a corresponding test becomes a tiny precursor PR that adds
+   the regression coverage *before* FF-PR-1 changes the slot shape.
+
+2. **Confirm the C6 guard has a test.** Find the test (if any) that
+   exercises `resolveSavePhaseHandoffTransition` with the orchestrator
+   tuple. If absent, add it as part of FF-PR-2 (the audit branch will
+   touch this code path anyway).
+
+3. **Pin the known gaps as `it.todo` / `xfail` entries.** For C3, C4,
+   C5, C7, C8 — add placeholder test stubs in the test file with
+   `it.todo("...")` markers naming the criterion. They cost nothing,
+   they show up in test output as known gaps, and they prevent the
+   "fixed by heuristic without coverage" failure mode. Each fast-follow
+   PR replaces its `it.todo` with a real assertion.
+
+### 13.3 Definition of done for this audit
+
+The audit is complete when:
+
+- §13.1 column 2 has ✅ / ❌ in every row (no TBDs)
+- §13.2 step 3 has produced `it.todo` entries for every ❌ row
+- Any C1 / C2 row that came back ❌ has a precursor PR opened against
+  `main` to add the regression coverage *before* FF-PR-1 changes slot
+  shape
+
+This audit is a small piece of preparatory work, not a blocker for the
+design itself. It is captured here so the fast-follow author has an
+explicit checklist rather than discovering missing coverage mid-PR.
+
 ---
 
-*End of validation document. This spec is now the durable record of the
-design choices in PR #756 and the governance precedent established for
-external-branch lifecycle re-entry. Two follow-up BIs (FOLLOWUP-CONTEXT-AMEND,
-FOLLOWUP-WWMD-PERTASK) and one new epic (EP-BUILD-MODEL-DRIVEN) are seeded
-here; filing them depends on §12.5 resolution.*
+*End of validation document. This spec is the durable record of the
+design choices in PR #756, the chief-architect feedback folded into
+rev 4, and the governance precedent established for external-branch
+lifecycle re-entry. The fast-follow PR plan (§7) and follow-up BI list
+(§12.3) drive subsequent work; filing the BIs depends on §12.5
+resolution.*
