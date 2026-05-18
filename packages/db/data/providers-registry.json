@@ -768,7 +768,7 @@
     "name": "Local STT (whisper-server)",
     "category": "direct",
     "endpointType": "transcription",
-    "baseUrl": "http://dpf-stt:8000",
+    "baseUrl": "http://dpf-stt:9000",
     "authMethod": "none",
     "supportedAuthMethods": [
       "none"

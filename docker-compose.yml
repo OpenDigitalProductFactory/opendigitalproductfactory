@@ -616,7 +616,11 @@ services:
       # starts are warm.
       - dpf_stt_models:/app/models
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]
+      # hwdsl2/whisper-server listens on port 9000 internally. The legacy
+      # speaches image was on 8000 — when swapping default-on tier we updated
+      # all three: healthcheck, host port mapping below, and the provider
+      # baseUrl in providers-registry.json.
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/v1/models"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -625,9 +629,9 @@ services:
       start_period: 120s
     ports:
       # Localhost-only port binding. The portal reaches the sidecar via the
-      # Docker network DNS name (dpf-stt:8000); the host-port mapping is for
+      # Docker network DNS name (dpf-stt:9000); the host-port mapping is for
       # developer-machine smoke testing only.
-      - "127.0.0.1:8765:8000"
+      - "127.0.0.1:8765:9000"
 
 volumes:
   pgdata:
