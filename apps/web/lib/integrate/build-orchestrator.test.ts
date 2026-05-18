@@ -347,6 +347,16 @@ describe("task-scoped Build Studio context", () => {
     expect(scoped).not.toContain("FULL_LIFECYCLE_THREAD");
     expect(scoped).not.toContain("conversation conversation conversation");
   });
+
+  // Pinned acceptance gaps from the rev 4 thread-management design (§13).
+  // Each it.todo names the criterion it will become a regression test for once
+  // the corresponding fast-follow lands. Replacing the todo with a real
+  // assertion is the explicit Definition of Done for that follow-up.
+  it.todo("C3 — decisions slot survives LRU eviction with 20 completed tasks (lands FF-PR-1: decisions ledger wired to DecisionInteraction)");
+  it.todo("C4 — file shapes (exported symbols) for files written by prior tasks appear in scoped context without re-Read (lands BI-FOLLOWUP-SIGNATURE-EXTRACT)");
+  it.todo("C5 — BLOCKED-task retry receives prior attempt's failure context in scoped dispatch (lands FF-PR-3)");
+  it.todo("C7 — taskResults.decisions[] contains only interactionId references, never duplicated rationale/confidence fields (lands FF-PR-1; prohibition test)");
+  it.todo("C8 — scoped context slot order is stable-prefix-first to maximize prompt cache hit rate (lands FF-PR-1; snapshot or position assertion)");
 });
 
 // ─── QA Verification Parsing ─────────────────────────────────────────────
