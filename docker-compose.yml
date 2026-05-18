@@ -122,6 +122,11 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
       QDRANT_INTERNAL_URL: ${QDRANT_INTERNAL_URL:-http://qdrant:6333}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+      # Management API for Ollama pull/delete/tags (distinct from OpenAI-compat
+      # inference URL above). On Docker Desktop, host.docker.internal reaches
+      # Ollama installed natively on the host. Linux sets this via the
+      # docker-compose.linux.yml overlay instead (to http://ollama:11434).
+      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
