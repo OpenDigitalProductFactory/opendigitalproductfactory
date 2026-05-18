@@ -765,10 +765,10 @@
   },
   {
     "providerId": "speaches",
-    "name": "Speaches (local STT sidecar)",
+    "name": "Local STT (whisper-server)",
     "category": "direct",
     "endpointType": "transcription",
-    "baseUrl": "http://dpf-stt:8000",
+    "baseUrl": "http://dpf-stt:9000",
     "authMethod": "none",
     "supportedAuthMethods": [
       "none"
@@ -790,7 +790,7 @@
       "costTier": "free",
       "costExplained": "Costs only the electricity to run your computer. No per-use charges.",
       "capabilitySummary": "Transcribes voice notes and dictation. Whisper-derived ASR with high accuracy on English; supports 90+ languages.",
-      "limitations": "Requires the 'stt' Docker Compose profile to be running. Edge-node installs without a GPU may be slower; consider whisper.cpp variant via DPF_STT_IMAGE.",
+      "limitations": "Runs on CPU by default — works on any modern machine. Operators with an NVIDIA GPU can upgrade to a CUDA variant for faster transcription via the SpeechToTextCard upgrade flow.",
       "dataResidency": "Your machine. Audio is processed on the local sidecar; nothing leaves the install.",
       "setupDifficulty": "automatic",
       "regulatoryNotes": "Maximum privacy. Suitable for all sensitivity levels including restricted/regulated data."

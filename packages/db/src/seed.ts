@@ -1292,6 +1292,21 @@ async function seedProviderRegistry(): Promise<void> {
 
     const existing = await prisma.modelProvider.findUnique({ where: { providerId } });
     if (existing) {
+      // Slice 1.5 backfill: rows that pre-date the auto-activate logic may
+      // exist with status='unconfigured' and/or empty sensitivityClearance
+      // for authMethod='none' providers. Flip them to active + full local
+      // clearance on reseed so existing installs don't need manual SQL to
+      // get voice working. Admin-configured rows (status='active' already,
+      // clearance already set) are left alone — the .length===0 gate
+      // preserves operator intent.
+      const isAuthNone =
+        ((existing.authMethod as string | null) ??
+          (entry.authMethod as string | undefined)) === "none";
+      const existingClearance = (existing.sensitivityClearance as string[]) ?? [];
+      const shouldBackfillStatus = isAuthNone && existing.status === "unconfigured";
+      const shouldBackfillClearance =
+        isAuthNone && existingClearance.length === 0;
+
       // Update metadata but preserve admin config (status, endpoint, enabledFamilies)
       await prisma.modelProvider.update({
         where: { providerId },
@@ -1320,17 +1335,41 @@ async function seedProviderRegistry(): Promise<void> {
           ...(entry.tokenUrl !== undefined && { tokenUrl: (entry.tokenUrl as string) ?? null }),
           ...(entry.oauthClientId !== undefined && { oauthClientId: (entry.oauthClientId as string) ?? null }),
           ...(entry.oauthRedirectUri !== undefined && { oauthRedirectUri: (entry.oauthRedirectUri as string) ?? null }),
+          ...(shouldBackfillStatus && { status: "active" }),
+          ...(shouldBackfillClearance && {
+            sensitivityClearance: ["public", "internal", "confidential", "restricted"],
+          }),
         },
       });
       updated++;
     } else {
+      // Providers that need no credentials (authMethod: "none") are local
+      // sidecars (STT, local LLM via Docker Model Runner, Ollama) — they
+      // should be active immediately on a fresh install so the operator
+      // doesn't need to click anything to make voice / local LLM work.
+      // Providers requiring OAuth / API keys correctly start unconfigured
+      // and become active when the admin connects them. Voice Slice 1.5:
+      // docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
+      //
+      // Active providers MUST declare sensitivityClearance (enforced by
+      // assertActiveProvidersHaveClearance). For local sidecars data never
+      // leaves the machine, so we grant the full clearance set — mirrors
+      // the pattern already used by seedLocalModels for the "local"
+      // provider id.
+      const isAuthNone =
+        (entry.authMethod as string | undefined) === "none";
+      const initialStatus = isAuthNone ? "active" : "unconfigured";
+      const initialClearance = isAuthNone
+        ? ["public", "internal", "confidential", "restricted"]
+        : [];
       await prisma.modelProvider.create({
         data: {
           providerId,
           name: entry.name as string ?? providerId,
           families: (entry.families as string[]) ?? [],
           enabledFamilies: [],
-          status: "unconfigured",
+          status: initialStatus,
+          sensitivityClearance: initialClearance,
           category: entry.category as string ?? "direct",
           baseUrl: (entry.baseUrl as string) ?? null,
           authMethod: entry.authMethod as string ?? "none",
@@ -1770,6 +1809,32 @@ async function seedSpeachesTranscriptionModel(): Promise<void> {
       `[seed] speaches provider not found in ModelProvider — packages/db/data/providers-registry.json must include providerId='${SPEACHES_PROVIDER_ID}'. Skipping transcription model seed.`,
     );
     return;
+  }
+
+  // Slice 1.5: migrate any existing speaches ModelProfile row that points at
+  // the legacy speaches modelId ("Systran/faster-distil-whisper-large-v3")
+  // — that model only exists in the old speaches sidecar; the new
+  // hwdsl2/whisper-server CPU default uses simpler model names like "base".
+  // Delete the stale profile + its EndpointTaskPerformance row so endpoint
+  // resolution picks the new profile cleanly. Idempotent: no-op on fresh
+  // installs.
+  const staleProfiles = await prisma.modelProfile.findMany({
+    where: {
+      providerId: SPEACHES_PROVIDER_ID,
+      modelId: { not: SPEACHES_MODEL_ID },
+    },
+    select: { id: true, modelId: true },
+  });
+  if (staleProfiles.length > 0) {
+    for (const stale of staleProfiles) {
+      await prisma.endpointTaskPerformance.deleteMany({
+        where: { endpointId: stale.id },
+      });
+      await prisma.modelProfile.delete({ where: { id: stale.id } });
+      console.log(
+        `  Cleaned stale speaches ModelProfile (modelId=${stale.modelId}) per Slice 1.5 image swap`,
+      );
+    }
   }
 
   // Upsert the ModelProfile. profileSource="seed" + profileSource check at
