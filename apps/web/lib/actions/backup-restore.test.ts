@@ -28,7 +28,10 @@ vi.mock("@/lib/operate/backups/postgres-restore-runner", () => ({
   },
 }));
 vi.mock("@dpf/db", () => ({
-  prisma: { backupRestore: { findMany: vi.fn() } },
+  prisma: {
+    backupRestore: { findMany: vi.fn() },
+    backupRun: { findUnique: vi.fn() },
+  },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -40,17 +43,23 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { runPostgresRestore } from "@/lib/operate/backups/postgres-restore-runner";
 import { buildRestorePreview } from "@/lib/operate/backups/restore-preview";
+import { prisma } from "@dpf/db";
 
 const mockedAuth = auth as unknown as ReturnType<typeof vi.fn>;
 const mockedCan = can as unknown as ReturnType<typeof vi.fn>;
 const mockedRunner = runPostgresRestore as unknown as ReturnType<typeof vi.fn>;
 const mockedPreview = buildRestorePreview as unknown as ReturnType<typeof vi.fn>;
+const mockedBackupRunFindUnique = prisma.backupRun.findUnique as unknown as ReturnType<typeof vi.fn>;
 
 describe("confirmRestoreAction (typed-confirmation gate)", () => {
   beforeEach(() => {
     mockedAuth.mockReset();
     mockedCan.mockReset();
     mockedRunner.mockReset();
+    mockedBackupRunFindUnique.mockReset();
+    // Default to the postgres path so tests that reach the runner stay on the
+    // postgres branch (the only runner mocked in this file).
+    mockedBackupRunFindUnique.mockResolvedValue({ target: "postgres" });
   });
 
   it("rejects when there is no session", async () => {
