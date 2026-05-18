@@ -1,17 +1,12 @@
 import type { PrismaClient } from "../generated/client/client";
 
 /**
- * Schedule + identifier constants for the platform-managed Postgres backup.
+ * Schedule + identifier constants for the platform-managed backups.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md
- * Plan: docs/superpowers/plans/2026-05-17-postgres-daily-backup-slice-1.md
+ * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md
  *
- * The ScheduledJob row is the live heartbeat surfaced in /admin/backups
- * (lastRunAt, nextRunAt, lastStatus). The actual cron firing is owned by
- * the Inngest function ops/postgres-daily-backup; this seed only ensures
- * the heartbeat row exists from a fresh install onward so the readiness
- * card has something to render before the first run.
- *
+ * The ScheduledJob rows are live heartbeats surfaced in /admin/backups.
  * The same identifiers are duplicated (intentionally — packages/db cannot
  * import from apps/web) in apps/web/lib/operate/backups/constants.ts.
  * If you change one, change both, or the heartbeat row will be orphaned.
@@ -20,6 +15,14 @@ export const POSTGRES_BACKUP_JOB_ID = "postgres-daily-backup";
 export const POSTGRES_BACKUP_JOB_NAME =
   "Postgres daily backup (platform-managed)";
 export const POSTGRES_BACKUP_SCHEDULE = "daily";
+
+export const NEO4J_BACKUP_JOB_ID = "neo4j-daily-backup";
+export const NEO4J_BACKUP_JOB_NAME = "Neo4j daily backup (platform-managed)";
+export const NEO4J_BACKUP_SCHEDULE = "daily";
+
+export const QDRANT_BACKUP_JOB_ID = "qdrant-daily-backup";
+export const QDRANT_BACKUP_JOB_NAME = "Qdrant daily backup (platform-managed)";
+export const QDRANT_BACKUP_SCHEDULE = "daily";
 
 type ScheduledJobSeedClient = Pick<PrismaClient, "scheduledJob">;
 
@@ -35,28 +38,26 @@ function nextDailyRunAt(from: Date): Date {
   return next;
 }
 
-/**
- * Idempotent: create the ScheduledJob heartbeat row if missing; update
- * name/schedule/nextRunAt on every seed run. Does not clobber lastRunAt /
- * lastStatus / lastError — those are owned by the runner.
- */
-export async function ensurePostgresBackupScheduledJob(
+async function ensureBackupScheduledJob(
   prisma: ScheduledJobSeedClient,
-  now: Date = new Date(),
+  jobId: string,
+  name: string,
+  schedule: string,
+  now: Date,
 ): Promise<{ created: boolean }> {
   const nextRunAt = nextDailyRunAt(now);
 
   const existing = await prisma.scheduledJob.findUnique({
-    where: { jobId: POSTGRES_BACKUP_JOB_ID },
+    where: { jobId },
     select: { jobId: true, nextRunAt: true },
   });
 
   if (existing) {
     await prisma.scheduledJob.update({
-      where: { jobId: POSTGRES_BACKUP_JOB_ID },
+      where: { jobId },
       data: {
-        name: POSTGRES_BACKUP_JOB_NAME,
-        schedule: POSTGRES_BACKUP_SCHEDULE,
+        name,
+        schedule,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
     });
@@ -64,12 +65,64 @@ export async function ensurePostgresBackupScheduledJob(
   }
 
   await prisma.scheduledJob.create({
-    data: {
-      jobId: POSTGRES_BACKUP_JOB_ID,
-      name: POSTGRES_BACKUP_JOB_NAME,
-      schedule: POSTGRES_BACKUP_SCHEDULE,
-      nextRunAt,
-    },
+    data: { jobId, name, schedule, nextRunAt },
   });
   return { created: true };
+}
+
+/**
+ * Idempotent: create the Postgres ScheduledJob heartbeat row if missing;
+ * update name/schedule/nextRunAt on every seed run. Does not clobber
+ * lastRunAt / lastStatus / lastError — those are owned by the runner.
+ */
+export async function ensurePostgresBackupScheduledJob(
+  prisma: ScheduledJobSeedClient,
+  now: Date = new Date(),
+): Promise<{ created: boolean }> {
+  return ensureBackupScheduledJob(
+    prisma,
+    POSTGRES_BACKUP_JOB_ID,
+    POSTGRES_BACKUP_JOB_NAME,
+    POSTGRES_BACKUP_SCHEDULE,
+    now,
+  );
+}
+
+export async function ensureNeo4jBackupScheduledJob(
+  prisma: ScheduledJobSeedClient,
+  now: Date = new Date(),
+): Promise<{ created: boolean }> {
+  return ensureBackupScheduledJob(
+    prisma,
+    NEO4J_BACKUP_JOB_ID,
+    NEO4J_BACKUP_JOB_NAME,
+    NEO4J_BACKUP_SCHEDULE,
+    now,
+  );
+}
+
+export async function ensureQdrantBackupScheduledJob(
+  prisma: ScheduledJobSeedClient,
+  now: Date = new Date(),
+): Promise<{ created: boolean }> {
+  return ensureBackupScheduledJob(
+    prisma,
+    QDRANT_BACKUP_JOB_ID,
+    QDRANT_BACKUP_JOB_NAME,
+    QDRANT_BACKUP_SCHEDULE,
+    now,
+  );
+}
+
+/** Convenience: ensure all three backup scheduled jobs exist in one call. */
+export async function ensureAllBackupScheduledJobs(
+  prisma: ScheduledJobSeedClient,
+  now: Date = new Date(),
+): Promise<{ postgres: { created: boolean }; neo4j: { created: boolean }; qdrant: { created: boolean } }> {
+  const [postgres, neo4j, qdrant] = await Promise.all([
+    ensureBackupScheduledJob(prisma, POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_JOB_NAME, POSTGRES_BACKUP_SCHEDULE, now),
+    ensureBackupScheduledJob(prisma, NEO4J_BACKUP_JOB_ID, NEO4J_BACKUP_JOB_NAME, NEO4J_BACKUP_SCHEDULE, now),
+    ensureBackupScheduledJob(prisma, QDRANT_BACKUP_JOB_ID, QDRANT_BACKUP_JOB_NAME, QDRANT_BACKUP_SCHEDULE, now),
+  ]);
+  return { postgres, neo4j, qdrant };
 }

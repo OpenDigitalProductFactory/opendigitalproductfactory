@@ -1,37 +1,42 @@
 /**
- * Reads the current state of the Postgres backup mechanism for the admin
- * readiness card.
+ * Reads the current state of the backup mechanism for the admin readiness card.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.8
+ * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md §3.4
  */
 
 import { prisma } from "@dpf/db";
 
-import { POSTGRES_BACKUP_JOB_ID } from "./constants";
-import { DEFAULT_BACKUP_RETENTION, type ReadinessSummary } from "./types";
+import {
+  NEO4J_BACKUP_JOB_ID,
+  POSTGRES_BACKUP_JOB_ID,
+  QDRANT_BACKUP_JOB_ID,
+} from "./constants";
+import { DEFAULT_BACKUP_RETENTION, type BackupTarget, type ReadinessSummary } from "./types";
 
 const BACKUPS_ROOT = "/backups";
 
-export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
+async function getReadinessForTarget(
+  jobId: string,
+  target: BackupTarget,
+): Promise<ReadinessSummary> {
   const [job, lastRun, lastSuccess, retainedRuns, recentFailures] =
     await Promise.all([
-      prisma.scheduledJob.findUnique({
-        where: { jobId: POSTGRES_BACKUP_JOB_ID },
-      }),
+      prisma.scheduledJob.findUnique({ where: { jobId } }),
       prisma.backupRun.findFirst({
-        where: { target: "postgres" },
+        where: { target },
         orderBy: { startedAt: "desc" },
       }),
       prisma.backupRun.findFirst({
-        where: { target: "postgres", status: "ok", prunedAt: null },
+        where: { target, status: "ok", prunedAt: null },
         orderBy: { finishedAt: "desc" },
       }),
       prisma.backupRun.findMany({
-        where: { target: "postgres", status: "ok", prunedAt: null },
+        where: { target, status: "ok", prunedAt: null },
         select: { sizeBytes: true },
       }),
       prisma.backupRun.findMany({
-        where: { target: "postgres" },
+        where: { target },
         orderBy: { startedAt: "desc" },
         take: 3,
         select: { status: true },
@@ -44,6 +49,7 @@ export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
   );
 
   return {
+    target,
     scheduledJob: job
       ? {
           jobId: job.jobId,
@@ -73,16 +79,38 @@ export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
       ? {
           id: lastSuccess.id,
           finishedAt: lastSuccess.finishedAt?.toISOString() ?? null,
-          sizeBytes: lastSuccess.sizeBytes
-            ? Number(lastSuccess.sizeBytes)
-            : null,
+          sizeBytes: lastSuccess.sizeBytes ? Number(lastSuccess.sizeBytes) : null,
         }
       : null,
     retention: DEFAULT_BACKUP_RETENTION,
     retainedCount: retainedRuns.length,
     retainedBytes,
-    storagePath: `${BACKUPS_ROOT}/postgres/`,
-    failuresInLastThreeRuns: recentFailures.filter((r) => r.status === "failed")
-      .length,
+    storagePath: `${BACKUPS_ROOT}/${target}/`,
+    failuresInLastThreeRuns: recentFailures.filter((r) => r.status === "failed").length,
   };
+}
+
+export async function getPostgresBackupReadiness(): Promise<ReadinessSummary> {
+  return getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres");
+}
+
+export async function getNeo4jBackupReadiness(): Promise<ReadinessSummary> {
+  return getReadinessForTarget(NEO4J_BACKUP_JOB_ID, "neo4j");
+}
+
+export async function getQdrantBackupReadiness(): Promise<ReadinessSummary> {
+  return getReadinessForTarget(QDRANT_BACKUP_JOB_ID, "qdrant");
+}
+
+export async function getAllBackupReadiness(): Promise<{
+  postgres: ReadinessSummary;
+  neo4j: ReadinessSummary;
+  qdrant: ReadinessSummary;
+}> {
+  const [postgres, neo4j, qdrant] = await Promise.all([
+    getReadinessForTarget(POSTGRES_BACKUP_JOB_ID, "postgres"),
+    getReadinessForTarget(NEO4J_BACKUP_JOB_ID, "neo4j"),
+    getReadinessForTarget(QDRANT_BACKUP_JOB_ID, "qdrant"),
+  ]);
+  return { postgres, neo4j, qdrant };
 }

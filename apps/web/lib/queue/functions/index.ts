@@ -21,8 +21,11 @@ import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verific
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import {
+  allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   postgresBackupRequested,
+  neo4jBackupRequested,
+  qdrantBackupRequested,
 } from "./postgres-daily-backup";
 
 export const allFunctions = [
@@ -49,6 +52,9 @@ export const allFunctions = [
   gitPromotionSandboxVerification,
   skillMetricsAggregator,
   skillCurator,
+  allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   postgresBackupRequested,
+  neo4jBackupRequested,
+  qdrantBackupRequested,
 ];
