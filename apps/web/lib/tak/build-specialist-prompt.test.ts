@@ -14,8 +14,8 @@ const PROMPT_PATH = join(REPO_ROOT, "prompts", "route-persona", "build-specialis
 const prompt = readFileSync(PROMPT_PATH, "utf-8");
 
 describe("build-specialist.prompt.md (Operator Contract)", () => {
-  it("has frontmatter version 4 (operator contract update)", () => {
-    expect(prompt).toMatch(/^version:\s*4$/m);
+  it("has frontmatter version 5 (ideate tool guidance + describe_model guard)", () => {
+    expect(prompt).toMatch(/^version:\s*5$/m);
   });
 
   it("preserves the role-defining sections", () => {
@@ -39,6 +39,15 @@ describe("build-specialist.prompt.md (Operator Contract)", () => {
 
   it("trusts the runtime tool list explicitly", () => {
     expect(prompt).toMatch(/platform delivers your callable tool list/i);
+  });
+
+  it("gives explicit ideate tool guidance (prevents describe_model loop)", () => {
+    // Regression: without explicit ideate tool guidance the model fell into a
+    // describe_model loop (4× same-args call detected by stuck-loop guard).
+    // The per-phase judgment section now names start_ideate_research and
+    // explicitly disallows describe_model for design-time research.
+    expect(prompt).toMatch(/start_ideate_research/);
+    expect(prompt).toMatch(/describe_model.*build phase/i);
   });
 
   it("references all nine contract clauses by intent", () => {
