@@ -182,17 +182,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (e) {
     // ── 4. Error mapping per spec §7.2 ─────────────────────────────────────
     if (e instanceof NoTranscriptionEndpointError) {
+      // Per the never-ask-user-to-run-commands kernel commandment, the
+      // operator-facing copy must NOT name shell. The admin guides the fix
+      // through Platform Tools > Communications > Speech-to-text.
       return jsonError(
         503,
         "tool-error",
-        "No transcription endpoint configured. Start the STT sidecar (`docker compose --profile stt up dpf-stt`) or configure a hosted provider.",
+        "Speech-to-text isn't ready yet. An admin can enable it in Platform Tools > Communications > Speech-to-text.",
       );
     }
     if (e instanceof InferenceError) {
       // Map InferenceError.code to HTTP status.
       const code = e.code;
       if (code === "network") {
-        return jsonError(503, "tool-error", `STT provider unreachable: ${e.message}`);
+        return jsonError(
+          503,
+          "tool-error",
+          "Speech-to-text service is unreachable. An admin can re-check the sidecar in Platform Tools > Communications.",
+        );
       }
       if (code === "provider_error") {
         return jsonError(502, "tool-error", `STT provider error: ${e.message}`);
