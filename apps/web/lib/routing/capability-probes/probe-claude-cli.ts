@@ -64,7 +64,7 @@ export async function probeClaudeCli(): Promise<CapabilityProbeResult> {
     supportsExtendedThinking: true,
     supportsOutputSchema: false, // not equivalent to Codex's --output-schema
 
-    maxInteractiveLatencyMs: 180_000, // matches CLI_TIMEOUT_MS in cli-adapter.ts
+    maxInteractiveLatencyMs: 600_000, // matches CLI_TIMEOUT_MS in cli-adapter.ts
     supportedAuthModes: ["oauth", "api-key"],
     knownDegradations: null,
   };

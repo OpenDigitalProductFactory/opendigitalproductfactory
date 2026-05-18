@@ -26,7 +26,7 @@ import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-const CLI_TIMEOUT_MS = 180_000; // 3 minutes — matches chat adapter's AbortSignal.timeout
+const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
 
 /** Internal portal URL the sandbox uses to reach `/api/mcp/v1`. The standard
  *  self-host docker bridge resolves `portal` to the portal container; override
