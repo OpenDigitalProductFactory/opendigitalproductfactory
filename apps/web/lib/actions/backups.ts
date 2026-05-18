@@ -10,11 +10,13 @@ import { can } from "@/lib/permissions";
 import { inngest } from "@/lib/queue/inngest-client";
 
 import {
+  NEO4J_BACKUP_EVENT,
   POSTGRES_BACKUP_EVENT,
   POSTGRES_BACKUP_JOB_ID,
+  QDRANT_BACKUP_EVENT,
 } from "@/lib/operate/backups/constants";
-import { getPostgresBackupReadiness } from "@/lib/operate/backups/readiness";
-import type { ReadinessSummary } from "@/lib/operate/backups/types";
+import { getAllBackupReadiness, getPostgresBackupReadiness } from "@/lib/operate/backups/readiness";
+import type { BackupTarget, ReadinessSummary } from "@/lib/operate/backups/types";
 
 const BACKUPS_ROOT = "/backups";
 const MAX_LOG_BYTES = 64 * 1024;
@@ -36,13 +38,25 @@ async function requireBackupAdmin(): Promise<void> {
   }
 }
 
+/** Returns readiness for a single target (Postgres only — kept for Slice 2 restore compat). */
 export async function getBackupReadinessAction(): Promise<ReadinessSummary> {
   await requireBackupAdmin();
   return getPostgresBackupReadiness();
 }
 
+/** Returns readiness summaries for all three targets. */
+export async function getAllBackupReadinessAction(): Promise<{
+  postgres: ReadinessSummary;
+  neo4j: ReadinessSummary;
+  qdrant: ReadinessSummary;
+}> {
+  await requireBackupAdmin();
+  return getAllBackupReadiness();
+}
+
 export interface BackupRunListItem {
   id: string;
+  target: string;
   status: string;
   trigger: string;
   startedAt: string;
@@ -56,15 +70,17 @@ export interface BackupRunListItem {
 
 export async function listBackupRunsAction(args?: {
   limit?: number;
+  target?: BackupTarget;
 }): Promise<BackupRunListItem[]> {
   await requireBackupAdmin();
   const rows = await prisma.backupRun.findMany({
-    where: { target: "postgres" },
+    where: args?.target ? { target: args.target } : { target: "postgres" },
     orderBy: { startedAt: "desc" },
     take: Math.min(Math.max(args?.limit ?? 50, 1), 200),
   });
   return rows.map((r) => ({
     id: r.id,
+    target: r.target,
     status: r.status,
     trigger: r.trigger,
     startedAt: r.startedAt.toISOString(),
@@ -77,15 +93,19 @@ export async function listBackupRunsAction(args?: {
   }));
 }
 
-export async function triggerBackupNowAction(): Promise<{
-  ok: boolean;
-  eventIds?: string[];
-  error?: string;
-}> {
+const TARGET_EVENT: Record<BackupTarget, string> = {
+  postgres: POSTGRES_BACKUP_EVENT,
+  neo4j: NEO4J_BACKUP_EVENT,
+  qdrant: QDRANT_BACKUP_EVENT,
+};
+
+export async function triggerBackupNowAction(
+  target: BackupTarget = "postgres",
+): Promise<{ ok: boolean; eventIds?: string[]; error?: string }> {
   await requireBackupAdmin();
   try {
     const result = await inngest.send({
-      name: POSTGRES_BACKUP_EVENT,
+      name: TARGET_EVENT[target],
       data: { trigger: "manual" },
     });
     return { ok: true, eventIds: result.ids };
@@ -111,7 +131,6 @@ export async function readBackupRunLogAction(runId: string): Promise<BackupRunLo
     return { manifest: null, logTail: null, notFound: true };
   }
   if (row.prunedAt) {
-    // Files are gone, but we may still have the row.
     return { manifest: null, logTail: null, notFound: false };
   }
 

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 
 import {
-  getBackupReadinessAction,
+  getAllBackupReadinessAction,
   listBackupRunsAction,
   readBackupRunLogAction,
   triggerBackupNowAction,
@@ -14,7 +14,7 @@ import {
   listRestoreRunsAction,
   previewRestoreAction,
 } from "@/lib/actions/backup-restore";
-import type { ReadinessSummary } from "@/lib/operate/backups/types";
+import type { BackupTarget, ReadinessSummary } from "@/lib/operate/backups/types";
 import type {
   RestoreImpactPreview,
   RestoreRunListItem,
@@ -23,9 +23,17 @@ import type {
 import { RestoreConfirmModal } from "./RestoreConfirmModal";
 import { RestoreHistorySection } from "./RestoreHistorySection";
 
+interface AllReadiness {
+  postgres: ReadinessSummary;
+  neo4j: ReadinessSummary;
+  qdrant: ReadinessSummary;
+}
+
 interface Props {
-  initialReadiness: ReadinessSummary;
-  initialRuns: BackupRunListItem[];
+  initialReadiness: AllReadiness;
+  initialPgRuns: BackupRunListItem[];
+  initialNeo4jRuns: BackupRunListItem[];
+  initialQdrantRuns: BackupRunListItem[];
   initialRestoreRuns: RestoreRunListItem[];
 }
 
@@ -71,15 +79,34 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+const TARGET_LABELS: Record<BackupTarget, string> = {
+  postgres: "Postgres",
+  neo4j: "Neo4j",
+  qdrant: "Qdrant",
+};
+
+const TARGET_DESCRIPTIONS: Record<BackupTarget, string> = {
+  postgres: "Full database dump (pg_dump -Fc). All operator state, backlog, config.",
+  neo4j: "Offline dump (neo4j-admin). Wiki link graph, routing data, EA model topology. Requires ~10 s Neo4j restart.",
+  qdrant: "Full-instance snapshot (REST API). Vector embeddings, semantic memory, brand context. No service interruption.",
+};
+
 export function BackupsClient({
   initialReadiness,
-  initialRuns,
+  initialPgRuns,
+  initialNeo4jRuns,
+  initialQdrantRuns,
   initialRestoreRuns,
 }: Props) {
-  const [readiness, setReadiness] = useState(initialReadiness);
-  const [runs, setRuns] = useState(initialRuns);
+  const [readiness, setReadiness] = useState<AllReadiness>(initialReadiness);
+  const [runsByTarget, setRunsByTarget] = useState<Record<BackupTarget, BackupRunListItem[]>>({
+    postgres: initialPgRuns,
+    neo4j: initialNeo4jRuns,
+    qdrant: initialQdrantRuns,
+  });
   const [restoreRuns, setRestoreRuns] = useState(initialRestoreRuns);
-  const [pending, startTransition] = useTransition();
+  const [pendingTarget, setPendingTarget] = useState<BackupTarget | null>(null);
+  const [, startTransition] = useTransition();
   const [openLog, setOpenLog] = useState<{ runId: string; data: BackupRunLog } | null>(null);
   const [loadingLog, setLoadingLog] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,13 +114,15 @@ export function BackupsClient({
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
 
   async function refresh() {
-    const [next, list, restores] = await Promise.all([
-      getBackupReadinessAction(),
-      listBackupRunsAction({ limit: 50 }),
+    const [next, pgRuns, neo4jRuns, qdrantRuns, restores] = await Promise.all([
+      getAllBackupReadinessAction(),
+      listBackupRunsAction({ limit: 50, target: "postgres" }),
+      listBackupRunsAction({ limit: 50, target: "neo4j" }),
+      listBackupRunsAction({ limit: 50, target: "qdrant" }),
       listRestoreRunsAction({ limit: 20 }),
     ]);
     setReadiness(next);
-    setRuns(list);
+    setRunsByTarget({ postgres: pgRuns, neo4j: neo4jRuns, qdrant: qdrantRuns });
     setRestoreRuns(restores);
   }
 
@@ -117,16 +146,16 @@ export function BackupsClient({
     );
   }
 
-  function handleTrigger() {
+  function handleTrigger(target: BackupTarget) {
     setError(null);
+    setPendingTarget(target);
     startTransition(async () => {
-      const result = await triggerBackupNowAction();
+      const result = await triggerBackupNowAction(target);
+      setPendingTarget(null);
       if (!result.ok) {
         setError(result.error ?? "Backup request failed.");
         return;
       }
-      // Inngest runs asynchronously; give it a moment to mark the row, then refresh.
-      // The cron concurrency limit serializes overlapping triggers.
       setTimeout(() => {
         refresh().catch((e: unknown) =>
           setError(e instanceof Error ? e.message : String(e)),
@@ -148,191 +177,214 @@ export function BackupsClient({
     }
   }
 
-  const j = readiness.scheduledJob;
-  const lastRun = readiness.lastRun;
-  const overdue = readiness.failuresInLastThreeRuns >= 2;
+  const targets: BackupTarget[] = ["postgres", "neo4j", "qdrant"];
 
   return (
-    <div className="max-w-4xl space-y-8">
-      {/* ─── Readiness card ─────────────────────────────────────────────── */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
-            Readiness
-          </h2>
-          <button
-            onClick={handleTrigger}
-            disabled={pending}
-            className="px-4 py-2 text-sm font-medium rounded transition-colors"
-            style={{
-              background: pending ? "var(--dpf-border)" : "var(--dpf-accent)",
-              color: pending ? "var(--dpf-muted)" : "#fff",
-              cursor: pending ? "not-allowed" : "pointer",
-            }}
-          >
-            {pending ? "Triggering…" : "Run backup now"}
-          </button>
-        </div>
-
+    <div className="max-w-4xl space-y-10">
+      {error && (
         <div
-          className="rounded p-4 grid gap-3 text-sm"
+          className="p-3 rounded text-sm"
           style={{
-            background: "var(--dpf-surface)",
-            border: "1px solid var(--dpf-border)",
+            background: "rgba(248, 113, 113, 0.15)",
+            color: "#f87171",
+            border: "1px solid rgba(248, 113, 113, 0.3)",
           }}
         >
-          <ReadinessRow
-            label="Schedule"
-            value={j ? `${j.schedule} (cron 03:00 UTC)` : "—"}
-          />
-          <ReadinessRow
-            label="Last run"
-            value={
-              lastRun
-                ? `${formatTimestamp(lastRun.startedAt)} · ${formatDurationMs(
-                    lastRun.durationMs,
-                  )} · ${formatBytes(lastRun.sizeBytes)}`
-                : "never"
-            }
-            statusBadge={lastRun ? <StatusPill status={lastRun.status} /> : null}
-          />
-          <ReadinessRow
-            label="Last successful run"
-            value={
-              readiness.lastSuccess
-                ? `${formatTimestamp(readiness.lastSuccess.finishedAt)} · ${formatBytes(
-                    readiness.lastSuccess.sizeBytes,
-                  )}`
-                : "never"
-            }
-          />
-          <ReadinessRow
-            label="Next run"
-            value={j?.nextRunAt ? formatTimestamp(j.nextRunAt) : "—"}
-          />
-          <ReadinessRow
-            label="Retention"
-            value={`${readiness.retention.daily} daily · ${readiness.retention.weekly} weekly · ${readiness.retention.monthly} monthly`}
-          />
-          <ReadinessRow
-            label="Retained on disk"
-            value={`${readiness.retainedCount} backup${readiness.retainedCount === 1 ? "" : "s"} · ${formatBytes(
-              readiness.retainedBytes,
-            )}`}
-          />
-          <ReadinessRow label="Storage path" value={readiness.storagePath} />
+          {error}
         </div>
+      )}
 
-        {overdue && (
-          <div
-            className="mt-3 p-3 rounded text-sm"
-            style={{
-              background: "rgba(248, 113, 113, 0.15)",
-              color: "#f87171",
-              border: "1px solid rgba(248, 113, 113, 0.3)",
-            }}
-          >
-            Multiple recent backups have failed. Investigate the latest run log
-            for details.
-          </div>
-        )}
+      {targets.map((target) => {
+        const r = readiness[target];
+        const runs = runsByTarget[target];
+        const j = r.scheduledJob;
+        const lastRun = r.lastRun;
+        const overdue = r.failuresInLastThreeRuns >= 2;
+        const isPending = pendingTarget === target;
 
-        {error && (
-          <div
-            className="mt-3 p-3 rounded text-sm"
-            style={{
-              background: "rgba(248, 113, 113, 0.15)",
-              color: "#f87171",
-              border: "1px solid rgba(248, 113, 113, 0.3)",
-            }}
-          >
-            {error}
-          </div>
-        )}
-      </section>
-
-      {/* ─── History ────────────────────────────────────────────────────── */}
-      <section>
-        <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">
-          History
-        </h2>
-        {runs.length === 0 ? (
-          <p className="text-xs text-[var(--dpf-muted)]">
-            No backups yet — the first scheduled run will appear here. Click
-            “Run backup now” above to create one immediately.
-          </p>
-        ) : (
-          <div
-            className="rounded overflow-hidden"
-            style={{
-              border: "1px solid var(--dpf-border)",
-            }}
-          >
-            <table className="w-full text-xs">
-              <thead style={{ background: "var(--dpf-bg)" }}>
-                <tr>
-                  <Th>Started</Th>
-                  <Th>Status</Th>
-                  <Th>Trigger</Th>
-                  <Th>Size</Th>
-                  <Th>Duration</Th>
-                  <Th className="text-right">Actions</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((r) => (
-                  <tr
-                    key={r.id}
-                    className={r.prunedAt ? "opacity-60" : ""}
-                    style={{ borderTop: "1px solid var(--dpf-border)" }}
+        return (
+          <div key={target}>
+            {/* ─── Section header ──────────────────────────────────────── */}
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+                  {TARGET_LABELS[target]}
+                </h2>
+                <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
+                  {TARGET_DESCRIPTIONS[target]}
+                </p>
+                {target === "neo4j" && (
+                  <p
+                    className="text-xs mt-1 font-medium"
+                    style={{ color: "#fbbf24" }}
                   >
-                    <Td>{formatTimestamp(r.startedAt)}</Td>
-                    <Td>
-                      <StatusPill status={r.status} />
-                    </Td>
-                    <Td className="text-[var(--dpf-muted)]">{r.trigger}</Td>
-                    <Td>{formatBytes(r.sizeBytes)}</Td>
-                    <Td>{formatDurationMs(r.durationMs)}</Td>
-                    <Td className="text-right">
-                      {r.status === "ok" && !r.prunedAt && (
-                        <button
-                          onClick={() => handleOpenRestore(r.id)}
-                          disabled={loadingPreview !== null}
-                          className="mr-3 hover:underline disabled:opacity-50"
-                          style={{ color: "#f87171" }}
-                          title="Restore the database from this backup"
-                        >
-                          {loadingPreview === r.id ? "Loading…" : "Restore…"}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleOpenLog(r.id)}
-                        disabled={loadingLog}
-                        className="text-[var(--dpf-accent)] hover:underline disabled:opacity-50"
-                      >
-                        View log
-                      </button>
-                      {r.prunedAt && (
-                        <span
-                          className="ml-2 text-[10px]"
-                          style={{ color: "var(--dpf-muted)" }}
-                        >
-                          pruned
-                        </span>
-                      )}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                    Manual trigger stops the Neo4j container for ~10 s.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => handleTrigger(target)}
+                disabled={isPending || pendingTarget !== null}
+                className="px-4 py-2 text-sm font-medium rounded transition-colors shrink-0 ml-4"
+                style={{
+                  background:
+                    isPending || pendingTarget !== null
+                      ? "var(--dpf-border)"
+                      : "var(--dpf-accent)",
+                  color:
+                    isPending || pendingTarget !== null
+                      ? "var(--dpf-muted)"
+                      : "#fff",
+                  cursor:
+                    isPending || pendingTarget !== null ? "not-allowed" : "pointer",
+                }}
+              >
+                {isPending
+                  ? "Triggering…"
+                  : `Run ${TARGET_LABELS[target]} backup now`}
+              </button>
+            </div>
 
-      {/* ─── Restore history (Slice 2) ──────────────────────────────────── */}
+            {/* ─── Readiness card ──────────────────────────────────────── */}
+            <div
+              className="rounded p-4 grid gap-3 text-sm mb-3"
+              style={{
+                background: "var(--dpf-surface)",
+                border: "1px solid var(--dpf-border)",
+              }}
+            >
+              <ReadinessRow
+                label="Schedule"
+                value={j ? `${j.schedule} (cron 03:00 UTC)` : "—"}
+              />
+              <ReadinessRow
+                label="Last run"
+                value={
+                  lastRun
+                    ? `${formatTimestamp(lastRun.startedAt)} · ${formatDurationMs(
+                        lastRun.durationMs,
+                      )} · ${formatBytes(lastRun.sizeBytes)}`
+                    : "never"
+                }
+                statusBadge={lastRun ? <StatusPill status={lastRun.status} /> : null}
+              />
+              <ReadinessRow
+                label="Last success"
+                value={
+                  r.lastSuccess
+                    ? `${formatTimestamp(r.lastSuccess.finishedAt)} · ${formatBytes(
+                        r.lastSuccess.sizeBytes,
+                      )}`
+                    : "never"
+                }
+              />
+              <ReadinessRow
+                label="Next run"
+                value={j?.nextRunAt ? formatTimestamp(j.nextRunAt) : "—"}
+              />
+              <ReadinessRow
+                label="Retention"
+                value={`${r.retention.daily} daily · ${r.retention.weekly} weekly · ${r.retention.monthly} monthly`}
+              />
+              <ReadinessRow
+                label="Retained on disk"
+                value={`${r.retainedCount} backup${r.retainedCount === 1 ? "" : "s"} · ${formatBytes(r.retainedBytes)}`}
+              />
+              <ReadinessRow label="Storage path" value={r.storagePath} />
+            </div>
+
+            {overdue && (
+              <div
+                className="mb-3 p-3 rounded text-sm"
+                style={{
+                  background: "rgba(248, 113, 113, 0.15)",
+                  color: "#f87171",
+                  border: "1px solid rgba(248, 113, 113, 0.3)",
+                }}
+              >
+                Multiple recent {TARGET_LABELS[target]} backups have failed.
+                Investigate the latest run log for details.
+              </div>
+            )}
+
+            {/* ─── History table ───────────────────────────────────────── */}
+            {runs.length === 0 ? (
+              <p className="text-xs text-[var(--dpf-muted)]">
+                No {TARGET_LABELS[target]} backups yet — click the trigger
+                button above to create one immediately.
+              </p>
+            ) : (
+              <div
+                className="rounded overflow-hidden"
+                style={{ border: "1px solid var(--dpf-border)" }}
+              >
+                <table className="w-full text-xs">
+                  <thead style={{ background: "var(--dpf-bg)" }}>
+                    <tr>
+                      <Th>Started</Th>
+                      <Th>Status</Th>
+                      <Th>Trigger</Th>
+                      <Th>Size</Th>
+                      <Th>Duration</Th>
+                      <Th className="text-right">Actions</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runs.map((row) => (
+                      <tr
+                        key={row.id}
+                        className={row.prunedAt ? "opacity-60" : ""}
+                        style={{ borderTop: "1px solid var(--dpf-border)" }}
+                      >
+                        <Td>{formatTimestamp(row.startedAt)}</Td>
+                        <Td>
+                          <StatusPill status={row.status} />
+                        </Td>
+                        <Td className="text-[var(--dpf-muted)]">{row.trigger}</Td>
+                        <Td>{formatBytes(row.sizeBytes)}</Td>
+                        <Td>{formatDurationMs(row.durationMs)}</Td>
+                        <Td className="text-right">
+                          {row.status === "ok" && !row.prunedAt && target === "postgres" && (
+                            <button
+                              onClick={() => handleOpenRestore(row.id)}
+                              disabled={loadingPreview !== null}
+                              className="mr-3 hover:underline disabled:opacity-50"
+                              style={{ color: "#f87171" }}
+                              title="Restore the database from this backup"
+                            >
+                              {loadingPreview === row.id ? "Loading…" : "Restore…"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleOpenLog(row.id)}
+                            disabled={loadingLog}
+                            className="text-[var(--dpf-accent)] hover:underline disabled:opacity-50"
+                          >
+                            View log
+                          </button>
+                          {row.prunedAt && (
+                            <span
+                              className="ml-2 text-[10px]"
+                              style={{ color: "var(--dpf-muted)" }}
+                            >
+                              pruned
+                            </span>
+                          )}
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* ─── Restore history (Slice 2) ────────────────────────────────────── */}
       <RestoreHistorySection runs={restoreRuns} />
 
-      {/* ─── Restore wizard modal (Slice 2) ─────────────────────────────── */}
+      {/* ─── Restore wizard modal (Slice 2, Postgres only) ───────────────── */}
       {restorePreview && (
         <RestoreConfirmModal
           preview={restorePreview}
@@ -341,7 +393,7 @@ export function BackupsClient({
         />
       )}
 
-      {/* ─── Log drawer ─────────────────────────────────────────────────── */}
+      {/* ─── Log drawer ──────────────────────────────────────────────────── */}
       {openLog && (
         <div
           className="fixed inset-0 z-40 flex justify-end"
