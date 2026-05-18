@@ -17,7 +17,13 @@
  */
 
 export const SPEACHES_PROVIDER_ID = "speaches" as const;
-export const SPEACHES_MODEL_ID = "Systran/faster-distil-whisper-large-v3" as const;
+// Slice 1.5: the local STT sidecar is now hwdsl2/whisper-server (CPU default)
+// which loads one model at startup via WHISPER_MODEL env (default "base", ~145
+// MB, sufficient accuracy for English dictation). The `model` field in the
+// OpenAI /v1/audio/transcriptions request is matched against this loaded
+// model. GPU upgrade path swaps the image to a CUDA variant via DPF_STT_IMAGE
+// and may use a larger model — operator-overridable via DPF_STT_MODEL.
+export const SPEACHES_MODEL_ID = "base" as const;
 
 /** Task type used in EndpointTaskPerformance + routing dispatch. */
 export const TRANSCRIPTION_TASK_TYPE = "transcription" as const;
@@ -44,9 +50,9 @@ export const SPEACHES_CAPABILITY_TIER = "basic" as const;
 export const SPEACHES_MODEL_PROFILE_CONFIG = {
   providerId: SPEACHES_PROVIDER_ID,
   modelId: SPEACHES_MODEL_ID,
-  friendlyName: "Faster Distil-Whisper Large v3",
+  friendlyName: "Whisper base (CPU)",
   summary:
-    "Distilled Whisper Large v3 served via the Speaches sidecar — Whisper-quality transcription at ~6× real-time. The Slice 1 default speech-to-text engine.",
+    "OpenAI Whisper base model served via the local whisper-server sidecar. CPU-only by default; works on any modern machine. Operators with NVIDIA GPUs can upgrade to a CUDA variant for ~10× faster transcription.",
   capabilityCategory: "basic",
   costTier: "$" as const,
   bestFor: ["transcription", "dictation", "voice-notes"],

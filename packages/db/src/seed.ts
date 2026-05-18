@@ -1324,13 +1324,21 @@ async function seedProviderRegistry(): Promise<void> {
       });
       updated++;
     } else {
+      // Providers that need no credentials (authMethod: "none") are local
+      // sidecars (the STT sidecar today) — they should be active immediately
+      // on a fresh install so the operator doesn't need to click anything to
+      // make voice / future local services work. Providers requiring OAuth /
+      // API keys correctly start unconfigured and become active when the admin
+      // connects them. Voice Slice 1.5: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
+      const initialStatus =
+        (entry.authMethod as string | undefined) === "none" ? "active" : "unconfigured";
       await prisma.modelProvider.create({
         data: {
           providerId,
           name: entry.name as string ?? providerId,
           families: (entry.families as string[]) ?? [],
           enabledFamilies: [],
-          status: "unconfigured",
+          status: initialStatus,
           category: entry.category as string ?? "direct",
           baseUrl: (entry.baseUrl as string) ?? null,
           authMethod: entry.authMethod as string ?? "none",
@@ -1770,6 +1778,32 @@ async function seedSpeachesTranscriptionModel(): Promise<void> {
       `[seed] speaches provider not found in ModelProvider — packages/db/data/providers-registry.json must include providerId='${SPEACHES_PROVIDER_ID}'. Skipping transcription model seed.`,
     );
     return;
+  }
+
+  // Slice 1.5: migrate any existing speaches ModelProfile row that points at
+  // the legacy speaches modelId ("Systran/faster-distil-whisper-large-v3")
+  // — that model only exists in the old speaches sidecar; the new
+  // hwdsl2/whisper-server CPU default uses simpler model names like "base".
+  // Delete the stale profile + its EndpointTaskPerformance row so endpoint
+  // resolution picks the new profile cleanly. Idempotent: no-op on fresh
+  // installs.
+  const staleProfiles = await prisma.modelProfile.findMany({
+    where: {
+      providerId: SPEACHES_PROVIDER_ID,
+      modelId: { not: SPEACHES_MODEL_ID },
+    },
+    select: { id: true, modelId: true },
+  });
+  if (staleProfiles.length > 0) {
+    for (const stale of staleProfiles) {
+      await prisma.endpointTaskPerformance.deleteMany({
+        where: { endpointId: stale.id },
+      });
+      await prisma.modelProfile.delete({ where: { id: stale.id } });
+      console.log(
+        `  Cleaned stale speaches ModelProfile (modelId=${stale.modelId}) per Slice 1.5 image swap`,
+      );
+    }
   }
 
   // Upsert the ModelProfile. profileSource="seed" + profileSource check at

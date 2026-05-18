@@ -580,31 +580,53 @@ services:
       retries: 3
       start_period: 40s
 
-  # ─── Voice Input Slice 1 — Speech-to-text sidecar (opt-in via `stt` profile) ──
-  # Owning plan: docs/superpowers/plans/2026-05-16-voice-input-slice-1-portal-mic.md
-  # Owning spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §6.6
+  # ─── Voice Input — Speech-to-text sidecar (default-on, CPU) ────────────────
+  # Owning spec: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
+  # Owning plan: docs/superpowers/plans/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
   #
-  # Single service entry — image switched by DPF_STT_IMAGE for deployment-target
-  # variants (speaches default; whisper.cpp for edge / CPU-only installs). Both
-  # expose OpenAI-compatible /v1/audio/transcriptions; the contract is the
-  # endpoint, not the image. Default `docker compose up` does NOT start this —
-  # opt-in via `docker compose --profile stt up`.
+  # 3-tier hardware ladder:
+  #   Tier 1 (default — this block):  hwdsl2/whisper-server CPU image.
+  #                                   ~190 MB image + ~145 MB base model.
+  #                                   OpenAI-compatible /v1/audio/transcriptions
+  #                                   matches transcription-adapter.ts contract.
+  #                                   Multi-arch amd64 + arm64.
+  #   Tier 2 (operator-enabled GPU):  Override DPF_STT_IMAGE to a CUDA-enabled
+  #                                   variant. Activated via the SpeechToTextCard
+  #                                   "Upgrade to GPU" button (Slice 1.6).
+  #   Tier 3 (hosted):                Connect Groq / Deepgram / AssemblyAI via
+  #                                   the standard provider-add flow. The
+  #                                   classifyBiasPrompt gate already strips
+  #                                   off-org-unsafe tokens before dispatch.
+  #
+  # No profile gate — voice ships working on `docker compose up`.
   dpf-stt:
-    image: ${DPF_STT_IMAGE:-ghcr.io/speaches-ai/speaches:latest-cuda}
-    profiles: ["stt"]
+    # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest at
+    # commit time. Bump deliberately; never reach for `:latest` in shipped
+    # compose because it makes the install non-reproducible.
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:b9a90a45e9ef72434862b0aaed5b503da5a03c0b1df650169e261861baf53d75}
+    restart: unless-stopped
     environment:
-      WHISPER_MODEL: ${DPF_STT_MODEL:-Systran/faster-distil-whisper-large-v3}
-      ENABLE_UI: "false"
+      # `base` (~145 MB) is the smallest model with usable accuracy on English.
+      # Override DPF_STT_MODEL to e.g. `distil-small.en` for lower latency on
+      # GPUs, or `large-v3` on a beefier machine.
+      WHISPER_MODEL: ${DPF_STT_MODEL:-base}
+    volumes:
+      # Cache downloaded models across container restarts. First start downloads
+      # the model (~10-30 s for base on a typical connection); subsequent
+      # starts are warm.
+      - dpf_stt_models:/app/models
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      # The first start downloads the model, so start_period accommodates it.
+      # Subsequent restarts hit the cached model and pass in ~3 s.
+      start_period: 120s
     ports:
-      # Localhost-only port binding by default. The portal reaches the sidecar
-      # via the Docker network DNS name (dpf-stt:8000) — the host-port mapping
-      # is for developer-machine smoke testing only.
+      # Localhost-only port binding. The portal reaches the sidecar via the
+      # Docker network DNS name (dpf-stt:8000); the host-port mapping is for
+      # developer-machine smoke testing only.
       - "127.0.0.1:8765:8000"
 
 volumes:
@@ -622,3 +644,4 @@ volumes:
   sandbox_workspace:
   prometheus_data:
   grafana_data:
+  dpf_stt_models:
