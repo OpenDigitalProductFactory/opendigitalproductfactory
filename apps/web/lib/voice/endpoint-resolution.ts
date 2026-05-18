@@ -31,8 +31,12 @@ export interface ResolveTranscriptionEndpointInput {
 
 export class NoTranscriptionEndpointError extends Error {
   constructor() {
+    // Operator-facing copy: per the never-ask-user-to-run-commands kernel
+    // commandment, the message must not name shell. The Platform Tools >
+    // Communications > Speech-to-text page guides the admin through enabling
+    // the sidecar without copy-paste shell.
     super(
-      "No transcription endpoint configured. Seed speaches via packages/db/data/providers-registry.json or run `docker compose --profile stt up dpf-stt`.",
+      "Speech-to-text isn't configured yet. Enable it in Platform Tools > Communications > Speech-to-text.",
     );
     this.name = "NoTranscriptionEndpointError";
   }

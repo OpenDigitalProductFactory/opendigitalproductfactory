@@ -61,7 +61,10 @@ export async function getSpeechToTextReadiness(): Promise<SpeechToTextReadiness>
       modelId: null,
       baseUrl: null,
       reason:
-        "No transcription endpoint registered. Start the local STT sidecar via `docker compose --profile stt up dpf-stt` or configure a hosted provider.",
+        // Operator-facing copy must not name shell. The admin card uses the
+        // Enable button to drive the sidecar start; the underlying script is
+        // platform plumbing.
+        "Speech-to-text isn't configured yet. Click Enable to start the local sidecar, or connect a hosted provider in Platform Tools > Communications.",
     };
   }
 

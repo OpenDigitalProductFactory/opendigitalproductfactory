@@ -98,6 +98,49 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
 
   return (
     <div style={{ borderTop: "1px solid var(--dpf-border)" }}>
+      {/*
+        Voice Slice 2 follow-up: surface voice errors INLINE, not just in the
+        button tooltip. Operators were clicking the mic, getting silent
+        failures (red ring on a small button), and concluding "nothing
+        happened". The error banner shows the failure reason + the next
+        actionable step in plain language.
+      */}
+      {voice.state === "error" && voice.error && (
+        <div
+          role="alert"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            padding: "6px 12px",
+            background: "rgba(211, 51, 51, 0.08)",
+            borderBottom: "1px solid rgba(211, 51, 51, 0.25)",
+            fontSize: 11,
+            color: "var(--dpf-text)",
+          }}
+        >
+          <span style={{ color: "var(--dpf-error, #d33)", fontWeight: 600 }}>
+            Voice input failed
+          </span>
+          <span style={{ flex: 1, color: "var(--dpf-muted)" }}>
+            {voice.error}
+          </span>
+          <button
+            type="button"
+            onClick={voice.reset}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--dpf-accent)",
+              cursor: "pointer",
+              fontSize: 11,
+              padding: 0,
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {pendingFile && (
         <div style={{
           display: "flex",
