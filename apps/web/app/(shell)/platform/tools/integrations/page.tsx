@@ -1,5 +1,14 @@
 import { prisma } from "@dpf/db";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
+import {
+  CSDM_STRUCTURAL_DOMAIN_LABELS,
+  EMPLOYEE_WORK_ROLE_LABELS,
+  INTEGRATION_COVERAGE_KIND_LABELS,
+  INTEGRATION_COVERAGE_MATRIX,
+  INTEGRATION_COVERAGE_MATURITY_LABELS,
+  INTEGRATION_COVERAGE_POSTURE_LABELS,
+  IT4IT_VALUE_STREAM_LABELS,
+} from "@/lib/tools/integration-coverage-matrix";
 
 export default async function EnterpriseIntegrationsPage() {
   const [configuredIntegrations, errorStates] = await Promise.all([
@@ -180,6 +189,112 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
       </div>
+
+      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+              Employee Work Coverage
+            </p>
+            <h2 className="mt-2 text-lg font-semibold text-[var(--dpf-text)]">
+              Role, taxonomy, coworker, and product posture
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[var(--dpf-text)]">
+              {INTEGRATION_COVERAGE_MATRIX.filter((row) => row.kind === "native").length} native rows
+            </span>
+            <span className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[var(--dpf-text)]">
+              {INTEGRATION_COVERAGE_MATRIX.filter((row) => row.kind === "benchmark").length} benchmark rows
+            </span>
+            <span className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[var(--dpf-text)]">
+              CSDM and IT4IT projection only
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[1100px] text-left text-sm">
+            <thead className="border-b border-[var(--dpf-border)] text-[11px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+              <tr>
+                <th className="py-3 pr-4 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">Employee work</th>
+                <th className="px-4 py-3 font-medium">Taxonomy</th>
+                <th className="px-4 py-3 font-medium">Surface / coworker</th>
+                <th className="px-4 py-3 font-medium">Posture</th>
+                <th className="px-4 py-3 font-medium">Structure</th>
+                <th className="py-3 pl-4 font-medium">Next slice</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--dpf-border)]">
+              {INTEGRATION_COVERAGE_MATRIX.map((row) => (
+                <tr key={row.id} className="align-top">
+                  <td className="py-4 pr-4">
+                    <p className="font-medium text-[var(--dpf-text)]">{row.productName}</p>
+                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">{row.provider}</p>
+                    <p className="mt-2 inline-flex rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-text)]">
+                      {INTEGRATION_COVERAGE_KIND_LABELS[row.kind]}
+                    </p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex max-w-[220px] flex-wrap gap-1.5">
+                      {row.employeeRoles.map((role) => (
+                        <span
+                          key={role}
+                          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-text)]"
+                        >
+                          {EMPLOYEE_WORK_ROLE_LABELS[role]}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="max-w-[250px] space-y-1">
+                      {row.taxonomyNodeIds.slice(0, 3).map((nodeId) => (
+                        <p key={nodeId} className="break-words font-mono text-xs text-[var(--dpf-muted)]">
+                          {nodeId}
+                        </p>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="max-w-[240px] space-y-2">
+                      <p className="break-words text-xs text-[var(--dpf-text)]">{row.dpfSurfaces.join(", ")}</p>
+                      <p className="break-words text-xs text-[var(--dpf-muted)]">{row.coworkerIds.join(", ")}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-[var(--dpf-text)]">
+                        {INTEGRATION_COVERAGE_POSTURE_LABELS[row.posture]}
+                      </p>
+                      <p className="text-xs text-[var(--dpf-muted)]">
+                        {INTEGRATION_COVERAGE_MATURITY_LABELS[row.maturity]}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="max-w-[220px] space-y-1">
+                      <p className="text-xs font-medium text-[var(--dpf-text)]">
+                        {CSDM_STRUCTURAL_DOMAIN_LABELS[row.csdmDomain]}
+                      </p>
+                      <p className="text-xs text-[var(--dpf-muted)]">
+                        {row.it4itValueStreams.map((stream) => IT4IT_VALUE_STREAM_LABELS[stream]).join(", ")}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="py-4 pl-4">
+                    <div className="max-w-[220px] space-y-1">
+                      <p className="font-mono text-xs font-medium text-[var(--dpf-text)]">{row.nextBacklogItemId}</p>
+                      <p className="text-xs text-[var(--dpf-muted)]">{row.notes}</p>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
         <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
