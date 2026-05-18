@@ -47,6 +47,9 @@ services:
   portal:
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      # Management API for pull/delete/tags — distinct from the OpenAI-compatible
+      # inference endpoint above. Used by the portal's Ollama provider routes.
+      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://ollama:11434}
     depends_on:
       ollama:
         condition: service_healthy

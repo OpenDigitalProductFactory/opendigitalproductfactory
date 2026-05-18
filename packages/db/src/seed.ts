@@ -927,6 +927,147 @@ async function seedSandboxPool(): Promise<void> {
   }
 }
 
+async function seedRuntimeTargets(): Promise<void> {
+  const rootPortalUrl = process.env.APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000";
+  const now = new Date();
+
+  await prisma.runtimeTarget.upsert({
+    where: { targetId: "RT-ROOT-PORTAL" },
+    create: {
+      targetId: "RT-ROOT-PORTAL",
+      kind: "root-portal",
+      status: "running",
+      serviceName: "portal",
+      containerName: "dpf-portal-1",
+      hostUrl: rootPortalUrl,
+      port: 3000,
+      serviceVersion: process.env.DPF_IMAGE_VERSION ?? process.env.DPF_VERSION ?? null,
+      lastHeartbeatAt: now,
+      metadata: {},
+    },
+    update: {
+      kind: "root-portal",
+      serviceName: "portal",
+      containerName: "dpf-portal-1",
+      hostUrl: rootPortalUrl,
+      port: 3000,
+      serviceVersion: process.env.DPF_IMAGE_VERSION ?? process.env.DPF_VERSION ?? null,
+      lastHeartbeatAt: now,
+    },
+  });
+
+  await prisma.runtimeTarget.upsert({
+    where: { targetId: "RT-DEV-PORTAL" },
+    create: {
+      targetId: "RT-DEV-PORTAL",
+      kind: "dev-portal",
+      status: "planned",
+      serviceName: "dev-portal",
+      containerName: "dpf-dev-portal-1",
+      hostUrl: "http://localhost:3001",
+      port: 3001,
+      metadata: {},
+    },
+    update: {
+      kind: "dev-portal",
+      serviceName: "dev-portal",
+      containerName: "dpf-dev-portal-1",
+      hostUrl: "http://localhost:3001",
+      port: 3001,
+    },
+  });
+
+  const featureBuilds = await prisma.featureBuild.findMany({
+    select: { id: true, buildId: true },
+  });
+  const featureBuildIdByBuildId = new Map(featureBuilds.map((build) => [build.buildId, build.id]));
+
+  const sandboxes = await prisma.sandbox.findMany({
+    select: {
+      id: true,
+      buildId: true,
+      providerId: true,
+      state: true,
+      previewUrl: true,
+    },
+  });
+  const sandboxIds = new Set(sandboxes.map((sandbox) => sandbox.id));
+
+  for (const sandbox of sandboxes) {
+    const status = sandbox.state === "running" || sandbox.state === "ready"
+      ? "running"
+      : sandbox.state === "failed"
+        ? "failed"
+        : sandbox.state === "destroyed"
+          ? "released"
+          : "assigned";
+    await prisma.runtimeTarget.upsert({
+      where: { targetId: `RT-SANDBOX-${sandbox.id}` },
+      create: {
+        targetId: `RT-SANDBOX-${sandbox.id}`,
+        kind: "build-sandbox",
+        status,
+        sandboxId: sandbox.id,
+        featureBuildId: featureBuildIdByBuildId.get(sandbox.buildId) ?? null,
+        hostUrl: sandbox.previewUrl,
+        metadata: {
+          buildId: sandbox.buildId,
+          providerId: sandbox.providerId,
+        },
+      },
+      update: {
+        status,
+        sandboxId: sandbox.id,
+        featureBuildId: featureBuildIdByBuildId.get(sandbox.buildId) ?? null,
+        hostUrl: sandbox.previewUrl,
+        metadata: {
+          buildId: sandbox.buildId,
+          providerId: sandbox.providerId,
+        },
+      },
+    });
+  }
+
+  const candidates = await prisma.gitPromotionCandidate.findMany({
+    where: { status: { in: ["queued", "verifying", "in_progress"] } },
+    select: {
+      id: true,
+      candidateId: true,
+      status: true,
+      sandboxId: true,
+    },
+  });
+
+  for (const candidate of candidates) {
+    const status = candidate.status === "verifying" || candidate.status === "in_progress"
+      ? "verifying"
+      : "planned";
+    await prisma.runtimeTarget.upsert({
+      where: { targetId: `RT-GIT-PROMOTION-${candidate.id}` },
+      create: {
+        targetId: `RT-GIT-PROMOTION-${candidate.id}`,
+        kind: "git-promotion-sandbox",
+        status,
+        sandboxId: candidate.sandboxId && sandboxIds.has(candidate.sandboxId) ? candidate.sandboxId : null,
+        metadata: {
+          candidateId: candidate.candidateId,
+          candidateSandboxId: candidate.sandboxId,
+        },
+      },
+      update: {
+        status,
+        sandboxId: candidate.sandboxId && sandboxIds.has(candidate.sandboxId) ? candidate.sandboxId : null,
+        metadata: {
+          candidateId: candidate.candidateId,
+          candidateSandboxId: candidate.sandboxId,
+        },
+      },
+    });
+  }
+
+  console.log("Seeded runtime targets: root portal, dev portal, and active sandbox mirrors");
+}
+
 async function seedCoworkerAgents(): Promise<void> {
   // EP-AI-WORKFORCE-001: Coworker agents with canonical AGT-UI-xxx IDs and slugId aliases
   const coworkers = [
@@ -2200,6 +2341,7 @@ async function main(): Promise<void> {
   await ensurePostgresBackupScheduledJob(prisma);
   await seedMcpServers();
   await seedSandboxPool();
+  await seedRuntimeTargets();
   await seedProviderRegistry();
   await seedCodexModels();
   await seedChatGPTModels();
