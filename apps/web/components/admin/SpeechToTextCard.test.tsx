@@ -85,7 +85,7 @@ describe("SpeechToTextCard — unconfigured (fresh install)", () => {
       modelId: null,
       baseUrl: null,
       reason:
-        "No transcription endpoint registered. Start the local STT sidecar via `docker compose --profile stt up dpf-stt` or configure a hosted provider.",
+        "Speech-to-text isn't configured yet. Click Enable to start the local sidecar, or connect a hosted provider in Platform Tools > Communications.",
     });
   });
 
@@ -100,9 +100,10 @@ describe("SpeechToTextCard — unconfigured (fresh install)", () => {
     expect(html.match(/—/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("renders the actionable reason with the docker command", async () => {
+  it("renders the actionable reason WITHOUT shell commands (kernel commandment)", async () => {
     const html = await renderCard();
-    expect(html).toMatch(/docker compose --profile stt/);
+    expect(html).not.toMatch(/docker compose|docker exec|`docker/);
+    expect(html).toMatch(/Platform Tools|Enable/i);
   });
 
   it("passes readinessIsHealthy=false to the test harness", async () => {

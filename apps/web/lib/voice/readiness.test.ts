@@ -36,7 +36,10 @@ describe("getSpeechToTextReadiness", () => {
     const result = await getSpeechToTextReadiness();
     expect(result.status).toBe("unconfigured");
     expect(result.providerId).toBeNull();
-    expect(result.reason).toMatch(/docker compose --profile stt/);
+    // Per the never-ask-user-to-run-commands kernel commandment, the
+    // operator-facing reason must not name shell.
+    expect(result.reason).not.toMatch(/docker compose|docker exec|`docker/);
+    expect(result.reason).toMatch(/Platform Tools|Enable/i);
   });
 
   it("returns 'healthy' when speaches is seeded + active + unblocked", async () => {
