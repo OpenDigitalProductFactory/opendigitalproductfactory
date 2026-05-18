@@ -1,12 +1,17 @@
 /**
- * Voice Slice 2 — restore wizard public types.
+ * Restore wizard public types.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.6
+ * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md (Slice 4)
  */
+
+import type { BackupTarget } from "./types";
 
 export interface RestoreImpactPreview {
   /** The BackupRun.id being restored. */
   sourceBackupRunId: string;
+  /** Which service this restore targets. */
+  target: BackupTarget;
   /** Source dump's finishedAt timestamp (UTC ISO). */
   sourceFinishedAt: string | null;
   /** Source dump size in bytes. */
@@ -25,11 +30,17 @@ export interface RestoreImpactPreview {
   /** True when the on-disk sha256 does not match BackupRun.sha256 (corruption). */
   sha256Mismatch: boolean;
   /**
-   * Cross-version warning. Spec §10 open question: dump may have been taken
-   * from a different DPF version. We surface it but do NOT block; operators
-   * recovering from a wipe sometimes need to restore older dumps.
+   * Cross-version warning. Dump may have been taken from a different DPF
+   * version. We surface it but do NOT block — operators recovering from a
+   * wipe sometimes need to restore older dumps.
    */
   versionWarning: string | null;
+  /**
+   * Service-specific warning shown before the confirmation input.
+   * null for Postgres (no extra downtime). Set for Neo4j (brief container
+   * restart) and Qdrant (full-instance replacement).
+   */
+  serviceWarning: string | null;
 }
 
 export interface RestoreRunListItem {

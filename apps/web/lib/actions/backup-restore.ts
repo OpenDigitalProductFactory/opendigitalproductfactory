@@ -17,6 +17,8 @@ import {
   isRestoreInFlight,
   runPostgresRestore,
 } from "@/lib/operate/backups/postgres-restore-runner";
+import { runNeo4jRestore } from "@/lib/operate/backups/neo4j-restore-runner";
+import { runQdrantRestore } from "@/lib/operate/backups/qdrant-restore-runner";
 
 async function requireBackupAdmin(): Promise<string | null> {
   const session = await auth();
@@ -54,10 +56,8 @@ export interface ConfirmRestoreResult {
 }
 
 /**
- * Confirms and triggers a restore. The wizard's "Restore" button calls this
- * with the typed confirmation text. We require an exact case-sensitive match
- * to `RESTORE` — never accept variants. The check is intentionally
- * server-side AND duplicated on the client (defense in depth).
+ * Confirms and triggers a restore. Dispatches to the right runner based on
+ * the BackupRun.target field. The confirmation text must match RESTORE exactly.
  */
 export async function confirmRestoreAction(
   sourceBackupRunId: string,
@@ -83,15 +83,25 @@ export async function confirmRestoreAction(
   }
 
   try {
-    const result = await runPostgresRestore({
-      sourceBackupRunId,
-      initiatedByUserId: userId,
+    // Look up the target so we dispatch to the correct runner.
+    const run = await prisma.backupRun.findUnique({
+      where: { id: sourceBackupRunId },
+      select: { target: true },
     });
-    return {
-      ok: result.status === "ok",
-      restoreId: result.restoreId,
-      status: result.status,
-    };
+    if (!run) {
+      return { ok: false, error: `Backup run ${sourceBackupRunId} not found.`, errorClass: "integrity" };
+    }
+
+    let result: { restoreId: string; status: "ok" | "failed" };
+    if (run.target === "neo4j") {
+      result = await runNeo4jRestore({ sourceBackupRunId, initiatedByUserId: userId });
+    } else if (run.target === "qdrant") {
+      result = await runQdrantRestore({ sourceBackupRunId, initiatedByUserId: userId });
+    } else {
+      result = await runPostgresRestore({ sourceBackupRunId, initiatedByUserId: userId });
+    }
+
+    return { ok: result.status === "ok", restoreId: result.restoreId, status: result.status };
   } catch (err) {
     if (err instanceof RestoreLockedError) {
       return { ok: false, error: err.message, errorClass: "locked" };

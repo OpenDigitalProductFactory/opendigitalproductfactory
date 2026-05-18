@@ -68,11 +68,18 @@ export function RestoreConfirmModal({ preview, onClose, onConfirmed }: Props) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="text-lg font-bold text-[var(--dpf-text)]">
-              Restore from backup
+              {preview.target === "neo4j"
+                ? "Restore Neo4j from backup"
+                : preview.target === "qdrant"
+                  ? "Restore Qdrant from backup"
+                  : "Restore Postgres from backup"}
             </h2>
             <p className="text-xs text-[var(--dpf-muted)] mt-1">
-              This action replaces the current database with the contents of
-              the selected dump.
+              {preview.target === "neo4j"
+                ? "This replaces the graph database with the selected dump. Neo4j restarts briefly."
+                : preview.target === "qdrant"
+                  ? "This replaces all Qdrant vector collections with the selected snapshot."
+                  : "This action replaces the current database with the contents of the selected dump."}
             </p>
           </div>
           <button
@@ -145,6 +152,19 @@ export function RestoreConfirmModal({ preview, onClose, onConfirmed }: Props) {
         >
           {preview.impactSummary}
         </div>
+
+        {preview.serviceWarning && (
+          <div
+            className="rounded p-3 mb-4 text-xs"
+            style={{
+              background: "rgba(251, 191, 36, 0.12)",
+              color: "#fbbf24",
+              border: "1px solid rgba(251, 191, 36, 0.3)",
+            }}
+          >
+            {preview.serviceWarning}
+          </div>
+        )}
 
         {preview.versionWarning && (
           <div

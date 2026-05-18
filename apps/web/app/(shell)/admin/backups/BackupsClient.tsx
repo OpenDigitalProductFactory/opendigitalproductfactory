@@ -344,13 +344,13 @@ export function BackupsClient({
                         <Td>{formatBytes(row.sizeBytes)}</Td>
                         <Td>{formatDurationMs(row.durationMs)}</Td>
                         <Td className="text-right">
-                          {row.status === "ok" && !row.prunedAt && target === "postgres" && (
+                          {row.status === "ok" && !row.prunedAt && (
                             <button
                               onClick={() => handleOpenRestore(row.id)}
                               disabled={loadingPreview !== null}
                               className="mr-3 hover:underline disabled:opacity-50"
                               style={{ color: "#f87171" }}
-                              title="Restore the database from this backup"
+                              title={`Restore ${TARGET_LABELS[target]} from this backup`}
                             >
                               {loadingPreview === row.id ? "Loading…" : "Restore…"}
                             </button>
