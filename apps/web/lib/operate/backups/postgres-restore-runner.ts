@@ -157,7 +157,7 @@ function summarizeScriptFailure(outcome: ScriptOutcome): string {
  * is already in flight. Returns a release function the caller MUST invoke
  * in `finally`.
  */
-function acquireRestoreLock(holder: string): () => void {
+export function acquireRestoreLock(holder: string): () => void {
   if (restoreLockHeld) {
     throw new RestoreLockedError(restoreLockHolder, restoreLockAcquiredAt);
   }
