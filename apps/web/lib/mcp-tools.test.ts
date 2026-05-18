@@ -3,6 +3,7 @@ import {
   buildEndpointTestRunRequest,
   getAvailableTools,
   inferEndpointIdFromRouteContext,
+  resolveSavePhaseHandoffTransition,
   sanitizeToolParams,
 } from "./mcp-tools";
 import { getActionsForRoute } from "./agent-action-registry";
@@ -251,6 +252,50 @@ describe("sanitizeToolParams", () => {
     // All string fields are empty but there's a non-string field — string check still applies
     // to string-typed fields only. Both string fields are empty → stripped.
     expect(result).not.toHaveProperty("proposeNew");
+  });
+});
+
+describe("save_phase_handoff transition controls", () => {
+  it("ignores hidden non-advancing controls from non-orchestrator callers", () => {
+    const transition = resolveSavePhaseHandoffTransition(
+      { toPhase: "build", autoAdvance: false },
+      { agentId: "frontend-engineer", routeContext: "/build" },
+      "build",
+    );
+
+    expect(transition).toEqual({
+      toPhase: "review",
+      autoAdvance: true,
+      isInternalTaskHandoff: false,
+    });
+  });
+
+  it("honors non-advancing task handoff controls only for the build orchestrator", () => {
+    const transition = resolveSavePhaseHandoffTransition(
+      { toPhase: "build", autoAdvance: false },
+      { agentId: "AGT-ORCH-300", routeContext: "/build" },
+      "build",
+    );
+
+    expect(transition).toEqual({
+      toPhase: "build",
+      autoAdvance: false,
+      isInternalTaskHandoff: true,
+    });
+  });
+
+  it("rejects invalid internal target phases", () => {
+    const transition = resolveSavePhaseHandoffTransition(
+      { toPhase: "not-a-phase", autoAdvance: false },
+      { agentId: "AGT-ORCH-300", routeContext: "/build" },
+      "build",
+    );
+
+    expect(transition).toEqual({
+      toPhase: "review",
+      autoAdvance: false,
+      isInternalTaskHandoff: true,
+    });
   });
 });
 
