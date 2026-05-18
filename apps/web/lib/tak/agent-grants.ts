@@ -131,6 +131,12 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   saveBuildEvidence: ["backlog_write"],
   reviewDesignDoc: ["architecture_read"],
   reviewBuildPlan: ["build_plan_write"],
+  // Build-progress observation tools added in PR #770 — read-only, require backlog_read
+  get_build_progress_visibility: ["backlog_read"],
+  get_build_sandbox_state:       ["backlog_read"],
+  get_build_dispatch_history:    ["backlog_read"],
+  get_build_scoped_verification: ["backlog_read"],
+  list_build_activity_since:     ["backlog_read"],
 
   // Deploy / Release
   deploy_feature: ["iac_execute"],
