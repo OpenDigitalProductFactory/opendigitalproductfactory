@@ -1,0 +1,563 @@
+# DPF Runtime Coordination Workflow Implementation Plan
+
+> **For agentic workers:** REQUIRED: Use `superpowers:subagent-driven-development` when splitting implementation work across independent files, or `superpowers:executing-plans` when executing this plan linearly. Check off tasks as they are completed. For TypeScript changes, run `pnpm --filter web typecheck`. For final acceptance changes, run the production build and the affected UX path against the Docker-served portal.
+
+**Goal:** Make DPF runtime targets first-class, governed platform state so external agent work, Build Studio work, sandbox review, backlog evidence, PR state, and final portal acceptance all answer the same question: what is deployed where, who owns it, what is being tested, and what is safe to merge?
+
+**Architecture:** Keep source isolation in branch/worktree/build capsule, but coordinate runtime verification through DPF-owned runtime targets. Reuse Work Capsule as the work-control spine, add queryable runtime target and verification records for deployed/running state, and make sandbox/Build Studio the default non-prod runtime while `D:\DPF` Docker portal remains the final acceptance runtime.
+
+**Tech Stack:** Next.js 16, Prisma 7, PostgreSQL, Docker Compose, Build Studio sandbox provider, Inngest queue functions, MCP JSON-RPC at `/api/mcp/v1`, Vitest, Playwright/browser-use evidence capture, GitHub PR metadata.
+
+---
+
+## Grounding
+
+This plan is based on repo inspection, DPF MCP backlog/spec queries, live Docker state, and live Postgres fallback.
+
+### Repo documents and implementation inspected
+
+- `AGENTS.md`
+- `docs/operations/dpf-production-runtime.md`
+- `docs/user-guide/development-workspace.md`
+- `docs/user-guide/build-studio/sandbox.md`
+- `docs/superpowers/specs/2026-05-14-portal-work-capsule-control-harness-design.md`
+- `docs/superpowers/plans/2026-05-17-portal-work-capsule-control-harness-phase-3.md`
+- `docs/superpowers/plans/2026-05-17-runtime-data-safety-guards.md`
+- `docs/superpowers/plans/2026-05-11-git-triggered-sandbox-promotion-slice-2.md`
+- `docs/superpowers/plans/2026-05-11-ai-routing-ux-verification-test-architecture.md`
+- `docs/superpowers/drafts/2026-05-12-agent-workspace-pattern.md`
+- `docker-compose.yml`
+- `apps/web/lib/platform-dev-policy.ts`
+- `apps/web/lib/mcp-tools.ts`
+- `apps/web/lib/work-capsules.ts`
+- `apps/web/lib/work-capsules/**`
+- `apps/web/lib/integrate/**`
+- `apps/web/lib/integrate/sandbox/**`
+- `apps/web/lib/queue/functions/build-review-verification.ts`
+- `packages/db/prisma/schema.prisma`
+
+### Live backlog and runtime checks
+
+DPF MCP was available for backlog/spec search:
+
+- `search_specs_and_plans` returned no exact existing plan for "runtime coordination" or "external agent runtime coordination".
+- Open/in-progress Build Studio and Work Capsule work exists:
+  - `EP-BUILD-STUDIO` has active/open Build Studio work.
+  - `EP-WORKTREE-HYGIENE` is open.
+  - `EP-CAPSULE` has in-progress capsule surface work, including `BI-D52D4E25` and `BI-3DE485DE`.
+- Active build-linked backlog items returned by `list_backlog_items(hasActiveBuild=true)`:
+  - `BI-57ED34F7` specialist subtask thread spawning.
+  - `BI-AF29825A` formal deliberation.
+  - `BI-4E54A1AA` Ollama as primary local AI backend.
+
+Live DB fallback was used because this session could not call the Work Capsule MCP tools even though `apps/web/lib/mcp-tools.ts` defines them and live `ToolExecution` history shows prior `list_work_capsules` attempts.
+
+DB fallback showed:
+
+- `WorkCapsule`: 0 rows.
+- `FeatureBuild`: 3 rows, all without sandbox assignment metadata.
+- `SandboxSlot`: 3 rows: `dpf-sandbox-1` on 3035, `dpf-sandbox-2` on 3037, `dpf-sandbox-3` on 3038, all marked `available`.
+- Docker runtime only showed `dpf-sandbox-1` running on 3035, so the database advertises more slots than the current Compose runtime actually has.
+- `GitPromotionCandidate`: 0 rows.
+- Evidence exists in `BacklogItemActivity`, `BuildActivity`, and `ToolExecution`, but runtime target ownership is not a first-class queryable contract.
+
+Live Docker/Git checks showed:
+
+- Root portal: `dpf-portal-1`, `localhost:3000`, healthy, image version/head SHA `07133d5e139c3dff7e23156b05e7a7be7ab0bc21`, branch `main`.
+- Sandbox: `dpf-sandbox-1`, `localhost:3035`, workspace branch `my-changes`, head `0bfda3e`, no confirmed app health response during inspection.
+- No unmanaged Node/Next listener was observed on ports 3000-3110 during the check.
+- One open PR existed: #747 `fix/voice: surface STT errors inline + strip shell commands from operator copy`.
+- Many worktrees exist, reinforcing that source isolation is working better than runtime coordination.
+
+### Standards anchors
+
+The target design follows project rules first, and uses these external standards as vocabulary rather than replacement governance:
+
+- Docker Compose project names isolate environments from one another, and Docker documents `COMPOSE_PROJECT_NAME` as a supported mechanism for that isolation: https://docs.docker.com/compose/how-tos/project-name/
+- GitHub Deployments model runtime deployment as a specific ref plus statuses such as `pending`, `in_progress`, `failure`, and `success`: https://docs.github.com/en/rest/deployments/deployments
+- SLSA provenance separates build inputs, resolved dependencies, builder identity, and run metadata. DPF should apply the same separation to Build Studio/sandbox provenance: https://slsa.dev/spec/v1.0/provenance
+- OpenTelemetry resource conventions treat `service.version` as the exact artifact version, including a git hash. DPF runtime targets should record this explicitly for root portal and sandbox runtimes: https://opentelemetry.io/docs/specs/semconv/resource/
+
+## Current-State Map
+
+| Surface | Verified current state | Current gap |
+| --- | --- | --- |
+| Root portal | `dpf-portal-1` serves `localhost:3000` and is the real customer-zero acceptance runtime. | It can be inspected manually, but portal acceptance is not yet tied to a runtime target record with owner, backlog item, PR, SHA, evidence, and verification status. |
+| Dev portal | Compose has a `dev-portal` profile on `localhost:3001`. | It is documented as an approved development surface, but external agents are not guided or gated into it through platform state. |
+| Build Studio sandbox | Compose has `sandbox` on `localhost:3035`; sandbox docs define isolation and promotion. | Build records currently lack sandbox metadata, and DB slot rows advertise slots not backed by running Compose services. |
+| Build Studio builds | `FeatureBuild` carries `buildId`, phase, backlog linkage, `sandboxId`, `sandboxPort`, `buildBranch`, `gitCommitHashes`, `uxTestResults`, and `uxVerificationStatus`. | The live active builds have no sandbox metadata, and the attachment from Build Studio to Work Capsule is not reflected in live rows. |
+| Work Capsule | Schema and service layer exist for capsule status, executor kind, branch/worktree/PR/sandbox/evidence, leases, scope claims, and activities. | Live DB has zero capsules. External agent and Build Studio work are therefore not represented by the intended durable work-control object. |
+| External agents | `.mcp.json` and worktree seed scripts exist; MCP backlog tools work; worktree isolation works. | The agent does not have a required registration handshake for runtime target, commit SHA, backlog item, PR, evidence destination, and verification status before runtime testing. |
+| Worktrees | Worktree rules and Compose project isolation are documented; seed script writes `COMPOSE_PROJECT_NAME=dpf-<topic>`. | Worktrees are still psychologically treated as permission to start a local app server, even when runtime verification should target sandbox or root portal. |
+| PRs | GitHub PR state is visible. | PR readiness is not coupled to DPF runtime target verification state. |
+| Evidence | Build evidence, backlog evidence, browser-use screenshots, and tool execution logs exist. | Evidence is scattered across tables and URLs. There is no single runtime target timeline that links the running surface, commit, owner, backlog item, build, PR, and screenshot. |
+
+## Design Decision
+
+The missing object is not another source workspace. It is a governed runtime target.
+
+DPF already has the right source-control primitives:
+
+- Branches and worktrees for source isolation.
+- Build Studio feature builds for AI-assisted implementation.
+- Work Capsules for cross-executor work ownership and scope claims.
+- Sandbox provider and sandbox slots for non-prod execution.
+- Root Docker portal for production-path acceptance.
+- MCP tools and evidence tables for external tool integration.
+
+The new workflow should make runtime target assignment and verification a platform-owned contract:
+
+1. A Work Capsule owns the work thread.
+2. A Runtime Target owns "where this code is running or being verified".
+3. Runtime Verification records prove what was checked against that target.
+4. Evidence attaches to the runtime target and is mirrored to the relevant backlog item/build/capsule timeline.
+5. Ad-hoc local servers are not valid verification targets unless explicitly registered as temporary debug exceptions.
+
+## Target Architecture
+
+### Core Concepts
+
+**Work Capsule**
+
+The durable unit of work ownership. It links backlog item, epic, feature build, branch, worktree, PR, executor, scope claims, evidence, verification state, and promotion policy.
+
+Existing implementation already supports most of this and should remain the workflow spine.
+
+**Runtime Target**
+
+A queryable record for a running or deployable surface. It answers:
+
+- What kind of runtime is this?
+- Which commit/branch/build/capsule/backlog item does it represent?
+- Who owns it?
+- What URL/container/port/service should be used?
+- Is it assigned, running, verifying, verified, failed, released, expired, or blocked?
+- Is it acceptable for non-prod verification, final acceptance, or debug only?
+
+**Runtime Verification**
+
+A queryable record for a check against a runtime target. It answers:
+
+- What was verified?
+- Which command, browser path, health check, screenshot, or manual review produced the result?
+- Which tool execution/build activity/backlog activity contains the evidence?
+- Does this verification count for merge/promotion readiness?
+
+### Proposed Data Model
+
+Add small first-class tables instead of burying the primary runtime truth in JSON. JSON may still hold snapshots, but the queryable contract needs relational ownership.
+
+```prisma
+model RuntimeTarget {
+  id                      String    @id @default(cuid())
+  targetId                String    @unique
+  kind                    String
+  environment             String
+  status                  String
+  ownerUserId             String?
+  ownerAgentId            String?
+  workCapsuleId           String?
+  featureBuildId          String?
+  backlogItemId           String?
+  epicId                  String?
+  gitPromotionCandidateId String?
+  pullRequestUrl          String?
+  pullRequestNumber       Int?
+  repositoryFullName      String?
+  baseBranch              String?
+  headBranch              String?
+  baseSha                 String?
+  headSha                 String?
+  worktreePath            String?
+  composeProjectName      String?
+  serviceName             String?
+  containerName           String?
+  internalUrl             String?
+  hostUrl                 String?
+  port                    Int?
+  slotId                  String?
+  sandboxProviderId       String?
+  acceptanceRole          String
+  debugReason             String?
+  expiresAt               DateTime?
+  lastHeartbeatAt         DateTime?
+  metadata                Json?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  verifications           RuntimeVerification[]
+}
+
+model RuntimeVerification {
+  id              String   @id @default(cuid())
+  verificationId  String   @unique
+  runtimeTargetId String
+  kind            String
+  status          String
+  command         String?
+  url             String?
+  evidenceUrl     String?
+  screenshotUrl   String?
+  toolExecutionId String?
+  buildActivityId String?
+  backlogActivityId String?
+  capsuleActivityId String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  result          Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  runtimeTarget   RuntimeTarget @relation(fields: [runtimeTargetId], references: [id], onDelete: Cascade)
+}
+```
+
+Use strongly typed string arrays in TypeScript and MCP tool schemas, matching existing DPF enum practice:
+
+- `RuntimeTarget.kind`: `root-portal`, `dev-portal`, `build-sandbox`, `git-promotion-sandbox`, `external-preview`, `ad-hoc-debug`.
+- `RuntimeTarget.environment`: `acceptance`, `non-prod`, `debug`.
+- `RuntimeTarget.status`: `planned`, `assigned`, `starting`, `running`, `verifying`, `verified`, `failed`, `released`, `expired`, `blocked`.
+- `RuntimeTarget.acceptanceRole`: `none`, `non-prod-verification`, `final-acceptance`, `debug-only`.
+- `RuntimeVerification.kind`: `health`, `typecheck`, `production-build`, `unit-test`, `ux`, `migration`, `manual-review`, `ci`.
+- `RuntimeVerification.status`: `pending`, `running`, `passed`, `failed`, `skipped`, `superseded`.
+
+### Runtime Rules
+
+#### Worktree Use
+
+- Worktrees remain mandatory for source isolation.
+- Root clone `D:\DPF` remains the merge/release worktree and customer-zero runtime source.
+- A worktree does not imply permission to start a local portal runtime.
+- Every external agent must register or adopt a Work Capsule before runtime verification.
+- Every external agent must record:
+  - branch and head SHA,
+  - worktree path,
+  - `COMPOSE_PROJECT_NAME`,
+  - executor kind,
+  - backlog item or explicit no-backlog reason,
+  - intended runtime target,
+  - verification evidence destination.
+- Worktree-scoped Compose project names remain valid for harnesses and disposable checks, but customer-zero acceptance never happens there.
+
+#### Sandbox Use
+
+- Default non-prod verification target is Build Studio/sandbox, not `next dev` or `next start`.
+- Sandbox assignment must be a lease with a Work Capsule or Feature Build owner.
+- A sandbox slot is available only if both DB state and Docker/Compose runtime state agree.
+- `FeatureBuild.sandboxId`, `sandboxPort`, `buildBranch`, and `gitCommitHashes` must be populated when a build enters implementation/review.
+- Sandbox verification records must include:
+  - runtime target id,
+  - sandbox id/slot id,
+  - container/service name,
+  - host URL and internal URL,
+  - source branch and commit SHA,
+  - Build Studio build id and Work Capsule id when present.
+- Browser-use screenshots captured during sandbox UX verification must attach to the runtime target and mirror into Build Activity/Backlog Activity/Work Capsule Activity.
+
+#### Main Portal Acceptance
+
+- Final acceptance happens only on the Docker-served portal path from root `D:\DPF`.
+- Approved acceptance targets:
+  - `AUTH_URL` / `APP_URL` from root `.env`.
+  - `localhost:3000` when inspecting the local Docker portal.
+  - `dpf-portal-1` internal health/version endpoints.
+- Final acceptance must record:
+  - root portal image version,
+  - root portal git SHA,
+  - container name,
+  - health check result,
+  - UX route(s) verified,
+  - screenshots or evidence URLs,
+  - PR number or branch,
+  - backlog item/build/capsule linkage.
+- A Build Studio or external-agent PR is not ready-for-promotion until final acceptance is attached to the capsule or explicit exception approval is recorded.
+
+#### External Agent Registration
+
+External agents must complete this handshake before runtime testing:
+
+1. `create_work_capsule` or `adopt_worktree`.
+2. `claim_capsule_scope` for the files/modules being edited.
+3. `register_runtime_target` with `kind=build-sandbox`, `dev-portal`, or `ad-hoc-debug`.
+4. `heartbeat_capsule` while working.
+5. `record_runtime_verification` for typecheck/build/UX/migration checks.
+6. `record_capsule_evidence` and `record_execution_evidence` for screenshots, logs, and decisions.
+7. Link PR metadata before status `ready-for-review`.
+
+If no backlog item exists, the agent must register an explicit reason such as `doc-only`, `incident-investigation`, or `pre-backlog-discovery`. This keeps legitimate exploratory work visible without forcing false backlog links.
+
+#### Concurrent Threads
+
+- Work Capsule scope claims prevent file/module collision.
+- Runtime target leases prevent sandbox collision.
+- Sandbox pool reconciliation prevents DB-only phantom slots.
+- PR readiness reads from Work Capsule + Runtime Target + Runtime Verification, not from local chat claims.
+- A single sandbox can be reassigned only after the previous runtime target is `released`, `expired`, or explicitly `superseded`.
+- A target whose owner has not heartbeated within its TTL is shown as stale and cannot count toward merge safety.
+
+#### Ad-Hoc Local Servers
+
+- `next dev`, `next start`, and arbitrary local ports are not valid DPF verification surfaces by default.
+- Port 3000 is reserved for `dpf-portal-1`; any non-Docker process binding it is a policy violation.
+- Ad-hoc servers are allowed only for explicit runtime-harness debugging or framework-level investigation.
+- An ad-hoc server must be registered as `RuntimeTarget.kind=ad-hoc-debug`, `acceptanceRole=debug-only`, with:
+  - owner,
+  - reason,
+  - port,
+  - branch/SHA,
+  - TTL,
+  - evidence note explaining why sandbox/dev-portal was insufficient.
+- `ad-hoc-debug` targets cannot satisfy final acceptance or PR readiness.
+
+#### Backlog Evidence and Screenshots
+
+- Evidence has one primary event and mirrored links:
+  - primary runtime evidence lives on `RuntimeVerification`;
+  - Work Capsule receives an activity pointer;
+  - Build Studio receives a Build Activity pointer when a build is involved;
+  - backlog receives `BacklogItemActivity` or `record_execution_evidence` when a backlog item is involved.
+- Screenshots from browser-use should keep the existing `/api/build/<buildId>/evidence/<file>` path for build evidence, while runtime target records store the canonical URL and metadata.
+- Manual review evidence should never be a free-floating comment. It must reference capsule/build/backlog/target identifiers.
+
+## Implementation Plan
+
+### Slice 1: Runtime Coordination Types and Schema
+
+- [ ] Add `RuntimeTarget` and `RuntimeVerification` models to `packages/db/prisma/schema.prisma`.
+- [ ] Add a migration with `pnpm --filter @dpf/db exec prisma migrate dev --name runtime_coordination_targets`.
+- [ ] Add TypeScript enum arrays and union types in a new module:
+  - `apps/web/lib/runtime-coordination/types.ts`
+  - `apps/web/lib/runtime-coordination/runtime-targets.ts`
+- [ ] Add query helpers:
+  - `createRuntimeTarget`
+  - `registerRuntimeTarget`
+  - `heartbeatRuntimeTarget`
+  - `releaseRuntimeTarget`
+  - `recordRuntimeVerification`
+  - `getRuntimeCoordinationMap`
+- [ ] Add tests for type guards, status transitions, and idempotency:
+  - `apps/web/lib/runtime-coordination/runtime-targets.test.ts`
+
+Acceptance:
+
+- Runtime target records can be created and updated idempotently.
+- Invalid enum values fail before reaching the database.
+- A runtime target can link to backlog, feature build, work capsule, PR, and git commit metadata.
+
+### Slice 2: Work Capsule and MCP Runtime Registration
+
+- [ ] Extend Work Capsule activity kinds with `runtime-target-registered`, `runtime-target-released`, `runtime-verification-passed`, and `runtime-verification-failed`.
+- [ ] Add MCP tool definitions and handlers:
+  - `register_runtime_target`
+  - `heartbeat_runtime_target`
+  - `release_runtime_target`
+  - `record_runtime_verification`
+  - `get_runtime_coordination_map`
+- [ ] Ensure external coding-agent tokens can discover these tools through `/api/mcp/v1`.
+- [ ] Add capability/grant mappings beside existing Work Capsule grants.
+- [ ] Update `record_capsule_evidence` so it can link to a `runtimeTargetId` and `verificationId`.
+- [ ] Add focused MCP handler tests.
+
+Acceptance:
+
+- A Codex/Claude external session can create/adopt a Work Capsule, register the worktree branch/SHA, register a sandbox target, and record evidence through MCP without DB fallback.
+- Tool output returns the target id, accepted URL(s), expected verification role, and whether the target can count for final acceptance.
+
+### Slice 3: Build Studio and Sandbox Attachment
+
+- [ ] Update Build Studio creation/phase transition paths so every `FeatureBuild` gets or attaches to a Work Capsule.
+- [ ] Backfill active `FeatureBuild` rows without capsules by idempotently calling `attachBuildStudioWorkCapsule`.
+- [ ] Update `apps/web/lib/integrate/build-orchestrator.ts` to register a `build-sandbox` runtime target when implementation starts.
+- [ ] Update `apps/web/lib/queue/functions/build-review-verification.ts` to record `RuntimeVerification` rows for UX checks and screenshot evidence.
+- [ ] Update `apps/web/lib/integrate/sandbox/sandbox-pool.ts` to reconcile DB slots against actual Compose services before declaring a slot available.
+- [ ] Update local Docker provider metadata so target records use one source of truth for `sandboxId`, `slotId`, `containerName`, `hostUrl`, and `internalUrl`.
+
+Acceptance:
+
+- Active Build Studio work has a capsule and a sandbox runtime target.
+- Phantom sandbox slots are shown as unavailable/misconfigured until Compose runtime exists.
+- UX verification writes both existing Build Activity and new Runtime Verification evidence.
+
+### Slice 4: External Agent Workflow
+
+- [ ] Add a small helper module:
+  - `apps/web/lib/runtime-coordination/external-agent-registration.ts`
+- [ ] Add a script for local agent introspection and registration:
+  - `scripts/register-runtime-target.mjs`
+- [ ] Update worktree seed scripts to print the required MCP registration step after copying `.mcp.json` and writing `COMPOSE_PROJECT_NAME`.
+- [ ] Update `AGENTS.md` with runtime coordination rules:
+  - worktrees isolate source only;
+  - sandbox/Build Studio is default non-prod runtime;
+  - root portal is final acceptance;
+  - ad-hoc servers require registered debug target;
+  - external agents must record capsule, branch, SHA, runtime target, and evidence.
+- [ ] Update `docs/operations/dpf-production-runtime.md` and `docs/user-guide/development-workspace.md` to point to the governed workflow.
+
+Acceptance:
+
+- A new worktree setup ends with an explicit runtime target registration path.
+- The registration helper refuses root `main` feature work and explains the approved target choices.
+- The docs no longer leave room for "random local server" interpretation.
+
+### Slice 5: Guardrails Against Runtime Drift
+
+- [ ] Add detection for unmanaged Node/Next listeners on reserved DPF ports:
+  - 3000: root portal only.
+  - 3001: Compose `dev-portal` only.
+  - 3035/3037/3038: registered sandbox slots only.
+- [ ] Add a policy helper:
+  - `apps/web/lib/runtime-coordination/runtime-policy.ts`
+- [ ] Add a script:
+  - `scripts/check-runtime-targets.mjs`
+- [ ] Integrate the check into pre-acceptance workflow docs and Build Studio review gates.
+- [ ] Add an MCP-visible warning event when an ad-hoc process is detected without a registered debug target.
+- [ ] Keep the guard warning-first for non-reserved ports, but hard-block final acceptance on unregistered runtimes.
+
+Acceptance:
+
+- An unmanaged process on port 3000 is reported as a violation.
+- A registered `ad-hoc-debug` runtime target is allowed for debugging but cannot satisfy acceptance.
+- Final readiness checks fail if the only UX evidence points to a debug-only target.
+
+### Slice 6: Runtime Coordination UI
+
+- [ ] Add a runtime coordination surface under the existing platform/build control area rather than a marketing-style page.
+- [ ] Candidate route:
+  - `/build/runtime`
+  - or a "Runtime" tab inside the Work Capsule/Build Studio control surface if existing navigation already owns that space.
+- [ ] Show four compact bands:
+  - Root portal acceptance target.
+  - Sandbox pool and slot health.
+  - Active Work Capsules and external agents.
+  - PR/readiness/evidence status.
+- [ ] Use dense operational layout:
+  - status chips,
+  - sortable tables,
+  - tabs for `Active`, `Stale`, `Verified`, `Debug`,
+  - icon buttons with tooltips,
+  - no nested cards,
+  - no hardcoded colors,
+  - `text-[var(--dpf-text)]`, `bg-[var(--dpf-surface-1)]`, `border-[var(--dpf-border)]`, and related theme tokens only.
+- [ ] Provide a detail panel for each runtime target with:
+  - owner,
+  - branch/SHA,
+  - worktree path,
+  - build/capsule/backlog/PR links,
+  - URL(s),
+  - verification timeline,
+  - evidence screenshots/logs.
+- [ ] Add UI tests for empty, active, stale, failed, and ready states.
+
+Acceptance:
+
+- An operator can answer from the UI: "what is deployed where, who owns it, what is being tested, and what is safe to merge?"
+- The UI works in light/dark/brand modes without hardcoded colors.
+- Text does not overflow compact panels or buttons at desktop/mobile widths.
+
+### Slice 7: Final Portal Acceptance Gate
+
+- [ ] Add a root portal acceptance helper:
+  - `apps/web/lib/runtime-coordination/root-portal-acceptance.ts`
+- [ ] Record:
+  - `dpf-portal-1` image version,
+  - git SHA,
+  - health endpoint result,
+  - root `.env` `APP_URL`/`AUTH_URL`,
+  - checked routes,
+  - screenshots,
+  - PR/backlog/build/capsule links.
+- [ ] Update PR readiness/status projection so `ready-for-promotion` requires a passing `final-acceptance` verification unless explicitly waived.
+- [ ] Add a waiver path that requires reason, owner, and evidence, and is visible in the runtime UI.
+- [ ] Update git-promotion verification so sandbox success does not masquerade as production-path acceptance.
+
+Acceptance:
+
+- Sandbox verification can mark a change ready for review.
+- Root portal verification is required for final acceptance.
+- A waiver is visible and cannot be confused with a passing production-path check.
+
+### Slice 8: Evidence Normalization
+
+- [ ] Add an evidence linking helper:
+  - `apps/web/lib/runtime-coordination/evidence-links.ts`
+- [ ] Normalize relationships across:
+  - `RuntimeVerification`
+  - `WorkCapsuleActivity`
+  - `BuildActivity`
+  - `BacklogItemActivity`
+  - `ToolExecution`
+  - `TaskArtifact`
+  - `ExternalEvidenceRecord`
+- [ ] Ensure `record_execution_evidence`, `record_capsule_evidence`, `saveBuildEvidence`, and browser-use screenshot capture can all link back to a runtime target.
+- [ ] Add tests for evidence mirroring and idempotent duplicate handling.
+
+Acceptance:
+
+- A screenshot from sandbox UX verification is visible from build, backlog item, work capsule, and runtime target.
+- Duplicate evidence submissions update or no-op instead of creating misleading parallel truth.
+
+### Slice 9: Verification
+
+- [ ] Focused unit tests:
+  - `pnpm --filter web exec vitest run apps/web/lib/runtime-coordination/runtime-targets.test.ts`
+  - `pnpm --filter web exec vitest run apps/web/lib/runtime-coordination/reconciler.test.ts`
+  - `pnpm --filter web exec vitest run apps/web/lib/work-capsules/*.test.ts`
+- [ ] MCP handler tests for runtime tools.
+- [ ] UI tests for runtime coordination surface.
+- [ ] Typecheck:
+  - `pnpm --filter web typecheck`
+- [ ] Production build:
+  - `cd apps/web && pnpm exec next build`
+- [ ] Docker-served portal acceptance:
+  - `docker compose build --no-cache portal portal-init sandbox`
+  - `docker compose up -d portal-init sandbox`
+  - `docker compose up -d portal`
+  - verify `dpf-portal-1` health/version,
+  - verify `/build/runtime` or chosen runtime UI route in the browser,
+  - attach screenshots/evidence to the right runtime target/capsule/backlog item.
+
+Acceptance:
+
+- Tests and build pass.
+- The live root portal shows the runtime coordination state.
+- Evidence records show the root portal target, sandbox target, branch/SHA, owner, backlog item, build/capsule, PR, and verification status.
+
+## Implementation Order
+
+1. Land schema/types/helpers with tests.
+2. Expose MCP runtime target registration and evidence tools.
+3. Attach Build Studio and sandbox flow to runtime targets.
+4. Add external agent registration helper and docs.
+5. Add guardrails for unmanaged local servers.
+6. Build the runtime coordination UI.
+7. Add final portal acceptance gate.
+8. Normalize evidence links.
+9. Run full verification and capture evidence.
+
+## Refactoring Budget
+
+Spend implementation effort on these refactors instead of piling behavior into existing large modules:
+
+- Extract runtime target and verification logic out of `mcp-tools.ts` handlers into `apps/web/lib/runtime-coordination/*`.
+- Keep `apps/web/lib/integrate/build-orchestrator.ts` focused on orchestration; move runtime registration to a helper.
+- Keep `apps/web/lib/integrate/sandbox/sandbox-pool.ts` focused on pool state; move DB/Docker reconciliation into a small `runtime-coordination/reconciler.ts`.
+- Keep evidence mirroring in `runtime-coordination/evidence-links.ts`, not duplicated across Build Studio, backlog, and capsule handlers.
+- Keep UI state derivation in a server-side query helper so the React surface stays mostly presentational.
+
+## Open Questions
+
+- Should DPF expose Runtime Targets as a top-level navigation item, or only inside Build/Work Control? Recommendation: start inside Build/Work Control to keep this operational, not promotional.
+- Should `dev-portal` on 3001 be an allowed runtime target for external agents, or only for human local development? Recommendation: allow it only when registered and never for final acceptance.
+- Should phantom sandbox slots be deleted from DB or marked `misconfigured`? Recommendation: mark `misconfigured` first, because DB slots may be intended capacity even when Compose services are not currently running.
+- Should GitHub Deployments be emitted for DPF runtime targets? Recommendation: not in the first slice. Store DPF runtime state first; GitHub Deployments can mirror it later for PR visibility.
+
+## Immediate Next Slice
+
+Start with Slice 1 and Slice 2 together:
+
+- Add `RuntimeTarget` / `RuntimeVerification`.
+- Add service helpers and enum validation.
+- Expose MCP registration tools.
+- Add one end-to-end test where a Work Capsule registers a sandbox runtime target and records a passing UX verification.
+
+This is the smallest slice that changes the platform from "agents can write evidence after the fact" to "the platform knows where the work is being tested before evidence is accepted."
