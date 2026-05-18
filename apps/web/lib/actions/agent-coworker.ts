@@ -50,6 +50,7 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
+import { isPageExplanationOnlyRequest } from "@/lib/tak/conversation-intent";
 import {
   buildExternalAccessDisabledInstruction,
   getExternalAccessToolSummaries,
@@ -880,9 +881,12 @@ export async function sendMessage(input: {
     );
   }
 
-  // Conversation-only detection: if the message is a conversational skill (analyze, advise),
-  // strip tools entirely so the model responds with text instead of trying to call tools.
-  const isConversationOnly = /^This is a CONVERSATION request/i.test(trimmedContent);
+  // Conversation-only detection: if the message is a conversational skill or a
+  // natural-language page/UI explanation request, strip tools entirely so the
+  // model explains from context instead of turning friction into backlog work.
+  const isExplicitConversationSkill = /^This is a CONVERSATION request/i.test(trimmedContent);
+  const isPageExplanationOnly = isPageExplanationOnlyRequest(trimmedContent);
+  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly;
 
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
@@ -1105,6 +1109,17 @@ export async function sendMessage(input: {
       "",
       "The following external services are available but not yet enabled for this organization. If a task would benefit from one, mention it to the user:",
       resourceHints,
+    ].join("\n");
+  }
+
+  if (isPageExplanationOnly) {
+    populatedPrompt += [
+      "",
+      "",
+      "READ-ONLY PAGE EXPLANATION REQUEST",
+      "The employee is asking you to explain the current UI or page, not to file, log, queue, or triage work.",
+      "Do not call tools, create backlog items, report issues, propose improvements, or list backlog status for this turn.",
+      "Use PAGE DATA and recent conversation to explain what the user is seeing. If context is missing, say what you can infer and ask one concise clarifying question.",
     ].join("\n");
   }
 
