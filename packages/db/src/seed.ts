@@ -1435,18 +1435,36 @@ async function seedProviderRegistry(): Promise<void> {
     if (existing) {
       // Slice 1.5 backfill: rows that pre-date the auto-activate logic may
       // exist with status='unconfigured' and/or empty sensitivityClearance
-      // for authMethod='none' providers. Flip them to active + full local
-      // clearance on reseed so existing installs don't need manual SQL to
-      // get voice working. Admin-configured rows (status='active' already,
+      // for non-LLM authMethod='none' providers. Flip them to active + full
+      // local clearance on reseed so existing installs don't need manual SQL
+      // to get voice working. Admin-configured rows (status='active' already,
       // clearance already set) are left alone — the .length===0 gate
       // preserves operator intent.
-      const isAuthNone =
-        ((existing.authMethod as string | null) ??
-          (entry.authMethod as string | undefined)) === "none";
+      //
+      // LLM providers (local Docker Model Runner, Ollama) are excluded:
+      // they depend on runtime model discovery (seedLocalModels) to acquire
+      // active ModelProfile rows. Activating an LLM provider without models
+      // trips INV-2 ("active LLM provider with zero active model profiles")
+      // in the routing-invariants audit.
+      //
+      // Edge case: providers like local/ollama that omit `endpointType` in
+      // the JSON catalog get the schema default of "llm" when inserted, but
+      // on UPDATE we read from `existing.endpointType` which is always set.
+      // Default to "llm" on missing — safest for the invariant.
+      const effectiveAuthMethod =
+        (existing.authMethod as string | null) ??
+        (entry.authMethod as string | undefined);
+      const effectiveEndpointType =
+        (existing.endpointType as string | null) ??
+        (entry.endpointType as string | undefined) ??
+        "llm";
+      const isAutoActivateEligible =
+        effectiveAuthMethod === "none" && effectiveEndpointType !== "llm";
       const existingClearance = (existing.sensitivityClearance as string[]) ?? [];
-      const shouldBackfillStatus = isAuthNone && existing.status === "unconfigured";
+      const shouldBackfillStatus =
+        isAutoActivateEligible && existing.status === "unconfigured";
       const shouldBackfillClearance =
-        isAuthNone && existingClearance.length === 0;
+        isAutoActivateEligible && existingClearance.length === 0;
 
       // Update metadata but preserve admin config (status, endpoint, enabledFamilies)
       await prisma.modelProvider.update({
@@ -1484,23 +1502,33 @@ async function seedProviderRegistry(): Promise<void> {
       });
       updated++;
     } else {
-      // Providers that need no credentials (authMethod: "none") are local
-      // sidecars (STT, local LLM via Docker Model Runner, Ollama) — they
-      // should be active immediately on a fresh install so the operator
-      // doesn't need to click anything to make voice / local LLM work.
-      // Providers requiring OAuth / API keys correctly start unconfigured
-      // and become active when the admin connects them. Voice Slice 1.5:
-      // docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
+      // Slice 1.5: non-LLM auth-none providers (the STT sidecar today, future
+      // TTS/embedding sidecars) auto-activate on a fresh install so the
+      // operator doesn't need to click anything to make voice work.
+      // Providers requiring OAuth / API keys correctly start unconfigured.
+      // Voice Slice 1.5: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
+      //
+      // LLM providers (local Docker Model Runner, Ollama) — even with
+      // authMethod=none — STAY unconfigured. They depend on runtime model
+      // discovery (seedLocalModels) to acquire active ModelProfile rows;
+      // activating them without models trips INV-2 in the routing-invariants
+      // audit. seedLocalModels owns flipping them active+cleared lazily.
+      //
+      // Edge case: providers like local/ollama in the JSON catalog omit
+      // `endpointType` — the schema default is "llm" but applies AFTER
+      // insert. Treat missing as "llm" for the purposes of the
+      // auto-activate predicate so we don't accidentally activate them.
       //
       // Active providers MUST declare sensitivityClearance (enforced by
-      // assertActiveProvidersHaveClearance). For local sidecars data never
-      // leaves the machine, so we grant the full clearance set — mirrors
-      // the pattern already used by seedLocalModels for the "local"
-      // provider id.
-      const isAuthNone =
-        (entry.authMethod as string | undefined) === "none";
-      const initialStatus = isAuthNone ? "active" : "unconfigured";
-      const initialClearance = isAuthNone
+      // assertActiveProvidersHaveClearance). Local sidecars never send data
+      // off-machine, so we grant the full clearance set.
+      const effectiveEntryEndpointType =
+        (entry.endpointType as string | undefined) ?? "llm";
+      const isAutoActivateEligible =
+        (entry.authMethod as string | undefined) === "none" &&
+        effectiveEntryEndpointType !== "llm";
+      const initialStatus = isAutoActivateEligible ? "active" : "unconfigured";
+      const initialClearance = isAutoActivateEligible
         ? ["public", "internal", "confidential", "restricted"]
         : [];
       await prisma.modelProvider.create({

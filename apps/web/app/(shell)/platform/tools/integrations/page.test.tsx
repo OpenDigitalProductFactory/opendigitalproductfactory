@@ -57,4 +57,20 @@ describe("EnterpriseIntegrationsPage", () => {
     expect(html).toContain("Local Visual Presence");
     expect(html).toContain("/platform/tools/integrations/instagram-business");
   });
+
+  it("surfaces the employee-work integration coverage matrix", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain("Employee Work Coverage");
+    expect(html).toContain("Bookkeeper / Accountant");
+    expect(html).toContain("QuickBooks Online");
+    expect(html).toContain("Xero");
+    expect(html).toContain("Benchmark");
+    expect(html).toContain("for_employees/financial_management");
+    expect(html).toContain("Service Offering");
+    expect(html).toContain("Strategy to Portfolio");
+  });
 });
