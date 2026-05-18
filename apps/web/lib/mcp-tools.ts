@@ -5667,7 +5667,12 @@ export async function executeTool(
       // Determine the next phase
       const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
       const idx = phaseOrder.indexOf(latestBuild.phase);
-      const toPhase = idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete";
+      const requestedToPhase = typeof params["toPhase"] === "string"
+        && [...phaseOrder, "complete"].includes(String(params["toPhase"]).trim())
+        ? String(params["toPhase"]).trim()
+        : null;
+      const toPhase = requestedToPhase ?? (idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete");
+      const autoAdvance = params["autoAdvance"] !== false;
 
       // Write the handoff record
       await prisma.phaseHandoff.create({
@@ -5715,6 +5720,10 @@ export async function executeTool(
           } catch { /* non-fatal */ }
         }
       }).catch(() => {});
+
+      if (!autoAdvance) {
+        return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
+      }
 
       // Actually advance the phase — the agent calls this as its last action
       // before transitioning, so this is the right place to do the DB update.
