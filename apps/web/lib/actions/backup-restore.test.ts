@@ -28,7 +28,13 @@ vi.mock("@/lib/operate/backups/postgres-restore-runner", () => ({
   },
 }));
 vi.mock("@dpf/db", () => ({
-  prisma: { backupRestore: { findMany: vi.fn() } },
+  prisma: {
+    // confirmRestoreAction looks up the BackupRun.target to dispatch to the
+    // correct runner (postgres / neo4j / qdrant). Tests default this to
+    // "postgres" so the mocked runPostgresRestore is exercised.
+    backupRun: { findUnique: vi.fn() },
+    backupRestore: { findMany: vi.fn() },
+  },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -40,17 +46,22 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { runPostgresRestore } from "@/lib/operate/backups/postgres-restore-runner";
 import { buildRestorePreview } from "@/lib/operate/backups/restore-preview";
+import { prisma } from "@dpf/db";
 
 const mockedAuth = auth as unknown as ReturnType<typeof vi.fn>;
 const mockedCan = can as unknown as ReturnType<typeof vi.fn>;
 const mockedRunner = runPostgresRestore as unknown as ReturnType<typeof vi.fn>;
 const mockedPreview = buildRestorePreview as unknown as ReturnType<typeof vi.fn>;
+const mockedFindUnique = prisma.backupRun.findUnique as unknown as ReturnType<typeof vi.fn>;
 
 describe("confirmRestoreAction (typed-confirmation gate)", () => {
   beforeEach(() => {
     mockedAuth.mockReset();
     mockedCan.mockReset();
     mockedRunner.mockReset();
+    mockedFindUnique.mockReset();
+    // Default: run targets postgres — exercises the mocked runPostgresRestore.
+    mockedFindUnique.mockResolvedValue({ target: "postgres" });
   });
 
   it("rejects when there is no session", async () => {
