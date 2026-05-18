@@ -1,0 +1,80 @@
+---
+title: Never wipe the DB to fix code
+slug: never-wipe-db-for-code-fixes
+pageKind: principle
+tier: commandment
+appliesTo: [agentic-coworker, claude-code, agent]
+publicOnly: false
+status: published
+authoredAt: 2026-05-18
+authoredBy: mark-bodman
+---
+
+# Never wipe the DB to fix code
+
+**A code bug is fixed with a code change, not by deleting the DB and
+reseeding.** Volumes hold operator-created state: backlog items,
+provider credentials, brand context, governance ledger, employee
+records. Wiping the volume to "reset" state destroys real work.
+
+This is the data-tier specific case of
+[`destructive-actions-require-explicit-go`](destructive-actions-require-explicit-go.md).
+Where that principle governs all destructive actions, this one
+specifically forbids the most common destructive shortcut: `docker
+compose down -v` or `prisma migrate reset` as a debugging step.
+
+## What to do instead
+
+When a bug surfaces in the DB layer:
+
+1. **Read the offending row directly** to confirm the bug is in the
+   data, not in the query
+2. **If the data is wrong, fix THAT ROW** with a targeted UPDATE, not
+   a table-wide reset
+3. **If the schema is wrong, write a migration** that corrects it
+   without dropping the table
+4. **If the seed produced the wrong defaults**, fix the seed AND write
+   a one-shot data migration for installs that already have the bad
+   default
+5. **Rebuild images, not volumes.** `docker compose build portal`
+   does not touch volumes. `docker compose up -d portal` only recreates
+   the container, not the data.
+
+## What "wipe the DB" looks like (and why it's wrong)
+
+- `docker compose down -v` — drops named volumes including `dpf_pgdata`
+- `docker volume rm dpf_pgdata` — same outcome, more direct
+- `prisma migrate reset` — drops + recreates the schema, wipes all
+  rows
+- `DROP DATABASE dpf; CREATE DATABASE dpf;` — same thing via SQL
+- Manually deleting `~/Library/Application Support/Docker/...` /
+  `\\wsl$\docker-desktop-data\...` filesystem paths
+
+Every one of these has produced real operator data loss in DPF's
+history. The first time it happened, the recovery took 6+ hours of
+reconstructing 43 epics and 280 backlog items from PRs, specs, and
+chat transcripts.
+
+## Acceptable exceptions (none common)
+
+- **Sandbox `dpf-sandbox-postgres-1`** — by design ephemeral, not used
+  for operator state. Wiping it is fine.
+- **Genuinely fresh-install testing** in a throwaway directory the
+  operator deliberately set up as a test environment. The path must
+  be clearly out-of-band — not the operator's primary DPF clone.
+
+## Penalty
+
+This is a **commandment-tier** principle. The recovery cost of a
+single wipe of `dpf_pgdata` exceeded the entire savings of every
+"just gonna reseed real quick" shortcut combined. There is no
+acceptable shortcut.
+
+## Related principles
+
+- [`destructive-actions-require-explicit-go`](destructive-actions-require-explicit-go.md) —
+  destructive actions need a fresh OK
+- [`fix-the-seed-not-the-runtime`](fix-the-seed-not-the-runtime.md) —
+  fix the seed + add an invariant, do not patch the runtime
+- [`live-state-over-seed-data`](live-state-over-seed-data.md) — the
+  reason the live DB is the source of truth

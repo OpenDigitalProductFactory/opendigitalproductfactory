@@ -316,6 +316,53 @@ describe("agent coworker external access", () => {
     );
   });
 
+  it("strips coworker tools for natural page explanation requests", async () => {
+    mockGetAvailableTools.mockReturnValue([
+      {
+        name: "create_backlog_item",
+        description: "Create backlog item",
+        inputSchema: {},
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+      },
+      {
+        name: "query_backlog",
+        description: "Query backlog",
+        inputSchema: {},
+        requiredCapability: "view_platform",
+        executionMode: "immediate",
+        sideEffect: false,
+      },
+    ]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "This workspace is your operating dashboard: it brings queue, schedule, and cross-platform activity together so you can decide what needs attention next.",
+      providerId: "openai",
+      modelId: "gpt",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      toolsStripped: false,
+      routeDecision: {},
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "I'm finding this user interface a little bit confusing. Can you explain it for me?",
+      routeContext: "/workspace",
+      coworkerMode: "act",
+    });
+
+    expect(mockToolsToOpenAIFormat).not.toHaveBeenCalled();
+    expect(mockRouteAndCall).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.stringContaining("READ-ONLY PAGE EXPLANATION REQUEST"),
+      "restricted",
+      expect.not.objectContaining({ tools: expect.anything() }),
+    );
+  });
+
   it("injects portal context digest and stable anchors into supported route prompts", async () => {
     mockGetAvailableTools.mockReturnValue([]);
     mockRouteAndCall.mockResolvedValue({

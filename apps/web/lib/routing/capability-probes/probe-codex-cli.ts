@@ -64,7 +64,7 @@ export async function probeCodexCli(): Promise<CapabilityProbeResult> {
     supportsExtendedThinking: true, // -c reasoning.effort=high
     supportsOutputSchema: true, // --output-schema (gpt-5 family only)
 
-    maxInteractiveLatencyMs: 180_000,
+    maxInteractiveLatencyMs: 600_000, // matches CLI_TIMEOUT_MS in codex-cli-adapter.ts
     supportedAuthModes: ["oauth", "api-key"],
 
     knownDegradations: [
