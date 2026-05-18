@@ -896,7 +896,7 @@ async function saveTaskPhaseHandoff(params: {
       autoAdvance: false,
     }, params.userId, {
       routeContext: "/build",
-      agentId: SPECIALIST_AGENT_IDS[params.entry.specialist as SpecialistRole] ?? "AGT-ORCH-300",
+      agentId: "AGT-ORCH-300",
       threadId: params.parentThreadId,
     });
   } catch (err) {

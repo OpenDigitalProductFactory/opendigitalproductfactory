@@ -67,6 +67,7 @@ import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
+type ToolExecutionContext = { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string };
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
@@ -203,6 +204,30 @@ export function sanitizeToolParams(
     }
   }
   return cleaned ?? params;
+}
+
+export function resolveSavePhaseHandoffTransition(
+  params: Record<string, unknown>,
+  context: ToolExecutionContext | undefined,
+  currentPhase: string,
+): { toPhase: string; autoAdvance: boolean; isInternalTaskHandoff: boolean } {
+  const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
+  const idx = phaseOrder.indexOf(currentPhase);
+  const isInternalTaskHandoff =
+    context?.agentId === "AGT-ORCH-300"
+    && context?.routeContext === "/build"
+    && params["autoAdvance"] === false;
+  const requestedToPhase = isInternalTaskHandoff
+    && typeof params["toPhase"] === "string"
+    && [...phaseOrder, "complete"].includes(String(params["toPhase"]).trim())
+    ? String(params["toPhase"]).trim()
+    : null;
+
+  return {
+    toPhase: requestedToPhase ?? (idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete"),
+    autoAdvance: isInternalTaskHandoff ? false : true,
+    isInternalTaskHandoff,
+  };
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
@@ -3927,7 +3952,7 @@ export async function executeTool(
   toolName: string,
   rawParams: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string },
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
@@ -5664,15 +5689,10 @@ export async function executeTool(
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
-      // Determine the next phase
-      const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
-      const idx = phaseOrder.indexOf(latestBuild.phase);
-      const requestedToPhase = typeof params["toPhase"] === "string"
-        && [...phaseOrder, "complete"].includes(String(params["toPhase"]).trim())
-        ? String(params["toPhase"]).trim()
-        : null;
-      const toPhase = requestedToPhase ?? (idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete");
-      const autoAdvance = params["autoAdvance"] !== false;
+      // Determine the next phase. Hidden task-handoff controls are accepted
+      // only from the build orchestrator context; public callers keep the
+      // normal phase-transition behavior even if they send schema-extra params.
+      const { toPhase, autoAdvance } = resolveSavePhaseHandoffTransition(params, context, latestBuild.phase);
 
       // Write the handoff record
       await prisma.phaseHandoff.create({
