@@ -63,7 +63,7 @@ describe("probeCodexCli", () => {
     expect(profile.supportsOutputSchema).toBe(true);
     expect(profile.supportsExtendedThinking).toBe(true);
     expect(profile.supportsSessionResume).toBe(true);
-    expect(profile.maxInteractiveLatencyMs).toBe(180_000);
+    expect(profile.maxInteractiveLatencyMs).toBe(600_000);
     expect(profile.supportedAuthModes).toEqual(expect.arrayContaining(["oauth", "api-key"]));
   });
 

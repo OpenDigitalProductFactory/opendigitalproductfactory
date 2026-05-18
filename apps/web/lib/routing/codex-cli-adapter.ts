@@ -23,7 +23,7 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-const CLI_TIMEOUT_MS = 180_000; // 3 minutes
+const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
 
 // ─── Container file writer ─────────────────────────────────────────────────
 

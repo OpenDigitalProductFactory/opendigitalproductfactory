@@ -56,7 +56,7 @@ describe("probeClaudeCli", () => {
     expect(profile.supportsMcpAttachPerInvoke).toBe(true);
     expect(profile.supportsHooks).toBe(true);
     expect(profile.supportsOutputSchema).toBe(false);
-    expect(profile.maxInteractiveLatencyMs).toBe(180_000);
+    expect(profile.maxInteractiveLatencyMs).toBe(600_000);
     expect(profile.supportedAuthModes).toEqual(expect.arrayContaining(["oauth", "api-key"]));
     expect(profile.knownDegradations).toBeNull();
   });
