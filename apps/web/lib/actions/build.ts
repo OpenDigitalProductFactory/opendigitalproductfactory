@@ -23,6 +23,7 @@ import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } f
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
+import type { ResumeBuildImplementationOutcome, ResumeImplementationMode } from "@/lib/build/progress-visibility-types";
 import {
   type BusinessBriefEvidenceKind,
   type BusinessBuildBriefSource,
@@ -765,7 +766,7 @@ export async function recordBuildAcceptance(
   }).catch(() => {});
 }
 
-export async function resumeBuildImplementation(buildId: string): Promise<void> {
+export async function resumeBuildImplementation(buildId: string): Promise<ResumeBuildImplementationOutcome> {
   const userId = await requireBuildAccess();
 
   const build = await prisma.featureBuild.findUnique({
@@ -847,6 +848,15 @@ export async function resumeBuildImplementation(buildId: string): Promise<void> 
       : task
   )) ?? [];
   const completedTasks = normalizedTasks.filter((task) => task.outcome === "DONE").length;
+  const resetTasks = recoverFromMissingReleaseDiff
+    ? normalizedTasks.length
+    : (storedResults?.tasks?.filter((task) => task.outcome !== "DONE").length ?? 0);
+  const resumeMode = deriveResumeImplementationMode({
+    phase: build.phase,
+    taskCount: storedResults?.tasks?.length ?? 0,
+    resetTasks,
+    verificationFailed,
+  });
 
   await prisma.featureBuild.update({
     where: { buildId },
@@ -890,6 +900,47 @@ export async function resumeBuildImplementation(buildId: string): Promise<void> 
   autoExecuteBuild(buildId).catch((err) =>
     console.error(`[build] resumeBuildImplementation failed for ${buildId}:`, err),
   );
+
+  return {
+    mode: resumeMode,
+    resetTasks,
+    dispatchQueued: true,
+    message: formatResumeImplementationOutcomeMessage(resumeMode, resetTasks),
+  };
+}
+
+function deriveResumeImplementationMode(args: {
+  phase: BuildPhase;
+  taskCount: number;
+  resetTasks: number;
+  verificationFailed: boolean;
+}): ResumeImplementationMode {
+  if (args.resetTasks > 0) {
+    return "reset-blocked";
+  }
+  if (args.taskCount === 0) {
+    return "replan-and-dispatch";
+  }
+  if (args.phase === "review" && args.verificationFailed) {
+    return "rerun-verification";
+  }
+  return "already-running";
+}
+
+function formatResumeImplementationOutcomeMessage(
+  mode: ResumeImplementationMode,
+  resetTasks: number,
+): string {
+  if (mode === "reset-blocked") {
+    return `Reset ${resetTasks} task${resetTasks === 1 ? "" : "s"} to BLOCKED; queued implementation resume.`;
+  }
+  if (mode === "replan-and-dispatch") {
+    return "No persisted task rows were reset; queued implementation dispatch from the current plan.";
+  }
+  if (mode === "rerun-verification") {
+    return "Cleared verification output; queued verification recovery through the existing implementation resume path.";
+  }
+  return "Resume request recorded; implementation already has observable work in progress.";
 }
 
 // autoA11yAudit was removed on 2026-04-20 when the Inngest-based

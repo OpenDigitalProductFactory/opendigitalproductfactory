@@ -410,7 +410,7 @@ describe("governed build start approvals", () => {
     });
     mockPrisma.featureBuild.update.mockResolvedValue({});
 
-    await resumeBuildImplementation("FB-123");
+    const outcome = await resumeBuildImplementation("FB-123");
 
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -429,6 +429,42 @@ describe("governed build start approvals", () => {
         }),
       }),
     );
+    expect(outcome).toEqual({
+      mode: "reset-blocked",
+      resetTasks: 2,
+      dispatchQueued: true,
+      message: "Reset 2 tasks to BLOCKED; queued implementation resume.",
+    });
+  });
+
+  it("resumeBuildImplementation reports replan-and-dispatch when no task rows exist", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      createdById: "user-1",
+      phase: "build",
+      sandboxId: null,
+      diffPatch: null,
+      diffSummary: null,
+      taskResultsVersion: 1,
+      threadId: null,
+      taskResults: {
+        completedTasks: 0,
+        totalTasks: 16,
+        tasks: [],
+      },
+      verificationOut: {
+        typecheckPassed: false,
+        testsPassed: 0,
+        testsFailed: 0,
+      },
+    });
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+
+    const outcome = await resumeBuildImplementation("FB-EMPTY");
+
+    expect(outcome.mode).toBe("replan-and-dispatch");
+    expect(outcome.resetTasks).toBe(0);
+    expect(outcome.dispatchQueued).toBe(true);
+    expect(outcome.message).toContain("No persisted task rows were reset");
   });
 
   it("resumeBuildImplementation prepares a clean sandbox branch when the sandbox is available", async () => {

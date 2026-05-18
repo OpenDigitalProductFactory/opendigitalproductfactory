@@ -10,17 +10,19 @@ import type {
   FeatureBrief,
   BuildDesignDoc,
   BuildPlanDoc,
-  TaskResult,
-  VerificationOutput,
   AcceptanceCriterion,
 } from "@/lib/feature-build-types";
 import { safeRenderValue } from "@/lib/safe-render";
+import { normalizeTaskResults, type NormalizedTaskResults } from "@/lib/build/task-results";
+import { normalizeVerificationOutput, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
 
 type Props = {
   build: FeatureBuildRow;
 };
 
 export function ReviewPanel({ build }: Props) {
+  const taskResults = normalizeTaskResults(build.taskResults);
+  const verification = normalizeVerificationOutput(build.verificationOut);
   const deliberationEntries = Object.entries(build.deliberationSummary ?? {}) as Array<
     ["ideate" | "plan" | "review", NonNullable<FeatureBuildRow["deliberationSummary"]>[keyof NonNullable<FeatureBuildRow["deliberationSummary"]>]]
   >;
@@ -46,8 +48,8 @@ export function ReviewPanel({ build }: Props) {
       <BriefSection brief={build.brief} />
       <DesignDocSection doc={build.designDoc} review={build.designReview} />
       <BuildPlanSection plan={build.buildPlan} review={build.planReview} />
-      <TaskResultsSection results={Array.isArray(build.taskResults) ? build.taskResults : Array.isArray((build.taskResults as any)?.tasks) ? (build.taskResults as any).tasks : null} />
-      <VerificationSection verification={build.verificationOut} />
+      <TaskResultsSection results={taskResults} />
+      <VerificationSection verification={verification} />
       <AcceptanceSection criteria={build.acceptanceMet} />
       <CodeChangesSection diffSummary={build.diffSummary} diffPatch={build.diffPatch} />
       <ManualTestSteps criteria={build.acceptanceMet} title={build.title} />
@@ -114,11 +116,13 @@ function Section({
 /* ── Evidence bar ────────────────────────────────────────────────────────── */
 
 function EvidenceBar({ build }: { build: FeatureBuildRow }) {
+  const taskResults = normalizeTaskResults(build.taskResults);
+  const verification = normalizeVerificationOutput(build.verificationOut);
   const items = [
     { label: "Design", ok: !!build.designDoc && build.designReview?.decision === "pass" },
     { label: "Plan", ok: !!build.buildPlan && build.planReview?.decision === "pass" },
-    { label: "Build", ok: Array.isArray(build.taskResults) ? build.taskResults.length > 0 : Array.isArray((build.taskResults as any)?.tasks) && (build.taskResults as any).tasks.length > 0 },
-    { label: "Verify", ok: build.verificationOut?.typecheckPassed === true },
+    { label: "Build", ok: taskResults.totalTasks > 0 },
+    { label: "Verify", ok: verification.typecheckPassed === true },
     {
       label: "AC",
       ok: build.acceptanceMet
@@ -343,17 +347,13 @@ function BuildPlanSection({
 
 /* ── Task Results ────────────────────────────────────────────────────────── */
 
-function TaskResultsSection({ results }: { results: TaskResult[] | null }) {
+function TaskResultsSection({ results }: { results: NormalizedTaskResults }) {
   const [expandedTask, setExpandedTask] = useState<number | null>(null);
-  if (!results || results.length === 0) return null;
+  if (results.tasks.length === 0) return null;
 
-  // Handle both old shape (testResult/codeReview) and orchestrator shape (outcome/specialist)
-  const passCount = results.filter((r) => {
-    if (r.testResult && r.codeReview) return r.testResult.passed && r.codeReview.decision === "pass";
-    return (r as any).outcome === "DONE" || (r as any).outcome === "DONE_WITH_CONCERNS";
-  }).length;
-  const badge = `${passCount}/${results.length} passed`;
-  const allPass = passCount === results.length;
+  const passCount = results.completedTasks;
+  const badge = `${passCount}/${results.totalTasks} passed`;
+  const allPass = results.totalTasks > 0 && passCount === results.totalTasks;
 
   return (
     <Section
@@ -363,17 +363,11 @@ function TaskResultsSection({ results }: { results: TaskResult[] | null }) {
       defaultOpen={true}
     >
       <div className="space-y-1">
-        {results.map((r, idx) => {
-          // Support both orchestrator shape (outcome/specialist) and legacy shape (testResult/codeReview)
-          const raw = r as any;
-          const taskPass = raw.testResult && raw.codeReview
-            ? raw.testResult.passed && raw.codeReview.decision === "pass"
-            : raw.outcome === "DONE" || raw.outcome === "DONE_WITH_CONCERNS";
+        {results.tasks.map((r, idx) => {
+          const taskPass = r.outcome === "DONE" || r.outcome === "DONE_WITH_CONCERNS";
           const taskIndex = r.taskIndex ?? idx;
           const isExpanded = expandedTask === taskIndex;
-          const outcomeLabel = raw.outcome ?? (taskPass ? "DONE" : "BLOCKED");
-          const specialistLabel = raw.specialist ?? "unknown";
-          const durationLabel = raw.durationMs ? `${(raw.durationMs / 1000).toFixed(0)}s` : "";
+          const durationLabel = r.durationMs ? `${(r.durationMs / 1000).toFixed(0)}s` : "";
 
           return (
             <div key={taskIndex}>
@@ -400,49 +394,28 @@ function TaskResultsSection({ results }: { results: TaskResult[] | null }) {
                     <span>
                       <span className="text-[var(--dpf-muted)]">Outcome: </span>
                       <span style={{ color: taskPass ? "var(--dpf-success)" : "var(--dpf-error)" }}>
-                        {outcomeLabel}
+                        {r.outcome}
                       </span>
                     </span>
                     <span>
                       <span className="text-[var(--dpf-muted)]">Specialist: </span>
-                      <span className="text-[var(--dpf-text)]">{specialistLabel}</span>
+                      <span className="text-[var(--dpf-text)]">{r.specialist}</span>
                     </span>
                   </div>
 
-                  {/* Legacy shape: test result + code review (if present) */}
-                  {raw.testResult && (
-                    <div className="text-xs">
-                      <span className="text-[var(--dpf-muted)]">Test: </span>
-                      <span style={{ color: raw.testResult.passed ? "var(--dpf-success)" : "var(--dpf-error)" }}>
-                        {raw.testResult.passed ? "Passed" : "Failed"}
-                      </span>
-                      {raw.testResult.output && (
-                        <pre className="mt-1 p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-32 overflow-auto">
-                          {raw.testResult.output}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-
-                  {raw.codeReview && (
-                    <div className="text-xs">
-                      <span className="text-[var(--dpf-muted)]">Code Review: </span>
-                      <span style={{ color: raw.codeReview.decision === "pass" ? "var(--dpf-success)" : "var(--dpf-error)" }}>
-                        {raw.codeReview.decision === "pass" ? "Approved" : "Issues found"}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Content/summary from orchestrator */}
-                  {raw.content && (
+                  {r.summary && (
                     <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-32 overflow-auto">
-                      {typeof raw.content === "string" ? raw.content.slice(0, 500) : JSON.stringify(raw.content).slice(0, 500)}
+                      {r.summary.slice(0, 500)}
                     </pre>
                   )}
 
-                  {r.commitSha && (
-                    <div className="text-[10px] text-[var(--dpf-muted)] font-mono">
-                      Commit: {r.commitSha.slice(0, 8)}
+                  {r.files.length > 0 && (
+                    <div className="space-y-1">
+                      {r.files.map((file) => (
+                        <div key={file} className="text-[10px] text-[var(--dpf-muted)] font-mono">
+                          {file}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -474,33 +447,48 @@ function parseVerificationErrors(output: string | undefined | null): string[] {
   return errors;
 }
 
-function VerificationSection({ verification }: { verification: VerificationOutput | null }) {
+function VerificationSection({ verification }: { verification: NormalizedVerificationOutput }) {
   const [showRaw, setShowRaw] = useState(false);
-  if (!verification) return null;
+  if (
+    verification.typecheckPassed == null
+    && verification.testsPassed == null
+    && verification.testsFailed == null
+    && verification.outputExcerpt == null
+  ) {
+    return null;
+  }
 
-  const allPassed = verification.typecheckPassed && verification.testsFailed === 0;
+  const testsFailed = verification.testsFailed ?? 0;
+  const testsPassed = verification.testsPassed ?? 0;
+  const allPassed = verification.typecheckPassed === true && testsFailed === 0;
   const badge = allPassed ? "Passed" : "Failed";
   const badgeColor = allPassed ? "var(--dpf-success)" : "var(--dpf-error)";
 
-  const errors = parseVerificationErrors(verification.fullOutput);
-  const totalTests = verification.testsPassed + verification.testsFailed;
+  const errors = parseVerificationErrors(verification.outputExcerpt);
+  const totalTests = testsPassed + testsFailed;
+  const typecheckCardClassName = verification.typecheckPassed
+    ? "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+    : "border-[var(--dpf-error)] bg-[var(--dpf-surface-2)]";
+  const testsCardClassName = testsFailed === 0
+    ? "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+    : "border-[var(--dpf-error)] bg-[var(--dpf-surface-2)]";
 
   return (
     <Section title="Verification" badge={badge} badgeColor={badgeColor} defaultOpen={!allPassed}>
       <div className="space-y-2">
         {/* Summary cards */}
         <div className="grid grid-cols-2 gap-2">
-          <div className={`rounded border p-2 ${verification.typecheckPassed ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
+          <div className={`rounded border p-2 ${typecheckCardClassName}`}>
             <div className="text-[10px] text-[var(--dpf-muted)]">TypeCheck</div>
             <div className="text-xs font-medium text-[var(--dpf-text)]">
               {verification.typecheckPassed ? "No errors" : `${errors.length} error${errors.length === 1 ? "" : "s"}`}
             </div>
           </div>
-          <div className={`rounded border p-2 ${verification.testsFailed === 0 ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
+          <div className={`rounded border p-2 ${testsCardClassName}`}>
             <div className="text-[10px] text-[var(--dpf-muted)]">Tests</div>
             <div className="text-xs font-medium text-[var(--dpf-text)]">
               {totalTests > 0
-                ? `${verification.testsPassed} passed${verification.testsFailed > 0 ? `, ${verification.testsFailed} failed` : ""}`
+                ? `${testsPassed} passed${testsFailed > 0 ? `, ${testsFailed} failed` : ""}`
                 : "No tests run"}
             </div>
           </div>
@@ -510,7 +498,7 @@ function VerificationSection({ verification }: { verification: VerificationOutpu
         {errors.length > 0 && (
           <div className="space-y-1">
             {errors.slice(0, 8).map((err, i) => (
-              <div key={i} className="text-[10px] text-[var(--dpf-error)] bg-red-500/5 rounded px-2 py-1 border border-red-500/20 font-mono">
+              <div key={i} className="text-[10px] text-[var(--dpf-error)] bg-[var(--dpf-surface-2)] rounded px-2 py-1 border border-[var(--dpf-error)] font-mono">
                 {err}
               </div>
             ))}
@@ -521,7 +509,7 @@ function VerificationSection({ verification }: { verification: VerificationOutpu
         )}
 
         {/* Raw output toggle */}
-        {verification.fullOutput && (
+        {verification.outputExcerpt && (
           <>
             <button
               type="button"
@@ -532,14 +520,14 @@ function VerificationSection({ verification }: { verification: VerificationOutpu
             </button>
             {showRaw && (
               <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto">
-                {verification.fullOutput}
+                {verification.outputExcerpt}
               </pre>
             )}
           </>
         )}
-        {verification.timestamp && (
+        {verification.observedAt && (
           <div className="text-[10px] text-[var(--dpf-muted)]">
-            Run at: {new Date(verification.timestamp).toLocaleString()}
+            Run at: {new Date(verification.observedAt).toLocaleString()}
           </div>
         )}
       </div>

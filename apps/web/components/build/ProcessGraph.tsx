@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -9,6 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./process-graph.css";
@@ -59,9 +60,13 @@ type Props = {
   governedBacklogEnabled: boolean;
 };
 
+type AnimatedProcessEdge = ProcessEdge & { type: "animatedFlow" };
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: Props) {
+  const reactFlowRef = useRef<ReactFlowInstance<Node, AnimatedProcessEdge> | null>(null);
+
   // ─── Live running-task state via DOM CustomEvents ──────────────────────
   const [activeTaskTitles, setActiveTaskTitles] = useState<Set<string>>(
     new Set(),
@@ -128,12 +133,12 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: P
     ];
 
     // Tag all edges with the animatedFlow type
-    const tagEdge = (e: ProcessEdge) => ({
+    const tagEdge = (e: ProcessEdge): AnimatedProcessEdge => ({
       ...e,
       type: "animatedFlow" as const,
     });
 
-    const allEdges = [
+    const allEdges: AnimatedProcessEdge[] = [
       ...phaseGraph.edges.map(tagEdge),
       ...taskGraph.edges.map(tagEdge),
     ];
@@ -155,6 +160,13 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: P
   useEffect(() => {
     setEdges(mergedEdges);
   }, [mergedEdges, setEdges]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      reactFlowRef.current?.fitView({ padding: 0.18, duration: 240 });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [build.buildId, build.taskResults, mergedNodes.length, mergedEdges.length]);
 
   // ─── Task Inspector ──────────────────────────────────────────────────
   const [inspectedTask, setInspectedTask] = useState<AssignedTask | null>(
@@ -218,16 +230,20 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: P
         onNodeClick={handleNodeClick}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
+        onInit={(instance) => {
+          reactFlowRef.current = instance;
+          window.setTimeout(() => instance.fitView({ padding: 0.18, duration: 240 }), 0);
+        }}
         fitView
         nodesDraggable={false}
         nodesConnectable={false}
         panOnDrag
         zoomOnScroll
-        colorMode="dark"
+        colorMode="system"
         minZoom={0.1}
         maxZoom={3}
       >
-        <Background color="#2a2a40" gap={20} />
+        <Background color="var(--dpf-border)" gap={20} />
         <Controls
           style={{
             background: "var(--dpf-surface-1)",
@@ -240,7 +256,7 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: P
             border: "1px solid var(--dpf-border)",
           }}
           maskColor="color-mix(in srgb, var(--dpf-bg) 70%, transparent)"
-          nodeColor="#3a3a5a"
+          nodeColor="var(--dpf-accent)"
         />
       </ReactFlow>
 

@@ -11,9 +11,10 @@ import {
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
 
-const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction } = vi.hoisted(() => ({
+const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockResumeBuildImplementation } = vi.hoisted(() => ({
   mockAdvanceBuildPhase: vi.fn(),
   mockCaptureDecisionInteraction: vi.fn(),
+  mockResumeBuildImplementation: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -26,7 +27,7 @@ vi.mock("@/lib/actions/build", () => ({
   advanceBuildPhase: mockAdvanceBuildPhase,
   approveBuildStart: vi.fn(),
   recordBuildAcceptance: vi.fn(),
-  resumeBuildImplementation: vi.fn(),
+  resumeBuildImplementation: mockResumeBuildImplementation,
   retryBuildExecution: vi.fn(),
   runBuildReviewVerification: vi.fn(),
 }));
@@ -38,7 +39,14 @@ vi.mock("@/lib/actions/decision-perspective", () => ({
 beforeEach(() => {
   mockAdvanceBuildPhase.mockReset();
   mockCaptureDecisionInteraction.mockReset();
+  mockResumeBuildImplementation.mockReset();
   mockCaptureDecisionInteraction.mockResolvedValue({ status: "captured", captureType: "escalation" });
+  mockResumeBuildImplementation.mockResolvedValue({
+    mode: "reset-blocked",
+    resetTasks: 3,
+    dispatchQueued: true,
+    message: "Reset 3 tasks to BLOCKED; queued implementation resume.",
+  });
 });
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
@@ -199,6 +207,47 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
         candidateMaterial: false,
       });
     });
+    expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("BuildStudioWorkflowActionCard resume visibility", () => {
+  it("renders pre-click resume mode and post-click outcome", async () => {
+    const onCompleted = vi.fn();
+    const action: BuildStudioWorkflowAction = {
+      kind: "resume-implementation",
+      title: "Click Resume to re-execute 3 blocked tasks",
+      message: "Failure axis: usage-limit. Resume will reset blocked tasks and queue the existing implementation path.",
+      primaryLabel: "Resume Implementation",
+      targetPhase: null,
+      disabledReason: null,
+      coworkerLabel: "Review failures with coworker",
+      coworkerPrompt: "Explain the usage limit.",
+      failureAxis: "usage-limit",
+      resumeMode: {
+        mode: "reset-blocked",
+        label: "Reset blocked tasks",
+        reason: "3 blocked tasks will be reset before the existing resume path is queued.",
+      },
+    };
+
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "build" })}
+        action={action}
+        onCompleted={onCompleted}
+      />,
+    );
+
+    expect(screen.getByText("Reset blocked tasks")).toBeInTheDocument();
+    expect(screen.getByText("3 blocked tasks will be reset before the existing resume path is queued.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume Implementation" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Reset 3 tasks to BLOCKED; queued implementation resume.")).toBeInTheDocument();
+    });
+    expect(mockResumeBuildImplementation).toHaveBeenCalledWith("FB-9B19098C");
     expect(onCompleted).toHaveBeenCalledTimes(1);
   });
 });

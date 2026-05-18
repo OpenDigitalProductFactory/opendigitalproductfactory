@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
 import type { NodeStatus } from "@/lib/build/process-graph-builder";
+import { normalizeTaskResults } from "@/lib/build/task-results";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { deriveWorkflowStageGuidance } from "./build-studio-workflow-actions";
 
@@ -60,11 +61,7 @@ function getArtifactLines(phase: BuildPhase, build: FeatureBuildRow): string[] {
   }
 
   if (phase === "build" && build.taskResults) {
-    const taskCount = Array.isArray(build.taskResults)
-      ? build.taskResults.length
-      : Array.isArray((build.taskResults as { tasks?: unknown[] }).tasks)
-        ? (build.taskResults as { tasks?: unknown[] }).tasks?.length ?? 0
-        : 0;
+    const taskCount = normalizeTaskResults(build.taskResults).tasks.length;
     if (taskCount > 0) {
       lines.push(`Completed task results: ${taskCount}`);
     }

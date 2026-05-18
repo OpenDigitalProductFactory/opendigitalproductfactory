@@ -13,6 +13,7 @@ import type { AssignedTask } from "./task-dependency-graph";
 import type { SpecialistRole } from "./task-dependency-graph";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
@@ -165,13 +166,30 @@ export async function dispatchCodexTask(params: {
   const providerId = params.providerId ?? "chatgpt";
   const model = params.model ?? "";
   const role = task.specialist;
+  const startedAt = new Date();
 
   // Write OAuth tokens to ~/.codex/auth.json in the sandbox container
   try {
     await injectCodexAuth(providerId);
   } catch (err) {
+    const completedAt = new Date();
+    const content = `Auth error: ${(err as Error).message}`;
+    await recordBuildDispatchAttempt({
+      buildId: params.buildId,
+      taskTitle: task.title,
+      specialist: role,
+      providerId,
+      model: model || null,
+      startedAt,
+      completedAt,
+      durationMs: completedAt.getTime() - startedAt.getTime(),
+      exitCode: null,
+      success: false,
+      stdout: "",
+      stderr: content,
+    });
     return {
-      content: `Auth error: ${(err as Error).message}`,
+      content,
       success: false,
       executedTools: [],
       durationMs: 0,
@@ -219,13 +237,19 @@ export async function dispatchCodexTask(params: {
 
     // Use spawn instead of exec to stream stderr for progress updates.
     // stdout = final agent message. stderr = real-time progress (file ops, commands).
-    const { stdout, durationMs } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
+    const { stdout, stderr, durationMs, exitCode } = await new Promise<{
+      stdout: string;
+      stderr: string;
+      durationMs: number;
+      exitCode: number | null;
+    }>((resolve, reject) => {
       const proc = spawnCb("docker", [
         "exec", SANDBOX_CONTAINER, "sh", "-c",
         `cd /workspace && codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/codex-prompt.txt`,
       ]);
 
       let stdout = "";
+      let stderr = "";
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
@@ -235,7 +259,9 @@ export async function dispatchCodexTask(params: {
       proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
 
       proc.stderr.on("data", (data: Buffer) => {
-        const lines = data.toString().split("\n").filter(Boolean);
+        const text = data.toString();
+        stderr += text;
+        const lines = text.split("\n").filter(Boolean);
         for (const line of lines) {
           const trimmed = line.trim();
           // Parse Codex CLI progress from stderr
@@ -257,11 +283,9 @@ export async function dispatchCodexTask(params: {
         clearTimeout(timer);
         const elapsed = Date.now() - startMs;
         if (timedOut) {
-          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, killed: true }));
-        } else if (code === 0 || stdout.trim()) {
-          resolve({ stdout, durationMs: elapsed });
+          reject(Object.assign(new Error(`Timed out after ${timeoutMs / 1000}s`), { stdout, stderr, killed: true }));
         } else {
-          reject(Object.assign(new Error(`Exit code ${code}`), { stdout, code }));
+          resolve({ stdout, stderr, durationMs: elapsed, exitCode: code });
         }
       });
 
@@ -272,11 +296,31 @@ export async function dispatchCodexTask(params: {
     });
 
     const content = stdout.trim();
-    console.log(`[codex-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)`);
+    const success = exitCode === 0;
+    await recordBuildDispatchAttempt({
+      buildId: params.buildId,
+      taskTitle: task.title,
+      specialist: role,
+      providerId,
+      model: model || null,
+      startedAt,
+      completedAt: new Date(),
+      durationMs,
+      exitCode,
+      success,
+      stdout,
+      stderr,
+    });
+
+    if (success) {
+      console.log(`[codex-dispatch] Task "${task.title}" completed in ${(durationMs / 1000).toFixed(1)}s (${content.length} chars)`);
+    } else {
+      console.log(`[codex-dispatch] Task "${task.title}" failed with exit code ${exitCode}. Output: ${(stdout || stderr).slice(0, 200)}`);
+    }
 
     return {
       content: content || "Task completed with no output.",
-      success: true,
+      success,
       executedTools: [],
       durationMs,
     };
@@ -284,6 +328,21 @@ export async function dispatchCodexTask(params: {
     const durationMs = Date.now() - startMs;
     const execErr = err as { stdout?: string; stderr?: string; message?: string; code?: number; killed?: boolean };
     const output = (execErr.stdout ?? "") + "\n" + (execErr.stderr ?? "");
+    await recordBuildDispatchAttempt({
+      buildId: params.buildId,
+      taskTitle: task.title,
+      specialist: role,
+      providerId,
+      model: model || null,
+      startedAt,
+      completedAt: new Date(),
+      durationMs,
+      exitCode: execErr.code ?? null,
+      success: false,
+      stdout: execErr.stdout ?? "",
+      stderr: execErr.stderr ?? execErr.message ?? "",
+      timedOut: execErr.killed === true,
+    });
 
     if (execErr.killed) {
       console.warn(`[codex-dispatch] Task "${task.title}" killed after ${CODEX_TASK_TIMEOUT_MS / 1000}s timeout`);

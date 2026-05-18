@@ -16,6 +16,7 @@ import {
   type ExecutionPhase,
   type SpecialistRole,
 } from "@/lib/integrate/task-dependency-graph";
+import { normalizeTaskResults } from "./task-results";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -297,64 +298,18 @@ export function normalizeBuildSnapshot(
   const storedTaskResults = new Map<string, NormalizedStoredTaskResult>();
   const taskActors = new Map<string, { kind: ProcessActorKind; label: string }>();
 
-  if (build.taskResults != null) {
-    const raw = build.taskResults as unknown;
-
-    if (raw != null && typeof raw === "object" && "tasks" in raw) {
-      // Runtime shape: { tasks: Array<{title, specialist, outcome, durationMs}> }
-      const runtimeResult = raw as {
-        tasks?: Array<{
-          title: string;
-          specialist: string;
-          outcome: string;
-          durationMs: number;
-        }>;
-      };
-
-      if (Array.isArray(runtimeResult.tasks)) {
-        for (const raw of runtimeResult.tasks) {
-          // Defensive: the Json column is untyped at runtime. Skip entries
-          // that don't match the orchestrator's StoredTaskResult shape — e.g.
-          // a misbehaving writer that stuffed claim/triage summaries here.
-          if (
-            raw == null ||
-            typeof raw !== "object" ||
-            typeof (raw as { title?: unknown }).title !== "string" ||
-            typeof (raw as { specialist?: unknown }).specialist !== "string"
-          ) {
-            continue;
-          }
-          const t = raw as {
-            title: string;
-            specialist: string;
-            outcome?: unknown;
-            durationMs?: unknown;
-          };
-          storedTaskResults.set(t.title, {
-            title: t.title,
-            specialist: t.specialist,
-            outcome: typeof t.outcome === "string" ? t.outcome : "",
-            durationMs: typeof t.durationMs === "number" ? t.durationMs : 0,
-          });
-          taskActors.set(t.title, {
-            kind: "ai_coworker",
-            label: formatSpecialistLabel(t.specialist),
-          });
-        }
-      }
-    } else if (Array.isArray(raw)) {
-      // TypeScript type shape fallback: TaskResult[]
-      for (const t of raw as Array<{ title?: string; taskIndex?: number }>) {
-        const title = t.title ?? `Task ${t.taskIndex ?? 0}`;
-        storedTaskResults.set(title, {
-          title,
-          specialist: "software-engineer",
-          outcome: "DONE",
-          durationMs: 0,
-        });
-        taskActors.set(title, { kind: "ai_coworker", label: "Software Engineer" });
-      }
-    }
+  const taskResults = normalizeTaskResults(build.taskResults);
+  for (const task of taskResults.tasks) {
+    storedTaskResults.set(task.title, {
+      title: task.title,
+      specialist: task.specialist,
+      outcome: task.outcome,
+      durationMs: task.durationMs ?? 0,
+    });
+    taskActors.set(task.title, {
+      kind: "ai_coworker",
+      label: formatSpecialistLabel(task.specialist),
+    });
   }
 
   // Build phase actor map from handoffs

@@ -4142,6 +4142,7 @@ model FeatureBuild {
   abandonReason            String?
   draftApprovedAt          DateTime?
   activities               BuildActivity[]
+  dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
   phaseHandoffs            PhaseHandoff[]
   toolExecutionReceipts    ToolExecutionReceipt[]
@@ -4327,6 +4328,31 @@ model BuildActivity {
   build     FeatureBuild @relation(fields: [buildId], references: [buildId])
 
   @@index([buildId, createdAt])
+}
+
+model BuildDispatchAttempt {
+  id               String       @id @default(cuid())
+  buildId          String
+  taskTitle        String
+  specialist       String?
+  providerId       String?
+  model            String?
+  attemptNumber    Int          @default(1)
+  startedAt        DateTime     @default(now())
+  completedAt      DateTime?
+  durationMs       Int?
+  exitCode         Int?
+  success          Boolean      @default(false)
+  failureAxis      String       @default("unknown")
+  stdoutExcerpt    String?      @db.Text
+  stderrExcerpt    String?      @db.Text
+  rootCauseSummary String?      @db.Text
+  rootCauseHash    String?
+  build            FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@index([buildId, startedAt])
+  @@index([buildId, taskTitle, startedAt])
+  @@index([failureAxis, startedAt])
 }
 
 /// Structured context passed between build phases. Written on phase advance,
