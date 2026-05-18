@@ -262,7 +262,7 @@
     "providerId": "ollama",
     "name": "Ollama",
     "category": "direct",
-    "baseUrl": "http://localhost:11434",
+    "baseUrl": "http://host.docker.internal:11434",
     "authMethod": "none",
     "supportedAuthMethods": ["none"],
     "authHeader": null,
