@@ -66,9 +66,8 @@ Out:
    - Env: `WHISPER_MODEL=${DPF_STT_MODEL:-base}`
    - Volume: `dpf_stt_models` mounted at `/app/models` (or whatever the
      hwdsl2 image documents)
-   - Healthcheck: `curl -fsS http://localhost:8000/v1/models`
-     (already roughly correct; just confirm path)
-   - Port: keep `127.0.0.1:8765:8000`
+   - Healthcheck: `curl -fsS http://localhost:9000/v1/models`
+   - Port: keep `127.0.0.1:8765:9000`
 3. Update `.env.docker.example`:
    - Reframe `DPF_STT_IMAGE` as "override to upgrade to GPU"
    - Add a comment block explaining the 3-tier ladder
@@ -85,11 +84,11 @@ container; healthcheck eventually green.
 2. Flip `status` from `unconfigured` to `active`.
 3. Rename `name` from "Speaches (local STT sidecar)" to "Local STT
    (whisper-server)" for accuracy.
-4. Keep `providerId='speaches'` and `baseUrl='http://dpf-stt:8000'` to
-   avoid touching `ModelProfile` / `EndpointTaskPerformance`.
-5. Update the live install's existing row via a one-shot SQL command
-   to match (idempotent — the next seed run will see no drift).
-6. Run the seed and verify the row has `status=active`.
+4. Keep `providerId='speaches'` but update `baseUrl='http://dpf-stt:9000'`
+   so the provider row matches the hwdsl2/whisper-server internal port.
+5. Run the seed and verify the existing provider row has `status=active`,
+   `baseUrl='http://dpf-stt:9000'`, the stale distil-whisper profile is
+   removed, and the active transcription profile uses `modelId='base'`.
 
 **Exit:** Endpoint resolver returns a `speaches` endpoint on first
 call (no admin action required).

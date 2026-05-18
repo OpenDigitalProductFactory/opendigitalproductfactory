@@ -15,34 +15,34 @@ Execute the checklist once after all four Slice 1 chunks are merged to main (#68
 
 - [ ] `git pull` on `main` includes all four Slice 1 chunk merges.
 - [ ] `pnpm install` completes cleanly with `@ricky0123/vad-web@^0.0.30` in the lockfile.
-- [ ] Postgres + Prisma seed run cleanly: `pnpm --filter @dpf/db exec prisma db seed` shows the line "Seeded speaches transcription profile (Systran/faster-distil-whisper-large-v3)" and "Ensured EndpointTaskPerformance(speaches/..., taskType=transcription)".
-- [ ] `docker compose --profile stt up -d dpf-stt` succeeds:
-  - First-time pull of `ghcr.io/speaches-ai/speaches:latest-cuda` completes (may take 2–10 min depending on bandwidth).
+- [ ] Postgres + Prisma seed run cleanly: `pnpm --filter @dpf/db seed` shows the line "Seeded speaches transcription profile (base)" or "Refreshed speaches transcription profile (base)", and "Ensured EndpointTaskPerformance(speaches/base, taskType=transcription)".
+- [ ] `docker compose up -d dpf-stt` succeeds:
+  - First-time pull of `hwdsl2/whisper-server` completes and downloads the `base` model (may take 1–3 min depending on bandwidth).
   - `docker compose ps` shows `dpf-stt` as `running (healthy)` within ~60s.
-  - `curl -fsS http://127.0.0.1:8765/v1/models` returns a JSON list including a `*whisper*` model id.
+  - `curl -fsS http://127.0.0.1:8765/v1/models` returns a JSON list including the `base` model id.
 
 ---
 
-## 1. Default-compose state (sidecar NOT running)
+## 1. Stopped-sidecar state
 
-The mic button must be discoverable-but-disabled when STT is not configured.
+The admin test harness must be discoverable-but-disabled when the STT sidecar is stopped or misconfigured.
 
-- [ ] Stop the STT sidecar: `docker compose --profile stt down`.
+- [ ] Stop the STT sidecar: `docker compose stop dpf-stt`.
 - [ ] Default-compose stack is still up: `docker compose up -d`.
 - [ ] Open the AI Coworker panel (any portal page that mounts `AgentMessageInput`).
 - [ ] Confirm the mic button is **rendered + disabled** (greyed out, no pulsing dot).
 - [ ] Hover the disabled button — tooltip reads exactly: `"Speech-to-text not configured — see Platform Tools > Communications"`.
 - [ ] `data-voice-state="unconfigured"` is set on the button in DevTools.
-- [ ] Navigate to **Platform Tools > Communications**. The **Speech-to-text** card renders with the **"Not configured"** badge and the actionable reason mentioning `docker compose --profile stt up`.
+- [ ] Navigate to **Platform Tools > Communications**. The **Speech-to-text** card renders with the **"Unhealthy"** badge and an actionable reason that the local health probe failed.
 - [ ] Test-phrase mic on the admin card is **also disabled** with the same tooltip — no permission prompt is triggered.
 
 ---
 
 ## 2. Healthy state (sidecar running)
 
-- [ ] Start the sidecar: `docker compose --profile stt up -d dpf-stt`.
+- [ ] Start the sidecar: `docker compose up -d dpf-stt`.
 - [ ] Wait for `docker compose ps` to report `dpf-stt` healthy.
-- [ ] Refresh the Communications page. The **Speech-to-text** card now shows the **"Healthy"** badge, the speaches provider name, the distil-whisper model id, and the `http://dpf-stt:8000` endpoint.
+- [ ] Refresh the Communications page. The **Speech-to-text** card now shows the **"Healthy"** badge, the Local STT provider name, the `base` model id, and the `http://dpf-stt:9000` endpoint.
 
 ---
 
