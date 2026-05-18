@@ -296,6 +296,38 @@ describe("reconcileCodeGraph", () => {
     );
   });
 
+  it("keeps the graph ready when dirty-state detection times out", async () => {
+    vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
+      graphKey: CODE_GRAPH_GRAPH_KEY,
+      graphVersion: CODE_GRAPH_PROJECTION_VERSION,
+      lastIndexedHeadSha: "head-2",
+    } as never);
+
+    mockExec.mockImplementation(async (command: string) => {
+      if (command === "git rev-parse HEAD") return { stdout: "head-2\n", stderr: "" };
+      if (command === "git rev-parse --abbrev-ref HEAD") return { stdout: "main\n", stderr: "" };
+      if (command === "git rev-parse --is-inside-work-tree") return { stdout: "true\n", stderr: "" };
+      if (command === "git status --porcelain") {
+        throw new Error("Command failed: git status --porcelain");
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await reconcileCodeGraph({ reason: "scheduled" });
+
+    expect(result.mode).toBe("noop");
+    expect(result.workspaceDirty).toBe(true);
+    expect(prisma.codeGraphIndexState.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          indexStatus: "ready",
+          lastError: null,
+          workspaceDirty: true,
+        }),
+      }),
+    );
+  });
+
   it("performs a full rebuild when the stored graph projection version is stale", async () => {
     vi.mocked(prisma.codeGraphIndexState.findUnique).mockResolvedValue({
       graphKey: CODE_GRAPH_GRAPH_KEY,
