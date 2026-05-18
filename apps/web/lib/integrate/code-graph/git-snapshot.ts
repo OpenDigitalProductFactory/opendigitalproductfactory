@@ -6,6 +6,7 @@ import {
 } from "./path-filter";
 
 const exec = lazyExec();
+const GIT_STATUS_TIMEOUT_MS = 2_000;
 
 export function getGitRoot(): string {
   const { resolve } = lazyPath();
@@ -49,8 +50,15 @@ export async function getCurrentBranch(gitRoot: string): Promise<string | null> 
 }
 
 export async function isWorkspaceDirty(gitRoot: string): Promise<boolean> {
-  const { stdout } = await exec("git status --porcelain", { cwd: gitRoot, timeout: 10_000 });
-  return stdout.trim().length > 0;
+  try {
+    const { stdout } = await exec("git status --porcelain", { cwd: gitRoot, timeout: GIT_STATUS_TIMEOUT_MS });
+    return stdout.trim().length > 0;
+  } catch {
+    // Dirty-state detection is advisory telemetry. If Git status is slow on a
+    // host-mounted workspace, keep the graph usable and surface the safer
+    // "possibly stale" warning instead of failing the reconcile job.
+    return true;
+  }
 }
 
 export async function listTrackedFiles(gitRoot: string): Promise<string[]> {
