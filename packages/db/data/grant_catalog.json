@@ -188,6 +188,7 @@
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "get_runtime_coordination_map",
         "get_work_capsule",
         "list_work_capsules"
       ],
@@ -202,8 +203,12 @@
         "claim_capsule_scope",
         "create_work_capsule",
         "heartbeat_capsule",
+        "heartbeat_runtime_target",
         "plan_capsule_worktree",
         "record_capsule_evidence",
+        "record_runtime_verification",
+        "register_runtime_target",
+        "release_runtime_target",
         "release_capsule_scope",
         "update_work_capsule_status"
       ],
