@@ -20,6 +20,7 @@ export const QUICKBOOKS_READINESS_ENTITY_FAMILIES = [
   "invoices",
   "vendors",
   "bills",
+  "expenses",
   "payments",
   "accounts",
   "bank_transactions",
@@ -36,6 +37,7 @@ type QuickBooksCapabilityTemplate = {
   description: string;
   supportedNow: boolean;
   nextAction: string;
+  apiCoverageNote: string;
 };
 
 const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
@@ -45,6 +47,7 @@ const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
     description: "QuickBooks company identity and realm context.",
     supportedNow: true,
     nextAction: "Use company context for finance setup and readiness checks.",
+    apiCoverageNote: "CompanyInfo endpoint is read through the Accounting API.",
   },
   {
     key: "customers",
@@ -52,6 +55,7 @@ const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
     description: "Customer directory records available through the Accounting API.",
     supportedNow: true,
     nextAction: "Use read coverage to plan customer import projection.",
+    apiCoverageNote: "Customer query helper reads customer directory rows; no imports or writes.",
   },
   {
     key: "invoices",
@@ -59,34 +63,47 @@ const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
     description: "Invoice records available through the Accounting API.",
     supportedNow: true,
     nextAction: "Use read coverage to plan invoice import projection.",
+    apiCoverageNote: "Invoice query and direct invoice helpers read AR invoice context.",
   },
   {
     key: "vendors",
     label: "Vendors",
     description: "Vendor directory records that should map to DPF suppliers.",
-    supportedNow: false,
-    nextAction: "Map the QuickBooks Vendor entity before import.",
+    supportedNow: true,
+    nextAction: "Use read coverage to plan source-attributed supplier staging.",
+    apiCoverageNote: "QuickBooks Vendor query is the read anchor for supplier mapping.",
   },
   {
     key: "bills",
     label: "Bills",
     description: "Accounts payable bills that should map to DPF bills.",
-    supportedNow: false,
-    nextAction: "Map the QuickBooks Bill entity before import.",
+    supportedNow: true,
+    nextAction: "Use read coverage to plan source-attributed AP bill staging.",
+    apiCoverageNote: "QuickBooks Bill query is the read anchor for AP bill mapping.",
+  },
+  {
+    key: "expenses",
+    label: "Expenses",
+    description: "Purchase/expense transactions that should map to DPF expense evidence.",
+    supportedNow: true,
+    nextAction: "Use read coverage to plan source-attributed expense staging.",
+    apiCoverageNote: "QuickBooks Purchase query is the read anchor for expense transactions.",
   },
   {
     key: "payments",
     label: "Payments",
     description: "Payment records and allocations for invoice settlement.",
-    supportedNow: false,
-    nextAction: "Map payment and allocation reads before reconciliation.",
+    supportedNow: true,
+    nextAction: "Use read coverage before Stripe/QuickBooks reconciliation work.",
+    apiCoverageNote: "QuickBooks Payment query reads AR payment objects; BillPayment remains a later AP enhancement.",
   },
   {
     key: "accounts",
     label: "Accounts",
     description: "Chart of accounts data required before ledger dual-run.",
-    supportedNow: false,
-    nextAction: "Map chart of accounts reads before accounting-core work.",
+    supportedNow: true,
+    nextAction: "Use chart-of-accounts reads for later ledger and report comparison.",
+    apiCoverageNote: "QuickBooks Account query reads chart-of-accounts records without ledger ownership.",
   },
   {
     key: "bank_transactions",
@@ -94,13 +111,15 @@ const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
     description: "Bank and card transaction context used for reconciliation.",
     supportedNow: false,
     nextAction: "Decide QuickBooks, Xero, or Plaid feed ownership before mapping.",
+    apiCoverageNote: "Bank-feed ownership remains blocked pending the provider posture decision.",
   },
   {
     key: "reports",
     label: "Reports",
     description: "Accounting reports used to validate DPF dual-run outputs.",
-    supportedNow: false,
-    nextAction: "Map report reads before dual-run comparison.",
+    supportedNow: true,
+    nextAction: "Use report reads for operational comparison only; do not claim close authority.",
+    apiCoverageNote: "QuickBooks Reports API read helper supports P&L, balance sheet, and cash-flow snapshots.",
   },
   {
     key: "tax",
@@ -108,6 +127,7 @@ const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
     description: "Tax posture and reporting context used for evidence checks.",
     supportedNow: false,
     nextAction: "Map tax reporting context without taking filing authority.",
+    apiCoverageNote: "Tax calculation and filing authority remain integration-led/specialist-led.",
   },
   {
     key: "accountant_workflow",
@@ -115,6 +135,7 @@ const QUICKBOOKS_CAPABILITIES: QuickBooksCapabilityTemplate[] = [
     description: "Accountant handoff and evidence review workflow.",
     supportedNow: false,
     nextAction: "Design the accountant evidence packet before enabling this workflow.",
+    apiCoverageNote: "Accountant collaboration is a workflow capability, not a QuickBooks entity read.",
   },
 ];
 
@@ -160,6 +181,7 @@ export function buildQuickBooksReadinessDescriptor({
         supportedNow: capability.supportedNow,
         hiveTag: "hive:aggregate-only",
         nextAction: capability.nextAction,
+        apiCoverageNote: capability.apiCoverageNote,
         unreachableStates:
           capability.key === "tax" || capability.key === "accountant_workflow"
             ? ["dpf-primary"]
@@ -199,7 +221,8 @@ function resolveNextSafeActions(status: QuickBooksReadinessConnection["status"])
   if (status === "connected") {
     return [
       "Review mapped read coverage",
-      "Plan QuickBooks read expansion for vendors, bills, payments, accounts, bank transactions, reports, tax, and accountant workflow",
+      "Use expanded QuickBooks read coverage to plan source-attributed staging before imports or writes",
+      "Keep bank feeds, tax authority, and accountant workflow blocked until their ownership gates are designed",
       "Keep write operations blocked until proposal-mode approval exists",
     ];
   }
