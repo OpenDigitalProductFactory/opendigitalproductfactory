@@ -1,0 +1,207 @@
+import {
+  buildQuickBooksReadinessDescriptor,
+  type QuickBooksReadinessConnection,
+} from "@/lib/integrate/quickbooks/readiness";
+
+type LaneRoute = {
+  label: string;
+  href: string;
+};
+
+export type AccountantWorkstream = {
+  key: string;
+  label: string;
+  dailyWork: string;
+  routes: LaneRoute[];
+  handoffRule: string;
+};
+
+export type AccountantLaneHandoff = {
+  actorId: string;
+  actorKind: "ai-coworker" | "employee-role" | "missing-coworker";
+  label: string;
+  responsibility: string;
+  boundary: string;
+};
+
+export type AccountantProviderBoundary = {
+  provider: string;
+  label: string;
+  href: string;
+  posture: "read-first" | "reconciliation-anchor" | "not-mapped";
+  currentCoverage: string[];
+  missingCoverage: string[];
+  writeBoundary: string;
+  nextBacklogItemId: string;
+};
+
+export type AccountantWorkLane = {
+  roleId: "bookkeeper_accountant";
+  roleLabel: string;
+  taxonomyNodeId: string;
+  posture: "hybrid";
+  maturityTarget: "observe";
+  workstreams: AccountantWorkstream[];
+  handoffs: AccountantLaneHandoff[];
+  providerBoundaries: AccountantProviderBoundary[];
+  promotionGuardrail: string;
+  nextWorkflow: {
+    backlogItemId: string;
+    title: string;
+    route: string;
+    reason: string;
+  };
+};
+
+const connectedQuickBooks: QuickBooksReadinessConnection = {
+  status: "connected",
+  companyName: "Example company",
+  realmId: "example-realm",
+  lastErrorMsg: null,
+  lastTestedAt: "2026-05-19T00:00:00.000Z",
+  environment: "sandbox",
+};
+
+const quickBooksReadiness = buildQuickBooksReadinessDescriptor({
+  connection: connectedQuickBooks,
+});
+
+const quickBooksReadCoverage = quickBooksReadiness.capabilities
+  .filter((capability) => capability.state === "read")
+  .map((capability) => capability.label);
+
+const quickBooksMissingCoverage = quickBooksReadiness.capabilities
+  .filter((capability) => capability.state !== "read")
+  .map((capability) => capability.label);
+
+export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
+  roleId: "bookkeeper_accountant",
+  roleLabel: "Bookkeeper / Accountant",
+  taxonomyNodeId: "for_employees/financial_management",
+  posture: "hybrid",
+  maturityTarget: "observe",
+  workstreams: [
+    {
+      key: "receivables",
+      label: "Receivables and payments",
+      dailyWork: "Review invoices, customer balances, payment status, and collections pressure.",
+      routes: [
+        { label: "Invoices", href: "/finance/invoices" },
+        { label: "Payments", href: "/finance/payments" },
+        { label: "Revenue hub", href: "/finance/revenue" },
+      ],
+      handoffRule:
+        "Finance Agent can prepare invoice/payment evidence; owner approval is required before any collection or write-back action.",
+    },
+    {
+      key: "payables",
+      label: "Payables, suppliers, and expenses",
+      dailyWork: "Track vendors, bills, expense claims, purchase orders, and payment-run readiness.",
+      routes: [
+        { label: "Bills", href: "/finance/bills" },
+        { label: "Suppliers", href: "/finance/suppliers" },
+        { label: "Expense claims", href: "/finance/expense-claims" },
+        { label: "Purchase orders", href: "/finance/purchase-orders" },
+        { label: "Payment runs", href: "/finance/payment-runs" },
+      ],
+      handoffRule:
+        "Finance Controller owns approval thresholds and exception review; Finance Agent can assemble draft packets.",
+    },
+    {
+      key: "banking-close",
+      label: "Banking, reports, tax, and close",
+      dailyWork: "Check cash position, bank imports, reconciliation candidates, reports, tax exposure, and close tasks.",
+      routes: [
+        { label: "Banking", href: "/finance/banking" },
+        { label: "Bank rules", href: "/finance/banking/rules" },
+        { label: "Reports", href: "/finance/reports" },
+        { label: "VAT summary", href: "/finance/reports/vat-summary" },
+        { label: "Close hub", href: "/finance/close" },
+      ],
+      handoffRule:
+        "Accountant review gates must exist before DPF claims close, tax, or reconciliation authority.",
+    },
+  ],
+  handoffs: [
+    {
+      actorId: "finance-agent",
+      actorKind: "ai-coworker",
+      label: "Finance Agent",
+      responsibility: "Prepare invoice, payment, bill, and report evidence for review.",
+      boundary: "Proposal mode only for accounting-impacting actions until write gates exist.",
+    },
+    {
+      actorId: "finance-controller",
+      actorKind: "ai-coworker",
+      label: "Finance Controller",
+      responsibility: "Own controls, reconciliation posture, approval thresholds, and close readiness.",
+      boundary: "Escalates ambiguous accounting ownership rather than silently promoting records.",
+    },
+    {
+      actorId: "owner_operator",
+      actorKind: "employee-role",
+      label: "Owner / Operator",
+      responsibility: "Approve provider connections, cash-sensitive actions, and DPF-primary promotion decisions.",
+      boundary: "Keeps business authority separate from coworker preparation work.",
+    },
+    {
+      actorId: "future-bookkeeper-accountant-specialist",
+      actorKind: "missing-coworker",
+      label: "Future bookkeeper/accountant specialist",
+      responsibility: "Review accountant evidence packets and provider reconciliation exceptions.",
+      boundary: "Missing coworker; track as a later capability once the lane is visible.",
+    },
+  ],
+  providerBoundaries: [
+    {
+      provider: "quickbooks",
+      label: "QuickBooks Online",
+      href: "/platform/tools/integrations/quickbooks",
+      posture: "read-first",
+      currentCoverage: quickBooksReadCoverage,
+      missingCoverage: quickBooksMissingCoverage,
+      writeBoundary:
+        "No imports, write-back, or DPF-primary accounting ownership until read expansion, staging metadata, reconciliation evidence, and accountant review are proven.",
+      nextBacklogItemId: "BI-C61B5202",
+    },
+    {
+      provider: "stripe",
+      label: "Stripe Billing & Payments",
+      href: "/platform/tools/integrations/stripe",
+      posture: "reconciliation-anchor",
+      currentCoverage: ["Balance", "Customers", "Invoices", "Payment intents"],
+      missingCoverage: ["Fees", "Payout deposits", "Invoice allocation matching", "QuickBooks reconciliation"],
+      writeBoundary:
+        "Stripe remains the payment processor; DPF should reconcile payment evidence before promoting billing records.",
+      nextBacklogItemId: "BI-07D76D6B",
+    },
+    {
+      provider: "bank-feed-provider",
+      label: "Bank-feed provider",
+      href: "/finance/banking",
+      posture: "not-mapped",
+      currentCoverage: ["Manual bank accounts", "CSV import posture"],
+      missingCoverage: ["Direct bank feeds", "Statement source custody", "Automated reconciliation evidence"],
+      writeBoundary:
+        "Bank feeds stay unmapped until DPF chooses provider ownership and proves rollback/export expectations.",
+      nextBacklogItemId: "BI-07D76D6B",
+    },
+  ],
+  promotionGuardrail:
+    "DPF does not become the accounting system of record until read coverage, import staging, reconciliation evidence, rollback/export, and accountant review workflows are proven in dual-run.",
+  nextWorkflow: {
+    backlogItemId: "BI-C61B5202",
+    title: "QuickBooks read expansion for vendors, bills, expenses, payments, accounts, and reports",
+    route: "/platform/tools/integrations/quickbooks",
+    reason:
+      "The accountant lane needs AP, payment, account, report, and tax visibility before import staging or write-back gates.",
+  },
+};
+
+export function getBookkeeperAccountantWorkLane(): AccountantWorkLane {
+  return BOOKKEEPER_ACCOUNTANT_WORK_LANE;
+}
+
+export function getAccountantLaneRouteHrefs(lane = BOOKKEEPER_ACCOUNTANT_WORK_LANE): string[] {
+  return Array.from(new Set(lane.workstreams.flatMap((workstream) => workstream.routes.map((route) => route.href))));
+}
