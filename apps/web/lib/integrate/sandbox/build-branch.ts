@@ -31,6 +31,11 @@ const SANDBOX_GIT_STAGE_EXCLUDES = [
   ":!*.tsbuildinfo",
   ":!**/*.tsbuildinfo",
   ":!pnpm-lock*",
+  // Generated Prisma client: regenerated on every `prisma generate` and must
+  // never enter the diff baseline. A stale sandbox image produces wrong types
+  // that bloat the patch and cause schema regressions on main.
+  ":!**/generated/client/**",
+  ":!packages/db/generated/**",
 ] as const;
 const SANDBOX_GIT_CLEAN_EXCLUDES = [
   ":!node_modules",
@@ -125,8 +130,9 @@ async function normalizeSandboxBranchArtifacts(branchName: string): Promise<void
 type ClientIdentity = {
   clientId: string;
   gitAgentEmail: string;
-  gitAuthorName: string; // "dpf-agent-<shortId>" — matches identity-privacy.getPlatformIdentity()
-  clientBranch: string;  // "client/<clientId>"
+  gitAuthorName: string;    // "dpf-agent-<shortId>" — matches identity-privacy.getPlatformIdentity()
+  clientBranch: string;     // "client/<clientId>"
+  upstreamRemoteUrl: string | null; // Canonical repo URL for fetching origin/main
 };
 
 let _cachedIdentity: ClientIdentity | null = null;
@@ -140,7 +146,7 @@ export async function getClientIdentity(): Promise<ClientIdentity> {
 
   const config = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    select: { clientId: true, gitAgentEmail: true },
+    select: { clientId: true, gitAgentEmail: true, upstreamRemoteUrl: true },
   });
 
   if (!config?.clientId || !config?.gitAgentEmail) {
@@ -160,6 +166,7 @@ export async function getClientIdentity(): Promise<ClientIdentity> {
     gitAgentEmail: config.gitAgentEmail,
     gitAuthorName: `dpf-agent-${shortId}`,
     clientBranch: `client/${config.clientId}`,
+    upstreamRemoteUrl: config.upstreamRemoteUrl ?? null,
   };
 
   return _cachedIdentity;
@@ -179,7 +186,16 @@ export async function isSandboxAvailable(): Promise<boolean> {
 
 /**
  * Configures git identity and ensures a baseline commit exists.
- * Safe to call multiple times.
+ *
+ * When upstreamRemoteUrl is provided (set during portal OAuth setup), the
+ * sandbox fetches origin/main and resets to it before committing the
+ * baseline. This guarantees the sandbox always starts from current main,
+ * not from the potentially weeks-old portal container image.
+ *
+ * Without a remote URL (offline / unconfigured installs) the behaviour is
+ * unchanged: commit whatever the portal container copied in.
+ *
+ * Safe to call multiple times — skips if a baseline already exists.
  */
 async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   // Configure identity first (idempotent)
@@ -194,6 +210,18 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
     `git -C ${WORKSPACE} rev-parse --is-inside-work-tree 2>/dev/null && echo yes || echo no`,
   ).catch(() => "no");
 
+  if (isRepo.trim() === "yes") {
+    // Repo already exists — ensure at least one commit, then return.
+    const commitCount = await execSandboxGit(
+      `git -C ${WORKSPACE} rev-list --count HEAD 2>/dev/null || echo 0`,
+    ).catch(() => "0");
+
+    if (commitCount.trim() !== "0") return; // Already has a baseline commit.
+  }
+
+  // --- Fresh baseline ---
+
+  // Step 1: git init if not already a repo
   if (isRepo.trim() !== "yes") {
     await execSandboxGit(
       [
@@ -201,31 +229,53 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
         `git init`,
         `git config user.name "${identity.gitAuthorName}"`,
         `git config user.email "${identity.gitAgentEmail}"`,
-        buildSandboxGitPruneTrackedArtifactsCommand(),
-        buildSandboxGitAddCommand(),
-        `git commit -m 'sandbox baseline' --allow-empty`,
-      ].join(" && "),
-    );
-    return;
-  }
-
-  // Ensure at least one commit exists
-  const commitCount = await execSandboxGit(
-    `git -C ${WORKSPACE} rev-list --count HEAD 2>/dev/null || echo 0`,
-  ).catch(() => "0");
-
-  if (commitCount.trim() === "0") {
-    await execSandboxGit(
-      [
-        `cd ${WORKSPACE}`,
-        `git config user.name "${identity.gitAuthorName}"`,
-        `git config user.email "${identity.gitAgentEmail}"`,
-        buildSandboxGitPruneTrackedArtifactsCommand(),
-        buildSandboxGitAddCommand(),
-        `git commit -m 'sandbox baseline' --allow-empty`,
       ].join(" && "),
     );
   }
+
+  // Step 2: If we have an upstream remote URL, fetch origin/main and reset to
+  // it so the baseline always matches current main — not the stale portal image.
+  // This is the key fix: the portal container image may be weeks behind
+  // origin/main; by resetting to origin/main, deploy_feature's diff is always
+  // a clean delta against what will actually land on the portal.
+  if (identity.upstreamRemoteUrl) {
+    const escapedUrl = JSON.stringify(identity.upstreamRemoteUrl);
+    try {
+      await execSandboxGit(
+        [
+          `cd ${WORKSPACE}`,
+          // Add remote if not already configured (idempotent)
+          `git remote get-url origin 2>/dev/null || git remote add origin ${escapedUrl}`,
+          // Shallow fetch is fast; we only need the tip of main for the baseline
+          `git fetch origin main --depth=1 2>&1`,
+          // Reset workspace to current main — source files win over portal image
+          `git reset --hard origin/main`,
+        ].join(" && "),
+      );
+      console.log(`[build-branch] Sandbox baseline reset to origin/main via ${identity.upstreamRemoteUrl}`);
+    } catch (fetchErr) {
+      // Non-fatal: if fetch fails (offline, token expired, etc.) fall through
+      // to the portal-copy baseline. The schema regression guard in
+      // deploy_feature will catch any stale-schema issues downstream.
+      console.warn(
+        `[build-branch] Could not fetch origin/main for baseline reset (falling back to portal copy): ${
+          (fetchErr as Error).message?.slice(0, 200)
+        }`,
+      );
+    }
+  }
+
+  // Step 3: Prune generated/cache artifacts and commit the baseline
+  await execSandboxGit(
+    [
+      `cd ${WORKSPACE}`,
+      `git config user.name "${identity.gitAuthorName}"`,
+      `git config user.email "${identity.gitAgentEmail}"`,
+      buildSandboxGitPruneTrackedArtifactsCommand(),
+      buildSandboxGitAddCommand(),
+      `git commit -m 'sandbox baseline' --allow-empty`,
+    ].join(" && "),
+  );
 }
 
 /**

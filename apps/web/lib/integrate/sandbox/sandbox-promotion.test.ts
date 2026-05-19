@@ -7,6 +7,7 @@ import {
   scanForDestructiveOps,
   categorizeDiffFiles,
   getRestoreInstructions,
+  detectSchemaRegressions,
 } from "./sandbox-promotion";
 
 // ─── DESTRUCTIVE_PATTERNS ─────────────────────────────────────────────────────
@@ -214,5 +215,84 @@ describe("getRestoreInstructions", () => {
     const result1 = getRestoreInstructions("/backups/backup-a.sql");
     const result2 = getRestoreInstructions("/backups/backup-b.sql");
     expect(result1).not.toBe(result2);
+  });
+});
+
+// ─── detectSchemaRegressions ──────────────────────────────────────────────────
+
+const SCHEMA_FILE = "packages/db/prisma/schema.prisma";
+
+function makeSchemaDiff(removedLines: string[], addedLines: string[] = []): string {
+  const removed = removedLines.map((l) => `-${l}`).join("\n");
+  const added = addedLines.map((l) => `+${l}`).join("\n");
+  return [
+    `diff --git a/${SCHEMA_FILE} b/${SCHEMA_FILE}`,
+    "index abc..def 100644",
+    `--- a/${SCHEMA_FILE}`,
+    `+++ b/${SCHEMA_FILE}`,
+    "@@ -1,5 +1,5 @@",
+    removed,
+    added,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+describe("detectSchemaRegressions", () => {
+  it("returns empty array when schema.prisma is not in the diff", () => {
+    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts\n+// added line`;
+    expect(detectSchemaRegressions(diff)).toHaveLength(0);
+  });
+
+  it("returns empty array for a pure-addition diff (new model)", () => {
+    const diff = makeSchemaDiff([], [
+      "+model NewThing {",
+      "+  id String @id",
+      "+}",
+    ]);
+    expect(detectSchemaRegressions(diff)).toHaveLength(0);
+  });
+
+  it("detects removal of a model field", () => {
+    const diff = makeSchemaDiff(["  nameNormalized String @default(\"\")"]);
+    const result = detectSchemaRegressions(diff);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain("nameNormalized");
+  });
+
+  it("detects removal of an index definition", () => {
+    const diff = makeSchemaDiff(["  @@index([regionId, nameNormalized])"]);
+    const result = detectSchemaRegressions(diff);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain("@@index");
+  });
+
+  it("detects removal of a model declaration", () => {
+    const diff = makeSchemaDiff(["model City {"]);
+    const result = detectSchemaRegressions(diff);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain("model City");
+  });
+
+  it("does not flag blank removed lines as regressions", () => {
+    const diff = makeSchemaDiff(["  ", ""]);
+    expect(detectSchemaRegressions(diff)).toHaveLength(0);
+  });
+
+  it("does not flag the diff --- header line as a regression", () => {
+    // The raw diff includes "--- a/packages/db/prisma/schema.prisma"
+    const diff = makeSchemaDiff(["  nameNormalized String"]);
+    const result = detectSchemaRegressions(diff);
+    // Only the actual field removal should appear, not the header
+    expect(result.every((l) => !l.startsWith("---"))).toBe(true);
+  });
+
+  it("returns multiple regressions when several fields are removed", () => {
+    const diff = makeSchemaDiff([
+      "  nameNormalized String @default(\"\")",
+      "  localityType   String @default(\"city\")",
+      "  source         String @default(\"seed\")",
+    ]);
+    expect(detectSchemaRegressions(diff)).toHaveLength(3);
   });
 });
