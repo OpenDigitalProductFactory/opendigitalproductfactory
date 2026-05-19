@@ -15,6 +15,12 @@ function toolInputEnum(toolName: string, field: string): readonly string[] {
   return (properties?.[field]?.enum ?? []) as readonly string[];
 }
 
+function toolInputFields(toolName: string): string[] {
+  const tool = PLATFORM_TOOLS.find((t) => t.name === toolName);
+  const properties = (tool?.inputSchema as { properties?: Record<string, unknown> } | undefined)?.properties;
+  return Object.keys(properties ?? {}).sort();
+}
+
 describe("backlog enum parity between backlog.ts and mcp-tools.ts", () => {
   it("triageOutcome matches on triage_backlog_item.outcome", () => {
     expect(toolInputEnum("triage_backlog_item", "outcome")).toEqual([...BACKLOG_TRIAGE_OUTCOMES]);
@@ -50,5 +56,37 @@ describe("backlog enum parity between backlog.ts and mcp-tools.ts", () => {
 
   it("update_epic.status matches shared epic statuses", () => {
     expect(toolInputEnum("update_epic", "status")).toEqual([...EPIC_STATUSES]);
+  });
+
+  it("create_epic exposes the generic epic management fields", () => {
+    expect(toolInputFields("create_epic")).toEqual(
+      expect.arrayContaining([
+        "description",
+        "epicId",
+        "owner",
+        "planPath",
+        "priority",
+        "rationale",
+        "source",
+        "specPath",
+        "status",
+        "title",
+      ]),
+    );
+  });
+
+  it("update_epic exposes priority and spec/plan audit context", () => {
+    expect(toolInputFields("update_epic")).toEqual(
+      expect.arrayContaining([
+        "description",
+        "epicId",
+        "planPath",
+        "priority",
+        "rationale",
+        "specPath",
+        "status",
+        "title",
+      ]),
+    );
   });
 });

@@ -833,6 +833,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         title: { type: "string", description: "Epic title" },
         description: { type: "string", description: "Epic description" },
         status: { type: "string", enum: [...EPIC_STATUSES], description: "Initial epic status (defaults to open)" },
+        priority: { type: "integer", description: "Optional ranked priority for the epic (lower = higher priority)" },
+        owner: { type: "string", description: "Optional accountable employee identifier: EmployeeProfile id, employeeId, workEmail, personalEmail, or exact displayName" },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "What kind of gap or signal produced this epic" },
         specPath: { type: "string", description: "Optional related spec path for audit/index context" },
         planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
@@ -853,6 +855,9 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         title: { type: "string", description: "New epic title" },
         description: { type: "string", description: "New epic description" },
         status: { type: "string", enum: [...EPIC_STATUSES], description: "New epic status" },
+        priority: { type: "integer", description: "New ranked priority for the epic (lower = higher priority)" },
+        specPath: { type: "string", description: "Optional related spec path for audit/index context" },
+        planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
         rationale: { type: "string", description: "Optional short rationale captured by ToolExecution" },
       },
       required: ["epicId"],
@@ -4716,183 +4721,13 @@ export async function executeTool(
 
     // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────
     case "create_epic": {
-      const title = String(params["title"] ?? "").trim();
-      if (!title) {
-        return { success: false, error: "missing_title", message: "title is required" };
-      }
-
-      const requestedEpicId = typeof params["epicId"] === "string" && params["epicId"].trim()
-        ? params["epicId"].trim()
-        : null;
-      const epicId = requestedEpicId ?? `EP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      if (!epicId.startsWith("EP-")) {
-        return {
-          success: false,
-          error: "invalid_epicId",
-          message: "epicId must use the semantic EP-* format.",
-        };
-      }
-
-      const status = typeof params["status"] === "string" && params["status"].trim()
-        ? params["status"].trim()
-        : "open";
-      if (!(EPIC_STATUSES as readonly string[]).includes(status)) {
-        return {
-          success: false,
-          error: "invalid_status",
-          message: `status must be one of ${EPIC_STATUSES.join("|")}, got ${status}`,
-        };
-      }
-
-      const existing = await prisma.epic.findFirst({
-        where: { epicId },
-        select: { epicId: true, title: true, status: true },
-      });
-      if (existing) {
-        return {
-          success: false,
-          error: "duplicate_epicId",
-          message: `Epic ${epicId} already exists: ${existing.title}`,
-          data: { existingEpic: existing },
-        };
-      }
-
-      const description = typeof params["description"] === "string"
-        ? params["description"].trim()
-        : "";
-      const source = typeof params["source"] === "string" ? params["source"].trim() : null;
-      const specPath = typeof params["specPath"] === "string" ? params["specPath"].trim() : null;
-      const planPath = typeof params["planPath"] === "string" ? params["planPath"].trim() : null;
-      const rationale = typeof params["rationale"] === "string" ? params["rationale"].trim() : null;
-
-      const epic = await prisma.epic.create({
-        data: {
-          epicId,
-          title,
-          status,
-          submittedById: userId,
-          agentId: context?.agentId ?? null,
-          ...(description ? { description } : {}),
-          ...(status === "done" ? { completedAt: new Date() } : {}),
-        },
-      });
-
-      const indexContext = [
-        description,
-        source ? `source: ${source}` : "",
-        specPath ? `specPath: ${specPath}` : "",
-        planPath ? `planPath: ${planPath}` : "",
-        rationale ? `rationale: ${rationale}` : "",
-      ].filter(Boolean).join("\n");
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: epic.epicId,
-          entityType: "epic",
-          title,
-          content: indexContext,
-        })
-      ).catch(() => {});
-
-      return {
-        success: true,
-        entityId: epic.epicId,
-        message: `Created epic ${epic.epicId}`,
-        data: {
-          epicId: epic.epicId,
-          title: epic.title,
-          status: epic.status,
-          source,
-          specPath,
-          planPath,
-        },
-      };
+      const { createEpicTool } = await import("@/lib/backlog/mcp-epic-tools");
+      return createEpicTool(params, userId, context);
     }
 
     case "update_epic": {
-      const epicRaw = String(params["epicId"] ?? "").trim();
-      if (!epicRaw) {
-        return { success: false, error: "missing_epicId", message: "epicId is required" };
-      }
-
-      const existing = await prisma.epic.findFirst({
-        where: { OR: [{ epicId: epicRaw }, { id: epicRaw }] },
-        select: {
-          id: true,
-          epicId: true,
-          title: true,
-          description: true,
-          status: true,
-          completedAt: true,
-        },
-      });
-      if (!existing) {
-        return { success: false, error: "not_found", message: `Epic ${epicRaw} not found` };
-      }
-
-      const data: {
-        title?: string;
-        description?: string | null;
-        status?: string;
-        completedAt?: Date | null;
-      } = {};
-      if (typeof params["title"] === "string") {
-        const title = params["title"].trim();
-        if (!title) {
-          return { success: false, error: "missing_title", message: "title cannot be blank" };
-        }
-        data.title = title;
-      }
-      if (typeof params["description"] === "string") {
-        const description = params["description"].trim();
-        data.description = description || null;
-      }
-      if (typeof params["status"] === "string") {
-        const status = params["status"].trim();
-        if (!(EPIC_STATUSES as readonly string[]).includes(status)) {
-          return {
-            success: false,
-            error: "invalid_status",
-            message: `status must be one of ${EPIC_STATUSES.join("|")}, got ${status}`,
-          };
-        }
-        data.status = status;
-        if (status === "done" && existing.status !== "done") {
-          data.completedAt = new Date();
-        }
-        if (status !== "done" && existing.status === "done") {
-          data.completedAt = null;
-        }
-      }
-
-      if (Object.keys(data).length === 0) {
-        return {
-          success: true,
-          entityId: existing.epicId,
-          message: `${existing.epicId} unchanged (no editable fields provided)`,
-          data: {
-            epicId: existing.epicId,
-            title: existing.title,
-            status: existing.status,
-          },
-        };
-      }
-
-      const updated = await prisma.epic.update({
-        where: { id: existing.id },
-        data,
-      });
-
-      return {
-        success: true,
-        entityId: updated.epicId,
-        message: `Updated epic ${updated.epicId}`,
-        data: {
-          epicId: updated.epicId,
-          title: updated.title,
-          status: updated.status,
-          completedAt: updated.completedAt ? updated.completedAt.toISOString() : null,
-        },
-      };
+      const { updateEpicTool } = await import("@/lib/backlog/mcp-epic-tools");
+      return updateEpicTool(params);
     }
 
     case "list_epics": {
@@ -4908,6 +4743,7 @@ export async function executeTool(
           epicId: true,
           title: true,
           status: true,
+          priority: true,
           updatedAt: true,
           items: { select: { status: true } },
         },
@@ -4925,6 +4761,7 @@ export async function executeTool(
             epicId: e.epicId,
             title: e.title,
             status: e.status,
+            priority: e.priority,
             itemCount: { total, open, inProgress, done },
             hasSpec: refIndex.specs.has(e.epicId) || refIndex.plans.has(e.epicId),
             updatedAt: e.updatedAt.toISOString(),

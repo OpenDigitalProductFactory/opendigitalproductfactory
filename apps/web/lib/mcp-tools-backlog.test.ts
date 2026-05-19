@@ -14,8 +14,12 @@ const mockPrisma = {
   epic: {
     create: vi.fn(),
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+  },
+  employeeProfile: {
+    findFirst: vi.fn(),
   },
   featureBuild: {
     create: vi.fn(),
@@ -60,6 +64,8 @@ describe("backlog MCP tool execution", () => {
       capsuleId: "WC-BUILD-1234",
     });
     mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
+    mockPrisma.epic.findMany.mockResolvedValue([]);
+    mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -129,6 +135,108 @@ describe("backlog MCP tool execution", () => {
     expect(mockPrisma.epic.create).not.toHaveBeenCalled();
   });
 
+  it("create_epic persists priority and resolves owner to the accountable employee", async () => {
+    mockPrisma.epic.findFirst.mockResolvedValue(null);
+    mockPrisma.employeeProfile.findFirst.mockResolvedValue({
+      id: "employee-row-1",
+      employeeId: "EMP-PLATFORM",
+      displayName: "Platform Owner",
+      workEmail: "owner@dpf.local",
+    });
+    mockPrisma.epic.create.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-MCP",
+      title: "MCP generic epic management",
+      status: "in-progress",
+      priority: 2,
+      accountableEmployeeId: "employee-row-1",
+      accountableEmployee: {
+        employeeId: "EMP-PLATFORM",
+        displayName: "Platform Owner",
+        workEmail: "owner@dpf.local",
+      },
+      completedAt: null,
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "create_epic",
+      {
+        epicId: "EP-MCP",
+        title: "MCP generic epic management",
+        status: "in-progress",
+        priority: 2,
+        owner: "owner@dpf.local",
+        source: "tool-gap",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.employeeProfile.findFirst).toHaveBeenCalled();
+    expect(mockPrisma.epic.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          priority: 2,
+          accountableEmployeeId: "employee-row-1",
+        }),
+      }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        epicId: "EP-MCP",
+        priority: 2,
+        owner: expect.objectContaining({
+          employeeId: "EMP-PLATFORM",
+          displayName: "Platform Owner",
+        }),
+      }),
+    );
+  });
+
+  it("create_epic warns when the title is similar to an active epic", async () => {
+    mockPrisma.epic.findFirst.mockResolvedValue(null);
+    mockPrisma.epic.findMany.mockResolvedValue([
+      {
+        epicId: "EP-MCP",
+        title: "MCP generic epic management",
+        status: "open",
+      },
+    ]);
+    mockPrisma.epic.create.mockResolvedValue({
+      id: "epic-row-2",
+      epicId: "EP-MCP-2",
+      title: "MCP generic epic management tools",
+      status: "open",
+      priority: null,
+      accountableEmployeeId: null,
+      accountableEmployee: null,
+      completedAt: null,
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "create_epic",
+      {
+        epicId: "EP-MCP-2",
+        title: "MCP generic epic management tools",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data?.similarEpics).toEqual([
+      expect.objectContaining({
+        epicId: "EP-MCP",
+        title: "MCP generic epic management",
+        status: "open",
+      }),
+    ]);
+    expect(result.data?.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining("similar active epic")]),
+    );
+  });
+
   it("update_epic updates editable fields and marks completion when moved to done", async () => {
     mockPrisma.epic.findFirst.mockResolvedValue({
       id: "epic-row-1",
@@ -167,6 +275,57 @@ describe("backlog MCP tool execution", () => {
           status: "done",
           completedAt: expect.any(Date),
         }),
+      }),
+    );
+  });
+
+  it("update_epic updates priority and preserves spec/plan context in the response", async () => {
+    mockPrisma.epic.findFirst.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-WWMD",
+      title: "WWMD Decision Perspective Kernel",
+      description: "Old description",
+      status: "open",
+      priority: null,
+      completedAt: null,
+    });
+    mockPrisma.epic.update.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-WWMD",
+      title: "WWMD Decision Perspective Kernel",
+      description: "Old description",
+      status: "open",
+      priority: 4,
+      completedAt: null,
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "update_epic",
+      {
+        epicId: "EP-WWMD",
+        priority: 4,
+        specPath: "docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md",
+        planPath: "docs/superpowers/plans/2026-05-17-wwmd-decision-perspective-kernel-implementation.md",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.epic.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "epic-row-1" },
+        data: expect.objectContaining({
+          priority: 4,
+        }),
+      }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        epicId: "EP-WWMD",
+        priority: 4,
+        specPath: "docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md",
+        planPath: "docs/superpowers/plans/2026-05-17-wwmd-decision-perspective-kernel-implementation.md",
       }),
     );
   });

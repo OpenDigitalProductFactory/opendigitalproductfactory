@@ -1128,6 +1128,7 @@ model Epic {
   title                 String
   description           String?
   status                String           @default("open")
+  priority              Int?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
   submittedById         String?
