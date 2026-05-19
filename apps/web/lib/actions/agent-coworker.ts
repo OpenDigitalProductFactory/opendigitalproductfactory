@@ -1960,3 +1960,101 @@ export async function getMarketingSkillRules(): Promise<Record<string, unknown> 
   if (!rules || typeof rules !== "object") return null;
   return rules as Record<string, unknown>;
 }
+
+// ─── Agent Thread Spawning ────────────────────────────────────────────────────
+
+type SpawnWorkThreadInput = {
+  parentThreadId: string;
+  objective: string;
+  title?: string;
+  routeContext?: string;
+  agentId?: string;
+};
+
+export async function spawnWorkThread(
+  input: SpawnWorkThreadInput,
+  userId: string,
+): Promise<{ child: { id: string }; taskRunId: string }> {
+  const { spawnWorkThread: spawn } = await import("@/lib/actions/agent-threads");
+  return spawn(input.parentThreadId, input.objective, userId, {
+    title: input.title,
+    routeContext: input.routeContext,
+    agentId: input.agentId,
+  });
+}
+
+export async function cancelThread(
+  input: { threadId: string },
+  userId: string,
+): Promise<{ ok: boolean }> {
+  const thread = await prisma.agentThread.findUnique({
+    where: { id: input.threadId },
+    select: { id: true, userId: true, cancelledAt: true },
+  });
+  if (!thread) {
+    throw new Error(`Thread ${input.threadId} not found.`);
+  }
+  if (thread.userId !== userId) {
+    throw new Error("Unauthorized: thread is owned by another user.");
+  }
+  if (thread.cancelledAt) {
+    return { ok: true };
+  }
+  await prisma.agentThread.update({
+    where: { id: input.threadId },
+    data: { cancelledAt: new Date() },
+  });
+  return { ok: true };
+}
+
+export async function getThreadResult(
+  input: { childId: string },
+  userId: string,
+): Promise<{ status: string; summary: string | null; terminalError: unknown }> {
+  const thread = await prisma.agentThread.findUnique({
+    where: { id: input.childId },
+    select: { id: true, userId: true, terminalError: true },
+  });
+  if (!thread) {
+    throw new Error(`Thread ${input.childId} not found.`);
+  }
+  if (thread.userId !== userId) {
+    throw new Error("Unauthorized: thread is owned by another user.");
+  }
+  const taskRun = await prisma.taskRun.findFirst({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, progressPayload: true },
+  });
+  const status = taskRun?.status ?? "unknown";
+  const summary =
+    typeof (taskRun?.progressPayload as Record<string, unknown> | null)?.["summary"] === "string"
+      ? ((taskRun!.progressPayload as Record<string, unknown>)["summary"] as string)
+      : null;
+  return { status, summary, terminalError: thread.terminalError };
+}
+
+export async function getChildThreads(
+  input: { parentThreadId: string },
+  userId: string,
+): Promise<Array<{ id: string; objective: string | null; status: string }>> {
+  const children = await prisma.agentThread.findMany({
+    where: { parentThreadId: input.parentThreadId, userId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const results: Array<{ id: string; objective: string | null; status: string }> = [];
+  for (const child of children) {
+    const taskRun = await prisma.taskRun.findFirst({
+      where: { threadId: child.id },
+      orderBy: { createdAt: "desc" },
+      select: { objective: true, status: true },
+    });
+    results.push({
+      id: child.id,
+      objective: taskRun?.objective ?? null,
+      status: taskRun?.status ?? "unknown",
+    });
+  }
+  return results;
+}

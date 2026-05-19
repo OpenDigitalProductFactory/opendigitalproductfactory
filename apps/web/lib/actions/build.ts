@@ -600,12 +600,21 @@ async function autoExecuteBuild(buildId: string): Promise<void> {
   };
 
   const updateState = async (state: import("@/lib/build-exec-types").BuildExecutionState) => {
+    const persisted = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { buildExecState: true },
+    });
+    const persistedSourceCurrency = readPersistedSourceCurrency(persisted?.buildExecState);
+    const nextState = state.sourceCurrency || !persistedSourceCurrency
+      ? state
+      : { ...state, sourceCurrency: persistedSourceCurrency };
+
     await prisma.featureBuild.update({
       where: { buildId },
       data: {
-        buildExecState: state as unknown as import("@dpf/db").Prisma.InputJsonValue,
-        ...(state.containerId ? { sandboxId: state.containerId } : {}),
-        ...(state.hostPort ? { sandboxPort: state.hostPort } : {}),
+        buildExecState: nextState as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        ...(nextState.containerId ? { sandboxId: nextState.containerId } : {}),
+        ...(nextState.hostPort ? { sandboxPort: nextState.hostPort } : {}),
       },
     });
   };
@@ -627,6 +636,17 @@ async function autoExecuteBuild(buildId: string): Promise<void> {
         : `Build pipeline failed at step: ${result.failedAt ?? result.step}`,
     },
   }).catch(() => {});
+}
+
+function readPersistedSourceCurrency(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const sourceCurrency = (value as { sourceCurrency?: unknown }).sourceCurrency;
+  if (!sourceCurrency || typeof sourceCurrency !== "object" || Array.isArray(sourceCurrency)) {
+    return null;
+  }
+  return sourceCurrency;
 }
 
 export async function retryBuildExecution(buildId: string): Promise<void> {

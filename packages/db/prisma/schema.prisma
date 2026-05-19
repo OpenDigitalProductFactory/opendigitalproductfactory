@@ -3453,8 +3453,18 @@ model AgentThread {
   cliSessionLastUsedAt  DateTime?
   cliSessionWorkdir     String?
 
+  // Specialist subtask thread spawning (feat/agent-thread-spawning)
+  parentThreadId String?
+  childCount     Int       @default(0)
+  cancelledAt    DateTime?
+  idempotencyKey String?
+  terminalError  Json?
+  parent         AgentThread?  @relation("AgentThreadChildren", fields: [parentThreadId], references: [id], onDelete: Restrict)
+  children       AgentThread[] @relation("AgentThreadChildren")
+
   @@unique([userId, contextKey])
   @@index([cliSessionLastUsedAt])
+  @@index([parentThreadId])
 }
 
 model AgentMessage {

@@ -109,11 +109,15 @@ export function BuildStudio({
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
-    const [fresh, nextFlow, nextProgress] = await Promise.all([
+    const [freshResult, flowResult, progressResult] = await Promise.allSettled([
       getFeatureBuild(buildId),
       getBuildFlowStateAction(buildId),
       getBuildProgressVisibilityAction(buildId),
     ]);
+    const fresh = freshResult.status === "fulfilled" ? freshResult.value : null;
+    const nextFlow = flowResult.status === "fulfilled" ? flowResult.value : null;
+    const nextProgress = progressResult.status === "fulfilled" ? progressResult.value : null;
+
     if (fresh) setActiveBuild(fresh);
     setFlowState(nextFlow);
     setProgressVisibility(nextProgress);
@@ -144,15 +148,20 @@ export function BuildStudio({
       return;
     }
     let cancelled = false;
-    Promise.all([
+    Promise.allSettled([
       getBuildFlowStateAction(activeBuild.buildId),
       getBuildProgressVisibilityAction(activeBuild.buildId),
-    ]).then(([nextFlow, nextProgress]) => {
+    ]).then(([flowResult, progressResult]) => {
       if (!cancelled) {
-        setFlowState(nextFlow);
-        setProgressVisibility(nextProgress);
+        setFlowState(flowResult.status === "fulfilled" ? flowResult.value : null);
+        setProgressVisibility(progressResult.status === "fulfilled" ? progressResult.value : null);
       }
-    }).catch(() => {});
+    }).catch(() => {
+      if (!cancelled) {
+        setFlowState(null);
+        setProgressVisibility(null);
+      }
+    });
     return () => { cancelled = true; };
   }, [activeBuild?.buildId]);
 

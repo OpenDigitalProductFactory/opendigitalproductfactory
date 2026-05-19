@@ -1,4 +1,5 @@
 import { getTruthSourceAge } from "./progress-visibility-types";
+import type { SandboxSourceCurrencySnapshot } from "@/lib/integrate/sandbox/sandbox-source-currency";
 
 export type BuildSandboxDiffEntry = {
   path: string;
@@ -20,6 +21,7 @@ export type BuildSandboxState = {
   sourceDiffstat: BuildSandboxDiffEntry[];
   ignoredDiffstat: IgnoredSandboxDiffEntry[];
   expectedPlanFiles: Array<{ path: string; status: "exists" | "missing" | "unknown" }>;
+  sourceCurrency: SandboxSourceCurrencySnapshot | null;
   observedAt: string | null;
   unavailableReason: string | null;
 };
@@ -31,6 +33,7 @@ export type SandboxRecordInput = {
   updatedAt: Date | string | null;
   planDocument: string | null;
   description: string | null;
+  buildExecState?: unknown;
 };
 
 export async function getSandboxStateForBuild(buildId: string): Promise<BuildSandboxState | null> {
@@ -44,6 +47,7 @@ export async function getSandboxStateForBuild(buildId: string): Promise<BuildSan
       updatedAt: true,
       buildPlan: true,
       description: true,
+      buildExecState: true,
     },
   });
   if (!build) {
@@ -57,6 +61,7 @@ export async function getSandboxStateForBuild(buildId: string): Promise<BuildSan
     updatedAt: build.updatedAt,
     planDocument: typeof build.buildPlan === "string" ? build.buildPlan : serializePlanDocument(build.buildPlan),
     description: build.description,
+    buildExecState: build.buildExecState,
   });
 }
 
@@ -84,6 +89,7 @@ export function buildSandboxStateFromRecord(input: SandboxRecordInput): BuildSan
       path,
       status: changedPaths.size === 0 ? "unknown" : changedPaths.has(path) ? "exists" : "missing",
     })),
+    sourceCurrency: extractSourceCurrency(input.buildExecState),
     observedAt,
     unavailableReason: input.diffPatch ? null : "Live sandbox git diff is not available from the projection yet.",
   };
@@ -191,4 +197,22 @@ function serializePlanDocument(plan: unknown): string | null {
   const lines = record.fileStructure
     .map((file) => `- ${file.action === "modify" ? "Modify" : "Create"} \`${file.path ?? ""}\`: ${file.purpose ?? ""}`);
   return `## File Structure\n${lines.join("\n")}`;
+}
+
+function extractSourceCurrency(value: unknown): SandboxSourceCurrencySnapshot | null {
+  const sourceCurrency = isRecord(value) ? value.sourceCurrency : null;
+  if (!isRecord(sourceCurrency)) {
+    return null;
+  }
+  if (sourceCurrency.source !== "sandbox-git") {
+    return null;
+  }
+  if (typeof sourceCurrency.status !== "string" || typeof sourceCurrency.targetRef !== "string") {
+    return null;
+  }
+  return sourceCurrency as SandboxSourceCurrencySnapshot;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

@@ -59,6 +59,10 @@ export function buildWorkspaceRootProbeCommand(portalContainer: string): string 
   return `docker exec ${portalContainer} sh -lc "if [ -n \\"${projectRootVar}\\" ] && [ -f \\"${projectRootVar}/package.json\\" ]; then printf %s \\"${projectRootVar}\\"; elif [ -f /workspace/package.json ]; then printf %s /workspace; fi"`;
 }
 
+export function buildSandboxGitWorkspaceReadyCommand(workspace: string = "/workspace"): string {
+  return `if test -d ${workspace}/.git && git -C ${workspace} rev-parse --verify HEAD >/dev/null 2>&1; then printf yes; else printf no; fi`;
+}
+
 export function buildWorkspacePackagesCopyCommand(
   portalContainer: string,
   containerId: string,
@@ -94,6 +98,19 @@ export function buildWorkspaceScriptsCopyCommand(
 
 export class LocalSourceStrategy implements SandboxSourceStrategy {
   async initializeWorkspace(containerId: string, _buildId: string): Promise<void> {
+    const gitWorkspaceReady = await execInSandbox(
+      containerId,
+      buildSandboxGitWorkspaceReadyCommand(),
+    ).then((out) => out.trim() === "yes").catch(() => false);
+
+    if (gitWorkspaceReady) {
+      await execInSandbox(
+        containerId,
+        buildSandboxWorkspaceCleanupCommand(),
+      );
+      return;
+    }
+
     // Resolve the portal container to copy source from.
     let portalContainer = "dpf-portal-1";
     try {
