@@ -16,6 +16,11 @@
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
 import { prisma } from "@dpf/db";
+import { buildBuildStudioSandboxTargetInput } from "@/lib/runtime-coordination/build-studio-runtime";
+import {
+  registerRuntimeTarget,
+  type RuntimeCoordinationDb,
+} from "@/lib/runtime-coordination/runtime-targets";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
@@ -363,12 +368,39 @@ export async function startBuildBranch(buildId: string): Promise<void> {
     console.log(`[build-branch] Created build branch: ${branchName} from ${identity.clientBranch}`);
   }
 
-  await prisma.featureBuild.update({
+  const updatedBuild = await prisma.featureBuild.update({
     where: { buildId },
     data: {
       sandboxId: SANDBOX_CONTAINER,
       sandboxPort: SANDBOX_PORT,
       buildBranch: branchName,
+    },
+    select: {
+      id: true,
+      buildId: true,
+      createdById: true,
+    },
+  });
+
+  const capsule = await prisma.workCapsule.findUnique({
+    where: { idempotencyKey: `build-studio:${buildId}` },
+    select: { id: true },
+  });
+
+  await registerRuntimeTarget({
+    db: prisma as unknown as RuntimeCoordinationDb,
+    input: buildBuildStudioSandboxTargetInput({
+      buildRowId: updatedBuild.id,
+      buildId: updatedBuild.buildId,
+      capsuleRowId: capsule?.id ?? null,
+      containerName: SANDBOX_CONTAINER,
+      hostPort: SANDBOX_PORT,
+      branchName,
+    }),
+    actor: {
+      userId: updatedBuild.createdById,
+      agentId: "build-studio",
+      principalId: null,
     },
   });
 }
