@@ -18,7 +18,12 @@ export function isDevInstance(): boolean {
 
 const DEV_ONLY_ERROR = "Codebase access is only available on dev instances. Production does not have source code.";
 
-import { lazyFs as getFs, lazyPath as getPath, lazyChildProcess } from "@/lib/shared/lazy-node";
+import {
+  lazyFs as getFs,
+  lazyFsPromises as getFsPromises,
+  lazyPath as getPath,
+  lazyExec,
+} from "@/lib/shared/lazy-node";
 
 function getProjectRoot(): string {
   const path = getPath();
@@ -137,21 +142,26 @@ export async function searchProjectFiles(
   const max = options?.maxResults ?? 20;
   const projectRoot = getProjectRoot();
 
+  // Use async exec via lazyExec — the synchronous variant (execSync) blocks
+  // the Node main event loop on subprocess wait, which under a wedged 9P
+  // bind mount parks the whole portal in kernel D state. See BI-6588414f
+  // for the 2026-05-19 incident. The async path lets the event loop keep
+  // serving HTTP, health checks, and the watchdog cron even if `git grep`
+  // is itself stuck.
   try {
-    const { execSync } = lazyChildProcess();
+    const execAsync = lazyExec();
     const globArg = options?.glob ? `-- "${options.glob}"` : "";
-    const output = execSync(
+    const { stdout } = await execAsync(
       `git grep -n --max-count=${max} ${JSON.stringify(query)} HEAD ${globArg}`.trim(),
       {
         cwd: projectRoot,
-        encoding: "utf-8",
         timeout: 10_000,
         maxBuffer: 1024 * 1024,
       },
     );
 
     const results: Array<{ path: string; line: number; text: string }> = [];
-    for (const rawLine of output.split("\n")) {
+    for (const rawLine of stdout.split("\n")) {
       if (results.length >= max) break;
       const line = rawLine.replace(/\r$/, "");
       const match = line.match(/^(?:HEAD:)?(.+?):(\d+):(.*)$/);
@@ -186,23 +196,23 @@ function makeLineMatcher(query: string): (line: string) => boolean {
   }
 }
 
-function fallbackSearchProjectFiles(
+async function fallbackSearchProjectFiles(
   projectRoot: string,
   query: string,
   options?: { glob?: string; maxResults?: number },
-): { results: Array<{ path: string; line: number; text: string }> } {
-  const fs = getFs();
+): Promise<{ results: Array<{ path: string; line: number; text: string }> }> {
+  const fsp = getFsPromises();
   const path = getPath();
   const max = options?.maxResults ?? 20;
   const matchesLine = makeLineMatcher(query);
   const results: Array<{ path: string; line: number; text: string }> = [];
   const skipDirs = new Set([".git", ".next", "node_modules", ".pnpm-store", "generated"]);
 
-  function visit(dir: string): void {
+  async function visit(dir: string): Promise<void> {
     if (results.length >= max) return;
     let entries: import("fs").Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fsp.readdir(dir, { withFileTypes: true });
     } catch {
       return;
     }
@@ -213,14 +223,14 @@ function fallbackSearchProjectFiles(
       const relPath = path.relative(projectRoot, fullPath).replace(/\\/g, "/");
       if (!relPath || !isPathAllowedSync(relPath)) continue;
       if (entry.isDirectory()) {
-        if (!skipDirs.has(entry.name)) visit(fullPath);
+        if (!skipDirs.has(entry.name)) await visit(fullPath);
         continue;
       }
       if (!entry.isFile() || !globMatches(relPath, options?.glob)) continue;
 
       let content: string;
       try {
-        content = fs.readFileSync(fullPath, "utf-8");
+        content = await fsp.readFile(fullPath, "utf-8");
       } catch {
         continue;
       }
@@ -233,7 +243,7 @@ function fallbackSearchProjectFiles(
     }
   }
 
-  visit(projectRoot);
+  await visit(projectRoot);
   return { results };
 }
 
