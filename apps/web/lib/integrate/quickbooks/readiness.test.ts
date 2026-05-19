@@ -13,7 +13,7 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     expect(descriptor.nextSafeActions).toContain("Connect QuickBooks credentials");
   });
 
-  it("marks company customers and invoices as read when connected", () => {
+  it("marks read-supported accounting families as read when connected", () => {
     const descriptor = buildQuickBooksReadinessDescriptor({
       connection: {
         status: "connected",
@@ -31,9 +31,28 @@ describe("buildQuickBooksReadinessDescriptor", () => {
       descriptor.capabilities
         .filter((capability) => capability.state === "read")
         .map((capability) => capability.key),
-    ).toEqual(["company", "customers", "invoices"]);
-    expect(descriptor.capabilities.find((capability) => capability.key === "vendors")?.state).toBe(
+    ).toEqual([
+      "company",
+      "customers",
+      "invoices",
+      "vendors",
+      "bills",
+      "expenses",
+      "payments",
+      "accounts",
+      "reports",
+    ]);
+    expect(
+      descriptor.capabilities.find((capability) => capability.key === "expenses")?.apiCoverageNote,
+    ).toContain("Purchase");
+    expect(
+      descriptor.capabilities.find((capability) => capability.key === "bank_transactions")?.state,
+    ).toBe("not-mapped");
+    expect(descriptor.capabilities.find((capability) => capability.key === "tax")?.state).toBe(
       "not-mapped",
+    );
+    expect(descriptor.nextSafeActions).toContain(
+      "Use expanded QuickBooks read coverage to plan source-attributed staging before imports or writes",
     );
   });
 

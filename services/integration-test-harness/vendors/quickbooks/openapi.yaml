@@ -131,6 +131,169 @@ paths:
                   PrivateNote: Monthly managed services retainer.
               schema:
                 $ref: "#/components/schemas/InvoiceResponse"
+  /v3/company/{realmId}/vendor/{vendorId}:
+    get:
+      summary: Get a vendor by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: vendorId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Vendor record
+          content:
+            application/json:
+              example:
+                Vendor:
+                  Id: "v-1"
+                  DisplayName: Acme Supplies
+                  CompanyName: Acme Supplies
+              schema:
+                $ref: "#/components/schemas/VendorResponse"
+  /v3/company/{realmId}/bill/{billId}:
+    get:
+      summary: Get a bill by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: billId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bill record
+          content:
+            application/json:
+              example:
+                Bill:
+                  Id: "b-1"
+                  DocNumber: BILL-1
+                  TotalAmt: 220
+                  Balance: 220
+                  VendorRef:
+                    value: "v-1"
+                    name: Acme Supplies
+              schema:
+                $ref: "#/components/schemas/BillResponse"
+  /v3/company/{realmId}/purchase/{purchaseId}:
+    get:
+      summary: Get a purchase/expense transaction by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: purchaseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Purchase expense record
+          content:
+            application/json:
+              example:
+                Purchase:
+                  Id: "p-1"
+                  TotalAmt: 42.75
+                  PaymentType: CreditCard
+              schema:
+                $ref: "#/components/schemas/PurchaseResponse"
+  /v3/company/{realmId}/payment/{paymentId}:
+    get:
+      summary: Get a payment by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment record
+          content:
+            application/json:
+              example:
+                Payment:
+                  Id: "pay-1"
+                  TotalAmt: 1250
+                  CustomerRef:
+                    value: "42"
+                    name: Acme Managed IT
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+  /v3/company/{realmId}/account/{accountId}:
+    get:
+      summary: Get an account by id
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Account record
+          content:
+            application/json:
+              example:
+                Account:
+                  Id: "a-1"
+                  Name: Checking
+                  AccountType: Bank
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+  /v3/company/{realmId}/reports/{reportName}:
+    get:
+      summary: Run a QuickBooks report
+      parameters:
+        - name: realmId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: reportName
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ProfitAndLoss, BalanceSheet, CashFlow, AgedReceivables, AgedPayables]
+      responses:
+        "200":
+          description: Report payload
+          content:
+            application/json:
+              example:
+                Header:
+                  ReportName: ProfitAndLoss
+                Rows:
+                  Row: []
+              schema:
+                $ref: "#/components/schemas/ReportResponse"
 components:
   schemas:
     TokenResponse:
@@ -164,4 +327,41 @@ components:
       required: [Invoice]
       properties:
         Invoice:
+          type: object
+    VendorResponse:
+      type: object
+      required: [Vendor]
+      properties:
+        Vendor:
+          type: object
+    BillResponse:
+      type: object
+      required: [Bill]
+      properties:
+        Bill:
+          type: object
+    PurchaseResponse:
+      type: object
+      required: [Purchase]
+      properties:
+        Purchase:
+          type: object
+    PaymentResponse:
+      type: object
+      required: [Payment]
+      properties:
+        Payment:
+          type: object
+    AccountResponse:
+      type: object
+      required: [Account]
+      properties:
+        Account:
+          type: object
+    ReportResponse:
+      type: object
+      properties:
+        Header:
+          type: object
+        Rows:
           type: object

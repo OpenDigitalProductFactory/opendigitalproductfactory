@@ -38,5 +38,65 @@
     "body": {
       "error": "rate_limited"
     }
+  },
+  "vendor": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "bill": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "expense": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "payment": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "account": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
+  },
+  "report": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": "rate_limited"
+    }
   }
 }

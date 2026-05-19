@@ -50,5 +50,84 @@
         "maxResults": 0
       }
     }
+  },
+  "vendor": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Vendor": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  },
+  "bill": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Bill": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  },
+  "expense": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Purchase": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  },
+  "payment": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Payment": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  },
+  "account": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "QueryResponse": {
+        "Account": [],
+        "startPosition": 1,
+        "maxResults": 0
+      }
+    }
+  },
+  "report": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Header": {
+        "ReportName": "ProfitAndLoss"
+      },
+      "Rows": {
+        "Row": []
+      }
+    }
   }
 }
