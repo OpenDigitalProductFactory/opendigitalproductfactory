@@ -81,4 +81,42 @@ describe("buildSandboxStateFromRecord", () => {
       { path: "apps/web/components/build/Missing.tsx", status: "missing" },
     ]);
   });
+
+  it("projects the persisted sandbox source-currency verdict", () => {
+    const state = buildSandboxStateFromRecord({
+      buildBranch: "build/FB-123",
+      gitCommitHashes: [],
+      diffPatch: null,
+      updatedAt: new Date("2026-05-18T12:00:00.000Z"),
+      planDocument: null,
+      description: null,
+      buildExecState: {
+        sourceCurrency: {
+          source: "sandbox-git",
+          status: "behind",
+          recommendedAction: "auto-refresh",
+          workspace: "/workspace",
+          branch: "client/abc",
+          headSha: "head",
+          headTreeSha: "tree-head",
+          targetRef: "origin/main",
+          targetSha: "target",
+          targetTreeSha: "tree-target",
+          mergeBaseSha: "base",
+          aheadBy: 0,
+          behindBy: 3,
+          dirty: false,
+          localSourceChangeCount: 0,
+          checkedAt: "2026-05-18T12:00:00.000Z",
+          reason: "Sandbox is 3 commits behind origin/main.",
+        },
+      },
+    });
+
+    expect(state.sourceCurrency).toMatchObject({
+      status: "behind",
+      targetRef: "origin/main",
+      recommendedAction: "auto-refresh",
+    });
+  });
 });
