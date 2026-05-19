@@ -72,11 +72,6 @@ export default async function AdminPlatformDevelopmentPage() {
         initialConnected={initialConnected}
       />
       <McpTokenManager
-        contributionModelConfigured={
-          isContributionModelEnabled()
-            ? config?.contributionModel != null
-            : config?.contributionMode === "selective" || config?.contributionMode === "contribute_all"
-        }
         baseUrl={baseUrl}
       />
     </div>

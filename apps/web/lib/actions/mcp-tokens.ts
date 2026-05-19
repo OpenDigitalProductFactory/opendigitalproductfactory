@@ -8,10 +8,14 @@ import {
   revokeMcpApiToken,
   type IssueMcpTokenResult,
   type McpTokenCapability,
+  type McpTokenScope,
 } from "@/lib/auth/mcp-api-token";
 import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { writeMcpJsonToHost } from "@/lib/auth/mcp-host-writer";
-import { CODING_AGENT_MCP_TOKEN_SCOPES } from "@/lib/mcp-token-scopes";
+import {
+  CODING_AGENT_MCP_TOKEN_SCOPES,
+  WRITE_MCP_TOKEN_SCOPES,
+} from "@/lib/mcp-token-scopes";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
 /**
@@ -50,6 +54,7 @@ export async function listMyMcpTokens() {
       name: t.name,
       prefix: t.prefix,
       capability: t.capability,
+      scope: t.scope,
       scopes: t.scopes,
       lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
       expiresAt: t.expiresAt?.toISOString() ?? null,
@@ -83,6 +88,7 @@ export type IssueTokenActionResult =
 export async function issueMyMcpToken(input: {
   name: string;
   capability: McpTokenCapability;
+  scope?: McpTokenScope;
   scopes: string[];
   expiresInDays: number | null;
   agentId?: string | null;
@@ -96,9 +102,43 @@ export async function issueMyMcpToken(input: {
     userId: session.user.id,
     name: input.name,
     capability: input.capability,
+    scope: input.scope ?? input.capability,
     scopes: input.scopes,
     expiresInDays: input.expiresInDays,
     agentId: input.agentId ?? null,
+  });
+  if (!result.ok) {
+    return { ok: false, error: result.error, message: result.message };
+  }
+  writeMcpJsonToHost(result.plaintext, input.baseUrl);
+  return {
+    ok: true,
+    tokenId: result.tokenId,
+    plaintext: result.plaintext,
+    prefix: result.prefix,
+    expiresAt: result.expiresAt?.toISOString() ?? null,
+    setupSnippets: buildSetupSnippets(result.plaintext, input.baseUrl),
+  };
+}
+
+export async function issueMyWriteMcpToken(input: {
+  baseUrl: string;
+  name?: string;
+  expiresInDays?: number | null;
+}): Promise<IssueTokenActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "unauthorized", message: "Sign in first" };
+  }
+
+  const result: IssueMcpTokenResult = await issueMcpApiToken({
+    userId: session.user.id,
+    name: input.name?.trim() || "Write MCP token",
+    capability: "write",
+    scope: "write",
+    scopes: [...WRITE_MCP_TOKEN_SCOPES],
+    expiresInDays: input.expiresInDays === undefined ? 90 : input.expiresInDays,
+    agentId: null,
   });
   if (!result.ok) {
     return { ok: false, error: result.error, message: result.message };

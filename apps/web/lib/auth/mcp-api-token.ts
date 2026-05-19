@@ -5,20 +5,21 @@
 // Resolution path: client sends Authorization: Bearer <secret>; server hashes
 // and looks up by tokenHash. Lazy lastUsedAt update on success.
 //
-// Write-capable tokens require contribution-mode to be configured first so
-// every external MCP write is end-to-end traceable to a real GitHub identity
-// if it ever becomes a contribution PR.
-
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@dpf/db";
-import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 
+export type McpTokenScope = "read" | "write" | "admin";
 export type McpTokenCapability = "read" | "write";
 
 export type IssueMcpTokenInput = {
   userId: string;
   name: string;
-  capability: McpTokenCapability;
+  /**
+   * Coarse token authority tier. `capability` is accepted for old internal
+   * callers, but new persisted tokens use `scope` as the source of truth.
+   */
+  scope?: McpTokenScope;
+  capability?: McpTokenCapability;
   scopes: string[];
   expiresInDays: number | null;
   agentId?: string | null;
@@ -37,7 +38,7 @@ export type IssueMcpTokenResult =
       error:
         | "missing_name"
         | "empty_scopes"
-        | "contribution_mode_required"
+        | "invalid_scope"
         | "invalid_capability";
       message: string;
     };
@@ -47,6 +48,7 @@ export type ResolvedMcpToken = {
   userId: string;
   agentId: string | null;
   scopes: string[];
+  scope: McpTokenScope;
   capability: McpTokenCapability;
 };
 
@@ -107,30 +109,22 @@ function hashSecret(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
-// A write-capable token requires a configured contribution path. What
-// "configured" means depends on the feature flag:
-//   - Flag ON  (CONTRIBUTION_MODEL_ENABLED=true): the fork-PR rollout is in
-//     effect, so PlatformDevConfig.contributionModel must be set explicitly
-//     via the ForkSetupPanel (values: "maintainer-direct" | "fork-pr").
-//   - Flag OFF (default): the legacy direct-push flow is in use; the
-//     ForkSetupPanel is hidden and contributionModel is never written.
-//     The only meaningful prerequisite is that the user opted into sharing
-//     at all — i.e. contributionMode is "selective" or "contribute_all".
-//     "fork_only" means "stay private", so writes have nowhere to go.
-async function contributionModeConfigured(): Promise<boolean> {
-  try {
-    const cfg = await prisma.platformDevConfig.findUnique({
-      where: { id: "singleton" },
-      select: { contributionMode: true, contributionModel: true },
-    });
-    if (!cfg) return false;
-    if (isContributionModelEnabled()) {
-      return cfg.contributionModel != null;
-    }
-    return cfg.contributionMode === "selective" || cfg.contributionMode === "contribute_all";
-  } catch {
-    return false;
-  }
+function isMcpTokenScope(value: unknown): value is McpTokenScope {
+  return value === "read" || value === "write" || value === "admin";
+}
+
+function isLegacyCapability(value: unknown): value is McpTokenCapability {
+  return value === "read" || value === "write";
+}
+
+function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
+  return scope === "read" ? "read" : "write";
+}
+
+function normalizePersistedScope(scope: unknown, capability: unknown): McpTokenScope {
+  if (isMcpTokenScope(scope)) return scope;
+  if (capability === "write") return "write";
+  return "read";
 }
 
 export async function issueMcpApiToken(
@@ -140,11 +134,19 @@ export async function issueMcpApiToken(
   if (!name) {
     return { ok: false, error: "missing_name", message: "name is required" };
   }
-  if (input.capability !== "read" && input.capability !== "write") {
+  if (input.capability !== undefined && !isLegacyCapability(input.capability)) {
     return {
       ok: false,
       error: "invalid_capability",
       message: `capability must be "read" or "write"`,
+    };
+  }
+  const scope = input.scope ?? input.capability ?? "read";
+  if (!isMcpTokenScope(scope)) {
+    return {
+      ok: false,
+      error: "invalid_scope",
+      message: `scope must be "read", "write", or "admin"`,
     };
   }
   if (!Array.isArray(input.scopes) || input.scopes.length === 0) {
@@ -153,17 +155,6 @@ export async function issueMcpApiToken(
       error: "empty_scopes",
       message: "at least one scope is required",
     };
-  }
-  if (input.capability === "write") {
-    const ok = await contributionModeConfigured();
-    if (!ok) {
-      return {
-        ok: false,
-        error: "contribution_mode_required",
-        message:
-          "Configure contribution mode (Admin > Platform Development) before issuing write-capable MCP tokens",
-      };
-    }
   }
 
   const { plaintext, hash, prefix } = generateToken();
@@ -180,7 +171,8 @@ export async function issueMcpApiToken(
       tokenHash: hash,
       prefix,
       scopes: input.scopes,
-      capability: input.capability,
+      capability: scopeToCapability(scope),
+      scope,
       expiresAt,
     },
   });
@@ -269,7 +261,8 @@ export async function resolveMcpApiToken(
     userId: row.userId,
     agentId: row.agentId,
     scopes: row.scopes,
-    capability: (row.capability as McpTokenCapability) ?? "read",
+    scope: normalizePersistedScope(row.scope, row.capability),
+    capability: scopeToCapability(normalizePersistedScope(row.scope, row.capability)),
   };
 }
 
@@ -278,6 +271,7 @@ export async function listMcpApiTokens(userId: string): Promise<
     id: string;
     name: string;
     prefix: string;
+    scope: McpTokenScope;
     capability: McpTokenCapability;
     scopes: string[];
     lastUsedAt: Date | null;
@@ -294,6 +288,7 @@ export async function listMcpApiTokens(userId: string): Promise<
       name: true,
       prefix: true,
       capability: true,
+      scope: true,
       scopes: true,
       lastUsedAt: true,
       expiresAt: true,
@@ -303,6 +298,7 @@ export async function listMcpApiTokens(userId: string): Promise<
   });
   return rows.map((r) => ({
     ...r,
-    capability: (r.capability as McpTokenCapability) ?? "read",
+    scope: normalizePersistedScope(r.scope, r.capability),
+    capability: scopeToCapability(normalizePersistedScope(r.scope, r.capability)),
   }));
 }

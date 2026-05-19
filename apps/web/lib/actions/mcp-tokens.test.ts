@@ -25,6 +25,7 @@ import {
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import {
   issueMyMcpToken,
+  issueMyWriteMcpToken,
   listAvailableMcpScopes,
   listMyMcpTokens,
   revokeMyMcpToken,
@@ -88,6 +89,7 @@ describe("listMyMcpTokens", () => {
         name: "Mark's laptop",
         prefix: "dpfmcp_ABC1",
         capability: "read",
+        scope: "read",
         scopes: ["backlog_read"],
         lastUsedAt: now,
         expiresAt: null,
@@ -101,6 +103,34 @@ describe("listMyMcpTokens", () => {
     expect(result.tokens[0]?.lastUsedAt).toBe(now.toISOString());
     expect(result.tokens[0]?.expiresAt).toBeNull();
     expect(listMock).toHaveBeenCalledWith("u1");
+  });
+});
+
+describe("issueMyWriteMcpToken", () => {
+  it("one-click issues a write-scoped token with the standard write grant set", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_write",
+      plaintext: "dpfmcp_WRITE",
+      prefix: "dpfmcp_WRIT",
+      expiresAt: new Date("2026-07-25T00:00:00Z"),
+    });
+
+    const result = await issueMyWriteMcpToken({
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        capability: "write",
+        scope: "write",
+        name: "Write MCP token",
+        scopes: expect.arrayContaining(["backlog_read", "work_capsule_write"]),
+      }),
+    );
   });
 });
 
@@ -120,12 +150,12 @@ describe("issueMyMcpToken", () => {
     expect(issueMock).not.toHaveBeenCalled();
   });
 
-  it("propagates underlying issue failures (e.g. contribution_mode_required)", async () => {
+  it("propagates underlying issue failures", async () => {
     authMock.mockResolvedValue({ user: { id: "u1" } });
     issueMock.mockResolvedValue({
       ok: false,
-      error: "contribution_mode_required",
-      message: "Configure contribution mode first",
+      error: "invalid_scope",
+      message: "scope must be read, write, or admin",
     });
     const result = await issueMyMcpToken({
       name: "x",
@@ -136,7 +166,7 @@ describe("issueMyMcpToken", () => {
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
-    expect(result.error).toBe("contribution_mode_required");
+    expect(result.error).toBe("invalid_scope");
   });
 
   it("on success returns plaintext + setup snippets pre-filled with the token", async () => {
@@ -242,8 +272,6 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
         "file_read",
         "spec_plan_read",
         "work_capsule_read",
-        "work_capsule_write",
-        "work_capsule_adopt",
       ],
       addedScopes: [
         "architecture_read",
@@ -251,8 +279,6 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
         "file_read",
         "spec_plan_read",
         "work_capsule_read",
-        "work_capsule_write",
-        "work_capsule_adopt",
       ],
     });
 
@@ -266,8 +292,6 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
       "file_read",
       "spec_plan_read",
       "work_capsule_read",
-      "work_capsule_write",
-      "work_capsule_adopt",
     ]);
   });
 });

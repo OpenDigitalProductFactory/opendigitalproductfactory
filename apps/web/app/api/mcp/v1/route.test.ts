@@ -773,7 +773,12 @@ describe("POST — tools/call", () => {
     );
     const body = await res.json();
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0].text).toMatch(/lacks the required scope/i);
+    expect(body.result.structuredContent).toMatchObject({
+      error: "insufficient_token_scope",
+      requiredScope: "write",
+      tokenScope: "read",
+      toolName: "create_backlog_item",
+    });
     expect(govMock).not.toHaveBeenCalled();
   });
 
@@ -784,6 +789,7 @@ describe("POST — tools/call", () => {
       agentId: null,
       scopes: ["backlog_read", "backlog_write"], // scopes allow it
       capability: "read", // but token capability is read-only
+      scope: "read",
     });
     const res = await POST(
       makeRequest({
@@ -798,8 +804,97 @@ describe("POST — tools/call", () => {
     );
     const body = await res.json();
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0].text).toMatch(/read-only/i);
+    expect(body.result.content[0].text).toMatch(/write-scoped MCP token/i);
+    expect(body.result.structuredContent).toMatchObject({
+      error: "insufficient_token_scope",
+      requiredScope: "write",
+      tokenScope: "read",
+      toolName: "create_backlog_item",
+    });
     expect(govMock).not.toHaveBeenCalled();
+  });
+
+  it("returns requiredScope=write for read tokens that try create_work_capsule", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_x",
+      userId: "u1",
+      agentId: null,
+      scopes: ["work_capsule_write"],
+      capability: "read",
+      scope: "read",
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: {
+          jsonrpc: "2.0",
+          id: 71,
+          method: "tools/call",
+          params: {
+            name: "create_work_capsule",
+            arguments: {
+              title: "Token scope test",
+              objective: "Verify write-token requirement",
+              source: "operator",
+              idempotencyKey: "scope-test",
+            },
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.isError).toBe(true);
+    expect(body.result.structuredContent.requiredScope).toBe("write");
+    expect(body.result.structuredContent.tokenScope).toBe("read");
+    expect(govMock).not.toHaveBeenCalled();
+  });
+
+  it("allows write-scoped tokens to call create_work_capsule", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_write",
+      userId: "u1",
+      agentId: "AGT-CAPSULE",
+      scopes: ["work_capsule_write"],
+      capability: "write",
+      scope: "write",
+    });
+    govMock.mockResolvedValue({
+      success: true,
+      message: "Work Capsule WC-SCOPE created.",
+      entityId: "WC-SCOPE",
+      data: { capsuleId: "WC-SCOPE" },
+    });
+
+    const res = await POST(
+      makeRequest({
+        bearer: "dpfmcp_WRITE",
+        body: {
+          jsonrpc: "2.0",
+          id: 72,
+          method: "tools/call",
+          params: {
+            name: "create_work_capsule",
+            arguments: {
+              title: "Token scope test",
+              objective: "Verify write-token acceptance",
+              source: "operator",
+              idempotencyKey: "scope-write-test",
+            },
+          },
+        },
+      }),
+    );
+
+    const body = await res.json();
+    expect(body.result.isError).toBe(false);
+    expect(body.result.structuredContent).toEqual({ capsuleId: "WC-SCOPE" });
+    expect(govMock).toHaveBeenCalledOnce();
+    const call = govMock.mock.calls[0]![0];
+    expect(call.toolName).toBe("create_work_capsule");
+    expect(call.context.apiTokenId).toBe("tok_write");
+    expect(call.source).toBe("external-jsonrpc");
   });
 
   it("dispatches to governedExecuteTool with source=external-jsonrpc and apiTokenId", async () => {
@@ -956,6 +1051,11 @@ describe("POST — tasks/submit", () => {
     const body = await res.json();
     expect(body.result.isError).toBe(true);
     expect(body.result.content[0].text).toMatch(/read-only/i);
+    expect(body.result.structuredContent).toMatchObject({
+      error: "insufficient_token_scope",
+      requiredScope: "write",
+      tokenScope: "read",
+    });
     expect(createRunMock).not.toHaveBeenCalled();
     expect(executeLoopMock).not.toHaveBeenCalled();
   });
