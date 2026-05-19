@@ -1443,7 +1443,11 @@ export async function reviewDesignDoc(buildId: string): Promise<ReviewResult> {
   const prompt = buildDesignReviewPrompt(doc, `Build: ${build.title}. ${build.description ?? ""}`);
 
   const raw = await callReviewerLLM(prompt);
-  const result = parseReviewResponse(raw);
+  const result = parseReviewResponse(raw) ?? {
+    decision: "fail" as const,
+    issues: [{ severity: "critical" as const, description: "Review agent returned unparseable response" }],
+    summary: "Review failed — could not parse agent response",
+  };
 
   await prisma.featureBuild.update({
     where: { buildId },
@@ -1465,7 +1469,11 @@ export async function reviewBuildPlan(buildId: string): Promise<ReviewResult> {
   const prompt = buildPlanReviewPrompt(plan);
 
   const raw = await callReviewerLLM(prompt);
-  const result = parseReviewResponse(raw);
+  const result = parseReviewResponse(raw) ?? {
+    decision: "fail" as const,
+    issues: [{ severity: "critical" as const, description: "Review agent returned unparseable response" }],
+    summary: "Review failed — could not parse agent response",
+  };
 
   await prisma.featureBuild.update({
     where: { buildId },

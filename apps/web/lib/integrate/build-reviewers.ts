@@ -177,7 +177,7 @@ export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
 
 // ─── Response Parsing ────────────────────────────────────────────────────────
 
-export function parseReviewResponse(raw: string): ReviewResult {
+export function parseReviewResponse(raw: string): ReviewResult | null {
   try {
     // Extract JSON from response (may have markdown code fences)
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -220,12 +220,12 @@ export function parseReviewResponse(raw: string): ReviewResult {
 
     return { decision, issues, summary };
   } catch {
-    // If parsing fails, return a fail result
-    return {
-      decision: "fail",
-      issues: [{ severity: "critical", description: "Review agent returned unparseable response" }],
-      summary: "Review failed — could not parse agent response",
-    };
+    // Return null so callers can distinguish a provider/parse failure from a
+    // genuine reviewer "fail" vote. Counting an unparseable response as a
+    // fail vote creates false no-consensus when the other reviewer passed
+    // (observed 2026-05-19: Codex rate-limit made Reviewer 2 return garbage
+    // JSON, which then cast a fake "fail" vote and blocked the approval gate).
+    return null;
   }
 }
 

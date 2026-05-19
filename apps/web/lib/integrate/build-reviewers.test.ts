@@ -73,32 +73,31 @@ describe("buildCodeReviewPrompt", () => {
 describe("parseReviewResponse", () => {
   it("parses valid pass response", () => {
     const result = parseReviewResponse('{"decision":"pass","issues":[],"summary":"Looks good"}');
-    expect(result.decision).toBe("pass");
-    expect(result.issues).toHaveLength(0);
-    expect(result.summary).toBe("Looks good");
+    expect(result!.decision).toBe("pass");
+    expect(result!.issues).toHaveLength(0);
+    expect(result!.summary).toBe("Looks good");
   });
 
   it("parses valid fail response with issues", () => {
     const result = parseReviewResponse('{"decision":"fail","issues":[{"severity":"critical","description":"Missing test"}],"summary":"Needs work"}');
-    expect(result.decision).toBe("fail");
-    expect(result.issues).toHaveLength(1);
-    expect(result.issues[0].severity).toBe("critical");
+    expect(result!.decision).toBe("fail");
+    expect(result!.issues).toHaveLength(1);
+    expect(result!.issues[0].severity).toBe("critical");
   });
 
   it("handles markdown code fences", () => {
     const result = parseReviewResponse('```json\n{"decision":"pass","issues":[],"summary":"ok"}\n```');
-    expect(result.decision).toBe("pass");
+    expect(result!.decision).toBe("pass");
   });
 
-  it("returns fail for unparseable response", () => {
+  it("returns null for unparseable response", () => {
     const result = parseReviewResponse("This is not JSON");
-    expect(result.decision).toBe("fail");
-    expect(result.issues[0].severity).toBe("critical");
+    expect(result).toBeNull();
   });
 
   it("defaults invalid severity to minor", () => {
     const result = parseReviewResponse('{"decision":"fail","issues":[{"severity":"unknown","description":"test"}],"summary":"ok"}');
-    expect(result.issues[0].severity).toBe("minor");
+    expect(result!.issues[0].severity).toBe("minor");
   });
 
   it("overrides reviewer's 'fail' decision when only important/minor issues exist", () => {
@@ -115,8 +114,8 @@ describe("parseReviewResponse", () => {
       ],
       summary: "Reviewer 2: state-consistency safeguards needed",
     }));
-    expect(result.decision).toBe("pass");
-    expect(result.issues).toHaveLength(2);
+    expect(result!.decision).toBe("pass");
+    expect(result!.issues).toHaveLength(2);
   });
 
   it("still fails when any issue is critical, regardless of reviewer's decision field", () => {
@@ -128,8 +127,8 @@ describe("parseReviewResponse", () => {
       ],
       summary: "technically fine but",
     }));
-    expect(result.decision).toBe("fail");
-    expect(result.issues).toHaveLength(2);
+    expect(result!.decision).toBe("fail");
+    expect(result!.issues).toHaveLength(2);
   });
 });
 

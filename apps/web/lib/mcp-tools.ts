@@ -6414,9 +6414,22 @@ export async function executeTool(
       // break the review gate (fail-loud via console.warn per project memory
       // "silent seed skips audit").
       try {
+        // Include every reviewer that responded, even when its response was
+        // unparseable (review: null). The deliberation synthesizer marks those
+        // branches as completed:false and excludes them from the consensus vote,
+        // so a rate-limited Reviewer 2 can no longer cast a fake "fail" vote
+        // that produces a misleading no-consensus outcome.
         const reviewerBranches: ReviewBranchInput[] = [];
-        if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
-        if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        if (r1settled.status === "fulfilled") {
+          reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1,
+            ...(!r1 ? { failureReason: "Reviewer returned unparseable response" } : {}),
+          });
+        }
+        if (r2settled.status === "fulfilled") {
+          reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2,
+            ...(!r2 ? { failureReason: "Reviewer returned unparseable response" } : {}),
+          });
+        }
         if (reviewerBranches.length > 0) {
           const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
           await runBuildReviewDeliberation({
@@ -6720,9 +6733,18 @@ export async function executeTool(
       // authoritative, deliberation persistence is best-effort, failures are
       // logged loudly but do not throw.
       try {
+        // Same parse-failure isolation as reviewDesignDoc — see that block for rationale.
         const reviewerBranches: ReviewBranchInput[] = [];
-        if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
-        if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        if (r1settled.status === "fulfilled") {
+          reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1,
+            ...(!r1 ? { failureReason: "Reviewer returned unparseable response" } : {}),
+          });
+        }
+        if (r2settled.status === "fulfilled") {
+          reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2,
+            ...(!r2 ? { failureReason: "Reviewer returned unparseable response" } : {}),
+          });
+        }
         if (reviewerBranches.length > 0) {
           const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
           await runBuildReviewDeliberation({
