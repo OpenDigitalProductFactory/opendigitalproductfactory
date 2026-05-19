@@ -28,6 +28,10 @@ import {
   DELIBERATION_TRIGGER_SOURCES,
 } from "@/lib/deliberation/types";
 import {
+  DELIBERATION_TOOLS,
+  deliberateOnMcpHandler,
+} from "@/lib/mcp-tools-deliberation";
+import {
   createLicenseReadinessIssue,
   saveLicensingInvestigationFinding,
 } from "@/lib/actions/licensing-compliance";
@@ -356,6 +360,7 @@ const WORK_CAPSULE_TOOL_ENUMS = workCapsuleToolEnums();
 const RUNTIME_COORDINATION_TOOL_ENUMS = runtimeCoordinationToolEnums();
 
 export const PLATFORM_TOOLS: ToolDefinition[] = [
+  ...DELIBERATION_TOOLS,
   {
     name: "create_backlog_item",
     description: "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required.",
@@ -3682,6 +3687,56 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_ea_modeler",
     sideEffect: false,
   },
+  // ─── Agent Thread Spawning Tools ─────────────────────────────────────────────
+  {
+    name: "spawn_work_thread",
+    description: "Start a child coworker thread from the current thread. Use for delegated work that should report back separately.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        objective: { type: "string", description: "The delegated work objective." },
+        title: { type: "string", description: "Optional short title for the delegated work." },
+      },
+      required: ["objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "cancel_thread",
+    description: "Cancel a coworker child thread. Defaults to the current thread when no threadId is supplied.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        threadId: { type: "string", description: "Thread id to cancel. Defaults to the current thread." },
+      },
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "get_thread_result",
+    description: "Poll a coworker child thread until it completes and return its result.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        threadId: { type: "string", description: "Child thread id to read." },
+      },
+      required: ["threadId"],
+    },
+    requiredCapability: null,
+    sideEffect: false,
+  },
+  {
+    name: "get_child_threads",
+    description: "List child coworker threads for the current thread with their latest objective and status.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    requiredCapability: null,
+    sideEffect: false,
+  },
   // ─── Deliberation Pattern Framework Tools (spec §6.8) ──────────────────────
   {
     name: "start_deliberation",
@@ -4076,6 +4131,9 @@ export async function executeTool(
   const params = sanitizeToolParams(toolName, rawParams);
   try {
   switch (toolName) {
+    case "deliberate_on": {
+      return deliberateOnMcpHandler(params, userId, context);
+    }
     case "list_work_capsules": {
       const { listWorkCapsulesTool } = await import("@/lib/work-capsules/mcp-handlers");
       return listWorkCapsulesTool(params);
@@ -4135,6 +4193,90 @@ export async function executeTool(
     case "get_runtime_coordination_map": {
       const { getRuntimeCoordinationMapTool } = await import("@/lib/runtime-coordination/mcp-handlers");
       return getRuntimeCoordinationMapTool(params);
+    }
+    case "spawn_work_thread": {
+      if (!context?.threadId) {
+        const message = "Error: spawn_work_thread requires caller thread context";
+        return {
+          success: false,
+          error: "missing_threadId",
+          message,
+          content: [{ type: "text", text: message }],
+        };
+      }
+      const { spawnWorkThread } = await import("@/lib/actions/agent-coworker");
+      const result = await spawnWorkThread(
+        {
+          parentThreadId: context.threadId,
+          objective: String(params["objective"] ?? ""),
+          title: typeof params["title"] === "string" ? params["title"] : undefined,
+          routeContext: context.routeContext,
+          agentId: context.agentId,
+        },
+        userId,
+      );
+      return {
+        success: true,
+        entityId: result.child.id,
+        message: "Started child thread.",
+        data: { child: result.child, taskRunId: result.taskRunId },
+      };
+    }
+    case "cancel_thread": {
+      const threadId = typeof params["threadId"] === "string" && params["threadId"].trim()
+        ? params["threadId"].trim()
+        : context?.threadId;
+      if (!threadId) {
+        return {
+          success: false,
+          error: "missing_threadId",
+          message: "cancel_thread requires a threadId or current thread context.",
+        };
+      }
+      const { cancelThread } = await import("@/lib/actions/agent-coworker");
+      const result = await cancelThread({ threadId }, userId);
+      return {
+        success: true,
+        entityId: threadId,
+        message: "Cancelled thread.",
+        data: result,
+      };
+    }
+    case "get_thread_result": {
+      const threadId = typeof params["threadId"] === "string" && params["threadId"].trim()
+        ? params["threadId"].trim()
+        : null;
+      if (!threadId) {
+        return {
+          success: false,
+          error: "missing_threadId",
+          message: "get_thread_result requires a threadId.",
+        };
+      }
+      const { getThreadResult } = await import("@/lib/actions/agent-coworker");
+      const result = await getThreadResult({ childId: threadId }, userId);
+      return {
+        success: true,
+        entityId: threadId,
+        message: "Thread completed.",
+        data: { result },
+      };
+    }
+    case "get_child_threads": {
+      if (!context?.threadId) {
+        return {
+          success: false,
+          error: "missing_threadId",
+          message: "get_child_threads requires a current thread context.",
+        };
+      }
+      const { getChildThreads } = await import("@/lib/actions/agent-coworker");
+      const threads = await getChildThreads({ parentThreadId: context.threadId }, userId);
+      return {
+        success: true,
+        message: `Found ${threads.length} child thread${threads.length === 1 ? "" : "s"}.`,
+        data: { threads },
+      };
     }
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()

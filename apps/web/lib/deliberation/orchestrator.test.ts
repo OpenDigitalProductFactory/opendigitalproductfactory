@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   taskRunCreate: vi.fn(),
   deliberationRunCreate: vi.fn(),
   deliberationRunUpdate: vi.fn(),
+  featureBuildUpdate: vi.fn(),
   taskNodeCreate: vi.fn(),
   taskNodeUpdate: vi.fn(),
   taskNodeEdgeCreate: vi.fn(),
@@ -32,6 +33,9 @@ vi.mock("@dpf/db", () => ({
     deliberationRun: {
       create: mocks.deliberationRunCreate,
       update: mocks.deliberationRunUpdate,
+    },
+    featureBuild: {
+      update: mocks.featureBuildUpdate,
     },
     taskNode: {
       create: mocks.taskNodeCreate,
@@ -114,6 +118,7 @@ beforeEach(() => {
   });
   mocks.deliberationRunCreate.mockResolvedValue({ id: "delib-1" });
   mocks.deliberationRunUpdate.mockResolvedValue({});
+  mocks.featureBuildUpdate.mockResolvedValue({});
   mocks.taskNodeUpdate.mockResolvedValue({});
   mocks.taskNodeEdgeCreate.mockResolvedValue({});
   const gen = mkNodeIdGen();
@@ -124,7 +129,7 @@ describe("orchestrateDeliberation — review pattern", () => {
   it("creates author, 2 reviewers, and adjudicator nodes with informs edges", async () => {
     mocks.getPattern.mockResolvedValue(makeReviewPattern());
 
-    await orchestrateDeliberation({
+    const result = await orchestrateDeliberation({
       userId: "user-1",
       patternSlug: "review",
       artifactType: "spec",
@@ -133,15 +138,28 @@ describe("orchestrateDeliberation — review pattern", () => {
       diversityMode: "single-model-multi-persona",
       activatedRiskLevel: "low",
     });
+    expect(mocks.featureBuildUpdate).not.toHaveBeenCalled();
 
     // TaskRun bootstrapped because no taskRunId supplied.
     expect(mocks.taskRunCreate).toHaveBeenCalledTimes(1);
     expect(mocks.taskRunCreate.mock.calls[0]![0].data.title).toContain(
       "Deliberation: review",
     );
+    expect(mocks.deliberationRunCreate.mock.calls[0]![0].data.metadata).toMatchObject({
+      requestedBy: "user-1",
+      requestedDiversity: "single-model-multi-persona",
+    });
 
     // 1 author + 2 reviewers + 0 skeptic (low risk, optional) + 1 adjudicator = 4 nodes
     expect(mocks.taskNodeCreate).toHaveBeenCalledTimes(4);
+    expect(result.branches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ roleSlug: "author", confidence: 0 }),
+        expect.objectContaining({ roleSlug: "reviewer", confidence: 0 }),
+      ]),
+    );
+    expect(result.consensusDecision.decision).toBe("escalate");
+    expect(result.consensusDecision.confidence).toBe(0);
 
     // Edges: 3 worker branches → adjudicator
     expect(mocks.taskNodeEdgeCreate).toHaveBeenCalledTimes(3);
@@ -165,6 +183,73 @@ describe("orchestrateDeliberation — review pattern", () => {
 
     // 1 author + 2 reviewers + 1 skeptic + 1 adjudicator = 5 nodes
     expect(mocks.taskNodeCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it("returns a consensus decision and persists build summary when buildId is supplied", async () => {
+    mocks.getPattern.mockResolvedValue(makeReviewPattern());
+
+    const result = await orchestrateDeliberation({
+      userId: "user-1",
+      buildId: "FB-123",
+      patternSlug: "review",
+      artifactType: "spec",
+      triggerSource: "explicit",
+      strategyProfile: "balanced",
+      diversityMode: "single-model-multi-persona",
+      activatedRiskLevel: "low",
+    });
+
+    expect(result.consensusDecision).toEqual(expect.objectContaining({
+      decision: "escalate",
+      confidence: 0,
+    }));
+    expect(result).toMatchObject({
+      deliberationRunId: "delib-1",
+      taskRunId: "taskrun-1",
+      taskRunBootstrapped: true,
+      requestedDiversity: "single-model-multi-persona",
+      actualDiversity: "single-model-multi-persona",
+      budgetHalted: false,
+      branchBudgetUsed: expect.any(Number),
+    });
+    expect(mocks.featureBuildUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { buildId: "FB-123" },
+    }));
+  });
+
+  it("supports the legacy positional signature with optional buildId", async () => {
+    mocks.getPattern.mockResolvedValue(makeReviewPattern());
+
+    const result = await orchestrateDeliberation(
+      "review",
+      { title: "Plan content" },
+      {
+        userId: "user-1",
+        taskRunId: null,
+        threadId: "thread-legacy",
+        routeContext: "legacy-review",
+      },
+      "FB-test",
+    );
+
+    expect(result.branches.length).toBeGreaterThan(0);
+    expect(result.branches[0]).toEqual(
+      expect.objectContaining({
+        roleSlug: expect.any(String),
+        confidence: expect.any(Number),
+        criticalObjection: expect.any(Boolean),
+      }),
+    );
+    expect(result.branches[0]).not.toHaveProperty("branchNodeId");
+    expect(result.consensusDecision.decision).toBe("escalate");
+    expect(mocks.taskRunCreate.mock.calls[0]![0].data).toMatchObject({
+      buildId: "FB-test",
+      threadId: "thread-legacy",
+      routeContext: "legacy-review",
+    });
+    expect(mocks.featureBuildUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { buildId: "FB-test" },
+    }));
   });
 });
 
@@ -242,6 +327,7 @@ describe("diversity degrades honestly — spec §9.5", () => {
 
     expect(result.requestedDiversity).toBe("multi-provider-heterogeneous");
     expect(result.actualDiversity).toBe("constrained");
+    expect(result.consensusDecision.decision).toBe("approve");
     expect(mocks.deliberationRunUpdate).toHaveBeenCalled();
     const updateCall = mocks.deliberationRunUpdate.mock.calls.find(
       (c) => c[0].data.metadata,
@@ -366,10 +452,17 @@ describe("budget cap halts cleanly — spec §13", () => {
       budgetUsd: null,
     });
 
-    // Failing branch does not halt the run — surviving branches still ran.
-    const failed = result.branches.filter((b) => b.status === "failed");
-    const completed = result.branches.filter((b) => b.status === "completed");
-    expect(failed.length).toBe(1);
-    expect(completed.length).toBeGreaterThanOrEqual(1);
+    // A dispatcher-level failure does not halt the run — surviving branches still ran.
+    expect(dispatcher.dispatch).toHaveBeenCalledTimes(3);
+    expect(result.branches.length).toBeGreaterThanOrEqual(3);
+    expect(result.branches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          roleSlug: "author",
+          criticalObjection: true,
+          objectionText: "no endpoints",
+        }),
+      ]),
+    );
   });
 });
