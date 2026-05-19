@@ -4,15 +4,18 @@ import { useEffect, useState, useTransition } from "react";
 
 import {
   issueMyMcpToken,
+  issueMyWriteMcpToken,
   listAvailableMcpScopes,
   listMyMcpTokens,
   revokeMyMcpToken,
   upgradeMyMcpTokenForCodingAgent,
 } from "@/lib/actions/mcp-tokens";
-import { defaultMcpTokenScopes } from "@/lib/mcp-token-scopes";
+import {
+  defaultMcpTokenScopes,
+  type McpTokenScopeTier,
+} from "@/lib/mcp-token-scopes";
 
 export interface McpTokenManagerProps {
-  contributionModelConfigured: boolean;
   baseUrl: string;
 }
 
@@ -21,6 +24,7 @@ type TokenRow = {
   name: string;
   prefix: string;
   capability: "read" | "write";
+  scope: McpTokenScopeTier;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -45,11 +49,12 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [scopes, setScopes] = useState<string[]>([]);
   const [view, setView] = useState<View>({ kind: "idle" });
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   // Form state
   const [formName, setFormName] = useState("");
-  const [formCapability, setFormCapability] = useState<"read" | "write">("read");
+  const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
   const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
 
@@ -80,10 +85,16 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     });
   }
 
-  function openForm() {
+  function applyScopeDefaults(scope: McpTokenScopeTier) {
+    setFormScope(scope);
+    setFormScopes(new Set(defaultMcpTokenScopes(scopes, scope)));
+  }
+
+  function openForm(scope: McpTokenScopeTier = "read") {
+    setInlineError(null);
     setFormName("");
-    setFormCapability("read");
-    setFormScopes(new Set(defaultMcpTokenScopes(scopes)));
+    setFormScope(scope);
+    setFormScopes(new Set(defaultMcpTokenScopes(scopes, scope)));
     setFormExpires("90");
     setView({ kind: "form", error: null });
   }
@@ -102,13 +113,29 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       const expiresInDays = formExpires === "never" ? null : parseInt(formExpires, 10);
       const result = await issueMyMcpToken({
         name: formName.trim(),
-        capability: formCapability,
+        capability: formScope === "read" ? "read" : "write",
+        scope: formScope,
         scopes: [...formScopes],
         expiresInDays,
         baseUrl: props.baseUrl,
       });
       if (!result.ok) {
         setView({ kind: "form", error: result.message });
+        return;
+      }
+      setView({ kind: "issued", payload: result });
+      refresh();
+    });
+  }
+
+  function issueWriteToken() {
+    setInlineError(null);
+    startTransition(async () => {
+      const result = await issueMyWriteMcpToken({
+        baseUrl: props.baseUrl,
+      });
+      if (!result.ok) {
+        setInlineError(result.message);
         return;
       }
       setView({ kind: "issued", payload: result });
@@ -143,21 +170,29 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             Use these to point Claude Code, Codex CLI, or VS Code MCP at this DPF install.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openForm}
-          disabled={pending}
-          className="rounded bg-[var(--dpf-accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          Generate token
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={issueWriteToken}
+            disabled={pending}
+            className="rounded bg-[var(--dpf-accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            Issue write token
+          </button>
+          <button
+            type="button"
+            onClick={() => openForm("read")}
+            disabled={pending}
+            className="rounded border border-[var(--dpf-border)] px-3 py-1.5 text-sm font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
+          >
+            Generate token
+          </button>
+        </div>
       </div>
 
-      {!props.contributionModelConfigured && (
-        <div className="mt-3 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-muted)]">
-          Write-capable tokens require contribution mode to be configured first
-          (so any external write that becomes a code contribution is traceable
-          to a real GitHub identity). Read-only tokens can issue freely.
+      {inlineError && (
+        <div className="mt-3 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-accent)]">
+          {inlineError}
         </div>
       )}
 
@@ -182,12 +217,12 @@ export function McpTokenManager(props: McpTokenManagerProps) {
                     </code>
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs ${
-                        t.capability === "write"
+                        t.scope !== "read"
                           ? "bg-[var(--dpf-accent)] text-white"
                           : "border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
                       }`}
                     >
-                      {t.capability}
+                      {t.scope}
                     </span>
                     {revoked && (
                       <span className="rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-xs text-[var(--dpf-muted)]">
@@ -238,7 +273,8 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "color-mix(in srgb, var(--dpf-text) 55%, transparent)" }}
           onClick={() => setView({ kind: "idle" })}
         >
           <div
@@ -260,37 +296,29 @@ export function McpTokenManager(props: McpTokenManagerProps) {
               </label>
 
               <fieldset className="text-sm">
-                <legend className="text-[var(--dpf-text)]">Capability</legend>
-                <label className="mt-1 mr-4 inline-flex items-center gap-1.5 text-[var(--dpf-text)]">
-                  <input
-                    type="radio"
-                    name="cap"
-                    value="read"
-                    checked={formCapability === "read"}
-                    onChange={() => setFormCapability("read")}
-                  />
-                  Read-only
-                </label>
-                <label
-                  className={`mt-1 inline-flex items-center gap-1.5 ${
-                    props.contributionModelConfigured
-                      ? "text-[var(--dpf-text)]"
-                      : "text-[var(--dpf-muted)]"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="cap"
-                    value="write"
-                    checked={formCapability === "write"}
-                    disabled={!props.contributionModelConfigured}
-                    onChange={() => setFormCapability("write")}
-                  />
-                  Write
-                  {!props.contributionModelConfigured && (
-                    <span className="text-xs">(configure contribution mode first)</span>
-                  )}
-                </label>
+                <legend className="text-[var(--dpf-text)]">Token scope</legend>
+                <div className="mt-1 grid grid-cols-3 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-1">
+                  {(["read", "write", "admin"] as const).map((scope) => (
+                    <label
+                      key={scope}
+                      className={`flex cursor-pointer items-center justify-center rounded px-2 py-1.5 text-xs font-medium ${
+                        formScope === scope
+                          ? "bg-[var(--dpf-accent)] text-white"
+                          : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="scope"
+                        value={scope}
+                        checked={formScope === scope}
+                        onChange={() => applyScopeDefaults(scope)}
+                        className="sr-only"
+                      />
+                      {scope}
+                    </label>
+                  ))}
+                </div>
               </fieldset>
 
               <fieldset className="text-sm">
@@ -354,7 +382,8 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "color-mix(in srgb, var(--dpf-text) 55%, transparent)" }}
         >
           <div className="w-full max-w-2xl rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
             <h3 className="text-base font-semibold text-[var(--dpf-text)]">Token issued — copy now</h3>

@@ -29,23 +29,6 @@ const tokenFindMany = prisma.mcpApiToken.findMany as unknown as ReturnType<typeo
 const tokenUpdate = prisma.mcpApiToken.update as unknown as ReturnType<typeof vi.fn>;
 const cfgFindUnique = prisma.platformDevConfig.findUnique as unknown as ReturnType<typeof vi.fn>;
 
-async function withFlag<T>(
-  value: string | undefined,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const orig = process.env.CONTRIBUTION_MODEL_ENABLED;
-  if (value === undefined) delete process.env.CONTRIBUTION_MODEL_ENABLED;
-  else process.env.CONTRIBUTION_MODEL_ENABLED = value;
-  try {
-    // Must await inside the try so the env var is still set when the
-    // contributionMode gate runs in async code.
-    return await fn();
-  } finally {
-    if (orig === undefined) delete process.env.CONTRIBUTION_MODEL_ENABLED;
-    else process.env.CONTRIBUTION_MODEL_ENABLED = orig;
-  }
-}
-
 beforeEach(() => {
   vi.resetAllMocks();
   delete process.env.CONTRIBUTION_MODEL_ENABLED;
@@ -112,21 +95,22 @@ describe("issueMcpApiToken — happy path", () => {
     expect(result.expiresAt).toBeNull();
   });
 
-  it("flag-on: issues a write token when contributionModel is set", async () => {
+  it("issues an admin token when requested", async () => {
     cfgFindUnique.mockResolvedValue({
       contributionMode: "selective",
       contributionModel: "fork-pr",
     });
-    const result = await withFlag("true", () =>
-      issueMcpApiToken({
-        userId: "u1",
-        name: "Mark write",
-        capability: "write",
-        scopes: ["backlog_write"],
-        expiresInDays: 30,
-      }),
-    );
+    const result = await issueMcpApiToken({
+      userId: "u1",
+      name: "Mark admin",
+      capability: "write",
+      scope: "admin",
+      scopes: ["admin_read", "admin_write"],
+      expiresInDays: 30,
+    });
     expect(result.ok).toBe(true);
+    const data = tokenCreate.mock.calls[0]![0].data;
+    expect(data.scope).toBe("admin");
   });
 
   it("flag-off: issues a write token when contributionMode is selective", async () => {
@@ -144,6 +128,22 @@ describe("issueMcpApiToken — happy path", () => {
       expiresInDays: 30,
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("persists the coarse MCP token scope separately from granular grants", async () => {
+    cfgFindUnique.mockResolvedValue(null);
+    const result = await issueMcpApiToken({
+      userId: "u1",
+      name: "Write MCP token",
+      capability: "write",
+      scope: "write",
+      scopes: ["backlog_read", "work_capsule_write"],
+      expiresInDays: 30,
+    });
+    if (!result.ok) throw new Error(`expected ok, got: ${result.error}`);
+    const data = tokenCreate.mock.calls[0]![0].data;
+    expect(data.scope).toBe("write");
+    expect(data.capability).toBeUndefined();
   });
 
   it("flag-off: issues a write token when contributionMode is contribute_all", async () => {
@@ -224,56 +224,48 @@ describe("issueMcpApiToken — rejections", () => {
     expect(result.error).toBe("invalid_capability");
   });
 
-  it("rejects write-capable token when PlatformDevConfig row is missing", async () => {
+  it("rejects unknown coarse token scope", async () => {
+    const result = await issueMcpApiToken({
+      userId: "u1",
+      name: "x",
+      capability: "write",
+      scope: "owner" as never,
+      scopes: ["backlog_read"],
+      expiresInDays: 30,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("invalid_scope");
+  });
+
+  it("issues write-capable tokens without requiring contribution-mode setup", async () => {
     cfgFindUnique.mockResolvedValue(null);
     const result = await issueMcpApiToken({
       userId: "u1",
       name: "x",
       capability: "write",
+      scope: "write",
       scopes: ["backlog_write"],
       expiresInDays: 30,
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("unreachable");
-    expect(result.error).toBe("contribution_mode_required");
-    expect(tokenCreate).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(tokenCreate).toHaveBeenCalledOnce();
   });
 
-  it("flag-on: rejects write-capable token when contributionModel is null", async () => {
+  it("does not use contributionModel to block write token issuance", async () => {
     cfgFindUnique.mockResolvedValue({
       contributionMode: "selective",
-      contributionModel: null,
-    });
-    const result = await withFlag("true", () =>
-      issueMcpApiToken({
-        userId: "u1",
-        name: "x",
-        capability: "write",
-        scopes: ["backlog_write"],
-        expiresInDays: 30,
-      }),
-    );
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("unreachable");
-    expect(result.error).toBe("contribution_mode_required");
-  });
-
-  it("flag-off: rejects write-capable token when contributionMode is fork_only", async () => {
-    // fork_only means "stay private" — writes have nowhere to go.
-    cfgFindUnique.mockResolvedValue({
-      contributionMode: "fork_only",
       contributionModel: null,
     });
     const result = await issueMcpApiToken({
       userId: "u1",
       name: "x",
       capability: "write",
+      scope: "write",
       scopes: ["backlog_write"],
       expiresInDays: 30,
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("unreachable");
-    expect(result.error).toBe("contribution_mode_required");
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -330,7 +322,7 @@ describe("resolveMcpApiToken", () => {
       userId: "u1",
       agentId: null,
       scopes: ["backlog_read"],
-      capability: "read",
+      scope: "read",
       revokedAt: new Date(),
       expiresAt: null,
     });
@@ -344,7 +336,7 @@ describe("resolveMcpApiToken", () => {
       userId: "u1",
       agentId: null,
       scopes: ["backlog_read"],
-      capability: "read",
+      scope: "read",
       revokedAt: null,
       expiresAt: new Date(Date.now() - 1000),
     });
@@ -358,7 +350,7 @@ describe("resolveMcpApiToken", () => {
       userId: "u1",
       agentId: "AGT-100",
       scopes: ["backlog_read", "backlog_write"],
-      capability: "write",
+      scope: "write",
       revokedAt: null,
       expiresAt: new Date(Date.now() + 1_000_000),
     });
@@ -368,6 +360,7 @@ describe("resolveMcpApiToken", () => {
     expect(result?.userId).toBe("u1");
     expect(result?.agentId).toBe("AGT-100");
     expect(result?.scopes).toEqual(["backlog_read", "backlog_write"]);
+    expect(result?.scope).toBe("write");
     expect(result?.capability).toBe("write");
     // lastUsedAt update is fire-and-forget; allow microtask to flush
     await new Promise((r) => setImmediate(r));
@@ -456,13 +449,13 @@ describe("addScopesToMcpApiToken", () => {
 });
 
 describe("listMcpApiTokens", () => {
-  it("returns rows for the given user with capability defaulted", async () => {
+  it("returns rows for the given user with capability derived from scope", async () => {
     tokenFindMany.mockResolvedValue([
       {
         id: "tok_1",
         name: "x",
         prefix: "dpfmcp_X",
-        capability: "read",
+        scope: "admin",
         scopes: ["backlog_read"],
         lastUsedAt: null,
         expiresAt: null,
@@ -473,6 +466,7 @@ describe("listMcpApiTokens", () => {
     const list = await listMcpApiTokens("u1");
     expect(list).toHaveLength(1);
     expect(list[0]?.id).toBe("tok_1");
-    expect(list[0]?.capability).toBe("read");
+    expect(list[0]?.scope).toBe("admin");
+    expect(list[0]?.capability).toBe("write");
   });
 });
