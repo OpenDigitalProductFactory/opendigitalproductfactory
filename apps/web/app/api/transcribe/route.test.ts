@@ -99,7 +99,7 @@ describe("POST /api/transcribe — success projection", () => {
       language: "en",
       durationMs: 1234,
       provider: "speaches",
-      model: "Systran/faster-distil-whisper-large-v3",
+      model: "base",
       biasUsed: false,
       biasRedacted: false,
     });
@@ -123,7 +123,7 @@ describe("POST /api/transcribe — success projection", () => {
       language: "en",
       durationMs: 1234,
       provider: "speaches",
-      model: "Systran/faster-distil-whisper-large-v3",
+      model: "base",
       biasUsed: false,
       biasRedacted: false,
     });
