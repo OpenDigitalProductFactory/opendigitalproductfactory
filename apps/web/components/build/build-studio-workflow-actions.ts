@@ -10,6 +10,7 @@ import {
   normalizeVerificationOutput,
   type NormalizedVerificationOutput,
 } from "@/lib/build/verification-output";
+import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type {
   BuildFailureAxis,
   ResumeImplementationModeDetail,
@@ -103,6 +104,7 @@ export type WorkflowStageGuidance = {
 type ActionInput = {
   build: FeatureBuildRow;
   governedBacklogEnabled: boolean;
+  progressVisibility?: BuildProgressVisibility | null;
 };
 
 type StageGuidanceInput = ActionInput & {
@@ -151,19 +153,26 @@ type ImplementationConcernState = {
   verification: NormalizedVerificationOutput;
   nonCleanTasks: NormalizedTaskResult[];
   failureAxis: BuildFailureAxis | null;
+  operatorAction: string | null;
   resumeMode: ResumeImplementationModeDetail;
   hasRecoverableConcern: boolean;
+  truthSources: TruthNumericSnapshot[];
 };
 
-function getImplementationConcernState(build: FeatureBuildRow): ImplementationConcernState {
-  const taskResults = normalizeTaskResults(build.taskResults);
+function getImplementationConcernState(
+  build: FeatureBuildRow,
+  progressVisibility: BuildProgressVisibility | null | undefined,
+): ImplementationConcernState {
+  const taskResults = progressVisibility?.tasks ?? normalizeTaskResults(build.taskResults);
   const verification = normalizeVerificationOutput(build.verificationOut);
   const nonCleanTasks = taskResults.tasks.filter((task) => task.outcome !== "DONE");
   const explicitFailureAxis = explicitFailureAxisOrNull(build.verificationOut);
   const verificationFailed =
     verification.typecheckPassed === false
     || explicitFailureAxis != null;
-  const failureAxis = deriveFailureAxis(nonCleanTasks, verification, explicitFailureAxis);
+  const failureAxis =
+    progressVisibility?.statusHeading.failureAxis
+    ?? deriveFailureAxis(nonCleanTasks, verification, explicitFailureAxis);
   const resumeMode = deriveResumeMode({
     build,
     taskResults,
@@ -176,8 +185,10 @@ function getImplementationConcernState(build: FeatureBuildRow): ImplementationCo
     verification,
     nonCleanTasks,
     failureAxis,
+    operatorAction: progressVisibility?.statusHeading.operatorAction ?? null,
     resumeMode,
     hasRecoverableConcern: nonCleanTasks.length > 0 || verificationFailed,
+    truthSources: [progressVisibility?.progress.primary ?? taskResults.source],
   };
 }
 
@@ -268,7 +279,9 @@ function buildResumeAction(args: {
   const blockedCount = state.nonCleanTasks.length;
   const axis = state.failureAxis ?? "unknown";
   const title =
-    axis === "out-of-scope-noise"
+    state.operatorAction
+      ? state.operatorAction
+      : axis === "out-of-scope-noise"
       ? "Review workspace noise before retrying this build"
       : blockedCount > 0
         ? `Click Resume to re-execute ${blockedCount} blocked task${blockedCount === 1 ? "" : "s"}`
@@ -290,7 +303,7 @@ function buildResumeAction(args: {
     coworkerLabel: args.coworkerLabel,
     coworkerPrompt: args.coworkerPrompt,
     failureAxis: state.failureAxis,
-    truthSources: [state.taskResults.source],
+    truthSources: state.truthSources,
     resumeMode: state.resumeMode,
   };
 }
@@ -311,6 +324,7 @@ function hasCompletedUxVerification(build: FeatureBuildRow): boolean {
 export function deriveBuildStudioWorkflowAction({
   build,
   governedBacklogEnabled,
+  progressVisibility,
 }: ActionInput): BuildStudioWorkflowAction {
   const requiresApproval =
     isApprovalManagedBacklogBuild(build, governedBacklogEnabled)
@@ -369,7 +383,7 @@ export function deriveBuildStudioWorkflowAction({
   }
 
   if (build.phase === "build") {
-    const concernState = getImplementationConcernState(build);
+    const concernState = getImplementationConcernState(build, progressVisibility);
     if (concernState.hasRecoverableConcern) {
       return buildResumeAction({
         state: concernState,
@@ -393,7 +407,7 @@ export function deriveBuildStudioWorkflowAction({
   }
 
   if (build.phase === "review") {
-    const concernState = getImplementationConcernState(build);
+    const concernState = getImplementationConcernState(build, progressVisibility);
     if (concernState.hasRecoverableConcern) {
       return buildResumeAction({
         state: concernState,
