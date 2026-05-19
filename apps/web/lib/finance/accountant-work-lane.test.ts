@@ -44,19 +44,24 @@ describe("bookkeeper accountant work lane", () => {
     );
   });
 
-  it("derives QuickBooks missing entity families from the readiness descriptor", () => {
+  it("derives QuickBooks read and missing entity families from the readiness descriptor", () => {
     const lane = getBookkeeperAccountantWorkLane();
     const quickBooks = lane.providerBoundaries.find((boundary) => boundary.provider === "quickbooks");
 
-    expect(quickBooks?.currentCoverage).toEqual(["Company profile", "Customers", "Invoices"]);
+    expect(quickBooks?.currentCoverage).toEqual([
+      "Company profile",
+      "Customers",
+      "Invoices",
+      "Vendors",
+      "Bills",
+      "Expenses",
+      "Payments",
+      "Accounts",
+      "Reports",
+    ]);
     expect(quickBooks?.missingCoverage).toEqual(
       expect.arrayContaining([
-        "Vendors",
-        "Bills",
-        "Payments",
-        "Accounts",
         "Bank transactions",
-        "Reports",
         "Tax",
         "Accountant workflow",
       ]),

@@ -3,8 +3,14 @@ import { MockAgent } from "undici";
 
 import {
   QuickBooksAccountingError,
+  getQuickBooksReport,
+  listQuickBooksAccounts,
+  listQuickBooksBills,
+  listQuickBooksExpenses,
   probeQuickBooksAccounting,
   resolveAccountingBaseUrl,
+  listQuickBooksPayments,
+  listQuickBooksVendors,
 } from "./accounting-client";
 
 describe("resolveAccountingBaseUrl", () => {
@@ -122,5 +128,104 @@ describe("probeQuickBooksAccounting", () => {
         dispatcher: mockAgent,
       }),
     ).rejects.not.toThrow(/secret-access-token/);
+  });
+});
+
+describe("expanded QuickBooks read coverage", () => {
+  let mockAgent: MockAgent;
+
+  beforeEach(() => {
+    mockAgent = new MockAgent();
+    mockAgent.disableNetConnect();
+  });
+
+  afterEach(async () => {
+    await mockAgent.close();
+  });
+
+  it("queries vendor, bill, expense, payment, and account entities as read-only lists", async () => {
+    const pool = mockAgent.get("https://sandbox-quickbooks.api.intuit.com");
+    const entityResponses = [
+      ["Vendor", { Id: "v-1", DisplayName: "Acme Supplies" }],
+      ["Bill", { Id: "b-1", DocNumber: "BILL-1", Balance: 220 }],
+      ["Purchase", { Id: "p-1", TotalAmt: 42.75, PaymentType: "CreditCard" }],
+      ["Payment", { Id: "pay-1", TotalAmt: 1250 }],
+      ["Account", { Id: "a-1", Name: "Checking", AccountType: "Bank" }],
+    ] as const;
+
+    for (const [entity, response] of entityResponses) {
+      pool
+        .intercept({
+          path: (value) =>
+            value.startsWith("/v3/company/9130355377388383/query?") &&
+            decodeURIComponent(value.replace(/\+/g, "%20")).includes(
+              `select * from ${entity} maxresults 5`,
+            ),
+          method: "GET",
+        })
+        .reply(200, {
+          QueryResponse: {
+            [entity]: [response],
+          },
+        });
+    }
+
+    const params = {
+      environment: "sandbox" as const,
+      realmId: "9130355377388383",
+      accessToken: "access-token-123",
+      dispatcher: mockAgent,
+      limit: 5,
+    };
+
+    await expect(listQuickBooksVendors(params)).resolves.toEqual([
+      { Id: "v-1", DisplayName: "Acme Supplies" },
+    ]);
+    await expect(listQuickBooksBills(params)).resolves.toEqual([
+      { Id: "b-1", DocNumber: "BILL-1", Balance: 220 },
+    ]);
+    await expect(listQuickBooksExpenses(params)).resolves.toEqual([
+      { Id: "p-1", TotalAmt: 42.75, PaymentType: "CreditCard" },
+    ]);
+    await expect(listQuickBooksPayments(params)).resolves.toEqual([
+      { Id: "pay-1", TotalAmt: 1250 },
+    ]);
+    await expect(listQuickBooksAccounts(params)).resolves.toEqual([
+      { Id: "a-1", Name: "Checking", AccountType: "Bank" },
+    ]);
+  });
+
+  it("reads QuickBooks report payloads without introducing write operations", async () => {
+    mockAgent
+      .get("https://sandbox-quickbooks.api.intuit.com")
+      .intercept({
+        path: "/v3/company/9130355377388383/reports/ProfitAndLoss",
+        method: "GET",
+      })
+      .reply(200, {
+        Header: {
+          ReportName: "ProfitAndLoss",
+        },
+        Rows: {
+          Row: [],
+        },
+      });
+
+    await expect(
+      getQuickBooksReport({
+        environment: "sandbox",
+        realmId: "9130355377388383",
+        accessToken: "access-token-123",
+        dispatcher: mockAgent,
+        reportName: "ProfitAndLoss",
+      }),
+    ).resolves.toEqual({
+      Header: {
+        ReportName: "ProfitAndLoss",
+      },
+      Rows: {
+        Row: [],
+      },
+    });
   });
 });
