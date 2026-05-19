@@ -193,8 +193,8 @@ describe("Build Disciplines — Full Flow Integration", () => {
 }
 \`\`\``;
       const result = parseReviewResponse(raw);
-      expect(result.decision).toBe("pass");
-      expect(result.issues).toHaveLength(0);
+      expect(result!.decision).toBe("pass");
+      expect(result!.issues).toHaveLength(0);
     });
 
     it("parses a real-world fail response with issues", () => {
@@ -207,10 +207,10 @@ describe("Build Disciplines — Full Flow Integration", () => {
         "summary": "Design needs more rigor before planning can begin."
       }`;
       const result = parseReviewResponse(raw);
-      expect(result.decision).toBe("fail");
-      expect(result.issues).toHaveLength(2);
-      expect(result.issues[0].severity).toBe("critical");
-      expect(result.issues[1].severity).toBe("important");
+      expect(result!.decision).toBe("fail");
+      expect(result!.issues).toHaveLength(2);
+      expect(result!.issues[0].severity).toBe("critical");
+      expect(result!.issues[1].severity).toBe("important");
     });
 
     it("returns null for LLM hallucination (non-JSON response)", () => {
