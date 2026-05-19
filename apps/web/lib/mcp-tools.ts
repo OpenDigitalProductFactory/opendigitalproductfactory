@@ -4201,7 +4201,6 @@ export async function executeTool(
           success: false,
           error: "missing_threadId",
           message,
-          content: [{ type: "text", text: message }],
         };
       }
       const { spawnWorkThread } = await import("@/lib/actions/agent-coworker");
