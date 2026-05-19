@@ -32,9 +32,7 @@ jobs:
           # "+" lines and diff headers are excluded.
           REMOVED=$(
             git diff origin/main...HEAD -- packages/db/prisma/schema.prisma \
-              | grep '^-' \
-              | grep -v '^---' \
-              | grep -E '^\-  [a-zA-Z@]|^\-(model|enum) '
+              | awk '/^-/ && !/^---/ && (/^-  [a-zA-Z@]/ || /^-(model|enum) /) { print }'
           )
 
           if [ -n "$REMOVED" ]; then
