@@ -379,7 +379,8 @@
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "start_deliberation"
+        "start_deliberation",
+        "deliberate_on"
       ],
       "implies": []
     },
@@ -391,6 +392,28 @@
       "honored_by_tools": [
         "get_deliberation_outcome",
         "get_deliberation_status"
+      ],
+      "implies": []
+    },
+    {
+      "key": "thread_read",
+      "description": "Read child thread status and results for specialist subtask delegation.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "get_thread_result",
+        "get_child_threads"
+      ],
+      "implies": []
+    },
+    {
+      "key": "thread_write",
+      "description": "Spawn or cancel specialist subtask child threads.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "spawn_work_thread",
+        "cancel_thread"
       ],
       "implies": []
     },
