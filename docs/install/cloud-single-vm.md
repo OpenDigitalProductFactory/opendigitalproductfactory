@@ -50,11 +50,11 @@ For the architectural background:
 
 ## Quick provision
 
-### Option A — Terraform (AWS or GCP, recommended)
+### Option A — Terraform (AWS, GCP, or Azure, recommended)
 
-One-command Terraform modules are available for AWS and GCP. They provision
-the VM, firewall rules, IAM role/service account, and run the DPF installer
-via cloud-init:
+One-command Terraform modules are available for AWS, GCP, and Azure. They
+provision the VM, firewall rules, IAM role/service account, and run the DPF
+installer via cloud-init:
 
 **AWS (EC2):**
 
@@ -114,10 +114,47 @@ gcloud compute ssh ubuntu@$(terraform output -raw instance_name) \
 Typical install time: **8-12 minutes**. Variables reference:
 [`infra/terraform/single-vm/gcp/variables.tf`](../../infra/terraform/single-vm/gcp/variables.tf).
 
-### Option B — Manual provisioning (Azure / other clouds)
+**Azure (VM):**
+
+```bash
+# Create the resource group first (the module does not create it)
+az group create --name dpf-rg --location eastus
+
+cd infra/terraform/single-vm/azure
+
+cat > terraform.tfvars << 'EOF'
+resource_group_name  = "dpf-rg"
+location             = "eastus"
+admin_ssh_public_key = "ssh-rsa AAAA..."   # contents of ~/.ssh/id_rsa.pub
+dpf_admin_password   = "change-me-long-enough-16chars"
+llm_base_url         = "https://api.openai.com/v1"
+llm_model            = "gpt-4o"
+embedding_model      = "text-embedding-3-small"
+EOF
+
+terraform init && terraform apply
+```
+
+After `apply`, watch progress via SSH (if port 22 is open) or Azure Run Command:
+
+```bash
+# SSH (requires admin_source_ranges set in tfvars)
+ssh ubuntu@$(terraform output -raw public_ip) 'tail -f /var/log/dpf-install.log'
+
+# Or without SSH — Azure Run Command (output buffered, not live):
+az vm run-command invoke \
+  --resource-group dpf-rg --name dpf-portal \
+  --command-id RunShellScript \
+  --scripts 'tail -n 50 /var/log/dpf-install.log'
+```
+
+Typical install time: **8-12 minutes**. Variables reference:
+[`infra/terraform/single-vm/azure/variables.tf`](../../infra/terraform/single-vm/azure/variables.tf).
+
+### Option B — Manual provisioning (other clouds)
 
 The runbook below covers manual VM provisioning for clouds without a
-Terraform module yet. Azure is the next planned module.
+Terraform module (DigitalOcean, Hetzner, Linode, etc.).
 
 ### AWS (EC2) — manual
 
@@ -295,9 +332,9 @@ Same lifecycle commands as bare-metal Linux:
 
 Out of scope for the Single VM Phase 0 substrate:
 
-- **Terraform (Azure)** — AWS and GCP modules shipped in Phase 0
-  (`infra/terraform/single-vm/{aws,gcp}/`). Azure (VM) follows the same
-  pattern and is tracked in BI-22332688.
+- **Terraform (other clouds)** — AWS, GCP, and Azure modules shipped in Phase 0
+  (`infra/terraform/single-vm/{aws,gcp,azure}/`). DigitalOcean, Hetzner,
+  and Linode are community-contributed follow-ons tracked in BI-22332688.
 - **HA / multi-AZ** — single VM by definition. Pick the Managed k8s
   substrate if you need HA today.
 - **PITR backups** — disk snapshots are the operator's responsibility.
