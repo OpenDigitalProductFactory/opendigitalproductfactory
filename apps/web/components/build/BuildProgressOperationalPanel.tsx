@@ -31,15 +31,10 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
         <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">Operational status</p>
+              <p className="text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">Task progress</p>
               <h3 className="mt-1 text-base font-semibold text-[var(--dpf-text)]">
-                {projection.statusHeading.operatorAction}
+                {completed} / {total} tasks complete
               </h3>
-              {projection.statusHeading.failureAxis && (
-                <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                  Failure axis: {projection.statusHeading.failureAxis}
-                </p>
-              )}
             </div>
             <TruthSourceBadge
               source={projection.progress.primary.source}
@@ -50,9 +45,7 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
 
           <div className="mt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-[var(--dpf-text)]">
-                {completed} / {total} tasks complete
-              </div>
+              <div className="text-sm font-semibold text-[var(--dpf-text)]">DB taskResults progress</div>
               <div className="text-xs text-[var(--dpf-muted)]">{percent}%</div>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded bg-[var(--dpf-surface-2)]">

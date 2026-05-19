@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { BuildSandboxCard } from "./BuildSandboxCard";
 import type { BuildSandboxState } from "@/lib/build/sandbox-state";
 
@@ -47,7 +47,7 @@ function makeSandbox(): BuildSandboxState {
       behindBy: 0,
       dirty: false,
       localSourceChangeCount: 0,
-      checkedAt: "2026-05-18T12:00:00.000Z",
+      checkedAt: new Date().toISOString(),
       reason: "Sandbox source tree matches origin/main.",
     },
     observedAt: "2026-05-18T12:00:00.000Z",
@@ -56,10 +56,14 @@ function makeSandbox(): BuildSandboxState {
 }
 
 describe("BuildSandboxCard", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders branch, source diffstat, and expected plan-file reality", () => {
     render(<BuildSandboxCard sandbox={makeSandbox()} />);
 
-    expect(screen.getByText("Sandbox")).toBeInTheDocument();
+    expect(screen.getAllByText("Sandbox").length).toBeGreaterThan(0);
     expect(screen.getByText("build/FB-123")).toBeInTheDocument();
     expect(screen.getByText("abcdef12")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
@@ -69,5 +73,21 @@ describe("BuildSandboxCard", () => {
     expect(screen.getAllByText("apps/web/components/build/BuildSandboxCard.tsx")).toHaveLength(2);
     expect(screen.getByText("+42 -3")).toBeInTheDocument();
     expect(screen.getByText("missing")).toBeInTheDocument();
+  });
+
+  it("marks stale persisted source-currency snapshots", () => {
+    render(
+      <BuildSandboxCard
+        sandbox={{
+          ...makeSandbox(),
+          sourceCurrency: {
+            ...makeSandbox().sourceCurrency!,
+            checkedAt: "2000-01-01T00:00:00.000Z",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Source currency snapshot is stale.")).toBeInTheDocument();
   });
 });

@@ -136,13 +136,16 @@ function makeProjection(): BuildProgressVisibility {
 }
 
 describe("BuildProgressOperationalPanel", () => {
-  it("renders the operational progress surface with source-labelled cards", () => {
+  it("renders evidence without duplicating the top command status", () => {
     render(<BuildProgressOperationalPanel projection={makeProjection()} />);
 
+    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Click Resume to re-execute 1 blocked task")).not.toBeInTheDocument();
+    expect(screen.getByText("Task progress")).toBeInTheDocument();
     expect(screen.getByText("0 / 16 tasks complete")).toBeInTheDocument();
     expect(screen.getAllByText("DB").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Chat").length).toBeGreaterThan(0);
-    expect(screen.getByText("Sandbox")).toBeInTheDocument();
+    expect(screen.getAllByText("Sandbox").length).toBeGreaterThan(0);
     expect(screen.getByText("Dispatch")).toBeInTheDocument();
     expect(screen.getByText("Verification")).toBeInTheDocument();
     expect(screen.getByText("Agent has been quiet for 7m")).toBeInTheDocument();

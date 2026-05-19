@@ -15,6 +15,7 @@ import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visi
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
+import { TruthSourceBadge } from "./TruthSourceBadge";
 import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 
 type Props = {
@@ -152,7 +153,7 @@ export function BuildStudioWorkflowActionCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
-              Studio Control
+              Build Status
             </p>
             <h4 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">
               {action.title}
@@ -165,6 +166,18 @@ export function BuildStudioWorkflowActionCard({
             {build.phase}
           </span>
         </div>
+
+        {action.truthSources && action.truthSources.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {action.truthSources.map((source) => (
+              <TruthSourceBadge
+                key={`${source.source}-${source.observedAt ?? "unknown"}`}
+                source={source.source}
+                observedAt={source.observedAt}
+              />
+            ))}
+          </div>
+        )}
 
         {action.disabledReason && (
           <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs leading-relaxed text-[var(--dpf-muted)]">
