@@ -48,6 +48,9 @@ import {
 
 const MAX_DURATION_ORCHESTRATOR_MS = 2_400_000; // 40 minutes — tasks average 2 min, 14-task builds need ~30 min
 const MAX_SPECIALIST_RETRIES = 2;
+export const MAX_SCOPED_TASK_CONTEXT_CHARS = 8_000;
+const MAX_TASK_ARTIFACT_SUMMARY_CHARS = 3_200;
+const MAX_TASK_ARTIFACT_ENTRY_CHARS = 320;
 
 export function resolveBuildProviderRunner(input: {
   agentId?: BuildAgentId;
@@ -134,6 +137,162 @@ function sanitizeSpecialistOutput(raw: string): string {
   }
 
   return cleaned;
+}
+
+function clipText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  if (maxChars <= 24) return value.slice(0, maxChars);
+  return `${value.slice(0, maxChars - 24).trimEnd()}\n[truncated to fit budget]`;
+}
+
+function conciseArtifactText(content: string): string {
+  const cleaned = sanitizeSpecialistOutput(content)
+    .replace(/RAW_HISTORY_SENTINEL[^\r\n]*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return "completed in prior run";
+  return clipText(cleaned, MAX_TASK_ARTIFACT_ENTRY_CHARS);
+}
+
+function extractVerificationHint(content: string): string | undefined {
+  const lower = content.toLowerCase();
+  const hints: string[] = [];
+  if (/typecheck[\s:]*pass/i.test(content) || lower.includes("no type errors")) {
+    hints.push("typecheck pass");
+  } else if (/typecheck[\s:]*fail/i.test(content) || /type\s*error/i.test(content)) {
+    hints.push("typecheck needs review");
+  }
+  const passMatch = content.match(/(\d+)\s*(?:tests?\s+)?pass(?:ing|ed)?/i);
+  const failMatch = content.match(/(\d+)\s*(?:tests?\s+)?fail(?:ing|ed|ures?)?/i);
+  if (passMatch || failMatch) {
+    hints.push(`${passMatch?.[1] ?? "0"} pass/${failMatch?.[1] ?? "0"} fail`);
+  }
+  return hints.length > 0 ? hints.join("; ") : undefined;
+}
+
+export type TaskArtifactEntry = {
+  taskIndex: number;
+  title: string;
+  specialist: SpecialistRole | string;
+  outcome: SpecialistOutcome | string;
+  files: string[];
+  summary: string;
+  verification?: string;
+  durationMs?: number;
+};
+
+export function buildTaskArtifactEntry(params: {
+  task: AssignedTask;
+  outcome: SpecialistOutcome;
+  content: string;
+  durationMs?: number;
+}): TaskArtifactEntry {
+  return {
+    taskIndex: params.task.taskIndex,
+    title: params.task.title,
+    specialist: params.task.specialist,
+    outcome: params.outcome,
+    files: params.task.files.map((file) => file.path),
+    summary: conciseArtifactText(params.content),
+    verification: extractVerificationHint(params.content),
+    durationMs: params.durationMs,
+  };
+}
+
+function taskArtifactEntryFromStored(task: StoredTaskResult): TaskArtifactEntry {
+  return {
+    taskIndex: task.taskIndex ?? -1,
+    title: task.title,
+    specialist: task.specialist,
+    outcome: task.outcome,
+    files: task.files ?? [],
+    summary: task.artifactSummary ?? "completed in prior run",
+    verification: task.verification,
+    durationMs: task.durationMs,
+  };
+}
+
+export function buildTaskArtifactSummary(
+  entries: TaskArtifactEntry[],
+  maxChars = MAX_TASK_ARTIFACT_SUMMARY_CHARS,
+): string {
+  const completed = entries.filter((entry) => entry.outcome === "DONE" || entry.outcome === "DONE_WITH_CONCERNS");
+  if (completed.length === 0) return "";
+
+  const lines = completed.map((entry) => {
+    const files = entry.files.length > 0 ? ` files=${entry.files.slice(0, 4).join(", ")}` : "";
+    const verification = entry.verification ? ` verification=${entry.verification}` : "";
+    return `- ${entry.specialist} [${entry.outcome}] (${entry.title}): ${entry.summary}${files}${verification}`;
+  });
+
+  const selected: string[] = [];
+  let used = "Completed task artifacts:\n".length;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!;
+    const nextUsed = used + line.length + 1;
+    if (nextUsed > maxChars && selected.length > 0) break;
+    selected.unshift(line);
+    used = nextUsed;
+    if (used >= maxChars) break;
+  }
+
+  const omitted = lines.length - selected.length;
+  const prefix = omitted > 0 ? `Completed task artifacts (${omitted} older omitted to preserve context budget):` : "Completed task artifacts:";
+  return clipText([prefix, ...selected].join("\n"), maxChars);
+}
+
+export function buildScopedTaskContext(params: {
+  buildId: string;
+  task: AssignedTask;
+  plan: BuildPlanDoc;
+  artifactSummary?: string;
+  rawBuildContext?: string;
+  maxChars?: number;
+}): string {
+  void params.rawBuildContext; // Intentionally discarded: task dispatches must not inherit raw lifecycle history.
+
+  const maxChars = params.maxChars ?? MAX_SCOPED_TASK_CONTEXT_CHARS;
+  const relevantFiles = params.task.files.length > 0
+    ? params.task.files
+    : params.plan.fileStructure.filter((file) => {
+      const purpose = file.purpose.toLowerCase();
+      const path = file.path.toLowerCase();
+      return params.task.title.toLowerCase().split(/\s+/).some((word) => word.length > 3 && (purpose.includes(word) || path.includes(word)));
+    });
+  const priorTaskTitles = params.plan.tasks
+    .slice(0, Math.max(params.task.taskIndex, 0))
+    .map((task) => task.title)
+    .slice(-6);
+  const artifactSummary = clipText(params.artifactSummary?.trim() || "No completed task artifacts yet.", 2_800);
+
+  const lines = [
+    "--- Scoped Build Task Context ---",
+    `Build ID: ${params.buildId}`,
+    "Context policy: raw Build Studio conversation history is intentionally omitted. Use only this task spec, relevant plan subset, and completed artifact summary.",
+    "",
+    "Current Task:",
+    `- Index: ${params.task.taskIndex}`,
+    `- Specialist: ${params.task.specialist}`,
+    `- Title: ${params.task.title}`,
+    params.task.task.testFirst ? `- Test first: ${clipText(params.task.task.testFirst, 900)}` : null,
+    params.task.task.implement ? `- Implement: ${clipText(params.task.task.implement, 1_200)}` : null,
+    params.task.task.verify ? `- Verify: ${clipText(params.task.task.verify, 900)}` : null,
+    "",
+    "Relevant Plan Files:",
+    ...(relevantFiles.length > 0
+      ? relevantFiles.slice(0, 12).map((file) => `- ${file.path} (${file.action}): ${clipText(file.purpose, 240)}`)
+      : ["- No explicit file targets recorded for this task."]),
+    "",
+    "Dependency Context:",
+    ...(priorTaskTitles.length > 0
+      ? priorTaskTitles.map((title) => `- Prior planned task: ${title}`)
+      : ["- This task has no prior planned dependency in the task graph."]),
+    "",
+    "Artifact Summary:",
+    artifactSummary,
+  ].filter((line): line is string => line != null);
+
+  return clipText(lines.join("\n"), maxChars);
 }
 
 export function formatBuildCompleteMessage(summary: BuildSummary): string {
@@ -512,10 +671,14 @@ export function parseQAVerification(qaContent: string): QAVerification {
 
 /** Stored task result shape from saveBuildEvidence("taskResults", ...) */
 export type StoredTaskResult = {
+  taskIndex?: number;
   title: string;
   specialist: string;
   outcome: string;
   durationMs?: number;
+  files?: string[];
+  artifactSummary?: string;
+  verification?: string;
 };
 
 /**
@@ -543,13 +706,7 @@ export function buildStoredResultsSummary(
   storedTasks: StoredTaskResult[] | undefined | null,
 ): string {
   if (!storedTasks?.length) return "";
-  let summary = "";
-  for (const t of storedTasks) {
-    if (t.outcome === "DONE" || t.outcome === "DONE_WITH_CONCERNS") {
-      summary += `\n${t.specialist} [${t.outcome}] (${t.title}): completed in prior run`;
-    }
-  }
-  return summary;
+  return buildTaskArtifactSummary(storedTasks.map(taskArtifactEntryFromStored));
 }
 
 // ─── Specialist Dispatch ────────────────────────────────────────────────────
@@ -711,6 +868,42 @@ async function dispatchSpecialist(params: {
   return { task, result: lastResult!, outcome: finalOutcome, success: false, retries };
 }
 
+async function saveTaskPhaseHandoff(params: {
+  buildId: string;
+  userId: string;
+  parentThreadId: string;
+  entry: TaskArtifactEntry;
+}): Promise<void> {
+  try {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const openIssues =
+      params.entry.outcome === "BLOCKED" || params.entry.outcome === "NEEDS_CONTEXT"
+        ? [`${params.entry.title}: ${params.entry.summary}`]
+        : [];
+
+    await executeTool("save_phase_handoff", {
+      buildId: params.buildId,
+      summary: `${params.entry.specialist} finished ${params.entry.title}: ${params.entry.summary}`,
+      decisionsMade: [
+        `Task outcome: ${params.entry.outcome}`,
+        params.entry.files.length > 0
+          ? `Files touched: ${params.entry.files.slice(0, 6).join(", ")}`
+          : "Files touched: none recorded",
+      ],
+      openIssues,
+      userPreferences: [],
+      toPhase: "build",
+      autoAdvance: false,
+    }, params.userId, {
+      routeContext: "/build",
+      agentId: "AGT-ORCH-300",
+      threadId: params.parentThreadId,
+    });
+  } catch (err) {
+    console.warn("[orchestrator] task phase handoff skipped:", (err as Error)?.message ?? err);
+  }
+}
+
 // ─── Orchestrator Main ──────────────────────────────────────────────────────
 
 export type OrchestratorResult = {
@@ -792,7 +985,7 @@ export async function runBuildOrchestrator(params: {
   // Read previously completed task results from the FeatureBuild record.
   // Tasks with outcome DONE or DONE_WITH_CONCERNS are skipped on re-run.
   let completedTaskTitles = new Set<string>();
-  let priorStoredResults: string = "";
+  let taskArtifactEntries: TaskArtifactEntry[] = [];
   let taskResultsVersion = 0;
 
   try {
@@ -806,7 +999,7 @@ export async function runBuildOrchestrator(params: {
     } | null;
 
     completedTaskTitles = getCompletedTaskTitles(stored?.tasks);
-    priorStoredResults = buildStoredResultsSummary(stored?.tasks);
+    taskArtifactEntries = (stored?.tasks ?? []).map(taskArtifactEntryFromStored);
 
     if (completedTaskTitles.size > 0) {
       console.log(`[orchestrator] Resuming build ${buildId}: ${completedTaskTitles.size} tasks already completed, will skip`);
@@ -944,7 +1137,6 @@ export async function runBuildOrchestrator(params: {
 
   // Execute phases sequentially; tasks within a phase run in parallel
   const allResults: SpecialistResult[] = [];
-  let priorResultsSummary = priorStoredResults;
 
   // Layer 1: CLI session continuity — DISABLED for now.
   // Claude Code --session-id is single-use: one session per invocation.
@@ -990,22 +1182,49 @@ export async function runBuildOrchestrator(params: {
     // Process tasks in batches of MAX_CONCURRENT_TASKS
     while (taskQueue.length > 0) {
       const batch = taskQueue.splice(0, MAX_CONCURRENT_TASKS);
+      const artifactSummaryForBatch = buildTaskArtifactSummary(taskArtifactEntries);
       const batchResults = await Promise.all(
-        batch.map(task =>
-          dispatchSpecialist({
+        batch.map(async (task) => {
+          const scopedTaskContext = buildScopedTaskContext({
+            buildId,
+            task,
+            plan: normalizedPlan.plan,
+            artifactSummary: artifactSummaryForBatch,
+            rawBuildContext: buildContext,
+          });
+          const specialistResult = await dispatchSpecialist({
             task,
             userId,
             platformRole,
             isSuperuser,
             buildId,
-            buildContext,
+            buildContext: scopedTaskContext,
             parentThreadId,
-            priorResults: priorResultsSummary || undefined,
+            priorResults: artifactSummaryForBatch || undefined,
             // sessionId omitted — see Layer 1 comment above
-          })
-        ),
+          });
+          const artifactEntry = buildTaskArtifactEntry({
+            task: specialistResult.task,
+            outcome: specialistResult.outcome,
+            content: specialistResult.result.content,
+            durationMs: "durationMs" in specialistResult.result ? specialistResult.result.durationMs : undefined,
+          });
+          await saveTaskPhaseHandoff({
+            buildId,
+            userId,
+            parentThreadId,
+            entry: artifactEntry,
+          });
+          return specialistResult;
+        }),
       );
       phaseResults.push(...batchResults);
+      taskArtifactEntries.push(...batchResults.map((sr) => buildTaskArtifactEntry({
+        task: sr.task,
+        outcome: sr.outcome,
+        content: sr.result.content,
+        durationMs: "durationMs" in sr.result ? sr.result.durationMs : undefined,
+      })));
     }
 
     // Collect results and build prior context for next phase
@@ -1013,8 +1232,8 @@ export async function runBuildOrchestrator(params: {
       allResults.push(sr);
 
       const roleLabel = ROLE_LABELS[sr.task.specialist];
-      // Clean outcome for user-facing events; raw content stays in priorResultsSummary
-      // for downstream specialists who need the technical detail.
+      // Clean outcome for user-facing events; downstream specialists receive
+      // the compact artifact ledger instead of raw specialist stdout.
       const cleanOutcome = sanitizeSpecialistOutput(sr.result.content.slice(0, 300));
 
       // Emit completion event with structured outcome
@@ -1027,8 +1246,8 @@ export async function runBuildOrchestrator(params: {
         status: sr.outcome,
       });
 
-      // Accumulate raw context for downstream specialists (they need the technical detail)
-      priorResultsSummary += `\n${roleLabel} [${sr.outcome}] (${sr.task.title}): ${sr.result.content.slice(0, 300)}`;
+      // Downstream specialists receive the compact artifact summary created
+      // after task completion, not raw specialist stdout or full thread history.
     }
 
     // Emit phase summary
@@ -1068,12 +1287,24 @@ export async function runBuildOrchestrator(params: {
   // Uses taskResultsVersion to detect if another process modified results since we
   // read them at the start. On version mismatch, re-reads and retries once.
   try {
-    const newTaskResults = allResults.map(r => ({
-      title: r.task.title,
-      specialist: r.task.specialist,
-      outcome: r.outcome,
-      durationMs: "durationMs" in r.result ? r.result.durationMs : 0,
-    }));
+    const newTaskResults = allResults.map(r => {
+      const artifact = buildTaskArtifactEntry({
+        task: r.task,
+        outcome: r.outcome,
+        content: r.result.content,
+        durationMs: "durationMs" in r.result ? r.result.durationMs : undefined,
+      });
+      return {
+        taskIndex: artifact.taskIndex,
+        title: r.task.title,
+        specialist: r.task.specialist,
+        outcome: r.outcome,
+        durationMs: artifact.durationMs ?? 0,
+        files: artifact.files,
+        artifactSummary: artifact.summary,
+        verification: artifact.verification,
+      };
+    });
 
     const MAX_MERGE_RETRIES = 1;
     for (let attempt = 0; attempt <= MAX_MERGE_RETRIES; attempt++) {

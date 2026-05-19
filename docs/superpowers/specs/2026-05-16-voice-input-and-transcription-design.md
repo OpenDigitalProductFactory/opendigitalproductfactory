@@ -377,19 +377,17 @@ Response:
 # docker-compose.yml — additive. ONE service. Image is swapped at install-time, not duplicated.
 services:
   dpf-stt:
-    image: ${DPF_STT_IMAGE:-ghcr.io/speaches-ai/speaches:latest-cuda}
-    # Edge / CPU-only installs override DPF_STT_IMAGE to ghcr.io/ggml-org/whisper.cpp:server-latest
-    profiles: ["stt"]                                  # opt-in until Slice 1 graduates to default
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:<pinned-digest>}
+    # GPU installs override DPF_STT_IMAGE to a CUDA-capable whisper-server variant.
     environment:
-      WHISPER_MODEL: "${DPF_STT_MODEL:-Systran/faster-distil-whisper-large-v3}"
-      ENABLE_UI: "false"
+      WHISPER_MODEL: "${DPF_STT_MODEL:-base}"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/v1/models"]
     ports:
-      - "127.0.0.1:8765:8000"                          # localhost-only by default
+      - "127.0.0.1:8765:9000"                          # localhost-only by default
 ```
 
-The portal reads `STT_BASE_URL` (default `http://dpf-stt:8000`) — a single env var, regardless of whether the image is speaches or whisper.cpp. Both expose OpenAI-compatible `/v1/audio/transcriptions`; the contract is the endpoint, not the image. Per the [edge-node](2026-05-09-dpf-edge-node-design.md) doctrine, the same compose entry serves every deployment target — only the image and model env vars differ.
+The provider registry seeds `speaches` as the local STT provider with `baseUrl='http://dpf-stt:9000'`, matching the hwdsl2/whisper-server internal port. The route still speaks the OpenAI-compatible `/v1/audio/transcriptions` contract; the contract is the endpoint, not the image. Per the [edge-node](2026-05-09-dpf-edge-node-design.md) doctrine, the same compose entry serves every deployment target — only the image and model env vars differ.
 
 ### 6.7 Routing layer extension for STT capability
 

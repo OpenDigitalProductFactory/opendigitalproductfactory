@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   findFirstPerf: vi.fn(),
   findProfile: vi.fn(),
+  fetch: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -24,9 +25,14 @@ import { getSpeechToTextReadiness } from "./readiness";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.fetch.mockResolvedValue(
+    new Response(JSON.stringify({ data: [{ id: "base" }] }), { status: 200 }),
+  );
+  vi.stubGlobal("fetch", mocks.fetch);
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -49,20 +55,72 @@ describe("getSpeechToTextReadiness", () => {
     });
     mocks.findProfile.mockResolvedValueOnce({
       providerId: "speaches",
-      modelId: "Systran/faster-distil-whisper-large-v3",
+      modelId: "base",
       modelStatus: "active",
       provider: {
-        name: "Speaches (local STT sidecar)",
-        baseUrl: "http://dpf-stt:8000",
+        name: "Local STT (whisper-server)",
+        baseUrl: "http://dpf-stt:9000",
+        authMethod: "none",
         status: "active",
       },
     });
     const result = await getSpeechToTextReadiness();
     expect(result.status).toBe("healthy");
     expect(result.providerId).toBe("speaches");
-    expect(result.modelId).toBe("Systran/faster-distil-whisper-large-v3");
-    expect(result.baseUrl).toBe("http://dpf-stt:8000");
-    expect(result.providerName).toBe("Speaches (local STT sidecar)");
+    expect(result.modelId).toBe("base");
+    expect(result.baseUrl).toBe("http://dpf-stt:9000");
+    expect(result.providerName).toBe("Local STT (whisper-server)");
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      "http://dpf-stt:9000/v1/models",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("returns 'unhealthy' when the local sidecar health probe fails", async () => {
+    mocks.fetch.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+    mocks.findFirstPerf.mockResolvedValueOnce({
+      endpointId: "profile-cuid",
+      blocked: false,
+    });
+    mocks.findProfile.mockResolvedValueOnce({
+      providerId: "speaches",
+      modelId: "base",
+      modelStatus: "active",
+      provider: {
+        name: "Local STT (whisper-server)",
+        baseUrl: "http://dpf-stt:8000",
+        authMethod: "none",
+        status: "active",
+      },
+    });
+    const result = await getSpeechToTextReadiness();
+    expect(result.status).toBe("unhealthy");
+    expect(result.reason).toMatch(/health probe/i);
+    expect(result.reason).toMatch(/http:\/\/dpf-stt:8000/);
+  });
+
+  it("returns 'unhealthy' when the local sidecar does not advertise the selected model", async () => {
+    mocks.fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [{ id: "tiny.en" }] }), { status: 200 }),
+    );
+    mocks.findFirstPerf.mockResolvedValueOnce({
+      endpointId: "profile-cuid",
+      blocked: false,
+    });
+    mocks.findProfile.mockResolvedValueOnce({
+      providerId: "speaches",
+      modelId: "base",
+      modelStatus: "active",
+      provider: {
+        name: "Local STT (whisper-server)",
+        baseUrl: "http://dpf-stt:9000",
+        authMethod: "none",
+        status: "active",
+      },
+    });
+    const result = await getSpeechToTextReadiness();
+    expect(result.status).toBe("unhealthy");
+    expect(result.reason).toMatch(/does not list model "base"/);
   });
 
   it("returns 'unhealthy' when the perf row references a missing profile", async () => {
@@ -83,9 +141,9 @@ describe("getSpeechToTextReadiness", () => {
     });
     mocks.findProfile.mockResolvedValueOnce({
       providerId: "speaches",
-      modelId: "Systran/faster-distil-whisper-large-v3",
+      modelId: "base",
       modelStatus: "active",
-      provider: { name: "Speaches", baseUrl: "http://dpf-stt:8000", status: "active" },
+      provider: { name: "Speaches", baseUrl: "http://dpf-stt:9000", authMethod: "none", status: "active" },
     });
     const result = await getSpeechToTextReadiness();
     expect(result.status).toBe("unhealthy");
@@ -99,9 +157,9 @@ describe("getSpeechToTextReadiness", () => {
     });
     mocks.findProfile.mockResolvedValueOnce({
       providerId: "speaches",
-      modelId: "Systran/faster-distil-whisper-large-v3",
+      modelId: "base",
       modelStatus: "retired",
-      provider: { name: "Speaches", baseUrl: "http://dpf-stt:8000", status: "active" },
+      provider: { name: "Speaches", baseUrl: "http://dpf-stt:9000", authMethod: "none", status: "active" },
     });
     const result = await getSpeechToTextReadiness();
     expect(result.status).toBe("unhealthy");
@@ -115,9 +173,9 @@ describe("getSpeechToTextReadiness", () => {
     });
     mocks.findProfile.mockResolvedValueOnce({
       providerId: "speaches",
-      modelId: "Systran/faster-distil-whisper-large-v3",
+      modelId: "base",
       modelStatus: "active",
-      provider: { name: "Speaches", baseUrl: "http://dpf-stt:8000", status: "unconfigured" },
+      provider: { name: "Speaches", baseUrl: "http://dpf-stt:9000", authMethod: "none", status: "unconfigured" },
     });
     const result = await getSpeechToTextReadiness();
     expect(result.status).toBe("unhealthy");
@@ -131,9 +189,9 @@ describe("getSpeechToTextReadiness", () => {
     });
     mocks.findProfile.mockResolvedValueOnce({
       providerId: "speaches",
-      modelId: "Systran/faster-distil-whisper-large-v3",
+      modelId: "base",
       modelStatus: "active",
-      provider: { name: "Speaches", baseUrl: "http://dpf-stt:8000", status: "degraded" },
+      provider: { name: "Speaches", baseUrl: "http://dpf-stt:9000", authMethod: "none", status: "degraded" },
     });
     const result = await getSpeechToTextReadiness();
     // Degraded providers can still serve traffic — routing manifest already

@@ -26,6 +26,11 @@ const SANDBOX_STAGE_EXCLUDES = [
   ":!.pnpm-store/**",
   ":!**/*.tsbuildinfo",
   ":!pnpm-lock*",
+  // Never include the generated Prisma client — it is regenerated from schema.prisma
+  // on every `prisma generate` and would bloat the diff with hundreds of KB of
+  // generated type stubs that conflict with main if the sandbox base is stale.
+  ":!**/generated/client/**",
+  ":!packages/db/generated/**",
 ] as const;
 const SANDBOX_DIFF_EXCLUDES = [
   ":(exclude)**/node_modules/**",
@@ -35,6 +40,9 @@ const SANDBOX_DIFF_EXCLUDES = [
   ":(exclude).pnpm-store/**",
   ":(exclude)**/*.tsbuildinfo",
   ":(exclude)pnpm-lock*",
+  // Generated Prisma client — see SANDBOX_STAGE_EXCLUDES comment above.
+  ":(exclude)**/generated/client/**",
+  ":(exclude)packages/db/generated/**",
 ] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

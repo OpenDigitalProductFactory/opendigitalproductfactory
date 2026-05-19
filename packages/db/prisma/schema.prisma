@@ -2561,6 +2561,8 @@ model Organization {
   wikiLintFindings              WikiLintFinding[]
   documents                     Document[]
   decisionPerspectiveProfiles   DecisionPerspectiveProfile[]
+  integrationCoverageProviders  IntegrationCoverageProvider[] @relation("OrgToCoverageProviders")
+  integrationRoleCoverages      IntegrationRoleCoverage[]     @relation("OrgToCoverageCells")
 }
 
 model BusinessContext {
@@ -4142,6 +4144,7 @@ model FeatureBuild {
   abandonReason            String?
   draftApprovedAt          DateTime?
   activities               BuildActivity[]
+  dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
   phaseHandoffs            PhaseHandoff[]
   toolExecutionReceipts    ToolExecutionReceipt[]
@@ -4327,6 +4330,31 @@ model BuildActivity {
   build     FeatureBuild @relation(fields: [buildId], references: [buildId])
 
   @@index([buildId, createdAt])
+}
+
+model BuildDispatchAttempt {
+  id               String       @id @default(cuid())
+  buildId          String
+  taskTitle        String
+  specialist       String?
+  providerId       String?
+  model            String?
+  attemptNumber    Int          @default(1)
+  startedAt        DateTime     @default(now())
+  completedAt      DateTime?
+  durationMs       Int?
+  exitCode         Int?
+  success          Boolean      @default(false)
+  failureAxis      String       @default("unknown")
+  stdoutExcerpt    String?      @db.Text
+  stderrExcerpt    String?      @db.Text
+  rootCauseSummary String?      @db.Text
+  rootCauseHash    String?
+  build            FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@index([buildId, startedAt])
+  @@index([buildId, taskTitle, startedAt])
+  @@index([failureAxis, startedAt])
 }
 
 /// Structured context passed between build phases. Written on phase advance,
@@ -8408,4 +8436,43 @@ model EdgeNodeCapability {
 
   @@unique([edgeNodeId, capability])
   @@index([capability])
+}
+
+// ─── Integration Coverage Matrix ─────────────────────────────────────────────
+
+enum WriteGateRequirement {
+  credential_verified
+  read_probe_passed
+  audit_log_enabled
+  approval_binding
+}
+
+model IntegrationCoverageProvider {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation("OrgToCoverageProviders", fields: [organizationId], references: [id])
+  providerKey       String
+  displayName       String
+  posture           String
+  replacementIntent String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([organizationId, providerKey])
+  @@index([organizationId])
+}
+
+model IntegrationRoleCoverage {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation("OrgToCoverageCells", fields: [organizationId], references: [id])
+  providerKey    String
+  role           String
+  surface        String
+  readPosture    String
+  writeGates     WriteGateRequirement[]
+  createdAt      DateTime               @default(now())
+
+  @@unique([organizationId, providerKey, role, surface])
+  @@index([organizationId])
 }

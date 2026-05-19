@@ -2550,17 +2550,19 @@
         },
         "concurrency_limit": 2,
         "tool_grants": [
+          "file_read",
+          "code_graph_read",
           "backlog_read",
           "backlog_write",
-          "code_graph_read",
-          "file_read",
-          "iac_execute",
+          "architecture_read",
+          "build_plan_write",
           "registry_read",
-          "release_gate_create",
           "sandbox_execute",
-          "work_capsule_read",
-          "work_capsule_write",
-          "work_capsule_adopt"
+          "deployment_plan_create",
+          "iac_execute",
+          "release_gate_create",
+          "release_plan_create",
+          "release_plan_read"
         ]
       }
     },

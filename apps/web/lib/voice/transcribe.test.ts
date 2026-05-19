@@ -42,7 +42,7 @@ import type { AdapterRequest, AdapterResult } from "@/lib/routing/adapter-types"
 vi.mock("./endpoint-resolution", () => ({
   resolveTranscriptionEndpoint: vi.fn(async () => ({
     providerId: "speaches",
-    modelId: "Systran/faster-distil-whisper-large-v3",
+    modelId: "base",
   })),
 }));
 
@@ -134,7 +134,7 @@ describe("transcribe() call-site", () => {
     });
     const args = vi.mocked(callProvider).mock.calls[0];
     expect(args[0]).toBe("speaches");
-    expect(args[1]).toBe("Systran/faster-distil-whisper-large-v3");
+    expect(args[1]).toBe("base");
   });
 
   it("projects AdapterResult to TranscribeResult with normalized Whisper confidence", async () => {
@@ -145,7 +145,7 @@ describe("transcribe() call-site", () => {
     });
     expect(result.text).toBe("Schedule the design review with Daisy for Friday.");
     expect(result.provider).toBe("speaches");
-    expect(result.model).toBe("Systran/faster-distil-whisper-large-v3");
+    expect(result.model).toBe("base");
     expect(result.durationMs).toBe(3120);
     // exp(mean([-0.142, -0.213])) = exp(-0.1775) ≈ 0.837
     expect(result.confidence).not.toBeNull();

@@ -16,6 +16,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   report_quality_issue: ["backlog_write"],
 
   // Governed MCP backlog surface (spec 2026-04-25)
+  create_epic: ["backlog_write"],
+  update_epic: ["backlog_write"],
   list_epics: ["backlog_read"],
   list_backlog_items: ["backlog_read"],
   get_backlog_item: ["backlog_read"],
@@ -131,6 +133,12 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   saveBuildEvidence: ["backlog_write"],
   reviewDesignDoc: ["architecture_read"],
   reviewBuildPlan: ["build_plan_write"],
+  // Build-progress observation tools are read-only work capsule inspection.
+  get_build_progress_visibility: ["work_capsule_read"],
+  get_build_sandbox_state: ["work_capsule_read"],
+  get_build_dispatch_history: ["work_capsule_read"],
+  get_build_scoped_verification: ["work_capsule_read"],
+  list_build_activity_since: ["work_capsule_read"],
 
   // Deploy / Release
   deploy_feature: ["iac_execute"],

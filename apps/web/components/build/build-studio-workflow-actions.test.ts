@@ -241,6 +241,64 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.message).toContain("healthy sandbox");
   });
 
+  it("names the resume action and failure axis for blocked usage-limit tasks", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: {
+          completedTasks: 0,
+          totalTasks: 3,
+          tasks: [
+            { title: "Add dispatch telemetry", specialist: "backend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+            { title: "Add sandbox card", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+            { title: "Add verification card", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+          ],
+          timestamp: "2026-05-18T12:00:00.000Z",
+        } as unknown as FeatureBuildRow["taskResults"],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("resume-implementation");
+    expect(action.title).toBe("Click Resume to re-execute 3 blocked tasks");
+    expect(action.failureAxis).toBe("usage-limit");
+    expect(action.message).toContain("usage-limit");
+    expect(action.resumeMode?.mode).toBe("reset-blocked");
+  });
+
+  it("separates out-of-scope verification noise from implementation recovery", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "review",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: {
+          completedTasks: 2,
+          totalTasks: 2,
+          tasks: [
+            { title: "Add scoped verification", specialist: "backend-engineer", outcome: "DONE" },
+            { title: "Add cards", specialist: "frontend-engineer", outcome: "DONE" },
+          ],
+          timestamp: "2026-05-18T12:00:00.000Z",
+        } as unknown as FeatureBuildRow["taskResults"],
+        verificationOut: {
+          typecheckPassed: false,
+          testsPassed: 0,
+          testsFailed: 192,
+          failureAxis: "out-of-scope-noise",
+          fullOutput: "FAIL apps/web/lib/mcp-tools-save-build-evidence.test.ts",
+          timestamp: "2026-05-18T12:05:00.000Z",
+        } as unknown as FeatureBuildRow["verificationOut"],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("resume-implementation");
+    expect(action.title).toBe("Review workspace noise before retrying this build");
+    expect(action.failureAxis).toBe("out-of-scope-noise");
+    expect(action.resumeMode?.mode).toBe("rerun-verification");
+  });
+
   it("surfaces implementation recovery in review when review only contains failed execution evidence", () => {
     const action = deriveBuildStudioWorkflowAction({
       build: makeBuild({
@@ -415,8 +473,32 @@ describe("deriveWorkflowStageGuidance", () => {
       governedBacklogEnabled: true,
     });
 
-    expect(guidance.title).toBe("Implementation Needs Recovery");
+    expect(guidance.title).toBe("Click Resume to re-execute 1 blocked task");
     expect(guidance.nextApproval).toContain("Resume implementation");
+  });
+
+  it("exposes specific recovery heading details in stage guidance", () => {
+    const guidance = deriveWorkflowStageGuidance({
+      build: makeBuild({
+        phase: "build",
+        taskResults: {
+          completedTasks: 0,
+          totalTasks: 3,
+          tasks: [
+            { title: "Task 1", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+            { title: "Task 2", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+            { title: "Task 3", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+          ],
+        } as unknown as FeatureBuildRow["taskResults"],
+      }),
+      phase: "build",
+      workflowLabel: "Build",
+      governedBacklogEnabled: true,
+    });
+
+    expect(guidance.title).toBe("Click Resume to re-execute 3 blocked tasks");
+    expect(guidance.workflowAction.failureAxis).toBe("usage-limit");
+    expect(guidance.workflowAction.message).toContain("usage-limit");
   });
 
   it("shows release guidance on the review node when review evidence is complete", () => {

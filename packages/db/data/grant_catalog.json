@@ -135,6 +135,7 @@
         "create_backlog_item",
         "create_build_epic",
         "create_digital_product",
+        "create_epic",
         "link_backlog_item_to_epic",
         "propose_decomposition",
         "record_execution_evidence",
@@ -148,6 +149,7 @@
         "submit_feedback",
         "update_backlog_item",
         "update_backlog_item_status",
+        "update_epic",
         "update_feature_brief",
         "update_lifecycle"
       ],

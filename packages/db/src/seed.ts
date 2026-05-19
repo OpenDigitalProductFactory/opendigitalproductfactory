@@ -29,11 +29,12 @@ import {
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
-import { ensurePostgresBackupScheduledJob } from "./seed-platform-backup.js";
+import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
+import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -2336,7 +2337,8 @@ async function seedWorkQueues(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("Starting seed...");
-  await ensureBootstrapOrganization();
+  const bootstrapOrganizationId = await ensureBootstrapOrganization();
+  await seedIntegrationCoverage(prisma, bootstrapOrganizationId);
   await seedGeographicData(prisma);
   await seedTaxJurisdictions(prisma);
   await seedLicenseRequirements(prisma);
@@ -2366,7 +2368,7 @@ async function main(): Promise<void> {
   await seedDefaultAdminUser();
   await ensureDiscoveryTriageScheduledTask(prisma);
   await ensureHiveScoutScheduledTask(prisma);
-  await ensurePostgresBackupScheduledJob(prisma);
+  await ensureAllBackupScheduledJobs(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedRuntimeTargets();

@@ -4,7 +4,7 @@ import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
-import { BACKLOG_STATUS_VALUES } from "@/lib/explore/backlog";
+import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -67,6 +67,7 @@ import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
+type ToolExecutionContext = { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string };
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
@@ -203,6 +204,30 @@ export function sanitizeToolParams(
     }
   }
   return cleaned ?? params;
+}
+
+export function resolveSavePhaseHandoffTransition(
+  params: Record<string, unknown>,
+  context: ToolExecutionContext | undefined,
+  currentPhase: string,
+): { toPhase: string; autoAdvance: boolean; isInternalTaskHandoff: boolean } {
+  const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
+  const idx = phaseOrder.indexOf(currentPhase);
+  const isInternalTaskHandoff =
+    context?.agentId === "AGT-ORCH-300"
+    && context?.routeContext === "/build"
+    && params["autoAdvance"] === false;
+  const requestedToPhase = isInternalTaskHandoff
+    && typeof params["toPhase"] === "string"
+    && [...phaseOrder, "complete"].includes(String(params["toPhase"]).trim())
+    ? String(params["toPhase"]).trim()
+    : null;
+
+  return {
+    toPhase: requestedToPhase ?? (idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete"),
+    autoAdvance: isInternalTaskHandoff ? false : true,
+    isInternalTaskHandoff,
+  };
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
@@ -790,6 +815,43 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────────
+  {
+    name: "create_epic",
+    description: "Create a generic backlog epic through the governed MCP surface. Use this for roadmap/recovery/planning epics that are not tied to a live Build Studio build. Rejects duplicate semantic epic IDs; optional source/spec/plan/rationale context is captured by ToolExecution and indexed for discovery.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        epicId: { type: "string", description: "Optional semantic epic id (e.g. EP-WWMD). Auto-generated if omitted." },
+        title: { type: "string", description: "Epic title" },
+        description: { type: "string", description: "Epic description" },
+        status: { type: "string", enum: [...EPIC_STATUSES], description: "Initial epic status (defaults to open)" },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "What kind of gap or signal produced this epic" },
+        specPath: { type: "string", description: "Optional related spec path for audit/index context" },
+        planPath: { type: "string", description: "Optional related implementation plan path for audit/index context" },
+        rationale: { type: "string", description: "Optional short rationale for creating the epic" },
+      },
+      required: ["title"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "update_epic",
+    description: "Update a generic backlog epic's editable fields through the governed MCP surface. Use this for title, description, and status changes; status=done stamps completedAt, and reopening clears it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        epicId: { type: "string", description: "Semantic epic id (EP-*) or internal epic row id" },
+        title: { type: "string", description: "New epic title" },
+        description: { type: "string", description: "New epic description" },
+        status: { type: "string", enum: [...EPIC_STATUSES], description: "New epic status" },
+        rationale: { type: "string", description: "Optional short rationale captured by ToolExecution" },
+      },
+      required: ["epicId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
   {
     name: "list_epics",
     description: "List epics with item-count rollups. Read-only. Filterable by status and whether the epic has open items. Returned epicId is the semantic id (EP-*), not the internal cuid.",
@@ -1532,6 +1594,82 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
     buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
+    name: "get_build_progress_visibility",
+    description: "Read the Build Studio progress projection for a build: source-labelled DB task progress, stale chat conflicts, sandbox state, dispatch history, scoped verification, and quiet-agent status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "get_build_sandbox_state",
+    description: "Read the source-bounded sandbox/git state for a Build Studio build, including branch, head SHA, source diffstat, ignored generated/dependency paths, and expected plan files.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "get_build_dispatch_history",
+    description: "Read bounded codex-dispatch attempts for a Build Studio build, including model, duration, exit code, sanitized stdout/stderr excerpts, and classified failure axis.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "get_build_scoped_verification",
+    description: "Read build-scoped verification for a Build Studio build, separating failures on the build's changed surface from workspace-wide/global-health noise.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "list_build_activity_since",
+    description: "List recent BuildActivity rows for a Build Studio build after an optional ISO timestamp cursor. Use this for polling-friendly observer updates.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+        cursor: { type: "string", description: "Optional ISO timestamp cursor; only rows after this timestamp are returned." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
   },
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
@@ -3664,11 +3802,13 @@ export async function getAvailableTools(
       && (options?.mode !== "advise" || !tool.sideEffect),
   );
 
-  // Agent-scoped filtering: intersection of user capabilities and agent tool grants
+  // Agent-scoped filtering: intersection of user capabilities and agent tool grants.
+  // EP-AI-WORKFORCE-001: use the async DB-first resolver so grants written via
+  // the DB (e.g. via seed or Admin UI) take precedence over the JSON fallback.
   if (options?.agentId) {
-    const { getAgentToolGrants, isToolAllowedByGrants } = await import("./agent-grants");
-    const agentGrants = getAgentToolGrants(options.agentId);
-    if (agentGrants) {
+    const { getAgentToolGrantsAsync, isToolAllowedByGrants } = await import("./agent-grants");
+    const agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
   }
@@ -3927,7 +4067,7 @@ export async function executeTool(
   toolName: string,
   rawParams: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string },
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
@@ -4431,6 +4571,186 @@ export async function executeTool(
     }
 
     // ─── Governed MCP backlog surface (spec 2026-04-25) ─────────────────────
+    case "create_epic": {
+      const title = String(params["title"] ?? "").trim();
+      if (!title) {
+        return { success: false, error: "missing_title", message: "title is required" };
+      }
+
+      const requestedEpicId = typeof params["epicId"] === "string" && params["epicId"].trim()
+        ? params["epicId"].trim()
+        : null;
+      const epicId = requestedEpicId ?? `EP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      if (!epicId.startsWith("EP-")) {
+        return {
+          success: false,
+          error: "invalid_epicId",
+          message: "epicId must use the semantic EP-* format.",
+        };
+      }
+
+      const status = typeof params["status"] === "string" && params["status"].trim()
+        ? params["status"].trim()
+        : "open";
+      if (!(EPIC_STATUSES as readonly string[]).includes(status)) {
+        return {
+          success: false,
+          error: "invalid_status",
+          message: `status must be one of ${EPIC_STATUSES.join("|")}, got ${status}`,
+        };
+      }
+
+      const existing = await prisma.epic.findFirst({
+        where: { epicId },
+        select: { epicId: true, title: true, status: true },
+      });
+      if (existing) {
+        return {
+          success: false,
+          error: "duplicate_epicId",
+          message: `Epic ${epicId} already exists: ${existing.title}`,
+          data: { existingEpic: existing },
+        };
+      }
+
+      const description = typeof params["description"] === "string"
+        ? params["description"].trim()
+        : "";
+      const source = typeof params["source"] === "string" ? params["source"].trim() : null;
+      const specPath = typeof params["specPath"] === "string" ? params["specPath"].trim() : null;
+      const planPath = typeof params["planPath"] === "string" ? params["planPath"].trim() : null;
+      const rationale = typeof params["rationale"] === "string" ? params["rationale"].trim() : null;
+
+      const epic = await prisma.epic.create({
+        data: {
+          epicId,
+          title,
+          status,
+          submittedById: userId,
+          agentId: context?.agentId ?? null,
+          ...(description ? { description } : {}),
+          ...(status === "done" ? { completedAt: new Date() } : {}),
+        },
+      });
+
+      const indexContext = [
+        description,
+        source ? `source: ${source}` : "",
+        specPath ? `specPath: ${specPath}` : "",
+        planPath ? `planPath: ${planPath}` : "",
+        rationale ? `rationale: ${rationale}` : "",
+      ].filter(Boolean).join("\n");
+      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
+        storePlatformKnowledge({
+          entityId: epic.epicId,
+          entityType: "epic",
+          title,
+          content: indexContext,
+        })
+      ).catch(() => {});
+
+      return {
+        success: true,
+        entityId: epic.epicId,
+        message: `Created epic ${epic.epicId}`,
+        data: {
+          epicId: epic.epicId,
+          title: epic.title,
+          status: epic.status,
+          source,
+          specPath,
+          planPath,
+        },
+      };
+    }
+
+    case "update_epic": {
+      const epicRaw = String(params["epicId"] ?? "").trim();
+      if (!epicRaw) {
+        return { success: false, error: "missing_epicId", message: "epicId is required" };
+      }
+
+      const existing = await prisma.epic.findFirst({
+        where: { OR: [{ epicId: epicRaw }, { id: epicRaw }] },
+        select: {
+          id: true,
+          epicId: true,
+          title: true,
+          description: true,
+          status: true,
+          completedAt: true,
+        },
+      });
+      if (!existing) {
+        return { success: false, error: "not_found", message: `Epic ${epicRaw} not found` };
+      }
+
+      const data: {
+        title?: string;
+        description?: string | null;
+        status?: string;
+        completedAt?: Date | null;
+      } = {};
+      if (typeof params["title"] === "string") {
+        const title = params["title"].trim();
+        if (!title) {
+          return { success: false, error: "missing_title", message: "title cannot be blank" };
+        }
+        data.title = title;
+      }
+      if (typeof params["description"] === "string") {
+        const description = params["description"].trim();
+        data.description = description || null;
+      }
+      if (typeof params["status"] === "string") {
+        const status = params["status"].trim();
+        if (!(EPIC_STATUSES as readonly string[]).includes(status)) {
+          return {
+            success: false,
+            error: "invalid_status",
+            message: `status must be one of ${EPIC_STATUSES.join("|")}, got ${status}`,
+          };
+        }
+        data.status = status;
+        if (status === "done" && existing.status !== "done") {
+          data.completedAt = new Date();
+        }
+        if (status !== "done" && existing.status === "done") {
+          data.completedAt = null;
+        }
+      }
+
+      if (Object.keys(data).length === 0) {
+        return {
+          success: true,
+          entityId: existing.epicId,
+          message: `${existing.epicId} unchanged (no editable fields provided)`,
+          data: {
+            epicId: existing.epicId,
+            title: existing.title,
+            status: existing.status,
+          },
+        };
+      }
+
+      const updated = await prisma.epic.update({
+        where: { id: existing.id },
+        data,
+      });
+
+      return {
+        success: true,
+        entityId: updated.epicId,
+        message: `Updated epic ${updated.epicId}`,
+        data: {
+          epicId: updated.epicId,
+          title: updated.title,
+          status: updated.status,
+          completedAt: updated.completedAt ? updated.completedAt.toISOString() : null,
+        },
+      };
+    }
+
     case "list_epics": {
       const where: Record<string, unknown> = {};
       if (typeof params["status"] === "string") where["status"] = params["status"];
@@ -5664,10 +5984,10 @@ export async function executeTool(
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
-      // Determine the next phase
-      const phaseOrder = ["ideate", "plan", "build", "review", "ship"];
-      const idx = phaseOrder.indexOf(latestBuild.phase);
-      const toPhase = idx >= 0 && idx < phaseOrder.length - 1 ? phaseOrder[idx + 1]! : "complete";
+      // Determine the next phase. Hidden task-handoff controls are accepted
+      // only from the build orchestrator context; public callers keep the
+      // normal phase-transition behavior even if they send schema-extra params.
+      const { toPhase, autoAdvance } = resolveSavePhaseHandoffTransition(params, context, latestBuild.phase);
 
       // Write the handoff record
       await prisma.phaseHandoff.create({
@@ -5716,6 +6036,10 @@ export async function executeTool(
         }
       }).catch(() => {});
 
+      if (!autoAdvance) {
+        return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
+      }
+
       // Actually advance the phase — the agent calls this as its last action
       // before transitioning, so this is the right place to do the DB update.
       // Gate check ensures we don't skip required evidence, and crucially
@@ -5758,6 +6082,95 @@ export async function executeTool(
       }
 
       return { success: true, message: `Phase handoff saved: ${latestBuild.phase} → ${toPhase}` };
+    }
+
+    case "get_build_progress_visibility": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getBuildProgressVisibility } = await import("@/lib/build/progress-visibility");
+      const projection = await getBuildProgressVisibility(buildId);
+      if (!projection) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Build progress visibility loaded for ${buildId}: ${projection.progress.primary.completed}/${projection.progress.primary.total} tasks from ${projection.progress.primary.source}.`,
+        data: projection as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "get_build_sandbox_state": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+      const state = await getSandboxStateForBuild(buildId);
+      if (!state) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Sandbox state loaded for ${buildId}: branch ${state.branch ?? "unknown"}, ${state.sourceDiffstat.length} source file(s) changed.`,
+        data: state as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "get_build_dispatch_history": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getDispatchHistoryForBuild } = await import("@/lib/build/dispatch-attempts");
+      const history = await getDispatchHistoryForBuild(buildId);
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Dispatch history loaded for ${buildId}: ${history.length} attempt(s).`,
+        data: { buildId, attempts: history },
+      };
+    }
+
+    case "get_build_scoped_verification": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
+      const verification = await getScopedVerificationForBuild(buildId);
+      if (!verification) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Scoped verification loaded for ${buildId}: ${verification.buildScoped.failureAxis ?? "no failure"} axis.`,
+        data: verification as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "list_build_activity_since": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const cursor = typeof params["cursor"] === "string" && params["cursor"].trim()
+        ? new Date(params["cursor"])
+        : null;
+      if (cursor != null && !Number.isFinite(cursor.getTime())) {
+        return { success: false, error: "Invalid cursor", message: "cursor must be an ISO timestamp when provided." };
+      }
+      const activities = await prisma.buildActivity.findMany({
+        where: {
+          buildId,
+          ...(cursor ? { createdAt: { gt: cursor } } : {}),
+        },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+        select: { id: true, buildId: true, tool: true, summary: true, createdAt: true },
+      });
+      const rows = activities.map((activity) => ({
+        ...activity,
+        createdAt: activity.createdAt.toISOString(),
+      }));
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Loaded ${rows.length} build activit${rows.length === 1 ? "y" : "ies"} for ${buildId}.`,
+        data: {
+          buildId,
+          activities: rows,
+          nextCursor: rows.at(-1)?.createdAt ?? params["cursor"] ?? null,
+        },
+      };
     }
 
     // ─── Build Studio Lifecycle Tool Handlers (EP-SELF-DEV-002) ─────────────
@@ -7234,6 +7647,31 @@ export async function executeTool(
           },
         };
       }
+
+      // Guard: schema regression check.
+      // If the diff removes existing fields/models from schema.prisma, the sandbox
+      // was initialized from a stale portal image and this diff would silently
+      // regress main's schema. Block deploy and surface the removed lines so the
+      // operator knows what drifted.
+      if (extracted.schemaRegressions.length > 0) {
+        const regressionSample = extracted.schemaRegressions.slice(0, 10).join("\n");
+        const regressionMessage =
+          `Schema regression detected in sandbox diff — ${extracted.schemaRegressions.length} existing field(s) or model declaration(s) would be removed from packages/db/prisma/schema.prisma. ` +
+          `This almost always means the sandbox was initialized from a portal image that predates recent schema changes on main. ` +
+          `Rebuild the sandbox from a fresh image (Admin → Build Studio → Rebuild Sandbox) and re-run the build before deploying.\n\n` +
+          `Removed lines (first 10):\n${regressionSample}`;
+        logBuildActivity(buildId, "deploy_feature", regressionMessage);
+        return {
+          success: false,
+          error: "Schema regression detected.",
+          message: regressionMessage,
+          data: {
+            schemaRegressions: extracted.schemaRegressions,
+            regressionCount: extracted.schemaRegressions.length,
+          },
+        };
+      }
+
       await prisma.featureBuild.update({
         where: { buildId },
         data: { diffPatch: extracted.fullDiff, diffSummary: extracted.fullDiff.slice(0, 500) },

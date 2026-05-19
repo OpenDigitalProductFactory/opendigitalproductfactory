@@ -193,6 +193,66 @@ export const postgresRestoreDurationSeconds = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Neo4j Daily Backup (Slice 3) ─────────────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md
+
+export const neo4jBackupRunsTotal = new Counter({
+  name: "dpf_neo4j_backup_runs_total",
+  help: "Neo4j backup runs by status and trigger",
+  labelNames: ["status", "trigger"] as const,
+  registers: [metricsRegistry],
+});
+
+export const neo4jBackupLastSuccessSeconds = new Gauge({
+  name: "dpf_neo4j_backup_last_success_seconds",
+  help: "Epoch seconds at which the last successful Neo4j backup finished",
+  registers: [metricsRegistry],
+});
+
+export const neo4jBackupStorageBytes = new Gauge({
+  name: "dpf_neo4j_backup_storage_bytes",
+  help: "Total bytes used by retained Neo4j backup dumps",
+  registers: [metricsRegistry],
+});
+
+export const neo4jBackupDurationSeconds = new Histogram({
+  name: "dpf_neo4j_backup_duration_seconds",
+  help: "Wall-clock duration of Neo4j backup runs",
+  labelNames: ["trigger"] as const,
+  buckets: [1, 2, 5, 10, 30, 60, 300, 900],
+  registers: [metricsRegistry],
+});
+
+// ─── Qdrant Daily Backup (Slice 3) ────────────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md
+
+export const qdrantBackupRunsTotal = new Counter({
+  name: "dpf_qdrant_backup_runs_total",
+  help: "Qdrant backup runs by status and trigger",
+  labelNames: ["status", "trigger"] as const,
+  registers: [metricsRegistry],
+});
+
+export const qdrantBackupLastSuccessSeconds = new Gauge({
+  name: "dpf_qdrant_backup_last_success_seconds",
+  help: "Epoch seconds at which the last successful Qdrant backup finished",
+  registers: [metricsRegistry],
+});
+
+export const qdrantBackupStorageBytes = new Gauge({
+  name: "dpf_qdrant_backup_storage_bytes",
+  help: "Total bytes used by retained Qdrant backup snapshots",
+  registers: [metricsRegistry],
+});
+
+export const qdrantBackupDurationSeconds = new Histogram({
+  name: "dpf_qdrant_backup_duration_seconds",
+  help: "Wall-clock duration of Qdrant backup runs",
+  labelNames: ["trigger"] as const,
+  buckets: [1, 2, 5, 10, 30, 60, 300, 900],
+  registers: [metricsRegistry],
+});
+
 // ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
 

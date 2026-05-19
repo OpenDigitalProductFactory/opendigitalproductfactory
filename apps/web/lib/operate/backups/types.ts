@@ -2,6 +2,7 @@
  * Shared types for the platform-managed backup mechanism.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md
+ * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md
  */
 
 /**
@@ -14,6 +15,7 @@
  */
 export type BackupTrigger = "scheduled" | "manual" | "pre-restore-safety";
 export type BackupRunStatus = "running" | "ok" | "failed";
+export type BackupTarget = "postgres" | "neo4j" | "qdrant";
 
 /** GFS retention policy. Tunable via Platform Config in a later slice. */
 export interface BackupRetentionPolicy {
@@ -51,7 +53,38 @@ export interface BackupManifest {
   dumpFormat: string;
 }
 
+/** Sidecar manifest written by scripts/backup-neo4j.sh. */
+export interface Neo4jBackupManifest {
+  schemaVersion: 1;
+  target: "neo4j";
+  container: string;
+  volume: string;
+  database: string;
+  image: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  sizeBytes: number;
+  sha256: string;
+  dumpFormat: string;
+}
+
+/** Sidecar manifest written by scripts/backup-qdrant.sh. */
+export interface QdrantBackupManifest {
+  schemaVersion: 1;
+  target: "qdrant";
+  qdrantUrl: string;
+  snapshotName: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  sizeBytes: number;
+  sha256: string;
+  dumpFormat: string;
+}
+
 export interface ReadinessSummary {
+  target: BackupTarget;
   scheduledJob: {
     jobId: string;
     schedule: string;

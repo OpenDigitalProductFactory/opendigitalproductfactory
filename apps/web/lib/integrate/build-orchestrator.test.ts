@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary, parseQAVerification, resolveBuildProviderRunner } from "./build-orchestrator";
+import { formatPhaseMessage, formatBuildCompleteMessage, classifyOutcome, getCompletedTaskTitles, buildStoredResultsSummary, buildScopedTaskContext, buildTaskArtifactEntry, buildTaskArtifactSummary, parseQAVerification, resolveBuildProviderRunner } from "./build-orchestrator";
 import type { StoredTaskResult } from "./build-orchestrator";
 import type { AgenticResult } from "@/lib/agentic-loop";
 import type { ClaudeResult } from "./claude-dispatch";
 import type { CodexResult } from "./codex-dispatch";
+import type { BuildPlanDoc } from "@/lib/feature-build-types";
+import type { AssignedTask } from "./task-dependency-graph";
 
 describe("resolveBuildProviderRunner", () => {
   it("defaults to local-docker x codex", () => {
@@ -271,6 +273,90 @@ describe("buildStoredResultsSummary", () => {
     const summary = buildStoredResultsSummary(tasks);
     expect(summary).toContain("completed in prior run");
   });
+});
+
+describe("task-scoped Build Studio context", () => {
+  function makeTask(index: number, implement = "Implement the scoped context guard."): AssignedTask {
+    return {
+      taskIndex: index,
+      title: `Task ${index}`,
+      specialist: "software-engineer",
+      files: [
+        {
+          path: `apps/web/lib/example-${index}.ts`,
+          action: "modify",
+          purpose: `Task ${index} target`,
+        },
+      ],
+      task: {
+        title: `Task ${index}`,
+        testFirst: "Write a focused regression test first.",
+        implement,
+        verify: "pnpm --filter web exec vitest run lib/integrate/build-orchestrator.test.ts",
+      },
+    };
+  }
+
+  it("compresses prior task output to bounded artifact entries", () => {
+    const rawOutput = `Changed files and ran tests.\nRAW_HISTORY_SENTINEL ${"x".repeat(20_000)}`;
+    const entry = buildTaskArtifactEntry({
+      task: makeTask(1),
+      outcome: "DONE",
+      content: rawOutput,
+      durationMs: 1234,
+    });
+
+    expect(entry.title).toBe("Task 1");
+    expect(entry.files).toEqual(["apps/web/lib/example-1.ts"]);
+    expect(entry.summary.length).toBeLessThanOrEqual(320);
+    expect(entry.summary).not.toContain("RAW_HISTORY_SENTINEL");
+  });
+
+  it("keeps task 16 scoped context under 8K after fifteen large prior results", () => {
+    const artifactEntries = Array.from({ length: 15 }, (_, idx) =>
+      buildTaskArtifactEntry({
+        task: makeTask(idx + 1),
+        outcome: "DONE",
+        content: `Task ${idx + 1} completed.\n${"raw turn detail ".repeat(800)}`,
+        durationMs: 1000 + idx,
+      }),
+    );
+    const plan: BuildPlanDoc = {
+      fileStructure: Array.from({ length: 16 }, (_, idx) => ({
+        path: `apps/web/lib/example-${idx + 1}.ts`,
+        action: "modify",
+        purpose: `Task ${idx + 1} target`,
+      })),
+      tasks: Array.from({ length: 16 }, (_, idx) => makeTask(idx + 1).task),
+    };
+    const rawLifecycleThread = `FULL_LIFECYCLE_THREAD ${"conversation ".repeat(12_000)}`;
+    const artifactSummary = buildTaskArtifactSummary(artifactEntries);
+
+    const scoped = buildScopedTaskContext({
+      buildId: "FB-SCOPED",
+      task: makeTask(16, "Implement the sixteenth task without reading raw lifecycle history."),
+      plan,
+      artifactSummary,
+      rawBuildContext: rawLifecycleThread,
+    });
+
+    expect(scoped.length).toBeLessThanOrEqual(8000);
+    expect(scoped).toContain("Task 16");
+    expect(scoped).toContain("Artifact Summary");
+    expect(scoped).toContain("apps/web/lib/example-16.ts");
+    expect(scoped).not.toContain("FULL_LIFECYCLE_THREAD");
+    expect(scoped).not.toContain("conversation conversation conversation");
+  });
+
+  // Pinned acceptance gaps from the rev 4 thread-management design (§13).
+  // Each it.todo names the criterion it will become a regression test for once
+  // the corresponding fast-follow lands. Replacing the todo with a real
+  // assertion is the explicit Definition of Done for that follow-up.
+  it.todo("C3 — decisions slot survives LRU eviction with 20 completed tasks (lands FF-PR-1: decisions ledger wired to DecisionInteraction)");
+  it.todo("C4 — file shapes (exported symbols) for files written by prior tasks appear in scoped context without re-Read (lands BI-FOLLOWUP-SIGNATURE-EXTRACT)");
+  it.todo("C5 — BLOCKED-task retry receives prior attempt's failure context in scoped dispatch (lands FF-PR-3)");
+  it.todo("C7 — taskResults.decisions[] contains only interactionId references, never duplicated rationale/confidence fields (lands FF-PR-1; prohibition test)");
+  it.todo("C8 — scoped context slot order is stable-prefix-first to maximize prompt cache hit rate (lands FF-PR-1; snapshot or position assertion)");
 });
 
 // ─── QA Verification Parsing ─────────────────────────────────────────────

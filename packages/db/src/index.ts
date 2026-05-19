@@ -4,6 +4,7 @@ export { prisma } from "./client";
 // Prisma.DbNull) and a type (for input/output type aliases).
 export { Prisma } from "../generated/client/client";
 export type { PrismaClient } from "../generated/client/client";
+export { WriteGateRequirement } from "../generated/client/client";
 
 export { neo4jSession, closeNeo4j, runCypher } from "./neo4j";
 

@@ -74,7 +74,7 @@ Implement the **3-tier hardware ladder** anchored on a CPU default:
 - Compose profile: NONE. Service starts on default `docker compose up`.
 - Provider config: `speaches` seed row keeps `providerId` for backward
   compat (no schema change needed) but `name` is updated to "Local STT
-  (whisper-server)" and `baseUrl` stays `http://dpf-stt:8000/v1`.
+  (whisper-server)" and `baseUrl` is `http://dpf-stt:9000`.
 
 ### Tier 2 — Upgrade (GPU)
 

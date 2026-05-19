@@ -3,6 +3,7 @@ import {
   buildEndpointTestRunRequest,
   getAvailableTools,
   inferEndpointIdFromRouteContext,
+  resolveSavePhaseHandoffTransition,
   sanitizeToolParams,
 } from "./mcp-tools";
 import { getActionsForRoute } from "./agent-action-registry";
@@ -75,6 +76,8 @@ describe("mcp tools", () => {
   it("includes build tools for platform users", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
     const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("create_epic");
+    expect(toolNames).toContain("update_epic");
     expect(toolNames).toContain("update_feature_brief");
     expect(toolNames).toContain("register_digital_product_from_build");
     expect(toolNames).toContain("create_build_epic");
@@ -194,6 +197,28 @@ describe("mcp tools", () => {
     expect(tool!.requiredCapability).toBe("manage_backlog");
     expect(tool!.sideEffect).toBe(true);
   });
+
+  it("exposes reviewDesignDoc and reviewBuildPlan to the build-specialist agent (architecture_read + build_plan_write grants)", async () => {
+    // Regression: mcp-tools.ts was using the sync JSON-backed getAgentToolGrants which
+    // returned stale grants missing architecture_read / build_plan_write. The ideate phase
+    // then could not call reviewDesignDoc (required for Ideate→Plan transition) because the
+    // tool was filtered out. Fix: switched to getAgentToolGrantsAsync (DB-first, JSON fallback).
+    const tools = await getAvailableTools(adminUser, {
+      externalAccessEnabled: false,
+      agentId: "build-specialist",
+    });
+    const toolNames = tools.map((t) => t.name);
+
+    expect(toolNames).toContain("reviewDesignDoc");
+    expect(toolNames).toContain("reviewBuildPlan");
+    expect(toolNames).toContain("saveBuildEvidence");
+    // Ensure sandbox tools are also present (build phase needs them)
+    expect(toolNames).toContain("start_sandbox");
+    expect(toolNames).toContain("run_sandbox_tests");
+    // Ensure the grant filter is actually applied (work_capsule tools are NOT in build-specialist's grants)
+    expect(toolNames).not.toContain("list_work_capsules");
+    expect(toolNames).not.toContain("get_work_capsule");
+  });
 });
 
 describe("sanitizeToolParams", () => {
@@ -251,6 +276,50 @@ describe("sanitizeToolParams", () => {
     // All string fields are empty but there's a non-string field — string check still applies
     // to string-typed fields only. Both string fields are empty → stripped.
     expect(result).not.toHaveProperty("proposeNew");
+  });
+});
+
+describe("save_phase_handoff transition controls", () => {
+  it("ignores hidden non-advancing controls from non-orchestrator callers", () => {
+    const transition = resolveSavePhaseHandoffTransition(
+      { toPhase: "build", autoAdvance: false },
+      { agentId: "frontend-engineer", routeContext: "/build" },
+      "build",
+    );
+
+    expect(transition).toEqual({
+      toPhase: "review",
+      autoAdvance: true,
+      isInternalTaskHandoff: false,
+    });
+  });
+
+  it("honors non-advancing task handoff controls only for the build orchestrator", () => {
+    const transition = resolveSavePhaseHandoffTransition(
+      { toPhase: "build", autoAdvance: false },
+      { agentId: "AGT-ORCH-300", routeContext: "/build" },
+      "build",
+    );
+
+    expect(transition).toEqual({
+      toPhase: "build",
+      autoAdvance: false,
+      isInternalTaskHandoff: true,
+    });
+  });
+
+  it("rejects invalid internal target phases", () => {
+    const transition = resolveSavePhaseHandoffTransition(
+      { toPhase: "not-a-phase", autoAdvance: false },
+      { agentId: "AGT-ORCH-300", routeContext: "/build" },
+      "build",
+    );
+
+    expect(transition).toEqual({
+      toPhase: "review",
+      autoAdvance: false,
+      isInternalTaskHandoff: true,
+    });
   });
 });
 

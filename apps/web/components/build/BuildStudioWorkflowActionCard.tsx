@@ -11,6 +11,7 @@ import {
   retryBuildExecution,
 } from "@/lib/actions/build";
 import { captureDecisionInteraction } from "@/lib/actions/decision-perspective";
+import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visibility-types";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
@@ -32,6 +33,7 @@ export function BuildStudioWorkflowActionCard({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastOutcome, setLastOutcome] = useState<ResumeBuildImplementationOutcome | null>(null);
 
   const primaryEnabled = action.kind !== "review-only" && action.disabledReason == null;
   const decisionInteraction =
@@ -75,6 +77,7 @@ export function BuildStudioWorkflowActionCard({
     }
     setPending(true);
     setError(null);
+    setLastOutcome(null);
     try {
       if (action.kind === "approve-start") {
         await approveBuildStart(build.buildId);
@@ -87,7 +90,7 @@ export function BuildStudioWorkflowActionCard({
       } else if (action.kind === "retry-build") {
         await retryBuildExecution(build.buildId);
       } else if (action.kind === "resume-implementation") {
-        await resumeBuildImplementation(build.buildId);
+        setLastOutcome(await resumeBuildImplementation(build.buildId));
       }
 
       window.dispatchEvent(
@@ -169,9 +172,22 @@ export function BuildStudioWorkflowActionCard({
           </div>
         )}
 
+        {action.resumeMode && (
+          <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs leading-relaxed">
+            <div className="font-semibold text-[var(--dpf-text)]">{action.resumeMode.label}</div>
+            <div className="mt-1 text-[var(--dpf-muted)]">{action.resumeMode.reason}</div>
+          </div>
+        )}
+
         {error && (
           <div className="rounded-lg border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] px-3 py-2 text-xs leading-relaxed text-[var(--dpf-error)]">
             {error}
+          </div>
+        )}
+
+        {lastOutcome && (
+          <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]">
+            {lastOutcome.message}
           </div>
         )}
 

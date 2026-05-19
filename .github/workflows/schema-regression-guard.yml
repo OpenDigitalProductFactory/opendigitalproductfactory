@@ -1,0 +1,52 @@
+name: Schema Regression Guard
+
+# Last-resort safety net: fail any PR that removes existing fields or model
+# declarations from packages/db/prisma/schema.prisma.
+#
+# The primary defence is deploy_feature's runtime check (which blocks the
+# coworker before the PR is even opened). This CI job catches edge cases:
+# hand-edited branches, manual cherry-picks, or any path that bypasses
+# deploy_feature.
+
+on:
+  pull_request:
+    paths:
+      - "packages/db/prisma/schema.prisma"
+
+jobs:
+  schema-regression-guard:
+    name: Schema regression guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect removed schema fields
+        run: |
+          git fetch origin main --depth=50
+
+          # Lines removed from schema.prisma that look like:
+          #   - Prisma field definitions (2-space indent + identifier)
+          #   - model / enum declarations
+          # "+" lines and diff headers are excluded.
+          REMOVED=$(
+            git diff origin/main...HEAD -- packages/db/prisma/schema.prisma \
+              | grep '^-' \
+              | grep -v '^---' \
+              | grep -E '^\-  [a-zA-Z@]|^\-(model|enum) '
+          )
+
+          if [ -n "$REMOVED" ]; then
+            echo "❌ Schema regression detected."
+            echo ""
+            echo "The following lines were removed from packages/db/prisma/schema.prisma:"
+            echo "$REMOVED"
+            echo ""
+            echo "Existing model fields and enum values must never be removed in a feature PR."
+            echo "If this diff came from a Build Studio sandbox, the sandbox image is likely"
+            echo "stale. Rebuild the sandbox from a fresh portal image and re-run the build."
+            exit 1
+          fi
+
+          echo "✅ No schema regressions detected."

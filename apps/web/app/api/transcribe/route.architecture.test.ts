@@ -30,18 +30,18 @@ const {
 } = vi.hoisted(() => ({
   mockResolveTranscriptionEndpoint: vi.fn(async () => ({
     providerId: "speaches",
-    modelId: "Systran/faster-distil-whisper-large-v3",
+    modelId: "base",
   })),
   mockPrismaModelProviderFindUnique: vi.fn(async () => ({
     providerId: "speaches",
-    name: "Speaches",
+    name: "Local STT (whisper-server)",
     endpointType: "transcription",
-    baseUrl: "http://dpf-stt:8000",
+    baseUrl: "http://dpf-stt:9000",
     authMethod: "none",
     authHeader: null,
     status: "active",
   })),
-  mockResolveExecutionBaseUrl: vi.fn(async () => "http://dpf-stt:8000"),
+  mockResolveExecutionBaseUrl: vi.fn(async () => "http://dpf-stt:9000"),
   mockBuildAuthHeaders: vi.fn(async () => ({})),
 }));
 
@@ -130,7 +130,7 @@ describe("ARCHITECTURE: /api/transcribe composes the transcription registry adap
     // The route projects provider/model from the resolved endpoint (not from
     // a hardcoded value or a direct sidecar lookup).
     expect(body.provider).toBe("speaches");
-    expect(body.model).toBe("Systran/faster-distil-whisper-large-v3");
+    expect(body.model).toBe("base");
     // Confidence is normalized from the fake adapter's raw.segments — proves
     // the InferenceResult.raw passthrough works end-to-end (not just in
     // transcribe.test.ts which mocks callProvider).

@@ -39,6 +39,22 @@ describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
     expect(isToolAllowedByGrants("create_portal_pr", ["sandbox_execute"])).toBe(true);
     expect(isToolAllowedByGrants("create_portal_pr", ["backlog_write"])).toBe(false);
   });
+
+  it("Build Studio observer tools require read-only work capsule access", () => {
+    const tools = [
+      "get_build_progress_visibility",
+      "get_build_sandbox_state",
+      "get_build_dispatch_history",
+      "get_build_scoped_verification",
+      "list_build_activity_since",
+    ];
+
+    for (const tool of tools) {
+      expect(isToolAllowedByGrants(tool, ["work_capsule_read"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["sandbox_execute"])).toBe(false);
+      expect(isToolAllowedByGrants(tool, ["backlog_read"])).toBe(false);
+    }
+  });
 });
 
 describe("TOOL_TO_GRANTS — Deploy / Release entries", () => {
@@ -237,6 +253,13 @@ describe("TOOL_TO_GRANTS — Tool marketplace entries", () => {
 });
 
 describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
+  it("generic epic tools require backlog_write", () => {
+    expect(isToolAllowedByGrants("create_epic", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("update_epic", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("create_epic", ["backlog_read"])).toBe(false);
+    expect(isToolAllowedByGrants("update_epic", ["backlog_read"])).toBe(false);
+  });
+
   it("retire_backlog_item requires backlog_write without broader triage authority", () => {
     expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_write"])).toBe(true);
     expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_read"])).toBe(false);
