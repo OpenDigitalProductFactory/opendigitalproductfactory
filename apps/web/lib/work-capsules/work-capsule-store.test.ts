@@ -158,6 +158,35 @@ describe("work capsule store", () => {
     expect(mockRevalidatePortalContext).toHaveBeenCalledTimes(1);
   });
 
+  it("records runtime evidence links in the capsule activity payload", async () => {
+    db.workCapsule.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-EVIDENCE" });
+    db.workCapsuleActivity.create.mockResolvedValue({ id: "activity-1" });
+
+    await recordWorkCapsuleEvidence({
+      db: capsuleDb(),
+      capsuleId: "WC-EVIDENCE",
+      evidence: {
+        kind: "verification",
+        summary: "Sandbox UX passed",
+        targetId: "RT-SANDBOX-1",
+        runtimeTargetId: "target-row-1",
+        verificationId: "RV-UX-1",
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+
+    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        kind: "evidence-recorded",
+        payload: expect.objectContaining({
+          targetId: "RT-SANDBOX-1",
+          runtimeTargetId: "target-row-1",
+          verificationId: "RV-UX-1",
+        }),
+      }),
+    }));
+  });
+
   describe("planCapsuleWorkspace", () => {
     it("persists deterministic branch + worktree path on first plan and writes a workspace-planned activity", async () => {
       db.workCapsule.findUnique.mockResolvedValueOnce({

@@ -539,6 +539,9 @@ export async function recordCapsuleEvidenceTool(
     summary: string;
     command?: string;
     url?: string;
+    targetId?: string;
+    runtimeTargetId?: string;
+    verificationId?: string;
     result?: unknown;
   } = {
     kind: rawKind,
@@ -546,8 +549,14 @@ export async function recordCapsuleEvidenceTool(
   };
   const command = stringParam(params, "command");
   const url = stringParam(params, "url");
+  const targetId = stringParam(params, "targetId");
+  const runtimeTargetId = stringParam(params, "runtimeTargetId");
+  const verificationId = stringParam(params, "verificationId");
   if (command) evidence.command = command;
   if (url) evidence.url = url;
+  if (targetId) evidence.targetId = targetId;
+  if (runtimeTargetId) evidence.runtimeTargetId = runtimeTargetId;
+  if (verificationId) evidence.verificationId = verificationId;
   if (Object.prototype.hasOwnProperty.call(params, "result")) evidence.result = params.result;
 
   const db = workCapsuleDb();

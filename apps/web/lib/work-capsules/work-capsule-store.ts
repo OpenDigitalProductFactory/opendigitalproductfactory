@@ -73,6 +73,9 @@ type CapsuleEvidenceInput = {
   summary: string;
   command?: string;
   url?: string;
+  targetId?: string;
+  runtimeTargetId?: string;
+  verificationId?: string;
   result?: unknown;
 };
 
