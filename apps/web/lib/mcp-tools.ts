@@ -1687,13 +1687,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   // ─── Build Studio Lifecycle Tools (EP-SELF-DEV-002) ───────────────────────
   {
     name: "saveBuildEvidence",
-    description: "Save evidence to a FeatureBuild record. ALWAYS pass both `field` and `value` — calls with empty `{}` are rejected. Example: `{field: \"designDoc\", value: {summary: \"...\", files: [\"apps/web/...\"], approach: \"...\"}}`. Valid fields: designDoc, designReview, buildPlan, planReview, taskResults, verificationOut, acceptanceMet.",
+    description: "Save evidence to a FeatureBuild record. ALWAYS pass both `field` and `value` — calls with empty `{}` are rejected. Example: `{field: \"designDoc\", value: {problemStatement: \"...\", existingFunctionalityAudit: \"...\", reusePlan: \"...\", proposedApproach: \"...\", acceptanceCriteria: [\"...\"]}}`. Valid fields: designDoc, designReview, buildPlan, planReview, taskResults, verificationOut, acceptanceMet.",
     inputSchema: {
       type: "object",
       properties: {
         buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
         field: { type: "string", enum: ["designDoc", "designReview", "buildPlan", "planReview", "taskResults", "verificationOut", "acceptanceMet"], description: "Evidence field to update — required" },
-        value: { type: "object", description: "JSON value to store — required, do not omit. Shape varies by field; for designDoc include summary/files/approach, for buildPlan include tasks array with per-task acceptance criteria." },
+        value: { type: "object", description: "JSON value to store — required, do not omit. Shape varies by field; for designDoc use {problemStatement, existingFunctionalityAudit, reusePlan, proposedApproach, acceptanceCriteria[]}, for buildPlan use {fileStructure[], tasks[]} arrays." },
       },
       required: ["field", "value"],
     },
@@ -6172,6 +6172,14 @@ export async function executeTool(
             ? topLevelValue
             : undefined;
 
+      if (normalizedValue === undefined || normalizedValue === null) {
+        return {
+          success: false,
+          error: "Missing value.",
+          message: `REJECTED: saveBuildEvidence requires a non-null "value" object. For field "${field}", pass a JSON object — e.g. for designDoc: {problemStatement, existingFunctionalityAudit, reusePlan, proposedApproach, acceptanceCriteria[]}.`,
+        };
+      }
+
       // Guide the agent when it saves the wrong field for the current phase
       const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });
       if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
@@ -6211,6 +6219,37 @@ export async function executeTool(
               message: "REJECTED: existingCodeAudit is empty or too short. Research the codebase first with search_project_files and describe_model. If this is a new feature with no existing code, write 'No existing implementation found. Searched for [terms]. This is a new feature.' — that counts as valid research.",
             };
           }
+        }
+
+        // Reject docs that use wrong field names for the required text fields.
+        // Common mistake: agent passes {summary, approach} from stale prompt examples
+        // instead of {problemStatement, proposedApproach}. The review prompt inlines
+        // these via template literals, so a missing field renders as the string
+        // "undefined" in the review input and the review always fails.
+        const docAfterAudit = normalizedValue as Record<string, unknown>;
+        const problemStatement = docAfterAudit?.problemStatement;
+        const proposedApproach = docAfterAudit?.proposedApproach;
+        const reusePlan = docAfterAudit?.reusePlan;
+        if (typeof problemStatement !== "string" || problemStatement.trim().length < 5) {
+          return {
+            success: false,
+            error: "designDoc missing problemStatement.",
+            message: `REJECTED: designDoc must have a non-empty "problemStatement" field (string, min 5 chars). Common mistake: you passed "summary" or "problem" — the correct key is "problemStatement". Required shape: {problemStatement, existingFunctionalityAudit, reusePlan, proposedApproach, acceptanceCriteria[]}`,
+          };
+        }
+        if (typeof proposedApproach !== "string" || proposedApproach.trim().length < 5) {
+          return {
+            success: false,
+            error: "designDoc missing proposedApproach.",
+            message: `REJECTED: designDoc must have a non-empty "proposedApproach" field (string, min 5 chars). Common mistake: you passed "approach" or "solution" — the correct key is "proposedApproach". Required shape: {problemStatement, existingFunctionalityAudit, reusePlan, proposedApproach, acceptanceCriteria[]}`,
+          };
+        }
+        if (typeof reusePlan !== "string" || reusePlan.trim().length < 3) {
+          return {
+            success: false,
+            error: "designDoc missing reusePlan.",
+            message: `REJECTED: designDoc must have a non-empty "reusePlan" field. State which existing code/patterns will be reused, or write "No reuse applicable — new standalone feature."`,
+          };
         }
       }
 
@@ -6372,7 +6411,8 @@ export async function executeTool(
       // Removing auto-advance from saveBuildEvidence prevents accidental phase
       // transitions when evidence is saved before review completes.
 
-      return { success: true, message: `Evidence "${field}" saved.`, entityId: buildId, data: { buildId } };
+      const savedLength = JSON.stringify(fieldValue).length;
+      return { success: true, message: `Evidence "${field}" saved (${savedLength} chars). Do NOT call saveBuildEvidence again for this field unless you receive a review failure — the write is confirmed.`, entityId: buildId, data: { buildId, field, length: savedLength, saved: true } };
     }
 
     case "reviewDesignDoc": {

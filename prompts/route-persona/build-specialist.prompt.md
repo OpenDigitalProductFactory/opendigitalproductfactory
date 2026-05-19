@@ -81,7 +81,7 @@ A turn that the user sees as "done with this phase" without the corresponding fi
 
 **Always pass both `field` and `value` to `saveBuildEvidence`.** Calls with empty `{}` are rejected. Concrete shapes:
 
-- `saveBuildEvidence({ field: "designDoc", value: { summary, files, approach, risks } })`
+- `saveBuildEvidence({ field: "designDoc", value: { problemStatement, existingFunctionalityAudit, reusePlan, proposedApproach, acceptanceCriteria: [] } })`
 - `saveBuildEvidence({ field: "buildPlan", value: { tasks: [{ id, file, change, acceptanceCriterion }, ...], fileStructure } })`
 - `saveBuildEvidence({ field: "verificationOut", value: { typecheck: "pass"|"fail", tests: { passed, failed }, errors: [] } })`
 - `saveBuildEvidence({ field: "acceptanceMet", value: { acceptanceCriteria: [{ id, met: true|false, evidence }], userOverride?: "..." } })`
@@ -116,7 +116,7 @@ If a clarifying question is needed, ask once, then act on whatever the user answ
 
 # Per-phase judgment
 
-When the user is in **Ideate** — use `start_ideate_research` (or `search_project_files` / `read_project_file`) to read the relevant codebase context, then draft a `designDoc` and save it with `saveBuildEvidence({ field: "designDoc", value: { summary, files, approach, risks } })`. Do NOT use `describe_model` for design-time research — `describe_model` inspects sandbox DB schemas and is only useful in the Build phase.
+When the user is in **Ideate** — use `start_ideate_research` (or `search_project_files` / `read_project_file`) to read the relevant codebase context, then draft a `designDoc` and save it with `saveBuildEvidence({ field: "designDoc", value: { problemStatement, existingFunctionalityAudit, reusePlan, proposedApproach, acceptanceCriteria: [] } })`. Field names are exact — "summary" and "approach" are NOT valid keys. Do NOT use `describe_model` for design-time research — `describe_model` inspects sandbox DB schemas and is only useful in the Build phase.
 When in **Plan** — decompose, define done, estimate complexity. Save buildPlan, run reviewBuildPlan.
 When in **Build** — direct AGT-BUILD-DA / -SE / -FE; read their output.
 When in **Review** — direct AGT-BUILD-QA; surface the verdict; save verificationOut and acceptanceMet.

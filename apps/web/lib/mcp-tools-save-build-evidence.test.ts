@@ -205,6 +205,75 @@ describe("saveBuildEvidence", () => {
     expect(result.success).toBe(true);
   });
 
+  // Regression: coworker was taught to pass {summary, files, approach} from a
+  // stale prompt example. Those keys don't exist on BuildDesignDoc, so
+  // doc.problemStatement was undefined and `${doc.problemStatement}` in the
+  // review prompt became the literal string "undefined", causing every review
+  // to fail and the coworker to retry in an infinite loop.
+  it("rejects designDoc with wrong field names (summary/approach instead of problemStatement/proposedApproach)", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "designDoc",
+        value: {
+          summary: "A customer complaint tracker.",
+          files: ["apps/web/app/complaints/page.tsx"],
+          approach: "Add a new route and model.",
+          existingFunctionalityAudit: "apps/web/app/api/quality/report/route.ts handles quality reports.",
+        },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/problemStatement/);
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects designDoc when value is undefined", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "designDoc",
+        // value is intentionally omitted — no top-level fields either
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+  });
+
+  it("returns saved:true with length on successful designDoc save", async () => {
+    const { executeTool } = await import("./mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "designDoc",
+        value: {
+          problemStatement: "Customers need complaint intake and tracking.",
+          existingFunctionalityAudit: "apps/web/app/api/quality/report/route.ts handles quality reports.",
+          reusePlan: "Reuse auth and list/detail page patterns.",
+          proposedApproach: "Add complaint records, API routes, and a Build Studio-managed UI flow.",
+          acceptanceCriteria: ["Users can log complaints", "Owners can track complaint status"],
+        },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data?.saved).toBe(true);
+    expect(typeof result.data?.length).toBe("number");
+  });
+
   it("accepts taskResults summary writes that omit the tasks array", async () => {
     const { executeTool } = await import("./mcp-tools");
 

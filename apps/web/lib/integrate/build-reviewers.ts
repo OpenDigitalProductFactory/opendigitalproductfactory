@@ -32,12 +32,12 @@ export function buildDesignReviewPrompt(doc: BuildDesignDoc, projectContext: str
   return `You are reviewing a design document for a platform feature.
 
 DESIGN DOCUMENT:
-Problem: ${doc.problemStatement}
+Problem: ${doc.problemStatement ?? "Not provided"}
 ${doc.dataModel ? `Data Model: ${doc.dataModel}` : ""}
 Existing Code Audit: ${doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? "Not provided"}
-Reuse Plan: ${doc.reusePlan}
-Proposed Approach: ${doc.proposedApproach}
-Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : doc.acceptanceCriteria ?? "Not specified"}
+Reuse Plan: ${doc.reusePlan ?? "Not provided"}
+Proposed Approach: ${doc.proposedApproach ?? "Not provided"}
+Acceptance Criteria: ${Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria.join("; ") : (doc.acceptanceCriteria ?? "Not specified")}
 ${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalysis.scope}, Entities=${doc.reusabilityAnalysis.domainEntities.map((e) => `${e.hardcodedValue}->${e.parameterName}`).join(", ") || "none"}, Boundary="${doc.reusabilityAnalysis.abstractionBoundary}", Readiness=${doc.reusabilityAnalysis.contributionReadiness}` : ""}
 ${(doc as { accessibility?: string }).accessibility ? `Accessibility: ${(doc as { accessibility?: string }).accessibility}` : ""}
 
