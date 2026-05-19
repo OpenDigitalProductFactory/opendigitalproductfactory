@@ -50,11 +50,46 @@ For the architectural background:
 
 ## Quick provision
 
+### Option A — Terraform (AWS, recommended)
+
+A one-command Terraform module is available for AWS. It provisions the VM,
+security group, IAM role, and runs the DPF installer via cloud-init:
+
+```bash
+cd infra/terraform/single-vm/aws
+cp /dev/null terraform.tfvars   # or create from the variables.tf comments
+
+cat > terraform.tfvars << 'EOF'
+aws_region         = "us-east-1"
+subnet_id          = "subnet-xxxxxxxxxxxxxxxxx"
+dpf_admin_password = "change-me-long-enough-16chars"
+llm_base_url       = "https://api.openai.com/v1"
+llm_model          = "gpt-4o"
+embedding_model    = "text-embedding-3-small"
+EOF
+
+terraform init && terraform apply
+```
+
+After `apply`, watch the cloud-init log:
+
+```bash
+aws ssm start-session --target $(terraform output -raw instance_id) \
+  --document-name AWS-StartInteractiveCommand \
+  --parameters command='tail -f /var/log/dpf-install.log'
+```
+
+Typical install time: **8-12 minutes**. Full reference:
+[`docs/install/cloud-single-vm-terraform-aws.md`](cloud-single-vm.md) — this page —
+plus [`infra/terraform/single-vm/aws/variables.tf`](../../infra/terraform/single-vm/aws/variables.tf).
+
+### Option B — Manual provisioning (GCP / Azure / other clouds)
+
 The runbook is the same for all three clouds at a baseline level —
 provision a VM with the size and disk specs above, allow your access
 method (SSH or cloud-shell), then SSH in.
 
-### AWS (EC2)
+### AWS (EC2) — manual
 
 ```bash
 # Create a key pair if you don't have one
@@ -230,9 +265,9 @@ Same lifecycle commands as bare-metal Linux:
 
 Out of scope for the Single VM Phase 0 substrate:
 
-- **Terraform module** — manual provisioning per the runbook above.
-  A `deploy/terraform/{aws,gcp,azure}/single-vm/` module that wraps
-  `install-dpf.sh --headless` via cloud-init is the Phase 1 target.
+- **Terraform (GCP / Azure)** — the AWS module landed in Phase 0
+  (`infra/terraform/single-vm/aws/`). GCP (Compute Engine) and Azure
+  equivalents follow the same pattern and are tracked in BI-22332688.
 - **HA / multi-AZ** — single VM by definition. Pick the Managed k8s
   substrate if you need HA today.
 - **PITR backups** — disk snapshots are the operator's responsibility.
