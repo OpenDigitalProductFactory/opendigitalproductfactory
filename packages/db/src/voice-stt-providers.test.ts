@@ -12,10 +12,10 @@ describe("speaches transcription provider config", () => {
     expect(SPEACHES_PROVIDER_ID).toBe("speaches");
   });
 
-  it("pins the default model to the spec's recommended Whisper variant", () => {
-    // Per spec §6.3 (`WHISPER_MODEL` env default) and plan Task 3 docker-compose entry.
+  it("pins the default model to the compose default Whisper variant", () => {
+    // Slice 1.5 default-on CPU sidecar uses hwdsl2/whisper-server with WHISPER_MODEL=base.
     // If this changes, docker-compose.yml DPF_STT_MODEL default must change in lockstep.
-    expect(SPEACHES_MODEL_ID).toBe("Systran/faster-distil-whisper-large-v3");
+    expect(SPEACHES_MODEL_ID).toBe("base");
   });
 
   it("uses 'transcription' as the canonical task type for routing", () => {

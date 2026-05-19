@@ -74,7 +74,7 @@ export interface TranscribeResult {
   durationMs: number;
   /** Provider id that handled the request (e.g. "speaches"). */
   provider: string;
-  /** Model id within the provider (e.g. "Systran/faster-distil-whisper-large-v3"). */
+  /** Model id within the provider (e.g. "base"). */
   model: string;
   /** True if the caller passed a non-empty bias prompt. */
   biasUsed: boolean;

@@ -212,11 +212,11 @@ The approved spec covers three slices plus deferred items. This plan covers **on
 
 - [ ] **Step 3: Run the test — verify it fails.** `pnpm --filter web exec vitest run <test-file>` should report "providerId 'speaches' not found".
 
-- [ ] **Step 4: Implement `seedSpeachesProvider()`.** Upsert by `providerId="speaches"`, `baseUrl=process.env.STT_BASE_URL ?? "http://dpf-stt:8000"`, `authMethod="none"` (the sidecar is localhost-only, no auth required by default), `capabilities` JSON includes `transcription: true`.
+- [ ] **Step 4: Implement `seedSpeachesProvider()`.** Upsert by `providerId="speaches"`, `baseUrl="http://dpf-stt:9000"` (the hwdsl2/whisper-server internal port), `authMethod="none"` (the sidecar is localhost-only, no auth required by default), `capabilities` JSON includes `transcription: true`.
 
 - [ ] **Step 5: Run the test — verify it passes.**
 
-- [ ] **Step 6: Seed a transcription-capable `ModelProfile`.** Look up the existing pattern for `ModelProfile` upsert; add a row with `providerId="speaches"`, `modelId="Systran/faster-distil-whisper-large-v3"`, `taskTypes` including `"transcription"`. Match the existing capability-declaration shape — do **not** invent a new field.
+- [ ] **Step 6: Seed a transcription-capable `ModelProfile`.** Look up the existing pattern for `ModelProfile` upsert; add a row with `providerId="speaches"`, `modelId="base"`, `taskTypes` including `"transcription"`. Match the existing capability-declaration shape — do **not** invent a new field.
 
 - [ ] **Step 7: Seed `EndpointTaskPerformance` for `taskType="transcription"`.** Map speaches to the `small` tier per spec §6.7 step 3. Use the existing upsert pattern.
 
@@ -237,7 +237,7 @@ The approved spec covers three slices plus deferred items. This plan covers **on
     image: ${DPF_STT_IMAGE:-ghcr.io/speaches-ai/speaches:latest-cuda}
     profiles: ["stt"]
     environment:
-      WHISPER_MODEL: "${DPF_STT_MODEL:-Systran/faster-distil-whisper-large-v3}"
+      WHISPER_MODEL: "${DPF_STT_MODEL:-base}"
       ENABLE_UI: "false"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]

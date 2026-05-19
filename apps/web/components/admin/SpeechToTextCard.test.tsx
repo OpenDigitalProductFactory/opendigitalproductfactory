@@ -45,10 +45,10 @@ describe("SpeechToTextCard — healthy", () => {
     mocks.getSpeechToTextReadiness.mockResolvedValue({
       status: "healthy",
       providerId: "speaches",
-      providerName: "Speaches (local STT sidecar)",
-      modelId: "Systran/faster-distil-whisper-large-v3",
-      baseUrl: "http://dpf-stt:8000",
-      reason: "Speaches (local STT sidecar) reachable at http://dpf-stt:8000.",
+      providerName: "Local STT (whisper-server)",
+      modelId: "base",
+      baseUrl: "http://dpf-stt:9000",
+      reason: "Local STT (whisper-server) reachable at http://dpf-stt:9000.",
     });
   });
 
@@ -60,14 +60,14 @@ describe("SpeechToTextCard — healthy", () => {
 
   it("renders provider, model, and endpoint metadata", async () => {
     const html = await renderCard();
-    expect(html).toContain("Speaches (local STT sidecar)");
-    expect(html).toContain("Systran/faster-distil-whisper-large-v3");
-    expect(html).toContain("http://dpf-stt:8000");
+    expect(html).toContain("Local STT (whisper-server)");
+    expect(html).toContain("base");
+    expect(html).toContain("http://dpf-stt:9000");
   });
 
   it("renders the readiness reason", async () => {
     const html = await renderCard();
-    expect(html).toMatch(/reachable at http:\/\/dpf-stt:8000/);
+    expect(html).toMatch(/reachable at http:\/\/dpf-stt:9000/);
   });
 
   it("passes readinessIsHealthy=true to the test harness", async () => {
@@ -117,9 +117,9 @@ describe("SpeechToTextCard — unhealthy", () => {
     mocks.getSpeechToTextReadiness.mockResolvedValue({
       status: "unhealthy",
       providerId: "speaches",
-      providerName: "Speaches",
-      modelId: "Systran/faster-distil-whisper-large-v3",
-      baseUrl: "http://dpf-stt:8000",
+      providerName: "Local STT (whisper-server)",
+      modelId: "base",
+      baseUrl: "http://dpf-stt:9000",
       reason: "Transcription endpoint is blocked. Unblock via the routing admin UI before traffic can flow.",
     });
   });

@@ -33,6 +33,40 @@ export interface SpeechToTextReadiness {
   reason: string;
 }
 
+function buildModelsProbeUrl(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/+$/, "");
+  return normalized.endsWith("/v1") ? `${normalized}/models` : `${normalized}/v1/models`;
+}
+
+async function probeLocalTranscriptionEndpoint(
+  baseUrl: string,
+): Promise<{ ok: true; modelIds: string[] } | { ok: false; reason: string }> {
+  const url = buildModelsProbeUrl(baseUrl);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!res.ok) {
+      return { ok: false, reason: `health probe returned HTTP ${res.status}` };
+    }
+    const body = (await res.json().catch(() => null)) as { data?: unknown } | null;
+    const modelIds = Array.isArray(body?.data)
+      ? body.data
+          .map((entry) => {
+            if (!entry || typeof entry !== "object" || !("id" in entry)) return null;
+            const id = (entry as { id: unknown }).id;
+            return typeof id === "string" ? id : null;
+          })
+          .filter((id): id is string => id !== null)
+      : [];
+    return { ok: true, modelIds };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: `health probe failed: ${message}` };
+  }
+}
+
 /**
  * Compute the STT readiness for the admin Communications hub card.
  *
@@ -74,7 +108,7 @@ export async function getSpeechToTextReadiness(): Promise<SpeechToTextReadiness>
       providerId: true,
       modelId: true,
       modelStatus: true,
-      provider: { select: { name: true, baseUrl: true, status: true } },
+      provider: { select: { name: true, baseUrl: true, authMethod: true, status: true } },
     },
   });
 
@@ -121,6 +155,42 @@ export async function getSpeechToTextReadiness(): Promise<SpeechToTextReadiness>
       baseUrl: profile.provider.baseUrl,
       reason: `Provider status is "${profile.provider.status}". Activate via the provider admin UI.`,
     };
+  }
+
+  if (profile.provider.authMethod === "none") {
+    if (!profile.provider.baseUrl) {
+      return {
+        status: "unhealthy",
+        providerId: profile.providerId,
+        providerName: profile.provider.name,
+        modelId: profile.modelId,
+        baseUrl: null,
+        reason: "Local speech-to-text provider is active but has no endpoint URL configured.",
+      };
+    }
+
+    const probe = await probeLocalTranscriptionEndpoint(profile.provider.baseUrl);
+    if (!probe.ok) {
+      return {
+        status: "unhealthy",
+        providerId: profile.providerId,
+        providerName: profile.provider.name,
+        modelId: profile.modelId,
+        baseUrl: profile.provider.baseUrl,
+        reason: `${profile.provider.name} is configured at ${profile.provider.baseUrl}, but its ${probe.reason}. Re-check the sidecar in Platform Tools > Communications.`,
+      };
+    }
+
+    if (probe.modelIds.length > 0 && !probe.modelIds.includes(profile.modelId)) {
+      return {
+        status: "unhealthy",
+        providerId: profile.providerId,
+        providerName: profile.provider.name,
+        modelId: profile.modelId,
+        baseUrl: profile.provider.baseUrl,
+        reason: `${profile.provider.name} is reachable at ${profile.provider.baseUrl}, but the sidecar does not list model "${profile.modelId}". Re-run the platform seed from the current release.`,
+      };
+    }
   }
 
   return {
