@@ -135,7 +135,7 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
       />,
     );
 
-    expect(html).toContain("Studio Control");
+    expect(html).toContain("Build Status");
     expect(html).toContain("WWMD gate");
     expect(html).toContain("Escalation required");
   });
@@ -148,7 +148,7 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
       />,
     );
 
-    expect(html).toContain("Studio Control");
+    expect(html).toContain("Build Status");
     expect(html).not.toContain("WWMD gate");
   });
 
@@ -224,6 +224,14 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
       coworkerLabel: "Review failures with coworker",
       coworkerPrompt: "Explain the usage limit.",
       failureAxis: "usage-limit",
+      truthSources: [
+        {
+          source: "db-task-results",
+          completed: 7,
+          total: 9,
+          observedAt: "2026-05-19T17:23:40.189Z",
+        },
+      ],
       resumeMode: {
         mode: "reset-blocked",
         label: "Reset blocked tasks",
@@ -240,6 +248,7 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
     );
 
     expect(screen.getByText("Reset blocked tasks")).toBeInTheDocument();
+    expect(screen.getByText("DB")).toBeInTheDocument();
     expect(screen.getByText("3 blocked tasks will be reset before the existing resume path is queued.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Resume Implementation" }));

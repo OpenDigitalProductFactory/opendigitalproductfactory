@@ -195,11 +195,54 @@ export async function getDispatchHistoryForBuild(buildId: string): Promise<Build
 
 function extractRootCauseSummary(stdout: string, stderr: string, fallback: BuildFailureAxis): string {
   const combined = `${stdout}\n${stderr}`;
-  const firstLine = combined
+  const lines = combined
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .find(Boolean);
+    .filter(Boolean);
+  const axisLine = lines.find((line) => lineMatchesFailureAxis(line, fallback));
+  if (axisLine) {
+    return axisLine.slice(0, 200);
+  }
+  const firstLine = lines.find((line) => !isCliPrologueLine(line));
   return firstLine?.slice(0, 200) ?? fallback;
+}
+
+function lineMatchesFailureAxis(line: string, axis: BuildFailureAxis): boolean {
+  const normalized = line.toLowerCase();
+  switch (axis) {
+    case "usage-limit":
+      return normalized.includes("usage limit");
+    case "rate-limit":
+      return normalized.includes("rate limit") || normalized.includes("429");
+    case "auth":
+      return normalized.includes("oauth")
+        || normalized.includes("api key")
+        || normalized.includes("authentication")
+        || normalized.includes("unauthorized")
+        || normalized.includes("forbidden");
+    case "timeout":
+      return normalized.includes("timed out") || normalized.includes("timeout");
+    case "provider-unavailable":
+      return normalized.includes("provider") && normalized.includes("unavailable");
+    case "test-failure":
+      return normalized.includes("test") || normalized.includes("fail");
+    case "typecheck-failure":
+      return normalized.includes("typecheck") || normalized.includes("typescript");
+    case "out-of-scope-noise":
+      return normalized.includes("out-of-scope") || normalized.includes("workspace");
+    case "unknown":
+      return false;
+    default:
+      return false;
+  }
+}
+
+function isCliPrologueLine(line: string): boolean {
+  const normalized = line.toLowerCase();
+  return normalized === "reading prompt from stdin..."
+    || normalized.startsWith("reading prompt from stdin")
+    || normalized.startsWith("openai codex")
+    || normalized.startsWith("codex ");
 }
 
 function excerpt(value: string): string | null {
