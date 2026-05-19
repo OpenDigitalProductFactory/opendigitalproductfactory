@@ -14,6 +14,9 @@
 - Doc + test updates land in the same change set.
 - Seed + Prisma migration kept in sync (manual DB patches are lost on fresh install).
 - ADR-6 data governance (GPS retention, notification dedupe via `CommunicationDeliveryAttempt`) and ADR-7 conduit framing (no centralized partner credentials) apply.
+- **Functional verification, not just structural.** Per the kernel principle [`structural-verification-is-not-functional`](../../../../../DPF/docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md) (commandment tier), each BI's "complete" claim requires driving the happy path on a live install — tests passing + typecheck green is not sufficient. Each per-BI "Manual smoke" line below is mandatory, not optional.
+- **Build Studio operator gate.** At every phase transition (Ideate → Design → Implement → Review → Ship), invoke the [`build-studio-operator`](../../../../.claude/skills/build-studio-operator) skill rather than rubber-stamping. The operator reviews artefacts and returns targeted feedback; Build Studio advances on evidence quality per the operator-ratified rule [`feedback_governance_approves_evidence_not_provenance`](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/feedback_governance_approves_evidence_not_provenance.md).
+- **Hive contribution boundary (Sprint 1 + 2):** zero signals leave the install from this pack. Field-service hive contributions are gated on Sprint 11 / Deferred Decision §16.7 (operator-visible per-signal allowlist). If a Build Studio design proposes contributing notification template performance or job-duration distributions now, reject and cite ADR-6.
 
 **Out of scope for this pack (later sprints, per spec §9):**
 - Voice-first job-close parser (Sprint 3, depends on STT Slice 1)
@@ -99,6 +102,7 @@ A new `hvac-contractor` archetype in the `trades-maintenance` category, availabl
 ```
 pnpm --filter @dpf/storefront-templates exec vitest run
 pnpm --filter web typecheck
+# Manual smoke (mandatory): on a fresh `docker compose down -v && up -d` install, select hvac-contractor during onboarding, publish the storefront, submit a service request from the public form, observe the resulting CustomerInquiry row + visible storefront preview. Tests passing alone is not "done".
 ```
 
 ---
@@ -124,9 +128,20 @@ A `sourceType = "field-service-job"` convention on the existing `WorkItem` model
 
 - Zod validator `FieldServiceJobEvidence` (in `packages/validators`) shape: `{ technicianNotes?: string[], partsUsed?: PartUsage[], photos?: PhotoAttachment[], customerSignOff?: SignOff, refrigerantLog?: RefrigerantEntry[] }` — defined as forward-compatible (optional fields) so Sprint 3/5/8 can extend without migration.
 - Validator `FieldServiceJobStatus` enforces the 9-state vocabulary; rejects any other value with a clear error.
+- **Canonical legal-transition matrix exported from `packages/validators`** as `FIELD_SERVICE_LEGAL_TRANSITIONS: Readonly<Record<Status, ReadonlySet<Status>>>`. BI-FS-004/005/006/007 import this — no duplication of transition rules. The matrix is the single source of truth:
+  - `quoted → {scheduled, cancelled}`
+  - `scheduled → {confirmed, en-route, cancelled}` — **scheduled → en-route is legal** (confirmation step can be skipped when the operator dispatches without a confirm SMS; BI-FS-006 relies on this)
+  - `confirmed → {en-route, cancelled}`
+  - `en-route → {on-site, cancelled}`
+  - `on-site → {complete, cancelled}`
+  - `complete → {invoiced}`
+  - `invoiced → {paid}`
+  - `paid → {}` (terminal)
+  - `cancelled → {}` (terminal)
 - Service helper `listFieldServiceJobs({ technicianId?, status?, day? })` under `apps/web/lib/field-service/` queries `WorkItem` filtered by `sourceType` and joins via existing `assignedToUserId` / `calendarEventId` / `WorkItemMessage` relations.
-- Service helper `transitionFieldServiceJob({ workItemId, fromStatus, toStatus, actorId })` enforces legal transitions (e.g. cannot go from `scheduled → complete` without crossing `en-route` and `on-site`); writes an audit entry via `WorkItemMessage`.
-- Unit tests cover: each legal transition, each illegal transition (rejected), `evidence` schema accepts a minimal payload, `evidence` schema rejects unknown top-level keys.
+- Service helper `transitionFieldServiceJob({ workItemId, fromStatus, toStatus, actorId, reason })` reads `FIELD_SERVICE_LEGAL_TRANSITIONS`, enforces legality, and writes a structured audit entry via `WorkItemMessage` (see audit shape below).
+- **Structured audit on every transition.** `WorkItemMessage.body` for transitions uses a Json envelope `{ kind: "field-service-transition", from, to, actorId, actorKind: "user"|"agent", reason, decisionVector?: {...} }` so the dispatcher panel (BI-FS-004) and future analytics can read it without parsing prose. Per [`project_principles_as_vectors`](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/project_principles_as_vectors.md), the `decisionVector` slot is reserved for the WWMD perspective output when a transition was arbitrated rather than mechanical.
+- Unit tests cover: each legal transition in the matrix, each illegal transition (rejected with a clear error naming both states), `evidence` schema accepts a minimal payload, `evidence` schema rejects unknown top-level keys, audit envelope shape validates.
 - Architecture doc page added at `docs/architecture/field-service-work-item.md` explaining the sourceType convention and citing spec ADR-1 for the "why no new model" rationale.
 
 ### Substrate references (verified against `main`)
@@ -149,6 +164,7 @@ pnpm --filter @dpf/db exec vitest run
 pnpm --filter @dpf/validators exec vitest run
 pnpm --filter web typecheck
 pnpm exec vitest run   # full suite, no skips
+# Manual smoke (mandatory): on a fresh install, create a WorkItem with sourceType="field-service-job", drive it through the full legal-transition chain quoted → scheduled → confirmed → en-route → on-site → complete → invoiced → paid via the service helper; verify each WorkItemMessage audit envelope is well-formed. Also attempt one illegal transition (e.g. scheduled → complete) and confirm the helper throws with both states named.
 ```
 
 ---
@@ -201,6 +217,7 @@ pnpm --filter @dpf/db exec vitest run
 pnpm --filter @dpf/validators exec vitest run
 pnpm --filter web typecheck
 pnpm exec vitest run
+# Manual smoke (mandatory): on a fresh install (seed path) AND on a migrated install (existing DB + migrate deploy), edit a customer, set preferredNotificationChannel=sms + phoneType=mobile, save, reload, confirm persistence. Then run the seed again on the fresh install and confirm idempotency.
 ```
 
 ---
@@ -224,14 +241,14 @@ A new `dispatcher` coworker seeded into the catalog with the role, prompt templa
 
 ### Acceptance criteria
 
-- Coworker seed file registers `dispatcher` with bundled-active default (no operator "Register" step needed on fresh install).
-- Tool grants seeded in the same change set: `list_work_items` (filtered to `sourceType = "field-service-job"`), `send_customer_notification`, `get_customer_contact`, `update_work_item_status`.
-- Invariant guard at boot verifies the dispatcher's grants are present; fails loud if missing (no silent skip — the agent-grant-seeding-gap fix pattern).
-- Prompt template captures: dispatcher persona, knows the 9-state lifecycle, reads `preferredNotificationChannel` before acting, escalates to operator when no channel works.
-- Routing assigns dispatcher tasks dynamically by capability tier; no provider/model pinning in the seed.
-- Dispatcher visible in Admin → Coworkers on fresh install; admin can disable / re-enable.
-- Portal "Dispatcher" panel (per spec §8.3) renders today's field-service `WorkItem`s with state chips and a notification-history sidecar.
-- Vitest covers: seed produces the expected coworker + grants on a fresh DB, invariant guard fires when a grant is missing, `list_work_items` tool filter rejects non-field-service `sourceType` values.
+- Coworker seed file registers the dispatcher with bundled-active default (no operator "Register" step needed on fresh install). Per [`feedback_obfuscated_not_anonymous`](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/feedback_obfuscated_not_anonymous.md), the coworker carries a **stable pseudonym** (e.g. `Dispatch-Operator` with a generated handle) — not a generic `dispatcher` string identical across installs. The pseudonym is seeded once per install and is the value rendered everywhere the dispatcher acts (audit lines, `WorkItemMessage` author, customer-facing "scheduled by" attribution if surfaced).
+- Tool grants seeded in the same change set: `list_work_items` (filtered to `sourceType = "field-service-job"`), `send_customer_notification`, `get_customer_contact`, `update_work_item_status`. `update_work_item_status` routes through `transitionFieldServiceJob` (BI-FS-002) so the legal-transition matrix and audit envelope are enforced — the dispatcher never writes `WorkItem.status` directly.
+- **Invariant guard is a boot-time `throw`, not a log line.** Pattern matches the agent-grant-seeding-gap fix: at server startup, an invariant function `assertDispatcherGrantsSeeded()` queries the live DB for the dispatcher's pseudonymous Agent row and its grants for the four tools above; on any mismatch (missing agent, missing grant, extra unexpected grant) it throws and the process exits non-zero. The error message names the missing item. Silent skip is the failure mode this guard exists to prevent.
+- Prompt template captures: dispatcher persona, knows the 9-state lifecycle (reads `FIELD_SERVICE_LEGAL_TRANSITIONS`), reads `preferredNotificationChannel` before acting, escalates to operator when no channel works. **WWMD escalation**: when a decision is genuinely ambiguous (e.g. customer has `preferredNotificationChannel = voice` but Sprint 6 TTS hasn't shipped), the dispatcher invokes the [WWMD Decision Perspective Kernel](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/project_wwmd_decision_perspective.md) at `build-studio-gate.ts` rather than guessing — outcomes `recommend / arbitrate / escalate / defer` are written into the transition audit's `decisionVector` slot.
+- Routing assigns dispatcher tasks dynamically by capability tier; no provider/model pinning in the seed (per [`feedback_no_provider_pinning`](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/feedback_no_provider_pinning.md)).
+- Dispatcher visible in Admin → Coworkers on fresh install (pseudonymous display name); admin can disable / re-enable.
+- Portal "Dispatcher" panel (per spec §8.3) renders today's field-service `WorkItem`s with state chips and a notification-history sidecar that reads the structured audit envelope from BI-FS-002, **including operator-actionable messages flagged by BI-FS-005/006 — this panel is the operator's queue for "could not reach this customer" alerts**, so the alert path has a concrete UI surface, not just a buried `WorkItemMessage` row.
+- Vitest covers: seed produces the expected coworker + grants on a fresh DB, invariant guard throws (not warns) when a grant is missing, `list_work_items` tool filter rejects non-field-service `sourceType` values, dispatcher pseudonym is stable across boots (re-running the seed does not generate a new pseudonym).
 
 ### Substrate references (verified against `main`)
 
@@ -279,8 +296,8 @@ A scheduled dispatcher coworker skill that runs hourly, finds every field-servic
 - Dedupe via `CommunicationDeliveryAttempt`: one confirmation per `WorkItem.id` per event-type per customer per 48h window.
 - On send success: skill does **not** auto-advance status to `confirmed`. State advances only when customer replies YES or operator manually marks. Capture the actual response — don't infer from "we sent it".
 - On send failure: writes a `WorkItemMessage` flagging the operator with "could not reach this customer for tomorrow's job; please call" — actionable, not a silent miss.
-- TCPA-aware opt-out: SMS body includes "Reply STOP to opt out"; STOP replies write `preferredNotificationChannel = none`.
-- Vitest covers: window query, dedupe, channel preference respected, failure path raises an alert, STOP handling.
+- TCPA-aware opt-out: SMS body includes "Reply STOP to opt out". STOP replies write `preferredNotificationChannel = none` on the matching `CustomerContact` and append an audit `WorkItemMessage`. **Substrate check before implementing:** verify the communication fabric exposes an inbound-SMS webhook + dispatcher event. If the spec [`2026-05-15-employee-communication-fabric-design.md`](../specs/2026-05-15-employee-communication-fabric-design.md) does not yet wire inbound SMS, surface the gap during Build Studio Design review and either (a) carve out a BI-FS-005a sub-item to add the inbound webhook, or (b) defer STOP-handling to that BI and ship BI-FS-005 with opt-out language only (no auto-write). Do not silently ship STOP handling that has no inbound path.
+- Vitest covers: window query, dedupe, channel preference respected, failure path raises an alert (and surfaces in the Dispatcher panel — BI-FS-004), STOP handling end-to-end if substrate exists else explicit "not wired" test that asserts the body language is present.
 
 ### Substrate references (verified against `main`)
 
@@ -324,7 +341,7 @@ A coworker skill the technician/operator triggers from the portal (mobile compan
 
 - Portal action button on the dispatcher panel + on each `WorkItem` detail row: "Send on-my-way" — opens a tiny form (minutes-out integer, default 20).
 - Action invokes the dispatcher coworker `send_on_my_way` skill with `{ workItemId, etaMinutes }`.
-- Skill validates: `WorkItem.sourceType = "field-service-job"`, status in `{confirmed, scheduled}`, customer has `preferredNotificationChannel != none` and at least one phone with `phoneType = mobile`.
+- Skill validates: `WorkItem.sourceType = "field-service-job"`, **transition is legal per `FIELD_SERVICE_LEGAL_TRANSITIONS` (BI-FS-002)** — both `confirmed → en-route` and `scheduled → en-route` are legal by that matrix; the skill imports the matrix rather than re-encoding the rule. Customer must have `preferredNotificationChannel != none` and at least one phone with `phoneType = mobile`.
 - On success: `WorkItem.status` → `en-route`, `CommunicationDeliveryAttempt` row written, `WorkItemMessage` audit ("dispatcher sent en-route SMS, ETA 20 min").
 - On failure (e.g. customer has landline only): action returns an inline error explaining the gap and suggests upgrading to TTS once Sprint 6 ships. Actionable, never silent.
 - Dedupe prevents two en-route notifications for the same `WorkItem` within 1h.
@@ -371,11 +388,19 @@ A scheduled dispatcher coworker skill that runs every 10 minutes: for any `WorkI
 ### Acceptance criteria
 
 - Skill runs every 10 minutes via the scheduled-task substrate (`ScheduledAgentTask` if appropriate, or the autonomous-coworker probe pattern).
-- Heuristic: projected slip = `now - originalEndAt` × `(1 + archetypeOverrunFactor)`. Ships with a sane HVAC default `archetypeOverrunFactor = 0.20` (20%) so the skill works day one without operator tuning; operator can override per archetype later. Applied to each subsequent job's `startAt` and `endAt`. Per-job override allowed via the dispatcher coworker if the technician messages "I'll be 45 minutes late at the next one".
-- Outbound SMS per affected downstream customer with spec §8.4 "running late" template; dedupe at one per `WorkItem.id` per slip-window.
-- `WorkItemMessage` audit on each affected job: "downstream slip cascade — new ETA sent".
-- Operator alert if cascade affects >2 downstream jobs (config flag) — dispatcher pings the operator's coworker thread so they can intervene.
-- Vitest covers: cascade math, dedupe, operator-alert threshold, channel preference respected, no notification fired if downstream `WorkItem` lacks a `startAt`.
+- **Cascade math (corrected from prior draft):**
+  - `elapsed = now - calendarEvent.startAt` (how long the current job has been on-site/en-route)
+  - `scheduledDuration = calendarEvent.endAt - calendarEvent.startAt`
+  - `projectedDuration = max(elapsed, scheduledDuration × (1 + overrunFactor))` — never project a shorter duration than already elapsed
+  - `projectedEndAt = calendarEvent.startAt + projectedDuration`
+  - `delta = projectedEndAt - calendarEvent.endAt` (positive = late)
+  - Each downstream job for the same technician on the same day shifts by `delta` for both `startAt` and `endAt` for notification purposes (the calendar row itself is not mutated — the slip is a notification artefact, not a schedule rewrite; calendar mutation is a later BI).
+  - Trigger threshold: skill fires the cascade only when `delta ≥ 15 minutes` to avoid spam.
+- **`overrunFactor` substrate (resolved):** for Sprint 2 the factor is a constant `0.20` exported from `packages/validators` as `FIELD_SERVICE_DEFAULT_OVERRUN_FACTOR`. Per-archetype override is **deferred to a tracked follow-up BI** (call it `BI-FS-007a`, file at plan time) that adds an `archetypeOverrunFactor` column on `StorefrontArchetype` or equivalent storefront-template metadata. Do not invent a new config table for Sprint 2. Per-job tech-supplied override ("I'll be 45m late at the next one") is captured via a dispatcher coworker message that writes `WorkItem.evidence.overrideEtaMinutes` on the affected downstream job — read this before applying the constant.
+- Outbound SMS per affected downstream customer with spec §8.4 "running late" template, including the new arrival window; dedupe at one per `WorkItem.id` per slip-window (slip-window = 30-minute bucket of `delta`).
+- `WorkItemMessage` audit on each affected job uses the structured envelope from BI-FS-002: `{ kind: "field-service-cascade", upstreamWorkItemId, delta, newProjectedStartAt, channelChosen, reasonIfSkipped }`.
+- Operator alert if cascade affects >2 downstream jobs (config flag) — dispatcher writes an actionable entry into the Dispatcher panel (BI-FS-004), not just a buried message, so the operator sees one place for "you should intervene" signals.
+- Vitest covers: cascade math (table-driven with at least 5 cases including the `elapsed > scheduled × (1+f)` edge case), dedupe, operator-alert threshold, channel preference respected, no notification fired if downstream `WorkItem` lacks a `startAt`, per-job `overrideEtaMinutes` honored over the archetype factor.
 
 ### Substrate references (verified against `main`)
 
@@ -435,6 +460,42 @@ cd apps/web && npx next build
 | Migration data loss on `CustomerContact` (BI-FS-003) | Both columns are nullable, no constraint changes on existing columns; rollback restores prior state without loss. |
 | Operator confuses "field-service-job" sourceType with existing WorkItem flows | Architecture doc page in BI-FS-002 acceptance criteria + dispatcher panel filtered view in BI-FS-004 keep the surface distinct. |
 | Build Studio writes feature code that wires GPS / TTS / Twilio into a Sprint-2 BI | Out-of-scope blocks at the top of each BI body are explicit. Design review must reject scope creep into Sprint 4/6. |
+| BI-FS-005 STOP handling silently ships without an inbound SMS path | BI-FS-005 acceptance criteria require verifying the inbound webhook exists in the communication fabric before coding STOP semantics; otherwise carve out BI-FS-005a or ship opt-out language only. No silent gap. |
+| Legal-transition matrix drifts between BIs (duplication) | Matrix exported once from `packages/validators` as `FIELD_SERVICE_LEGAL_TRANSITIONS`; BI-FS-004/005/006/007 import it. Vitest covers matrix shape so a divergent change breaks tests, not production. |
+| Dispatcher coworker ships with non-pseudonymous identity (`dispatcher` literal everywhere) | BI-FS-004 acceptance criteria require a stable per-install pseudonym; vitest covers pseudonym stability across reseed. Cite [`feedback_obfuscated_not_anonymous`](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/feedback_obfuscated_not_anonymous.md) if Design review proposes a literal name. |
+
+---
+
+## Filing checklist (operator one-screen reference)
+
+When `EP-TRADES-FIELD-SERVICE` and the seven BIs are filed into Build Studio's intake, paste each BI's body from the line range below verbatim — the body is already the intake brief. Order matters only for `BI-FS-004 → 007` because of dependencies; the first three can be filed in any order.
+
+| Filed? | `itemId` | Title | Type | Effort | Depends on | Body lines |
+| ------ | -------- | ----- | ---- | ------ | ---------- | ---------- |
+| ☐ | `EP-TRADES-FIELD-SERVICE` | Field Service Trades — AI Dispatch & Field Automation | Epic | — | — | 34–59 |
+| ☐ | `BI-FS-001` | HVAC/AC Contractor Storefront Archetype | Feature | XS | — | 61–108 |
+| ☐ | `BI-FS-002` | `WorkItem` Field-Service Lifecycle | Feature | M | — | 110–170 |
+| ☐ | `BI-FS-003` | Customer Notification Preference Fields | Feature | XS | — | 172–223 |
+| ☐ | `BI-FS-004` | Dispatcher Coworker Seed (V1) | Feature | S | `BI-FS-002`, `BI-FS-003` | 225–273 |
+| ☐ | `BI-FS-005` | Appointment Confirmation Skill (T-24h) | Feature | S | `BI-FS-004` | 275–321 |
+| ☐ | `BI-FS-006` | On-My-Way SMS Skill (Manual ETA Entry) | Feature | S | `BI-FS-004` | 323–369 |
+| ☐ | `BI-FS-007` | Running-Late Cascade Skill | Feature | S | `BI-FS-004`, `BI-FS-006` | 371–425 |
+
+**Per-BI filing fields** (operator fills at intake; everything else is in the body):
+
+- `epicId` → the cuid of the seeded `EP-TRADES-FIELD-SERVICE` row (look up first; do **not** pass the semantic string).
+- `priority` → set Sprint-1 BIs to `1`, Sprint-2 BIs to `2`; Build Studio's queue ordering reads this.
+- `source` → `spec:2026-05-19-field-service-trades-ai-dispatch-design` so the trace link back to the spec is queryable.
+- `accountableEmployeeId` → leave null at intake; Build Studio's triage assigns.
+- `submittedById` → the operator's user id.
+
+**Operator gate at each phase transition** (per governance constraint, lines 18–19):
+
+1. After Build Studio's **Ideate** draft for each BI → invoke `build-studio-operator` skill to review the draft against the BI body and the spec's ADRs.
+2. After **Design** → operator reviews the design doc; rejects any drift toward a new `Job` Prisma model (BI-FS-002), any drift toward partner-credential brokering (financing — out of scope for this pack anyway), and any hive contribution proposal (gated to Sprint 11).
+3. After **Implement** → operator runs the per-BI manual smoke step on the live portal (functional verification, not just structural).
+4. After **Review** → operator confirms tests + typecheck green AND the smoke step passed before authorising Ship.
+5. After **Ship** → operator verifies the BI's behaviour persists through a docker-compose down -v / up cycle (no DB-volume dependency).
 
 ---
 
