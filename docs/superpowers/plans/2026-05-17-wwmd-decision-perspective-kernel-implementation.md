@@ -60,13 +60,13 @@ Models:
 - `DecisionPerspectiveProfileVersion`
   - `versionId`, `profileId`, `versionNumber`, `materialFingerprint`, `changeSummary`, `promotedByPrincipalId`, timestamps.
 - `PerspectiveMaterial`
-  - `materialId`, `profileId`, optional `profileVersionId`, `sourceType`, `sourceRef`, `scope`, `domainClass` (the decision class this material applies to — e.g. `plan-readiness`, `architecture-tradeoff`, `risk-assessment`), `direction` (signed stance vector for principle conflict detection — see Slice 2), `evidenceGrade` (`A` | `B` | `C` | `D`, per the deliberation framework's grade scale), `freshness`, `confidenceWeight`, `reviewStatus`, `promotionState`, validation timestamps, summary.
+  - `materialId`, `profileId`, optional `profileVersionId`, `sourceType`, `sourceRef`, `scope`, `domainClass` (the decision class this material applies to — e.g. `plan-readiness`, `architecture-tradeoff`, `risk-assessment`), `direction` (signed integer: `1` = supports the expected direction for this domain, `-1` = opposes it, `0` = neutral or domain-agnostic; principle conflict is detected when two or more active materials share the same `domainClass` and have opposing `1`/`-1` values — see Slice 2), `evidenceGrade` (`A` | `B` | `C` | `D`, per the deliberation framework's grade scale; D contributes zero weight), `freshness`, `confidenceWeight`, `reviewStatus`, `promotionState`, validation timestamps, summary.
 - `DecisionInteraction`
-  - `interactionId`, `profileId`, `profileVersionId`, optional `fallbackProfileId`, optional `featureBuildId`, optional `taskRunId`, optional `deliberationRunId`, `triggeredByUserId` (FK to the user/principal who caused the gate to fire), `routeContext`, `phaseFrom`, `phaseTo`, `domainClass`, `question`, `options`, `evidenceBundle`, `sources`, `rationale`, `riskTier`, `confidenceBefore`, `confidenceAfter`, `outcomeType`, `outcomePayload`, `humanOutcome`, `principleConflict` (boolean), timestamps. Composite unique index on `(featureBuildId, phaseFrom, phaseTo, profileVersionId)` to enforce idempotency.
+  - `interactionId`, `profileId`, `profileVersionId`, optional `fallbackProfileId`, optional `featureBuildId`, optional `taskRunId`, optional `deliberationRunId`, optional `triggeredByUserId` (nullable FK to the user/principal who caused the gate to fire; null when the gate is invoked by an automated agent rather than a human action), `routeContext`, `phaseFrom`, `phaseTo`, `domainClass`, `question`, `options`, `evidenceBundle`, `sources`, `rationale`, `riskTier`, `confidenceBefore`, `confidenceAfter`, `outcomeType`, `outcomePayload`, `humanOutcome`, `principleConflict` (boolean), timestamps. Composite unique index on `(featureBuildId, phaseFrom, phaseTo, profileVersionId)` to enforce idempotency.
 - `EscalationCapture`
   - `interactionId`, resolver principal/user, prompt, answer, criteria, rationale, objectionsResolved, `domainClass` (string — the decision class that was escalated; required for drift detection in later backlog), candidateMaterial flag, timestamps.
 - `DeferralCapture`
-  - `interactionId`, domain, gapReason, suggestedSourceTypes, candidateMaterial flag, timestamps.
+  - `interactionId`, domain, `gapReason` (typed string constant — one of: `"no-material"` | `"contradicted-material"` | `"below-threshold"` | `"coverage-gap-inherited"`; typed rather than free text so drift analytics can aggregate by reason class), suggestedSourceTypes, candidateMaterial flag, timestamps.
 
 String-valued fixed domains get TypeScript constant arrays in `types.ts` and corresponding runtime guards. Do not add database enum types unless the repo already has a reason to promote them there.
 
@@ -85,13 +85,13 @@ Write failing tests before production code.
    - Confidence score for a set of all-`current` Grade A sources meets the `recommend` threshold.
    - Confidence score for a mix of `stale` and Grade C sources stays below `arbitrate` threshold.
    - Principle conflict where both sides are equally weighted produces `escalate`, not a synthetic recommendation.
-   - Evaluator throwing on malformed input is caught by the gate service and produces a fail-closed `escalate` outcome with the error class recorded in `rationale` — never a thrown exception that bubbles to the operator without a ledger row.
 2. Build Studio gate tests in `apps/web/lib/decision-perspective/build-studio-gate.test.ts`
    - Builds a plan-advancement question from `FeatureBuild` evidence.
    - Includes compact deliberation summary when present.
    - Persists a `DecisionInteraction` for every invocation.
    - Blocks phase advancement on `escalate` or `defer`.
    - Allows phase advancement on `recommend` or `arbitrate`, while preserving the ledger.
+   - Evaluator throwing on malformed input is caught by the gate service and produces a fail-closed `escalate` outcome with the error class recorded in `rationale` — never a thrown exception that bubbles to the operator without a ledger row. (This test belongs here, not in evaluator tests: the evaluator is pure and does not catch its own exceptions; the gate service is the exception boundary.)
 3. Action/API tests in `apps/web/lib/actions/build-governed.test.ts` and `apps/web/app/api/agent/build/advance-phase/route.test.ts`
    - `advanceBuildPhase` invokes WWMD only for `plan -> build` after deterministic phase prerequisites pass.
    - `advanceBuildPhase` does not invoke WWMD for any other phase transition in v1.
@@ -123,7 +123,7 @@ Exit:
 
 - Prisma migration creates the six required models and indexes.
 - `pnpm --filter @dpf/db exec prisma validate` passes.
-- `packages/db/src/seed-decision-perspective.ts` runs without error against a fresh DB and produces one profile, one version snapshot, and at least five `PerspectiveMaterial` rows for the `Mark / DPF Platform` profile.
+- `packages/db/src/seed-decision-perspective.ts` runs without error against a fresh DB and produces one profile, one version snapshot, and at least five `PerspectiveMaterial` rows for the `Mark / DPF Platform` profile — with at least one row carrying `domainClass: "plan-readiness"` so a non-defer outcome is possible for plan advancement evaluations from day one.
 - Re-running the seed is idempotent.
 
 ### Slice 2 - Pure evaluator
@@ -156,7 +156,11 @@ The Build Studio plan-advancement gate uses `domainClass: "plan-readiness"` as i
 `confidenceScore` is a float in `[0, 1]` computed as:
 
 ```
-baseScore = mean(materialWeight(m) for m in resolvedMaterial)
+// If resolvedMaterial is empty (coverageGap: true), baseScore = 0 and
+// confidenceScore collapses to 0 → defer outcome. Do not attempt mean([]).
+baseScore = resolvedMaterial.length > 0
+  ? mean(materialWeight(m) for m in resolvedMaterial)
+  : 0
   where materialWeight(m) =
     freshnessMultiplier(m.freshness)          // current=1.0, stale=0.5, superseded=0.2, contradicted=0.0
     × evidenceGradeWeight(m.evidenceGrade)   // A=1.0, B=0.75, C=0.4, D=0.0
