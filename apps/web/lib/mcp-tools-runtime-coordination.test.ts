@@ -10,6 +10,9 @@ const mockPrisma = {
   runtimeVerification: {
     create: vi.fn(),
   },
+  buildActivity: {
+    create: vi.fn(),
+  },
   workCapsule: {
     findUnique: vi.fn(),
   },
@@ -94,6 +97,9 @@ describe("runtime coordination MCP tools", () => {
       id: "capsule-row-1",
       capsuleId: "WC-RUNTIME",
     });
+    mockPrisma.buildActivity.create.mockResolvedValueOnce({
+      id: "build-activity-1",
+    });
     mockPrisma.runtimeVerification.create.mockResolvedValueOnce({
       id: "verification-row-1",
       verificationId: "RV-RUNTIME-1",
@@ -107,6 +113,7 @@ describe("runtime coordination MCP tools", () => {
       status: "passed",
       targetId: "RT-ROOT-PORTAL",
       capsuleId: "WC-RUNTIME",
+      buildId: "FB-1",
       command: "pnpm --filter web build",
     }, "user-1", { agentId: "codex" });
 
@@ -115,6 +122,14 @@ describe("runtime coordination MCP tools", () => {
       data: expect.objectContaining({
         runtimeTargetId: "target-row-1",
         workCapsuleId: "capsule-row-1",
+        buildActivityId: "build-activity-1",
+      }),
+    }));
+    expect(mockPrisma.featureBuild.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        buildId: "FB-1",
+        tool: "runtime_verification:production-build",
       }),
     }));
   });

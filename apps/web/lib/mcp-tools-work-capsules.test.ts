@@ -116,6 +116,9 @@ describe("work capsule MCP tools", () => {
         kind: "test",
         summary: "Focused MCP lease-renewal test passed.",
         command: "pnpm --filter web exec vitest run lib/mcp-tools-work-capsules.test.ts",
+        targetId: "RT-SANDBOX-1",
+        runtimeTargetId: "target-row-1",
+        verificationId: "RV-UX-1",
       },
       "user-1",
       { agentId: "codex" },
@@ -124,6 +127,15 @@ describe("work capsule MCP tools", () => {
     expect(result.success).toBe(true);
     expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "evidence-recorded", recordedByAgentId: "codex" }),
+    }));
+    expect(mockPrisma.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        payload: expect.objectContaining({
+          targetId: "RT-SANDBOX-1",
+          runtimeTargetId: "target-row-1",
+          verificationId: "RV-UX-1",
+        }),
+      }),
     }));
     expect(mockPrisma.workCapsule.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { capsuleId: "WC-EVIDENCE" },

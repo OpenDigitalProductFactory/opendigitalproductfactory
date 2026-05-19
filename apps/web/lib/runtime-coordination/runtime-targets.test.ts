@@ -7,18 +7,26 @@ import {
   isRuntimeTargetStatus,
   isRuntimeVerificationKind,
   isRuntimeVerificationStatus,
+  getRuntimeCoordinationMap,
+  heartbeatRuntimeTarget,
+  releaseRuntimeTarget,
   recordRuntimeVerification,
   registerRuntimeTarget,
+  resolveRuntimeTargetOwnership,
   type RuntimeCoordinationDb,
 } from "./runtime-targets";
 
 const db = {
   runtimeTarget: {
     create: vi.fn(),
+    findMany: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
   },
   runtimeVerification: {
+    create: vi.fn(),
+  },
+  buildActivity: {
     create: vi.fn(),
   },
   workCapsuleActivity: {
@@ -29,9 +37,11 @@ const db = {
 
 function resetDb() {
   db.runtimeTarget.create.mockReset();
+  db.runtimeTarget.findMany.mockReset();
   db.runtimeTarget.findUnique.mockReset();
   db.runtimeTarget.update.mockReset();
   db.runtimeVerification.create.mockReset();
+  db.buildActivity.create.mockReset();
   db.workCapsuleActivity.create.mockReset();
   db.$transaction.mockReset();
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
@@ -169,6 +179,99 @@ describe("registerRuntimeTarget", () => {
       actor: { userId: "user-1", agentId: null, principalId: "PRN-1" },
     })).rejects.toThrow(/debugReason/i);
   });
+
+  it("heartbeats and releases targets through service helpers", async () => {
+    const now = new Date("2026-05-18T03:00:00.000Z");
+    db.runtimeTarget.update
+      .mockResolvedValueOnce({ id: "target-row-1", targetId: "RT-BUILD-FB-1" })
+      .mockResolvedValueOnce({
+        id: "target-row-1",
+        targetId: "RT-BUILD-FB-1",
+        workCapsuleId: "capsule-row-1",
+      });
+    db.workCapsuleActivity.create.mockResolvedValueOnce({ id: "activity-1" });
+
+    await heartbeatRuntimeTarget({
+      db: runtimeDb(),
+      targetId: "RT-BUILD-FB-1",
+      now,
+    });
+    await releaseRuntimeTarget({
+      db: runtimeDb(),
+      targetId: "RT-BUILD-FB-1",
+      actor: { userId: "user-1", agentId: "codex", principalId: "PRN-1" },
+      now,
+    });
+
+    expect(db.runtimeTarget.update).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: { targetId: "RT-BUILD-FB-1" },
+      data: { lastHeartbeatAt: now },
+    }));
+    expect(db.runtimeTarget.update).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { targetId: "RT-BUILD-FB-1" },
+      data: { status: "released", lastHeartbeatAt: now },
+    }));
+    expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        workCapsuleId: "capsule-row-1",
+        kind: "runtime-target-released",
+      }),
+    }));
+  });
+
+  it("returns a coordination map with derived acceptance metadata", async () => {
+    db.runtimeTarget.findMany.mockResolvedValueOnce([
+      {
+        targetId: "RT-ROOT-PORTAL",
+        kind: "root-portal",
+        status: "running",
+        verifications: [],
+      },
+    ]);
+
+    const result = await getRuntimeCoordinationMap({
+      db: runtimeDb(),
+      status: "running",
+      limit: 5,
+    });
+
+    expect(db.runtimeTarget.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { status: "running" },
+      take: 5,
+    }));
+    expect(result.targets[0]).toMatchObject({
+      targetId: "RT-ROOT-PORTAL",
+      acceptanceRole: "final-acceptance",
+      canSatisfyFinalAcceptance: true,
+    });
+  });
+
+  it("resolves ownership from linked capsule/build data without duplicating it on the target", () => {
+    const ownership = resolveRuntimeTargetOwnership({
+      workCapsule: {
+        leaseHolderPrincipalId: "PRN-LEASE",
+        createdByPrincipalId: "PRN-CREATOR",
+        headBranch: "feat/runtime-coordination-targets",
+        headSha: "cbbc9862",
+        pullRequestUrl: "https://github.test/pr/1",
+        pullRequestNumber: 1,
+      },
+      featureBuild: {
+        buildId: "FB-1",
+        buildBranch: "feat/build-branch",
+        gitCommitHashes: ["build-sha"],
+      },
+    });
+
+    expect(ownership).toEqual({
+      ownerPrincipalId: "PRN-LEASE",
+      branch: "feat/runtime-coordination-targets",
+      sha: "cbbc9862",
+      pullRequestUrl: "https://github.test/pr/1",
+      pullRequestNumber: 1,
+      buildId: "FB-1",
+    });
+  });
 });
 
 describe("recordRuntimeVerification", () => {
@@ -188,6 +291,7 @@ describe("recordRuntimeVerification", () => {
   });
 
   it("records verification and mirrors to Work Capsule activity when linked", async () => {
+    db.buildActivity.create.mockResolvedValueOnce({ id: "build-activity-1" });
     db.runtimeVerification.create.mockResolvedValueOnce({
       id: "verification-row-1",
       verificationId: "RV-UX-1",
@@ -203,6 +307,7 @@ describe("recordRuntimeVerification", () => {
         status: "passed",
         runtimeTargetId: "target-row-1",
         workCapsuleId: "capsule-row-1",
+        buildId: "FB-1",
         url: "http://localhost:3035/build",
         screenshotUrl: "/api/build/FB-1/evidence/screen.png",
         result: { checked: ["/build"] },
@@ -216,6 +321,14 @@ describe("recordRuntimeVerification", () => {
         status: "passed",
         runtimeTargetId: "target-row-1",
         workCapsuleId: "capsule-row-1",
+        buildActivityId: "build-activity-1",
+      }),
+    }));
+    expect(db.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        buildId: "FB-1",
+        tool: "runtime_verification:ux",
+        summary: "Runtime verification RV-UX-1 passed.",
       }),
     }));
     expect(db.workCapsuleActivity.create).toHaveBeenCalledWith(expect.objectContaining({

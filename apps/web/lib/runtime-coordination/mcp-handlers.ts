@@ -12,12 +12,15 @@ import {
   isRuntimeTargetStatus,
   isRuntimeVerificationKind,
   isRuntimeVerificationStatus,
+  getRuntimeCoordinationMap,
+  heartbeatRuntimeTarget,
+  releaseRuntimeTarget,
   recordRuntimeVerification,
   registerRuntimeTarget,
   type RuntimeCoordinationActor,
   type RuntimeCoordinationDb,
 } from "./runtime-targets";
-import type { RuntimeTargetInput, RuntimeVerificationInput } from "./types";
+import type { RuntimeTargetInput, RuntimeTargetKind, RuntimeTargetStatus, RuntimeVerificationInput } from "./types";
 
 type ToolContext = {
   routeContext?: string;
@@ -209,9 +212,9 @@ export async function heartbeatRuntimeTargetTool(params: Record<string, unknown>
   const targetId = stringParam(params, "targetId");
   if (!targetId) return { success: false, error: "missing_targetId", message: "targetId is required." };
 
-  const target = await prisma.runtimeTarget.update({
-    where: { targetId },
-    data: { lastHeartbeatAt: new Date() },
+  const target = await heartbeatRuntimeTarget({
+    db: runtimeDb(),
+    targetId,
   });
 
   return {
@@ -222,13 +225,18 @@ export async function heartbeatRuntimeTargetTool(params: Record<string, unknown>
   };
 }
 
-export async function releaseRuntimeTargetTool(params: Record<string, unknown>): Promise<ToolResult> {
+export async function releaseRuntimeTargetTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context: ToolContext,
+): Promise<ToolResult> {
   const targetId = stringParam(params, "targetId");
   if (!targetId) return { success: false, error: "missing_targetId", message: "targetId is required." };
 
-  const target = await prisma.runtimeTarget.update({
-    where: { targetId },
-    data: { status: "released", lastHeartbeatAt: new Date() },
+  const target = await releaseRuntimeTarget({
+    db: runtimeDb(),
+    targetId,
+    actor: await actor(userId, context),
   });
 
   return {
@@ -257,13 +265,18 @@ export async function recordRuntimeVerificationTool(
   }
 
   try {
+    const runtimeTargetId = await resolveRuntimeTargetRowId(params);
+    const buildId = stringParam(params, "buildId");
     const input: RuntimeVerificationInput = {
       verificationId,
       kind,
       status,
-      runtimeTargetId: await resolveRuntimeTargetRowId(params),
+      runtimeTargetId,
       workCapsuleId: await resolveWorkCapsuleRowId(params),
-      featureBuildId: await resolveFeatureBuildRowId(params),
+      featureBuildId: runtimeTargetId && buildId && !stringParam(params, "featureBuildId")
+        ? null
+        : await resolveFeatureBuildRowId(params),
+      buildId,
       gitPromotionCandidateId: await resolveGitPromotionCandidateRowId(params),
       command: stringParam(params, "command"),
       url: stringParam(params, "url"),
@@ -309,19 +322,11 @@ export async function getRuntimeCoordinationMapTool(params: Record<string, unkno
     return { success: false, error: "invalid_kind", message: `kind must be one of: ${RUNTIME_TARGET_KINDS.join(", ")}.` };
   }
 
-  const targets = await prisma.runtimeTarget.findMany({
-    where: {
-      ...(status ? { status } : {}),
-      ...(kind ? { kind } : {}),
-    },
-    orderBy: { updatedAt: "desc" },
-    take: limit,
-    include: {
-      verifications: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      },
-    },
+  const { targets } = await getRuntimeCoordinationMap({
+    db: runtimeDb(),
+    kind: kind as RuntimeTargetKind | null,
+    status: status as RuntimeTargetStatus | null,
+    limit,
   });
 
   return {

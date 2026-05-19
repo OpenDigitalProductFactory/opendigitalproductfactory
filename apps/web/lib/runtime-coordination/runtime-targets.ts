@@ -29,6 +29,9 @@ export type RuntimeCoordinationDb = {
   runtimeVerification: {
     create(args: unknown): Promise<any>;
   };
+  buildActivity?: {
+    create(args: unknown): Promise<any>;
+  };
   workCapsuleActivity?: {
     create(args: unknown): Promise<any>;
   };
@@ -128,6 +131,10 @@ function verificationActivityKind(status: RuntimeVerificationStatus) {
   return status === "failed" ? "runtime-verification-failed" : "runtime-verification-passed";
 }
 
+function verificationSummary(verificationId: string, status: RuntimeVerificationStatus) {
+  return `Runtime verification ${verificationId} ${status}.`;
+}
+
 async function recordCapsuleActivity(args: {
   db: RuntimeCoordinationDb;
   workCapsuleId?: string | null;
@@ -189,6 +196,119 @@ export async function registerRuntimeTarget(args: {
   });
 }
 
+export async function heartbeatRuntimeTarget(args: {
+  db: RuntimeCoordinationDb;
+  targetId: string;
+  now?: Date;
+}) {
+  if (!args.targetId?.trim()) throw new Error("targetId is required");
+  const now = args.now ?? new Date();
+  return args.db.runtimeTarget.update({
+    where: { targetId: args.targetId },
+    data: { lastHeartbeatAt: now },
+  });
+}
+
+export async function releaseRuntimeTarget(args: {
+  db: RuntimeCoordinationDb;
+  targetId: string;
+  actor?: RuntimeCoordinationActor;
+  now?: Date;
+}) {
+  if (!args.targetId?.trim()) throw new Error("targetId is required");
+  const now = args.now ?? new Date();
+  return inTransaction(args.db, async (tx) => {
+    const target = await tx.runtimeTarget.update({
+      where: { targetId: args.targetId },
+      data: { status: "released", lastHeartbeatAt: now },
+    });
+
+    await recordCapsuleActivity({
+      db: tx,
+      workCapsuleId: target?.workCapsuleId ?? null,
+      kind: "runtime-target-released",
+      summary: `Released runtime target ${args.targetId}.`,
+      payload: {
+        targetId: args.targetId,
+        status: "released",
+      },
+      actor: args.actor,
+    });
+
+    return target;
+  });
+}
+
+export async function getRuntimeCoordinationMap(args: {
+  db: RuntimeCoordinationDb;
+  kind?: RuntimeTargetKind | null;
+  status?: RuntimeTargetStatus | null;
+  limit?: number | null;
+}) {
+  if (!args.db.runtimeTarget.findMany) throw new Error("runtimeTarget.findMany is required");
+  if (args.kind && !isRuntimeTargetKind(args.kind)) throw new Error("Invalid runtime target kind");
+  if (args.status && !isRuntimeTargetStatus(args.status)) throw new Error("Invalid runtime target status");
+
+  const limit = Math.min(Math.max(Math.trunc(args.limit ?? 50), 1), 100);
+  const targets = await args.db.runtimeTarget.findMany({
+    where: {
+      ...(args.kind ? { kind: args.kind } : {}),
+      ...(args.status ? { status: args.status } : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    include: {
+      verifications: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      },
+    },
+  });
+
+  return {
+    targets: targets.map((target) => ({
+      ...target,
+      acceptanceRole: isRuntimeTargetKind(target.kind)
+        ? deriveAcceptanceRole(target.kind)
+        : "none",
+      canSatisfyFinalAcceptance: isRuntimeTargetKind(target.kind)
+        ? canSatisfyFinalAcceptance(target.kind)
+        : false,
+    })),
+  };
+}
+
+export function resolveRuntimeTargetOwnership(target: {
+  workCapsule?: {
+    leaseHolderPrincipalId?: string | null;
+    createdByPrincipalId?: string | null;
+    headBranch?: string | null;
+    headSha?: string | null;
+    pullRequestUrl?: string | null;
+    pullRequestNumber?: number | null;
+  } | null;
+  featureBuild?: {
+    buildId?: string | null;
+    buildBranch?: string | null;
+    gitCommitHashes?: unknown;
+  } | null;
+}) {
+  const capsule = target.workCapsule ?? null;
+  const build = target.featureBuild ?? null;
+  const buildShas = Array.isArray(build?.gitCommitHashes)
+    ? build.gitCommitHashes.filter((value): value is string => typeof value === "string")
+    : [];
+
+  return {
+    ownerPrincipalId: capsule?.leaseHolderPrincipalId ?? capsule?.createdByPrincipalId ?? null,
+    branch: capsule?.headBranch ?? build?.buildBranch ?? null,
+    sha: capsule?.headSha ?? buildShas[0] ?? null,
+    pullRequestUrl: capsule?.pullRequestUrl ?? null,
+    pullRequestNumber: capsule?.pullRequestNumber ?? null,
+    buildId: build?.buildId ?? null,
+  };
+}
+
 function primaryAttachPointCount(input: RuntimeVerificationInput): number {
   const directCount = [
     input.runtimeTargetId,
@@ -216,6 +336,18 @@ export async function recordRuntimeVerification(args: {
 }) {
   validateVerificationInput(args.input);
   return inTransaction(args.db, async (tx) => {
+    let buildActivityId = args.input.buildActivityId ?? null;
+    if (!buildActivityId && args.input.buildId && tx.buildActivity) {
+      const activity = await tx.buildActivity.create({
+        data: {
+          buildId: args.input.buildId,
+          tool: `runtime_verification:${args.input.kind}`,
+          summary: verificationSummary(args.input.verificationId, args.input.status),
+        },
+      });
+      buildActivityId = activity?.id ?? null;
+    }
+
     const verification = await tx.runtimeVerification.create({
       data: {
         verificationId: args.input.verificationId,
@@ -230,7 +362,7 @@ export async function recordRuntimeVerification(args: {
         evidenceUrl: args.input.evidenceUrl ?? null,
         screenshotUrl: args.input.screenshotUrl ?? null,
         toolExecutionId: args.input.toolExecutionId ?? null,
-        buildActivityId: args.input.buildActivityId ?? null,
+        buildActivityId,
         backlogActivityId: args.input.backlogActivityId ?? null,
         capsuleActivityId: args.input.capsuleActivityId ?? null,
         startedAt: args.input.startedAt ?? null,
@@ -243,12 +375,13 @@ export async function recordRuntimeVerification(args: {
       db: tx,
       workCapsuleId: args.input.workCapsuleId,
       kind: verificationActivityKind(args.input.status),
-      summary: `Runtime verification ${args.input.verificationId} ${args.input.status}.`,
+      summary: verificationSummary(args.input.verificationId, args.input.status),
       payload: {
         verificationId: args.input.verificationId,
         kind: args.input.kind,
         status: args.input.status,
         runtimeTargetId: args.input.runtimeTargetId ?? null,
+        buildActivityId,
         evidenceUrl: args.input.evidenceUrl ?? null,
         screenshotUrl: args.input.screenshotUrl ?? null,
       },
