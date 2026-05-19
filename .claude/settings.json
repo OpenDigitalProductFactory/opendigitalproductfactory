@@ -21,6 +21,21 @@
   "enabledMcpjsonServers": [
     "dpf"
   ],
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "Set-Location 'D:\\DPF'; .\\scripts\\sync-mcp-worktrees.ps1",
+            "shell": "powershell",
+            "async": true,
+            "statusMessage": "Syncing MCP config to new worktree..."
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "code-review@claude-code-plugins": true,
     "frontend-design@claude-code-plugins": true,
