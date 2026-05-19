@@ -246,7 +246,7 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Studio Control");
+    expect(html).toContain("Build Status");
     expect(html).toContain("Record Approve Start");
     expect(html).toContain("Review with coworker");
   });
