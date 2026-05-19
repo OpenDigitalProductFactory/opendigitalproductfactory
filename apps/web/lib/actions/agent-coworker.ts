@@ -715,12 +715,32 @@ export async function sendMessage(input: {
     // Inject Build Studio context — use explicit buildId or auto-resolve on /build route.
     // Exclude `abandoned` so a prior-test abandoned build doesn't shadow the real active build.
     if (!resolvedBuildId && input.routeContext.startsWith("/build")) {
-      const latestBuild = await prisma.featureBuild.findFirst({
-        where: { createdById: user.id!, phase: { notIn: ["complete", "failed", "abandoned"] } },
-        orderBy: { updatedAt: "desc" },
-        select: { buildId: true },
-      });
-      resolvedBuildId = latestBuild?.buildId ?? undefined;
+      // On a capsule page (/build/work/<capsuleId>), resolve from the capsule's linked build.
+      // Falling through to "latest build" would pick whichever build was updated most recently
+      // across ALL user builds — e.g. a blocked Ollama build's 9 tasks bleed into an unrelated
+      // ideate-phase capsule's coworker context.
+      const capsuleMatch = input.routeContext.match(/\/build\/work\/(WC-[A-Z0-9]+)/);
+      if (capsuleMatch) {
+        const capsule = await prisma.workCapsule.findUnique({
+          where: { capsuleId: capsuleMatch[1] },
+          select: { featureBuildId: true },
+        });
+        if (capsule?.featureBuildId) {
+          const build = await prisma.featureBuild.findUnique({
+            where: { id: capsule.featureBuildId },
+            select: { buildId: true },
+          });
+          resolvedBuildId = build?.buildId ?? undefined;
+        }
+        // No linked build → leave resolvedBuildId undefined; no build context injected
+      } else {
+        const latestBuild = await prisma.featureBuild.findFirst({
+          where: { createdById: user.id!, phase: { notIn: ["complete", "failed", "abandoned"] } },
+          orderBy: { updatedAt: "desc" },
+          select: { buildId: true },
+        });
+        resolvedBuildId = latestBuild?.buildId ?? undefined;
+      }
     }
     if (resolvedBuildId) {
       const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
