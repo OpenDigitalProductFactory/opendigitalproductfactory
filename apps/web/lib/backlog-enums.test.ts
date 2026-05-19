@@ -4,6 +4,7 @@ import {
   BACKLOG_SOURCE_VALUES,
   BACKLOG_EFFORT_SIZES,
   BACKLOG_STATUS_VALUES,
+  EPIC_STATUSES,
 } from "@/lib/explore/backlog";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 
@@ -41,5 +42,13 @@ describe("backlog enum parity between backlog.ts and mcp-tools.ts", () => {
 
   it("query_backlog.status matches shared backlog statuses", () => {
     expect(toolInputEnum("query_backlog", "status")).toEqual([...BACKLOG_STATUS_VALUES]);
+  });
+
+  it("create_epic.status matches shared epic statuses", () => {
+    expect(toolInputEnum("create_epic", "status")).toEqual([...EPIC_STATUSES]);
+  });
+
+  it("update_epic.status matches shared epic statuses", () => {
+    expect(toolInputEnum("update_epic", "status")).toEqual([...EPIC_STATUSES]);
   });
 });

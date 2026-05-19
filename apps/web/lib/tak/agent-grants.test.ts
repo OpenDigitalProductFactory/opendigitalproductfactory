@@ -253,6 +253,13 @@ describe("TOOL_TO_GRANTS — Tool marketplace entries", () => {
 });
 
 describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
+  it("generic epic tools require backlog_write", () => {
+    expect(isToolAllowedByGrants("create_epic", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("update_epic", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("create_epic", ["backlog_read"])).toBe(false);
+    expect(isToolAllowedByGrants("update_epic", ["backlog_read"])).toBe(false);
+  });
+
   it("retire_backlog_item requires backlog_write without broader triage authority", () => {
     expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_write"])).toBe(true);
     expect(isToolAllowedByGrants("retire_backlog_item", ["backlog_read"])).toBe(false);

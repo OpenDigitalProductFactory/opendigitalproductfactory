@@ -13,6 +13,8 @@ const mockPrisma = {
   },
   epic: {
     create: vi.fn(),
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
     update: vi.fn(),
   },
   featureBuild: {
@@ -62,6 +64,111 @@ describe("backlog MCP tool execution", () => {
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
     });
+  });
+
+  it("create_epic creates a generic epic with semantic id and actor attribution", async () => {
+    mockPrisma.epic.findFirst.mockResolvedValue(null);
+    mockPrisma.epic.create.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-WWMD",
+      title: "WWMD Decision Perspective Kernel",
+      status: "open",
+      completedAt: null,
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "create_epic",
+      {
+        epicId: "EP-WWMD",
+        title: "WWMD Decision Perspective Kernel",
+        description: "Governed autonomy gate for ambiguous decisions.",
+        status: "open",
+        source: "feature-gap",
+      },
+      "user-1",
+      { agentId: "AGT-1" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.entityId).toBe("EP-WWMD");
+    expect(mockPrisma.epic.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          epicId: "EP-WWMD",
+          title: "WWMD Decision Perspective Kernel",
+          description: "Governed autonomy gate for ambiguous decisions.",
+          status: "open",
+          submittedById: "user-1",
+          agentId: "AGT-1",
+        }),
+      }),
+    );
+  });
+
+  it("create_epic rejects duplicate semantic ids", async () => {
+    mockPrisma.epic.findFirst.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-WWMD",
+      title: "Existing WWMD",
+      status: "open",
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "create_epic",
+      {
+        epicId: "EP-WWMD",
+        title: "WWMD Decision Perspective Kernel",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("duplicate_epicId");
+    expect(mockPrisma.epic.create).not.toHaveBeenCalled();
+  });
+
+  it("update_epic updates editable fields and marks completion when moved to done", async () => {
+    mockPrisma.epic.findFirst.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-WWMD",
+      title: "WWMD Decision Perspective Kernel",
+      description: "Old description",
+      status: "open",
+      completedAt: null,
+    });
+    mockPrisma.epic.update.mockResolvedValue({
+      id: "epic-row-1",
+      epicId: "EP-WWMD",
+      title: "WWMD Decision Perspective Kernel",
+      description: "Updated description",
+      status: "done",
+      completedAt: new Date("2026-05-19T12:00:00.000Z"),
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool(
+      "update_epic",
+      {
+        epicId: "EP-WWMD",
+        description: "Updated description",
+        status: "done",
+      },
+      "user-1",
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockPrisma.epic.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "epic-row-1" },
+        data: expect.objectContaining({
+          description: "Updated description",
+          status: "done",
+          completedAt: expect.any(Date),
+        }),
+      }),
+    );
   });
 
   it("triage_backlog_item persists triage fields and opens a build candidate", async () => {

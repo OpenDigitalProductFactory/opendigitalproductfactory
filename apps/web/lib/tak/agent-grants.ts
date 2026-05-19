@@ -16,6 +16,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   report_quality_issue: ["backlog_write"],
 
   // Governed MCP backlog surface (spec 2026-04-25)
+  create_epic: ["backlog_write"],
+  update_epic: ["backlog_write"],
   list_epics: ["backlog_read"],
   list_backlog_items: ["backlog_read"],
   get_backlog_item: ["backlog_read"],
