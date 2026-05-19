@@ -3652,6 +3652,7 @@ model McpApiToken {
   tokenHash     String    @unique
   prefix        String
   scopes        String[]  @default([])
+  capability    String    @default("read")
   scope         String    @default("read")
   lastUsedAt    DateTime?
   expiresAt     DateTime?

@@ -111,6 +111,7 @@ describe("issueMcpApiToken — happy path", () => {
     expect(result.ok).toBe(true);
     const data = tokenCreate.mock.calls[0]![0].data;
     expect(data.scope).toBe("admin");
+    expect(data.capability).toBe("write");
   });
 
   it("flag-off: issues a write token when contributionMode is selective", async () => {
@@ -130,7 +131,7 @@ describe("issueMcpApiToken — happy path", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("persists the coarse MCP token scope separately from granular grants", async () => {
+  it("persists the coarse MCP token scope while mirroring legacy capability", async () => {
     cfgFindUnique.mockResolvedValue(null);
     const result = await issueMcpApiToken({
       userId: "u1",
@@ -143,7 +144,7 @@ describe("issueMcpApiToken — happy path", () => {
     if (!result.ok) throw new Error(`expected ok, got: ${result.error}`);
     const data = tokenCreate.mock.calls[0]![0].data;
     expect(data.scope).toBe("write");
-    expect(data.capability).toBeUndefined();
+    expect(data.capability).toBe("write");
   });
 
   it("flag-off: issues a write token when contributionMode is contribute_all", async () => {
@@ -323,6 +324,7 @@ describe("resolveMcpApiToken", () => {
       agentId: null,
       scopes: ["backlog_read"],
       scope: "read",
+      capability: "read",
       revokedAt: new Date(),
       expiresAt: null,
     });
@@ -337,6 +339,7 @@ describe("resolveMcpApiToken", () => {
       agentId: null,
       scopes: ["backlog_read"],
       scope: "read",
+      capability: "read",
       revokedAt: null,
       expiresAt: new Date(Date.now() - 1000),
     });
@@ -351,6 +354,7 @@ describe("resolveMcpApiToken", () => {
       agentId: "AGT-100",
       scopes: ["backlog_read", "backlog_write"],
       scope: "write",
+      capability: "write",
       revokedAt: null,
       expiresAt: new Date(Date.now() + 1_000_000),
     });
@@ -456,6 +460,7 @@ describe("listMcpApiTokens", () => {
         name: "x",
         prefix: "dpfmcp_X",
         scope: "admin",
+        capability: "write",
         scopes: ["backlog_read"],
         lastUsedAt: null,
         expiresAt: null,

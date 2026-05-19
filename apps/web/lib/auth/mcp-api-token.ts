@@ -121,6 +121,12 @@ function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
 }
 
+function normalizePersistedScope(scope: unknown, capability: unknown): McpTokenScope {
+  if (isMcpTokenScope(scope)) return scope;
+  if (capability === "write") return "write";
+  return "read";
+}
+
 export async function issueMcpApiToken(
   input: IssueMcpTokenInput,
 ): Promise<IssueMcpTokenResult> {
@@ -165,6 +171,7 @@ export async function issueMcpApiToken(
       tokenHash: hash,
       prefix,
       scopes: input.scopes,
+      capability: scopeToCapability(scope),
       scope,
       expiresAt,
     },
@@ -254,8 +261,8 @@ export async function resolveMcpApiToken(
     userId: row.userId,
     agentId: row.agentId,
     scopes: row.scopes,
-    scope: isMcpTokenScope(row.scope) ? row.scope : "read",
-    capability: scopeToCapability(isMcpTokenScope(row.scope) ? row.scope : "read"),
+    scope: normalizePersistedScope(row.scope, row.capability),
+    capability: scopeToCapability(normalizePersistedScope(row.scope, row.capability)),
   };
 }
 
@@ -280,6 +287,7 @@ export async function listMcpApiTokens(userId: string): Promise<
       id: true,
       name: true,
       prefix: true,
+      capability: true,
       scope: true,
       scopes: true,
       lastUsedAt: true,
@@ -290,7 +298,7 @@ export async function listMcpApiTokens(userId: string): Promise<
   });
   return rows.map((r) => ({
     ...r,
-    scope: isMcpTokenScope(r.scope) ? r.scope : "read",
-    capability: scopeToCapability(isMcpTokenScope(r.scope) ? r.scope : "read"),
+    scope: normalizePersistedScope(r.scope, r.capability),
+    capability: scopeToCapability(normalizePersistedScope(r.scope, r.capability)),
   }));
 }
