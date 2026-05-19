@@ -3,12 +3,15 @@
 import { auth } from "@/lib/auth";
 import {
   addScopesToMcpApiToken,
+  copyMcpApiTokenPlaintext,
   issueMcpApiToken,
   listMcpApiTokens,
   revokeMcpApiToken,
+  rotateMcpApiToken,
   type IssueMcpTokenResult,
   type McpTokenCapability,
   type McpTokenScope,
+  type RotateMcpTokenResult,
 } from "@/lib/auth/mcp-api-token";
 import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { writeMcpJsonToHost } from "@/lib/auth/mcp-host-writer";
@@ -53,6 +56,8 @@ export async function listMyMcpTokens() {
       id: t.id,
       name: t.name,
       prefix: t.prefix,
+      tokenSuffix: t.tokenSuffix,
+      canCopy: t.canCopy,
       capability: t.capability,
       scope: t.scope,
       scopes: t.scopes,
@@ -70,6 +75,7 @@ export type IssueTokenActionResult =
       tokenId: string;
       plaintext: string;
       prefix: string;
+      tokenSuffix: string;
       expiresAt: string | null;
       setupSnippets: {
         claudeCode: string;
@@ -116,6 +122,7 @@ export async function issueMyMcpToken(input: {
     tokenId: result.tokenId,
     plaintext: result.plaintext,
     prefix: result.prefix,
+    tokenSuffix: result.tokenSuffix,
     expiresAt: result.expiresAt?.toISOString() ?? null,
     setupSnippets: buildSetupSnippets(result.plaintext, input.baseUrl),
   };
@@ -149,9 +156,21 @@ export async function issueMyWriteMcpToken(input: {
     tokenId: result.tokenId,
     plaintext: result.plaintext,
     prefix: result.prefix,
+    tokenSuffix: result.tokenSuffix,
     expiresAt: result.expiresAt?.toISOString() ?? null,
     setupSnippets: buildSetupSnippets(result.plaintext, input.baseUrl),
   };
+}
+
+function isOwnedActiveToken(
+  tokens: Awaited<ReturnType<typeof listMcpApiTokens>>,
+  tokenId: string,
+): boolean {
+  const owned = tokens.find((t) => t.id === tokenId);
+  if (!owned) return false;
+  if (owned.revokedAt != null) return false;
+  if (owned.expiresAt != null && owned.expiresAt.getTime() < Date.now()) return false;
+  return true;
 }
 
 export async function revokeMyMcpToken(input: {
@@ -170,6 +189,76 @@ export async function revokeMyMcpToken(input: {
     return { ok: false, error: "not_found_or_not_yours" };
   }
   return revokeMcpApiToken(input.tokenId, input.reason);
+}
+
+export async function copyMyMcpToken(input: {
+  tokenId: string;
+  baseUrl: string;
+}): Promise<IssueTokenActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "unauthorized", message: "Sign in first" };
+  }
+  const tokens = await listMcpApiTokens(session.user.id);
+  if (!isOwnedActiveToken(tokens, input.tokenId)) {
+    return {
+      ok: false,
+      error: "not_found_or_not_yours",
+      message: "Token was not found for the current user.",
+    };
+  }
+
+  const result = await copyMcpApiTokenPlaintext(input.tokenId);
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      message:
+        result.error === "unavailable"
+          ? "This token was issued before recoverable token storage was enabled. Rotate it to get a copyable replacement."
+          : `Could not copy token: ${result.error}`,
+    };
+  }
+  return {
+    ok: true,
+    tokenId: input.tokenId,
+    plaintext: result.plaintext,
+    prefix: result.prefix,
+    tokenSuffix: result.tokenSuffix,
+    expiresAt: null,
+    setupSnippets: buildSetupSnippets(result.plaintext, input.baseUrl),
+  };
+}
+
+export async function rotateMyMcpToken(input: {
+  tokenId: string;
+  baseUrl: string;
+}): Promise<IssueTokenActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "unauthorized", message: "Sign in first" };
+  }
+  const result: RotateMcpTokenResult = await rotateMcpApiToken({
+    tokenId: input.tokenId,
+    userId: session.user.id,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      message: result.message ?? `Could not rotate token: ${result.error}`,
+    };
+  }
+  writeMcpJsonToHost(result.plaintext, input.baseUrl);
+  return {
+    ok: true,
+    tokenId: result.tokenId,
+    plaintext: result.plaintext,
+    prefix: result.prefix,
+    tokenSuffix: result.tokenSuffix,
+    expiresAt: result.expiresAt?.toISOString() ?? null,
+    setupSnippets: buildSetupSnippets(result.plaintext, input.baseUrl),
+  };
 }
 
 export async function upgradeMyMcpTokenForCodingAgent(input: {
