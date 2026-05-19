@@ -116,7 +116,8 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("ROUTING_LAYOUT");
     expect(source).toContain("width: 1080");
     expect(source).toContain("providerNodeX: 852");
-    expect(source).toContain("routedCoworkerIds");
+    expect(source).toContain("visibleCoworkerIds");
+    expect(source).toContain("visibleProviderIds");
     expect(source).toContain("routedProviderIds");
     expect(source).toContain("prioritizeRoutingNodeIds");
     expect(source).toContain("priorityIds?: ReadonlySet<string>");

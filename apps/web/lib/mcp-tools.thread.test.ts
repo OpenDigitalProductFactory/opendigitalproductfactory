@@ -60,7 +60,7 @@ describe("thread MCP tools", () => {
     expect(mocks.getThreadResult).toHaveBeenCalledWith({ childId: "child-1" }, "user-1");
   });
 
-  it("spawn_work_thread without caller thread context returns the MCP error text", async () => {
+  it("spawn_work_thread without caller thread context returns the MCP error message", async () => {
     const { executeTool } = await import("./mcp-tools");
 
     const result = await executeTool("spawn_work_thread", { objective: "Do X" }, "user-1", {});
@@ -68,9 +68,7 @@ describe("thread MCP tools", () => {
     expect(result).toMatchObject({
       success: false,
       error: "missing_threadId",
-      content: [
-        { type: "text", text: "Error: spawn_work_thread requires caller thread context" },
-      ],
+      message: "Error: spawn_work_thread requires caller thread context",
     });
     expect(mocks.spawnWorkThread).not.toHaveBeenCalled();
   });
