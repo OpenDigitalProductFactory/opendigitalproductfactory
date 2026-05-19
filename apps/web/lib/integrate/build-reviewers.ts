@@ -141,10 +141,11 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
  * Summary: joined from both reviewers.
  */
 export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
-  // A parse failure ("could not parse agent response") is not a real review.
-  // If one reviewer parsed successfully and the other didn't, trust the parsed one.
-  const r1ParseFail = r1.issues.some(i => i.description.includes("unparseable response"));
-  const r2ParseFail = r2.issues.some(i => i.description.includes("unparseable response"));
+  // A parse failure is not a real review — treat it as an absent reviewer.
+  // Use the parseError flag first; fall back to text-matching for results
+  // produced before the flag existed.
+  const r1ParseFail = r1.parseError ?? r1.issues.some(i => i.description.includes("unparseable response"));
+  const r2ParseFail = r2.parseError ?? r2.issues.some(i => i.description.includes("unparseable response"));
   const decision =
     r1ParseFail && !r2ParseFail ? r2.decision :
     r2ParseFail && !r1ParseFail ? r1.decision :
@@ -220,11 +221,11 @@ export function parseReviewResponse(raw: string): ReviewResult {
 
     return { decision, issues, summary };
   } catch {
-    // If parsing fails, return a fail result
     return {
       decision: "fail",
       issues: [{ severity: "critical", description: "Review agent returned unparseable response" }],
       summary: "Review failed — could not parse agent response",
+      parseError: true,
     };
   }
 }
@@ -315,12 +316,17 @@ export function buildReviewBranchArtifacts(
   inputs: ReviewBranchInput[],
 ): BranchArtifact[] {
   return inputs.map((input) => {
-    if (!input.review) {
+    // Treat both null reviews and parse-error results as absent reviewers.
+    // A parse-error branch is not a dissenting vote — it is infra noise and
+    // must not contribute a "fail" recommendation to consensusState detection.
+    if (!input.review || input.review.parseError) {
       return {
         branchNodeId: input.branchNodeId,
         role: input.role,
         completed: false,
-        failureReason: input.failureReason ?? "Reviewer did not produce a parsed response.",
+        failureReason: input.review?.parseError
+          ? "parse-error: reviewer returned unparseable output"
+          : (input.failureReason ?? "Reviewer did not produce a parsed response."),
       };
     }
     const { assertions, objections } = extractClaimsFromReview(input.review);
