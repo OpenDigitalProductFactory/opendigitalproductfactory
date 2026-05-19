@@ -90,10 +90,16 @@ describe("parseReviewResponse", () => {
     expect(result.decision).toBe("pass");
   });
 
-  it("returns fail for unparseable response", () => {
+  it("returns fail with parseError:true for unparseable response", () => {
     const result = parseReviewResponse("This is not JSON");
     expect(result.decision).toBe("fail");
     expect(result.issues[0].severity).toBe("critical");
+    expect(result.parseError).toBe(true);
+  });
+
+  it("does not set parseError on a successfully parsed response", () => {
+    const result = parseReviewResponse('{"decision":"pass","issues":[],"summary":"All good"}');
+    expect(result.parseError).toBeUndefined();
   });
 
   it("defaults invalid severity to minor", () => {
@@ -241,6 +247,30 @@ describe("buildReviewBranchArtifacts", () => {
     ];
     const branches = buildReviewBranchArtifacts(inputs);
     expect(branches[0].failureReason).toMatch(/did not produce/i);
+  });
+
+  it("treats a parse-error review as incomplete, not as a dissenting vote", () => {
+    // Reproduces the Codex rate-limit scenario: reviewer-2 response was not
+    // parseable so parseReviewResponse returned parseError:true. The branch
+    // must be marked completed:false so detectConsensusState sees only the
+    // one passing reviewer and returns partial-consensus, not no-consensus.
+    const parseErrorReview: ReviewResult = {
+      decision: "fail",
+      issues: [{ severity: "critical", description: "Review agent returned unparseable response" }],
+      summary: "Review failed — could not parse agent response",
+      parseError: true,
+    };
+    const inputs: ReviewBranchInput[] = [
+      { branchNodeId: "reviewer-1", role: "reviewer", review: { decision: "pass", issues: [], summary: "Looks good" } },
+      { branchNodeId: "reviewer-2", role: "reviewer", review: parseErrorReview },
+    ];
+    const branches = buildReviewBranchArtifacts(inputs);
+    expect(branches).toHaveLength(2);
+    expect(branches[0].completed).toBe(true);
+    expect(branches[0].recommendation).toBe("pass");
+    expect(branches[1].completed).toBe(false);
+    expect(branches[1].failureReason).toMatch(/parse-error/i);
+    expect(branches[1].recommendation).toBeUndefined();
   });
 });
 
