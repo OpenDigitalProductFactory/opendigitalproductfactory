@@ -39,6 +39,22 @@ describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
     expect(isToolAllowedByGrants("create_portal_pr", ["sandbox_execute"])).toBe(true);
     expect(isToolAllowedByGrants("create_portal_pr", ["backlog_write"])).toBe(false);
   });
+
+  it("Build Studio observer tools require read-only work capsule access", () => {
+    const tools = [
+      "get_build_progress_visibility",
+      "get_build_sandbox_state",
+      "get_build_dispatch_history",
+      "get_build_scoped_verification",
+      "list_build_activity_since",
+    ];
+
+    for (const tool of tools) {
+      expect(isToolAllowedByGrants(tool, ["work_capsule_read"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["sandbox_execute"])).toBe(false);
+      expect(isToolAllowedByGrants(tool, ["backlog_read"])).toBe(false);
+    }
+  });
 });
 
 describe("TOOL_TO_GRANTS — Deploy / Release entries", () => {
