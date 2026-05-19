@@ -3651,6 +3651,8 @@ model McpApiToken {
   name          String
   tokenHash     String    @unique
   prefix        String
+  tokenSuffix   String?
+  secretEnc     String?   @db.Text
   scopes        String[]  @default([])
   capability    String    @default("read")
   scope         String    @default("read")

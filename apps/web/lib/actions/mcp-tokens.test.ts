@@ -6,9 +6,11 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/auth/mcp-api-token", () => ({
   addScopesToMcpApiToken: vi.fn(),
+  copyMcpApiTokenPlaintext: vi.fn(),
   issueMcpApiToken: vi.fn(),
   revokeMcpApiToken: vi.fn(),
   listMcpApiTokens: vi.fn(),
+  rotateMcpApiToken: vi.fn(),
 }));
 
 vi.mock("@/lib/tak/agent-grants", () => ({
@@ -18,25 +20,31 @@ vi.mock("@/lib/tak/agent-grants", () => ({
 import { auth } from "@/lib/auth";
 import {
   addScopesToMcpApiToken,
+  copyMcpApiTokenPlaintext,
   issueMcpApiToken,
   listMcpApiTokens,
   revokeMcpApiToken,
+  rotateMcpApiToken,
 } from "@/lib/auth/mcp-api-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import {
+  copyMyMcpToken,
   issueMyMcpToken,
   issueMyWriteMcpToken,
   listAvailableMcpScopes,
   listMyMcpTokens,
   revokeMyMcpToken,
+  rotateMyMcpToken,
   upgradeMyMcpTokenForCodingAgent,
 } from "./mcp-tokens";
 
 const addScopesMock = addScopesToMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const authMock = auth as unknown as ReturnType<typeof vi.fn>;
+const copyMock = copyMcpApiTokenPlaintext as unknown as ReturnType<typeof vi.fn>;
 const issueMock = issueMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const revokeMock = revokeMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const listMock = listMcpApiTokens as unknown as ReturnType<typeof vi.fn>;
+const rotateMock = rotateMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const grantMapMock = getToolGrantMapping as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -88,6 +96,8 @@ describe("listMyMcpTokens", () => {
         id: "tok_1",
         name: "Mark's laptop",
         prefix: "dpfmcp_ABC1",
+        tokenSuffix: "9K2M",
+        canCopy: true,
         capability: "read",
         scope: "read",
         scopes: ["backlog_read"],
@@ -102,6 +112,8 @@ describe("listMyMcpTokens", () => {
     expect(result.tokens).toHaveLength(1);
     expect(result.tokens[0]?.lastUsedAt).toBe(now.toISOString());
     expect(result.tokens[0]?.expiresAt).toBeNull();
+    expect(result.tokens[0]?.tokenSuffix).toBe("9K2M");
+    expect(result.tokens[0]?.canCopy).toBe(true);
     expect(listMock).toHaveBeenCalledWith("u1");
   });
 });
@@ -225,6 +237,99 @@ describe("revokeMyMcpToken", () => {
     const result = await revokeMyMcpToken({ tokenId: "tok_x", reason: "leaked" });
     expect(result.ok).toBe(true);
     expect(revokeMock).toHaveBeenCalledWith("tok_x", "leaked");
+  });
+});
+
+describe("copyMyMcpToken", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+
+    const result = await copyMyMcpToken({
+      tokenId: "tok_x",
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(copyMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects copy for tokens not owned by the caller", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([{ id: "tok_owned", name: "x" }]);
+
+    const result = await copyMyMcpToken({
+      tokenId: "tok_other",
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("not_found_or_not_yours");
+    expect(copyMock).not.toHaveBeenCalled();
+  });
+
+  it("returns plaintext and setup snippets for an owned recoverable token", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([{ id: "tok_x", name: "x", revokedAt: null, expiresAt: null }]);
+    copyMock.mockResolvedValue({
+      ok: true,
+      plaintext: "dpfmcp_SECRET",
+      prefix: "dpfmcp_SECR",
+      tokenSuffix: "A1B2",
+    });
+
+    const result = await copyMyMcpToken({
+      tokenId: "tok_x",
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.plaintext).toBe("dpfmcp_SECRET");
+    expect(result.setupSnippets.claudeCode).toContain("Bearer dpfmcp_SECRET");
+  });
+});
+
+describe("rotateMyMcpToken", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+
+    const result = await rotateMyMcpToken({
+      tokenId: "tok_x",
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(rotateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns replacement plaintext and setup snippets after rotating an owned token", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    rotateMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_new",
+      plaintext: "dpfmcp_NEWSECRET",
+      prefix: "dpfmcp_NEWS",
+      tokenSuffix: "C3D4",
+      expiresAt: new Date("2026-08-01T00:00:00Z"),
+      revokedTokenId: "tok_old",
+    });
+
+    const result = await rotateMyMcpToken({
+      tokenId: "tok_old",
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(rotateMock).toHaveBeenCalledWith({ tokenId: "tok_old", userId: "u1" });
+    expect(result.tokenId).toBe("tok_new");
+    expect(result.plaintext).toBe("dpfmcp_NEWSECRET");
+    expect(result.setupSnippets.codex).toContain("Bearer dpfmcp_NEWSECRET");
   });
 });
 

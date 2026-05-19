@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: vi.fn(),
     mcpApiToken: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -16,11 +17,14 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  acknowledgeMcpTokenRefresh,
   addScopesToMcpApiToken,
+  copyMcpApiTokenPlaintext,
   issueMcpApiToken,
   listMcpApiTokens,
   resolveMcpApiToken,
   revokeMcpApiToken,
+  rotateMcpApiToken,
 } from "./mcp-api-token";
 
 const tokenCreate = prisma.mcpApiToken.create as unknown as ReturnType<typeof vi.fn>;
@@ -28,10 +32,13 @@ const tokenFindUnique = prisma.mcpApiToken.findUnique as unknown as ReturnType<t
 const tokenFindMany = prisma.mcpApiToken.findMany as unknown as ReturnType<typeof vi.fn>;
 const tokenUpdate = prisma.mcpApiToken.update as unknown as ReturnType<typeof vi.fn>;
 const cfgFindUnique = prisma.platformDevConfig.findUnique as unknown as ReturnType<typeof vi.fn>;
+const transactionMock = prisma.$transaction as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.resetAllMocks();
   delete process.env.CONTRIBUTION_MODEL_ENABLED;
+  process.env.CREDENTIAL_ENCRYPTION_KEY = "0".repeat(64);
+  transactionMock.mockImplementation(async (fn) => fn(prisma));
   tokenCreate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
     id: "tok_123",
     createdAt: new Date(),
@@ -46,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.resetAllMocks();
   delete process.env.CONTRIBUTION_MODEL_ENABLED;
+  delete process.env.CREDENTIAL_ENCRYPTION_KEY;
 });
 
 describe("issueMcpApiToken — happy path", () => {
@@ -65,6 +73,8 @@ describe("issueMcpApiToken — happy path", () => {
     expect(tokenCreate).toHaveBeenCalledOnce();
     const data = tokenCreate.mock.calls[0]![0].data;
     expect(data.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(data.tokenSuffix).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}$/);
+    expect(data.secretEnc).toMatch(/^enc:/);
     expect(data.tokenHash).not.toContain(result.plaintext);
   });
 
@@ -372,6 +382,46 @@ describe("resolveMcpApiToken", () => {
   });
 });
 
+describe("acknowledgeMcpTokenRefresh", () => {
+  it("acknowledges a valid replacement token and marks it used", async () => {
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_new",
+      userId: "u1",
+      agentId: "AGT-100",
+      scopes: ["backlog_read", "backlog_write"],
+      capability: "write",
+      prefix: "dpfmcp_ABCDE",
+      tokenSuffix: "9K2M",
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const result = await acknowledgeMcpTokenRefresh("dpfmcp_GOODTOKEN");
+
+    expect(result).toEqual({
+      ok: true,
+      tokenId: "tok_new",
+      prefix: "dpfmcp_ABCDE",
+      tokenSuffix: "9K2M",
+      capability: "write",
+      scopes: ["backlog_read", "backlog_write"],
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(tokenUpdate).toHaveBeenCalledWith({
+      where: { id: "tok_new" },
+      data: { lastUsedAt: expect.any(Date) },
+    });
+  });
+
+  it("rejects invalid refresh tokens", async () => {
+    tokenFindUnique.mockResolvedValue(null);
+
+    const result = await acknowledgeMcpTokenRefresh("dpfmcp_BAD");
+
+    expect(result).toEqual({ ok: false, error: "invalid_token" });
+  });
+});
+
 describe("revokeMcpApiToken", () => {
   it("returns not_found when token doesn't exist", async () => {
     tokenFindUnique.mockResolvedValue(null);
@@ -395,6 +445,136 @@ describe("revokeMcpApiToken", () => {
       where: { id: "tok_x" },
       data: { revokedAt: expect.any(Date), revokedReason: "leaked" },
     });
+  });
+});
+
+describe("copyMcpApiTokenPlaintext", () => {
+  it("decrypts recoverable token material for copy-current-token actions", async () => {
+    const issued = await issueMcpApiToken({
+      userId: "u1",
+      name: "copyable",
+      capability: "read",
+      scopes: ["backlog_read"],
+      expiresInDays: null,
+    });
+    if (!issued.ok) throw new Error("expected issue ok");
+    const createdData = tokenCreate.mock.calls.at(-1)![0].data;
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_copy",
+      userId: "u1",
+      prefix: issued.prefix,
+      tokenSuffix: createdData.tokenSuffix,
+      secretEnc: createdData.secretEnc,
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const result = await copyMcpApiTokenPlaintext("tok_copy");
+
+    expect(result).toEqual({
+      ok: true,
+      plaintext: issued.plaintext,
+      prefix: issued.prefix,
+      tokenSuffix: createdData.tokenSuffix,
+    });
+  });
+
+  it("returns unavailable for legacy hash-only tokens", async () => {
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_legacy",
+      secretEnc: null,
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const result = await copyMcpApiTokenPlaintext("tok_legacy");
+
+    expect(result).toEqual({ ok: false, error: "unavailable" });
+  });
+
+  it("returns decrypt_failed when encrypted token material cannot be opened", async () => {
+    const issued = await issueMcpApiToken({
+      userId: "u1",
+      name: "copyable",
+      capability: "read",
+      scopes: ["backlog_read"],
+      expiresInDays: null,
+    });
+    if (!issued.ok) throw new Error("expected issue ok");
+    const createdData = tokenCreate.mock.calls.at(-1)![0].data;
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_copy",
+      prefix: issued.prefix,
+      tokenSuffix: createdData.tokenSuffix,
+      secretEnc: createdData.secretEnc,
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    delete process.env.CREDENTIAL_ENCRYPTION_KEY;
+    const result = await copyMcpApiTokenPlaintext("tok_copy");
+
+    expect(result).toEqual({ ok: false, error: "decrypt_failed" });
+  });
+});
+
+describe("rotateMcpApiToken", () => {
+  it("creates a replacement token and revokes the old token in one transaction", async () => {
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_old",
+      userId: "u1",
+      agentId: "AGT-100",
+      name: "Mark laptop",
+      capability: "write",
+      scopes: ["backlog_read", "backlog_write"],
+      expiresAt: new Date("2026-08-01T00:00:00Z"),
+      revokedAt: null,
+    });
+
+    const result = await rotateMcpApiToken({
+      tokenId: "tok_old",
+      userId: "u1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.plaintext).toMatch(/^dpfmcp_/);
+    expect(tokenCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: "u1",
+        agentId: "AGT-100",
+        name: "Mark laptop (rotated)",
+        capability: "write",
+        scopes: ["backlog_read", "backlog_write"],
+        expiresAt: new Date("2026-08-01T00:00:00Z"),
+        tokenSuffix: expect.any(String),
+        secretEnc: expect.stringMatching(/^enc:/),
+      }),
+    });
+    expect(tokenUpdate).toHaveBeenCalledWith({
+      where: { id: "tok_old" },
+      data: {
+        revokedAt: expect.any(Date),
+        revokedReason: expect.stringContaining("rotated to"),
+      },
+    });
+  });
+
+  it("refuses to rotate tokens not owned by the user", async () => {
+    tokenFindUnique.mockResolvedValue({
+      id: "tok_old",
+      userId: "someone_else",
+      revokedAt: null,
+    });
+
+    const result = await rotateMcpApiToken({
+      tokenId: "tok_old",
+      userId: "u1",
+    });
+
+    expect(result).toEqual({ ok: false, error: "not_found_or_not_yours" });
+    expect(tokenCreate).not.toHaveBeenCalled();
+    expect(tokenUpdate).not.toHaveBeenCalled();
   });
 });
 
@@ -460,6 +640,8 @@ describe("listMcpApiTokens", () => {
         name: "x",
         prefix: "dpfmcp_X",
         scope: "admin",
+        tokenSuffix: "A1B2",
+        secretEnc: "enc:copyable",
         capability: "write",
         scopes: ["backlog_read"],
         lastUsedAt: null,
@@ -473,5 +655,7 @@ describe("listMcpApiTokens", () => {
     expect(list[0]?.id).toBe("tok_1");
     expect(list[0]?.scope).toBe("admin");
     expect(list[0]?.capability).toBe("write");
+    expect(list[0]?.tokenSuffix).toBe("A1B2");
+    expect(list[0]?.canCopy).toBe(true);
   });
 });

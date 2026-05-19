@@ -7,6 +7,8 @@
 //
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@dpf/db";
+import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
+import { decryptSecret, encryptSecret } from "@/lib/govern/credential-crypto";
 
 export type McpTokenScope = "read" | "write" | "admin";
 export type McpTokenCapability = "read" | "write";
@@ -31,6 +33,7 @@ export type IssueMcpTokenResult =
       tokenId: string;
       plaintext: string;
       prefix: string;
+      tokenSuffix: string;
       expiresAt: Date | null;
     }
   | {
@@ -61,6 +64,53 @@ export type AddMcpTokenScopesResult =
   | {
       ok: false;
       error: "not_found" | "revoked" | "expired";
+    };
+
+export type CopyMcpTokenPlaintextResult =
+  | {
+      ok: true;
+      plaintext: string;
+      prefix: string;
+      tokenSuffix: string;
+    }
+  | {
+      ok: false;
+      error: "not_found" | "revoked" | "expired" | "unavailable" | "decrypt_failed";
+    };
+
+export type RefreshMcpTokenResult =
+  | {
+      ok: true;
+      tokenId: string;
+      prefix: string;
+      tokenSuffix: string;
+      capability: McpTokenCapability;
+      scopes: string[];
+    }
+  | {
+      ok: false;
+      error: "invalid_token";
+    };
+
+export type RotateMcpTokenInput = {
+  tokenId: string;
+  userId: string;
+};
+
+export type RotateMcpTokenResult =
+  | {
+      ok: true;
+      tokenId: string;
+      revokedTokenId: string;
+      plaintext: string;
+      prefix: string;
+      tokenSuffix: string;
+      expiresAt: Date | null;
+    }
+  | {
+      ok: false;
+      error: "not_found_or_not_yours" | "revoked" | "expired" | "empty_scopes" | "invalid_capability";
+      message?: string;
     };
 
 const TOKEN_PREFIX = "dpfmcp_";
@@ -97,12 +147,20 @@ function encodeBase32(buf: Buffer): string {
   return out;
 }
 
-function generateToken(): { plaintext: string; hash: string; prefix: string } {
+function generateToken(): {
+  plaintext: string;
+  hash: string;
+  prefix: string;
+  tokenSuffix: string;
+  secretEnc: string;
+} {
   const secret = encodeBase32(randomBytes(SECRET_BYTES));
   const plaintext = `${TOKEN_PREFIX}${secret}`;
   const hash = createHash("sha256").update(plaintext).digest("hex");
   const prefix = plaintext.slice(0, PREFIX_DISPLAY_LENGTH);
-  return { plaintext, hash, prefix };
+  const tokenSuffix = plaintext.slice(-4);
+  const secretEnc = encryptSecret(plaintext);
+  return { plaintext, hash, prefix, tokenSuffix, secretEnc };
 }
 
 function hashSecret(plaintext: string): string {
@@ -157,7 +215,7 @@ export async function issueMcpApiToken(
     };
   }
 
-  const { plaintext, hash, prefix } = generateToken();
+  const { plaintext, hash, prefix, tokenSuffix, secretEnc } = generateToken();
   const expiresAt =
     input.expiresInDays != null
       ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000)
@@ -170,6 +228,8 @@ export async function issueMcpApiToken(
       name,
       tokenHash: hash,
       prefix,
+      tokenSuffix,
+      secretEnc,
       scopes: input.scopes,
       capability: scopeToCapability(scope),
       scope,
@@ -182,7 +242,117 @@ export async function issueMcpApiToken(
     tokenId: row.id,
     plaintext,
     prefix,
+    tokenSuffix,
     expiresAt,
+  };
+}
+
+export async function copyMcpApiTokenPlaintext(
+  tokenId: string,
+): Promise<CopyMcpTokenPlaintextResult> {
+  const row = await prisma.mcpApiToken.findUnique({
+    where: { id: tokenId },
+    select: {
+      prefix: true,
+      tokenSuffix: true,
+      secretEnc: true,
+      revokedAt: true,
+      expiresAt: true,
+    },
+  });
+  if (!row) return { ok: false, error: "not_found" };
+  if (row.revokedAt != null) return { ok: false, error: "revoked" };
+  if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "expired" };
+  }
+  if (!row.secretEnc) return { ok: false, error: "unavailable" };
+
+  let plaintext: string | null = null;
+  try {
+    plaintext = decryptSecret(row.secretEnc);
+  } catch {
+    return { ok: false, error: "decrypt_failed" };
+  }
+  if (!plaintext) return { ok: false, error: "decrypt_failed" };
+  return {
+    ok: true,
+    plaintext,
+    prefix: row.prefix,
+    tokenSuffix: row.tokenSuffix ?? plaintext.slice(-4),
+  };
+}
+
+export async function rotateMcpApiToken(
+  input: RotateMcpTokenInput,
+): Promise<RotateMcpTokenResult> {
+  const existing = await prisma.mcpApiToken.findUnique({
+    where: { id: input.tokenId },
+    select: {
+      id: true,
+      userId: true,
+      agentId: true,
+      name: true,
+      capability: true,
+      scopes: true,
+      expiresAt: true,
+      revokedAt: true,
+    },
+  });
+  if (!existing || existing.userId !== input.userId) {
+    return { ok: false, error: "not_found_or_not_yours" };
+  }
+  if (existing.revokedAt != null) {
+    return { ok: false, error: "revoked", message: "Revoked tokens cannot be rotated." };
+  }
+  if (existing.expiresAt != null && existing.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "expired", message: "Expired tokens cannot be rotated." };
+  }
+  if (existing.capability !== "read" && existing.capability !== "write") {
+    return { ok: false, error: "invalid_capability" };
+  }
+  if (!Array.isArray(existing.scopes) || existing.scopes.length === 0) {
+    return { ok: false, error: "empty_scopes" };
+  }
+
+  const { plaintext, hash, prefix, tokenSuffix, secretEnc } = generateToken();
+  const now = new Date();
+  const replacementName = existing.name.endsWith(" (rotated)")
+    ? existing.name
+    : `${existing.name} (rotated)`;
+
+  const row = await prisma.$transaction(async (tx) => {
+    const created = await tx.mcpApiToken.create({
+      data: {
+        userId: existing.userId,
+        agentId: existing.agentId,
+        name: replacementName,
+        tokenHash: hash,
+        prefix,
+        tokenSuffix,
+        secretEnc,
+        scopes: existing.scopes,
+        capability: existing.capability,
+        expiresAt: existing.expiresAt,
+      },
+    });
+    await tx.mcpApiToken.update({
+      where: { id: existing.id },
+      data: {
+        revokedAt: now,
+        revokedReason: `rotated to ${prefix}...${tokenSuffix}`,
+      },
+    });
+    return created;
+  });
+
+  return {
+    ok: true,
+    tokenId: row.id,
+    revokedTokenId: existing.id,
+    plaintext,
+    prefix,
+    tokenSuffix,
+    expiresAt: row.expiresAt,
   };
 }
 
@@ -266,12 +436,53 @@ export async function resolveMcpApiToken(
   };
 }
 
+export async function acknowledgeMcpTokenRefresh(
+  plaintext: string,
+): Promise<RefreshMcpTokenResult> {
+  if (typeof plaintext !== "string" || !plaintext.startsWith(TOKEN_PREFIX)) {
+    return { ok: false, error: "invalid_token" };
+  }
+  const hash = hashSecret(plaintext);
+  const row = await prisma.mcpApiToken.findUnique({
+    where: { tokenHash: hash },
+    select: {
+      id: true,
+      prefix: true,
+      tokenSuffix: true,
+      scopes: true,
+      capability: true,
+      revokedAt: true,
+      expiresAt: true,
+    },
+  });
+  if (!row) return { ok: false, error: "invalid_token" };
+  if (row.revokedAt != null) return { ok: false, error: "invalid_token" };
+  if (row.expiresAt != null && row.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "invalid_token" };
+  }
+
+  prisma.mcpApiToken
+    .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })
+    .catch(() => {});
+
+  return {
+    ok: true,
+    tokenId: row.id,
+    prefix: row.prefix,
+    tokenSuffix: row.tokenSuffix ?? plaintext.slice(-4),
+    capability: (row.capability as McpTokenCapability) ?? "read",
+    scopes: row.scopes,
+  };
+}
+
 export async function listMcpApiTokens(userId: string): Promise<
   Array<{
     id: string;
     name: string;
     prefix: string;
     scope: McpTokenScope;
+    tokenSuffix: string;
+    canCopy: boolean;
     capability: McpTokenCapability;
     scopes: string[];
     lastUsedAt: Date | null;
@@ -287,6 +498,8 @@ export async function listMcpApiTokens(userId: string): Promise<
       id: true,
       name: true,
       prefix: true,
+      tokenSuffix: true,
+      secretEnc: true,
       capability: true,
       scope: true,
       scopes: true,
@@ -300,5 +513,7 @@ export async function listMcpApiTokens(userId: string): Promise<
     ...r,
     scope: normalizePersistedScope(r.scope, r.capability),
     capability: scopeToCapability(normalizePersistedScope(r.scope, r.capability)),
+    tokenSuffix: r.tokenSuffix ?? r.prefix.slice(-4),
+    canCopy: r.secretEnc != null,
   }));
 }
