@@ -7,6 +7,7 @@ import {
   normalizeHappyPathState,
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
+import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
   return {
@@ -265,6 +266,108 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.failureAxis).toBe("usage-limit");
     expect(action.message).toContain("usage-limit");
     expect(action.resumeMode?.mode).toBe("reset-blocked");
+  });
+
+  it("uses the progress projection failure axis when task summaries are not diagnostic", () => {
+    const progressVisibility = {
+      buildId: "FB-9B19098C",
+      generatedAt: "2026-05-19T19:45:00.000Z",
+      statusHeading: {
+        operatorAction: "Click Resume to re-execute 2 blocked tasks",
+        failureAxis: "usage-limit",
+      },
+      progress: {
+        primary: {
+          source: "db-task-results",
+          completed: 7,
+          total: 9,
+          observedAt: "2026-05-19T17:23:40.189Z",
+        },
+        conflicts: [],
+      },
+      tasks: {
+        completedTasks: 7,
+        totalTasks: 9,
+        source: {
+          source: "db-task-results",
+          completed: 7,
+          total: 9,
+          observedAt: "2026-05-19T17:23:40.189Z",
+        },
+        tasks: [
+          {
+            taskIndex: 0,
+            title: "Update provider page",
+            specialist: "frontend-engineer",
+            outcome: "BLOCKED",
+            durationMs: null,
+            summary: "Task completed with no output.",
+            files: [],
+          },
+          {
+            taskIndex: 1,
+            title: "Run verification",
+            specialist: "qa-engineer",
+            outcome: "BLOCKED",
+            durationMs: null,
+            summary: "Task completed with no output.",
+            files: [],
+          },
+        ],
+      },
+      staleChatSnapshots: [],
+      sandbox: null,
+      dispatchHistory: [
+        {
+          id: "attempt-1",
+          buildId: "FB-9B19098C",
+          taskTitle: "Run verification",
+          specialist: "qa-engineer",
+          providerId: "chatgpt",
+          model: "gpt-5.3-codex",
+          attemptNumber: 1,
+          startedAt: "2026-05-19T06:04:52.138Z",
+          completedAt: "2026-05-19T06:04:53.864Z",
+          durationMs: 1726,
+          exitCode: 1,
+          success: false,
+          failureAxis: "usage-limit",
+          stdoutExcerpt: "ERROR: You've hit your usage limit.",
+          stderrExcerpt: null,
+          rootCauseSummary: "ERROR: You've hit your usage limit.",
+          rootCauseHash: "abc123abc123abcd",
+        },
+      ],
+      verification: null,
+      quietAgent: {
+        quiet: true,
+        minutesQuiet: 135,
+        lastObservableSignalAt: "2026-05-19T17:23:40.189Z",
+      },
+    } satisfies BuildProgressVisibility;
+
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: {
+          completedTasks: 7,
+          totalTasks: 9,
+          tasks: [
+            { title: "Update provider page", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "Task completed with no output." },
+            { title: "Run verification", specialist: "qa-engineer", outcome: "BLOCKED", artifactSummary: "Task completed with no output." },
+          ],
+          timestamp: "2026-05-19T17:23:40.189Z",
+        } as unknown as FeatureBuildRow["taskResults"],
+      }),
+      governedBacklogEnabled: true,
+      progressVisibility,
+    });
+
+    expect(action.kind).toBe("resume-implementation");
+    expect(action.title).toBe("Click Resume to re-execute 2 blocked tasks");
+    expect(action.failureAxis).toBe("usage-limit");
+    expect(action.message).toContain("usage-limit");
   });
 
   it("separates out-of-scope verification noise from implementation recovery", () => {

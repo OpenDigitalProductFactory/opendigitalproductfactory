@@ -94,6 +94,28 @@ describe("buildDispatchAttemptData", () => {
     expect(data.rootCauseHash).toMatch(/^[a-f0-9]{16}$/);
   });
 
+  it("skips Codex CLI prologue lines when extracting root cause", () => {
+    const data = buildDispatchAttemptData({
+      buildId: "FB-123",
+      taskTitle: "Run verification",
+      startedAt: new Date("2026-05-19T06:04:52.138Z"),
+      completedAt: new Date("2026-05-19T06:04:53.864Z"),
+      durationMs: 1726,
+      exitCode: 1,
+      success: false,
+      stdout: [
+        "Reading prompt from stdin...",
+        "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage or try again at 6:06 AM",
+      ].join("\n"),
+      stderr: "",
+    });
+
+    expect(data.failureAxis).toBe("usage-limit");
+    expect(data.rootCauseSummary).toBe(
+      "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage or try again at 6:06 AM",
+    );
+  });
+
   it("redacts secrets before creating excerpts", () => {
     const data = buildDispatchAttemptData({
       buildId: "FB-123",

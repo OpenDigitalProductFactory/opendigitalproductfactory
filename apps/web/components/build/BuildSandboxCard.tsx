@@ -2,6 +2,7 @@
 
 import type { BuildSandboxState } from "@/lib/build/sandbox-state";
 import type { SandboxSourceCurrencyStatus } from "@/lib/integrate/sandbox/sandbox-source-currency";
+import { getTruthSourceAge } from "@/lib/build/progress-visibility-types";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 
 type Props = {
@@ -9,6 +10,10 @@ type Props = {
 };
 
 export function BuildSandboxCard({ sandbox }: Props) {
+  const sourceCurrencyAge = sandbox?.sourceCurrency
+    ? getTruthSourceAge(sandbox.sourceCurrency.checkedAt)
+    : null;
+
   return (
     <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -37,7 +42,15 @@ export function BuildSandboxCard({ sandbox }: Props) {
           {sandbox.sourceCurrency && (
             <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-2 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] uppercase text-[var(--dpf-muted)]">Source currency</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] uppercase text-[var(--dpf-muted)]">Source currency</span>
+                  <TruthSourceBadge
+                    source="sandbox-git"
+                    observedAt={sandbox.sourceCurrency.checkedAt}
+                    ageLabel={sourceCurrencyAge?.label ?? null}
+                    conflict={sourceCurrencyAge?.stale ?? false}
+                  />
+                </div>
                 <span className={`font-semibold ${sourceCurrencyStatusClass(sandbox.sourceCurrency.status)}`}>
                   {sandbox.sourceCurrency.status}
                 </span>
@@ -60,6 +73,11 @@ export function BuildSandboxCard({ sandbox }: Props) {
               </div>
               {sandbox.sourceCurrency.reason && (
                 <p className="mt-2 text-[var(--dpf-muted)]">{sandbox.sourceCurrency.reason}</p>
+              )}
+              {sourceCurrencyAge?.stale && (
+                <p className="mt-2 rounded border border-[var(--dpf-warning)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[var(--dpf-warning)]">
+                  Source currency snapshot is stale.
+                </p>
               )}
             </div>
           )}
