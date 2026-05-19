@@ -36,6 +36,12 @@ import {
 } from "./request-contract";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { RouteDecision } from "@/lib/routing/types";
+import {
+  applyConsensusOutcome,
+  computeConsensus,
+  type BranchVote,
+  type ConsensusDecision,
+} from "./consensus";
 
 /* -------------------------------------------------------------------------- */
 /* Public shapes                                                              */
@@ -141,11 +147,12 @@ export interface OrchestratedDeliberation {
   deliberationRunId: string;
   taskRunId: string;
   taskRunBootstrapped: boolean;
-  branches: BranchRecord[];
+  branches: BranchVote[];
   requestedDiversity: DeliberationDiversityMode;
   actualDiversity: DeliberationDiversityMode | "constrained";
   budgetHalted: boolean;
   branchBudgetUsed: number;
+  consensusDecision: ConsensusDecision;
 }
 
 export interface BranchRecord {
@@ -279,13 +286,58 @@ function planBranches(
   return planned;
 }
 
+function normalizeLegacyOrchestrateInput(
+  patternSlug: string,
+  options: LegacyOrchestrateOptions | undefined,
+  buildId: string,
+): OrchestrateDeliberationInput {
+  if (!options?.userId) {
+    throw new Error("[deliberation/orchestrator] userId is required");
+  }
+  return {
+    userId: options.userId,
+    buildId,
+    taskRunId: options.taskRunId,
+    threadId: options.threadId,
+    routeContext: options.routeContext,
+    patternSlug,
+    artifactType: "plan",
+    triggerSource: "explicit",
+    strategyProfile: "balanced",
+    diversityMode: "single-model-multi-persona",
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Main orchestration                                                         */
 /* -------------------------------------------------------------------------- */
 
+type LegacyOrchestrateOptions = {
+  userId: string;
+  taskRunId?: string | null;
+  threadId?: string | null;
+  routeContext?: string | null;
+};
+
 export async function orchestrateDeliberation(
   input: OrchestrateDeliberationInput,
+): Promise<OrchestratedDeliberation>;
+export async function orchestrateDeliberation(
+  patternSlug: string,
+  content: unknown,
+  options: LegacyOrchestrateOptions,
+  buildId?: string,
+): Promise<OrchestratedDeliberation>;
+export async function orchestrateDeliberation(
+  inputOrPatternSlug: OrchestrateDeliberationInput | string,
+  _content?: unknown,
+  options?: LegacyOrchestrateOptions,
+  legacyBuildId: string = "",
 ): Promise<OrchestratedDeliberation> {
+  const input =
+    typeof inputOrPatternSlug === "string"
+      ? normalizeLegacyOrchestrateInput(inputOrPatternSlug, options, legacyBuildId)
+      : inputOrPatternSlug;
   const pattern = await getPattern(input.patternSlug);
   if (!pattern) {
     throw new Error(
@@ -357,6 +409,7 @@ export async function orchestrateDeliberation(
       budgetUsd: input.budgetUsd ?? null,
       metadata: {
         requestedDiversity: input.diversityMode,
+        requestedBy: input.userId,
       },
     },
     select: { id: true },
@@ -373,7 +426,7 @@ export async function orchestrateDeliberation(
   const planned = planBranches(pattern, maxBranches, input.activatedRiskLevel);
 
   // ── Create worker branch TaskNodes + edges ────────────────────────────
-  const branches: BranchRecord[] = [];
+  const branchRecords: BranchRecord[] = [];
   const branchNodeIds: string[] = [];
 
   for (const p of planned) {
@@ -399,7 +452,7 @@ export async function orchestrateDeliberation(
       select: { id: true },
     });
     branchNodeIds.push(node.id);
-    branches.push({
+    branchRecords.push({
       branchNodeId: node.id,
       role: p.role,
       status: "queued",
@@ -436,7 +489,7 @@ export async function orchestrateDeliberation(
       select: { id: true },
     });
     adjudicatorNodeDbId = adjNode.id;
-    branches.push({
+    branchRecords.push({
       branchNodeId: adjNode.id,
       role: "adjudicator",
       status: "queued",
@@ -467,7 +520,7 @@ export async function orchestrateDeliberation(
 
   if (input.dispatcher) {
     // Worker branches first.
-    for (const br of branches) {
+    for (const br of branchRecords) {
       if (br.role === "adjudicator") continue;
       if (budgetHalted) {
         br.status = "budget-halted";
@@ -613,21 +666,37 @@ export async function orchestrateDeliberation(
     data: {
       metadata: {
         requestedDiversity: input.diversityMode,
+        requestedBy: input.userId,
         actualDiversity,
         budgetHalted,
       },
     },
   });
 
+  const branchVotes: BranchVote[] = branchRecords
+    .filter((branch) => branch.role !== "adjudicator")
+    .map((branch) => ({
+      roleSlug: branch.role,
+      confidence: branch.status === "completed" ? 0.9 : 0,
+      criticalObjection: branch.status === "failed" || branch.status === "budget-halted",
+      ...(branch.failureReason ? { objectionText: branch.failureReason } : {}),
+    }));
+  const consensusDecision = computeConsensus(branchVotes);
+  const buildId = input.buildId ?? "";
+  if (buildId) {
+    await applyConsensusOutcome(buildId, consensusDecision, branchVotes, prisma);
+  }
+
   return {
     deliberationRunId: deliberationRun.id,
     taskRunId: taskRunId!,
     taskRunBootstrapped,
-    branches,
+    branches: branchVotes,
     requestedDiversity: input.diversityMode,
     actualDiversity,
     budgetHalted,
     branchBudgetUsed,
+    consensusDecision,
   };
 }
 

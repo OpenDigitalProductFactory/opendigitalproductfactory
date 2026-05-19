@@ -59,6 +59,13 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   start_deliberation:        ["deliberation_create"],
   get_deliberation_status:   ["deliberation_read"],
   get_deliberation_outcome:  ["deliberation_read"],
+  deliberate_on:             ["deliberation_create"],
+
+  // Specialist subtask thread spawning
+  spawn_work_thread:         ["thread_write"],
+  cancel_thread:             ["thread_write"],
+  get_thread_result:         ["thread_read"],
+  get_child_threads:         ["thread_read"],
 
   // Registry / Products
   create_digital_product: ["registry_read", "backlog_write"],
