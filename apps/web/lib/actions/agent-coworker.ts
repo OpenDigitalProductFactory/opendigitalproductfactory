@@ -1383,6 +1383,7 @@ export async function sendMessage(input: {
         try {
           const { dispatchScoutResearch } = await import("@/lib/integrate/scout-dispatch");
           const scoutResult = await dispatchScoutResearch({
+            buildId: resolvedBuildId,
             featureTitle: buildForScout?.title ?? "",
             featureDescription: buildForScout?.description ?? "",
             externalUrls: (scoutState.scoutUrls as string[] | undefined) ?? [],
