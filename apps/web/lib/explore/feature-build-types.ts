@@ -37,6 +37,10 @@ export type ReviewResult = {
     suggestion?: string;
   }>;
   summary: string;
+  /** True when the LLM response could not be parsed (rate-limited, empty, or
+   *  malformed output). Gates and deliberation treat parse-error branches as
+   *  absent reviewers, not dissenting votes. */
+  parseError?: true;
 };
 
 export type ReusabilityAnalysis = {
