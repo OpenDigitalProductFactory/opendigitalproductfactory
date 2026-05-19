@@ -117,6 +117,8 @@ Autonomy levels:
 | High confidence, low risk | Arbitrate and continue, with a decision record. |
 | High confidence, high risk | Escalate or require approval anyway. |
 
+Numeric thresholds for each confidence band and the mapping to outcome type are defined in the implementation plan's confidence formula. V1 uses rule-based scoring derived from material freshness, evidence grade, risk tier, and recent override history. Model-assessed evidence fit is deferred to v2, once the decision ledger has enough real invocations to validate calibration against human corrections.
+
 ### 5.4 Temporal Decay and Contradiction Detection
 
 Perspective material expires. A source that predates a confirmed decision reversal is actively harmful if weighted equally with current doctrine. The system must:
@@ -147,6 +149,8 @@ WWMD must distinguish:
 - unknowns
 
 Debate and synthesis outputs must cite evidence and label fuzzy memory as fuzzy memory. Unsupported claims cannot carry the same confidence as source-backed facts, confirmed decisions, or authoritative records.
+
+V1 does not require the evaluator to classify evidence into these categories automatically. The distinction is operationalized through `PerspectiveMaterial.evidenceGrade` (A–D, where D contributes zero confidence weight) and `freshness` state. Automatic evidence-type classification is a v2 capability.
 
 ### 5.7 Principle Contradiction Resolution
 
@@ -247,6 +251,8 @@ Source material for the profile:
 - manual leader guidance
 
 Fields: source, source type, scope, `freshness` (`current` | `stale` | `superseded` | `contradicted`), staleness decay schedule, last-validated date, confidence weight, promotion state, profile version when promoted.
+
+Evidence grade (`A` | `B` | `C` | `D`) maps to confidence multipliers: A = full weight, B = 0.75×, C = 0.4×, D = zero weight. Grade D material is retained in the profile for audit purposes but contributes nothing to a confidence score. `contradicted` freshness also carries zero weight regardless of grade.
 
 ### 7.4 Decision Interaction
 
@@ -355,6 +361,8 @@ Recommended v1:
    - deliberation inputs, if present
    - And returns one of: `recommend`, `arbitrate`, `escalate`, `defer`
 3. Add Build Studio gate integration at the **plan advancement decision** — the point where Build Studio must decide whether a plan is ready to enter implementation. This is the highest-value ambiguity point in the v1 lifecycle because it is: high-stakes (wrong plan wastes a full build), frequently ambiguous (plan quality is often borderline), and already visible to the operator (it's an existing gate, not a new one).
+
+   **Relationship to existing Design Review gate:** Build Studio already has a Design Review phase gate that evaluates structural plan completeness (spec coverage, required sections, severity of review findings). WWMD is a separate, complementary gate layered *after* the deterministic Design Review gate passes. Design Review answers "is the plan structurally complete?" WWMD answers "given this plan and the organization's doctrine, is advancing the right call?" A plan that fails Design Review never reaches WWMD. A plan that passes Design Review may still be escalated or deferred by WWMD on doctrinal or contextual grounds.
 4. Persist a decision interaction ledger row using the smallest schema extension that fits existing `TaskRun`/Build Studio records, with profile version snapshot FK.
 5. Add escalation and deferral capture for human answer, criteria, rationale, and gap notice.
 6. Add a small AI Workforce/Build Studio inspector for the ledger.
@@ -402,3 +410,5 @@ At that point, the article angle should present WWMD/WWWD as an evidence-backed 
 4. Who is the accountable human resolver for v1: Mark directly, COO coworker routing to Mark, or Build Studio owner role? **Recommended: Build Studio owner role.** The gate should escalate to the person who owns the build in progress. For platform doctrine questions that exceed the build owner's authority, the escalation chain routes to Mark. This preserves the architecture without requiring Mark-specific coupling in the gate logic, and generalizes naturally to customer installs where "Mark" does not exist.
 
 5. What is the minimum UI needed for confidence changes to feel trustworthy without overwhelming the operator?
+
+   **Recommended:** Three labeled confidence tiers — `High`, `Medium`, `Low` — derived from the numeric score ranges in the implementation plan, never exposing the raw float. The gate panel shows: outcome badge (Recommended / Arbitrated / Escalation required / Coverage gap — deferred), confidence tier label, the count of source materials used, and a single primary action (accept escalation / review deferral / continue). The decision ledger inspector shows the numeric `confidenceBefore` and `confidenceAfter` for operators who want the detail. Raw floats live in the ledger, not the gate panel.
