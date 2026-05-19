@@ -6,8 +6,7 @@ import {
   RUNTIME_TARGET_STATUSES,
   RUNTIME_VERIFICATION_KINDS,
   RUNTIME_VERIFICATION_STATUSES,
-  canSatisfyFinalAcceptance,
-  deriveAcceptanceRole,
+  resolveAcceptanceRole,
   isRuntimeTargetKind,
   isRuntimeTargetStatus,
   isRuntimeVerificationKind,
@@ -189,14 +188,15 @@ export async function registerRuntimeTargetTool(
       input,
       actor: await actor(userId, context),
     });
+    const acceptanceRole = resolveAcceptanceRole(kind, input.acceptanceRoleOverride);
     return {
       success: true,
       entityId: target.targetId,
       message: `Registered runtime target ${target.targetId}.`,
       data: {
         target,
-        acceptanceRole: deriveAcceptanceRole(kind),
-        canSatisfyFinalAcceptance: canSatisfyFinalAcceptance(kind),
+        acceptanceRole,
+        canSatisfyFinalAcceptance: acceptanceRole === "final-acceptance",
       },
     };
   } catch (error) {
@@ -212,17 +212,25 @@ export async function heartbeatRuntimeTargetTool(params: Record<string, unknown>
   const targetId = stringParam(params, "targetId");
   if (!targetId) return { success: false, error: "missing_targetId", message: "targetId is required." };
 
-  const target = await heartbeatRuntimeTarget({
-    db: runtimeDb(),
-    targetId,
-  });
+  try {
+    const target = await heartbeatRuntimeTarget({
+      db: runtimeDb(),
+      targetId,
+    });
 
-  return {
-    success: true,
-    entityId: target.targetId,
-    message: `Heartbeat recorded for runtime target ${target.targetId}.`,
-    data: { target },
-  };
+    return {
+      success: true,
+      entityId: target.targetId,
+      message: `Heartbeat recorded for runtime target ${target.targetId}.`,
+      data: { target },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export async function releaseRuntimeTargetTool(
@@ -233,18 +241,26 @@ export async function releaseRuntimeTargetTool(
   const targetId = stringParam(params, "targetId");
   if (!targetId) return { success: false, error: "missing_targetId", message: "targetId is required." };
 
-  const target = await releaseRuntimeTarget({
-    db: runtimeDb(),
-    targetId,
-    actor: await actor(userId, context),
-  });
+  try {
+    const target = await releaseRuntimeTarget({
+      db: runtimeDb(),
+      targetId,
+      actor: await actor(userId, context),
+    });
 
-  return {
-    success: true,
-    entityId: target.targetId,
-    message: `Released runtime target ${target.targetId}.`,
-    data: { target },
-  };
+    return {
+      success: true,
+      entityId: target.targetId,
+      message: `Released runtime target ${target.targetId}.`,
+      data: { target },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export async function recordRuntimeVerificationTool(

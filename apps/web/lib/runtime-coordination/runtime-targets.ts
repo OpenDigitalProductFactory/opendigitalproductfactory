@@ -5,6 +5,7 @@ import {
   RUNTIME_VERIFICATION_KINDS,
   RUNTIME_VERIFICATION_STATUSES,
   type RuntimeAcceptanceRole,
+  type RuntimeAcceptanceRoleOverride,
   type RuntimeTargetInput,
   type RuntimeTargetKind,
   type RuntimeTargetStatus,
@@ -74,8 +75,18 @@ export function deriveAcceptanceRole(kind: RuntimeTargetKind): RuntimeAcceptance
   }
 }
 
-export function canSatisfyFinalAcceptance(kind: RuntimeTargetKind): boolean {
-  return deriveAcceptanceRole(kind) === "final-acceptance";
+export function resolveAcceptanceRole(
+  kind: RuntimeTargetKind,
+  override?: RuntimeAcceptanceRoleOverride | null,
+): RuntimeAcceptanceRole {
+  return override === "debug-only" ? "debug-only" : deriveAcceptanceRole(kind);
+}
+
+export function canSatisfyFinalAcceptance(
+  kind: RuntimeTargetKind,
+  override?: RuntimeAcceptanceRoleOverride | null,
+): boolean {
+  return resolveAcceptanceRole(kind, override) === "final-acceptance";
 }
 
 async function inTransaction<T>(
@@ -128,7 +139,9 @@ function validateTargetInput(input: RuntimeTargetInput) {
 }
 
 function verificationActivityKind(status: RuntimeVerificationStatus) {
-  return status === "failed" ? "runtime-verification-failed" : "runtime-verification-passed";
+  if (status === "failed") return "runtime-verification-failed";
+  if (status === "passed") return "runtime-verification-passed";
+  return null;
 }
 
 function verificationSummary(verificationId: string, status: RuntimeVerificationStatus) {
@@ -176,6 +189,7 @@ export async function registerRuntimeTarget(args: {
         data,
       })
       : await tx.runtimeTarget.create({ data });
+    const acceptanceRole = resolveAcceptanceRole(args.input.kind, args.input.acceptanceRoleOverride);
 
     await recordCapsuleActivity({
       db: tx,
@@ -186,8 +200,8 @@ export async function registerRuntimeTarget(args: {
         targetId: args.input.targetId,
         kind: args.input.kind,
         status: args.input.status,
-        acceptanceRole: deriveAcceptanceRole(args.input.kind),
-        canSatisfyFinalAcceptance: canSatisfyFinalAcceptance(args.input.kind),
+        acceptanceRole,
+        canSatisfyFinalAcceptance: acceptanceRole === "final-acceptance",
       },
       actor: args.actor,
     });
@@ -262,19 +276,44 @@ export async function getRuntimeCoordinationMap(args: {
         orderBy: { createdAt: "desc" },
         take: 10,
       },
+      workCapsule: {
+        select: {
+          leaseHolderPrincipalId: true,
+          createdByPrincipalId: true,
+          headBranch: true,
+          headSha: true,
+          pullRequestUrl: true,
+          pullRequestNumber: true,
+        },
+      },
+      featureBuild: {
+        select: {
+          buildId: true,
+          buildBranch: true,
+          gitCommitHashes: true,
+          createdById: true,
+          claimedByAgentId: true,
+        },
+      },
     },
   });
 
   return {
-    targets: targets.map((target) => ({
-      ...target,
-      acceptanceRole: isRuntimeTargetKind(target.kind)
-        ? deriveAcceptanceRole(target.kind)
-        : "none",
-      canSatisfyFinalAcceptance: isRuntimeTargetKind(target.kind)
-        ? canSatisfyFinalAcceptance(target.kind)
-        : false,
-    })),
+    targets: targets.map((target) => {
+      const override = ACCEPTANCE_OVERRIDE_SET.has(target.acceptanceRoleOverride)
+        ? target.acceptanceRoleOverride as RuntimeAcceptanceRoleOverride
+        : null;
+      const acceptanceRole = isRuntimeTargetKind(target.kind)
+        ? resolveAcceptanceRole(target.kind, override)
+        : "none";
+
+      return {
+        ...target,
+        ownership: resolveRuntimeTargetOwnership(target),
+        acceptanceRole,
+        canSatisfyFinalAcceptance: acceptanceRole === "final-acceptance",
+      };
+    }),
   };
 }
 
@@ -291,6 +330,8 @@ export function resolveRuntimeTargetOwnership(target: {
     buildId?: string | null;
     buildBranch?: string | null;
     gitCommitHashes?: unknown;
+    createdById?: string | null;
+    claimedByAgentId?: string | null;
   } | null;
 }) {
   const capsule = target.workCapsule ?? null;
@@ -306,6 +347,8 @@ export function resolveRuntimeTargetOwnership(target: {
     pullRequestUrl: capsule?.pullRequestUrl ?? null,
     pullRequestNumber: capsule?.pullRequestNumber ?? null,
     buildId: build?.buildId ?? null,
+    ownerUserId: build?.createdById ?? null,
+    ownerAgentId: build?.claimedByAgentId ?? null,
   };
 }
 
@@ -371,22 +414,25 @@ export async function recordRuntimeVerification(args: {
       },
     });
 
-    await recordCapsuleActivity({
-      db: tx,
-      workCapsuleId: args.input.workCapsuleId,
-      kind: verificationActivityKind(args.input.status),
-      summary: verificationSummary(args.input.verificationId, args.input.status),
-      payload: {
-        verificationId: args.input.verificationId,
-        kind: args.input.kind,
-        status: args.input.status,
-        runtimeTargetId: args.input.runtimeTargetId ?? null,
-        buildActivityId,
-        evidenceUrl: args.input.evidenceUrl ?? null,
-        screenshotUrl: args.input.screenshotUrl ?? null,
-      },
-      actor: args.actor,
-    });
+    const activityKind = verificationActivityKind(args.input.status);
+    if (activityKind) {
+      await recordCapsuleActivity({
+        db: tx,
+        workCapsuleId: args.input.workCapsuleId,
+        kind: activityKind,
+        summary: verificationSummary(args.input.verificationId, args.input.status),
+        payload: {
+          verificationId: args.input.verificationId,
+          kind: args.input.kind,
+          status: args.input.status,
+          runtimeTargetId: args.input.runtimeTargetId ?? null,
+          buildActivityId,
+          evidenceUrl: args.input.evidenceUrl ?? null,
+          screenshotUrl: args.input.screenshotUrl ?? null,
+        },
+        actor: args.actor,
+      });
+    }
 
     return verification;
   });

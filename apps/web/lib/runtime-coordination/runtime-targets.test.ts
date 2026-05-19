@@ -12,6 +12,7 @@ import {
   releaseRuntimeTarget,
   recordRuntimeVerification,
   registerRuntimeTarget,
+  resolveAcceptanceRole,
   resolveRuntimeTargetOwnership,
   type RuntimeCoordinationDb,
 } from "./runtime-targets";
@@ -63,6 +64,8 @@ describe("runtime target types", () => {
     expect(canSatisfyFinalAcceptance("root-portal")).toBe(true);
     expect(canSatisfyFinalAcceptance("build-sandbox")).toBe(false);
     expect(canSatisfyFinalAcceptance("ad-hoc-debug")).toBe(false);
+    expect(resolveAcceptanceRole("root-portal", "debug-only")).toBe("debug-only");
+    expect(canSatisfyFinalAcceptance("root-portal", "debug-only")).toBe(false);
   });
 
   it("exposes canonical enum guards for MCP schemas and runtime validation", () => {
@@ -225,7 +228,17 @@ describe("registerRuntimeTarget", () => {
         targetId: "RT-ROOT-PORTAL",
         kind: "root-portal",
         status: "running",
+        acceptanceRoleOverride: "debug-only",
         verifications: [],
+        workCapsule: {
+          leaseHolderPrincipalId: "PRN-LEASE",
+          createdByPrincipalId: "PRN-CREATOR",
+          headBranch: "feat/runtime",
+          headSha: "abc123",
+          pullRequestUrl: "https://github.test/pr/781",
+          pullRequestNumber: 781,
+        },
+        featureBuild: null,
       },
     ]);
 
@@ -241,8 +254,14 @@ describe("registerRuntimeTarget", () => {
     }));
     expect(result.targets[0]).toMatchObject({
       targetId: "RT-ROOT-PORTAL",
-      acceptanceRole: "final-acceptance",
-      canSatisfyFinalAcceptance: true,
+      acceptanceRole: "debug-only",
+      canSatisfyFinalAcceptance: false,
+      ownership: {
+        ownerPrincipalId: "PRN-LEASE",
+        branch: "feat/runtime",
+        sha: "abc123",
+        pullRequestNumber: 781,
+      },
     });
   });
 
@@ -260,6 +279,8 @@ describe("registerRuntimeTarget", () => {
         buildId: "FB-1",
         buildBranch: "feat/build-branch",
         gitCommitHashes: ["build-sha"],
+        createdById: "user-build",
+        claimedByAgentId: "agent-build",
       },
     });
 
@@ -270,6 +291,8 @@ describe("registerRuntimeTarget", () => {
       pullRequestUrl: "https://github.test/pr/1",
       pullRequestNumber: 1,
       buildId: "FB-1",
+      ownerUserId: "user-build",
+      ownerAgentId: "agent-build",
     });
   });
 });
@@ -337,5 +360,27 @@ describe("recordRuntimeVerification", () => {
         kind: "runtime-verification-passed",
       }),
     }));
+  });
+
+  it("does not mirror non-terminal-success statuses as passed capsule activity", async () => {
+    db.runtimeVerification.create.mockResolvedValueOnce({
+      id: "verification-row-2",
+      verificationId: "RV-WAIVED-1",
+      status: "waived",
+    });
+
+    await recordRuntimeVerification({
+      db: runtimeDb(),
+      input: {
+        verificationId: "RV-WAIVED-1",
+        kind: "ux",
+        status: "waived",
+        runtimeTargetId: "target-row-1",
+        workCapsuleId: "capsule-row-1",
+      },
+    });
+
+    expect(db.runtimeVerification.create).toHaveBeenCalled();
+    expect(db.workCapsuleActivity.create).not.toHaveBeenCalled();
   });
 });
