@@ -66,7 +66,7 @@ describe("McpTokenManager", () => {
     render(<McpTokenManager baseUrl="http://localhost:3000" />);
 
     expect(await screen.findByText("Mark laptop")).toBeTruthy();
-    expect(screen.getByText("...A1B2")).toBeTruthy();
+    expect(screen.getByText("dpfmcp_MAR...A1B2")).toBeTruthy();
     expect(screen.getByText(/backlog_read, backlog_write/)).toBeTruthy();
     expect(screen.getByText(/Issued:/)).toBeTruthy();
     expect(screen.getByText(/Last used:/)).toBeTruthy();
@@ -86,6 +86,8 @@ describe("McpTokenManager", () => {
         codex: '{"mcpServers":{"dpf":{"headers":{"Authorization":"Bearer dpfmcp_COPYABLE"}}}}',
         vscode: '{"servers":{"dpf":{"headers":{"Authorization":"Bearer dpfmcp_COPYABLE"}}}}',
         syncCommand: ".\\scripts\\seed-worktree-mcp.ps1",
+        envPowerShell: "[System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'dpfmcp_COPYABLE', 'User')",
+        runtimeRefreshPowerShell: "Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/mcp/token/refresh' -ContentType 'application/json' -Body '{\"token\":\"dpfmcp_COPYABLE\"}'",
       },
     });
 
@@ -102,6 +104,39 @@ describe("McpTokenManager", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("dpfmcp_COPYABLE");
   });
 
+  it("shows the recoverable current token when clipboard access is blocked", async () => {
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("clipboard blocked"),
+    );
+    copyMock.mockResolvedValue({
+      ok: true,
+      plaintext: "dpfmcp_COPYABLE",
+      prefix: "dpfmcp_COPY",
+      tokenSuffix: "A1B2",
+      setupSnippets: {
+        claudeCode: '{"mcpServers":{"dpf":{"headers":{"Authorization":"Bearer ${DPF_MCP_BEARER_TOKEN}"}}}}',
+        codex: '[mcp_servers.dpf]\nbearer_token_env_var = "DPF_MCP_BEARER_TOKEN"',
+        vscode: '{"servers":{"dpf":{"headers":{"Authorization":"Bearer ${env:DPF_MCP_BEARER_TOKEN}"}}}}',
+        syncCommand: ".\\scripts\\seed-worktree-mcp.ps1",
+        envPowerShell: "[System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'dpfmcp_COPYABLE', 'User')",
+        runtimeRefreshPowerShell: "Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/mcp/token/refresh' -ContentType 'application/json' -Body '{\"token\":\"dpfmcp_COPYABLE\"}'",
+      },
+    });
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Copy current token/i }));
+
+    expect(await screen.findByRole("heading", { name: "Current token" })).toBeTruthy();
+    expect(screen.getByText(/Clipboard access was blocked/i)).toBeTruthy();
+    expect(screen.getByText("dpfmcp_COPYABLE")).toBeTruthy();
+
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("clipboard blocked again"),
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Copy" })[0]);
+    expect(await screen.findByText("Clipboard blocked")).toBeTruthy();
+  });
+
   it("rotates an active token and presents the replacement token immediately", async () => {
     rotateMock.mockResolvedValue({
       ok: true,
@@ -115,6 +150,8 @@ describe("McpTokenManager", () => {
         codex: '{"mcpServers":{"dpf":{"headers":{"Authorization":"Bearer dpfmcp_ROTATED"}}}}',
         vscode: '{"servers":{"dpf":{"headers":{"Authorization":"Bearer dpfmcp_ROTATED"}}}}',
         syncCommand: ".\\scripts\\seed-worktree-mcp.ps1",
+        envPowerShell: "[System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'dpfmcp_ROTATED', 'User')",
+        runtimeRefreshPowerShell: "Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/mcp/token/refresh' -ContentType 'application/json' -Body '{\"token\":\"dpfmcp_ROTATED\"}'",
       },
     });
 
@@ -129,5 +166,7 @@ describe("McpTokenManager", () => {
     });
     expect(await screen.findByText(/Replacement token issued/i)).toBeTruthy();
     expect(screen.getByText("dpfmcp_ROTATED")).toBeTruthy();
+    expect(screen.getByText(/SetEnvironmentVariable/)).toBeTruthy();
+    expect(screen.getByText(/api\/mcp\/token\/refresh/)).toBeTruthy();
   });
 });
