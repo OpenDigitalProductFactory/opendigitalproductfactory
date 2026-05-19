@@ -34,7 +34,7 @@
 // Sibling: apps/web/scripts/issue-edge-bootstrap-token.ts
 
 import { prisma } from "@dpf/db";
-import type { McpTokenCapability } from "../lib/auth/mcp-api-token";
+import type { McpTokenCapability, McpTokenScope } from "../lib/auth/mcp-api-token";
 import type { McpSnippetFormat } from "../lib/auth/mcp-setup-snippets";
 
 const DEFAULT_EMAIL = "admin@dpf.local";
@@ -43,8 +43,8 @@ const DEFAULT_EXPIRES_DAYS = 90;
 type Args = {
   email: string;
   name: string;
-  capability: McpTokenCapability;
-  scopes: string[] | null; // null → resolved to CODING_AGENT_MCP_TOKEN_SCOPES at runtime
+  scope: McpTokenScope;
+  scopes: string[] | null; // null -> resolved from the selected read/write/admin tier
   expiresDays: number | null;
   format: McpSnippetFormat;
   baseUrl: string;
@@ -53,7 +53,7 @@ type Args = {
 function parseArgs(argv: readonly string[]): Args {
   let email = DEFAULT_EMAIL;
   let name = `cli-issued-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-  let capability: McpTokenCapability = "read";
+  let scope: McpTokenScope = "read";
   let scopes: string[] | null = null;
   let expiresDays: number | null = DEFAULT_EXPIRES_DAYS;
   let format: McpSnippetFormat = "claude-code";
@@ -76,12 +76,20 @@ function parseArgs(argv: readonly string[]): Args {
       case "--name":
         name = next();
         break;
+      case "--scope": {
+        const v = next();
+        if (v !== "read" && v !== "write" && v !== "admin") {
+          fatal(`--scope must be read | write | admin; got: ${v}`);
+        }
+        scope = v;
+        break;
+      }
       case "--capability": {
         const v = next();
         if (v !== "read" && v !== "write") {
-          fatal(`--capability must be "read" or "write"; got: ${v}`);
+          fatal(`--capability is deprecated; use --scope read|write|admin. Got: ${v}`);
         }
-        capability = v;
+        scope = v;
         break;
       }
       case "--scopes": {
@@ -126,7 +134,7 @@ function parseArgs(argv: readonly string[]): Args {
     }
   }
 
-  return { email, name, capability, scopes, expiresDays, format, baseUrl };
+  return { email, name, scope, scopes, expiresDays, format, baseUrl };
 }
 
 function printHelp(): void {
@@ -141,8 +149,8 @@ function printHelp(): void {
       "  --user <email>         Admin user to issue the token for",
       `                         (default: ${DEFAULT_EMAIL})`,
       "  --name <label>         Token display name (default: cli-issued-<timestamp>)",
-      "  --capability <c>       read | write (default: read)",
-      "                         write requires contribution mode configured in Admin",
+      "  --scope <scope>        read | write | admin (default: read)",
+      "  --capability <c>       Deprecated alias for --scope read|write",
       "  --scopes <csv>         Comma-separated scope list",
       "                         (default: coding-agent set from mcp-token-scopes.ts)",
       `  --expires-days N|never Token TTL in days, or "never" (default: ${DEFAULT_EXPIRES_DAYS})`,
@@ -176,7 +184,11 @@ async function main(): Promise<void> {
   // Dynamic imports so tsx resolves path aliases correctly at runtime.
   const { issueMcpApiToken } = await import("../lib/auth/mcp-api-token");
   const { buildSetupSnippets } = await import("../lib/auth/mcp-setup-snippets");
-  const { CODING_AGENT_MCP_TOKEN_SCOPES } = await import("../lib/mcp-token-scopes");
+  const {
+    ADMIN_MCP_TOKEN_SCOPES,
+    CODING_AGENT_MCP_TOKEN_SCOPES,
+    WRITE_MCP_TOKEN_SCOPES,
+  } = await import("../lib/mcp-token-scopes");
 
   const user = await prisma.user.findFirst({ where: { email: args.email } });
   if (!user) {
@@ -187,22 +199,26 @@ async function main(): Promise<void> {
     );
   }
 
-  const scopes: string[] = args.scopes ?? [...CODING_AGENT_MCP_TOKEN_SCOPES];
+  const defaultScopes =
+    args.scope === "admin"
+      ? ADMIN_MCP_TOKEN_SCOPES
+      : args.scope === "write"
+        ? WRITE_MCP_TOKEN_SCOPES
+        : CODING_AGENT_MCP_TOKEN_SCOPES;
+  const scopes: string[] = args.scopes ?? [...defaultScopes];
+  const capability: McpTokenCapability = args.scope === "read" ? "read" : "write";
 
   const result = await issueMcpApiToken({
     userId: user.id,
     name: args.name,
-    capability: args.capability,
+    capability,
+    scope: args.scope,
     scopes,
     expiresInDays: args.expiresDays,
   });
 
   if (!result.ok) {
-    const detail =
-      result.error === "contribution_mode_required"
-        ? `${result.message}\nConfigure contribution mode at Admin > Platform Development, then re-run.`
-        : result.message;
-    fatal(detail);
+    fatal(result.message);
   }
 
   // Diagnostics to stderr — stdout stays pipeable.

@@ -13,7 +13,12 @@
 // return a WWW-Authenticate header on 401 so clients that perform
 // discovery don't fail mysteriously.
 
-import { resolveMcpApiToken, type ResolvedMcpToken } from "@/lib/auth/mcp-api-token";
+import {
+  resolveMcpApiToken,
+  type McpTokenCapability,
+  type McpTokenScope,
+  type ResolvedMcpToken,
+} from "@/lib/auth/mcp-api-token";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
@@ -92,6 +97,17 @@ function jsonRpcError(
 
 function jsonRpcOk(id: JsonRpcId, result: unknown): Response {
   return jsonResponse({ jsonrpc: "2.0", id, result } satisfies JsonRpcResponse);
+}
+
+function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
+  return scope === "read" ? "read" : "write";
+}
+
+function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability">): McpTokenScope {
+  if (token.scope === "admin" || token.scope === "write" || token.scope === "read") {
+    return token.scope;
+  }
+  return token.capability === "write" ? "write" : "read";
 }
 
 function unauthorizedResponse(detail: string): Response {
@@ -216,7 +232,52 @@ function tokenCanUseTool(
   }
   const required = grantMap[tool.name];
   if (!required) return false; // default-deny tools without a grant entry
+  const requiredScope = requiredTokenScopeForTool(tool, required);
+  if (!tokenScopeSatisfies(normalizeTokenScope(token), requiredScope)) {
+    return false;
+  }
   return required.some((g) => token.scopes.includes(g));
+}
+
+function requiredTokenScopeForTool(
+  tool: ToolDefinition | undefined,
+  requiredGrants: readonly string[],
+): McpTokenScope {
+  if (requiredGrants.some((grant) => grant.startsWith("admin_"))) return "admin";
+  return tool?.sideEffect ? "write" : "read";
+}
+
+function tokenScopeSatisfies(actual: McpTokenScope, required: McpTokenScope): boolean {
+  if (required === "read") return true;
+  if (required === "write") return actual === "write" || actual === "admin";
+  return actual === "admin";
+}
+
+function insufficientScopeResult(
+  toolName: string,
+  tokenScope: McpTokenScope,
+  requiredScope: McpTokenScope,
+  requiredGrants: readonly string[],
+) {
+  return {
+    content: [
+      {
+        type: "text",
+        text:
+          `${toolName} requires a ${requiredScope}-scoped MCP token. ` +
+          `This token is ${tokenScope}. Issue a ${requiredScope} token in Admin > Platform Development > MCP, then retry.`,
+      },
+    ],
+    structuredContent: {
+      error: "insufficient_token_scope",
+      toolName,
+      requiredScope,
+      tokenScope,
+      requiredGrants,
+      action: `Issue a ${requiredScope} MCP token in Admin > Platform Development > MCP.`,
+    },
+    isError: true,
+  };
 }
 
 function annotateTool(tool: ToolDefinition) {
@@ -245,7 +306,7 @@ async function handleTasksSubmit(
     token: {
       tokenId: token.tokenId,
       userId: token.userId,
-      capability: token.capability,
+      capability: scopeToCapability(normalizeTokenScope(token)),
       source: token.source,
     },
     userContext,
@@ -309,6 +370,15 @@ async function handleToolsCall(
       isError: true,
     });
   }
+  const toolDef = PLATFORM_TOOLS.find((t) => t.name === toolName);
+  const tokenScope = normalizeTokenScope(token);
+  const requiredScope = requiredTokenScopeForTool(toolDef, required);
+  if (!tokenScopeSatisfies(tokenScope, requiredScope)) {
+    return jsonRpcOk(
+      id,
+      insufficientScopeResult(toolName, tokenScope, requiredScope, required),
+    );
+  }
   const tokenAllowed = required.some((g) => token.scopes.includes(g));
   if (!tokenAllowed) {
     return jsonRpcOk(id, {
@@ -316,21 +386,6 @@ async function handleToolsCall(
         {
           type: "text",
           text: `Token lacks the required scope for ${toolName}. Required: one of ${required.join(", ")}; token has: ${token.scopes.join(", ")}.`,
-        },
-      ],
-      isError: true,
-    });
-  }
-
-  // Capability check on the tool's write-capable subset: read-capable tokens
-  // can never invoke a side-effecting tool, regardless of token scopes.
-  const toolDef = PLATFORM_TOOLS.find((t) => t.name === toolName);
-  if (toolDef?.sideEffect && token.capability === "read") {
-    return jsonRpcOk(id, {
-      content: [
-        {
-          type: "text",
-          text: `${toolName} is a side-effecting tool; this token is read-only. Re-issue a write-capable token to call it.`,
         },
       ],
       isError: true,
@@ -415,6 +470,7 @@ export async function POST(request: Request): Promise<Response> {
       userId: session.userId,
       agentId: session.agentId ?? null,
       scopes: session.scopes,
+      scope: session.capability === "write" ? "write" : "read",
       capability: session.capability,
       threadId: session.threadId ?? null,
       routeContext: session.routeContext ?? null,

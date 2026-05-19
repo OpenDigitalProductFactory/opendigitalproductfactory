@@ -1,6 +1,6 @@
 ---
 title: MCP governance-flow token scope — unblocking Claude-side BS lifecycle work
-status: draft
+status: implemented
 author: Claude (substrate investigation)
 date: 2026-05-18
 related:
@@ -16,6 +16,13 @@ references:
 ---
 
 # MCP governance-flow token scope — design
+
+> Implementation note (2026-05-19): the shipped scope model is the broader
+> `read | write | admin` MCP token tier requested for operator-managed access.
+> Default token issuance is read-only. Write tokens are issued from Admin >
+> Platform Development > MCP and the MCP route returns structured
+> `insufficient_token_scope` errors with `requiredScope` for side-effecting
+> calls attempted by read tokens.
 
 ## 1. Problem
 

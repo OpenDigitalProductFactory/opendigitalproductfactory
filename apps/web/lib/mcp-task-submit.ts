@@ -93,8 +93,15 @@ export async function submitRemoteCoworkerTask(input: {
       kind: "result",
       result: {
         content: remoteTaskContent(
-          `This token is read-only and cannot submit ${parsed.riskClass} autonomous coworker work. Re-issue a write-capable token for bounded write tasks.`,
+          `This token is read-only and cannot submit ${parsed.riskClass} autonomous coworker work. Issue a write token in Admin > Platform Development > MCP, then retry.`,
         ),
+        structuredContent: {
+          error: "insufficient_token_scope",
+          requiredScope: "write",
+          tokenScope: "read",
+          riskClass: parsed.riskClass,
+          action: "Issue a write MCP token in Admin > Platform Development > MCP.",
+        },
         isError: true,
       },
     };
