@@ -95,19 +95,19 @@ export function BuildStudio({
       governedBacklogEnabled,
     })
     : null;
-  const workflowAction = activeBuild
-    ? deriveBuildStudioWorkflowAction({
-      build: activeBuild,
-      governedBacklogEnabled,
-    })
-    : null;
-
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
+  const workflowAction = activeBuild
+    ? deriveBuildStudioWorkflowAction({
+      build: activeBuild,
+      governedBacklogEnabled,
+      progressVisibility,
+    })
+    : null;
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
     const [freshResult, flowResult, progressResult] = await Promise.allSettled([
       getFeatureBuild(buildId),

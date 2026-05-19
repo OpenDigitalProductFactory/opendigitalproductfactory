@@ -38,6 +38,7 @@ export interface IntegrationReadinessCapability {
   supportedNow: boolean;
   hiveTag: HiveContributionTag;
   nextAction: string;
+  apiCoverageNote?: string;
   unreachableStates?: IntegrationReadinessState[];
 }
 

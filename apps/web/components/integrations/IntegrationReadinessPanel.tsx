@@ -66,6 +66,11 @@ export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPa
                 <td className="px-3 py-3 align-top">
                   <div className="font-medium text-[var(--dpf-text)]">{capability.label}</div>
                   <div className="text-xs text-[var(--dpf-muted)]">{capability.description}</div>
+                  {capability.apiCoverageNote && (
+                    <div className="mt-1 text-xs text-[var(--dpf-muted)]">
+                      API coverage: {capability.apiCoverageNote}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-3 align-top">
                   <StateChip state={capability.state} />
