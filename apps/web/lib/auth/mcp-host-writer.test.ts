@@ -25,7 +25,7 @@ describe("writeMcpJsonToHost", () => {
     expect(fs.mkdirSync).not.toHaveBeenCalled();
   });
 
-  it("writes .mcp.json with mcpServers.dpf and Bearer token", () => {
+  it("writes .mcp.json with mcpServers.dpf and env-backed bearer header", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
     vi.mocked(fs.mkdirSync).mockImplementation(() => undefined);
@@ -36,7 +36,8 @@ describe("writeMcpJsonToHost", () => {
     expect(firstCall[0]).toBe("/host-dpf/.mcp.json");
     const parsed = JSON.parse(firstCall[1] as string) as Record<string, unknown>;
     const dpf = (parsed.mcpServers as Record<string, unknown>).dpf as Record<string, unknown>;
-    expect((dpf.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+    expect((dpf.headers as Record<string, string>).Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
+    expect(firstCall[1]).not.toContain(TOKEN);
   });
 
   it("writes .vscode/mcp.json with servers key (not mcpServers)", () => {

@@ -182,7 +182,7 @@ describe("issueMyMcpToken", () => {
     expect(result.error).toBe("invalid_scope");
   });
 
-  it("on success returns plaintext + setup snippets pre-filled with the token", async () => {
+  it("on success returns plaintext plus env-backed setup and refresh snippets", async () => {
     authMock.mockResolvedValue({ user: { id: "u1" } });
     issueMock.mockResolvedValue({
       ok: true,
@@ -203,14 +203,15 @@ describe("issueMyMcpToken", () => {
     if (!result.ok) throw new Error("unreachable");
     expect(result.plaintext).toBe("dpfmcp_SECRET");
     expect(result.setupSnippets.claudeCode).toContain("http://localhost:3000/api/mcp/v1");
-    expect(result.setupSnippets.claudeCode).toContain("Bearer dpfmcp_SECRET");
-    expect(result.setupSnippets.vscode).toContain("Bearer dpfmcp_SECRET");
-    expect(result.setupSnippets.codex).toContain("Bearer dpfmcp_SECRET");
+    expect(result.setupSnippets.claudeCode).toContain("Bearer ${DPF_MCP_BEARER_TOKEN}");
+    expect(result.setupSnippets.vscode).toContain("Bearer ${env:DPF_MCP_BEARER_TOKEN}");
+    expect(result.setupSnippets.codex).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');
+    expect(result.setupSnippets.claudeCode).not.toContain("dpfmcp_SECRET");
+    expect(result.setupSnippets.envPowerShell).toContain("dpfmcp_SECRET");
+    expect(result.setupSnippets.runtimeRefreshPowerShell).toContain("/api/mcp/token/refresh");
     const claudeCode = JSON.parse(result.setupSnippets.claudeCode);
-    const codex = JSON.parse(result.setupSnippets.codex);
     const vscode = JSON.parse(result.setupSnippets.vscode);
     expect(claudeCode.mcpServers.dpf.type).toBe("http");
-    expect(codex.mcpServers.dpf.type).toBe("http");
     expect(vscode.servers.dpf.type).toBe("http");
   });
 });
@@ -290,7 +291,8 @@ describe("copyMyMcpToken", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.plaintext).toBe("dpfmcp_SECRET");
-    expect(result.setupSnippets.claudeCode).toContain("Bearer dpfmcp_SECRET");
+    expect(result.setupSnippets.claudeCode).toContain("Bearer ${DPF_MCP_BEARER_TOKEN}");
+    expect(result.setupSnippets.envPowerShell).toContain("dpfmcp_SECRET");
   });
 });
 
@@ -331,7 +333,9 @@ describe("rotateMyMcpToken", () => {
     expect(rotateMock).toHaveBeenCalledWith({ tokenId: "tok_old", userId: "u1" });
     expect(result.tokenId).toBe("tok_new");
     expect(result.plaintext).toBe("dpfmcp_NEWSECRET");
-    expect(result.setupSnippets.codex).toContain("Bearer dpfmcp_NEWSECRET");
+    expect(result.setupSnippets.codex).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');
+    expect(result.setupSnippets.envPowerShell).toContain("dpfmcp_NEWSECRET");
+    expect(result.setupSnippets.runtimeRefreshPowerShell).toContain("dpfmcp_NEWSECRET");
   });
 });
 
