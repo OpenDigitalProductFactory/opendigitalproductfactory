@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
+import { getMatrixByOrg } from "@/lib/actions/integration-coverage";
 import {
   CSDM_STRUCTURAL_DOMAIN_LABELS,
   EMPLOYEE_WORK_ROLE_LABELS,
@@ -11,6 +12,9 @@ import {
 } from "@/lib/tools/integration-coverage-matrix";
 
 export default async function EnterpriseIntegrationsPage() {
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  const dbCoverageMatrix = org ? await getMatrixByOrg(org.id) : [];
+
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
       where: {
@@ -291,6 +295,44 @@ export default async function EnterpriseIntegrationsPage() {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">Integration Coverage Matrix</h2>
+        </div>
+        <div className="overflow-x-auto border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-[var(--dpf-border)] text-[11px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              <tr>
+                <th className="px-3 py-2 font-medium">Provider</th>
+                <th className="px-3 py-2 font-medium">Role</th>
+                <th className="px-3 py-2 font-medium">Surface</th>
+                <th className="px-3 py-2 font-medium">Read Posture</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dbCoverageMatrix.map((row) => (
+                <tr
+                  key={`${row.providerKey}-${row.role}-${row.surface}`}
+                  className="border-b border-[var(--dpf-border)] last:border-0"
+                >
+                  <td className="px-3 py-2 text-[var(--dpf-text)]">{row.providerKey}</td>
+                  <td className="px-3 py-2 text-[var(--dpf-text)]">{row.role}</td>
+                  <td className="px-3 py-2 text-[var(--dpf-muted)]">{row.surface}</td>
+                  <td className="px-3 py-2 text-[var(--dpf-muted)]">{row.readPosture}</td>
+                </tr>
+              ))}
+              {dbCoverageMatrix.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-3 text-[var(--dpf-muted)]" colSpan={4}>
+                    No integration coverage rows configured.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
