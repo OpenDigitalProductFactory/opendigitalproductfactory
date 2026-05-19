@@ -1,5 +1,10 @@
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import { orchestrateDeliberation } from "@/lib/deliberation/orchestrator";
+import {
+  isDeliberationArtifactType,
+  isDeliberationTriggerSource,
+  isDeliberationStrategyProfile,
+} from "@/lib/deliberation/types";
 
 export const DELIBERATION_TOOLS: ToolDefinition[] = [
   {
@@ -51,23 +56,25 @@ export async function deliberateOnMcpHandler(
     };
   }
 
-  const content = typeof params["content"] === "string" ? params["content"] : "";
-  const options: {
-    userId: string;
-    taskRunId?: string;
-    threadId?: string;
-    routeContext?: string;
-  } = { userId };
-  if (context?.taskRunId) options.taskRunId = context.taskRunId;
-  if (context?.threadId) options.threadId = context.threadId;
-  if (context?.routeContext) options.routeContext = context.routeContext;
+  const rawArtifactType = params["artifactType"];
+  const artifactType = isDeliberationArtifactType(rawArtifactType) ? rawArtifactType : "plan";
+  const rawTriggerSource = params["triggerSource"];
+  const triggerSource = isDeliberationTriggerSource(rawTriggerSource) ? rawTriggerSource : "explicit";
+  const rawStrategyProfile = params["strategyProfile"];
+  const strategyProfile = isDeliberationStrategyProfile(rawStrategyProfile) ? rawStrategyProfile : "balanced";
 
-  const result = await orchestrateDeliberation(
-    "review",
-    content,
-    options,
+  const result = await orchestrateDeliberation({
     buildId,
-  );
+    patternSlug: typeof params["patternSlug"] === "string" ? params["patternSlug"] : "review",
+    artifactType,
+    triggerSource,
+    strategyProfile,
+    diversityMode: "multi-model-same-provider",
+    userId,
+    taskRunId: context?.taskRunId ?? null,
+    threadId: context?.threadId ?? null,
+    routeContext: context?.routeContext ?? null,
+  });
 
   return {
     success: true,
