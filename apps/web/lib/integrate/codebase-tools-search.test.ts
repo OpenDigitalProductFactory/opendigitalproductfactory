@@ -3,17 +3,15 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockExecSync } = vi.hoisted(() => ({
-  mockExecSync: vi.fn(),
+const { mockExecAsync } = vi.hoisted(() => ({
+  mockExecAsync: vi.fn(),
 }));
 
 vi.mock("@/lib/shared/lazy-node", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/shared/lazy-node")>();
   return {
     ...actual,
-    lazyChildProcess: () => ({
-      execSync: mockExecSync,
-    }),
+    lazyExec: () => mockExecAsync,
   };
 });
 
@@ -36,7 +34,7 @@ describe("searchProjectFiles", () => {
       ].join("\n"),
     );
     process.env.PROJECT_ROOT = projectRoot;
-    mockExecSync.mockImplementation(() => {
+    mockExecAsync.mockImplementation(async () => {
       throw new Error("fatal: not a git repository");
     });
   });
@@ -66,11 +64,14 @@ describe("searchProjectFiles", () => {
   });
 
   it("filters package-store matches from git grep output", async () => {
-    mockExecSync.mockReturnValue([
-      ".pnpm-store/v10/index/noise.json:1:seedCityOnce",
-      "packages/db/generated/client/index.d.ts:1:seedCityOnce",
-      "packages/db/src/seed-geographic-data.ts:1:export async function seedCityOnce() {",
-    ].join("\n"));
+    mockExecAsync.mockResolvedValue({
+      stdout: [
+        ".pnpm-store/v10/index/noise.json:1:seedCityOnce",
+        "packages/db/generated/client/index.d.ts:1:seedCityOnce",
+        "packages/db/src/seed-geographic-data.ts:1:export async function seedCityOnce() {",
+      ].join("\n"),
+      stderr: "",
+    });
 
     const result = await searchProjectFiles("seedCityOnce", {
       glob: "*.ts",
@@ -89,12 +90,13 @@ describe("searchProjectFiles", () => {
   });
 
   it("parses CRLF git grep output from Windows-authored source files", async () => {
-    mockExecSync.mockReturnValue(
-      [
+    mockExecAsync.mockResolvedValue({
+      stdout: [
         "HEAD:packages/db/src/seed-geographic-data.ts:223:export async function seedGeographicData(prisma: PrismaClient): Promise<void> {\r",
         "HEAD:packages/db/src/seed.ts:16:import { seedGeographicData } from \"./seed-geographic-data.js\";\r",
       ].join("\n"),
-    );
+      stderr: "",
+    });
 
     const result = await searchProjectFiles("seedGeographicData", {
       glob: "*.ts",
