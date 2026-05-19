@@ -82,6 +82,8 @@ export type IssueTokenActionResult =
         codex: string;
         vscode: string;
         syncCommand: string;
+        envPowerShell: string;
+        runtimeRefreshPowerShell: string;
       };
     }
   | {

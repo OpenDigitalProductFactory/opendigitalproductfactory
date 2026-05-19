@@ -22,8 +22,9 @@
 //
 // Examples:
 //
-//   # Write .mcp.json for Claude Code (default):
+//   # Write .mcp.json for Claude Code (default, env-var backed):
 //   pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts > .mcp.json
+//   TOKEN=$(pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format raw)
 //
 //   # Write VS Code mcp.json:
 //   pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format vscode > .vscode/mcp.json
@@ -161,12 +162,13 @@ function printHelp(): void {
       "",
       "Output (stdout):",
       "  claude-code  .mcp.json snippet   (mcpServers.dpf, http transport)",
-      "  codex        Same as claude-code",
+      "  codex        ~/.codex/config.toml snippet using bearer_token_env_var",
       "  vscode       .vscode/mcp.json snippet (servers.dpf)",
       "  raw          Plaintext token only",
       "",
       "Examples:",
       "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts > .mcp.json",
+      "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format codex >> ~/.codex/config.toml",
       "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format vscode > .vscode/mcp.json",
       "  TOKEN=$(pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format raw)",
     ].join("\n"),
