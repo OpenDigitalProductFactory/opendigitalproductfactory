@@ -50,10 +50,13 @@ For the architectural background:
 
 ## Quick provision
 
-### Option A — Terraform (AWS, recommended)
+### Option A — Terraform (AWS or GCP, recommended)
 
-A one-command Terraform module is available for AWS. It provisions the VM,
-security group, IAM role, and runs the DPF installer via cloud-init:
+One-command Terraform modules are available for AWS and GCP. They provision
+the VM, firewall rules, IAM role/service account, and run the DPF installer
+via cloud-init:
+
+**AWS (EC2):**
 
 ```bash
 cd infra/terraform/single-vm/aws
@@ -79,15 +82,42 @@ aws ssm start-session --target $(terraform output -raw instance_id) \
   --parameters command='tail -f /var/log/dpf-install.log'
 ```
 
-Typical install time: **8-12 minutes**. Full reference:
-[`docs/install/cloud-single-vm-terraform-aws.md`](cloud-single-vm.md) — this page —
-plus [`infra/terraform/single-vm/aws/variables.tf`](../../infra/terraform/single-vm/aws/variables.tf).
+Typical install time: **8-12 minutes**. Variables reference:
+[`infra/terraform/single-vm/aws/variables.tf`](../../infra/terraform/single-vm/aws/variables.tf).
 
-### Option B — Manual provisioning (GCP / Azure / other clouds)
+**GCP (Compute Engine):**
 
-The runbook is the same for all three clouds at a baseline level —
-provision a VM with the size and disk specs above, allow your access
-method (SSH or cloud-shell), then SSH in.
+```bash
+cd infra/terraform/single-vm/gcp
+
+cat > terraform.tfvars << 'EOF'
+project_id         = "my-gcp-project"
+zone               = "us-central1-a"
+subnetwork         = "default"
+dpf_admin_password = "change-me-long-enough-16chars"
+llm_base_url       = "https://api.openai.com/v1"
+llm_model          = "gpt-4o"
+embedding_model    = "text-embedding-3-small"
+EOF
+
+terraform init && terraform apply
+```
+
+After `apply`, watch the cloud-init log via IAP tunnel (no port 22 needed):
+
+```bash
+gcloud compute ssh ubuntu@$(terraform output -raw instance_name) \
+  --project=my-gcp-project --zone=us-central1-a --tunnel-through-iap \
+  --command='tail -f /var/log/dpf-install.log'
+```
+
+Typical install time: **8-12 minutes**. Variables reference:
+[`infra/terraform/single-vm/gcp/variables.tf`](../../infra/terraform/single-vm/gcp/variables.tf).
+
+### Option B — Manual provisioning (Azure / other clouds)
+
+The runbook below covers manual VM provisioning for clouds without a
+Terraform module yet. Azure is the next planned module.
 
 ### AWS (EC2) — manual
 
@@ -265,9 +295,9 @@ Same lifecycle commands as bare-metal Linux:
 
 Out of scope for the Single VM Phase 0 substrate:
 
-- **Terraform (GCP / Azure)** — the AWS module landed in Phase 0
-  (`infra/terraform/single-vm/aws/`). GCP (Compute Engine) and Azure
-  equivalents follow the same pattern and are tracked in BI-22332688.
+- **Terraform (Azure)** — AWS and GCP modules shipped in Phase 0
+  (`infra/terraform/single-vm/{aws,gcp}/`). Azure (VM) follows the same
+  pattern and is tracked in BI-22332688.
 - **HA / multi-AZ** — single VM by definition. Pick the Managed k8s
   substrate if you need HA today.
 - **PITR backups** — disk snapshots are the operator's responsibility.
