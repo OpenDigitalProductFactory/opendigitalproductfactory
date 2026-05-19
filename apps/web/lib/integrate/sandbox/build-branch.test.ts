@@ -77,3 +77,15 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain("node_modules");
   });
 });
+
+// ─── Sandbox git-add exclusions (generated Prisma client) ────────────────────
+
+describe("buildSandboxGitAddCommand generated-client exclusion", () => {
+  it("excludes the generated Prisma client from sandbox staged changes", () => {
+    const command = buildSandboxGitAddCommand();
+    // The generated Prisma client lives at packages/db/generated/ — it must
+    // never appear in the diff baseline because a stale sandbox image will
+    // produce the wrong types and bloat the patch with conflicts.
+    expect(command).toContain("**/generated/client/**");
+  });
+});
