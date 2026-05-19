@@ -4,19 +4,24 @@ import Link from "next/link";
 import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { AccountantWorkLanePanel } from "@/components/finance/AccountantWorkLanePanel";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
 const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  sent: "#38bdf8",
-  viewed: "#a78bfa",
-  overdue: "#ef4444",
-  partially_paid: "#fbbf24",
-  paid: "#4ade80",
-  void: "#6b7280",
-  written_off: "#6b7280",
+  draft: "var(--dpf-muted)",
+  sent: "var(--dpf-info)",
+  viewed: "var(--dpf-accent)",
+  overdue: "var(--dpf-error)",
+  partially_paid: "var(--dpf-warning)",
+  paid: "var(--dpf-success)",
+  void: "var(--dpf-muted)",
+  written_off: "var(--dpf-muted)",
 };
+
+const POSITIVE_COLOUR = "var(--dpf-success)";
+const ATTENTION_COLOUR = "var(--dpf-error)";
+const MUTED_COLOUR = "var(--dpf-muted)";
 
 export default async function FinancePage() {
   const now = new Date();
@@ -266,6 +271,8 @@ export default async function FinancePage() {
         />
       </div>
 
+      <AccountantWorkLanePanel />
+
       {/* Row 1: Cash Position + 30-day Forecast + Outstanding + Overdue */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {/* Widget 1: Cash Position */}
@@ -287,7 +294,7 @@ export default async function FinancePage() {
             <>
               <p
                 className="text-2xl font-bold"
-                style={{ color: totalCash >= 0 ? "#4ade80" : "#ef4444" }}
+                style={{ color: totalCash >= 0 ? POSITIVE_COLOUR : ATTENTION_COLOUR }}
               >
                 {sym}{formatMoney(totalCash)}
               </p>
@@ -305,7 +312,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: forecastBalance >= totalCash ? "#4ade80" : "#ef4444" }}
+            style={{ color: forecastBalance >= totalCash ? POSITIVE_COLOUR : ATTENTION_COLOUR }}
           >
             {sym}{formatMoney(forecastBalance)}
           </p>
@@ -334,7 +341,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: overdueCount > 0 ? "#ef4444" : "#4ade80" }}
+            style={{ color: overdueCount > 0 ? ATTENTION_COLOUR : POSITIVE_COLOUR }}
           >
             {overdueCount}
           </p>
@@ -373,7 +380,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: moneyOweAmount > 0 ? "#ef4444" : "#4ade80" }}
+            style={{ color: moneyOweAmount > 0 ? ATTENTION_COLOUR : POSITIVE_COLOUR }}
           >
             {sym}{formatMoney(moneyOweAmount)}
           </p>
@@ -389,7 +396,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: activeRecurringCount > 0 ? "#4ade80" : "#8888a0" }}
+            style={{ color: activeRecurringCount > 0 ? POSITIVE_COLOUR : MUTED_COLOUR }}
           >
             {activeRecurringCount}
           </p>
@@ -407,7 +414,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: overdueGt30Amount > 0 ? "#ef4444" : "#4ade80" }}
+            style={{ color: overdueGt30Amount > 0 ? ATTENTION_COLOUR : POSITIVE_COLOUR }}
           >
             {sym}{formatMoney(overdueGt30Amount)}
           </p>
@@ -428,7 +435,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: pendingExpenseCount > 0 ? "#a78bfa" : "#4ade80" }}
+            style={{ color: pendingExpenseCount > 0 ? "var(--dpf-accent)" : POSITIVE_COLOUR }}
           >
             {pendingExpenseCount}
           </p>
@@ -446,7 +453,7 @@ export default async function FinancePage() {
           </p>
           <p
             className="text-2xl font-bold"
-            style={{ color: totalAssetValue > 0 ? "#4ade80" : "#8888a0" }}
+            style={{ color: totalAssetValue > 0 ? POSITIVE_COLOUR : MUTED_COLOUR }}
           >
             {sym}{formatMoney(totalAssetValue)}
           </p>
@@ -638,7 +645,7 @@ export default async function FinancePage() {
               </thead>
               <tbody>
                 {recentInvoices.map((inv) => {
-                  const colour = STATUS_COLOURS[inv.status] ?? "#6b7280";
+                  const colour = STATUS_COLOURS[inv.status] ?? MUTED_COLOUR;
                   return (
                     <tr
                       key={inv.id}
@@ -665,7 +672,7 @@ export default async function FinancePage() {
                           className="text-[9px] px-1.5 py-0.5 rounded-full"
                           style={{
                             color: colour,
-                            backgroundColor: `${colour}20`,
+                            backgroundColor: `color-mix(in srgb, ${colour} 16%, transparent)`,
                           }}
                         >
                           {inv.status.replace("_", " ")}
