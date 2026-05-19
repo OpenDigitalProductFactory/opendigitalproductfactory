@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildTarExcludeFlags,
   buildSourcePaths,
+  buildSandboxGitWorkspaceReadyCommand,
   buildWorkspaceAppsWebCopyCommand,
   buildWorkspacePackagesCopyCommand,
   buildWorkspaceRootProbeCommand,
@@ -112,6 +113,16 @@ describe("buildWorkspaceRootProbeCommand", () => {
 
   it("targets the requested portal container", () => {
     expect(buildWorkspaceRootProbeCommand("portal-123")).toContain("docker exec portal-123 sh -lc");
+  });
+});
+
+describe("buildSandboxGitWorkspaceReadyCommand", () => {
+  it("detects an initialized git workspace before source copy mutates files", () => {
+    const command = buildSandboxGitWorkspaceReadyCommand("/workspace");
+
+    expect(command).toContain("test -d /workspace/.git");
+    expect(command).toContain("git -C /workspace rev-parse --verify HEAD");
+    expect(command).toContain("printf yes");
   });
 });
 

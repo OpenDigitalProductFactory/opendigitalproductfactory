@@ -171,9 +171,9 @@ async function stepCreateSandbox(
   const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
   const hostPort = Number(process.env.SANDBOX_PORT ?? "3035");
 
-  await startBuildBranch(buildId);
+  const sourceCurrency = await startBuildBranch(buildId);
 
-  return { ...state, containerId, hostPort };
+  return { ...state, containerId, hostPort, sourceCurrency };
 }
 
 async function stepInitWorkspace(

@@ -31,6 +31,25 @@ function makeSandbox(): BuildSandboxState {
         status: "missing",
       },
     ],
+    sourceCurrency: {
+      source: "sandbox-git",
+      status: "current",
+      recommendedAction: "allow",
+      workspace: "/workspace",
+      branch: "build/FB-123",
+      headSha: "abcdef1234567890",
+      headTreeSha: "tree-head",
+      targetRef: "origin/main",
+      targetSha: "main1234567890",
+      targetTreeSha: "tree-head",
+      mergeBaseSha: "main1234567890",
+      aheadBy: 0,
+      behindBy: 0,
+      dirty: false,
+      localSourceChangeCount: 0,
+      checkedAt: "2026-05-18T12:00:00.000Z",
+      reason: "Sandbox source tree matches origin/main.",
+    },
     observedAt: "2026-05-18T12:00:00.000Z",
     unavailableReason: null,
   };
@@ -44,6 +63,9 @@ describe("BuildSandboxCard", () => {
     expect(screen.getByText("build/FB-123")).toBeInTheDocument();
     expect(screen.getByText("abcdef12")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("Source currency")).toBeInTheDocument();
+    expect(screen.getByText("current")).toBeInTheDocument();
+    expect(screen.getByText("origin/main")).toBeInTheDocument();
     expect(screen.getAllByText("apps/web/components/build/BuildSandboxCard.tsx")).toHaveLength(2);
     expect(screen.getByText("+42 -3")).toBeInTheDocument();
     expect(screen.getByText("missing")).toBeInTheDocument();

@@ -21,6 +21,13 @@ import {
   registerRuntimeTarget,
   type RuntimeCoordinationDb,
 } from "@/lib/runtime-coordination/runtime-targets";
+import {
+  buildSandboxSourceCurrencyProbeCommand,
+  classifySandboxSourceCurrency,
+  formatSandboxSourceCurrencySummary,
+  parseSandboxSourceCurrencyProbeOutput,
+  type SandboxSourceCurrencySnapshot,
+} from "./sandbox-source-currency";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
@@ -128,6 +135,115 @@ async function normalizeSandboxBranchArtifacts(branchName: string): Promise<void
   ).catch((err) => {
     console.warn(`[build-branch] artifact prune commit skipped on ${branchName}: ${(err as Error).message?.slice(0, 200)}`);
   });
+}
+
+async function configureAndFetchUpstream(identity: ClientIdentity): Promise<boolean> {
+  if (!identity.upstreamRemoteUrl) {
+    return false;
+  }
+
+  const escapedUrl = JSON.stringify(identity.upstreamRemoteUrl);
+  await execSandboxGit(
+    [
+      `cd ${WORKSPACE}`,
+      `if git remote get-url origin >/dev/null 2>&1; then git remote set-url origin ${escapedUrl}; else git remote add origin ${escapedUrl}; fi`,
+      `git fetch origin main --prune`,
+    ].join(" && "),
+  );
+  return true;
+}
+
+async function inspectCurrentSandboxSourceCurrency(
+  targetRef: string,
+): Promise<SandboxSourceCurrencySnapshot> {
+  const output = await execSandboxGit(
+    buildSandboxSourceCurrencyProbeCommand({
+      workspace: WORKSPACE,
+      targetRef,
+    }),
+  );
+  return parseSandboxSourceCurrencyProbeOutput(output, {
+    targetRef,
+    checkedAt: new Date().toISOString(),
+    workspace: WORKSPACE,
+  });
+}
+
+async function recordBuildSourceCurrency(
+  buildId: string,
+  snapshot: SandboxSourceCurrencySnapshot,
+  summaryPrefix?: string,
+): Promise<void> {
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { buildExecState: true },
+  });
+  const existingState = isRecord(build?.buildExecState) ? build.buildExecState : {};
+  const summary = [
+    summaryPrefix,
+    formatSandboxSourceCurrencySummary(snapshot),
+  ].filter(Boolean).join(" ");
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      buildExecState: {
+        ...existingState,
+        sourceCurrency: snapshot,
+      } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+    },
+  });
+  await prisma.buildActivity.create({
+    data: {
+      buildId,
+      tool: "sandbox_source_currency",
+      summary,
+    },
+  }).catch(() => {});
+}
+
+async function refreshCurrentBranchFromTarget(args: {
+  buildId: string;
+  branchName: string;
+  targetRef: string;
+  blockUnknown: boolean;
+}): Promise<SandboxSourceCurrencySnapshot> {
+  const before = await inspectCurrentSandboxSourceCurrency(args.targetRef);
+
+  if (before.status === "behind") {
+    await recordBuildSourceCurrency(
+      args.buildId,
+      before,
+      `Auto-refreshing ${args.branchName} before Build Studio work starts.`,
+    );
+    await execSandboxGit(
+      `git -C ${WORKSPACE} reset --hard ${quoteGitPathspec(args.targetRef)}`,
+    );
+    await normalizeSandboxBranchArtifacts(args.branchName);
+    const after = await inspectCurrentSandboxSourceCurrency(args.targetRef);
+    await recordBuildSourceCurrency(
+      args.buildId,
+      after,
+      `Auto-refreshed ${args.branchName}.`,
+    );
+    return after;
+  }
+
+  if (before.recommendedAction === "pause" || (args.blockUnknown && before.status === "unknown")) {
+    await recordBuildSourceCurrency(
+      args.buildId,
+      before,
+      `Paused ${args.branchName} before Build Studio work starts.`,
+    );
+    throw new Error(formatSandboxSourceCurrencySummary(before));
+  }
+
+  await recordBuildSourceCurrency(args.buildId, before);
+  return before;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 // ─── Client Identity ─────────────────────────────────────────────────────────
@@ -244,19 +360,9 @@ async function ensureGitBaseline(identity: ClientIdentity): Promise<void> {
   // origin/main; by resetting to origin/main, deploy_feature's diff is always
   // a clean delta against what will actually land on the portal.
   if (identity.upstreamRemoteUrl) {
-    const escapedUrl = JSON.stringify(identity.upstreamRemoteUrl);
     try {
-      await execSandboxGit(
-        [
-          `cd ${WORKSPACE}`,
-          // Add remote if not already configured (idempotent)
-          `git remote get-url origin 2>/dev/null || git remote add origin ${escapedUrl}`,
-          // Shallow fetch is fast; we only need the tip of main for the baseline
-          `git fetch origin main --depth=1 2>&1`,
-          // Reset workspace to current main — source files win over portal image
-          `git reset --hard origin/main`,
-        ].join(" && "),
-      );
+      await configureAndFetchUpstream(identity);
+      await execSandboxGit(`git -C ${WORKSPACE} reset --hard origin/main`);
       console.log(`[build-branch] Sandbox baseline reset to origin/main via ${identity.upstreamRemoteUrl}`);
     } catch (fetchErr) {
       // Non-fatal: if fetch fails (offline, token expired, etc.) fall through
@@ -308,11 +414,30 @@ async function ensureClientBranch(identity: ClientIdentity): Promise<void> {
  * Updates FeatureBuild with sandboxId/sandboxPort so deploy_feature,
  * the preview proxy, and the promoter all work unchanged.
  */
-export async function startBuildBranch(buildId: string): Promise<void> {
+export async function startBuildBranch(buildId: string): Promise<SandboxSourceCurrencySnapshot | null> {
   const identity = await getClientIdentity();
 
   await ensureGitBaseline(identity);
   await ensureClientBranch(identity);
+  let upstreamVerified = false;
+  if (identity.upstreamRemoteUrl) {
+    try {
+      upstreamVerified = await configureAndFetchUpstream(identity);
+    } catch (err) {
+      const snapshot = classifySandboxSourceCurrency({
+        workspace: WORKSPACE,
+        branch: await currentSandboxBranch(),
+        targetRef: "origin/main",
+        checkedAt: new Date().toISOString(),
+      });
+      await recordBuildSourceCurrency(
+        buildId,
+        snapshot,
+        `Could not verify origin/main before Build Studio work starts: ${(err as Error).message?.slice(0, 200)}`,
+      );
+      throw new Error(`Could not verify sandbox source against origin/main: ${(err as Error).message}`);
+    }
+  }
 
   // Scrub any uncommitted leakage from a prior build before switching branches.
   //
@@ -347,6 +472,28 @@ export async function startBuildBranch(buildId: string): Promise<void> {
     `git -C ${WORKSPACE} checkout "${identity.clientBranch}"`,
   );
   await normalizeSandboxBranchArtifacts(identity.clientBranch);
+  if (upstreamVerified) {
+    await refreshCurrentBranchFromTarget({
+      buildId,
+      branchName: identity.clientBranch,
+      targetRef: "origin/main",
+      blockUnknown: true,
+    });
+  } else {
+    const snapshot = await inspectCurrentSandboxSourceCurrency("origin/main").catch(() =>
+      classifySandboxSourceCurrency({
+        workspace: WORKSPACE,
+        branch: identity.clientBranch,
+        targetRef: "origin/main",
+        checkedAt: new Date().toISOString(),
+      })
+    );
+    await recordBuildSourceCurrency(
+      buildId,
+      snapshot,
+      "Upstream remote is not configured; sandbox source currency is observe-only.",
+    );
+  }
 
   const branchName = `build/${buildId}`;
 
@@ -359,6 +506,12 @@ export async function startBuildBranch(buildId: string): Promise<void> {
       `git -C ${WORKSPACE} checkout "${branchName}"`,
     );
     await normalizeSandboxBranchArtifacts(branchName);
+    await refreshCurrentBranchFromTarget({
+      buildId,
+      branchName,
+      targetRef: identity.clientBranch,
+      blockUnknown: true,
+    });
     console.log(`[build-branch] Resumed build branch: ${branchName}`);
   } else {
     await execSandboxGit(
@@ -367,6 +520,10 @@ export async function startBuildBranch(buildId: string): Promise<void> {
     await normalizeSandboxBranchArtifacts(branchName);
     console.log(`[build-branch] Created build branch: ${branchName} from ${identity.clientBranch}`);
   }
+  const finalSourceCurrency = await inspectCurrentSandboxSourceCurrency(
+    upstreamVerified ? "origin/main" : identity.clientBranch,
+  );
+  await recordBuildSourceCurrency(buildId, finalSourceCurrency);
 
   const updatedBuild = await prisma.featureBuild.update({
     where: { buildId },
@@ -403,6 +560,7 @@ export async function startBuildBranch(buildId: string): Promise<void> {
       principalId: null,
     },
   });
+  return finalSourceCurrency;
 }
 
 /**

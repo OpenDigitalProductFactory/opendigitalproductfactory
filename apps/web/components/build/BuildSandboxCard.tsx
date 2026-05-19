@@ -1,6 +1,7 @@
 "use client";
 
 import type { BuildSandboxState } from "@/lib/build/sandbox-state";
+import type { SandboxSourceCurrencyStatus } from "@/lib/integrate/sandbox/sandbox-source-currency";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 
 type Props = {
@@ -33,6 +34,36 @@ export function BuildSandboxCard({ sandbox }: Props) {
             </div>
           </div>
 
+          {sandbox.sourceCurrency && (
+            <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10px] uppercase text-[var(--dpf-muted)]">Source currency</span>
+                <span className={`font-semibold ${sourceCurrencyStatusClass(sandbox.sourceCurrency.status)}`}>
+                  {sandbox.sourceCurrency.status}
+                </span>
+              </div>
+              <div className="mt-2 grid gap-2 text-[var(--dpf-muted)] sm:grid-cols-3">
+                <div>
+                  <div className="text-[10px] uppercase">Target</div>
+                  <div className="font-mono text-[var(--dpf-text)]">{sandbox.sourceCurrency.targetRef}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase">Ahead / behind</div>
+                  <div className="font-mono text-[var(--dpf-text)]">
+                    {sandbox.sourceCurrency.aheadBy ?? "?"} / {sandbox.sourceCurrency.behindBy ?? "?"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase">Action</div>
+                  <div className="font-mono text-[var(--dpf-text)]">{sandbox.sourceCurrency.recommendedAction}</div>
+                </div>
+              </div>
+              {sandbox.sourceCurrency.reason && (
+                <p className="mt-2 text-[var(--dpf-muted)]">{sandbox.sourceCurrency.reason}</p>
+              )}
+            </div>
+          )}
+
           <div>
             <div className="text-[10px] uppercase text-[var(--dpf-muted)]">Source diffstat</div>
             <div className="mt-1 space-y-1">
@@ -64,4 +95,20 @@ export function BuildSandboxCard({ sandbox }: Props) {
       )}
     </section>
   );
+}
+
+function sourceCurrencyStatusClass(status: SandboxSourceCurrencyStatus): string {
+  switch (status) {
+    case "current":
+    case "ahead":
+      return "text-[var(--dpf-success)]";
+    case "behind":
+    case "unknown":
+      return "text-[var(--dpf-warning)]";
+    case "dirty":
+    case "diverged":
+      return "text-[var(--dpf-error)]";
+    default:
+      return "text-[var(--dpf-muted)]";
+  }
 }

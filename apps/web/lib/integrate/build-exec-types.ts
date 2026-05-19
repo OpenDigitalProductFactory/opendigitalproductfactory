@@ -1,6 +1,8 @@
 // apps/web/lib/build-exec-types.ts
 // Types for the checkpoint-based build execution pipeline.
 
+import type { SandboxSourceCurrencySnapshot } from "./sandbox/sandbox-source-currency";
+
 export type BuildExecStep =
   | "pending"
   | "sandbox_created"
@@ -23,6 +25,7 @@ export type BuildExecutionState = {
   qdrantContainerId?: string;
   networkId?: string;
   hostPort?: number;
+  sourceCurrency?: SandboxSourceCurrencySnapshot | null;
   startedAt: string;
   completedAt?: string;
 };
