@@ -34,5 +34,59 @@
     "body": {
       "error": "token_expired"
     }
+  },
+  "vendor": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "bill": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "expense": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "payment": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "account": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
+  },
+  "report": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "token_expired"
+    }
   }
 }

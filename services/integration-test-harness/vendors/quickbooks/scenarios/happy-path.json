@@ -66,5 +66,92 @@
         "PrivateNote": "Monthly managed services retainer."
       }
     }
+  },
+  "vendor": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Vendor": {
+        "Id": "v-1",
+        "DisplayName": "Acme Supplies",
+        "CompanyName": "Acme Supplies"
+      }
+    }
+  },
+  "bill": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Bill": {
+        "Id": "b-1",
+        "DocNumber": "BILL-1",
+        "TotalAmt": 220,
+        "Balance": 220,
+        "VendorRef": {
+          "value": "v-1",
+          "name": "Acme Supplies"
+        }
+      }
+    }
+  },
+  "expense": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Purchase": {
+        "Id": "p-1",
+        "TotalAmt": 42.75,
+        "PaymentType": "CreditCard"
+      }
+    }
+  },
+  "payment": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Payment": {
+        "Id": "pay-1",
+        "TotalAmt": 1250,
+        "CustomerRef": {
+          "value": "42",
+          "name": "Acme Managed IT"
+        }
+      }
+    }
+  },
+  "account": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Account": {
+        "Id": "a-1",
+        "Name": "Checking",
+        "AccountType": "Bank"
+      }
+    }
+  },
+  "report": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "Header": {
+        "ReportName": "ProfitAndLoss"
+      },
+      "Rows": {
+        "Row": []
+      }
+    }
   }
 }

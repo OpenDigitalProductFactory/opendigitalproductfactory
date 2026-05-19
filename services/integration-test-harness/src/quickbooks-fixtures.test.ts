@@ -22,6 +22,12 @@ describe("quickbooks vendor fixtures", () => {
     expect(openapiText).toContain("/v3/company/{realmId}/companyinfo/{realmId}");
     expect(openapiText).toContain("/v3/company/{realmId}/customer/{customerId}");
     expect(openapiText).toContain("/v3/company/{realmId}/invoice/{invoiceId}");
+    expect(openapiText).toContain("/v3/company/{realmId}/vendor/{vendorId}");
+    expect(openapiText).toContain("/v3/company/{realmId}/bill/{billId}");
+    expect(openapiText).toContain("/v3/company/{realmId}/purchase/{purchaseId}");
+    expect(openapiText).toContain("/v3/company/{realmId}/payment/{paymentId}");
+    expect(openapiText).toContain("/v3/company/{realmId}/account/{accountId}");
+    expect(openapiText).toContain("/v3/company/{realmId}/reports/{reportName}");
   });
 
   it("maps route definitions for the OAuth and read-first accounting endpoints", () => {
@@ -42,7 +48,54 @@ describe("quickbooks vendor fixtures", () => {
         method: "GET",
         path: "/v3/company/{realmId}/invoice/{invoiceId}",
       },
+      {
+        key: "vendor",
+        method: "GET",
+        path: "/v3/company/{realmId}/vendor/{vendorId}",
+      },
+      {
+        key: "bill",
+        method: "GET",
+        path: "/v3/company/{realmId}/bill/{billId}",
+      },
+      {
+        key: "expense",
+        method: "GET",
+        path: "/v3/company/{realmId}/purchase/{purchaseId}",
+      },
+      {
+        key: "payment",
+        method: "GET",
+        path: "/v3/company/{realmId}/payment/{paymentId}",
+      },
+      {
+        key: "account",
+        method: "GET",
+        path: "/v3/company/{realmId}/account/{accountId}",
+      },
+      {
+        key: "report",
+        method: "GET",
+        path: "/v3/company/{realmId}/reports/{reportName}",
+      },
     ]);
+  });
+
+  it("includes fixtures for each expanded QuickBooks read-only entity family", () => {
+    const scenario = JSON.parse(
+      readFileSync(join(vendorDir, "scenarios", "happy-path.json"), "utf8"),
+    ) as Record<string, unknown>;
+
+    expect(Object.keys(scenario)).toEqual(
+      expect.arrayContaining([
+        "vendor",
+        "bill",
+        "expense",
+        "payment",
+        "account",
+        "report",
+      ]),
+    );
   });
 
   it("includes explicit jailbreak content in the adversarial scenario", () => {

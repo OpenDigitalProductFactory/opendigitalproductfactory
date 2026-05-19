@@ -34,5 +34,59 @@
     "body": {
       "error": "AuthenticationFailed"
     }
+  },
+  "vendor": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "bill": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "expense": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "payment": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "account": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
+  },
+  "report": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "AuthenticationFailed"
+    }
   }
 }
