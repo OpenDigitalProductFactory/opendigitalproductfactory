@@ -23,8 +23,10 @@ describe("IntegrationReadinessPanel", () => {
 
     expect(screen.getByRole("heading", { name: "QuickBooks Online readiness" })).toBeVisible();
     expect(screen.getByText("Acme Services LLC")).toBeVisible();
-    expect(screen.getAllByText("Read only")).toHaveLength(3);
+    expect(screen.getAllByText("Read only")).toHaveLength(9);
     expect(screen.getByText("Vendors")).toBeVisible();
+    expect(screen.getByText("Expenses")).toBeVisible();
+    expect(screen.getByText(/API coverage: QuickBooks Purchase query/i)).toBeVisible();
     expect(screen.getAllByText("Not mapped").length).toBeGreaterThan(0);
     expect(screen.getByText("Connected")).toBeVisible();
     expect(screen.queryByText(/clientSecret/i)).not.toBeInTheDocument();

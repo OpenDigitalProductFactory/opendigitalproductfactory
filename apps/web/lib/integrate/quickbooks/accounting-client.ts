@@ -36,6 +36,86 @@ export interface QuickBooksInvoice {
   [key: string]: unknown;
 }
 
+export interface QuickBooksVendor {
+  Id?: string;
+  DisplayName?: string;
+  CompanyName?: string;
+  PrimaryEmailAddr?: {
+    Address?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface QuickBooksBill {
+  Id?: string;
+  DocNumber?: string;
+  TotalAmt?: number;
+  Balance?: number;
+  VendorRef?: {
+    value?: string;
+    name?: string;
+    [key: string]: unknown;
+  };
+  DueDate?: string;
+  [key: string]: unknown;
+}
+
+export interface QuickBooksExpense {
+  Id?: string;
+  TotalAmt?: number;
+  PaymentType?: string;
+  AccountRef?: {
+    value?: string;
+    name?: string;
+    [key: string]: unknown;
+  };
+  EntityRef?: {
+    value?: string;
+    name?: string;
+    type?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface QuickBooksPayment {
+  Id?: string;
+  TotalAmt?: number;
+  CustomerRef?: {
+    value?: string;
+    name?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface QuickBooksAccount {
+  Id?: string;
+  Name?: string;
+  AccountType?: string;
+  AccountSubType?: string;
+  CurrentBalance?: number;
+  [key: string]: unknown;
+}
+
+export type QuickBooksReportName =
+  | "ProfitAndLoss"
+  | "BalanceSheet"
+  | "CashFlow"
+  | "AgedReceivables"
+  | "AgedPayables";
+
+export interface QuickBooksReport {
+  Header?: {
+    ReportName?: string;
+    [key: string]: unknown;
+  };
+  Rows?: Record<string, unknown>;
+  Columns?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface ProbeQuickBooksAccountingResult {
   companyInfo: QuickBooksCompanyInfo;
   sampleCustomer: QuickBooksCustomer | null;
@@ -101,6 +181,61 @@ export async function listQuickBooksInvoices(
   );
 }
 
+export async function listQuickBooksVendors(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksVendor[]> {
+  return queryEntities<QuickBooksVendor>(
+    "Vendor",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
+}
+
+export async function listQuickBooksBills(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksBill[]> {
+  return queryEntities<QuickBooksBill>(
+    "Bill",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
+}
+
+export async function listQuickBooksExpenses(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksExpense[]> {
+  return queryEntities<QuickBooksExpense>(
+    "Purchase",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
+}
+
+export async function listQuickBooksPayments(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksPayment[]> {
+  return queryEntities<QuickBooksPayment>(
+    "Payment",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
+}
+
+export async function listQuickBooksAccounts(
+  params: ProbeQuickBooksAccountingParams & { limit?: number },
+): Promise<QuickBooksAccount[]> {
+  return queryEntities<QuickBooksAccount>(
+    "Account",
+    params,
+    resolveAccountingBaseUrl(params.environment),
+    params.limit,
+  );
+}
+
 export async function getQuickBooksInvoice(
   params: ProbeQuickBooksAccountingParams & { invoiceId: string },
 ): Promise<QuickBooksInvoice> {
@@ -112,8 +247,28 @@ export async function getQuickBooksInvoice(
   return response.Invoice;
 }
 
+export async function getQuickBooksReport(
+  params: ProbeQuickBooksAccountingParams & { reportName: QuickBooksReportName },
+): Promise<QuickBooksReport> {
+  const baseUrl = resolveAccountingBaseUrl(params.environment);
+  const reportName = encodeURIComponent(params.reportName);
+  return fetchJson<QuickBooksReport>(
+    `${baseUrl}/v3/company/${params.realmId}/reports/${reportName}`,
+    params,
+  );
+}
+
+type QuickBooksQueryableEntity =
+  | "Customer"
+  | "Invoice"
+  | "Vendor"
+  | "Bill"
+  | "Purchase"
+  | "Payment"
+  | "Account";
+
 async function queryEntity<T extends Record<string, unknown>>(
-  entity: "Customer" | "Invoice",
+  entity: QuickBooksQueryableEntity,
   params: ProbeQuickBooksAccountingParams,
   baseUrl: string,
 ): Promise<T | null> {
@@ -122,7 +277,7 @@ async function queryEntity<T extends Record<string, unknown>>(
 }
 
 async function queryEntities<T extends Record<string, unknown>>(
-  entity: "Customer" | "Invoice",
+  entity: QuickBooksQueryableEntity,
   params: ProbeQuickBooksAccountingParams,
   baseUrl: string,
   limit = 5,
@@ -206,9 +361,8 @@ interface InvoiceResponse {
 
 type QueryResponse<T extends Record<string, unknown>> = {
   QueryResponse?: {
-    Customer?: T[];
-    Invoice?: T[];
-  };
+    [entity in QuickBooksQueryableEntity]?: T[];
+  } & Record<string, unknown>;
 };
 
 async function safelyDrainBody(body: { text: () => Promise<string> }): Promise<void> {

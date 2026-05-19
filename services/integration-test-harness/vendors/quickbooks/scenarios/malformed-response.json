@@ -26,5 +26,47 @@
       "content-type": "application/json"
     },
     "rawBody": "{\"Invoice\":"
+  },
+  "vendor": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Vendor\":"
+  },
+  "bill": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Bill\":"
+  },
+  "expense": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Purchase\":"
+  },
+  "payment": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Payment\":"
+  },
+  "account": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Account\":"
+  },
+  "report": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "rawBody": "{\"Header\":"
   }
 }
