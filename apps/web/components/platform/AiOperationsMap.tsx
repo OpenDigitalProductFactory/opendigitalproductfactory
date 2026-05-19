@@ -512,39 +512,15 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
     [controlFilteredRoutes, selectedReplayTime, timelineRange],
   );
   const displayRoutes = useMemo(() => aggregateRoutesForDisplay(replayFilteredRoutes), [replayFilteredRoutes]);
-  const visibleProviderOnlyMarkers = useMemo(
-    () =>
-      routingTopology.markers.filter((marker) => {
-        if (marker.routeId) return false;
-        if (!marker.providerId) return false;
-        if (!markerMatchesRouteFilter(marker, routeFilter)) return false;
-        if (!markerVisibleAtReplayTime(marker, selectedReplayTime, timelineRange)) return false;
-        if (providerFilter !== "all") return marker.providerId === providerFilter;
-        return providerMatchesTypeFilter(providersById.get(marker.providerId), providerTypeFilter);
-      }),
-    [providerFilter, providerTypeFilter, providersById, routeFilter, routingTopology.markers, selectedReplayTime, timelineRange],
-  );
-  const visibleCoworkerOnlyMarkers = useMemo(
-    () =>
-      routingTopology.markers.filter((marker) => {
-        if (marker.routeId || !marker.coworkerId || marker.providerId) return false;
-        if (!markerMatchesRouteFilter(marker, routeFilter)) return false;
-        return markerVisibleAtReplayTime(marker, selectedReplayTime, timelineRange);
-      }),
-    [routeFilter, routingTopology.markers, selectedReplayTime, timelineRange],
-  );
   const visibleCoworkerIds = useMemo(
     () => {
-      const ids = new Set(displayRoutes.map((route) => route.coworkerId));
-      visibleProviderOnlyMarkers.forEach((marker) => {
-        if (marker.coworkerId) ids.add(marker.coworkerId);
-      });
-      visibleCoworkerOnlyMarkers.forEach((marker) => {
-        if (marker.coworkerId) ids.add(marker.coworkerId);
+      const ids = new Set(controlFilteredRoutes.map((route) => route.coworkerId));
+      routingTopology.markers.forEach((marker) => {
+        if (marker.coworkerId && markerMatchesRouteFilter(marker, routeFilter)) ids.add(marker.coworkerId);
       });
       return ids;
     },
-    [displayRoutes, visibleCoworkerOnlyMarkers, visibleProviderOnlyMarkers],
+    [controlFilteredRoutes, routeFilter, routingTopology.markers],
   );
   const visibleProviderIds = useMemo(
     () => {
@@ -554,13 +530,19 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
           if (providerFilter === "all" || provider.providerId === providerFilter) ids.add(provider.providerId);
         });
       }
-      displayRoutes.forEach((route) => ids.add(route.providerId));
-      visibleProviderOnlyMarkers.forEach((marker) => {
-        if (marker.providerId) ids.add(marker.providerId);
+      controlFilteredRoutes.forEach((route) => ids.add(route.providerId));
+      routingTopology.markers.forEach((marker) => {
+        if (!marker.routeId && marker.providerId && markerMatchesRouteFilter(marker, routeFilter)) {
+          if (providerFilter === "all" || marker.providerId === providerFilter) {
+            if (providerMatchesTypeFilter(providersById.get(marker.providerId), providerTypeFilter)) {
+              ids.add(marker.providerId);
+            }
+          }
+        }
       });
       return ids;
     },
-    [displayRoutes, providerFilter, providerTypeFilteredProviders, routeFilter, visibleProviderOnlyMarkers],
+    [controlFilteredRoutes, providerFilter, providerTypeFilter, providerTypeFilteredProviders, providersById, routeFilter, routingTopology.markers],
   );
   const visibleRouteIds = useMemo(
     () => new Set(displayRoutes.flatMap((route) => route.sourceRouteIds)),
@@ -589,10 +571,6 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
       }),
     [routingTopology.markers, selectedReplayTime, timelineRange, visibleCoworkerIds, visibleProviderIds, visibleRouteIds],
   );
-  const routedCoworkerIds = useMemo(
-    () => new Set(displayRoutes.map((route) => route.coworkerId)),
-    [displayRoutes],
-  );
   const routedProviderIds = useMemo(
     () => new Set(displayRoutes.map((route) => route.providerId)),
     [displayRoutes],
@@ -604,9 +582,8 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
         ROUTING_LAYOUT.coworkerNodeX,
         ROUTING_LAYOUT.startY,
         ROUTING_LAYOUT.endY,
-        routedCoworkerIds,
       ),
-    [routedCoworkerIds, visibleCoworkers],
+    [visibleCoworkers],
   );
   const providerPositions = useMemo(
     () =>
@@ -615,9 +592,8 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
         ROUTING_LAYOUT.providerNodeX,
         ROUTING_LAYOUT.startY,
         ROUTING_LAYOUT.endY,
-        routedProviderIds,
       ),
-    [routedProviderIds, visibleProviders],
+    [visibleProviders],
   );
   const routeMarkersByRouteId = useMemo(
     () => {
