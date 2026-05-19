@@ -113,13 +113,15 @@ Those are exactly the moments where a governed decision perspective earns its ke
 
 ---
 
-**A measurement from this week.** As I write this, a build in our own portal — Build Studio working on the `formal deliberation` feature, ironically — is paused with 7 of 9 tasks complete. The last 10 minutes of activity before it went quiet show 54 dispatch attempts, every single one of them failing with `usage-limit` — provider rate limits, hit in a cascade as the same task retried with growing context.
+What we're really building here is the **embodiment of a way of thinking.**
 
-Then 151 minutes of silence.
+That phrase matters. An organization's accumulated judgment isn't a database of past answers — it's a *method*. How evidence gets weighed. Which conflicts get escalated and which get arbitrated. When confidence should grow and when it should drop. What gets deferred because the profile doesn't yet have enough coverage to frame the question honestly.
 
-That is the cost of unresolved ambiguity in an autonomous coding loop, measured in real time. Not because the model isn't capable — but because the *substrate around the model* doesn't yet capture what's already been answered, doesn't yet cap context regrowth on retry, and doesn't yet route the genuinely ambiguous parts to a human before the loop exhausts itself trying.
+Most AI systems try to capture decisions. WWMD/WWWD tries to capture the method that produced them.
 
-The WWMD gate addresses the routing-to-human half. Scoped task context addresses the context-cap half. Both shipped this week. Neither has yet had its first real catch — but the load they're built to handle is no longer theoretical.
+The difference matters when ambiguity shows up in an agentic workflow — which it always does. An autonomous coworker hitting an underspecified piece of work doesn't need an answer from a black box. It needs the question routed through the organization's actual way of deciding. When that routing exists as a governed substrate — versioned, evidenced, auditable — ambiguity stops being a stall point and starts being a place where the method actually does its work.
+
+That's the bet. The decisions are downstream. The way of thinking is the thing.
 
 ---
 
@@ -308,33 +310,49 @@ Every invocation writes to the decision ledger, which operators can inspect over
 
 ---
 
-### What the load actually looks like
+### Embodying a way of thinking
 
-I want to be precise about the current state of this work, because the temptation to overclaim a freshly-shipped feature is real.
+There is a category mistake at the center of most enterprise AI projects, and it shows up most visibly when a company tries to "codify its best people" or "capture institutional knowledge."
 
-The WWMD gate code, schema, seed, and UI all shipped on 2026-05-17. The first profile (`Mark / DPF Platform`) is seeded with six pieces of perspective material drawn from existing platform principles. The integration point — the plan-advancement gate in Build Studio — is wired.
+The mistake is treating decisions as data.
 
-The `DecisionInteraction` ledger has not yet recorded its first real invocation. As of the last direct ground-truth check, the table held zero rows. The builds currently in `build` phase advanced before the UI surface shipped; the builds in `ideate` phase have not yet reached the plan-advancement boundary. The first catch is days, maybe a week, away.
+They aren't. A decision is the *application of a method to a situation*. The situation is specific; the method is what was actually worth preserving. The decision itself is just the residue.
 
-What I *can* show is what the load looks like in the meantime — because the problem the gate is designed for is loud right now, in production, on the builds whose entire purpose is to extend the substrate that will eventually catch it.
+A retrieval system can store decisions and look them up. It cannot reconstruct the method from the decisions — at least not reliably, and not in a way that generalizes to situations the original decision-maker never saw. Ask a RAG-over-meeting-notes system "what would we do here?" and it will give you a plausible-sounding paraphrase of the nearest past case. That is not how organizations actually decide, and it is not what an autonomous coworker should be doing when it hits ambiguity in real work.
 
-A snapshot from a single in-flight build, captured live as I was drafting this:
+WWMD/WWWD is built on a different proposition: what an organization should preserve is **how its leaders weigh evidence, where they escalate, when they defer, and what they treat as principle versus what they treat as preference.** The decisions emerge from that. They aren't the thing itself.
 
-- **Build state:** 7 of 9 tasks complete, agent quiet for 151 minutes, operator action prompt reads "Click Resume to re-execute 2 blocked tasks."
-- **Last 10 minutes of activity before silence:** 54 dispatch attempts. Every single one failed with `usage-limit` — provider rate limits, hit in a cascade as the same task retried with growing context. 100% failure rate. Average attempt duration: 2 seconds (these are fast-fail rate-limit rejections, not work).
-- **Then 151 minutes of nothing**, while the build waits for a human to notice.
+When you capture the method instead of the decisions, three useful things happen.
 
-That is the cost of unresolved ambiguity in an autonomous coding loop, measured in real time. Not because the model isn't capable — but because the substrate around the model doesn't yet capture what was already answered, doesn't yet cap context regrowth on retry, and doesn't yet route the genuinely ambiguous parts to a human before the loop exhausts itself trying.
+**1. New situations get principled answers.** The substrate doesn't need to have seen the exact case before. It applies the encoded method — the four-outcome framing, the confidence rules, the deliberation pattern, the escalation route — to a situation that may not match any prior decision. The novelty is preserved; the method is portable.
 
-It is important to be clear about division of responsibility, because conflating the two parts would be intellectually dishonest:
+**2. Corrections improve the method, not just the case.** When a human overrides a recommendation, the override doesn't just resolve the current question. It teaches the substrate something about *when* its method needs adjustment — about which domain classes are drifting, which sources are stale, which principles need re-weighting. A patched single case is a logged event. A patched method is a learning signal that scales across every future decision in that class.
 
-**The rate-limit storm itself is not what WWMD addresses.** WWMD does not change rate limits. What it changes is whether an ambiguity that *would* have caused the next retry storm gets routed to a human capture — turning the question into a durable decision the next coworker queries — rather than re-triggering the same cascade in a sibling task.
+**3. Audit becomes possible.** Three months later, you can ask not just "what did we decide?" but "why did we decide it that way, given what we knew then, and which principle governed?" That is the difference between an AI system you can trust with consequential work and one you can't. The decision ledger answers the first question. The profile version snapshot answers the second.
 
-**The context regrowth on retry** is what *scoped task context* addresses (a separate change that shipped alongside the gate). Capped context means each retry doesn't carry the cumulative noise of the previous one.
+This is what it means to embody a way of thinking. Not store decisions. Not impersonate a person. **Encode the method as governed structure** — versioned, evidenced, auditable, correctable — and let the decisions follow.
 
-Together, the two changes reduce the surface area of the loop that ambiguity-and-retry can attack. Neither alone is sufficient. The article's empirical claim, when we earn the right to make it, will be a delta between this state and the state after both changes have caught their first wave of real cases.
+### Why this matters for ambiguity
 
-For now, the honest framing: **we built the catcher under real load, not in a lab.** The first measurement is pending. The load is documented.
+Ambiguity in agentic workflows is the place where this distinction stops being philosophical and becomes operational.
+
+Every autonomous coworker hits ambiguity. A plan has a gap. A design choice is underspecified. A trade-off has competing principles. The standard failure mode is well-known: the model asks a clarifying question, gets an answer, and then either re-asks it five minutes later in a sibling task or guesses at a synthetic answer that propagates downstream as if it were authoritative.
+
+That failure mode happens because the conversation is the only place the answer lives. Conversation is brittle — it rotates out of context windows, doesn't carry across tasks, and isn't versioned. Asking a coworker to remember an answer is asking the wrong layer to do the wrong job.
+
+The substrate is the right layer. When ambiguity arrives at the gate, the method runs:
+
+- Is the profile's coverage sufficient to recommend?
+- Is the confidence high enough, given the risk tier?
+- Are there competing principles? If so, this becomes an escalation, not a synthesis.
+- Has the human resolved a similar question in this domain class before? If so, that resolution is the answer.
+- If none of the above, defer honestly — surface the coverage gap as candidate material rather than guessing.
+
+That sequence isn't a clever prompt. It's the organization's way of thinking, encoded as code, applied to a moment of ambiguity, with an auditable record at the end. The coworker doesn't need to remember anything. The substrate remembers.
+
+Honest current state: the gate code, schema, seed, and UI shipped on 2026-05-17. The first profile is seeded with six pieces of perspective material. The integration point — the plan-advancement gate in Build Studio — is wired. The `DecisionInteraction` ledger has not yet recorded its first real invocation; the builds currently in flight advanced before the UI surface shipped, and the builds in ideate phase haven't yet reached the plan-advancement boundary. The first catch is days away.
+
+The architecture is in place. The method is encoded. The first ambiguity the gate catches will be the first real test of whether the embodiment actually works as designed. If it does, the next coworker that hits a question in the same domain class will find the answer in the ledger before it asks anyone — because the method, not the conversation, is now where the organization's thinking lives.
 
 ---
 
@@ -413,24 +431,22 @@ Those two questions are the whole design problem.
 
 This section tracks which features have shipped and which article markers can be resolved. Update as features land.
 
-### Snapshot 2026-05-19 19:55Z — first live build metrics captured
+### Snapshot 2026-05-19 19:55Z — WWMD substrate state
 
-Direct observation of build `FB-71FB3A53` (working on the formal-deliberation feature):
+Direct observation of WWMD-relevant state. Build-runtime metrics (rate-limit storms, dispatch retry patterns) are out of scope for this article — see the "Out of scope" section below.
 
 | Metric | Value | Reading |
 |---|---|---|
-| Tasks complete | 7 of 9 | 77.8% — close to finish, blocked on last two |
-| Dispatch attempts in trailing 10 min window | **54** | Retry storm signature |
-| Failure axis distribution | `usage-limit`: 54 / 54 (100%) | Pure rate-limit cascade, no model failures, no logic failures |
-| Avg attempt duration | ~2 s | Fast-fail rate-limit rejections |
-| Quiet minutes since storm | **151** | Build stalled, awaiting operator |
-| Operator prompt | "Click Resume to re-execute 2 blocked tasks" | Human-in-the-loop boundary, exactly what the gate is designed to formalize |
-| Sandbox age | 2 h | Active branch `build/FB-71FB3A53` |
-| Conflicts surfaced | 10 | Progress projection flagged stale state |
-| Profile / material seed | 1 profile / 6 materials | Intact since 2026-05-17 seed |
-| `DecisionInteraction` rows | 0 (last verified 2026-05-18 05:45Z; admin_query_db unavailable in current session) | Gate still has not fired on a plan→build transition |
+| `DecisionPerspectiveProfile` rows | 1 | `Mark / DPF Platform` seeded correctly |
+| `PerspectiveMaterial` rows | 6 | Starter principles loaded from platform doctrine |
+| `DecisionInteraction` rows | 0 (last verified 2026-05-18 05:45Z; admin_query_db unavailable in current session) | **Gate has not yet fired on a plan→build transition** |
+| `EscalationCapture` rows | 0 | No human resolutions captured yet |
+| `DeferralCapture` rows | 0 | No coverage gaps logged yet |
+| Builds in `plan` phase | 0 (most recent check) | No advancement-gate candidate in flight |
+| Builds in `ideate` phase | 2 | Will reach the gate boundary in coming days |
+| Builds in `build` phase | 3 | Advanced before UI surface shipped at 16:51Z 2026-05-17 |
 
-**Reading.** The system is loudly demonstrating the problem the substrate is built for: retries with rate-limit failure (not logic failure), followed by long quiet periods, followed by human resume. That is exactly the gate's domain. The `usage-limit` axis confirms scoped-task-context (the prompt-size half) is the right architectural sibling to ship next to WWMD. Neither the gate nor scoped-context has had its first catch on this build — the dispatches stalled in retry storms, not at the WWMD plan-advancement boundary.
+**Reading.** The substrate exists. The seed is intact. The first catch is pending. The article's empirical claim — that ambiguity, once routed through the encoded method, stops repeating across sibling tasks — is not yet measurable, and the drafts have been written to acknowledge that honestly. The next plan→build transition is the first real test.
 
 ### Marker resolution status
 
@@ -442,10 +458,18 @@ Direct observation of build `FB-71FB3A53` (working on the formal-deliberation fe
 | Principle conflict example | `principleConflict: true` interaction row from evaluator + gate integration (v1 = escalate; v2 weighted synthesis is deferred) | infra-shipped, no conflict yet | Backlog item #4 / spec §5.7 |
 | Defer outcome example | Deferral capture and coverage gap surfacing | infra-shipped, no deferral yet | Backlog item #7 |
 
-### Orthogonal concern surfaced from live metrics — track separately
+### Out of scope for this article — captured for a future piece
 
-The 54-attempt rate-limit storm on `FB-71FB3A53` is **not** WWMD-shaped. It is a separate prompt-size-on-retry / fallback-chain-exhaustion pattern that compounds the ambiguity problem but is not solved by WWMD. Recommended as a distinct backlog item so it doesn't confound the first WWMD measurement run:
+The 54-attempt rate-limit storm and 151-minute quiet window on `FB-71FB3A53` are real, measurable, and worth writing about. **They are not this article.**
 
-**Proposed backlog title:** "Build Studio retry-storm on usage-limit failures — cap context regrowth on retry, throttle dispatch cascade, surface rate-limit-exhaustion state to operator before 151-minute quiet windows."
+This article is about the embodiment of a way of thinking — encoding decision-making method as governed substrate, applied to ambiguity in agentic workflows. The retry storm is a different problem class: provider rate-limit cascades and context regrowth on retry. Conflating them weakens both stories.
 
-Without this fix, the first WWMD measurement run will be contaminated by retry-storm noise. The article's eventual quantitative claim depends on isolating the WWMD signal from the rate-limit signal.
+**Captured for a future article:**
+
+- Build `FB-71FB3A53` (formal-deliberation feature): 7/9 tasks complete, 54 dispatch attempts in 10 minutes, 100% `usage-limit` failure axis, 151 minutes of subsequent silence before operator intervention.
+- Pattern: rate-limit failures cascade through the provider fallback chain (chatgpt → anthropic-sub → gemini → codex), with each retry resending growing context.
+- Compound effect: prompt size grows on retry → rate limits hit faster → more retries → eventual operator stall.
+- Proposed future article: "Why your autonomous build paused for 151 minutes — retry storms, prompt-size regrowth, and rate-limit cascades in agentic loops."
+- Proposed backlog item: cap context regrowth on retry, throttle dispatch cascade, surface rate-limit-exhaustion state to operator earlier.
+
+The WWMD article should be allowed to make its argument cleanly. The retry-storm article will have its own evidence and its own thesis. They are siblings in the substrate-vs-conversation family but should not share a piece.
