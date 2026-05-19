@@ -1,639 +1,443 @@
-# Field Service Sprint 1 — Foundation Implementation Plan
+# Field Service Sprint 1 + 2 — Build Studio Intake Brief Pack
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task.
+> **Delivery model:** Per the [`feedback_build_studio_for_all_development`](../../../../C:/Users/Mark%20Bodman/.claude/projects/D--DPF/memory/feedback_build_studio_for_all_development.md) standing rule, this plan does **not** describe Claude implementation steps. It describes the seven Backlog Items the operator files into the Build Studio intake (`BI-FS-001` … `BI-FS-007`) so Build Studio's Ideate → Design → Implement → Review → Ship pipeline can drive each one. Each section below is a self-contained intake brief that maps directly to the `BacklogItem.body` field.
 
-**Goal:** Lay the three schema and archetype foundations that every downstream field service sprint depends on: the HVAC storefront archetype, the `FieldServiceJob` entity with state machine, and customer notification preference fields.
+**Goal:** Land the field-service foundation — HVAC archetype, `WorkItem` field-service lifecycle, customer notification preferences, dispatcher coworker V1 with appointment-confirmation and on-my-way SMS — entirely through Build Studio, with no new top-level Prisma models.
 
-**Architecture:** `FieldServiceJob` is a new top-level Prisma model (not an extension of `CalendarEvent`, `StorefrontOrder`, or `SalesOrder` — the schema audit in Task 2 confirms these are all narrower than a field service job). It links by FK to `CustomerAccount`, `CustomerSite`, `EmployeeProfile` (technician), `Invoice`, and optionally a `CalendarEvent`. The HVAC archetype is a new entry in `packages/storefront-templates/src/archetypes/trades-maintenance.ts`. Notification preference fields are additive columns on `CustomerContact` behind a nullable-safe migration.
+**Architecture:** Per the [spec §5 substrate audit](../specs/2026-05-19-field-service-trades-ai-dispatch-design.md) and ADR-1, the field-service "job" is a `WorkItem` row (`packages/db/prisma/schema.prisma:7795`) with `sourceType = "field-service-job"`, lifecycle states in `WorkItem.status`, and on-site capture (photos, sign-off, refrigerant log, parts used) in `WorkItem.evidence`. Notification preferences are additive columns on `CustomerContact`. The dispatcher coworker is a new autonomous coworker seed with grants on `send_customer_notification` and `list_work_items`. **No new top-level models in this Sprint pack.**
 
-**Tech Stack:** Next.js 16 monorepo (pnpm workspaces), Prisma 7.x (PostgreSQL), Zod validators (`packages/validators`), Vitest unit tests.
+**Tech Stack:** Next.js 16 monorepo (pnpm workspaces), Prisma 7.x (PostgreSQL), Zod (`packages/validators`), Vitest, autonomous coworker runtime, communication fabric.
 
-**DCO required:** Every commit must include `Signed-off-by: <name> <email>` — use `git commit -s`.
+**Governance constraints (apply to every BI):**
+- DCO sign-off on every commit (`git commit -s`).
+- Full `vitest` run before push (pre-commit hook only runs typecheck; PR CI breaks if vitest is skipped locally).
+- Doc + test updates land in the same change set.
+- Seed + Prisma migration kept in sync (manual DB patches are lost on fresh install).
+- ADR-6 data governance (GPS retention, notification dedupe via `CommunicationDeliveryAttempt`) and ADR-7 conduit framing (no centralized partner credentials) apply.
 
-**Verification gate (run before opening PR):**
+**Out of scope for this pack (later sprints, per spec §9):**
+- Voice-first job-close parser (Sprint 3, depends on STT Slice 1)
+- GPS ETA via mapping API (Sprint 4)
+- Equipment / site history (Sprint 5)
+- TTS outbound call (Sprint 6, depends on persona voice layer)
+- QuickBooks invoice write (Sprint 7, depends on QB Anchor Slice 6)
+- EPA 608 + rebate intelligence (Sprint 8)
+- Inbound call answering (Sprint 9)
+- Financing + truck stock (Sprint 10)
+- Predictive maintenance IoT hook (Sprint 11)
+
+---
+
+## Epic registration
+
+| Field | Value |
+| ----- | ----- |
+| `itemId` | `EP-TRADES-FIELD-SERVICE` |
+| Type | Epic |
+| Title | Field Service Trades — AI Dispatch & Field Automation |
+| Source spec | [`docs/superpowers/specs/2026-05-19-field-service-trades-ai-dispatch-design.md`](../specs/2026-05-19-field-service-trades-ai-dispatch-design.md) |
+| Outcome | Field service contractor runs job lifecycle, dispatch, and customer notifications through DPF; wife is no longer in the critical path for appointment confirmation and en-route messaging. |
+
+All seven BIs below link to this epic via `BacklogItem.epicId`. **Look up the Epic's cuid first** — passing the semantic string `EP-TRADES-FIELD-SERVICE` as the FK breaks (see Prisma FK pitfall noted in past field-service work).
+
+---
+
+## Dependency graph
+
+```
+BI-FS-001 (HVAC archetype) ──┐
+BI-FS-002 (WorkItem lifecycle) ─┬─→ BI-FS-004 (Dispatcher seed) ─┬─→ BI-FS-005 (Appt confirm)
+BI-FS-003 (Notif prefs) ──────┘                                  ├─→ BI-FS-006 (On-my-way)
+                                                                 └─→ BI-FS-007 (Running-late)
+```
+
+**Parallelisation:** `BI-FS-001`, `BI-FS-002`, `BI-FS-003` can run as three concurrent Build Studio builds. `BI-FS-004` waits on `BI-FS-002` + `BI-FS-003`. `BI-FS-005`, `BI-FS-006`, `BI-FS-007` can run concurrently once `BI-FS-004` ships.
+
+---
+
+## BI-FS-001 — HVAC/AC Contractor Storefront Archetype
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | XS |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | (none) |
+
+### Problem
+
+The `trades-maintenance` archetype family in `packages/storefront-templates/src/archetypes/trades-maintenance.ts` covers facilities-maintenance, plumber, electrician, cleaning-service, landscaping — but not HVAC, the most common field-service SMB vertical. Operators in this archetype cannot stand up a working storefront today without manual schema work.
+
+### Proposed outcome
+
+A new `hvac-contractor` archetype in the `trades-maintenance` category, available to any HVAC contractor at install time, with the services, form fields, and vocabulary overrides defined in spec §11.
+
+### Acceptance criteria
+
+- `ALL_ARCHETYPES` includes `{ archetypeId: "hvac-contractor", category: "trades-maintenance", ctaType: "inquiry" }`.
+- `itemTemplates` contains at minimum: AC Tune-Up / Preventive Maintenance, Emergency Service Call, AC Installation, Heating System Service, Refrigerant Recharge, Indoor Air Quality Assessment, Maintenance Agreement, Commercial HVAC Service.
+- `formSchema` contains: name, email, phone, `systemType` (Central AC / Heat Pump / Mini-Split / Gas Furnace / Commercial), `urgency` (Emergency / Next Available / Scheduled), `propertyType` (Residential / Commercial), notes.
+- Vocabulary overrides include: "Jobs" (not Orders), "Technician" (not Employee), "Service call" (not Appointment), "Parts" (not Inventory items).
+- Tags include `hvac`, `air-conditioning`, `heating`, `field-service`.
+- Catalog test in `packages/storefront-templates/src/archetypes/archetypes.test.ts` validates archetype presence and required-field shape.
+- Operator can install fresh and select HVAC archetype during onboarding; storefront publishes; customer can submit a service request.
+
+### Substrate references (verified against `main`)
+
+- Existing file to extend: `packages/storefront-templates/src/archetypes/trades-maintenance.ts` (`plumber` archetype at line 42 is the closest shape to copy).
+- Archetype shape: `packages/storefront-templates/src/types.ts` (StorefrontArchetype interface).
+- Catalog test pattern: `packages/storefront-templates/src/archetypes/archetypes.test.ts`.
+
+### Out of scope
+
+- HVAC-specific equipment schema (BI-FS-014, Sprint 5 — uses `CustomerConfigurationItem` extension).
+- Flat-rate pricebook population (Sprint 10).
+- EPA 608 fields on the archetype (Sprint 8).
+
+### Verification gate
+
 ```
 pnpm --filter @dpf/storefront-templates exec vitest run
 pnpm --filter web typecheck
+```
+
+---
+
+## BI-FS-002 — `WorkItem` Field-Service Lifecycle
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | M |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | (none) |
+
+### Problem
+
+Field service work needs a state machine: `quoted → scheduled → confirmed → en-route → on-site → complete → invoiced → paid` (plus `cancelled`). Every downstream automation (dispatcher reads "what's open today", on-my-way fires on state transition, invoice generates from `status = complete`) depends on this lifecycle being addressable and validated. The naive design — a new `Job` Prisma model — duplicates substrate that already exists in `WorkItem`.
+
+### Proposed outcome
+
+A `sourceType = "field-service-job"` convention on the existing `WorkItem` model with: (a) state vocabulary enforced at the validator boundary, (b) a Zod `evidence` schema for field-service-specific capture, (c) helper services that wrap the queries the dispatcher coworker will use. **No new top-level Prisma model.**
+
+### Acceptance criteria
+
+- Zod validator `FieldServiceJobEvidence` (in `packages/validators`) shape: `{ technicianNotes?: string[], partsUsed?: PartUsage[], photos?: PhotoAttachment[], customerSignOff?: SignOff, refrigerantLog?: RefrigerantEntry[] }` — defined as forward-compatible (optional fields) so Sprint 3/5/8 can extend without migration.
+- Validator `FieldServiceJobStatus` enforces the 9-state vocabulary; rejects any other value with a clear error.
+- Service helper `listFieldServiceJobs({ technicianId?, status?, day? })` under `apps/web/lib/field-service/` queries `WorkItem` filtered by `sourceType` and joins via existing `assignedToUserId` / `calendarEventId` / `WorkItemMessage` relations.
+- Service helper `transitionFieldServiceJob({ workItemId, fromStatus, toStatus, actorId })` enforces legal transitions (e.g. cannot go from `scheduled → complete` without crossing `en-route` and `on-site`); writes an audit entry via `WorkItemMessage`.
+- Unit tests cover: each legal transition, each illegal transition (rejected), `evidence` schema accepts a minimal payload, `evidence` schema rejects unknown top-level keys.
+- Architecture doc page added at `docs/architecture/field-service-work-item.md` explaining the sourceType convention and citing spec ADR-1 for the "why no new model" rationale.
+
+### Substrate references (verified against `main`)
+
+- `WorkItem` model: `packages/db/prisma/schema.prisma:7795` — already carries `sourceType`, `status`, `urgency`, `assignedToUserId`, `assignedToAgentId`, `calendarEventId`, `evidence` (Json), `parentItemId`, `dueAt`, `routingDecision`.
+- `WorkItemMessage` model: `packages/db/prisma/schema.prisma:7841` — already supports the per-job message thread the dispatcher and technician will use.
+- `CalendarEvent.workItems WorkItem[]` relation: `packages/db/prisma/schema.prisma:5285`.
+
+### Out of scope
+
+- **No new Prisma model.** If Build Studio's design review pushes back with "this should be `Job`/`FieldServiceJob`", reject and cite spec §5 + ADR-1.
+- No UI in this BI (UI ships with BI-FS-004 dispatcher panel).
+- No QB sync hook (Sprint 7).
+- No state-change webhooks (deferred until a consumer exists).
+
+### Verification gate
+
+```
+pnpm --filter @dpf/db exec vitest run
+pnpm --filter @dpf/validators exec vitest run
+pnpm --filter web typecheck
+pnpm exec vitest run   # full suite, no skips
+```
+
+---
+
+## BI-FS-003 — Customer Notification Preference Fields
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | XS |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | (none) |
+
+### Problem
+
+The dispatcher coworker (BI-FS-004+) needs to know how to reach each customer — SMS, voice call, or email — and which of a customer's phone numbers is mobile-capable. Today, `CustomerContact` has neither a stated preference nor a mobile/landline distinction. Without these fields, the coworker either spams every channel or fails silently when SMS goes to a landline.
+
+### Proposed outcome
+
+Two additive nullable columns on `CustomerContact` plus a small UI surface on the customer record to set them. Nullable defaults preserve backward compatibility; an absent value means "operator hasn't told us" and the dispatcher falls back to existing notification heuristics until set.
+
+### Acceptance criteria
+
+- Prisma migration adds `CustomerContact.preferredNotificationChannel String?` (allowed values via Zod: `sms | voice | email | none`).
+- Prisma migration adds `CustomerContact.phoneType String?` (allowed values via Zod: `mobile | landline | unknown`).
+- Seed updated so fixture customers still load; new contacts default `phoneType = "unknown"` only where appropriate.
+- Migration is purely additive — no data loss possible if rolled back.
+- Customer record edit form (existing UI under `apps/web/app/customers/`) exposes both fields as dropdowns with helper text.
+- Validator `CustomerNotificationPreference` in `packages/validators` exports the allowed-value enums for use by the dispatcher (BI-FS-005/006).
+- Vitest covers: migration applies cleanly on a fresh DB, validator rejects invalid values, customer edit form saves both fields.
+- Seed and migration kept in lock-step — fresh install reproduces same `CustomerContact` shape as a migrated install.
+
+### Substrate references (verified against `main`)
+
+- `CustomerContact` model: `packages/db/prisma/schema.prisma:112`.
+- `Notification` model: `packages/db/prisma/schema.prisma:3890`.
+- `CommunicationDeliveryAttempt` model: `packages/db/prisma/schema.prisma:3983` — already exists; dedupe in BI-FS-005/006 reads from here.
+
+### Out of scope
+
+- Dispatcher logic (BI-FS-004+).
+- Bulk-backfill tool for existing customers (operator backfills as they edit each record; not blocking).
+- SMS opt-out workflow (TCPA wiring lands in BI-FS-005 where the first outbound SMS fires).
+
+### Verification gate
+
+```
+pnpm exec prisma migrate dev --name customer_notification_prefs
+pnpm --filter @dpf/db exec vitest run
+pnpm --filter @dpf/validators exec vitest run
+pnpm --filter web typecheck
+pnpm exec vitest run
+```
+
+---
+
+## BI-FS-004 — Dispatcher Coworker Seed (V1)
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | S |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | BI-FS-002, BI-FS-003 |
+
+### Problem
+
+There is no autonomous coworker today whose role is field-service coordination. The dispatcher role currently held by the contractor's wife — confirm tomorrow's appointments, notify next customer when running late, fire en-route texts — has no AI surrogate. Hardcoded coworkers also have a history of silent grant misses (a hardcoded coworker without grants returns hallucinated success on every tool call), so seeding the coworker without grants is worse than not seeding at all.
+
+### Proposed outcome
+
+A new `dispatcher` coworker seeded into the catalog with the role, prompt template, and tool grants in place from first install. Per ADR-1 the coworker queries `WorkItem` directly; per ADR-3 it reads `CustomerContact.preferredNotificationChannel` before dispatching. Skills implemented in BI-FS-005/006/007 plug into this coworker.
+
+### Acceptance criteria
+
+- Coworker seed file registers `dispatcher` with bundled-active default (no operator "Register" step needed on fresh install).
+- Tool grants seeded in the same change set: `list_work_items` (filtered to `sourceType = "field-service-job"`), `send_customer_notification`, `get_customer_contact`, `update_work_item_status`.
+- Invariant guard at boot verifies the dispatcher's grants are present; fails loud if missing (no silent skip — the agent-grant-seeding-gap fix pattern).
+- Prompt template captures: dispatcher persona, knows the 9-state lifecycle, reads `preferredNotificationChannel` before acting, escalates to operator when no channel works.
+- Routing assigns dispatcher tasks dynamically by capability tier; no provider/model pinning in the seed.
+- Dispatcher visible in Admin → Coworkers on fresh install; admin can disable / re-enable.
+- Portal "Dispatcher" panel (per spec §8.3) renders today's field-service `WorkItem`s with state chips and a notification-history sidecar.
+- Vitest covers: seed produces the expected coworker + grants on a fresh DB, invariant guard fires when a grant is missing, `list_work_items` tool filter rejects non-field-service `sourceType` values.
+
+### Substrate references (verified against `main`)
+
+- Agent model: `packages/db/prisma/schema.prisma:1689`.
+- Tool-grant pattern + invariant guard: same as the fix that closed the agent-grant-seeding-gap incident — reuse, don't reinvent.
+- Autonomous coworker runtime: spec `docs/superpowers/specs/2026-05-11-autonomous-coworker-runtime-design.md`.
+
+### Out of scope
+
+- The three skill implementations (BI-FS-005/006/007).
+- TTS outbound call capability (Sprint 6).
+- Inbound call answering (Sprint 9).
+
+### Verification gate
+
+```
+pnpm exec vitest run
+pnpm --filter web typecheck
+# Manual smoke: fresh install via docker-compose, Admin → Coworkers shows Dispatcher with grants populated; toggle disable/enable works
+```
+
+---
+
+## BI-FS-005 — Appointment Confirmation Skill (T-24h)
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | S |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | BI-FS-004 |
+
+### Problem
+
+Customers forget appointments. The wife calls every customer the day before to confirm — a daily 30-minute task that scales linearly with job volume and is the first thing that breaks when the second technician onboards.
+
+### Proposed outcome
+
+A scheduled dispatcher coworker skill that runs hourly, finds every field-service `WorkItem` with `status = scheduled` whose `calendarEvent.startAt` falls in a 23–25h sliding window, reads each linked customer's `preferredNotificationChannel`, and dispatches a confirmation SMS via the communication fabric. Records the send in `CommunicationDeliveryAttempt` so the same job isn't notified twice (ADR-6 dedupe).
+
+### Acceptance criteria
+
+- Skill file under the coworker-skills package, invoked by a scheduled task running hourly.
+- Query joins `WorkItem` (`sourceType = "field-service-job"`, `status = "scheduled"`) → `calendarEvent` → linked `CustomerContact`. Proceeds only if `CustomerContact.preferredNotificationChannel` is `sms` or unset; on `voice` or `none` it skips the SMS path **and writes a `WorkItemMessage` ping to the operator** ("customer prefers voice/no contact; please confirm manually until Sprint 6 TTS ships"). No silent skip.
+- Dedupe via `CommunicationDeliveryAttempt`: one confirmation per `WorkItem.id` per event-type per customer per 48h window.
+- On send success: skill does **not** auto-advance status to `confirmed`. State advances only when customer replies YES or operator manually marks. Capture the actual response — don't infer from "we sent it".
+- On send failure: writes a `WorkItemMessage` flagging the operator with "could not reach this customer for tomorrow's job; please call" — actionable, not a silent miss.
+- TCPA-aware opt-out: SMS body includes "Reply STOP to opt out"; STOP replies write `preferredNotificationChannel = none`.
+- Vitest covers: window query, dedupe, channel preference respected, failure path raises an alert, STOP handling.
+
+### Substrate references (verified against `main`)
+
+- `CommunicationDeliveryAttempt`: `packages/db/prisma/schema.prisma:3983`.
+- Communication fabric SMS path: spec `docs/superpowers/specs/2026-05-15-employee-communication-fabric-design.md`.
+
+### Out of scope
+
+- Voice/TTS confirmation calls (Sprint 6).
+- Multi-language templates (English-only for Sprint 2).
+- Operator-editable template wording (uses defaults from spec §8.4; CMS-style editing is later UX polish).
+
+### Verification gate
+
+```
+pnpm exec vitest run
+pnpm --filter web typecheck
+# Manual: seed a fixture WorkItem with calendarEvent.startAt = now+24h on a fresh install, invoke the scheduled skill manually, observe one outbound SMS + one CommunicationDeliveryAttempt row + no auto-status-advance
+```
+
+---
+
+## BI-FS-006 — On-My-Way SMS Skill (Manual ETA Entry)
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | S |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | BI-FS-004 |
+
+### Problem
+
+The single highest-frequency wife-on-the-critical-path event is the en-route notification. Today: tech texts wife from the truck, wife texts customer. Two hops, often delayed, often the wife is doing something else. The customer doesn't know the technician is coming until he knocks.
+
+### Proposed outcome
+
+A coworker skill the technician/operator triggers from the portal (mobile companion lives in Sprint 3 — for Sprint 2 the operator triggers from the portal): selects a `WorkItem` with `status = confirmed` (or `scheduled` if the confirm step was skipped), enters an estimated arrival minutes value (manual for Sprint 2; GPS-derived ETA is Sprint 4), the skill transitions the `WorkItem` to `en-route` and sends the customer the SMS template from spec §8.4.
+
+### Acceptance criteria
+
+- Portal action button on the dispatcher panel + on each `WorkItem` detail row: "Send on-my-way" — opens a tiny form (minutes-out integer, default 20).
+- Action invokes the dispatcher coworker `send_on_my_way` skill with `{ workItemId, etaMinutes }`.
+- Skill validates: `WorkItem.sourceType = "field-service-job"`, status in `{confirmed, scheduled}`, customer has `preferredNotificationChannel != none` and at least one phone with `phoneType = mobile`.
+- On success: `WorkItem.status` → `en-route`, `CommunicationDeliveryAttempt` row written, `WorkItemMessage` audit ("dispatcher sent en-route SMS, ETA 20 min").
+- On failure (e.g. customer has landline only): action returns an inline error explaining the gap and suggests upgrading to TTS once Sprint 6 ships. Actionable, never silent.
+- Dedupe prevents two en-route notifications for the same `WorkItem` within 1h.
+- Vitest covers: happy path, status guard rejects `complete`/`invoiced`, channel guard rejects landline-only customer, dedupe.
+
+### Substrate references (verified against `main`)
+
+- Same as BI-FS-005.
+- Mobile companion UX intentionally **not** wired here — Sprint 3 owns that. The portal action is the Sprint 2 surface.
+
+### Out of scope
+
+- GPS-derived ETA (Sprint 4 / BI-FS-011-013).
+- Mobile-app trigger button (Sprint 3 / BI-FS-010).
+- Customer reply handling beyond STOP.
+
+### Verification gate
+
+```
+pnpm exec vitest run
+pnpm --filter web typecheck
+# Manual: with a fixture WorkItem in 'confirmed' state, fire the action from the dispatcher panel; verify SMS + state transition + dedupe (second click within 1h = no-op + clear UI feedback)
+```
+
+---
+
+## BI-FS-007 — Running-Late Cascade Skill
+
+| Field | Value |
+| ----- | ----- |
+| Type | Feature |
+| Effort | S |
+| Epic | `EP-TRADES-FIELD-SERVICE` |
+| Depends on | BI-FS-004, BI-FS-006 |
+
+### Problem
+
+When the current job runs long, the next 1–4 customers in the day's schedule are silently waiting. The wife either notices and calls, or she misses it — either way the next customer's window slips without acknowledgment.
+
+### Proposed outcome
+
+A scheduled dispatcher coworker skill that runs every 10 minutes: for any `WorkItem` with `status in {on-site, en-route}` whose `calendarEvent.endAt` is in the past by ≥15 minutes, recompute the projected end based on a configurable per-archetype overrun heuristic, identify downstream jobs for the same technician, and dispatch a "running-late, new ETA" SMS to each affected customer (subject to ADR-3 preference rules and ADR-6 dedupe).
+
+### Acceptance criteria
+
+- Skill runs every 10 minutes via the scheduled-task substrate (`ScheduledAgentTask` if appropriate, or the autonomous-coworker probe pattern).
+- Heuristic: projected slip = `now - originalEndAt` × `(1 + archetypeOverrunFactor)`. Ships with a sane HVAC default `archetypeOverrunFactor = 0.20` (20%) so the skill works day one without operator tuning; operator can override per archetype later. Applied to each subsequent job's `startAt` and `endAt`. Per-job override allowed via the dispatcher coworker if the technician messages "I'll be 45 minutes late at the next one".
+- Outbound SMS per affected downstream customer with spec §8.4 "running late" template; dedupe at one per `WorkItem.id` per slip-window.
+- `WorkItemMessage` audit on each affected job: "downstream slip cascade — new ETA sent".
+- Operator alert if cascade affects >2 downstream jobs (config flag) — dispatcher pings the operator's coworker thread so they can intervene.
+- Vitest covers: cascade math, dedupe, operator-alert threshold, channel preference respected, no notification fired if downstream `WorkItem` lacks a `startAt`.
+
+### Substrate references (verified against `main`)
+
+- `CalendarEvent.workItems WorkItem[]`: `packages/db/prisma/schema.prisma:5285`.
+- `ScheduledAgentTask`: `packages/db/prisma/schema.prisma:5294`.
+- Same notification/dedupe pattern as BI-FS-005/006.
+
+### Out of scope
+
+- Schedule optimization (resequencing jobs by geography is a later sprint).
+- Customer reply handling (reschedule-via-reply is a later UX).
+- TTS variant of the running-late call (Sprint 6).
+
+### Verification gate
+
+```
+pnpm exec vitest run
+pnpm --filter web typecheck
+# Manual: with three sequential fixture WorkItems for one technician, mark the first 'on-site' with endAt 20m in the past; observe cascade SMS to the next two customers and audit entries on each WorkItem
+```
+
+---
+
+## Cross-BI verification (run before merging the Sprint-pack PRs)
+
+```
+# Fresh install reproducibility
+docker compose down -v && docker compose up -d
+# wait for healthchecks
+pnpm exec prisma migrate deploy
+pnpm exec tsx scripts/seed.ts
+
+# Full suite — no skips
+pnpm exec vitest run
+pnpm --filter web typecheck
 cd apps/web && npx next build
+
+# Manual smoke checklist
+# 1. Admin → Coworkers → Dispatcher present + grants populated (BI-FS-004)
+# 2. Customers → edit → preferredNotificationChannel + phoneType save and persist (BI-FS-003)
+# 3. Storefront → install picks hvac-contractor → publish → submit a request (BI-FS-001)
+# 4. Backoffice → create a field-service WorkItem with sourceType="field-service-job"; run state transitions through scheduled → confirmed → en-route → on-site → complete (BI-FS-002)
+# 5. Dispatcher panel → fire on-my-way SMS to a fixture customer with phoneType=mobile (BI-FS-006)
+# 6. Wait for 23–25h-windowed scheduled task tick (or invoke manually) → observe outbound confirmation SMS for tomorrow's job (BI-FS-005)
+# 7. Mark a fixture job 'on-site' with endAt 20m past + downstream jobs → observe running-late cascade SMS (BI-FS-007)
 ```
 
 ---
 
-## Pre-work: Branch setup
+## Risks (Sprint-pack-level)
 
-```bash
-# From the repo root (D:\DPF or your local clone)
-git fetch origin
-git worktree add ../DPF-field-service-sprint1 -b feat/field-service-sprint1 origin/main
-cd ../DPF-field-service-sprint1
-.\scripts\sync-mcp-worktrees.ps1   # seeds .mcp.json + sets COMPOSE_PROJECT_NAME
-```
-
----
-
-## Task 1: HVAC/AC Contractor Storefront Archetype (BI-FS-001)
-
-**No dependencies. Parallelisable with Task 3.**
-
-**Files:**
-- Modify: `packages/storefront-templates/src/archetypes/trades-maintenance.ts`
-- Test: `packages/storefront-templates/src/archetypes/archetypes.test.ts`
-
-### Context
-
-The archetype catalog test at `archetypes.test.ts` already validates every archetype for required fields, unique IDs, and hero-first sections. Adding the new archetype to the export array is enough to have it picked up. The test count check says `>= 30` — confirm current count before adding (so you know the test won't break).
-
-Current trades-maintenance archetypes: `facilities-maintenance`, `plumber`, `electrician`, `cleaning-service`, `landscaping`. Adding `hvac-contractor`.
-
-### Steps
-
-- [ ] **Step 1.1 — Check current archetype count**
-  ```bash
-  cd packages/storefront-templates
-  pnpm exec vitest run --reporter=verbose 2>&1 | grep "has at least"
-  ```
-  Expected: `✓ has at least 30 archetypes`. Note the count if the test output shows it.
-
-- [ ] **Step 1.2 — Write a failing test for the hvac-contractor archetype**
-
-  Add to `packages/storefront-templates/src/archetypes/archetypes.test.ts` after the `"includes a software-platform archetype"` block:
-
-  ```typescript
-  it("includes an hvac-contractor archetype for HVAC field service businesses", () => {
-    const hvac = ALL_ARCHETYPES.find((a) => a.archetypeId === "hvac-contractor");
-    expect(hvac).toBeDefined();
-    expect(hvac?.category).toBe("trades-maintenance");
-    expect(hvac?.ctaType).toBe("inquiry");
-    expect(hvac?.itemTemplates.some((i) => i.name === "AC Tune-Up / Preventive Maintenance")).toBe(true);
-    expect(hvac?.itemTemplates.some((i) => i.name === "Emergency Service Call")).toBe(true);
-    expect(hvac?.itemTemplates.some((i) => i.name === "Maintenance Agreement")).toBe(true);
-    expect(hvac?.formSchema.some((f) => f.name === "systemType")).toBe(true);
-    expect(hvac?.tags).toContain("hvac");
-    expect(hvac?.tags).toContain("air-conditioning");
-  });
-  ```
-
-- [ ] **Step 1.3 — Run the test to confirm it fails**
-  ```bash
-  cd packages/storefront-templates
-  pnpm exec vitest run --reporter=verbose
-  ```
-  Expected: `✗ includes an hvac-contractor archetype for HVAC field service businesses`
-
-- [ ] **Step 1.4 — Add the HVAC archetype definition**
-
-  In `packages/storefront-templates/src/archetypes/trades-maintenance.ts`, add after the `landscaping` entry (before the closing `]`):
-
-  ```typescript
-  {
-    archetypeId: "hvac-contractor",
-    name: "HVAC / AC Contractor",
-    category: "trades-maintenance",
-    ctaType: "inquiry",
-    tags: ["hvac", "air-conditioning", "heating", "cooling", "trades", "emergency"],
-    itemTemplates: [
-      { name: "AC Tune-Up / Preventive Maintenance", description: "Full system inspection, cleaning, and performance check", priceType: "fixed" },
-      { name: "Emergency Service Call", description: "Same-day emergency response for AC or heating failure", priceType: "from" },
-      { name: "AC Installation", description: "New system supply and installation with warranty", priceType: "quote" },
-      { name: "Heating System Service", description: "Furnace or heat pump inspection and repair", priceType: "from" },
-      { name: "Refrigerant Recharge", description: "Diagnose and recharge low refrigerant levels", priceType: "from" },
-      { name: "Duct Inspection & Cleaning", description: "Full ductwork inspection with optional deep clean", priceType: "from" },
-      { name: "Indoor Air Quality Assessment", description: "Air quality testing and filtration recommendations", priceType: "fixed" },
-      { name: "Maintenance Agreement", description: "Annual service plan with priority scheduling and discounts", priceType: "from" },
-    ],
-    sectionTemplates: [
-      { type: "hero", title: "Hero", sortOrder: 0 },
-      { type: "items", title: "Services", sortOrder: 1 },
-      { type: "about", title: "About Us", sortOrder: 2 },
-      { type: "testimonials", title: "Customer Reviews", sortOrder: 3 },
-      { type: "contact", title: "Request Service", sortOrder: 4 },
-    ],
-    formSchema: [
-      ...INQUIRY_BASE_FIELDS,
-      {
-        name: "systemType",
-        label: "System type",
-        type: "select" as const,
-        required: true,
-        options: ["Central AC", "Heat Pump", "Mini-Split / Ductless", "Gas Furnace", "Electric Furnace", "Commercial HVAC", "Not sure"],
-      },
-      {
-        name: "urgency",
-        label: "Urgency",
-        type: "select" as const,
-        required: true,
-        options: ["Emergency — system down", "Urgent — within 24 hours", "Routine — next available", "Planned — flexible timing"],
-      },
-      {
-        name: "propertyType",
-        label: "Property type",
-        type: "select" as const,
-        required: true,
-        options: ["Residential", "Commercial", "Industrial"],
-      },
-      {
-        name: "notes",
-        label: "Describe the issue",
-        type: "textarea" as const,
-        required: false,
-      },
-    ],
-  },
-  ```
-
-- [ ] **Step 1.5 — Run the tests to confirm they all pass**
-  ```bash
-  cd packages/storefront-templates
-  pnpm exec vitest run --reporter=verbose
-  ```
-  Expected: all tests pass including the new `hvac-contractor` test.
-
-- [ ] **Step 1.6 — Commit**
-  ```bash
-  git add packages/storefront-templates/src/archetypes/trades-maintenance.ts \
-          packages/storefront-templates/src/archetypes/archetypes.test.ts
-  git commit -s -m "feat(archetypes): add hvac-contractor storefront archetype (BI-FS-001)
-
-  Adds HVAC/AC contractor to the trades-maintenance family with 8 service
-  items, system-type and urgency form fields, and the standard trades
-  section layout. Tested in archetypes.test.ts."
-  ```
+| Risk | Mitigation |
+| ---- | ---------- |
+| Build Studio Ideate phase rejects BI-FS-002 because "no model = unclear scope" | Spec §5 substrate audit is the authoritative answer — link it from the BI body. Reject any "add a Job model" proposal from Design review with citation to ADR-1. |
+| Hardcoded coworker silent-grant regression (BI-FS-004) | Invariant guard from the agent-grant-seeding-gap fix is in scope of BI-FS-004 acceptance criteria — do not ship without it. |
+| SMS spam from over-eager scheduled task (BI-FS-005 / 007) | Dedupe via `CommunicationDeliveryAttempt` is in every notification BI's acceptance criteria. Operator alert threshold in BI-FS-007 caps cascade blast radius. |
+| Migration data loss on `CustomerContact` (BI-FS-003) | Both columns are nullable, no constraint changes on existing columns; rollback restores prior state without loss. |
+| Operator confuses "field-service-job" sourceType with existing WorkItem flows | Architecture doc page in BI-FS-002 acceptance criteria + dispatcher panel filtered view in BI-FS-004 keep the surface distinct. |
+| Build Studio writes feature code that wires GPS / TTS / Twilio into a Sprint-2 BI | Out-of-scope blocks at the top of each BI body are explicit. Design review must reject scope creep into Sprint 4/6. |
 
 ---
 
-## Task 2: Schema Audit — Job Model Design (prerequisite for Task 3)
+## Recommended next step (after this pack ships)
 
-**No code changes. Required reading before writing any migration.**
-
-This task prevents duplicating logic that already exists in the CRM pipeline models. Read the relevant models and write down conclusions.
-
-### Steps
-
-- [ ] **Step 2.1 — Read and compare the candidate models**
-
-  Open `packages/db/prisma/schema.prisma` and read these four models:
-  - `SalesOrder` (line ~2474) — confirmed: represents a fulfilled quote, has `status: confirmed | in_progress | fulfilled | cancelled`. **Not the right parent** — it is the downstream fulfillment of a Quote, not a field visit.
-  - `CalendarEvent` (line ~5263) — confirmed: represents a scheduled time block owned by an `EmployeeProfile`. Has no customer FK, no job status, no line items. **Not the right parent** — it is a scheduling primitive, not a job record.
-  - `CustomerSite` (line ~2073) — confirmed: represents a physical service location owned by a `CustomerAccount`. Has `accessInstructions` and `serviceNotes`. **Right FK target** — the job happens at a site.
-  - `StorefrontOrder` (line ~6350) — confirmed: represents a storefront checkout. No technician, no status lifecycle, no parts. **Not the right parent**.
-
-- [ ] **Step 2.2 — Record the design decision**
-
-  **Conclusion (record this in your PR description):**
-
-  `FieldServiceJob` must be a **new top-level model**. None of the existing models carry: technician assignment, job lifecycle states (`quoted` → `paid`), scheduled window (date + duration), parts/labor tracking, or field notes. The job FKs to:
-  - `CustomerAccount` (who the work is for)
-  - `CustomerSite?` (where — nullable because some jobs may not have a site record yet)
-  - `EmployeeProfile` (assigned technician)
-  - `CalendarEvent?` (optional — if a calendar block exists, link it)
-  - `Invoice?` (optional — created when job completes)
-  - `StorefrontInquiry?` (optional — if the job originated from a storefront booking)
-
-  The `SalesOrder` → `FieldServiceJob` relation is deferred to Sprint 7 (QuickBooks sync); do not FK to it now.
-
----
-
-## Task 3: FieldServiceJob Prisma Model (BI-FS-002)
-
-**Depends on: Task 2 conclusions. Parallelisable with Task 1 after Task 2 is done.**
-
-**Scope note:** BI-FS-002 specifies the `FieldServiceJob` state machine. `FieldServiceJobLineItem` and `FieldServiceJobStatusLog` are included here as inseparable companions — a job without line items cannot be invoiced, and a job without a status log cannot be audited. Both models are Cascade-deleted from the parent and have no independent lifecycle. They do not constitute separate backlog items.
-
-**Files:**
-- Modify: `packages/db/prisma/schema.prisma`
-- Create: `packages/db/prisma/migrations/<timestamp>_add_field_service_job/migration.sql` (auto-generated)
-- Create: `packages/db/src/seed-field-service.test.ts`
-
-### Steps
-
-- [ ] **Step 3.1 — Write a failing test that asserts the model and enum exist**
-
-  Create `packages/db/src/seed-field-service.test.ts`:
-
-  ```typescript
-  import { describe, it, expect } from "vitest";
-  import { PrismaClient } from "../generated/client/client";
-
-  // Structural test: confirms the FieldServiceJob table and enum are in the schema.
-  // Does NOT hit a running database.
-  describe("FieldServiceJob schema", () => {
-    it("FieldServiceJob model is exported from the Prisma client", () => {
-      const prisma = new PrismaClient();
-      expect(prisma.fieldServiceJob).toBeDefined();
-      void prisma.$disconnect();
-    });
-
-    it("valid job status values match the schema comment", () => {
-      // NOTE: DPF uses plain String columns for status (not DB enums) with
-      // validated values documented in comments. This test is a cross-check
-      // documentation fixture — it does NOT query the DB. If you add a status
-      // value to schema.prisma, you must update this array AND the backlog.ts
-      // FIELD_SERVICE_JOB_STATUSES constant added in Sprint 2.
-      const VALID_STATUSES = [
-        "quoted",
-        "scheduled",
-        "confirmed",
-        "en-route",
-        "on-site",
-        "complete",
-        "invoiced",
-        "paid",
-        "cancelled",
-      ] as const;
-
-      expect(VALID_STATUSES).toHaveLength(9);
-      expect(new Set(VALID_STATUSES).size).toBe(VALID_STATUSES.length);
-    });
-  });
-  ```
-
-- [ ] **Step 3.2 — Run the test to confirm it fails**
-  ```bash
-  cd packages/db
-  pnpm exec vitest run seed-field-service --reporter=verbose
-  ```
-  Expected: `✗ FieldServiceJob model is exported from the Prisma client`
-
-- [ ] **Step 3.3 — Add the FieldServiceJob model to schema.prisma**
-
-  In `packages/db/prisma/schema.prisma`, add after the `SalesOrder` model block (around line 2520). Insert:
-
-  ```prisma
-  // ─── Field Service ───────────────────────────────────────────────────────────
-  // Represents a single field visit from quote through payment.
-  // status lifecycle: quoted → scheduled → confirmed → en-route → on-site
-  //                   → complete → invoiced → paid  (or cancelled at any point)
-
-  model FieldServiceJob {
-    id            String    @id @default(cuid())
-    jobRef        String    @unique   // FSJ-2026-0001 (sequential on create)
-    status        String    @default("quoted")
-    // quoted | scheduled | confirmed | en-route | on-site | complete | invoiced | paid | cancelled
-    jobType       String    // e.g. "AC Tune-Up", "Emergency Call-Out", "Installation"
-    title         String?   // operator-friendly label; derived from jobType if null
-    description   String?
-    accountId     String
-    siteId        String?
-    technicianId  String?   // FK to EmployeeProfile.id
-    calendarEventId String? // optional link to a scheduled CalendarEvent
-    invoiceId     String?   // set when job transitions to invoiced
-    inquiryRefId  String?   // FK to StorefrontInquiry.id if originated from booking
-    scheduledAt   DateTime?
-    scheduledEndAt DateTime?
-    arrivedAt     DateTime?
-    completedAt   DateTime?
-    enRouteAt     DateTime?
-    estimatedMinutes Int?
-    laborMinutes  Int?
-    totalAmount   Decimal?
-    currency      String    @default("USD")
-    fieldNotes    String?
-    internalNotes String?
-    createdById   String?
-    createdAt     DateTime  @default(now())
-    updatedAt     DateTime  @updatedAt
-
-    account     CustomerAccount  @relation(fields: [accountId], references: [id])
-    site        CustomerSite?    @relation(fields: [siteId], references: [id])
-    technician  EmployeeProfile? @relation("TechnicianJobs", fields: [technicianId], references: [id])
-    invoice     Invoice?         @relation(fields: [invoiceId], references: [id])
-    createdBy   User?            @relation("JobCreations", fields: [createdById], references: [id])
-    lineItems   FieldServiceJobLineItem[]
-    statusLogs  FieldServiceJobStatusLog[]
-
-    @@index([accountId])
-    @@index([technicianId])
-    @@index([status])
-    @@index([scheduledAt])
-    @@index([invoiceId])
-  }
-
-  model FieldServiceJobLineItem {
-    id          String   @id @default(cuid())
-    jobId       String
-    type        String   @default("labor")
-    // labor | part | material | fee
-    description String
-    quantity    Decimal  @default(1)
-    unitPrice   Decimal
-    lineTotal   Decimal
-    partNumber  String?
-    supplierId  String?
-    sortOrder   Int      @default(0)
-    createdAt   DateTime @default(now())
-
-    job FieldServiceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-
-    @@index([jobId])
-  }
-
-  model FieldServiceJobStatusLog {
-    id        String   @id @default(cuid())
-    jobId     String
-    fromStatus String?
-    toStatus  String
-    changedBy String?
-    note      String?
-    changedAt DateTime @default(now())
-
-    job FieldServiceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-
-    @@index([jobId])
-    @@index([changedAt])
-  }
-  ```
-
-  Also add back-relations to **all six** referenced models. Prisma requires every `@relation` to be symmetric — missing any one of these will cause `prisma validate` to fail and block the migration.
-
-  **On `CustomerAccount`** — after `recurringSchedules RecurringSchedule[]` (the last relation line before `@@index`):
-  ```prisma
-  fieldServiceJobs   FieldServiceJob[]
-  ```
-
-  **On `CustomerSite`** — after `nodes CustomerSiteNode[]` (the last relation line before `@@index`):
-  ```prisma
-  fieldServiceJobs   FieldServiceJob[]
-  ```
-
-  **On `EmployeeProfile`** — at the end of the relations block, before `@@index([status])`:
-  ```prisma
-  technicianJobs     FieldServiceJob[]  @relation("TechnicianJobs")
-  ```
-
-  **On `Invoice`** — after `dunningLogs DunningLog[]` (last relation before `@@index`):
-  ```prisma
-  fieldServiceJob    FieldServiceJob?
-  ```
-
-  **On `User`** (search `model User`):
-  ```prisma
-  createdJobs        FieldServiceJob[]  @relation("JobCreations")
-  ```
-
-  **On `CalendarEvent`** — after `workItems WorkItem[]` (the existing last relation before `@@index`):
-  ```prisma
-  fieldServiceJobs   FieldServiceJob[]
-  ```
-
-  **On `StorefrontInquiry`** — after `storefront StorefrontConfig @relation(...)` (the existing last relation before `@@index`):
-  ```prisma
-  fieldServiceJobs   FieldServiceJob[]
-  ```
-
-- [ ] **Step 3.4 — Run typecheck to catch schema relation errors before migrating**
-  ```bash
-  pnpm --filter @dpf/db exec prisma validate
-  ```
-  Expected: no errors. If errors appear, fix missing back-relations or relation naming before continuing.
-
-- [ ] **Step 3.5 — Generate and apply the migration**
-  ```bash
-  pnpm --filter @dpf/db exec prisma migrate dev --name add_field_service_job
-  ```
-  Expected output includes: `✔ Generated Prisma Client` and a new migration folder in `packages/db/prisma/migrations/`.
-
-  > **Important:** Migration files are immutable once committed. If the migration fails, roll it back with `pnpm --filter @dpf/db exec prisma migrate reset` (local dev only), fix the schema, and re-run. Never edit a committed migration file.
-
-- [ ] **Step 3.6 — Run the tests to confirm they pass**
-  ```bash
-  cd packages/db
-  pnpm exec vitest run seed-field-service --reporter=verbose
-  ```
-  Expected: both tests pass.
-
-- [ ] **Step 3.7 — Run full typecheck to catch any cascade type errors**
-  ```bash
-  pnpm --filter web typecheck
-  ```
-  Expected: zero new errors. (Pre-existing errors are acceptable — do not introduce new ones.)
-
-- [ ] **Step 3.8 — Commit**
-  ```bash
-  git add packages/db/prisma/schema.prisma \
-          packages/db/prisma/migrations/ \
-          packages/db/src/seed-field-service.test.ts
-  git commit -s -m "feat(db): FieldServiceJob model with state machine (BI-FS-002)
-
-  Adds FieldServiceJob, FieldServiceJobLineItem, and FieldServiceJobStatusLog
-  models. Status machine: quoted → scheduled → confirmed → en-route → on-site
-  → complete → invoiced → paid (+ cancelled). FKs to CustomerAccount,
-  CustomerSite, EmployeeProfile (technician), Invoice, and User.
-  Structural test confirms Prisma client exports the new model."
-  ```
-
----
-
-## Task 4: Customer Notification Preference Fields (BI-FS-003)
-
-**No dependencies. Parallelisable with Tasks 1 and 3.**
-
-**Files:**
-- Modify: `packages/db/prisma/schema.prisma`
-- Create: `packages/db/prisma/migrations/<timestamp>_add_contact_notification_prefs/migration.sql` (auto-generated)
-- Modify: `packages/validators/src/customer.ts`
-- Modify: `apps/web/app/api/v1/customer/contacts/[id]/route.ts`
-- Create: `packages/validators/src/customer.test.ts` (or add to existing if it exists)
-
-### Context
-
-`CustomerContact` currently has a single `phone` field. Field service requires:
-- `mobilePhone` — SMS-capable; replaces the ambiguous `phone` field for new contacts
-- `landlinePhone` — voice-only; for TTS call routing
-- `preferredNotificationChannel` — `sms | call | email`; governs dispatcher coworker routing
-
-The legacy `phone` field must **not** be removed (existing data); new fields are added alongside it. The API and validator are updated to accept and persist the new fields.
-
-### Steps
-
-- [ ] **Step 4.1 — Write failing validator tests**
-
-  Check if `packages/validators/src/customer.test.ts` exists:
-  ```bash
-  ls packages/validators/src/
-  ```
-
-  If it does not exist, create it. If it does, add to it. The test:
-
-  ```typescript
-  import { describe, it, expect } from "vitest";
-  import { updateContactSchema, createContactSchema } from "./customer";
-
-  describe("updateContactSchema — notification preference fields", () => {
-    it("accepts preferredNotificationChannel sms", () => {
-      const result = updateContactSchema.safeParse({ preferredNotificationChannel: "sms" });
-      expect(result.success).toBe(true);
-    });
-
-    it("accepts preferredNotificationChannel call", () => {
-      const result = updateContactSchema.safeParse({ preferredNotificationChannel: "call" });
-      expect(result.success).toBe(true);
-    });
-
-    it("accepts preferredNotificationChannel email", () => {
-      const result = updateContactSchema.safeParse({ preferredNotificationChannel: "email" });
-      expect(result.success).toBe(true);
-    });
-
-    it("rejects unknown preferredNotificationChannel", () => {
-      const result = updateContactSchema.safeParse({ preferredNotificationChannel: "whatsapp" });
-      expect(result.success).toBe(false);
-    });
-
-    it("accepts mobilePhone and landlinePhone on update", () => {
-      const result = updateContactSchema.safeParse({
-        mobilePhone: "+15125550100",
-        landlinePhone: "+15125550101",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("accepts mobilePhone on create", () => {
-      const result = createContactSchema.safeParse({
-        email: "test@example.com",
-        accountId: "acc-1",
-        mobilePhone: "+15125550100",
-      });
-      expect(result.success).toBe(true);
-    });
-
-    it("accepts preferredNotificationChannel on create", () => {
-      const result = createContactSchema.safeParse({
-        email: "test@example.com",
-        accountId: "acc-1",
-        preferredNotificationChannel: "call",
-      });
-      expect(result.success).toBe(true);
-    });
-  });
-  ```
-
-- [ ] **Step 4.2 — Run the tests to confirm they fail**
-  ```bash
-  cd packages/validators
-  pnpm exec vitest run customer --reporter=verbose
-  ```
-  Expected: multiple failures about unknown fields.
-
-- [ ] **Step 4.3 — Update the Prisma schema**
-
-  In `CustomerContact`, insert the three new fields **between `avatarUrl` (line ~127) and `updatedAt` (line ~128)**, before the relations block begins. The correct position is after the last scalar field (`avatarUrl`) and before `updatedAt @updatedAt`:
-
-  ```prisma
-  mobilePhone              String?  // SMS-capable mobile number
-  landlinePhone            String?  // Voice-only landline
-  preferredNotificationChannel String? @default("sms")
-  // sms | call | email
-  ```
-
-  Do not insert after the `updatedAt` line — that would place the fields inside the relations block and cause a Prisma parse error.
-
-- [ ] **Step 4.4 — Update the Zod validators**
-
-  In `packages/validators/src/customer.ts`, update `createContactSchema` and `updateContactSchema`:
-
-  ```typescript
-  // Add to createContactSchema:
-  mobilePhone: z.string().max(50).optional(),
-  landlinePhone: z.string().max(50).optional(),
-  preferredNotificationChannel: z.enum(["sms", "call", "email"]).optional(),
-
-  // Add to updateContactSchema:
-  mobilePhone: z.string().max(50).optional().nullable(),
-  landlinePhone: z.string().max(50).optional().nullable(),
-  preferredNotificationChannel: z.enum(["sms", "call", "email"]).optional().nullable(),
-  ```
-
-- [ ] **Step 4.5 — Run validator tests to confirm they pass**
-  ```bash
-  cd packages/validators
-  pnpm exec vitest run customer --reporter=verbose
-  ```
-  Expected: all tests pass.
-
-- [ ] **Step 4.6 — Run Prisma validate to confirm schema is clean**
-  ```bash
-  pnpm --filter @dpf/db exec prisma validate
-  ```
-
-- [ ] **Step 4.7 — Generate the migration**
-  ```bash
-  pnpm --filter @dpf/db exec prisma migrate dev --name add_contact_notification_prefs
-  ```
-  Expected: migration created and applied.
-
-- [ ] **Step 4.8 — Update the PATCH /api/v1/customer/contacts/[id] route**
-
-  The route at `apps/web/app/api/v1/customer/contacts/[id]/route.ts` uses `updateContactSchema` — it will already accept the new fields via the schema update. Verify the `update` call passes the new fields through:
-
-  In the `PATCH` handler, confirm the `rest` spread includes the new fields. The current destructure is:
-  ```typescript
-  const { firstName, lastName, ...rest } = parsed.data;
-  ```
-  This is correct — `mobilePhone`, `landlinePhone`, `preferredNotificationChannel` will be in `rest` and flow through to `prisma.customerContact.update`. No change needed.
-
-  Run a quick typecheck to confirm:
-  ```bash
-  pnpm --filter web typecheck
-  ```
-  Expected: no new errors.
-
-- [ ] **Step 4.9 — Commit**
-  ```bash
-  git add packages/db/prisma/schema.prisma \
-          packages/db/prisma/migrations/ \
-          packages/validators/src/customer.ts \
-          packages/validators/src/customer.test.ts
-  git commit -s -m "feat(db): customer notification preference fields (BI-FS-003)
-
-  Adds mobilePhone, landlinePhone, and preferredNotificationChannel (sms |
-  call | email) to CustomerContact. Validator and PATCH route updated.
-  Existing phone field untouched. Tested via updateContactSchema unit tests."
-  ```
-
----
-
-## Task 5: Final Verification and PR
-
-- [ ] **Step 5.1 — Run all affected test suites together**
-  ```bash
-  pnpm --filter @dpf/storefront-templates exec vitest run
-  pnpm --filter @dpf/db exec vitest run
-  pnpm --filter @dpf/validators exec vitest run
-  ```
-  Expected: all pass.
-
-- [ ] **Step 5.2 — Typecheck**
-  ```bash
-  pnpm --filter web typecheck
-  ```
-  Expected: zero new errors.
-
-- [ ] **Step 5.3 — Production build**
-  ```bash
-  cd apps/web && npx next build
-  ```
-  Expected: build completes with zero errors.
-
-- [ ] **Step 5.4 — Push and open PR**
-  ```bash
-  git push -u origin feat/field-service-sprint1
-  gh pr create \
-    --title "feat: field service sprint 1 — HVAC archetype, FieldServiceJob, contact notification prefs" \
-    --body "Implements BI-FS-001, BI-FS-002, BI-FS-003 per spec docs/superpowers/specs/2026-05-19-field-service-trades-ai-dispatch-design.md
-
-  - BI-FS-001: hvac-contractor archetype (trades-maintenance family, 8 service items, system-type form field)
-  - BI-FS-002: FieldServiceJob model with 9-state lifecycle + FieldServiceJobLineItem + FieldServiceJobStatusLog
-  - BI-FS-003: CustomerContact mobilePhone / landlinePhone / preferredNotificationChannel fields
-
-  All tests pass. No new typecheck errors. next build clean."
-  ```
-
----
-
-## Notes for Agentic Workers
-
-- **Migration immutability:** If a migration is committed and then you discover a schema error, do NOT edit the migration file. Create a new corrective migration instead.
-- **Back-relations must be symmetric:** Every `@relation` on `FieldServiceJob` needs a matching relation list on the referenced model. Prisma validate will catch asymmetric relations before you migrate.
-- **`phone` field is legacy:** `CustomerContact.phone` stays. New code should write to `mobilePhone`. The dispatcher coworker in Sprint 2 will read `mobilePhone` first, then fall back to `phone` if `mobilePhone` is null.
-- **USD default currency:** The spec targets US-based HVAC contractors. `FieldServiceJob.currency` defaults to `"USD"` unlike other finance models that default to `"GBP"`. This is intentional.
-- **`jobRef` generation:** Sprint 2 will add an auto-increment sequence or ULID-based `FSJ-YYYY-NNNN` format. For Sprint 1, generate with `crypto.randomUUID()` prefixed `FSJ-` until the sequence is wired.
+Sprint 3 — voice-first job completion (`BI-FS-008` / `BI-FS-009` / `BI-FS-010`), which unblocks the "technician on the truck dictates the invoice" loop. Sprint 3 depends on STT Slice 1 being live in production (currently in progress; default-on CPU path lands in `2026-05-17-voice-input-slice-1-5-default-on-cpu.md`).
