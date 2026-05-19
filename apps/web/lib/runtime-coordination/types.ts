@@ -94,6 +94,7 @@ export type RuntimeVerificationInput = {
   runtimeTargetId?: string | null;
   workCapsuleId?: string | null;
   featureBuildId?: string | null;
+  buildId?: string | null;
   gitPromotionCandidateId?: string | null;
   command?: string | null;
   url?: string | null;

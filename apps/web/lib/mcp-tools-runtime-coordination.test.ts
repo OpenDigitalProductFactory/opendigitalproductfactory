@@ -10,6 +10,9 @@ const mockPrisma = {
   runtimeVerification: {
     create: vi.fn(),
   },
+  buildActivity: {
+    create: vi.fn(),
+  },
   workCapsule: {
     findUnique: vi.fn(),
   },
@@ -69,6 +72,7 @@ describe("runtime coordination MCP tools", () => {
       targetId: "RT-ROOT-PORTAL",
       kind: "root-portal",
       status: "running",
+      acceptanceRoleOverride: "debug-only",
       serviceName: "portal",
       containerName: "dpf-portal-1",
       hostUrl: "http://localhost:3000",
@@ -77,8 +81,8 @@ describe("runtime coordination MCP tools", () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toMatchObject({
-      acceptanceRole: "final-acceptance",
-      canSatisfyFinalAcceptance: true,
+      acceptanceRole: "debug-only",
+      canSatisfyFinalAcceptance: false,
     });
     expect(mockPrisma.runtimeTarget.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ targetId: "RT-ROOT-PORTAL", kind: "root-portal" }),
@@ -94,6 +98,9 @@ describe("runtime coordination MCP tools", () => {
       id: "capsule-row-1",
       capsuleId: "WC-RUNTIME",
     });
+    mockPrisma.buildActivity.create.mockResolvedValueOnce({
+      id: "build-activity-1",
+    });
     mockPrisma.runtimeVerification.create.mockResolvedValueOnce({
       id: "verification-row-1",
       verificationId: "RV-RUNTIME-1",
@@ -107,6 +114,7 @@ describe("runtime coordination MCP tools", () => {
       status: "passed",
       targetId: "RT-ROOT-PORTAL",
       capsuleId: "WC-RUNTIME",
+      buildId: "FB-1",
       command: "pnpm --filter web build",
     }, "user-1", { agentId: "codex" });
 
@@ -115,6 +123,14 @@ describe("runtime coordination MCP tools", () => {
       data: expect.objectContaining({
         runtimeTargetId: "target-row-1",
         workCapsuleId: "capsule-row-1",
+        buildActivityId: "build-activity-1",
+      }),
+    }));
+    expect(mockPrisma.featureBuild.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        buildId: "FB-1",
+        tool: "runtime_verification:production-build",
       }),
     }));
   });
@@ -132,5 +148,18 @@ describe("runtime coordination MCP tools", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe("invalid_input");
     expect(result.message).toContain("exactly one primary attach point");
+  });
+
+  it("heartbeat_runtime_target returns a tool error instead of throwing on missing targets", async () => {
+    mockPrisma.runtimeTarget.update.mockRejectedValueOnce(new Error("RuntimeTarget not found"));
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("heartbeat_runtime_target", {
+      targetId: "RT-MISSING",
+    }, "user-1", { agentId: "codex" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("invalid_input");
+    expect(result.message).toContain("RuntimeTarget not found");
   });
 });

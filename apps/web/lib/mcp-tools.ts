@@ -694,6 +694,9 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
         url: { type: "string", description: "Optional URL for PRs, CI runs, screenshots, or external evidence." },
+        targetId: { type: "string", description: "Optional stable RuntimeTarget id (RT-*)." },
+        runtimeTargetId: { type: "string", description: "Optional RuntimeTarget row id." },
+        verificationId: { type: "string", description: "Optional RuntimeVerification id (RV-*)." },
         result: { type: "object", description: "Optional structured result payload." },
       },
       required: ["capsuleId", "summary"],
@@ -4123,7 +4126,7 @@ export async function executeTool(
     }
     case "release_runtime_target": {
       const { releaseRuntimeTargetTool } = await import("@/lib/runtime-coordination/mcp-handlers");
-      return releaseRuntimeTargetTool(params);
+      return releaseRuntimeTargetTool(params, userId, context);
     }
     case "record_runtime_verification": {
       const { recordRuntimeVerificationTool } = await import("@/lib/runtime-coordination/mcp-handlers");
