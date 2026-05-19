@@ -76,6 +76,8 @@ describe("mcp tools", () => {
   it("includes build tools for platform users", async () => {
     const tools = await getAvailableTools(adminUser, { externalAccessEnabled: false });
     const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("create_epic");
+    expect(toolNames).toContain("update_epic");
     expect(toolNames).toContain("update_feature_brief");
     expect(toolNames).toContain("register_digital_product_from_build");
     expect(toolNames).toContain("create_build_epic");
