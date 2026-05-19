@@ -48,13 +48,20 @@ type TokenRow = {
 };
 
 type Issued = {
-  mode: "issued" | "rotated";
+  mode: "issued" | "rotated" | "copied";
   tokenId: string;
   plaintext: string;
   prefix: string;
   tokenSuffix: string;
   expiresAt: string | null;
-  setupSnippets: { claudeCode: string; codex: string; vscode: string; syncCommand: string };
+  setupSnippets: {
+    claudeCode: string;
+    codex: string;
+    vscode: string;
+    syncCommand: string;
+    envPowerShell: string;
+    runtimeRefreshPowerShell: string;
+  };
 };
 
 type View =
@@ -74,7 +81,7 @@ function isExpired(token: TokenRow): boolean {
 }
 
 function tokenDisplay(token: TokenRow): string {
-  return `...${token.tokenSuffix ?? token.prefix.slice(-4)}`;
+  return `${token.prefix}...${token.tokenSuffix ?? token.prefix.slice(-4)}`;
 }
 
 function buttonClass(kind: "primary" | "secondary" | "danger" = "secondary"): string {
@@ -89,6 +96,15 @@ function buttonClass(kind: "primary" | "secondary" | "danger" = "secondary"): st
 
 function iconClass(): string {
   return "h-3.5 w-3.5";
+}
+
+async function writeClipboardText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function McpTokenManager(props: McpTokenManagerProps) {
@@ -188,7 +204,11 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         setNotice({ kind: "error", message: result.message });
         return;
       }
-      await navigator.clipboard.writeText(result.plaintext);
+      const copied = await writeClipboardText(result.plaintext);
+      if (!copied) {
+        setView({ kind: "issued", payload: { ...result, mode: "copied" } });
+        return;
+      }
       setNotice({ kind: "success", message: "Current token copied to clipboard." });
     });
   }
@@ -355,7 +375,6 @@ export function McpTokenManager(props: McpTokenManagerProps) {
 
       {view.kind === "issued" && (
         <IssuedTokenDialog
-          baseUrl={props.baseUrl}
           payload={view.payload}
           onClose={() => setView({ kind: "idle" })}
         />
@@ -635,15 +654,17 @@ function ScopeTierOption(props: {
   );
 }
 
-function IssuedTokenDialog(props: {
-  baseUrl: string;
-  payload: Issued;
-  onClose: () => void;
-}) {
-  const title = props.payload.mode === "rotated" ? "Replacement token issued" : "Token issued";
-  const refreshPayload = JSON.stringify({ token: props.payload.plaintext });
-  const refreshSnippet = `POST ${props.baseUrl}/api/mcp/token/refresh ${refreshPayload}`;
-  const headerSnippet = `Authorization: Bearer ${props.payload.plaintext}`;
+function IssuedTokenDialog(props: { payload: Issued; onClose: () => void }) {
+  const title =
+    props.payload.mode === "rotated"
+      ? "Replacement token issued"
+      : props.payload.mode === "copied"
+        ? "Current token"
+        : "Token issued";
+  const description =
+    props.payload.mode === "copied"
+      ? "Clipboard access was blocked. Select the current token or setup command below."
+      : "Copy the token or refresh payload before closing.";
 
   return (
     <DialogFrame>
@@ -655,9 +676,7 @@ function IssuedTokenDialog(props: {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-[var(--dpf-text)]">{title}</h3>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              Copy the token or refresh payload before closing.
-            </p>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">{description}</p>
           </div>
           <button type="button" onClick={props.onClose} className={buttonClass()}>
             <X className={iconClass()} aria-hidden="true" />
@@ -670,9 +689,10 @@ function IssuedTokenDialog(props: {
             label="Token"
             value={props.payload.plaintext}
           />
-          <SnippetBlock label="Header" value={headerSnippet} />
-          <SnippetBlock label="Refresh endpoint" value={refreshSnippet} />
-          <SnippetBlock label="Claude / Codex config" value={props.payload.setupSnippets.claudeCode} />
+          <SnippetBlock label="Client env" value={props.payload.setupSnippets.envPowerShell} />
+          <SnippetBlock label="Session refresh" value={props.payload.setupSnippets.runtimeRefreshPowerShell} />
+          <SnippetBlock label="Claude config" value={props.payload.setupSnippets.claudeCode} />
+          <SnippetBlock label="Codex config" value={props.payload.setupSnippets.codex} />
         </div>
 
         <div className="mt-5 flex justify-end">
@@ -686,15 +706,29 @@ function IssuedTokenDialog(props: {
 }
 
 function SnippetBlock(props: { label: string; value: string }) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "blocked">("idle");
+
+  async function copy() {
+    const copied = await writeClipboardText(props.value);
+    setCopyState(copied ? "copied" : "blocked");
+  }
+
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-[var(--dpf-text)]">{props.label}</p>
-        <button
-          type="button"
-          onClick={() => navigator.clipboard.writeText(props.value)}
-          className={buttonClass()}
-        >
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-[var(--dpf-text)]">{props.label}</p>
+          {copyState !== "idle" && (
+            <p
+              className={`mt-0.5 text-xs ${
+                copyState === "copied" ? "text-[var(--dpf-success)]" : "text-[var(--dpf-warning)]"
+              }`}
+            >
+              {copyState === "copied" ? "Copied" : "Clipboard blocked"}
+            </p>
+          )}
+        </div>
+        <button type="button" onClick={copy} className={buttonClass()}>
           <Copy className={iconClass()} aria-hidden="true" />
           Copy
         </button>
