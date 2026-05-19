@@ -1,17 +1,9 @@
 import { prisma } from "@dpf/db";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
-import {
-  CSDM_STRUCTURAL_DOMAIN_LABELS,
-  EMPLOYEE_WORK_ROLE_LABELS,
-  INTEGRATION_COVERAGE_KIND_LABELS,
-  INTEGRATION_COVERAGE_MATRIX,
-  INTEGRATION_COVERAGE_MATURITY_LABELS,
-  INTEGRATION_COVERAGE_POSTURE_LABELS,
-  IT4IT_VALUE_STREAM_LABELS,
-} from "@/lib/tools/integration-coverage-matrix";
+import { getMatrixByOrg } from "@/lib/actions/integration-coverage";
 
 export default async function EnterpriseIntegrationsPage() {
-  const [configuredIntegrations, errorStates] = await Promise.all([
+  const [configuredIntegrations, errorStates, coverageMatrix] = await Promise.all([
     prisma.integrationCredential.count({
       where: {
         provider: {
@@ -46,6 +38,7 @@ export default async function EnterpriseIntegrationsPage() {
         status: "error",
       },
     }),
+    getMatrixByOrg("platform"),
   ]);
 
   return (
@@ -99,16 +92,6 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
-          title="Employee Communications Fabric"
-          description="Governed employee reachability, delivery evidence, and channel-adapter readiness across DPF-owned and external messaging surfaces."
-          href="/platform/tools/integrations/communications"
-          accent="var(--dpf-info)"
-          metrics={[
-            { label: "Category", value: "Employee Communications" },
-            { label: "Model", value: "Fabric" },
-          ]}
-        />
-        <PlatformSummaryCard
           title="HubSpot CRM & Marketing"
           description="Marketing and CRM anchor for account details, contacts, and lead-capture forms on the enterprise substrate."
           href="/platform/tools/integrations/hubspot"
@@ -149,36 +132,6 @@ export default async function EnterpriseIntegrationsPage() {
           ]}
         />
         <PlatformSummaryCard
-          title="Facebook Pages"
-          description="Localized social presence anchor for page details, recent posts, and comment activity on the enterprise substrate."
-          href="/platform/tools/integrations/facebook-pages"
-          accent="var(--dpf-info)"
-          metrics={[
-            { label: "Category", value: "Local Social Presence" },
-            { label: "Model", value: "Native" },
-          ]}
-        />
-        <PlatformSummaryCard
-          title="WhatsApp Business"
-          description="Localized messaging readiness anchor for phone quality, approved templates, and language coverage on the enterprise substrate."
-          href="/platform/tools/integrations/whatsapp-business"
-          accent="var(--dpf-success)"
-          metrics={[
-            { label: "Category", value: "Localized Messaging" },
-            { label: "Model", value: "Native" },
-          ]}
-        />
-        <PlatformSummaryCard
-          title="Instagram Business"
-          description="Local visual presence anchor for profile, recent media, and comment context on the enterprise substrate."
-          href="/platform/tools/integrations/instagram-business"
-          accent="var(--dpf-info)"
-          metrics={[
-            { label: "Category", value: "Local Visual Presence" },
-            { label: "Model", value: "Native" },
-          ]}
-        />
-        <PlatformSummaryCard
           title="Mailchimp Marketing"
           description="Email marketing anchor for audiences, recent campaigns, and approved customer outreach context on the enterprise substrate."
           href="/platform/tools/integrations/mailchimp"
@@ -190,112 +143,6 @@ export default async function EnterpriseIntegrationsPage() {
         />
       </div>
 
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-              Employee Work Coverage
-            </p>
-            <h2 className="mt-2 text-lg font-semibold text-[var(--dpf-text)]">
-              Role, taxonomy, coworker, and product posture
-            </h2>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[var(--dpf-text)]">
-              {INTEGRATION_COVERAGE_MATRIX.filter((row) => row.kind === "native").length} native rows
-            </span>
-            <span className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[var(--dpf-text)]">
-              {INTEGRATION_COVERAGE_MATRIX.filter((row) => row.kind === "benchmark").length} benchmark rows
-            </span>
-            <span className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-[var(--dpf-text)]">
-              CSDM and IT4IT projection only
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-[1100px] text-left text-sm">
-            <thead className="border-b border-[var(--dpf-border)] text-[11px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-              <tr>
-                <th className="py-3 pr-4 font-medium">Product</th>
-                <th className="px-4 py-3 font-medium">Employee work</th>
-                <th className="px-4 py-3 font-medium">Taxonomy</th>
-                <th className="px-4 py-3 font-medium">Surface / coworker</th>
-                <th className="px-4 py-3 font-medium">Posture</th>
-                <th className="px-4 py-3 font-medium">Structure</th>
-                <th className="py-3 pl-4 font-medium">Next slice</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--dpf-border)]">
-              {INTEGRATION_COVERAGE_MATRIX.map((row) => (
-                <tr key={row.id} className="align-top">
-                  <td className="py-4 pr-4">
-                    <p className="font-medium text-[var(--dpf-text)]">{row.productName}</p>
-                    <p className="mt-1 text-xs text-[var(--dpf-muted)]">{row.provider}</p>
-                    <p className="mt-2 inline-flex rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-text)]">
-                      {INTEGRATION_COVERAGE_KIND_LABELS[row.kind]}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                      {row.employeeRoles.map((role) => (
-                        <span
-                          key={role}
-                          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-text)]"
-                        >
-                          {EMPLOYEE_WORK_ROLE_LABELS[role]}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="max-w-[250px] space-y-1">
-                      {row.taxonomyNodeIds.slice(0, 3).map((nodeId) => (
-                        <p key={nodeId} className="break-words font-mono text-xs text-[var(--dpf-muted)]">
-                          {nodeId}
-                        </p>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="max-w-[240px] space-y-2">
-                      <p className="break-words text-xs text-[var(--dpf-text)]">{row.dpfSurfaces.join(", ")}</p>
-                      <p className="break-words text-xs text-[var(--dpf-muted)]">{row.coworkerIds.join(", ")}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-[var(--dpf-text)]">
-                        {INTEGRATION_COVERAGE_POSTURE_LABELS[row.posture]}
-                      </p>
-                      <p className="text-xs text-[var(--dpf-muted)]">
-                        {INTEGRATION_COVERAGE_MATURITY_LABELS[row.maturity]}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="max-w-[220px] space-y-1">
-                      <p className="text-xs font-medium text-[var(--dpf-text)]">
-                        {CSDM_STRUCTURAL_DOMAIN_LABELS[row.csdmDomain]}
-                      </p>
-                      <p className="text-xs text-[var(--dpf-muted)]">
-                        {row.it4itValueStreams.map((stream) => IT4IT_VALUE_STREAM_LABELS[stream]).join(", ")}
-                      </p>
-                    </div>
-                  </td>
-                  <td className="py-4 pl-4">
-                    <div className="max-w-[220px] space-y-1">
-                      <p className="font-mono text-xs font-medium text-[var(--dpf-text)]">{row.nextBacklogItemId}</p>
-                      <p className="text-xs text-[var(--dpf-muted)]">{row.notes}</p>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <div className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
         <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
           Current Posture
@@ -306,6 +153,46 @@ export default async function EnterpriseIntegrationsPage() {
           approval boundaries remain explicit.
         </p>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">Integration Coverage Matrix</h2>
+        </div>
+        <div className="overflow-x-auto border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-[var(--dpf-border)] text-[11px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              <tr>
+                <th className="px-3 py-2 font-medium">Provider</th>
+                <th className="px-3 py-2 font-medium">Role</th>
+                <th className="px-3 py-2 font-medium">Surface</th>
+                <th className="px-3 py-2 font-medium">Read Posture</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coverageMatrix.map((row) => (
+                <tr
+                  key={`${row.providerKey}-${row.role}-${row.surface ?? "core"}`}
+                  className="border-b border-[var(--dpf-border)] last:border-0"
+                >
+                  <td className="px-3 py-2 text-[var(--dpf-text)]">{row.providerKey}</td>
+                  <td className="px-3 py-2 text-[var(--dpf-text)]">{row.role}</td>
+                  <td className="px-3 py-2 text-[var(--dpf-muted)]">{row.surface ?? "core"}</td>
+                  <td className="px-3 py-2 text-[var(--dpf-muted)]">
+                    {row.readPosture}
+                  </td>
+                </tr>
+              ))}
+              {coverageMatrix.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-3 text-[var(--dpf-muted)]" colSpan={4}>
+                    No integration coverage rows configured.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

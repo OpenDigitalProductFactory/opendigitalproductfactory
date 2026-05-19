@@ -3,7 +3,6 @@ import "./load-env.js";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { prisma } from "./client.js";
-import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
@@ -15,25 +14,12 @@ import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
-import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
-import { seedWikiKernel } from "./seed-wiki-kernel.js";
-import { seedDecisionPerspective } from "./seed-decision-perspective.js";
-import {
-  SPEACHES_PROVIDER_ID,
-  SPEACHES_MODEL_ID,
-  SPEACHES_MODEL_PROFILE_CONFIG,
-  SPEACHES_ENDPOINT_PERFORMANCE_BASELINE,
-} from "./voice-stt-providers.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
-import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
-import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { syncCapabilities } from "./sync-capabilities.js";
-import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
-import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
-import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
+import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -206,6 +192,13 @@ async function seedAgents(): Promise<void> {
   console.log(`Seeded ${seen.size} agents (skipped ${registry.agents.length - seen.size} duplicates)`);
 }
 
+const PORTFOLIO_BUDGETS: Record<string, number> = {
+  foundational: 2500,
+  manufacturing_and_delivery: 1800,
+  for_employees: 1200,
+  products_and_services_sold: 3500,
+};
+
 async function seedBusinessModels(): Promise<void> {
   const registry = readJson<{
     business_models: Array<{
@@ -299,11 +292,12 @@ async function seedPortfolios(): Promise<void> {
   for (const p of registry.portfolios) {
     await prisma.portfolio.upsert({
       where: { slug: p.id },
-      update: { name: p.name, description: p.description ?? null },
+      update: { name: p.name, description: p.description ?? null, budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null },
       create: {
         slug: p.id,
         name: p.name,
         description: p.description ?? null,
+        budgetKUsd: PORTFOLIO_BUDGETS[p.id] ?? null,
       },
     });
   }
@@ -394,7 +388,6 @@ async function seedTaxonomyNodes(): Promise<void> {
   for (const entry of entries) {
     const parentCuid = entry.parentNodeId ? (nodeIdToCuid.get(entry.parentNodeId) ?? null) : null;
     const portfolioCuid = portfolioIdMap.get(entry.portfolioId) ?? null;
-    const governance = defaultGovernanceFor(entry.nodeId);
     const node = await prisma.taxonomyNode.upsert({
       where: { nodeId: entry.nodeId },
       create: {
@@ -405,7 +398,6 @@ async function seedTaxonomyNodes(): Promise<void> {
         status:      "active",
         description: entry.description,
         enrichment:  entry.enrichment ? JSON.parse(JSON.stringify(entry.enrichment)) : undefined,
-        governance:  JSON.parse(JSON.stringify(governance)),
       },
       update: {
         name:        entry.name,
@@ -414,24 +406,10 @@ async function seedTaxonomyNodes(): Promise<void> {
         status:      "active",
         description: entry.description,
         enrichment:  entry.enrichment ? JSON.parse(JSON.stringify(entry.enrichment)) : undefined,
-        governance:  JSON.parse(JSON.stringify(governance)),
       },
       select: { id: true },
     });
     nodeIdToCuid.set(entry.nodeId, node.id);
-  }
-
-  // Invariant guard: every TaxonomyNode must carry governance after seed.
-  // This catches future regressions where a code path adds rows but skips
-  // the governance payload (per the "fix the seed, not the runtime" principle).
-  const missing = await prisma.taxonomyNode.count({
-    where: { governance: { equals: Prisma.DbNull } },
-  });
-  if (missing > 0) {
-    throw new Error(
-      `Invariant violation: ${missing} TaxonomyNode rows have null governance after seed. ` +
-        `Did seedTaxonomyNodes skip the upsert payload? See packages/db/src/taxonomy-governance-defaults.ts.`,
-    );
   }
 
   console.log(`Seeded ${entries.length} taxonomy nodes`);
@@ -927,153 +905,11 @@ async function seedSandboxPool(): Promise<void> {
   }
 }
 
-async function seedRuntimeTargets(): Promise<void> {
-  const rootPortalUrl = process.env.APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000";
-  const now = new Date();
-
-  await prisma.runtimeTarget.upsert({
-    where: { targetId: "RT-ROOT-PORTAL" },
-    create: {
-      targetId: "RT-ROOT-PORTAL",
-      kind: "root-portal",
-      status: "running",
-      serviceName: "portal",
-      containerName: "dpf-portal-1",
-      hostUrl: rootPortalUrl,
-      port: 3000,
-      serviceVersion: process.env.DPF_IMAGE_VERSION ?? process.env.DPF_VERSION ?? null,
-      lastHeartbeatAt: now,
-      metadata: {},
-    },
-    update: {
-      kind: "root-portal",
-      serviceName: "portal",
-      containerName: "dpf-portal-1",
-      hostUrl: rootPortalUrl,
-      port: 3000,
-      serviceVersion: process.env.DPF_IMAGE_VERSION ?? process.env.DPF_VERSION ?? null,
-      lastHeartbeatAt: now,
-    },
-  });
-
-  await prisma.runtimeTarget.upsert({
-    where: { targetId: "RT-DEV-PORTAL" },
-    create: {
-      targetId: "RT-DEV-PORTAL",
-      kind: "dev-portal",
-      status: "planned",
-      serviceName: "dev-portal",
-      containerName: "dpf-dev-portal-1",
-      hostUrl: "http://localhost:3001",
-      port: 3001,
-      metadata: {},
-    },
-    update: {
-      kind: "dev-portal",
-      serviceName: "dev-portal",
-      containerName: "dpf-dev-portal-1",
-      hostUrl: "http://localhost:3001",
-      port: 3001,
-    },
-  });
-
-  const featureBuilds = await prisma.featureBuild.findMany({
-    select: { id: true, buildId: true },
-  });
-  const featureBuildIdByBuildId = new Map(featureBuilds.map((build) => [build.buildId, build.id]));
-
-  const sandboxes = await prisma.sandbox.findMany({
-    select: {
-      id: true,
-      buildId: true,
-      providerId: true,
-      state: true,
-      previewUrl: true,
-    },
-  });
-  const sandboxIds = new Set(sandboxes.map((sandbox) => sandbox.id));
-
-  for (const sandbox of sandboxes) {
-    const status = sandbox.state === "running" || sandbox.state === "ready"
-      ? "running"
-      : sandbox.state === "failed"
-        ? "failed"
-        : sandbox.state === "destroyed"
-          ? "released"
-          : "assigned";
-    await prisma.runtimeTarget.upsert({
-      where: { targetId: `RT-SANDBOX-${sandbox.id}` },
-      create: {
-        targetId: `RT-SANDBOX-${sandbox.id}`,
-        kind: "build-sandbox",
-        status,
-        sandboxId: sandbox.id,
-        featureBuildId: featureBuildIdByBuildId.get(sandbox.buildId) ?? null,
-        hostUrl: sandbox.previewUrl,
-        metadata: {
-          buildId: sandbox.buildId,
-          providerId: sandbox.providerId,
-        },
-      },
-      update: {
-        status,
-        sandboxId: sandbox.id,
-        featureBuildId: featureBuildIdByBuildId.get(sandbox.buildId) ?? null,
-        hostUrl: sandbox.previewUrl,
-        metadata: {
-          buildId: sandbox.buildId,
-          providerId: sandbox.providerId,
-        },
-      },
-    });
-  }
-
-  const candidates = await prisma.gitPromotionCandidate.findMany({
-    where: { status: { in: ["queued", "verifying", "in_progress"] } },
-    select: {
-      id: true,
-      candidateId: true,
-      status: true,
-      sandboxId: true,
-    },
-  });
-
-  for (const candidate of candidates) {
-    const status = candidate.status === "verifying" || candidate.status === "in_progress"
-      ? "verifying"
-      : "planned";
-    await prisma.runtimeTarget.upsert({
-      where: { targetId: `RT-GIT-PROMOTION-${candidate.id}` },
-      create: {
-        targetId: `RT-GIT-PROMOTION-${candidate.id}`,
-        kind: "git-promotion-sandbox",
-        status,
-        sandboxId: candidate.sandboxId && sandboxIds.has(candidate.sandboxId) ? candidate.sandboxId : null,
-        metadata: {
-          candidateId: candidate.candidateId,
-          candidateSandboxId: candidate.sandboxId,
-        },
-      },
-      update: {
-        status,
-        sandboxId: candidate.sandboxId && sandboxIds.has(candidate.sandboxId) ? candidate.sandboxId : null,
-        metadata: {
-          candidateId: candidate.candidateId,
-          candidateSandboxId: candidate.sandboxId,
-        },
-      },
-    });
-  }
-
-  console.log("Seeded runtime targets: root portal, dev portal, and active sandbox mirrors");
-}
-
 async function seedCoworkerAgents(): Promise<void> {
   // EP-AI-WORKFORCE-001: Coworker agents with canonical AGT-UI-xxx IDs and slugId aliases
   const coworkers = [
     { agentId: "portfolio-advisor", slugId: "portfolio-advisor", name: "Portfolio Analyst", tier: 1, type: "coworker", description: "Investment, risk, and portfolio health analysis", valueStream: "evaluate", sensitivity: "internal" },
-    { agentId: "external-catalog-scout", slugId: "external-catalog-scout", name: "External Catalog Scout", tier: 2, type: "coworker", description: "External coworker archetype reconnaissance and governed backlog suggestion generation from approved outside catalogs", valueStream: "explore", sensitivity: "internal" },
-    { agentId: "inventory-specialist", slugId: "inventory-specialist", name: "Digital Product Estate Specialist", tier: 2, type: "coworker", description: "Lifecycle, maturity, and attribution analysis across the discovered digital product estate", valueStream: "explore", sensitivity: "internal" },
+    { agentId: "inventory-specialist", slugId: "inventory-specialist", name: "Product Manager", tier: 2, type: "coworker", description: "Product lifecycle, maturity, and market fit analysis", valueStream: "explore", sensitivity: "internal" },
     { agentId: "ea-architect", slugId: "ea-architect", name: "Enterprise Architect", tier: 2, type: "coworker", description: "Structural analysis, dependency tracing, and architecture governance", valueStream: "cross-cutting", sensitivity: "internal" },
     { agentId: "hr-specialist", slugId: "hr-specialist", name: "HR Director", tier: 2, type: "coworker", description: "People, roles, accountability chains, and governance compliance", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "customer-advisor", slugId: "customer-advisor", name: "Customer Success Manager", tier: 2, type: "coworker", description: "Customer journey, service adoption, and satisfaction analysis", valueStream: "consume", sensitivity: "confidential" },
@@ -1097,20 +933,19 @@ async function seedCoworkerAgents(): Promise<void> {
   // from agent_registry.json; these hardcoded ones need them here.
   const HARDCODED_COWORKER_GRANTS: Record<string, string[]> = {
     "portfolio-advisor":    ["portfolio_read", "registry_read", "backlog_read"],
-    "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
     "inventory-specialist": ["portfolio_read", "registry_read", "registry_write", "backlog_read", "backlog_write", "agent_control_read"],
     "ea-architect":         ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read"],
     "hr-specialist":        ["registry_read", "consumer_read", "consumer_write"],
     "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"],
     "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
-    "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read", "marketing_write", "web_search"],
+    "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write"],
     "ops-coordinator":      ["backlog_read", "backlog_write", "registry_read", "portfolio_read"],
     "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
-    "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read"],
+    "build-specialist":     ["file_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read"],
     "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
     "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
     "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read"],
-    "doc-specialist":       ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
+    "doc-specialist":       ["file_read", "registry_read", "portfolio_read"],
     "compliance-officer":   ["policy_write", "data_governance_validate", "file_read", "backlog_read", "backlog_write", "tool_evaluation_create"],
     "finance-controller":   ["registry_read", "backlog_read", "portfolio_read"],
   };
@@ -1186,11 +1021,6 @@ async function seedCoworkerSkills(): Promise<void> {
       { label: "Find a product", description: "Search for a digital product", prompt: "Help me find a product in the portfolio.", sortOrder: 2 },
       { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 3 },
     ],
-    "external-catalog-scout": [
-      { label: "Run scout pass", description: "Scan the approved external catalog and file governed backlog suggestions", prompt: "Run the external catalog scout pass. Use the governed ingest tool once, then summarize what was created, duplicated, or deferred.", sortOrder: 0 },
-      { label: "Review latest gaps", description: "Summarize the latest archetype gaps worth platform attention", prompt: "Review the latest Hive Scout suggestions and summarize the highest-value gaps for DPF to absorb into the platform.", sortOrder: 1 },
-      { label: "Report an issue", description: "Report a bug or give feedback", prompt: "I'd like to report an issue or give feedback.", sortOrder: 2 },
-    ],
     "build-specialist": [
       { label: "Start a build", description: "Begin a new feature build", capability: "build_studio", prompt: "Help me start a new feature build.", sortOrder: 0 },
       { label: "Review code", description: "Review pending code changes", prompt: "Review the current code changes and suggest improvements.", sortOrder: 1 },
@@ -1235,12 +1065,6 @@ async function seedAgentPromptContexts(): Promise<void> {
       heuristics: "Start with portfolio-level health metrics, then drill into product-level concerns. Flag concentration risk, budget overruns, and misaligned investments.",
       interpretiveModel: "Optimize for risk-adjusted return on IT investment. A healthy portfolio balances innovation (new products) with stability (mature products).",
       domainTools: ["list_products", "get_product", "list_backlog_items", "search_products"],
-    },
-    "external-catalog-scout": {
-      perspective: "You scan the external ecosystem for proven coworker patterns, then translate them into DPF-native backlog suggestions without importing code or multiplying tools.",
-      heuristics: "Run the governed scout pass first, summarize concrete counts, name genuine novelty, and keep backlog noise low by calling out duplicates and deferred items clearly.",
-      interpretiveModel: "Optimize for absorption over integration. External projects are evidence and inspiration, not product dependencies.",
-      domainTools: ["run_hive_scout_ingest", "list_backlog_items", "search_products"],
     },
     "build-specialist": {
       perspective: "You see the platform as code to be written, tested, and shipped. Every request maps to files, functions, and tests. You encode the world as implementation tasks.",
@@ -1433,39 +1257,6 @@ async function seedProviderRegistry(): Promise<void> {
 
     const existing = await prisma.modelProvider.findUnique({ where: { providerId } });
     if (existing) {
-      // Slice 1.5 backfill: rows that pre-date the auto-activate logic may
-      // exist with status='unconfigured' and/or empty sensitivityClearance
-      // for non-LLM authMethod='none' providers. Flip them to active + full
-      // local clearance on reseed so existing installs don't need manual SQL
-      // to get voice working. Admin-configured rows (status='active' already,
-      // clearance already set) are left alone — the .length===0 gate
-      // preserves operator intent.
-      //
-      // LLM providers (local Docker Model Runner, Ollama) are excluded:
-      // they depend on runtime model discovery (seedLocalModels) to acquire
-      // active ModelProfile rows. Activating an LLM provider without models
-      // trips INV-2 ("active LLM provider with zero active model profiles")
-      // in the routing-invariants audit.
-      //
-      // Edge case: providers like local/ollama that omit `endpointType` in
-      // the JSON catalog get the schema default of "llm" when inserted, but
-      // on UPDATE we read from `existing.endpointType` which is always set.
-      // Default to "llm" on missing — safest for the invariant.
-      const effectiveAuthMethod =
-        (existing.authMethod as string | null) ??
-        (entry.authMethod as string | undefined);
-      const effectiveEndpointType =
-        (existing.endpointType as string | null) ??
-        (entry.endpointType as string | undefined) ??
-        "llm";
-      const isAutoActivateEligible =
-        effectiveAuthMethod === "none" && effectiveEndpointType !== "llm";
-      const existingClearance = (existing.sensitivityClearance as string[]) ?? [];
-      const shouldBackfillStatus =
-        isAutoActivateEligible && existing.status === "unconfigured";
-      const shouldBackfillClearance =
-        isAutoActivateEligible && existingClearance.length === 0;
-
       // Update metadata but preserve admin config (status, endpoint, enabledFamilies)
       await prisma.modelProvider.update({
         where: { providerId },
@@ -1494,51 +1285,17 @@ async function seedProviderRegistry(): Promise<void> {
           ...(entry.tokenUrl !== undefined && { tokenUrl: (entry.tokenUrl as string) ?? null }),
           ...(entry.oauthClientId !== undefined && { oauthClientId: (entry.oauthClientId as string) ?? null }),
           ...(entry.oauthRedirectUri !== undefined && { oauthRedirectUri: (entry.oauthRedirectUri as string) ?? null }),
-          ...(shouldBackfillStatus && { status: "active" }),
-          ...(shouldBackfillClearance && {
-            sensitivityClearance: ["public", "internal", "confidential", "restricted"],
-          }),
         },
       });
       updated++;
     } else {
-      // Slice 1.5: non-LLM auth-none providers (the STT sidecar today, future
-      // TTS/embedding sidecars) auto-activate on a fresh install so the
-      // operator doesn't need to click anything to make voice work.
-      // Providers requiring OAuth / API keys correctly start unconfigured.
-      // Voice Slice 1.5: docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md
-      //
-      // LLM providers (local Docker Model Runner, Ollama) — even with
-      // authMethod=none — STAY unconfigured. They depend on runtime model
-      // discovery (seedLocalModels) to acquire active ModelProfile rows;
-      // activating them without models trips INV-2 in the routing-invariants
-      // audit. seedLocalModels owns flipping them active+cleared lazily.
-      //
-      // Edge case: providers like local/ollama in the JSON catalog omit
-      // `endpointType` — the schema default is "llm" but applies AFTER
-      // insert. Treat missing as "llm" for the purposes of the
-      // auto-activate predicate so we don't accidentally activate them.
-      //
-      // Active providers MUST declare sensitivityClearance (enforced by
-      // assertActiveProvidersHaveClearance). Local sidecars never send data
-      // off-machine, so we grant the full clearance set.
-      const effectiveEntryEndpointType =
-        (entry.endpointType as string | undefined) ?? "llm";
-      const isAutoActivateEligible =
-        (entry.authMethod as string | undefined) === "none" &&
-        effectiveEntryEndpointType !== "llm";
-      const initialStatus = isAutoActivateEligible ? "active" : "unconfigured";
-      const initialClearance = isAutoActivateEligible
-        ? ["public", "internal", "confidential", "restricted"]
-        : [];
       await prisma.modelProvider.create({
         data: {
           providerId,
           name: entry.name as string ?? providerId,
           families: (entry.families as string[]) ?? [],
           enabledFamilies: [],
-          status: initialStatus,
-          sensitivityClearance: initialClearance,
+          status: "unconfigured",
           category: entry.category as string ?? "direct",
           baseUrl: (entry.baseUrl as string) ?? null,
           authMethod: entry.authMethod as string ?? "none",
@@ -1628,7 +1385,7 @@ async function seedLocalModels(): Promise<void> {
           modelId: m.id,
           friendlyName: m.id.replace("docker.io/ai/", ""),
           summary: "Local model via Docker Model Runner",
-          capabilityCategory: "basic",
+          capabilityTier: "basic",
           costTier: "free",
           bestFor: ["conversation", "general"],
           avoidFor: [],
@@ -1655,8 +1412,9 @@ async function seedLocalModels(): Promise<void> {
 async function seedCodexModels(): Promise<void> {
   const codexFamilies = ["gpt-5.4", "gpt-5.3-codex", "codex-mini"];
 
-  // Ensure codex provider exists and is active. Codex remains the canonical
-  // OAuth-backed route for governed custom-tool coworker work.
+  // Ensure codex provider exists and is active. The CLI adapter (anthropic-sub)
+  // cannot execute MCP tools — codex via the responses adapter is the only
+  // provider that supports both tool use and OAuth auth for the coworker agentic loop.
   await prisma.modelProvider.upsert({
     where: { providerId: "codex" },
     create: {
@@ -1685,8 +1443,9 @@ async function seedCodexModels(): Promise<void> {
   //   * #107 introduced provider-tier preference so user-configured
   //     providers always beat bundled local in routing — no pin needed to
   //     keep build-specialist off Gemma4.
-  //   * Coworker tool execution is routed by capability floor and backend
-  //     contract, not by hard provider pins.
+  //   * #112 and #118 broadened the codex-cli and claude-cli tool_use
+  //     parsers so anthropic-sub can also execute MCP tools — no reason
+  //     to force codex specifically.
   //
   // Per feedback_no_provider_pinning: routing picks the right LLM for the
   // job from capability tier + task type. Pins are a lie about the world —
@@ -1762,7 +1521,7 @@ async function seedCodexModels(): Promise<void> {
           modelId: m.modelId,
           friendlyName: m.friendlyName,
           summary: m.summary,
-          capabilityCategory: "advanced",
+          capabilityTier: "advanced",
           costTier: m.costTier,
           bestFor: m.bestFor,
           avoidFor: m.avoidFor,
@@ -1843,7 +1602,7 @@ async function seedChatGPTModels(): Promise<void> {
           modelId: m.modelId,
           friendlyName: m.friendlyName,
           summary: m.summary,
-          capabilityCategory: "advanced",
+          capabilityTier: "advanced",
           costTier: "subscription",
           bestFor: m.bestFor,
           avoidFor: m.avoidFor,
@@ -1866,11 +1625,7 @@ async function seedChatGPTModels(): Promise<void> {
     } else if (existing.profileSource === "seed") {
       await prisma.modelProfile.update({
         where: { providerId_modelId: { providerId: "chatgpt", modelId: m.modelId } },
-        data: {
-          ...scoreFields,
-          supportsToolUse: false,
-          capabilities: { toolUse: false, streaming: true, structuredOutput: true, imageInput: true } as any,
-        },
+        data: scoreFields,
       });
       updated++;
     }
@@ -1889,38 +1644,21 @@ async function seedAnthropicSubScope(): Promise<void> {
     update: {},  // preserve existing credentials on re-seed
   });
 
-  // anthropic-sub uses the Claude CLI adapter. Platform tools are injected as
-  // tool descriptions, Claude Code native tools are suppressed, and the
-  // agentic loop executes parsed platform tool_use events server-side. Keep
-  // the seed aligned with that adapter contract so active paid Claude models
-  // remain eligible for coworker turns that require tools.
+  // anthropic-sub uses the Claude CLI adapter which runs Claude Code in a
+  // sandbox subprocess. The CLI has NO access to MCP tools — tool-based
+  // agentic work (coworker conversations) must route to codex instead.
+  // Mark supportsToolUse=false so the routing pipeline skips this provider
+  // for tool-based requests.
   await prisma.modelProvider.updateMany({
     where: { providerId: "anthropic-sub" },
-    data: { supportsToolUse: true },
+    data: { supportsToolUse: false },
   });
   await prisma.modelProfile.updateMany({
-    where: {
-      providerId: "anthropic-sub",
-      modelStatus: { in: ["active", "degraded"] },
-      NOT: { profileSource: "admin" },
-    },
-    data: { supportsToolUse: true },
+    where: { providerId: "anthropic-sub" },
+    data: { supportsToolUse: false },
   });
-  await prisma.$executeRaw`
-    UPDATE "ModelProfile"
-    SET "capabilities" = jsonb_set(
-      COALESCE("capabilities", '{}'::jsonb),
-      '{toolUse}',
-      'true'::jsonb,
-      true
-    )
-    WHERE "providerId" = 'anthropic-sub'
-      AND "modelStatus" IN ('active', 'degraded')
-      AND ("profileSource" IS NULL OR "profileSource" <> 'admin')
-      AND NOT (COALESCE("capabilityOverrides", '{}'::jsonb) ? 'toolUse')
-  `;
 
-  console.log("Seeded anthropic-sub credential scope (toolUse=true)");
+  console.log("Seeded anthropic-sub credential scope (toolUse=false)");
 }
 
 /**
@@ -1946,136 +1684,13 @@ async function seedModelProfiles(): Promise<void> {
       select: { id: true },
     });
     if (existing) { skipped++; continue; }
+    const { providerId: _pid, modelId: _mid, ...rest } = p;
     try {
-      await prisma.modelProfile.create({ data: toModelProfileSeedCreateData(p) as never });
+      await prisma.modelProfile.create({ data: { providerId, modelId, ...rest } as never });
       created++;
     } catch { skipped++; }
   }
   console.log(`  Seeded ${created} model profiles (${skipped} already existed)`);
-}
-
-/**
- * Voice Input Slice 1 / Task 2 — speaches transcription model + perf baseline.
- *
- * Owning plan: docs/superpowers/plans/2026-05-16-voice-input-slice-1-portal-mic.md
- *
- * Idempotent: re-running this seed updates the profile fields (per the standard
- * codex/chatgpt seed pattern, profileSource="seed" rows get refreshed on
- * re-seed; evaluated/admin-tuned rows are preserved).
- *
- * Depends on: seedProviderRegistry() having already created the speaches
- * provider row from packages/db/data/providers-registry.json with
- * endpointType="transcription". If that row is missing, this seed logs a
- * warning and skips — the provider catalog is the source of truth, not
- * this function.
- */
-async function seedSpeachesTranscriptionModel(): Promise<void> {
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId: SPEACHES_PROVIDER_ID },
-  });
-  if (!provider) {
-    console.warn(
-      `[seed] speaches provider not found in ModelProvider — packages/db/data/providers-registry.json must include providerId='${SPEACHES_PROVIDER_ID}'. Skipping transcription model seed.`,
-    );
-    return;
-  }
-
-  // Slice 1.5: migrate any existing speaches ModelProfile row that points at
-  // the legacy speaches modelId ("Systran/faster-distil-whisper-large-v3")
-  // — that model only exists in the old speaches sidecar; the new
-  // hwdsl2/whisper-server CPU default uses simpler model names like "base".
-  // Delete the stale profile + its EndpointTaskPerformance row so endpoint
-  // resolution picks the new profile cleanly. Idempotent: no-op on fresh
-  // installs.
-  const staleProfiles = await prisma.modelProfile.findMany({
-    where: {
-      providerId: SPEACHES_PROVIDER_ID,
-      modelId: { not: SPEACHES_MODEL_ID },
-    },
-    select: { id: true, modelId: true },
-  });
-  if (staleProfiles.length > 0) {
-    for (const stale of staleProfiles) {
-      await prisma.endpointTaskPerformance.deleteMany({
-        where: { endpointId: stale.id },
-      });
-      await prisma.modelProfile.delete({ where: { id: stale.id } });
-      console.log(
-        `  Cleaned stale speaches ModelProfile (modelId=${stale.modelId}) per Slice 1.5 image swap`,
-      );
-    }
-  }
-
-  // Upsert the ModelProfile. profileSource="seed" + profileSource check at
-  // refresh time mirror the codex pattern (seed.ts seedCodexModels).
-  const { providerId: _pid, modelId: _mid, ...profileData } = SPEACHES_MODEL_PROFILE_CONFIG;
-  const existingProfile = await prisma.modelProfile.findUnique({
-    where: { providerId_modelId: { providerId: SPEACHES_PROVIDER_ID, modelId: SPEACHES_MODEL_ID } },
-    select: { id: true, profileSource: true },
-  });
-
-  let profileId: string;
-  if (!existingProfile) {
-    const created = await prisma.modelProfile.create({
-      data: {
-        providerId: SPEACHES_PROVIDER_ID,
-        modelId: SPEACHES_MODEL_ID,
-        ...profileData,
-        bestFor: profileData.bestFor as Prisma.InputJsonValue,
-        avoidFor: profileData.avoidFor as Prisma.InputJsonValue,
-        inputModalities: profileData.inputModalities as Prisma.InputJsonValue,
-        outputModalities: profileData.outputModalities as Prisma.InputJsonValue,
-        capabilities: profileData.capabilities as Prisma.InputJsonValue,
-      },
-      select: { id: true },
-    });
-    profileId = created.id;
-    console.log(`  Seeded speaches transcription profile (${SPEACHES_MODEL_ID})`);
-  } else if (existingProfile.profileSource === "seed") {
-    // Refresh from catalog when the row hasn't been overridden by eval or admin.
-    await prisma.modelProfile.update({
-      where: { id: existingProfile.id },
-      data: {
-        ...profileData,
-        bestFor: profileData.bestFor as Prisma.InputJsonValue,
-        avoidFor: profileData.avoidFor as Prisma.InputJsonValue,
-        inputModalities: profileData.inputModalities as Prisma.InputJsonValue,
-        outputModalities: profileData.outputModalities as Prisma.InputJsonValue,
-        capabilities: profileData.capabilities as Prisma.InputJsonValue,
-      },
-    });
-    profileId = existingProfile.id;
-    console.log(`  Refreshed speaches transcription profile (${SPEACHES_MODEL_ID})`);
-  } else {
-    profileId = existingProfile.id;
-    console.log(
-      `  Preserved speaches transcription profile (profileSource=${existingProfile.profileSource})`,
-    );
-  }
-
-  // Upsert the EndpointTaskPerformance baseline. endpointId is the profile cuid.
-  // The unique constraint is (endpointId, taskType), so upsert by that pair.
-  await prisma.endpointTaskPerformance.upsert({
-    where: {
-      endpointId_taskType: {
-        endpointId: profileId,
-        taskType: SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.taskType,
-      },
-    },
-    create: {
-      endpointId: profileId,
-      modelId: SPEACHES_MODEL_ID,
-      ...SPEACHES_ENDPOINT_PERFORMANCE_BASELINE,
-      recentScores: [...SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.recentScores] as number[],
-      dimensionScores: SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.dimensionScores as Prisma.InputJsonValue,
-    },
-    update: {
-      // Re-seed does NOT clobber accumulated evaluation history — only ensures
-      // the row exists. Real telemetry from inference traffic owns the scores.
-      modelId: SPEACHES_MODEL_ID,
-    },
-  });
-  console.log(`  Ensured EndpointTaskPerformance(${SPEACHES_PROVIDER_ID}/${SPEACHES_MODEL_ID}, taskType=${SPEACHES_ENDPOINT_PERFORMANCE_BASELINE.taskType})`);
 }
 
   /**
@@ -2257,9 +1872,35 @@ async function seedAgentModelDefaults(): Promise<void> {
   // routing's decision and drag agents down to stale models as the
   // provider landscape shifts. Encode real requirements as
   // minimumTier / minimumCapabilities / minimumContextTokens.
+  const defaults: Array<{
+    agentId: string;
+    minimumTier: string;
+    budgetClass: string;
+    minimumCapabilities?: Record<string, boolean>;
+    minimumContextTokens?: number;
+  }> = [
+    { agentId: "build-specialist",    minimumTier: "strong",   budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "coo",                 minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "platform-engineer",   minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "admin-assistant",     minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "ops-coordinator",     minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "portfolio-advisor",   minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "inventory-specialist", minimumTier: "adequate", budgetClass: "balanced",     minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "ea-architect",        minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "hr-specialist",       minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "customer-advisor",    minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "marketing-specialist", minimumTier: "adequate", budgetClass: "balanced",     minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "storefront-advisor",  minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "onboarding-coo",      minimumTier: "basic",    budgetClass: "minimize_cost", minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+    { agentId: "doc-specialist",      minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "data-architect",      minimumTier: "adequate", budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "compliance-officer",  minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
+    { agentId: "finance-controller",  minimumTier: "strong",   budgetClass: "balanced",      minimumCapabilities: { toolUse: true }, minimumContextTokens: 16000 },
+  ];
+
   let seeded = 0;
   let existed = 0;
-  for (const d of AGENT_MODEL_CONFIG_DEFAULTS) {
+  for (const d of defaults) {
     const existing = await prisma.agentModelConfig.findUnique({
       where: { agentId: d.agentId },
     });
@@ -2336,10 +1977,10 @@ async function seedWorkQueues(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("Starting seed...");
-  await ensureBootstrapOrganization();
+  const bootstrapOrganizationId = await ensureBootstrapOrganization();
+  await seedIntegrationCoverage(prisma, bootstrapOrganizationId);
   await seedGeographicData(prisma);
   await seedTaxJurisdictions(prisma);
-  await seedLicenseRequirements(prisma);
   await seedRoles();
   await seedGovernanceReferenceData(prisma);
   await seedWorkforceReferenceData(prisma);
@@ -2365,18 +2006,14 @@ async function main(): Promise<void> {
   await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
   await ensureDiscoveryTriageScheduledTask(prisma);
-  await ensureHiveScoutScheduledTask(prisma);
-  await ensureAllBackupScheduledJobs(prisma);
   await seedMcpServers();
   await seedSandboxPool();
-  await seedRuntimeTargets();
+  await seedAnthropicSubScope();
   await seedProviderRegistry();
   await seedCodexModels();
   await seedChatGPTModels();
   await seedLocalModels();
   await seedModelProfiles();
-  await seedSpeachesTranscriptionModel();
-  await seedAnthropicSubScope();
   await ensureBuildStudioModelConfig();
   await seedModelPricing();
   await seedAgentModelDefaults();
@@ -2387,28 +2024,9 @@ async function main(): Promise<void> {
   await seedWorkQueues();
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);
-  const wikiSeed = await seedWikiKernel(prisma);
-  if (wikiSeed.emptyKernel) {
-    console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
-  } else {
-    const qdrantSummary = wikiSeed.embeddingsSidecarPresent
-      ? `qdrant=${wikiSeed.qdrantPointsSeeded}`
-      : "qdrant=no-sidecar";
-    console.log(
-      `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
-        `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
-        `orphan-links=${wikiSeed.orphanLinks.length} ${qdrantSummary}`,
-    );
-  }
   await seedDeliberationPatterns(prisma);
-  const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
-  console.log(
-    `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
-      `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
-  );
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
-  await assertAnthropicSubToolCapability();
   await assertCoworkerAgentsHaveGrants();
   console.log("Seed complete.");
 }
@@ -2432,59 +2050,6 @@ async function assertActiveProvidersHaveClearance(): Promise<void> {
     throw new Error(
       `Seed invariant violated: active providers without sensitivityClearance: ${list}. ` +
         `Add sensitivityClearance to the relevant seed function (see seedLocalModels/seedCodexModels for reference).`,
-    );
-  }
-}
-
-/**
- * anthropic-sub is the paid subscription provider most likely to be active on
- * local installs. If its tool capability seed drifts false, every coworker
- * with the default toolUse floor routes to the bundled local model even though
- * Claude is connected. Fail seed instead of silently shipping that state.
- */
-async function assertAnthropicSubToolCapability(): Promise<void> {
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId: "anthropic-sub" },
-    select: { status: true, supportsToolUse: true },
-  });
-  if (!provider || (provider.status !== "active" && provider.status !== "degraded")) return;
-
-  const profiles = await prisma.modelProfile.findMany({
-    where: {
-      providerId: "anthropic-sub",
-      modelStatus: { in: ["active", "degraded"] },
-      retiredAt: null,
-    },
-    select: {
-      modelId: true,
-      supportsToolUse: true,
-      capabilities: true,
-      capabilityOverrides: true,
-      profileSource: true,
-    },
-  });
-
-  const offenders = profiles.filter((profile) => {
-    const overrides = profile.capabilityOverrides as Record<string, unknown> | null;
-    if (profile.profileSource === "admin" || (overrides && "toolUse" in overrides)) {
-      return false;
-    }
-    const capabilities =
-      profile.capabilities &&
-      typeof profile.capabilities === "object" &&
-      !Array.isArray(profile.capabilities)
-        ? (profile.capabilities as Record<string, unknown>)
-        : {};
-    return provider.supportsToolUse !== true ||
-      profile.supportsToolUse !== true ||
-      capabilities.toolUse !== true;
-  });
-
-  if (offenders.length > 0) {
-    throw new Error(
-      `Seed invariant violated: anthropic-sub is active but ${offenders.length} active profile(s) ` +
-        `are not tool-capable: ${offenders.map((p) => p.modelId).join(", ")}. ` +
-        `Keep providers-registry.json, model-profiles.json, and seedAnthropicSubScope aligned with the Claude CLI adapter contract.`,
     );
   }
 }

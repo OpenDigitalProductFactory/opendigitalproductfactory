@@ -1,9 +1,7 @@
 // packages/db/src/index.ts
 export { prisma } from "./client";
-// Prisma is exported as both a value (for runtime helpers like Prisma.JsonNull,
-// Prisma.DbNull) and a type (for input/output type aliases).
-export { Prisma } from "../generated/client/client";
-export type { PrismaClient } from "../generated/client/client";
+export { WriteGateRequirement } from "../generated/client/client";
+export type { Prisma, PrismaClient } from "../generated/client/client";
 
 export { neo4jSession, closeNeo4j, runCypher } from "./neo4j";
 
@@ -19,70 +17,6 @@ export {
   hashToNumber,
   QDRANT_COLLECTIONS,
 } from "./qdrant";
-
-// EP-WIKI-001 Phase 1a: wiki kernel + per-org overlay store helpers
-// Phase 2.1 adds the raw-source ingest helpers (upsertRawSource,
-// recordIngestEvent, RAW_SOURCE_TYPES) consumed by the file-source
-// orchestrator in apps/web/lib/wiki/ingest.ts.
-export {
-  upsertWikiPage,
-  appendRevision,
-  linkPages,
-  attachSource,
-  getWikiPage,
-  listPrinciplesByTier,
-  upsertRawSource,
-  recordIngestEvent,
-  RAW_SOURCE_TYPES,
-  isRawSourceType,
-  type WikiStoreClient,
-  type WikiPageKind,
-  type WikiPageStatus,
-  type WikiRevisionChangeKind,
-  type UpsertWikiPageInput,
-  type AppendRevisionInput,
-  type LinkPagesInput,
-  type AttachSourceInput,
-  type WikiPagePrincipleInput,
-  type UpsertRawSourceInput,
-  type RecordIngestEventInput,
-  type RawSourceType,
-} from "./wiki-store";
-
-// EP-WIKI-001 Phase 2.1: re-export the shared frontmatter parser so the
-// apps/web ingest orchestrator can reuse the same YAML subset that
-// founder-kernel raw-source files are written against, without reaching
-// into @dpf/db internals. Lives in `./wiki-frontmatter` rather than
-// `./seed-wiki-kernel` because the seed module's `__dirname`-based
-// KERNEL_DIR constant fails to evaluate under Vite's ESM/SSR loader.
-export {
-  parseFrontmatter as parseWikiFrontmatter,
-  extractWikilinks,
-  type RawSourceFrontmatter,
-  type WikiPageFrontmatter,
-} from "./wiki-frontmatter";
-
-// Principles-as-wiki-kind Phase 0: taxonomy constants + predicates so
-// retrieval, lint, MCP, and UI consumers in apps/web import them through
-// the @dpf/db barrel.
-export {
-  WIKI_PAGE_KINDS,
-  WIKI_PAGE_STATUSES,
-  PRINCIPLE_TIERS,
-  PRINCIPLE_APPLIES_TO,
-  PRINCIPLE_DIMENSIONS,
-  PRINCIPLE_TIER_DEFAULT_WEIGHT,
-  PRINCIPLE_TIER_CAPS,
-  PRINCIPLE_DECIDE_DEFAULTS,
-  isWikiPageKind,
-  isWikiPageStatus,
-  isPrincipleTier,
-  isPrincipleAppliesTo,
-  isPrincipleDimension,
-  type PrincipleTier,
-  type PrincipleAppliesTo,
-  type PrincipleDimension,
-} from "./wiki-taxonomy";
 export { initNeo4jSchema, backfillOsiLayers, NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
 export {
   getDownstreamImpact,
@@ -111,8 +45,6 @@ export {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
   syncIT4ITLabels,
-  syncDocumentNode,
-  syncDocumentReference,
 } from "./neo4j-sync";
 export {
   buildDiscoveredKey,
@@ -178,13 +110,7 @@ export {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,
   type DiscoveryPersistenceSummary,
-  type DiscoveryProjectionOptions,
-  type DiscoverySyncClient,
 } from "./discovery-sync";
-export {
-  persistSubmittedDiscoveryRun,
-  type SubmittedDiscoveryRunInput,
-} from "./persist-submitted-discovery-run";
 export {
   promoteInventoryEntities,
   generateProductId,
