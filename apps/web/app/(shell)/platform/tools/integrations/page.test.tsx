@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const { mockCount } = vi.hoisted(() => ({
+const { mockCount, mockOrgFindFirst, mockGetMatrixByOrg } = vi.hoisted(() => ({
   mockCount: vi.fn(),
+  mockOrgFindFirst: vi.fn(),
+  mockGetMatrixByOrg: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -10,8 +12,20 @@ vi.mock("@dpf/db", () => ({
     integrationCredential: {
       count: mockCount,
     },
+    organization: {
+      findFirst: mockOrgFindFirst,
+    },
   },
 }));
+
+vi.mock("@/lib/actions/integration-coverage", () => ({
+  getMatrixByOrg: mockGetMatrixByOrg,
+}));
+
+beforeEach(() => {
+  mockOrgFindFirst.mockResolvedValue({ id: "org-test" });
+  mockGetMatrixByOrg.mockResolvedValue([]);
+});
 
 describe("EnterpriseIntegrationsPage", () => {
   it("surfaces the Facebook Pages card on the native integrations landing page", async () => {
@@ -56,6 +70,16 @@ describe("EnterpriseIntegrationsPage", () => {
     expect(html).toContain("Instagram Business");
     expect(html).toContain("Local Visual Presence");
     expect(html).toContain("/platform/tools/integrations/instagram-business");
+  });
+
+  it("renders the db-backed integration coverage matrix section", async () => {
+    mockCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+
+    const { default: EnterpriseIntegrationsPage } = await import("./page");
+    const html = renderToStaticMarkup(await EnterpriseIntegrationsPage());
+
+    expect(html).toContain("Integration Coverage Matrix");
+    expect(html).toContain("No integration coverage rows configured");
   });
 
   it("surfaces the employee-work integration coverage matrix", async () => {
