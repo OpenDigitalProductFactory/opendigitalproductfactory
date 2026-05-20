@@ -393,6 +393,25 @@ export function deriveBuildStudioWorkflowAction({
       });
     }
 
+    // Sandbox launch failed before writing any task results — exec state is
+    // "failed" but there is nothing to resume; only a clean retry will work.
+    const execFailed = build.buildExecState?.step === "failed";
+    const hasNoResults = concernState.taskResults.tasks.length === 0;
+    if (execFailed && hasNoResults) {
+      return {
+        kind: "retry-build",
+        title: "Sandbox Launch Failed",
+        message:
+          "The sandbox container could not be started before any implementation work began. Retry to attempt a fresh sandbox launch.",
+        primaryLabel: "Retry Sandbox Launch",
+        targetPhase: null,
+        disabledReason: null,
+        coworkerLabel: "Diagnose with coworker",
+        coworkerPrompt:
+          "The sandbox failed to start before any tasks ran. Check the last build execution error and tell me whether a plain retry is safe or whether the build plan or sandbox config needs to change first.",
+      };
+    }
+
     return {
       kind: "advance-phase",
       title: "Ready for Verification",
