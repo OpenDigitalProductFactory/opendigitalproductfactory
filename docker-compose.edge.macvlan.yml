@@ -1,0 +1,103 @@
+# DPF Edge Node — macvlan/ipvlan overlay (Linux only).
+#
+# Optional alternative to the `linux-host-network` profile in
+# docker-compose.edge.yml. Use this when you want the Edge Node to
+# appear as its own first-class device on the LAN (own MAC, own IP
+# from DHCP, fully ARP-discoverable from peer devices) instead of
+# sharing the host's network namespace.
+#
+# When to choose macvlan vs host networking:
+#   - Host networking is simpler and the documented default. The
+#     container shares the host's NICs, ARP table, and routes. Trivial
+#     to reach the Authority Core at localhost:3000.
+#   - macvlan gives you LAN-level isolation between the host and the
+#     edge node. Useful when the edge node will probe / interact with
+#     LAN devices in ways you don't want attributed to the host.
+#   - macvlan is also the right call when something else on the host
+#     already owns the broadcast domain (e.g. another container with
+#     network_mode: host bound to port 53 or 67).
+#
+# Hard constraints:
+#   - LINUX ONLY. Docker Desktop on Windows/macOS attaches macvlan to
+#     the WSL2/LinuxKit VM's virtual NIC, not the physical host NIC.
+#     The result is a macvlan with no path to the real LAN. Use the
+#     `linux-host-network` profile + WSL mirrored mode on Windows;
+#     use the Mode 4 native binary on macOS.
+#   - The parent NIC must support promiscuous mode. Most wired NICs
+#     do. Most consumer Wi-Fi cards do NOT, and most consumer APs
+#     filter by authenticated MAC anyway — macvlan over Wi-Fi
+#     usually fails silently. ipvlan (single MAC, multiple IPs) is
+#     the Wi-Fi-compatible variant; this overlay uses ipvlan L2 mode
+#     by default for that reason.
+#   - macvlan/ipvlan children CANNOT talk back to their parent host
+#     by design (kernel forbids it). If your edge node needs to
+#     reach the Authority Core on the same host, see the "host-talk
+#     workaround" section in
+#     docs/edge-node/macvlan-deployment.md.
+#
+# Spec: docs/superpowers/specs/2026-05-20-edge-node-deployment-matrix.md
+#   § 5 macvlan on Linux — when it's the right call
+#
+# ─── Usage ──────────────────────────────────────────────────────────
+#
+# 1. Identify your LAN's CIDR and gateway (`ip addr`, `ip route`).
+# 2. Pick an IP range INSIDE that subnet but OUTSIDE your DHCP pool —
+#    a typical home setup might use 192.168.0.0/24 with DHCP pool
+#    192.168.0.100-200; reserve 192.168.0.50 for the edge node.
+# 3. Edit `lan_macvlan.driver_opts.parent` below to match your real
+#    NIC name (`enp3s0`, `eth0`, `eno1`, etc.) — see `ip link`.
+# 4. Edit `lan_macvlan.ipam.config[0].subnet` and `.gateway` to your
+#    LAN values.
+# 5. Edit `edge-node-macvlan.networks.lan_macvlan.ipv4_address` to
+#    the reserved IP you picked.
+# 6. Bring up:
+#      docker compose -f docker-compose.yml \
+#                     -f docker-compose.linux.yml \
+#                     -f docker-compose.edge.macvlan.yml \
+#                     --profile macvlan up -d edge-node-macvlan
+
+services:
+  edge-node-macvlan:
+    profiles:
+      - macvlan
+    image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/edge-node/Dockerfile
+    pull_policy: missing
+    restart: unless-stopped
+    environment:
+      # In macvlan mode the container has its own IP on the LAN, so
+      # the Authority must be reachable by that IP — typically the
+      # host's LAN address. Set DPF_AUTHORITY_URL in .env to match,
+      # e.g. http://192.168.0.10:3000.
+      DPF_AUTHORITY_URL: ${DPF_AUTHORITY_URL:-http://host.docker.internal:3000}
+      DPF_BOOTSTRAP_TOKEN: ${DPF_BOOTSTRAP_TOKEN:-}
+      DPF_EDGE_NODE_NAME: ${DPF_EDGE_NODE_NAME:-edge-node-macvlan}
+      DPF_INSTALL_MODE: ${DPF_INSTALL_MODE:-container-host}
+      DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
+    volumes:
+      - edge_node_state_macvlan:/var/lib/dpf-edge-node
+    networks:
+      lan_macvlan:
+        # Reserve an IP inside your LAN subnet but outside the DHCP
+        # pool. The compose comment block above explains how to pick.
+        ipv4_address: 192.168.0.50
+
+networks:
+  lan_macvlan:
+    driver: ipvlan
+    driver_opts:
+      # ipvlan L2 is Wi-Fi-compatible (single MAC, multiple IPs).
+      # If you're on wired Ethernet and want a separate MAC for the
+      # edge node, change `driver: ipvlan` above to `driver: macvlan`
+      # and remove the ipvlan_mode line.
+      parent: eth0
+      ipvlan_mode: l2
+    ipam:
+      config:
+        - subnet: 192.168.0.0/24
+          gateway: 192.168.0.1
+
+volumes:
+  edge_node_state_macvlan:
