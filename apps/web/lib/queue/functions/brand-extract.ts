@@ -56,16 +56,24 @@ export async function runBrandExtraction(input: RunBrandExtractionInput): Promis
   }
 
   try {
-    // Mark TaskRun working (idempotent; submitted is the initial envelope state).
-    await prisma.taskRun.update({
-      where: { taskRunId: input.taskRunId },
-      data: { status: "working", startedAt: new Date() },
-    });
+    // BI-4ab6be39 — sanctioned entry point for the working transition.
+    // markTaskRunWorking sets lastHeartbeatAt atomically so the watchdog's
+    // "never_started" branch doesn't false-positive between transition and
+    // first emit().
+    const { markTaskRunWorking } = await import("@/lib/observability/heartbeat");
+    await markTaskRunWorking(input.taskRunId);
   } catch {
     // Best-effort.
   }
 
   const emit = async (progress: { stage: string; message: string; percent: number }): Promise<void> => {
+    // BI-4ab6be39 — every progress emission is a natural heartbeat boundary.
+    try {
+      const { heartbeat } = await import("@/lib/observability/heartbeat");
+      await heartbeat(input.taskRunId);
+    } catch {
+      // Best-effort.
+    }
     await pushThreadProgress(input.threadId, input.taskRunId, {
       type: "brand:extract.progress",
       taskRunId: input.taskRunId,

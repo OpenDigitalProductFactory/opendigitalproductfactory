@@ -783,6 +783,18 @@ export async function runAgenticLoop(params: {
       break;
     }
 
+    // BI-4ab6be39 — cooperative heartbeat. If the row was canceled elsewhere
+    // (status != "working"), heartbeat returns false; we treat that as a
+    // cooperative-cancel signal and break out of the loop.
+    if (taskRunId) {
+      const { heartbeat } = await import("@/lib/observability/heartbeat");
+      const alive = await heartbeat(taskRunId);
+      if (!alive) {
+        console.log(`[agentic-loop] heartbeat reports row no longer working at iteration ${iteration} — breaking`);
+        break;
+      }
+    }
+
     // No artificial inference call cap. The loop exits when the model responds with
     // text-only (natural completion). Runaway protection comes from:
     // - Sandbox circuit breaker (2 failures → immediate abort)

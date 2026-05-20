@@ -65,11 +65,15 @@ export function buildFailedState(
  */
 export async function runBuildPipeline(params: {
   buildId: string;
+  /** Business taskRunId for BI-4ab6be39 heartbeat emission. Optional — older
+   * call sites may not have one in scope; the pipeline degrades gracefully
+   * (no heartbeat = watchdog flags after the build-phase threshold). */
+  taskRunId?: string;
   existingState: BuildExecutionState | null;
   updateState: (state: BuildExecutionState) => Promise<void>;
   emit: (event: AgentEvent) => void;
 }): Promise<BuildExecutionState> {
-  const { buildId, existingState, updateState, emit } = params;
+  const { buildId, taskRunId, existingState, updateState, emit } = params;
 
   const resumeStep = getResumeStep(existingState);
 
@@ -99,6 +103,12 @@ export async function runBuildPipeline(params: {
         const advanced = nextStep(step);
         state = { ...state, step: advanced ?? step, retryCount: 0 };
         await updateState(state);
+        // BI-4ab6be39 — heartbeat at the step-transition boundary (only
+        // when a taskRunId was provided by the caller).
+        if (taskRunId) {
+          const { heartbeat } = await import("@/lib/observability/heartbeat");
+          await heartbeat(taskRunId);
+        }
         break; // step succeeded — move on
       } catch (err) {
         attempt++;

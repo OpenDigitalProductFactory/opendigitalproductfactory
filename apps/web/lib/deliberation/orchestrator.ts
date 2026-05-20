@@ -430,6 +430,12 @@ export async function orchestrateDeliberation(
   const branchNodeIds: string[] = [];
 
   for (const p of planned) {
+    // BI-4ab6be39 — heartbeat at deliberation branch boundary. taskRunId here
+    // is the business id resolved earlier in this function.
+    if (taskRunId) {
+      const { heartbeat } = await import("@/lib/observability/heartbeat");
+      await heartbeat(taskRunId);
+    }
     const { nodeType, workerRole } = mapRoleToNode(p.role);
     const envelope = computeBranchAuthorityEnvelope(
       input.parentAuthorityScope ?? [],
