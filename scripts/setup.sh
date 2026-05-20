@@ -154,6 +154,78 @@ step "Seeding database"
 pnpm db:seed
 ok "Database seeded with roles, agents, and default admin user"
 
+# ── Edge Node bootstrap ──────────────────────────────────────────────────────
+# Mirrors install-dpf.sh's auto-approve flow for contributors. Mints a
+# single-use bootstrap token, wires it into .env, force-recreates the
+# edge-node service so it enrolls. Spec § Approval policy permits the local
+# installer to auto-approve the host's own Edge Node.
+#
+# Skip if DPF_SKIP_EDGE_BOOTSTRAP=1 — handy when running setup.sh against a
+# host that already has an enrolled Edge Node and the operator just wants
+# to refresh deps / migrations.
+if [ "${DPF_SKIP_EDGE_BOOTSTRAP:-0}" != "1" ]; then
+  step "Edge Node bootstrap"
+
+  # Bring up the Edge Node container alongside whatever overlay is in use.
+  # docker-compose.yml + docker-compose.edge.yml is the minimum chain.
+  EDGE_COMPOSE_ARGS=("-f" "docker-compose.yml" "-f" "docker-compose.edge.yml")
+
+  # The portal must be reachable for the token mint (Prisma → Postgres) to
+  # succeed. We brought up Postgres/Neo4j/Qdrant above but not the portal,
+  # so do that now (best-effort; warns instead of failing).
+  if docker compose "${EDGE_COMPOSE_ARGS[@]}" up -d portal edge-node >/dev/null 2>&1; then
+    HEALTH_URL="http://localhost:3000/api/health"
+    HEALTH_OK=0
+    for _ in $(seq 1 60); do
+      if curl --silent --max-time 5 --fail "$HEALTH_URL" -o /dev/null 2>/dev/null; then
+        HEALTH_OK=1
+        break
+      fi
+      sleep 5
+    done
+
+    if [ "$HEALTH_OK" = "1" ]; then
+      # Run the token-issuing script inside the portal container instead of
+      # via host pnpm. The container always has a Prisma client that matches
+      # the just-migrated schema, and consumer installs without host Node/pnpm
+      # still reach the same code path.
+      PORTAL_CONTAINER="$(docker compose "${EDGE_COMPOSE_ARGS[@]}" ps -q portal 2>/dev/null | head -1)"
+      if [ -z "$PORTAL_CONTAINER" ]; then PORTAL_CONTAINER="dpf-portal-1"; fi
+      if EDGE_TOKEN="$(docker exec "$PORTAL_CONTAINER" sh -c \
+           'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' \
+           2>/dev/null | tail -1)"; then
+        if [ -n "$EDGE_TOKEN" ] && [[ "$EDGE_TOKEN" == dpfboot_* ]]; then
+          if grep -q "^DPF_BOOTSTRAP_TOKEN=" .env 2>/dev/null; then
+            dpf_sed_inplace "s|^DPF_BOOTSTRAP_TOKEN=.*|DPF_BOOTSTRAP_TOKEN=$EDGE_TOKEN|" .env
+          else
+            printf '\n# Edge Node bootstrap token -- installer-issued, auto-approve.\n' >> .env
+            printf 'DPF_BOOTSTRAP_TOKEN=%s\n' "$EDGE_TOKEN" >> .env
+          fi
+          if ! grep -q "^DPF_EDGE_NODE_NAME=" .env 2>/dev/null; then
+            printf 'DPF_EDGE_NODE_NAME=%s\n' "${HOSTNAME:-$(hostname 2>/dev/null || echo edge-node-local)}" >> .env
+          fi
+
+          if docker compose "${EDGE_COMPOSE_ARGS[@]}" up -d --no-deps --force-recreate edge-node >/dev/null 2>&1; then
+            ok "Edge Node bootstrapped (auto-approve token wired into .env)"
+          else
+            warn "edge-node container restart failed; check: docker compose ${EDGE_COMPOSE_ARGS[*]} logs edge-node --tail 50"
+          fi
+        else
+          warn "Bootstrap token output not recognized; skipping Edge Node enrollment."
+          warn "Re-issue via Admin > Platform Development > Edge Nodes."
+        fi
+      else
+        warn "Bootstrap token issuance failed; skipping Edge Node enrollment."
+      fi
+    else
+      warn "Portal did not become healthy within 5 minutes; skipping Edge Node enrollment."
+      warn "Bring it up later: bash scripts/setup.sh (this step is idempotent)."
+    fi
+  else
+    warn "docker compose up -d portal edge-node failed; skipping Edge Node enrollment."
+  fi
+fi
+
 # ── Agent rulebook conformance ───────────────────────────────────────────────
 # Per AGENTS.md: every install must ship the canonical AGENTS.md plus pointer
 # files for each supported AI tool. Fail the install if any are missing or
