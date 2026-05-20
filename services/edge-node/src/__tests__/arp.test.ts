@@ -271,4 +271,41 @@ describe("collectArpNeighbors", () => {
     expect(result.items).toEqual([]);
     expect(result.warnings[0]).toMatch(/win32/);
   });
+
+  it("stamps vendor + shortened vendor name from the bundled IEEE OUI dataset", async () => {
+    // FC:A1:83 is one of Amazon Technologies' OUIs in the IEEE registry.
+    // This test exercises the real bundled dataset rather than mocking
+    // the lookup — catches data-file shipping regressions too.
+    const adapter = makeAdapter({
+      platform: () => "linux",
+      readProcNetArp: async () =>
+        [
+          "IP address       HW type     Flags     HW address            Mask     Device",
+          "192.168.0.99     0x1         0x2       fc:a1:83:de:ad:be     *        eth0",
+        ].join("\n"),
+    });
+    const result = await collectArpNeighbors(adapter);
+    expect(result.items).toHaveLength(1);
+    const raw = result.items[0]?.rawData as Record<string, unknown>;
+    expect(raw.vendor).toBe("Amazon Technologies Inc.");
+    expect(raw.vendorOui).toBe("FCA183");
+    expect(raw.vendorShort).toBe("Amazon");
+    expect(result.items[0]?.name).toBe("Amazon 192.168.0.99");
+  });
+
+  it("falls back to the generic LAN Host name when the OUI is unknown", async () => {
+    const adapter = makeAdapter({
+      platform: () => "linux",
+      readProcNetArp: async () =>
+        [
+          "IP address       HW type     Flags     HW address            Mask     Device",
+          "192.168.0.50     0x1         0x2       de:ad:be:ef:00:00     *        eth0",
+        ].join("\n"),
+    });
+    const result = await collectArpNeighbors(adapter);
+    expect(result.items[0]?.name).toBe("LAN Host 192.168.0.50");
+    const raw = result.items[0]?.rawData as Record<string, unknown>;
+    expect(raw.vendor).toBeUndefined();
+    expect(raw.vendorOui).toBeUndefined();
+  });
 });

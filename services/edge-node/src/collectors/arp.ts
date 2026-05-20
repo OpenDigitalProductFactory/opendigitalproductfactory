@@ -28,6 +28,7 @@ import { promises as fs } from "node:fs";
 import { execFileSync } from "node:child_process";
 import * as os from "node:os";
 
+import { lookupOui, shortVendor } from "../lib/mac-oui";
 import type { ObservationItem } from "./host-info";
 
 /**
@@ -282,26 +283,44 @@ export async function collectArpNeighbors(
 }> {
   const { entries, warnings } = await readArpCache(adapter);
 
-  const items: ObservationItem[] = entries.map((entry) => ({
-    observedKey: `arp:${entry.ip}`,
-    itemType: "host",
-    name: `LAN Host ${entry.ip}`,
-    // Confidence matches the server-side arp-scan collector (0.70):
-    // ARP cache is a reasonable but not authoritative signal — it
-    // tells us the kernel resolved the IP recently, not that the
-    // host is currently up. nmap/SNMP active checks raise confidence
-    // when they confirm in C2/C3.
-    confidence: 0.7,
-    rawData: {
-      address: entry.ip,
-      mac: entry.mac,
-      iface: entry.iface,
-      osiLayer: 3,
-      osiLayerName: "network",
-      protocolFamily: "ipv4",
-      discoveredVia: "arp_table",
-    },
-  }));
+  const items: ObservationItem[] = entries.map((entry) => {
+    // Stamp the IEEE-registered manufacturer on every ARP item. This
+    // is what turns lines like "LAN Host 192.168.0.42" into something
+    // an operator can actually read — "Amazon Technologies Inc.",
+    // "Reolink Innovation Limited", etc. The lookup is local-only;
+    // no DNS, no HTTP, nothing leaves the host.
+    const oui = lookupOui(entry.mac);
+    const displayName = oui
+      ? `${shortVendor(oui.vendor)} ${entry.ip}`
+      : `LAN Host ${entry.ip}`;
+    return {
+      observedKey: `arp:${entry.ip}`,
+      itemType: "host",
+      name: displayName,
+      // Confidence matches the server-side arp-scan collector (0.70):
+      // ARP cache is a reasonable but not authoritative signal — it
+      // tells us the kernel resolved the IP recently, not that the
+      // host is currently up. nmap/SNMP active checks raise confidence
+      // when they confirm in C2/C3.
+      confidence: 0.7,
+      rawData: {
+        address: entry.ip,
+        mac: entry.mac,
+        iface: entry.iface,
+        osiLayer: 3,
+        osiLayerName: "network",
+        protocolFamily: "ipv4",
+        discoveredVia: "arp_table",
+        ...(oui
+          ? {
+              vendor: oui.vendor,
+              vendorOui: oui.oui,
+              vendorShort: shortVendor(oui.vendor),
+            }
+          : {}),
+      },
+    };
+  });
 
   return { items, relationships: [], warnings };
 }
