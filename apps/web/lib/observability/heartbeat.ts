@@ -21,11 +21,20 @@ import { prisma } from "@dpf/db";
 import { resolveThresholdForTaskRun } from "./threshold-lookup";
 
 export async function heartbeat(taskRunId: string): Promise<boolean> {
-  const result = await prisma.taskRun.updateMany({
-    where: { taskRunId, status: "working" },
-    data: { lastHeartbeatAt: new Date() },
-  });
-  return result.count > 0;
+  // Best-effort. The heartbeat is observability plumbing — a transient DB
+  // hiccup or an incomplete test mock must not crash the long-running loop
+  // that called us. Failure is logged and surfaces as "alive=true" so the
+  // caller doesn't treat it as a cooperative-cancel signal.
+  try {
+    const result = await prisma.taskRun.updateMany({
+      where: { taskRunId, status: "working" },
+      data: { lastHeartbeatAt: new Date() },
+    });
+    return result.count > 0;
+  } catch (err) {
+    console.warn(`[heartbeat] write failed for ${taskRunId}:`, err instanceof Error ? err.message : err);
+    return true;
+  }
 }
 
 export async function markTaskRunWorking(taskRunId: string): Promise<void> {
