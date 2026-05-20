@@ -509,10 +509,12 @@ export function deriveWorkflowStageGuidance({
   phase,
   workflowLabel,
   governedBacklogEnabled,
+  progressVisibility,
 }: StageGuidanceInput): WorkflowStageGuidance {
   const workflowAction = deriveBuildStudioWorkflowAction({
     build,
     governedBacklogEnabled,
+    progressVisibility,
   });
 
   if (
