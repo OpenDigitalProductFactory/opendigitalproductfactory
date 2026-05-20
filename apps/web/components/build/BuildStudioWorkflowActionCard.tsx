@@ -211,15 +211,31 @@ export function BuildStudioWorkflowActionCard({
 
         <div className="flex flex-wrap items-center gap-2">
           {primaryLabel && (
-            <button
-              type="button"
-              onClick={handlePrimaryAction}
-              disabled={!primaryEnabled || pending}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            <span
+              title={!primaryEnabled && action.disabledReason ? action.disabledReason : undefined}
+              className="inline-flex"
             >
-              {pending && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
-              {primaryLabel}
-            </button>
+              <button
+                type="button"
+                onClick={handlePrimaryAction}
+                disabled={!primaryEnabled || pending}
+                aria-disabled={!primaryEnabled || pending}
+                aria-describedby={!primaryEnabled && action.disabledReason ? `${action.kind}-disabled-reason` : undefined}
+                className="inline-flex items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pending && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                {primaryLabel}
+              </button>
+            </span>
+          )}
+          {!primaryEnabled && action.disabledReason && primaryLabel && (
+            <span
+              id={`${action.kind}-disabled-reason`}
+              className="text-[11px] text-[var(--dpf-text-muted)]"
+              role="status"
+            >
+              {action.disabledReason}
+            </span>
           )}
           <button
             type="button"
