@@ -21,17 +21,33 @@
 #
 #      DPF_BOOTSTRAP_TOKEN=dpfedge_xxxxxxxxxxxxxxxx
 #
-# 3. Bring up the Edge Node alongside the portal:
+# 3. Bring up the Edge Node alongside the portal. Pick the profile
+#    that matches your host substrate. The deployment-matrix spec at
+#    docs/superpowers/specs/2026-05-20-edge-node-deployment-matrix.md
+#    explains why each scenario takes its own path:
 #
-#      # Linux (host network — the Edge Node sees host interfaces):
+#      # Linux bare-metal / VM — container shares host network and
+#      # sees real LAN. This is the only host class where the
+#      # container path delivers full discovery fidelity.
 #      docker compose -f docker-compose.yml \
 #                     -f docker-compose.linux.yml \
 #                     -f docker-compose.edge.yml \
-#                     --profile linux-host-network up -d edge-node
+#                     --profile linux-host-network up -d edge-node-host
 #
-#      # Mac / Windows / Docker Desktop (bridge network — the Edge
-#      # Node only sees the compose-internal subnet, so the network
-#      # discovery collector is limited to the Docker bridge):
+#      # Linux operators who want LAN-isolation between the edge node
+#      # and the host: see docker-compose.edge.macvlan.yml overlay
+#      # (Linux only; not for Docker Desktop).
+#
+#      # Docker Desktop (Windows OR macOS) — container can only see
+#      # Docker's internal services network (192.168.65.x), NOT your
+#      # real LAN, EVEN WITH `network_mode: host` AND WSL2 mirrored
+#      # networking enabled. Docker Engine isolates containers from
+#      # the host network on Docker Desktop regardless of compose
+#      # config; verified on Win 11 + WSL 2.6 + Docker Desktop 4.34+.
+#      # The Mode 4 native binary (per the 2026-05-16 ADR) is the
+#      # canonical answer for these hosts. Until that ships, the
+#      # bridge-mode container enrolls + submits host-info but
+#      # discovery is limited to the Docker bridge.
 #      docker compose -f docker-compose.yml \
 #                     -f docker-compose.edge.yml up -d edge-node
 #
@@ -127,20 +143,26 @@ services:
 
   # ─── Linux host-network profile ────────────────────────────────────
   #
-  # Enable this profile on Linux deployments where the Edge Node
-  # needs to discover host-network interfaces, not just the
-  # compose-internal bridge. Activates `network_mode: host` which
-  # disables compose-internal DNS — DPF_AUTHORITY_URL must then
-  # point at a reachable address from the host's perspective
-  # (typically http://localhost:3000 when portal is also on the host,
-  # or the LAN IP when Authority is on another machine).
+  # Linux ONLY. Activates `network_mode: host` so the container shares
+  # the Linux host's network namespace and discovers the real LAN.
+  #
+  # `network_mode: host` disables compose-internal DNS — set
+  # DPF_AUTHORITY_URL to a host-reachable address (typically
+  # http://localhost:3000 when the portal runs on the same host, or
+  # the LAN IP when Authority lives elsewhere).
   #
   #   docker compose ... --profile linux-host-network up -d edge-node-host
   #
-  # macOS / Windows note: Docker Desktop does NOT honor
-  # `network_mode: host` in the way Linux does — the "host" is the
-  # Docker Desktop VM, not the user's machine. Don't enable this
-  # profile on those platforms.
+  # Where this profile does NOT work — verified on 2026-05-20:
+  #   - Docker Desktop on Windows (any version, including Win 11 +
+  #     Docker Desktop 4.34+ + WSL2 mirrored networking). Docker Engine
+  #     isolates containers from the host network with its own services
+  #     bridge (192.168.65.0/24) that mirrored mode does not cross.
+  #   - Docker Desktop on macOS. Same reason; LinuxKit VM has no
+  #     mirrored-mode equivalent either way.
+  # Both host classes should use the Mode 4 native binary per the
+  # 2026-05-16 ADR. See:
+  #   docs/superpowers/specs/2026-05-20-edge-node-deployment-matrix.md
   edge-node-host:
     profiles:
       - linux-host-network
