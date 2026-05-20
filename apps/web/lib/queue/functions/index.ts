@@ -7,6 +7,7 @@ import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-gra
 import { routeWorkItem } from "./route-work-item";
 import { issueReportTriage } from "./issue-report-triage";
 import { agentTaskDispatch } from "./agent-task-dispatch";
+import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { buildReviewVerification } from "./build-review-verification";
@@ -40,6 +41,7 @@ export const allFunctions = [
   routeWorkItem,
   issueReportTriage,
   agentTaskDispatch,
+  taskrunWatchdog,
   evalBackground,
   probeBackground,
   brandExtract,

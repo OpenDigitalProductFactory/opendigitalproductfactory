@@ -142,6 +142,10 @@ export function deriveProjectionSeverityFromTaskState(state: TaskState): Operati
       return "critical";
     case "input-required":
     case "auth-required":
+      // Stalled is recoverable (operator can Retry/Abandon) — treat as
+      // attention-grade, not critical. See BI-4ab6be39 §9.1.
+      return "attention";
+    case "stalled":
       return "attention";
     case "submitted":
     case "working":
