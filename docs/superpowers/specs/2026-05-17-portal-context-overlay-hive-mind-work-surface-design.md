@@ -2,13 +2,19 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft for review |
+| Status | Implemented through Phase 2; A2A child execution dependency remains |
 | Date | 2026-05-17 |
 | Backlog | EP-CAPSULE / BI-7529B658 |
 | Author | Codex + Mark Bodman |
 | Primary audience | Platform architecture, Build Studio, coworker runtime, Work Capsule UX |
 | Related repo areas | `apps/web/components/agent/*`, `apps/web/lib/actions/agent-coworker.ts`, `apps/web/lib/tak/*`, `apps/web/lib/work-capsules/*`, `apps/web/app/(shell)/build/*`, `packages/db/prisma/schema.prisma` |
 | Related artifacts | `2026-05-14-portal-work-capsule-control-harness-design.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-04-29-coworker-execution-adapter-substrate-design.md`, `2026-04-01-phase-handoff-and-human-authority-engagement-design.md` |
+
+## Implementation Note - 2026-05-20
+
+The first implementation branch delivered the `PortalContextEnvelope` projection, Build Studio/Work Control strip and drawer, prompt digest injection, hive recommendations, and broad Work Capsule invalidation. Phase 2 adds explicit Hive tab invocation, child `TaskRun` dedupe, request artifacts, Work Capsule/backlog evidence writes, substantive coworker response artifacts, resolver timeout/source fallback, scoped cache invalidation helpers, and URL-backed Build Studio active-build selection.
+
+The remaining dependency is not the overlay contract itself. It is the existing child-thread dispatch seam: `dispatchAgentThread` is still a placeholder in mainline, so hive invocation can now create durable task/evidence records and open the child thread context, but autonomous child-agent execution still depends on the A2A/team-orchestration runtime landing behind that dispatcher.
 
 ## 1. Purpose
 

@@ -59,6 +59,30 @@ Deferred from this slice:
 
 These are now tracked as `BI-3FCA9CB0` under `EP-CAPSULE`.
 
+## Implementation Status - 2026-05-20 Phase 2
+
+Implemented in branch `feat/portal-context-overlay-phase-2`:
+
+- Added explicit Hive tab invocation from the Portal Context overlay. Candidate rows are now grant-aware action rows that either queue/ask the recommended coworker, show `Needs task`, show `Missing grant`, or show the empty state.
+- Added `invokePortalContextHiveCandidate`, a server action that authenticates the caller, verifies parent `TaskRun` ownership, reuses an existing non-terminal child task for the same parent/context/hive role, or creates a new child `TaskRun` with hive metadata, request artifact, anchored build/capsule/backlog/epic IDs, and child thread linkage.
+- Added backlog and Work Capsule evidence recording for hive invocation requests. The action writes a `hive_invocation_request` `TaskArtifact`, Work Capsule evidence when a capsule anchor exists, and `BacklogItemActivity` when a backlog anchor exists.
+- Persisted substantive coworker responses as `TaskArtifact` records and mirrored them to Work Capsule and backlog evidence when the active portal context has those anchors. Short acknowledgements remain chat-only to avoid noisy evidence.
+- Added partial-envelope fallback around user, principal, organization, route-data, work, evidence, and hive candidate sources. Resolver failures now yield a degraded envelope plus `source_unavailable`; soft timeouts also add `envelope_timeout`.
+- Replaced broad-only invalidation with scoped helpers for build, capsule, thread, user, and task-run tags. Generic callers can still invalidate the broad `portal-context` tag, but build/task mutation points now use entity tags.
+- URL-backed default Build Studio selection now replaces `/build` with `/build?buildId=<active>` after hydration, so the server envelope and coworker runtime can anchor the same active build.
+- Added a small shared `recordPortalContextBacklogEvidence` helper so portal-context evidence writes use the same backlog activity shape from hive and coworker paths.
+
+Verified:
+
+- `pnpm --filter web exec vitest run lib/portal-context/portal-context.test.ts lib/portal-context/prompt-digest.test.ts lib/portal-context/invalidation.test.ts components/portal-context/PortalContextOverlayDrawer.test.tsx components/portal-context/PortalContextStrip.test.tsx components/build/BuildStudioHeaderLayout.test.tsx components/build/work-control/WorkControlPanel.test.tsx lib/actions/portal-context-hive.test.ts lib/actions/agent-coworker-external.test.ts lib/work-capsules/work-capsule-store.test.ts lib/actions/build-governed.test.ts` - 11 files, 69 tests passed.
+- `pnpm --filter web typecheck` - passed.
+- `pnpm --filter web build` - passed. Existing Turbopack/NFT broad-trace warnings remain in backlog/spec search and discovery catalog import traces.
+- Disposable Docker UX verification against the phase-2 image on `localhost:3101` passed for `/build`, URL-backed active build selection, Portal Context strip, overlay drawer, Hive tab, and mobile drawer width. Screenshots: `apps/web/output/playwright/phase2-build-overlay-hive.png`, `apps/web/output/playwright/phase2-build-overlay-hive-mobile.png`.
+
+Remaining dependency:
+
+- The hive action calls the existing `dispatchAgentThread` seam after creating or reusing the child task. That dispatcher is still a placeholder in current mainline code, so this slice makes hive participation durable and visible in `TaskRun`/artifact/evidence records, but full autonomous child-thread execution still depends on the A2A/team-orchestration runtime landing behind that seam.
+
 ## File Structure
 
 Create:

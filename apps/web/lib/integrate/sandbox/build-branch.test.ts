@@ -18,6 +18,15 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain("**/*.tsbuildinfo");
   });
 
+  it("stages baseline files without git add -A so ignored caches do not fail the build start", () => {
+    const command = buildSandboxGitAddCommand();
+
+    expect(command).toContain("git add -u");
+    expect(command).toContain("git ls-files -z --others --exclude-standard -- .");
+    expect(command).toContain("xargs -0 -r git add --");
+    expect(command).not.toContain("git add -A");
+  });
+
   it("prunes previously tracked cache artifacts from the sandbox git index", () => {
     const command = buildSandboxGitPruneTrackedArtifactsCommand();
     expect(command).toContain("git rm -r --cached --ignore-unmatch");

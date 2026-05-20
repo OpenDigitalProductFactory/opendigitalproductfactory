@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSandboxAppsWebCopyCommand,
+  buildDockerExecSandboxCommand,
   buildSandboxDiffForFilesCommand,
   buildSandboxCreateArgs,
   buildSandboxListReleasableFilesCommand,
@@ -110,15 +111,64 @@ describe("prefixSafeWorkspaceCommand", () => {
   });
 });
 
+describe("buildDockerExecSandboxCommand", () => {
+  it("single-quotes the sandbox shell command so substitutions execute inside the sandbox", () => {
+    const command = buildDockerExecSandboxCommand(
+      "dpf-sandbox-1",
+      "branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true) && printf 'branch=%s\\n' \"$branch\"",
+    );
+
+    expect(command).toContain("docker exec 'dpf-sandbox-1' sh -c '");
+    expect(command).toContain("branch=$(git rev-parse --abbrev-ref HEAD");
+    expect(command).toContain("\"$branch\"");
+    expect(command).not.toContain('sh -c "');
+  });
+
+  it("quotes container names and embedded single quotes without breaking command substitution", () => {
+    const command = buildDockerExecSandboxCommand("sandbox'name", "printf 'x' && target=$(pwd)");
+
+    expect(command).toContain("'sandbox'\"'\"'name'");
+    expect(command).toContain("target=$(pwd)");
+    expect(command).toContain("'\"'\"'");
+  });
+});
+
 describe("buildSandboxStageCommand", () => {
   it("stages releasable sandbox changes while excluding caches and generated artifacts", () => {
     const command = buildSandboxStageCommand();
 
-    expect(command).toContain("cd /workspace && git add -A --");
+    expect(command).toContain("cd /workspace");
     expect(command).toContain(":!**/node_modules/**");
     expect(command).toContain(":!**/.next/**");
     expect(command).toContain(":!**/*.tsbuildinfo");
     expect(command).toContain(":!pnpm-lock*");
+    expect(command).toContain(":!packages/db/generated/**");
+  });
+
+  it("does not use git add -A which exits 1 when gitignored directories are present in the working tree", () => {
+    // git add -A errors (exit code 1) on gitignored untracked paths such as
+    // .pnpm-store, node_modules, and packages/db/generated even when those paths
+    // are listed in the exclude pathspecs — crashing the Continue to Release action.
+    const command = buildSandboxStageCommand();
+    expect(command).not.toContain("git add -A");
+  });
+
+  it("uses git add -u to stage tracked modifications without touching gitignored untracked paths", () => {
+    const command = buildSandboxStageCommand();
+    expect(command).toContain("git add -u");
+  });
+
+  it("uses git ls-files --others --exclude-standard to discover new non-gitignored source files", () => {
+    const command = buildSandboxStageCommand();
+    expect(command).toContain("git ls-files");
+    expect(command).toContain("--others");
+    expect(command).toContain("--exclude-standard");
+  });
+
+  it("pipes new-file list through xargs git add to handle any count of new source files", () => {
+    const command = buildSandboxStageCommand();
+    expect(command).toContain("xargs");
+    expect(command).toContain("git add --");
   });
 });
 

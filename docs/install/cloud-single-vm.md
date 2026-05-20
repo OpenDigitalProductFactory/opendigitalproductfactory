@@ -267,6 +267,25 @@ deployment you'll want:
    notification emails, webhook payloads, and Edge Node enrollment
    endpoints.
 
+   Setting `PUBLIC_URL` also activates **canonical-host enforcement**:
+   any request arriving on a non-matching origin (e.g. the raw VM
+   public IP on port 3000) is 301-redirected to `PUBLIC_URL` with a
+   `Clear-Site-Data: "storage"` header. This ensures all users share a
+   single browser origin, so chat history, session state, and UI
+   preferences don't diverge between IP-based and hostname-based access.
+
+   If you need to keep direct LAN/IP access alive after setting a
+   canonical domain (e.g. on-prem admin reaching the VM at its private
+   IP), use `PUBLIC_URL_ALIASES` to allow-list those origins:
+
+   ```
+   PUBLIC_URL_ALIASES=10.0.0.5:3000,dpf.internal
+   ```
+
+   Health-probe endpoints (`/api/health`, `/api/healthz`, `/api/ready`)
+   are excluded from the redirect so load balancer probes hitting the
+   VM directly still succeed.
+
 The cloud-deployment spec covers TLS placement options in detail
 ([§ Public URL and TLS](../superpowers/specs/2026-05-09-cloud-deployment-design.md#public-url-and-tls)).
 

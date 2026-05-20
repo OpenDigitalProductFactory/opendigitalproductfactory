@@ -177,7 +177,7 @@ export function buildSandboxSourceCurrencyProbeCommand(args: {
     `mergeBaseSha=$(git merge-base HEAD ${targetRef} 2>/dev/null || true)`,
     `aheadBehind=$(git rev-list --left-right --count HEAD...${targetRef} 2>/dev/null || true)`,
     `dirty=false`,
-    `if [ -n "$(git status --porcelain --untracked-files=all 2>/dev/null)" ]; then dirty=true; fi`,
+    `if [ -n "$(git status --porcelain --untracked-files=all -- . ${diffExcludes} 2>/dev/null)" ]; then dirty=true; fi`,
     `localSourceChangeCount=`,
     `if [ -n "$mergeBaseSha" ]; then localSourceChangeCount=$(git diff --name-only "$mergeBaseSha"..HEAD -- . ${diffExcludes} 2>/dev/null | wc -l | tr -d ' '); fi`,
     `printf 'branch=%s\\n' "$branch"`,

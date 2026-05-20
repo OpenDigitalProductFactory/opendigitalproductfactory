@@ -69,10 +69,11 @@ function quoteGitPathspec(pathspec: string): string {
 }
 
 export function buildSandboxGitAddCommand(): string {
+  const excludes = SANDBOX_GIT_STAGE_EXCLUDES.map(quoteGitPathspec).join(" ");
   return [
-    "git add -A --",
-    ...SANDBOX_GIT_STAGE_EXCLUDES.map(quoteGitPathspec),
-  ].join(" ");
+    "git add -u",
+    `git ls-files -z --others --exclude-standard -- . ${excludes} | xargs -0 -r git add --`,
+  ].join(" && ");
 }
 
 export function buildSandboxBranchSwitchPrepCommand(workspace: string = WORKSPACE): string {

@@ -20,7 +20,7 @@ import type {
   WorkCapsuleRow,
 } from "./db-types";
 
-type WorkResolution = {
+export type WorkResolution = {
   work: {
     backlogItem: WorkBacklogAnchor | null;
     epic: WorkEpicAnchor | null;

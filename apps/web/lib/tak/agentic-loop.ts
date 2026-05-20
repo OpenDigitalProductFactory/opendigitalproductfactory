@@ -563,21 +563,62 @@ function getPhaseSpecificNudge(executedTools: Array<{ name: string }>): string {
   return "Check your available tools and call the most relevant one now.";
 }
 
+// Review tools succeed at the protocol level (success=true) but can emit
+// data.review.decision === "fail" — a *content* rejection of the artifact
+// produced by an earlier saveBuildEvidence call. Without surfacing that
+// rejection back to the model, it will retry saveBuildEvidence with identical
+// content and the agentic-loop guard will trip after 3 identical calls.
+// See: docs/.../wwmd-mcp-exposure FB-C26D5B50 Ideate loop, 2026-05-19.
+type ReviewResultShape = {
+  review?: { decision?: string; rationale?: string; summary?: string };
+  blocked?: boolean;
+};
+function reviewFailMessage(t: { name: string; result: { success: boolean; data?: Record<string, unknown>; message?: string } }): string | null {
+  if (t.name !== "reviewDesignDoc" && t.name !== "reviewBuildPlan") return null;
+  if (!t.result.success) return null;
+  const data = t.result.data as ReviewResultShape | undefined;
+  const decision = data?.review?.decision;
+  if (decision !== "fail" && !data?.blocked) return null;
+  const detail =
+    data?.review?.rationale
+    ?? data?.review?.summary
+    ?? t.result.message
+    ?? "review rejected the saved artifact";
+  const artifact = t.name === "reviewDesignDoc" ? "design doc" : "build plan";
+  return `Your previous ${artifact} was REJECTED by ${t.name}. Reason: ${detail.slice(0, 200)}. Regenerate the content addressing this specific gap before calling saveBuildEvidence again — submitting identical arguments will be rejected the same way and the run will be stopped.`;
+}
+
 /**
  * Annotate tool descriptions with session-aware hints based on what the agent
  * has already tried. Inspired by Claude Code's dynamic tool description system.
  * Mutates nothing — returns a new array.
  */
-function enrichToolDescriptions(
+export function enrichToolDescriptions(
   toolsForProvider: Array<Record<string, unknown>>,
-  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: { success: boolean; error?: string } }>,
+  executedTools: Array<{ name: string; args?: Record<string, unknown>; result: { success: boolean; error?: string; data?: Record<string, unknown>; message?: string } }>,
 ): Array<Record<string, unknown>> {
   if (executedTools.length === 0) return toolsForProvider;
 
   // Build failure map: tool name → last error. If a tool succeeded after
   // failing, clear the warning — the tool recovered.
   const failures = new Map<string, string>();
+  // Separate veto map for content-level review rejections that target a
+  // different write tool. Stays sticky across subsequent saveBuildEvidence
+  // tool-level successes until a passing review clears it.
+  const reviewVetoes = new Map<string, string>();
   for (const t of executedTools) {
+    const veto = reviewFailMessage(t);
+    if (veto) {
+      reviewVetoes.set("saveBuildEvidence", veto);
+      continue;
+    }
+    // A passing review clears the veto on the corresponding write tool.
+    if ((t.name === "reviewDesignDoc" || t.name === "reviewBuildPlan") && t.result.success) {
+      const data = t.result.data as ReviewResultShape | undefined;
+      if (data?.review?.decision === "pass" && !data?.blocked) {
+        reviewVetoes.delete("saveBuildEvidence");
+      }
+    }
     if (!t.result.success && t.result.error) {
       failures.set(t.name, t.result.error.slice(0, 150));
     } else if (t.result.success) {
@@ -585,17 +626,21 @@ function enrichToolDescriptions(
     }
   }
 
-  if (failures.size === 0) return toolsForProvider;
+  if (failures.size === 0 && reviewVetoes.size === 0) return toolsForProvider;
 
   return toolsForProvider.map((tool) => {
     const name = tool.name as string;
     const lastError = failures.get(name);
-    if (!lastError) return tool;
+    const veto = reviewVetoes.get(name);
+    if (!lastError && !veto) return tool;
 
     const desc = tool.description as string;
+    const warning = veto
+      ? `[REVIEW REJECTION: ${veto}]`
+      : `[WARNING: This tool failed earlier in this session with: "${lastError}". Consider a different approach or different arguments.]`;
     return {
       ...tool,
-      description: `${desc} [WARNING: This tool failed earlier in this session with: "${lastError}". Consider a different approach or different arguments.]`,
+      description: `${desc} ${warning}`,
     };
   });
 }

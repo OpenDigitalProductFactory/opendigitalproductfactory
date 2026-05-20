@@ -37,6 +37,7 @@ import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
 } from "@/lib/work-capsules/build-studio-attachment";
+import { revalidatePortalContextForBuild } from "@/lib/portal-context/invalidation";
 
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
@@ -446,6 +447,7 @@ export async function advanceBuildPhase(
     where: { buildId },
     data: { phase: targetPhase },
   });
+  revalidatePortalContextForBuild(buildId);
 
   // Notify the UI immediately so progress indicators update without waiting for debounce
   try {
@@ -670,6 +672,7 @@ export async function retryBuildExecution(buildId: string): Promise<void> {
       where: { buildId },
       data: { phase: "build" },
     });
+    revalidatePortalContextForBuild(buildId);
   }
 
   // Fire-and-forget retry — picks up from failed step
@@ -896,6 +899,7 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
       },
     },
   });
+  revalidatePortalContextForBuild(buildId);
 
   try {
     if (build.threadId) {
@@ -1297,6 +1301,7 @@ export async function completeBuild(buildId: string): Promise<void> {
     where: { buildId },
     data: { phase: "complete" },
   });
+  revalidatePortalContextForBuild(buildId);
 }
 
 // ─── Create Epic + Backlog Items for a Build ────────────────────────────────
