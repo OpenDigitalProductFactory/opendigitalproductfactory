@@ -94,6 +94,27 @@ function emptySnmpAdapter() {
   };
 }
 
+/**
+ * Default UniFi adapter for sweep tests — no adapters.json present.
+ * The collector returns empty without ever calling fetch, so existing
+ * sweep assertions stay deterministic regardless of the runner's
+ * /etc/dpf-edge/adapters.json contents.
+ */
+function emptyUnifiAdapter() {
+  return {
+    fetch: async () => {
+      throw new Error("emptyUnifiAdapter.fetch must not be called");
+    },
+    configAdapter: {
+      env: {},
+      readFile: () => "",
+      statMode: () => {
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      },
+    },
+  };
+}
+
 function makeApi(submit: AuthorityApiClient["submitDiscoveryRun"]): AuthorityApiClient {
   return {
     submitDiscoveryRun: submit,
@@ -118,6 +139,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
       newRunKey: () => `run_${++runKeyCounter}`,
       now: () => new Date("2026-05-12T12:00:00.000Z"),
     });
@@ -149,6 +171,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -170,6 +193,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     expect(submit.mock.calls[0]![0]).toBe("dpfedge_specifictoken");
@@ -195,6 +219,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     // 2 iterations × 1 submit each (no retry of dropped 413) = 2 total.
@@ -222,6 +247,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -251,6 +277,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -275,6 +302,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
       newRunKey: () => `run_${++counter}`,
     });
 
@@ -301,6 +329,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     // 3 iterations, each tries once, drops, no retry. So 3 calls total.
@@ -333,6 +362,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
       newRunKey: () => `run_${++counter}`,
       maxBufferedSubmissions: 2,
       log,
@@ -363,6 +393,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     // 3 iterations means 3 sleeps at the end of each tick.
@@ -399,6 +430,7 @@ describe("runSweepLoop", () => {
       arpAdapter: emptyArpAdapter(),
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     // Iter 1 + 3 submit; iter 2 throws during collect. → 2 submits.
@@ -430,6 +462,7 @@ describe("runSweepLoop", () => {
       arpAdapter: populatedArpAdapter,
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
@@ -473,6 +506,7 @@ describe("runSweepLoop", () => {
       arpAdapter: failingArpAdapter,
       nmapAdapter: emptyNmapAdapter(),
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
@@ -522,6 +556,7 @@ describe("runSweepLoop", () => {
       arpAdapter: populatedArpAdapter,
       nmapAdapter: populatedNmapAdapter,
       snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
     });
 
     const envelope = submit.mock.calls[0]![1] as Record<string, unknown>;
