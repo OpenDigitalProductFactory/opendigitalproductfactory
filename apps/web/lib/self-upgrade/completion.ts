@@ -1,3 +1,14 @@
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
+
+import { Prisma, prisma } from "@dpf/db";
+
+import { loadSelfUpgradeConfig } from "./config";
+import { notifySelfUpgradeEvent } from "./notification";
+
+const execFile = promisify(execFileCb);
+export const MAX_COMPLETION_ATTEMPTS = 4;
+
 type BuildHeadInput = {
   buildBranch?: string | null;
   gitCommitHashes?: string[] | null;
@@ -30,6 +41,46 @@ type CompletionGit = {
   resolveRef(candidate: string): Promise<string | null>;
   isAncestor(candidateSha: string, productionSha: string): Promise<boolean>;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function getCompletionAttempts(completionEvidence: unknown): number {
+  if (!isRecord(completionEvidence)) return 0;
+  const attempts = completionEvidence.completionAttempts;
+  return typeof attempts === "number" && Number.isInteger(attempts) && attempts > 0
+    ? attempts
+    : 0;
+}
+
+export function buildCompletionFailureUpdate(input: {
+  completionEvidence: unknown;
+  message: string;
+  failedAt?: Date;
+}) {
+  const completionAttempts = getCompletionAttempts(input.completionEvidence) + 1;
+  const exhausted = completionAttempts >= MAX_COMPLETION_ATTEMPTS;
+  const failedAt = input.failedAt ?? new Date();
+  const failureEvidence = {
+    ...(isRecord(input.completionEvidence) ? input.completionEvidence : {}),
+    completionAttempts,
+    lastCompletionError: input.message.slice(0, 12000),
+    lastCompletionErrorAt: failedAt.toISOString(),
+  } satisfies Prisma.InputJsonObject;
+
+  return {
+    completionAttempts,
+    exhausted,
+    data: {
+      status: exhausted ? "failed" : "completing",
+      reason: exhausted ? "completion-retries-exhausted" : "completion-failed",
+      failureLog: input.message.slice(0, 12000),
+      completedAt: exhausted ? failedAt : undefined,
+      completionEvidence: failureEvidence,
+    },
+  };
+}
 
 export function resolveBuildHeadCandidates(build: BuildHeadInput): string[] {
   const candidates: string[] = [];
@@ -148,7 +199,13 @@ export async function completeSelfUpgradeRun(runId: string): Promise<{
 }> {
   const run = await prisma.selfUpgradeRun.findUnique({
     where: { runId },
-    select: { runId: true, status: true, targetSha: true, deployedSha: true },
+    select: {
+      runId: true,
+      status: true,
+      targetSha: true,
+      deployedSha: true,
+      completionEvidence: true,
+    },
   });
 
   if (!run) return { completedBuildIds: [], skipped: true, reason: "run-not-found" };
@@ -197,16 +254,26 @@ export async function completeSelfUpgradeRun(runId: string): Promise<{
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const failure = buildCompletionFailureUpdate({
+      completionEvidence: run.completionEvidence,
+      message,
+    });
     await prisma.selfUpgradeRun.update({
       where: { runId },
-      data: {
-        status: "completing",
-        reason: "completion-failed",
-        failureLog: message.slice(0, 12000),
-      },
+      data: failure.data,
     });
-    await notifySelfUpgradeEvent({ type: "failed", runId, reason: message });
-    throw err;
+    await notifySelfUpgradeEvent({
+      type: "failed",
+      runId,
+      reason: failure.exhausted
+        ? `Completion failed ${failure.completionAttempts} times; self-upgrade marked failed: ${message}`
+        : `Completion attempt ${failure.completionAttempts} failed; will retry on the next sweep: ${message}`,
+    });
+    return {
+      completedBuildIds: [],
+      skipped: true,
+      reason: failure.exhausted ? "completion-retries-exhausted" : "completion-failed",
+    };
   }
 }
 
@@ -228,12 +295,3 @@ export async function completePendingSelfUpgradeRuns(limit = 5): Promise<{
 
   return { processedRunIds };
 }
-import { execFile as execFileCb } from "node:child_process";
-import { promisify } from "node:util";
-
-import { Prisma, prisma } from "@dpf/db";
-
-import { loadSelfUpgradeConfig } from "./config";
-import { notifySelfUpgradeEvent } from "./notification";
-
-const execFile = promisify(execFileCb);

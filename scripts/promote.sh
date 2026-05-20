@@ -35,6 +35,7 @@ SELF_UPGRADE_TARGET_SHA="${SELF_UPGRADE_TARGET_SHA:-}"
 SELF_UPGRADE_REMOTE="${DPF_SELF_UPGRADE_REMOTE:-origin}"
 SELF_UPGRADE_BRANCH="${DPF_SELF_UPGRADE_BRANCH:-main}"
 SELF_UPGRADE_HOST_SOURCE="${DPF_HOST_SOURCE_PATH:-/host-source}"
+SELF_UPGRADE_HEALTH_URL="${DPF_SELF_UPGRADE_HEALTH_URL:-http://127.0.0.1:3000/api/health}"
 
 log() { echo "[promoter] $(date +%H:%M:%S) $1"; }
 
@@ -212,7 +213,7 @@ run_self_upgrade() {
   HEALTHY=false
   for i in $(seq 1 "$HEALTH_RETRIES"); do
     log "  Health check attempt $i/$HEALTH_RETRIES..."
-    if docker exec "$PORTAL_CONTAINER" wget -qO /dev/null -T 10 http://127.0.0.1:3000/api/health 2>/dev/null; then
+    if docker exec "$PORTAL_CONTAINER" wget -qO /dev/null -T 10 "$SELF_UPGRADE_HEALTH_URL" 2>/dev/null; then
       HEALTHY=true
       break
     fi

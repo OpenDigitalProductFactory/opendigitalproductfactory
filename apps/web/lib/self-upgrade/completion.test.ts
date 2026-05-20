@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildCompletionEvidence,
+  buildCompletionFailureUpdate,
+  getCompletionAttempts,
+  MAX_COMPLETION_ATTEMPTS,
   resolveBuildHeadCandidates,
   completeMergedShipBuilds,
 } from "./completion";
@@ -33,6 +36,46 @@ describe("buildCompletionEvidence", () => {
       confirmedAt: "2026-05-20T03:00:00.000Z",
       selfUpgradeRunId: "SUR-123",
     });
+  });
+});
+
+describe("completion failure retry state", () => {
+  it("increments completion attempts without failing the run until the cap", () => {
+    const first = buildCompletionFailureUpdate({
+      completionEvidence: { reason: "update-available" },
+      message: "git unavailable",
+      failedAt: new Date("2026-05-20T03:00:00Z"),
+    });
+
+    expect(first.completionAttempts).toBe(1);
+    expect(first.exhausted).toBe(false);
+    expect(first.data).toEqual(expect.objectContaining({
+      status: "completing",
+      reason: "completion-failed",
+      failureLog: "git unavailable",
+      completionEvidence: expect.objectContaining({
+        reason: "update-available",
+        completionAttempts: 1,
+        lastCompletionError: "git unavailable",
+        lastCompletionErrorAt: "2026-05-20T03:00:00.000Z",
+      }),
+    }));
+  });
+
+  it("marks the run failed when completion attempts reach the cap", () => {
+    const final = buildCompletionFailureUpdate({
+      completionEvidence: { completionAttempts: MAX_COMPLETION_ATTEMPTS - 1 },
+      message: "still unavailable",
+      failedAt: new Date("2026-05-20T04:00:00Z"),
+    });
+
+    expect(getCompletionAttempts(final.data.completionEvidence)).toBe(MAX_COMPLETION_ATTEMPTS);
+    expect(final.exhausted).toBe(true);
+    expect(final.data).toEqual(expect.objectContaining({
+      status: "failed",
+      reason: "completion-retries-exhausted",
+      completedAt: new Date("2026-05-20T04:00:00Z"),
+    }));
   });
 });
 

@@ -11,7 +11,7 @@ type SelfUpgradeNotification = {
   containerName?: string;
 };
 
-function notificationMessage(event: SelfUpgradeNotification): string {
+export function notificationMessage(event: SelfUpgradeNotification): string {
   if (event.type === "started") {
     return `Portal self-upgrade ${event.runId} started from ${event.currentSha?.slice(0, 12) ?? "unknown"} to ${event.targetSha?.slice(0, 12) ?? "unknown"}.`;
   }
@@ -33,5 +33,8 @@ export async function notifySelfUpgradeEvent(event: SelfUpgradeNotification): Pr
       subjectId: event.runId ?? null,
       message: notificationMessage(event),
     },
-  }).catch(() => undefined);
+  }).catch((err: unknown) => {
+    // Upgrade state is already persisted elsewhere; notification failure must not mask it.
+    console.warn("[self-upgrade] notification write failed:", err);
+  });
 }
