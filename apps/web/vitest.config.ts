@@ -18,6 +18,14 @@ export default defineConfig({
     globals: false,
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
+    // Each test file gets its own worker process. Without forks, React 18's
+    // scheduler can queue a setImmediate (Immediate.performWorkUntilDeadline)
+    // that fires after jsdom teardown, throwing "window is not defined" and
+    // failing the run even when all assertions pass. Process exit on forks
+    // disposes the pending message-channel work cleanly.
+    // (Surfaced 2026-05-19 in BuildStudioHeaderLayout.test.tsx CI runs;
+    // local always passed because timing differs.)
+    pool: "forks",
     server: {
       deps: {
         // Auth.js imports the Next server runtime by extensionless subpath.
