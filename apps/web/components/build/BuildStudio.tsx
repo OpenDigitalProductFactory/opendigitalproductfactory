@@ -635,6 +635,7 @@ export function BuildStudio({
                       build={activeBuild}
                       workflowLabel={activeLifecycleLabel}
                       governedBacklogEnabled={governedBacklogEnabled}
+                      progressVisibility={progressVisibility}
                     />
                   </div>
                 )}

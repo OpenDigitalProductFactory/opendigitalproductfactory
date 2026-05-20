@@ -16,6 +16,7 @@ import "./process-graph.css";
 
 import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
+import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import { buildDependencyGraph } from "@/lib/integrate/task-dependency-graph";
 import {
   buildPhaseGraph,
@@ -58,13 +59,14 @@ type Props = {
   build: FeatureBuildRow;
   workflowLabel: string | null;
   governedBacklogEnabled: boolean;
+  progressVisibility?: BuildProgressVisibility | null;
 };
 
 type AnimatedProcessEdge = ProcessEdge & { type: "animatedFlow" };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
-export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: Props) {
+export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, progressVisibility }: Props) {
   const reactFlowRef = useRef<ReactFlowInstance<Node, AnimatedProcessEdge> | null>(null);
 
   // ─── Live running-task state via DOM CustomEvents ──────────────────────
@@ -276,6 +278,7 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled }: P
           status={getPhaseNodeStatus(inspectedPhase, build)}
           workflowLabel={workflowLabel}
           governedBacklogEnabled={governedBacklogEnabled}
+          progressVisibility={progressVisibility}
           onClose={handleInspectorClose}
         />
       )}

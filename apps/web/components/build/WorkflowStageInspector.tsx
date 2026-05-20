@@ -5,6 +5,7 @@ import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
 import type { NodeStatus } from "@/lib/build/process-graph-builder";
 import { normalizeTaskResults } from "@/lib/build/task-results";
+import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { deriveWorkflowStageGuidance } from "./build-studio-workflow-actions";
 
@@ -14,6 +15,7 @@ type Props = {
   status: NodeStatus;
   workflowLabel: string | null;
   governedBacklogEnabled: boolean;
+  progressVisibility?: BuildProgressVisibility | null;
   onClose: () => void;
 };
 
@@ -93,6 +95,7 @@ export function WorkflowStageInspector({
   status,
   workflowLabel,
   governedBacklogEnabled,
+  progressVisibility,
   onClose,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -104,6 +107,7 @@ export function WorkflowStageInspector({
     phase,
     workflowLabel,
     governedBacklogEnabled,
+    progressVisibility,
   });
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {

@@ -207,7 +207,7 @@ function extractRootCauseSummary(stdout: string, stderr: string, fallback: Build
   return firstLine?.slice(0, 200) ?? fallback;
 }
 
-function lineMatchesFailureAxis(line: string, axis: BuildFailureAxis): boolean {
+export function lineMatchesFailureAxis(line: string, axis: BuildFailureAxis): boolean {
   const normalized = line.toLowerCase();
   switch (axis) {
     case "usage-limit":
@@ -225,11 +225,13 @@ function lineMatchesFailureAxis(line: string, axis: BuildFailureAxis): boolean {
     case "provider-unavailable":
       return normalized.includes("provider") && normalized.includes("unavailable");
     case "test-failure":
-      return normalized.includes("test") || normalized.includes("fail");
+      return normalized.includes("test")
+        && (/\b(?:fail(?:ed|ing|ure|ures|s)?|error(?:s)?)\b/.test(normalized)
+          || normalized.includes("\u00d7"));
     case "typecheck-failure":
-      return normalized.includes("typecheck") || normalized.includes("typescript");
+      return normalized.includes("typecheck") || /\berror\s+ts\d{4}\b/.test(normalized);
     case "out-of-scope-noise":
-      return normalized.includes("out-of-scope") || normalized.includes("workspace");
+      return normalized.includes("out-of-scope");
     case "unknown":
       return false;
     default:

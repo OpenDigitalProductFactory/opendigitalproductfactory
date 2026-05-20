@@ -656,4 +656,120 @@ describe("deriveWorkflowStageGuidance", () => {
     expect(guidance.workflowAction.kind).toBe("run-review-verification");
     expect(guidance.nextApproval).toContain("sandbox evidence");
   });
+
+  it("matches the top-card failureAxis when projection data is provided (single-narrator invariant)", () => {
+    const build = makeBuild({
+      phase: "build",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      taskResults: {
+        completedTasks: 7,
+        totalTasks: 9,
+        tasks: [
+          { title: "Update provider page", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "Task completed with no output." },
+          { title: "Run verification", specialist: "qa-engineer", outcome: "BLOCKED", artifactSummary: "Task completed with no output." },
+        ],
+        timestamp: "2026-05-19T17:23:40.189Z",
+      } as unknown as FeatureBuildRow["taskResults"],
+    });
+    const progressVisibility = {
+      buildId: "FB-9B19098C",
+      generatedAt: "2026-05-19T19:45:00.000Z",
+      statusHeading: {
+        operatorAction: "Click Resume to re-execute 2 blocked tasks",
+        failureAxis: "usage-limit",
+      },
+      progress: {
+        primary: {
+          source: "db-task-results",
+          completed: 7,
+          total: 9,
+          observedAt: "2026-05-19T17:23:40.189Z",
+        },
+        conflicts: [],
+      },
+      tasks: {
+        completedTasks: 7,
+        totalTasks: 9,
+        source: {
+          source: "db-task-results",
+          completed: 7,
+          total: 9,
+          observedAt: "2026-05-19T17:23:40.189Z",
+        },
+        tasks: [
+          {
+            taskIndex: 0,
+            title: "Update provider page",
+            specialist: "frontend-engineer",
+            outcome: "BLOCKED",
+            durationMs: null,
+            summary: "Task completed with no output.",
+            files: [],
+          },
+          {
+            taskIndex: 1,
+            title: "Run verification",
+            specialist: "qa-engineer",
+            outcome: "BLOCKED",
+            durationMs: null,
+            summary: "Task completed with no output.",
+            files: [],
+          },
+        ],
+      },
+      staleChatSnapshots: [],
+      sandbox: null,
+      dispatchHistory: [],
+      verification: null,
+      quietAgent: {
+        quiet: true,
+        minutesQuiet: 135,
+        lastObservableSignalAt: "2026-05-19T17:23:40.189Z",
+      },
+    } satisfies BuildProgressVisibility;
+
+    const topCardAction = deriveBuildStudioWorkflowAction({
+      build,
+      governedBacklogEnabled: true,
+      progressVisibility,
+    });
+    const guidance = deriveWorkflowStageGuidance({
+      build,
+      phase: "build",
+      workflowLabel: "Build",
+      governedBacklogEnabled: true,
+      progressVisibility,
+    });
+
+    expect(guidance.workflowAction.failureAxis).toBe("usage-limit");
+    expect(guidance.workflowAction.failureAxis).toBe(topCardAction.failureAxis);
+    expect(guidance.title).toBe(topCardAction.title);
+    expect(guidance.title).toBe("Click Resume to re-execute 2 blocked tasks");
+  });
+
+  it("falls back to build-row derivation when projection is absent (graceful degradation)", () => {
+    const build = makeBuild({
+      phase: "build",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      taskResults: {
+        completedTasks: 0,
+        totalTasks: 1,
+        tasks: [
+          { title: "Update provider page", specialist: "frontend-engineer", outcome: "BLOCKED", artifactSummary: "ERROR: You've hit your usage limit." },
+        ],
+        timestamp: "2026-05-19T17:23:40.189Z",
+      } as unknown as FeatureBuildRow["taskResults"],
+    });
+
+    const guidance = deriveWorkflowStageGuidance({
+      build,
+      phase: "build",
+      workflowLabel: "Build",
+      governedBacklogEnabled: true,
+      progressVisibility: null,
+    });
+
+    expect(guidance.workflowAction.kind).toBe("resume-implementation");
+    expect(guidance.workflowAction.failureAxis).toBe("usage-limit");
+  });
 });
