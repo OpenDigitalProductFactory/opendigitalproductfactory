@@ -27,6 +27,7 @@ import {
   SPEACHES_ENDPOINT_PERFORMANCE_BASELINE,
 } from "./voice-stt-providers.js";
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
+import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
@@ -2358,6 +2359,7 @@ async function main(): Promise<void> {
   console.log("Starting seed...");
   const bootstrapOrganizationId = await ensureBootstrapOrganization();
   await seedIntegrationCoverage(prisma, bootstrapOrganizationId);
+  await seedStallThresholds(prisma);
   await seedGeographicData(prisma);
   await seedTaxJurisdictions(prisma);
   await seedLicenseRequirements(prisma);

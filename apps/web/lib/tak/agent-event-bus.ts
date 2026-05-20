@@ -65,7 +65,11 @@ export type AgentEvent =
   | { type: "deliberation:branch_dispatched"; deliberationRunId: string; branchNodeId: string; role: string }
   | { type: "deliberation:branch_completed"; deliberationRunId: string; branchNodeId: string; role: string; success: boolean }
   | { type: "deliberation:degraded_diversity"; deliberationRunId: string; from: string; to: string; reason: string }
-  | { type: "deliberation:completed"; deliberationRunId: string; consensusState: string };
+  | { type: "deliberation:completed"; deliberationRunId: string; consensusState: string }
+  // BI-4ab6be39 stall detection — emitted by ops/taskrun-watchdog when a
+  // working TaskRun is transitioned to "stalled". Operator UIs subscribe to
+  // refresh without polling.
+  | { type: "taskrun:stalled"; taskRunId: string; buildId: string | null; phase: string | null; reason: string };
 
 type Handler = (event: AgentEvent) => void;
 

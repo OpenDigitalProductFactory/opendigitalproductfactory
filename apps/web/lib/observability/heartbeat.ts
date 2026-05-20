@@ -1,0 +1,67 @@
+/**
+ * Heartbeat substrate for BI-4ab6be39 (stall detection).
+ *
+ * Three exports:
+ *   - heartbeat(taskRunId): cooperative write of lastHeartbeatAt by long-running
+ *     loops. Returns false if the row is no longer in "working" — caller can
+ *     treat that as cooperative cancellation.
+ *   - markTaskRunWorking(taskRunId): canonical sanctioned entry point for new
+ *     code to transition a TaskRun into the working state. Sets lastHeartbeatAt
+ *     atomically so the watchdog's "never_started" branch doesn't false-positive
+ *     on the gap between transition and first work.
+ *   - withHeartbeatTicker(taskRunId, fn): wrapper for opaque long calls that
+ *     have no natural emission boundary. Runs fn while emitting heartbeats at
+ *     (resolved heartbeatTimeoutSeconds / 3) cadence so three ticks fit inside
+ *     a timeout window (one missed = jitter, two missed = suspicious, three
+ *     missed trips the watchdog).
+ *
+ * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.6, §6.1.
+ */
+import { prisma } from "@dpf/db";
+import { resolveThresholdForTaskRun } from "./threshold-lookup";
+
+export async function heartbeat(taskRunId: string): Promise<boolean> {
+  // Best-effort. The heartbeat is observability plumbing — a transient DB
+  // hiccup or an incomplete test mock must not crash the long-running loop
+  // that called us. Failure is logged and surfaces as "alive=true" so the
+  // caller doesn't treat it as a cooperative-cancel signal.
+  try {
+    const result = await prisma.taskRun.updateMany({
+      where: { taskRunId, status: "working" },
+      data: { lastHeartbeatAt: new Date() },
+    });
+    return result.count > 0;
+  } catch (err) {
+    // Pass taskRunId as a separate console arg (not interpolated into the
+    // format string) to satisfy CodeQL's externally-controlled-format-string
+    // rule. console APIs treat the first arg as a format string in some
+    // runtimes; keeping it a literal avoids the warning.
+    console.warn("[heartbeat] write failed for", taskRunId, err instanceof Error ? err.message : err);
+    return true;
+  }
+}
+
+export async function markTaskRunWorking(taskRunId: string): Promise<void> {
+  await prisma.taskRun.update({
+    where: { taskRunId },
+    data: { status: "working", lastHeartbeatAt: new Date() },
+  });
+}
+
+export async function withHeartbeatTicker<T>(
+  taskRunId: string,
+  fn: () => Promise<T>,
+  _intervalMsForTests?: number,
+): Promise<T> {
+  const intervalMs =
+    _intervalMsForTests ??
+    Math.floor((await resolveThresholdForTaskRun(taskRunId)).heartbeatTimeoutSeconds * 1000 / 3);
+  const handle = setInterval(() => {
+    void heartbeat(taskRunId);
+  }, intervalMs);
+  try {
+    return await fn();
+  } finally {
+    clearInterval(handle);
+  }
+}
