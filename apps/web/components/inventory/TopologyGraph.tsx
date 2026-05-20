@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import type { GraphData } from "@/lib/actions/graph";
+import { useRef, useEffect, useState, useCallback, useMemo, useTransition } from "react";
+import { getImpactData, getDependencyAuditData, type GraphData } from "@/lib/actions/graph";
 import { hasSubnetScopeNode } from "@/lib/graph/scope-helpers";
 import type { GraphViewName, PositionedNode, LayoutResult } from "@/lib/graph/types";
 import { VIEW_CONFIGS, resolveViewForTaxonomy } from "@/lib/graph/view-config";
@@ -208,6 +208,9 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [selectedView, setSelectedView] = useState<GraphViewName>(autoView);
   const viewConfig = VIEW_CONFIGS[selectedView];
   const isForceLayout = viewConfig.layout === "force";
+  const [isPending, startTransition] = useTransition();
+  const [dynamicData, setDynamicData] = useState<GraphData | null>(null);
+  const effectiveData = useMemo(() => dynamicData ?? data, [dynamicData, data]);
 
   // Subnet filter (for subnet-topology view)
   const [activeSubnetId, setActiveSubnetId] = useState<string | null>(null);
@@ -216,7 +219,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   );
   const availableSubnets = useMemo(() => {
     if (selectedView !== "subnet-topology") return [];
-    return data.nodes
+    return effectiveData.nodes
       .filter((n) => {
         const ct = (n as Record<string, unknown>).ciType;
         return ct === "subnet" || ct === "vlan";
@@ -228,15 +231,15 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         if (aDocker !== bDocker) return aDocker ? 1 : -1;
         return a.name.localeCompare(b.name);
       });
-  }, [data.nodes, selectedView]);
+  }, [effectiveData.nodes, selectedView]);
 
   const scopeState = useMemo(
-    () => resolveSubnetScopeState(data, selectedView, activeSubnetId),
-    [data, selectedView, activeSubnetId],
+    () => resolveSubnetScopeState(effectiveData, selectedView, activeSubnetId),
+    [effectiveData, selectedView, activeSubnetId],
   );
   const filteredData = useMemo(
-    () => resolveDisplayedGraphData(data, selectedView, activeSubnetId, focusNodeId, maxHops),
-    [data, selectedView, activeSubnetId, focusNodeId, maxHops],
+    () => resolveDisplayedGraphData(effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops),
+    [effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops],
   );
 
   // Layout computation
@@ -340,6 +343,22 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     },
     [applySubnetSelection],
   );
+
+  useEffect(() => {
+    if (selectedView === "impact-blast-radius" && focusNodeId) {
+      startTransition(async () => {
+        const result = await getImpactData(focusNodeId);
+        setDynamicData(result);
+      });
+    } else if (selectedView === "dependency-audit" && focusNodeId) {
+      startTransition(async () => {
+        const result = await getDependencyAuditData(focusNodeId);
+        setDynamicData(result);
+      });
+    } else {
+      setDynamicData(null);
+    }
+  }, [selectedView, focusNodeId]);
 
   // ─── Force simulation (exploration view only) ──────────────────────────
   const simulate = useCallback(() => {
@@ -653,7 +672,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     isPanningRef.current = false;
   }
 
-  if (data.nodes.length === 0) {
+  if (effectiveData.nodes.length === 0) {
     return (
       <div className="text-center py-8 text-sm text-[var(--dpf-muted)]">
         No graph data available. Discovery runs automatically every 15 minutes.
@@ -786,7 +805,7 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       <p className="text-[9px] text-[var(--dpf-muted)] mb-2">{viewConfig.description}</p>
 
       {/* ─── Canvas ──────────────────────────────────────────────────── */}
-      <div style={{ position: "relative" }}>
+      <div className="relative w-full h-full">
         <canvas
           ref={canvasRef}
           width={dimensions.width}
@@ -807,6 +826,11 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         {!isForceLayout && layoutResult == null && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--dpf-muted)]">
             Updating graph...
+          </div>
+        )}
+        {isPending && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[var(--dpf-bg)]/60">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--dpf-accent)] border-t-transparent" />
           </div>
         )}
         <div className="absolute bottom-2 left-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-[var(--dpf-muted)]">
