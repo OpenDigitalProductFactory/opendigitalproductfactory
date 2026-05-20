@@ -1,4 +1,5 @@
 import type { GraphData } from "@/lib/actions/graph";
+import { stripDockerOrigin } from "./docker-filter";
 import type { ViewConfig } from "./types";
 
 type FilterGraphOptions = {
@@ -7,6 +8,11 @@ type FilterGraphOptions = {
   selectedView: ViewConfig["name"];
   subnetFilter: string;
   viewConfig: ViewConfig;
+  // When true, drop Docker-origin nodes (subnets, gateways, containers,
+  // docker_host/runtime CIs) before any other scoping. Default false to
+  // preserve existing call sites; the TopologyGraph component opts in
+  // based on its Show Docker toggle. See lib/graph/docker-filter.ts.
+  hideDocker?: boolean;
 };
 
 const subnetScopeCache = new WeakMap<GraphData, Map<string, GraphData>>();
@@ -62,10 +68,12 @@ export function filterGraphData(
     selectedView,
     subnetFilter,
     viewConfig,
+    hideDocker = false,
   }: FilterGraphOptions,
 ): GraphData {
-  let nodes = data.nodes.filter((node) => viewConfig.nodeTypesShown.has(node.label));
-  let links = data.links.filter((link) => viewConfig.edgesShown.has(link.type));
+  const source = hideDocker ? stripDockerOrigin(data) : data;
+  let nodes = source.nodes.filter((node) => viewConfig.nodeTypesShown.has(node.label));
+  let links = source.links.filter((link) => viewConfig.edgesShown.has(link.type));
 
   if (selectedView === "subnet-topology" && subnetFilter !== "all") {
     const scoped = filterBySubnet({ nodes, links }, subnetFilter);
