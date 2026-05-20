@@ -301,21 +301,40 @@ func runSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *s
 // submitSweep builds one envelope from the current collector chain and
 // POSTs it. Pulled into its own function so tests can drive it without
 // constructing a ticker.
+//
+// Collector chain (matches services/edge-node/src/sweep.ts):
+//   1. HostInfo — local host facts; always present.
+//   2. ArpNeighbors — kernel/OS ARP cache. This is the collector
+//      that finally surfaces the OTHER devices on the LAN (Amazon
+//      Echo, Reolink cameras, Kasa switches, etc.) when the binary
+//      runs natively on Windows/macOS rather than inside Docker.
 func submitSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
 	hostResult := collect.HostInfo()
+	arpResult := collect.ArpNeighbors()
 
 	// Convert []collect.Item → []any so the SubmissionEnvelope's typed
 	// `[]any` accepts them. The JSON marshal layer produces identical
 	// bytes either way; the indirection only matters at the Go type
 	// level.
-	items := make([]any, 0, len(hostResult.Items))
+	items := make([]any, 0, len(hostResult.Items)+len(arpResult.Items))
 	for _, item := range hostResult.Items {
 		items = append(items, item)
 	}
-	rels := make([]any, 0, len(hostResult.Relationships))
+	for _, item := range arpResult.Items {
+		items = append(items, item)
+	}
+
+	rels := make([]any, 0, len(hostResult.Relationships)+len(arpResult.Relationships))
 	for _, rel := range hostResult.Relationships {
 		rels = append(rels, rel)
 	}
+	for _, rel := range arpResult.Relationships {
+		rels = append(rels, rel)
+	}
+
+	warnings := make([]string, 0, len(hostResult.Warnings)+len(arpResult.Warnings))
+	warnings = append(warnings, hostResult.Warnings...)
+	warnings = append(warnings, arpResult.Warnings...)
 
 	envelope := api.SubmissionEnvelope{
 		RunKey:        uuid.NewString(),
@@ -325,7 +344,7 @@ func submitSweep(ctx context.Context, cfg *config.Config, client *api.Client, st
 		Capabilities:  phase0Capabilities,
 		Items:         items,
 		Relationships: rels,
-		Warnings:      hostResult.Warnings,
+		Warnings:      warnings,
 	}
 
 	if _, err := client.SubmitDiscoveryRun(ctx, st.NodeToken, envelope); err != nil {

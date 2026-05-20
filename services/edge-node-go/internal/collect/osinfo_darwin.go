@@ -6,18 +6,23 @@ import (
 	"context"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // osRelease shells to /usr/bin/sw_vers for the user-facing macOS
-// version (e.g. "macOS 14.5") and uses syscall.Uname() for the
-// Darwin kernel string. sw_vers ships with the base OS so this
-// doesn't require Xcode or third-party tools.
+// version (e.g. "macOS 14.5") and uses unix.Uname() for the Darwin
+// kernel string. sw_vers ships with the base OS so this doesn't
+// require Xcode or third-party tools.
+//
+// stdlib syscall.Utsname is Linux-only; we route through
+// golang.org/x/sys/unix (already in the module's dep tree via the
+// Windows ARP code) which exposes the same API on Darwin.
 //
 // 2-second timeout — sw_vers is local and should respond instantly;
-// any longer means the system is in a degenerate state and we'd
-// rather surface an empty release than block the sweep.
+// longer means the system is in a degenerate state and we'd rather
+// surface an empty release than block the sweep.
 func osRelease() (release string, kernel string, err error) {
 	release = swVersDescription()
 	kernel = darwinUnameRelease()
@@ -49,23 +54,19 @@ func swVersDescription() string {
 }
 
 func darwinUnameRelease() string {
-	var u syscall.Utsname
-	if err := syscall.Uname(&u); err != nil {
+	var u unix.Utsname
+	if err := unix.Uname(&u); err != nil {
 		return ""
 	}
+	// unix.Utsname.Release is [65]byte on Darwin (not int8 like Linux);
+	// the bytes are NUL-terminated.
 	return utsnameToString(u.Release[:])
 }
 
-// utsnameToString reads the int8/byte slice the platform returns and
-// stops at the first NUL terminator. Darwin's syscall.Utsname.Release
-// is `[256]int8`.
-func utsnameToString(in []int8) string {
-	var b strings.Builder
-	for _, c := range in {
-		if c == 0 {
-			break
-		}
-		b.WriteByte(byte(c))
+func utsnameToString(in []byte) string {
+	end := 0
+	for end < len(in) && in[end] != 0 {
+		end++
 	}
-	return b.String()
+	return string(in[:end])
 }
