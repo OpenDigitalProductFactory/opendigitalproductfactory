@@ -14,7 +14,7 @@
 
 The first implementation branch delivered the `PortalContextEnvelope` projection, Build Studio/Work Control strip and drawer, prompt digest injection, hive recommendations, and broad Work Capsule invalidation. Phase 2 adds explicit Hive tab invocation, child `TaskRun` dedupe, request artifacts, Work Capsule/backlog evidence writes, substantive coworker response artifacts, resolver timeout/source fallback, scoped cache invalidation helpers, and URL-backed Build Studio active-build selection.
 
-The remaining dependency is not the overlay contract itself. It is the existing child-thread dispatch seam: `dispatchAgentThread` is still a placeholder in mainline, so hive invocation can now create durable task/evidence records and open the child thread context, but autonomous child-agent execution still depends on the A2A/team-orchestration runtime landing behind that dispatcher.
+The child-thread dispatch seam (`apps/web/lib/actions/agent-thread-dispatcher.ts`) is no longer a placeholder. As of the BI-57ED34F7 slice it transitions the child `TaskRun` to `working`, fires the existing `executeAutonomousAgenticLoop` (the same runtime used by interactive coworker chat, external MCP submissions, and scheduled tasks), persists the assistant `AgentMessage`, and writes `completed` / `failed` with a populated `progressPayload.summary` so the existing `get_thread_result` and `get_child_threads` polling tools can surface progress. Cross-specialist (A2A) team orchestration remains the open follow-up — that is tracked separately under EP-A2A / BI-9DB7C332 and is not blocked by the portal context overlay.
 
 ## 1. Purpose
 
