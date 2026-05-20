@@ -4,7 +4,20 @@ param(
 )
 
 Set-Location $DPF_DIR
-docker compose up -d
+
+# Always bring the Edge Node overlay up alongside the platform so the bundled
+# single-host install includes network discovery. The overlay is harmless
+# when no enrolled node exists yet (edge-node will retry enrollment until the
+# operator wires DPF_BOOTSTRAP_TOKEN via .\scripts\fresh-install.ps1 or the
+# Admin > Platform Development > Edge Nodes UI).
+# See docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md.
+$composeArgs = @("-f", "docker-compose.yml")
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
+    $composeArgs += @("-f", "docker-compose.override.yml")
+}
+$composeArgs += @("-f", "docker-compose.edge.yml")
+
+docker compose @composeArgs up -d
 
 # --- Wait for portal health ---------------------------------------------------
 Write-Host "Waiting for portal to be ready..." -ForegroundColor Cyan
