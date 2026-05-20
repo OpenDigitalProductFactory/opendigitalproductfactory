@@ -49,17 +49,23 @@ import {
   type SnmpPollAdapter,
   type SnmpRelationship,
 } from "./collectors/snmp-poll";
+import {
+  collectUnifi,
+  type UnifiAdapter,
+  type UnifiRelationship,
+} from "./collectors/unifi";
 import type { EdgeNodeConfig } from "./config";
 import type { EdgeNodeState } from "./state";
 
 /**
- * Unified relationship shape carried in the submission envelope. Both
- * the nmap-sweep and snmp-poll collectors produce the same field set,
- * so we widen at the envelope level to accept either.
+ * Unified relationship shape carried in the submission envelope. All
+ * of the nmap-sweep, snmp-poll, and unifi collectors produce the same
+ * field set, so we widen at the envelope level to accept any of them.
  */
 export type SubmissionRelationship =
   | NmapSweepRelationship
-  | SnmpRelationship;
+  | SnmpRelationship
+  | UnifiRelationship;
 
 const PHASE_0_CAPABILITY = "discovery.network";
 
@@ -97,6 +103,8 @@ export type SweepRunnerOptions = {
   nmapAdapter?: NmapSweepAdapter;
   /** Override the SNMP-poll adapter (test seam). */
   snmpAdapter?: SnmpPollAdapter;
+  /** Override the UniFi adapter (test seam). */
+  unifiAdapter?: UnifiAdapter;
   /** Override runKey generation (test seam). */
   newRunKey?: () => string;
   /** Override the wall-clock used for observedAt (test seam). */
@@ -132,6 +140,7 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
   const arpAdapter = opts.arpAdapter;
   const nmapAdapter = opts.nmapAdapter;
   const snmpAdapter = opts.snmpAdapter;
+  const unifiAdapter = opts.unifiAdapter;
   const maxBuffer = opts.maxBufferedSubmissions ?? 1000;
   const { config, api, state } = opts;
 
@@ -166,21 +175,30 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
       const arp = await collectArpNeighbors(arpAdapter);
       const nmap = await collectNmapSweep(nmapAdapter);
       const snmp = await collectSnmpPoll(snmpAdapter);
+      // UniFi adapter runs last so its `arp:<ip>` SAME_AS targets line
+      // up with whatever the ARP collector emitted earlier in the same
+      // envelope — gives the Authority's normalization layer the best
+      // chance to collapse `unifi:<mac>` and `arp:<ip>` in one pass.
+      // Opt-in: zero-output no-op when adapters.json is absent.
+      const unifi = await collectUnifi(unifiAdapter);
 
       const items: ObservationItem[] = [
         ...host.items,
         ...arp.items,
         ...nmap.items,
         ...snmp.items,
+        ...unifi.items,
       ];
       const relationships: SubmissionRelationship[] = [
         ...nmap.relationships,
         ...snmp.relationships,
+        ...unifi.relationships,
       ];
       const warnings: string[] = [
         ...arp.warnings,
         ...nmap.warnings,
         ...snmp.warnings,
+        ...unifi.warnings,
       ];
 
       envelope = {
