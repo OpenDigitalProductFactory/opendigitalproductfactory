@@ -24,6 +24,7 @@
 - Coworker send path: `apps/web/lib/actions/agent-coworker.ts`
 - Work Capsule actions: `apps/web/lib/actions/work-capsules.ts`
 - Build read actions: `apps/web/lib/actions/build-read.ts`
+- Phase 2 additions (now canonical): `apps/web/lib/actions/portal-context-hive.ts`, `apps/web/lib/portal-context/invalidation.ts`, `apps/web/lib/portal-context/evidence-recording.ts`, `apps/web/lib/portal-context/db-types.ts`, `apps/web/lib/actions/portal-context-hive.test.ts`, `apps/web/lib/portal-context/invalidation.test.ts`
 
 ## Current Repo Constraints
 
@@ -82,6 +83,29 @@ Verified:
 Remaining dependency:
 
 - The hive action calls the existing `dispatchAgentThread` seam after creating or reusing the child task. That dispatcher is still a placeholder in current mainline code, so this slice makes hive participation durable and visible in `TaskRun`/artifact/evidence records, but full autonomous child-thread execution still depends on the A2A/team-orchestration runtime landing behind that seam.
+
+## Known Gaps From Architectural Review — 2026-05-20
+
+The following implementation-vs-spec gaps were identified after Phase 2 landed and must be addressed before this slice is marked complete (or explicitly deferred to a follow-up backlog item with an open governance trail):
+
+- [x] **Authority resolver — capsule executor and promotion grant.** Implemented in `apps/web/lib/portal-context/authority-resolver.ts`: `canActOnCapsule` now resolves against the current user's principal/user refs on capsule executor, lease holder, and structured scope claims; `canReviewPromotion` no longer treats `manage_backlog` as sufficient and accepts the build-scoped `release_gate_create` reviewer grant resolved from active authority bindings.
+- [x] **Authority resolver — `proposalModeActive`.** Implemented from the resolved task-run authority scope (`authorityScope === "proposal"`), not from the mere presence of a build or capsule anchor.
+- [x] **Hive-mind role inference.** Transitional path implemented: typed `agent.role` is honored when present in resolver input; otherwise the keyword fallback logs a one-time warning per agent. Follow-up debt item filed as `BI-REFACTOR-B6A61421` to add durable typed role metadata and remove the heuristic.
+- [x] **`requiredGrantKeys` field semantics.** Implemented in `hive-mind-resolver.ts`; `requiredGrantKeys` now lists only `Agent.toolGrants[].grantKey`. Regression coverage asserts a declared skill capability without a tool grant yields `requiredGrantKeys: []`.
+- [x] **`build_stalled` emission.** Implemented in `work-resolver.ts`; build-phase `FeatureBuild` rows with stale `updatedAt` emit `build_stalled` using the configured work-capsule stall window.
+- [x] **Digest sanitization.** Implemented in `prompt-digest.ts`; `safeDigestText()` strips newlines/control characters, caps digest text, and removes prompt-injection markers before user-shaped branch text enters the digest.
+
+Each item above is small and can be commit-scoped. Suggested ordering: authority resolver fixes first (security-adjacent), then hive-mind cleanup, then digest sanitization, then the emission/dead-code cleanup last.
+
+Follow-up verification added:
+
+- `pnpm --filter web exec vitest run lib/portal-context/authority-resolver.test.ts lib/portal-context/hive-mind-resolver.test.ts lib/portal-context/prompt-digest.test.ts lib/portal-context/portal-context.test.ts components/build/BuildStudioHeaderLayout.test.tsx components/portal-context/PortalContextOverlayDrawer.test.tsx` - 6 files, 34 tests passed.
+- `pnpm --filter web typecheck` - passed.
+- `pnpm --filter web build` - passed. Existing broad Turbopack/NFT trace warnings remain in the same spec-plan search and discovery catalog import paths noted by the Phase 2 verification.
+
+## Phase Checklist Status
+
+> **Reading note.** The phase checkboxes below (Phase 1 through Phase 10) describe the original implementation slice. Phases 1–9 are landed on `feat/portal-context-overlay-phase-2` per the two **Implementation Status** sections above; the boxes are left as `[ ]` for the historical record. The actionable checklist for the next implementer lives in **Known Gaps From Architectural Review** above. Do not re-execute Phases 1–9; close the gaps, then run Phase 10's final verification.
 
 ## File Structure
 

@@ -159,9 +159,132 @@ describe("resolvePortalContextEnvelopeUncached", () => {
     expect(envelope.work.backlogItem?.backlogItemId).toBe("BI-D52D4E25");
     expect(envelope.work.epic?.epicId).toBe("EP-CAPSULE");
     expect(envelope.work.taskRun?.taskRunId).toBe("TR-123");
+    expect(envelope.authority.proposalModeActive).toBe(true);
     expect(db.workCapsule.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { featureBuildId: "build-row-1" },
+      }),
+    );
+  });
+
+  it("lets the capsule executor principal act on the active capsule without broad platform role", async () => {
+    const db = createDbMock({
+      user: {
+        id: "user-1",
+        isSuperuser: false,
+        groups: [],
+      },
+      principalAlias: {
+        principal: { principalId: "principal-1" },
+      },
+      capsule: {
+        id: "capsule-row-1",
+        capsuleId: "WC-123",
+        title: "Owned capsule",
+        status: "working",
+        executorKind: "codex",
+        executorRef: "principal-1",
+        leaseHolderPrincipalId: "principal-1",
+        leaseExpiresAt: new Date("2026-05-17T19:00:00.000Z"),
+        scopeClaims: [
+          {
+            kind: "path",
+            value: "apps/web/lib/portal-context",
+            intent: "edit",
+            recordedAt: "2026-05-17T18:00:00.000Z",
+            recordedByPrincipalId: "principal-1",
+          },
+        ],
+      },
+    });
+
+    const envelope = await resolvePortalContextEnvelopeUncached(
+      { pathname: "/build/work/WC-123", routeContext: "/build/work", capsuleId: "WC-123" },
+      "user-1",
+      {
+        now: () => new Date("2026-05-17T18:23:41.123Z"),
+        db,
+        getRouteDataContext: vi.fn().mockResolvedValue(null),
+      },
+    );
+
+    expect(envelope.work.capsule?.capsuleId).toBe("WC-123");
+    expect(envelope.authority.canActOnCapsule).toBe(true);
+  });
+
+  it("keeps proposal mode inactive for an anchored build when the current task is not in proposal mode", async () => {
+    const db = createDbMock({
+      featureBuild: {
+        id: "build-row-1",
+        buildId: "FB-123",
+        title: "Build the thing",
+        phase: "build",
+        status: "working",
+        threadId: "thread-1",
+      },
+      capsule: {
+        id: "capsule-row-1",
+        capsuleId: "WC-123",
+        title: "Build capsule",
+        status: "working",
+        executorKind: "build-studio",
+        leaseExpiresAt: new Date("2026-05-17T19:00:00.000Z"),
+        featureBuildId: "build-row-1",
+        taskRunId: "task-row-1",
+      },
+      taskRun: {
+        id: "task-row-1",
+        taskRunId: "TR-123",
+        contextId: "ctx-123",
+        status: "working",
+        authorityScope: { mode: "execute" },
+        parentTaskRunId: null,
+      },
+      agentThread: {
+        id: "thread-1",
+        contextKey: "coworker:/build",
+      },
+    });
+
+    const envelope = await resolvePortalContextEnvelopeUncached(
+      { pathname: "/build", routeContext: "/build", buildId: "FB-123" },
+      "user-1",
+      {
+        now: () => new Date("2026-05-17T18:23:41.123Z"),
+        db,
+        getRouteDataContext: vi.fn().mockResolvedValue(null),
+      },
+    );
+
+    expect(envelope.authority.proposalModeActive).toBe(false);
+  });
+
+  it("emits build_stalled for a build-phase FeatureBuild with no recent activity", async () => {
+    const db = createDbMock({
+      featureBuild: {
+        id: "build-row-1",
+        buildId: "FB-STALE",
+        title: "Stale build",
+        phase: "build",
+        status: "working",
+        updatedAt: new Date("2026-05-17T17:40:00.000Z"),
+      },
+    });
+
+    const envelope = await resolvePortalContextEnvelopeUncached(
+      { pathname: "/build", routeContext: "/build", buildId: "FB-STALE" },
+      "user-1",
+      {
+        now: () => new Date("2026-05-17T18:23:41.123Z"),
+        db,
+        getRouteDataContext: vi.fn().mockResolvedValue(null),
+      },
+    );
+
+    expect(envelope.attention).toContainEqual(
+      expect.objectContaining({
+        kind: "build_stalled",
+        severity: "warning",
       }),
     );
   });
@@ -174,6 +297,7 @@ describe("resolvePortalContextEnvelopeUncached", () => {
           name: "Context Architect",
           description: "Anchors Build Studio work to capsules and backlog context.",
           valueStream: "integrate",
+          role: "architect",
           skills: [
             {
               label: "Anchor work context",
@@ -269,6 +393,8 @@ describe("resolvePortalContextEnvelopeUncached", () => {
 });
 
 function createDbMock(overrides: {
+  user?: Record<string, unknown> | null;
+  principalAlias?: Record<string, unknown> | null;
   featureBuild?: Record<string, unknown> | null;
   capsule?: Record<string, unknown> | null;
   backlogItem?: Record<string, unknown> | null;
@@ -279,14 +405,14 @@ function createDbMock(overrides: {
 } = {}) {
   return {
     user: {
-      findUnique: vi.fn().mockResolvedValue({
+      findUnique: vi.fn().mockResolvedValue(overrides.user ?? {
         id: "user-1",
         isSuperuser: true,
         groups: [{ platformRole: { roleId: "HR-000" } }],
       }),
     },
     principalAlias: {
-      findFirst: vi.fn().mockResolvedValue({
+      findFirst: vi.fn().mockResolvedValue(overrides.principalAlias ?? {
         principal: { principalId: "principal-1" },
       }),
     },

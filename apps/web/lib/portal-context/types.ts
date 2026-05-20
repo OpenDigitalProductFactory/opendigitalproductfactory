@@ -35,10 +35,13 @@ export type WorkCapsuleAnchor = {
   title: string;
   status: string;
   executorKind: string;
+  executorRef: string | null;
+  leaseHolderPrincipalId: string | null;
   leaseExpiresAt: string | null;
   isLeaseExpired: boolean;
   isStale: boolean;
   scopeClaims: string[];
+  scopeClaimPrincipalIds: string[];
   branchName: string | null;
   href: string;
 };
