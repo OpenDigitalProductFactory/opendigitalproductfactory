@@ -125,7 +125,11 @@ function CandidateAction({
 
 function disabledReason(candidate: HiveMindCandidate, granted: Set<string>, parentTaskRunId: string | null): string | null {
   if (!parentTaskRunId) return "Needs task";
-  const missing = candidate.requiredGrantKeys.filter((grant) => !granted.has(grant));
+  // Defensive: requiredGrantKeys is typed string[] but stale serialized
+  // portal-context payloads have been observed with missing/undefined arrays,
+  // which crashes the entire /build page render with a minified React error.
+  const requiredKeys = Array.isArray(candidate.requiredGrantKeys) ? candidate.requiredGrantKeys : [];
+  const missing = requiredKeys.filter((grant) => !granted.has(grant));
   if (missing.length > 0) return "Missing grant";
   return null;
 }
