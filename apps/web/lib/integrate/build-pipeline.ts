@@ -294,11 +294,11 @@ async function stepGenerateCode(
   // Build the initial message from the brief
   const userMessage = [
     `Build the following feature in the sandbox:`,
-    `Title: ${brief.title}`,
-    `Description: ${brief.description}`,
+    `Title: ${brief?.title ?? build.title ?? buildId}`,
+    `Description: ${brief?.description ?? build.description ?? "(no description provided)"}`,
     ``,
     `Acceptance Criteria:`,
-    ...(Array.isArray(brief.acceptanceCriteria) ? brief.acceptanceCriteria.map((c: string, i: number) => `${i + 1}. ${c}`) : []),
+    ...(Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria.map((c: string, i: number) => `${i + 1}. ${c}`) : [`(none specified)`]),
     ``,
     `Follow the approved implementation plan. Start by searching the codebase for existing patterns, then generate new files and edit existing ones as needed. Run tests when done.`,
   ].join("\n");
