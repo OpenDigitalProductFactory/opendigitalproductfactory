@@ -46,6 +46,11 @@ export async function runHeartbeatLoop(
         ...state,
         heartbeatIntervalSec: result.heartbeatIntervalSec,
         sweepIntervalSec: result.sweepIntervalSec,
+        // Propagate Authority-tuned metrics interval if provided; keep
+        // existing value (or undefined → 10 s default) if absent.
+        ...(result.metricsIntervalSec !== undefined
+          ? { metricsIntervalSec: result.metricsIntervalSec }
+          : {}),
         acceptedCapabilities: result.acceptedCapabilities,
         trustState: result.trustState,
       };
@@ -55,6 +60,7 @@ export async function runHeartbeatLoop(
       if (
         updated.heartbeatIntervalSec !== state.heartbeatIntervalSec ||
         updated.sweepIntervalSec !== state.sweepIntervalSec ||
+        updated.metricsIntervalSec !== state.metricsIntervalSec ||
         updated.trustState !== state.trustState ||
         JSON.stringify(updated.acceptedCapabilities) !==
           JSON.stringify(state.acceptedCapabilities)

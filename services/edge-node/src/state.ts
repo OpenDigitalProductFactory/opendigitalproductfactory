@@ -37,6 +37,8 @@ const StateSchema = z.object({
   heartbeatIntervalSec: z.number().int().positive(),
   /** Authority-decided sweep interval in seconds. */
   sweepIntervalSec: z.number().int().positive(),
+  /** Authority-decided metrics collection interval in seconds. Defaults to 10 s. */
+  metricsIntervalSec: z.number().int().positive().optional(),
   /** Capabilities the Authority accepts from this node. */
   acceptedCapabilities: z.array(z.string()),
   /** trustState at last heartbeat. */
