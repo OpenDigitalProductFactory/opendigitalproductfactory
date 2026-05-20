@@ -97,13 +97,119 @@ async function loadStalled(taskRunId: string): Promise<StalledRow> {
 }
 
 /**
+ * Per-phase Retry strategy (BI-4ab6be39 Phase H, spec §5.5).
+ *
+ * What it means in v1:
+ *   - "fresh"          — re-dispatch from scratch (ideate, review, default).
+ *   - "resume-build"   — build phase. FeatureBuild.buildExecState carries the
+ *                        last-checkpoint state and is NOT touched by Retry,
+ *                        so the existing runBuildPipeline(..., existingState)
+ *                        path naturally resumes from the failed step.
+ *   - "resume-plan"    — plan phase. If a DeliberationRun for this build has
+ *                        completedAt set, the new TaskRun is pre-seeded with
+ *                        its outcome (via a2aMetadata.priorDeliberationRunId).
+ *                        Otherwise falls back to "fresh".
+ *   - "review-current" — review phase. Re-run only the current reviewer pass;
+ *                        do NOT re-run upstream design/plan work.
+ *   - "ship-force"     — ship phase with explicit force:true. Same dispatch
+ *                        path as fresh, recorded with the force outcome notes
+ *                        so the audit trail captures the double-publish-risk
+ *                        acknowledgment.
+ *
+ * The strategy label is recorded on:
+ *   - The new TaskRun.a2aMetadata (so downstream agentic dispatchers can read it).
+ *   - The closing StallEvent.notes (so the audit ledger explains WHY retry).
+ *
+ * Behavioral wiring that requires the strategy beyond these two recordings
+ * (e.g. plan-phase deliberation pre-seeding, review-phase upstream skip) is
+ * implemented progressively — the build-phase resume works today because
+ * the checkpoint substrate already supports it.
+ */
+export type RetryStrategy =
+  | "fresh"
+  | "resume-build"
+  | "resume-plan"
+  | "review-current"
+  | "ship-force";
+
+interface RetryDecision {
+  strategy: RetryStrategy;
+  notes: string;
+  /** Pre-resolved metadata to attach to the new TaskRun.a2aMetadata. */
+  metadata: Record<string, unknown>;
+}
+
+async function decideRetryStrategy(
+  stalled: StalledRow,
+  opts: { force?: boolean },
+): Promise<RetryDecision> {
+  const phase = stalled.phase;
+
+  if (phase === "build") {
+    return {
+      strategy: "resume-build",
+      notes: "Build phase — FeatureBuild.buildExecState carries the last checkpoint; runBuildPipeline will resume from the failed step.",
+      metadata: { retryStrategy: "resume-build", priorTaskRunId: stalled.taskRunId },
+    };
+  }
+
+  if (phase === "plan") {
+    // Look up the most recent completed DeliberationRun on this TaskRun (the
+    // stalled row's cuid id is what DeliberationRun.taskRunId stores). Pre-
+    // seed the next agent turn with its outcome so plan work isn't redone.
+    const priorDeliberation = await prisma.deliberationRun.findFirst({
+      where: { taskRunId: stalled.id, completedAt: { not: null } },
+      orderBy: { completedAt: "desc" },
+      select: { id: true, consensusState: true },
+    });
+    if (priorDeliberation) {
+      return {
+        strategy: "resume-plan",
+        notes: `Plan phase — pre-seeding with DeliberationRun ${priorDeliberation.id} (consensus=${priorDeliberation.consensusState}).`,
+        metadata: {
+          retryStrategy: "resume-plan",
+          priorTaskRunId: stalled.taskRunId,
+          priorDeliberationRunId: priorDeliberation.id,
+        },
+      };
+    }
+    return {
+      strategy: "fresh",
+      notes: "Plan phase — no prior DeliberationRun found, falling back to fresh dispatch.",
+      metadata: { retryStrategy: "fresh", priorTaskRunId: stalled.taskRunId },
+    };
+  }
+
+  if (phase === "review") {
+    return {
+      strategy: "review-current",
+      notes: "Review phase — re-running the reviewer pass only; do not re-run upstream design/plan.",
+      metadata: { retryStrategy: "review-current", priorTaskRunId: stalled.taskRunId },
+    };
+  }
+
+  if (phase === "ship" && opts.force) {
+    return {
+      strategy: "ship-force",
+      notes: "Ship phase — operator explicitly forced retry, double-publish risk acknowledged.",
+      metadata: { retryStrategy: "ship-force", priorTaskRunId: stalled.taskRunId },
+    };
+  }
+
+  return {
+    strategy: "fresh",
+    notes: `${phase ?? "unknown"} phase — fresh dispatch.`,
+    metadata: { retryStrategy: "fresh", priorTaskRunId: stalled.taskRunId },
+  };
+}
+
+/**
  * Operator clicks Retry on a stalled TaskRun.
  *
  * Creates a sibling TaskRun with parentTaskRunId pointing at the stalled
  * row's cuid id. Re-uses the same threadId/contextId so the UI thread
  * stays coherent. Updates the most recent open StallEvent's outcome to
- * "retry". Returns the new business taskRunId so the caller can navigate
- * the operator to it.
+ * "retry". Records a per-phase strategy in a2aMetadata + StallEvent.notes.
  *
  * Ship-phase Retry is gated: callers must pass { force: true } or this
  * throws ship_phase_requires_force.
@@ -112,7 +218,7 @@ export async function taskrunRetry(
   taskRunId: string,
   operatorUserId: string,
   opts: { force?: boolean } = {},
-): Promise<{ newTaskRunId: string }> {
+): Promise<{ newTaskRunId: string; strategy: RetryStrategy }> {
   const stalled = await loadStalled(taskRunId);
 
   if (stalled.phase === "ship" && !opts.force) {
@@ -122,10 +228,11 @@ export async function taskrunRetry(
     );
   }
 
+  const decision = await decideRetryStrategy(stalled, opts);
   const now = new Date();
   const newBusinessId = `TR-RETRY-${Math.random().toString(36).slice(2, 10)}`;
 
-  return prisma.$transaction(async (tx) => {
+  const { newTaskRunId } = await prisma.$transaction(async (tx) => {
     const newRun = await tx.taskRun.create({
       data: {
         taskRunId: newBusinessId,
@@ -140,6 +247,7 @@ export async function taskrunRetry(
         source: stalled.source,
         status: "submitted",
         startedAt: now,
+        a2aMetadata: decision.metadata as Record<string, string>,
       },
     });
 
@@ -155,12 +263,15 @@ export async function taskrunRetry(
           outcome: "retry",
           outcomeAt: now,
           outcomeBy: operatorUserId,
+          notes: decision.notes,
         },
       });
     }
 
     return { newTaskRunId: newRun.taskRunId };
   });
+
+  return { newTaskRunId, strategy: decision.strategy };
 }
 
 /**

@@ -6,6 +6,7 @@ import { BuildDispatchHistoryCard } from "./BuildDispatchHistoryCard";
 import { BuildSandboxCard } from "./BuildSandboxCard";
 import { BuildVerificationScopedCard } from "./BuildVerificationScopedCard";
 import { TruthSourceBadge } from "./TruthSourceBadge";
+import { StallEventHistoryStrip } from "./StallEventHistoryStrip";
 
 type Props = {
   projection: BuildProgressVisibility | null;
@@ -99,6 +100,10 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
           <BuildDispatchHistoryCard attempts={projection.dispatchHistory} />
           <BuildVerificationScopedCard verification={projection.verification} />
         </div>
+
+        {/* BI-4ab6be39 F3: stall history strip — only renders when this
+            build has StallEvents. Silent on healthy builds. */}
+        <StallEventHistoryStrip buildId={projection.buildId} />
       </div>
     </div>
   );
