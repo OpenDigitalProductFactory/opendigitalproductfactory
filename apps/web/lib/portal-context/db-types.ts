@@ -24,6 +24,7 @@ export type FeatureBuildRow = {
   acceptanceMet?: unknown;
   verificationOut?: unknown;
   abandonedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 
 export type WorkCapsuleRow = {
@@ -32,6 +33,8 @@ export type WorkCapsuleRow = {
   title: string;
   status: string;
   executorKind?: string | null;
+  executorRef?: string | null;
+  leaseHolderPrincipalId?: string | null;
   leaseExpiresAt?: Date | string | null;
   updatedAt?: Date | string | null;
   scopeClaims?: unknown;
@@ -78,6 +81,7 @@ export type AgentRegistryRow = {
   name: string;
   description?: string | null;
   valueStream?: string | null;
+  role?: string | null;
   skills?: Array<{
     label: string;
     description: string;
@@ -86,6 +90,18 @@ export type AgentRegistryRow = {
   }>;
   toolGrants?: Array<{
     grantKey: string;
+  }>;
+};
+
+export type AuthorityBindingRow = {
+  subjects?: Array<{
+    subjectType: string;
+    subjectRef: string;
+    relation: string;
+  }>;
+  grants?: Array<{
+    grantKey: string;
+    mode: string;
   }>;
 };
 
@@ -128,6 +144,9 @@ export type PortalContextDb = {
   };
   agent: {
     findMany(args: unknown): Promise<AgentRegistryRow[]>;
+  };
+  authorityBinding?: {
+    findMany(args: unknown): Promise<AuthorityBindingRow[]>;
   };
   workCapsuleActivity: {
     findMany(args: unknown): Promise<ActivityRow[]>;

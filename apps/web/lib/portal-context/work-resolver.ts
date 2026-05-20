@@ -1,3 +1,5 @@
+import { parseScopeClaims, STALE_CACHE_MS } from "@/lib/work-capsules";
+
 import type {
   AgentThreadAnchor,
   AttentionSignal,
@@ -19,6 +21,18 @@ import type {
   TaskRunRow,
   WorkCapsuleRow,
 } from "./db-types";
+
+const BUILD_STALLED_TERMINAL_STATUSES = new Set([
+  "complete",
+  "completed",
+  "done",
+  "failed",
+  "cancelled",
+  "canceled",
+  "rejected",
+  "archived",
+  "abandoned",
+]);
 
 export type WorkResolution = {
   work: {
@@ -135,6 +149,16 @@ function finalizeWork(args: {
     : null;
 
   const attention = [...args.attention];
+  if (isBuildStalled(args.build, args.now)) {
+    attention.push({
+      kind: "build_stalled",
+      severity: "warning",
+      message: `Build ${args.build?.buildId} has had no observable activity inside the configured work window.`,
+      actionLabel: "Open build",
+      actionHref: featureBuild?.href ?? "/build",
+    });
+  }
+
   if (capsule?.isLeaseExpired) {
     attention.push({
       kind: "lease_expired",
@@ -185,16 +209,20 @@ function capsuleAnchor(capsule: WorkCapsuleRow, now: Date): WorkCapsuleAnchor {
   const leaseDate = capsule.leaseExpiresAt ? new Date(capsule.leaseExpiresAt) : null;
   const updatedAt = capsule.updatedAt ? new Date(capsule.updatedAt) : null;
   const staleAfterMs = 1000 * 60 * 60 * 24;
+  const structuredScopeClaims = parseScopeClaims(capsule.scopeClaims);
 
   return {
     capsuleId: capsule.capsuleId,
     title: capsule.title,
     status: capsule.status,
     executorKind: capsule.executorKind ?? "unknown",
+    executorRef: capsule.executorRef ?? null,
+    leaseHolderPrincipalId: capsule.leaseHolderPrincipalId ?? null,
     leaseExpiresAt,
     isLeaseExpired: Boolean(leaseDate && leaseDate.getTime() < now.getTime()),
     isStale: Boolean(updatedAt && now.getTime() - updatedAt.getTime() > staleAfterMs),
-    scopeClaims: parseStringArray(capsule.scopeClaims),
+    scopeClaims: displayScopeClaims(capsule.scopeClaims, structuredScopeClaims),
+    scopeClaimPrincipalIds: Array.from(new Set(structuredScopeClaims.map((claim) => claim.recordedByPrincipalId))),
     branchName: capsule.headBranch ?? null,
     href: `/build/work/${encodeURIComponent(capsule.capsuleId)}`,
   };
@@ -240,6 +268,24 @@ function agentThreadAnchor(thread: AgentThreadRow, routeContext: string, buildId
 function toIsoString(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   return new Date(value).toISOString();
+}
+
+function isBuildStalled(build: FeatureBuildRow | null, now: Date): boolean {
+  if (!build || (build.phase ?? "ideate") !== "build") return false;
+  if (BUILD_STALLED_TERMINAL_STATUSES.has(build.status ?? "")) return false;
+  if (!build.updatedAt) return false;
+
+  const updatedAt = new Date(build.updatedAt);
+  if (!Number.isFinite(updatedAt.getTime())) return false;
+  return now.getTime() - updatedAt.getTime() > STALE_CACHE_MS;
+}
+
+function displayScopeClaims(value: unknown, structuredScopeClaims: ReturnType<typeof parseScopeClaims>): string[] {
+  if (structuredScopeClaims.length > 0) {
+    return structuredScopeClaims.map((claim) => `${claim.kind}:${claim.value}`);
+  }
+
+  return parseStringArray(value);
 }
 
 function parseStringArray(value: unknown): string[] {
