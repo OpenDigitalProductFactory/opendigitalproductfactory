@@ -108,3 +108,11 @@ export interface BuildGitUpdateReceivedEvent {
     candidateId: string;
   };
 }
+
+export interface PortalSelfUpgradeRequestedEvent {
+  name: "portal/self-upgrade.requested";
+  data: {
+    trigger: "manual";
+    requestedByUserId?: string | null;
+  };
+}

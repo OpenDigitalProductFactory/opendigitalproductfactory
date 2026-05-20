@@ -4578,6 +4578,27 @@ model PlatformConfig {
   updatedAt DateTime @updatedAt
 }
 
+model SelfUpgradeRun {
+  id                    String    @id @default(cuid())
+  runId                 String    @unique
+  status                String    @default("queued")
+  trigger               String
+  currentSha            String?
+  targetSha             String?
+  deployedSha           String?
+  reason                String?
+  promoterContainerName String?
+  completionEvidence    Json?
+  failureLog            String?   @db.Text
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([targetSha])
+}
+
 model PlatformDevConfig {
   id                     String    @id @default("singleton")
   contributionMode       String    @default("selective")

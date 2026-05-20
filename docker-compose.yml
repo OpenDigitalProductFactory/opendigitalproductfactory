@@ -68,6 +68,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
+      DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme123}
     depends_on:
       postgres:
@@ -130,6 +132,7 @@ services:
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
       SANDBOX_PREVIEW_URL: http://sandbox:3000

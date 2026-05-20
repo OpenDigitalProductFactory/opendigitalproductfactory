@@ -1309,6 +1309,25 @@ async function seedPlatformConfig(): Promise<void> {
     update: {},
     create: { key: "USE_UNIFIED_COWORKER", value: { enabled: false } },
   });
+  await prisma.platformConfig.upsert({
+    where: { key: "self_upgrade" },
+    update: {},
+    create: {
+      key: "self_upgrade",
+      value: {
+        enabled: process.env.DPF_SELF_UPGRADE_ENABLED !== "false",
+        hostInstallPath: process.env.DPF_HOST_INSTALL_PATH ?? "/workspace",
+        hostSourceMountPath: process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ?? "/host-dpf",
+        composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf",
+        portalContainerName: process.env.DPF_PRODUCTION_PORTAL_CONTAINER ?? "dpf-portal-1",
+        dbContainerName: process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1",
+        repositoryRemote: process.env.DPF_SELF_UPGRADE_REMOTE ?? "origin",
+        repositoryBranch: process.env.DPF_SELF_UPGRADE_BRANCH ?? "main",
+        healthUrl: process.env.DPF_SELF_UPGRADE_HEALTH_URL ?? "http://localhost:3000/api/health",
+        promoterImage: process.env.DPF_PROMOTER_IMAGE ?? "dpf-promoter",
+      },
+    },
+  });
   console.log("Seeded platform config flags");
 }
 

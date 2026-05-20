@@ -2,13 +2,20 @@
 # scripts/promote.sh — Autonomous promotion pipeline
 # Runs inside the promoter container. No AI, no agents — pure procedural.
 #
-# Input:  PROMOTION_ID env var
+# Input:  PROMOTION_ID env var, or --self-upgrade with SELF_UPGRADE_RUN_ID
 # Output: Exit 0 (success) or Exit 1 (rolled back)
 #
 # Steps: validate -> window -> backup -> extract -> build -> tag -> stop -> start -> health -> update -> cleanup
 
 # ─── Configuration ──────────────────────────────────────────────────────────
-PROMOTION_ID="${PROMOTION_ID:?PROMOTION_ID env var is required}"
+SELF_UPGRADE_MODE=false
+if [ "${1:-}" = "--self-upgrade" ]; then
+  SELF_UPGRADE_MODE=true
+  shift
+fi
+[ "${SELF_UPGRADE:-}" = "1" ] && SELF_UPGRADE_MODE=true
+
+PROMOTION_ID="${PROMOTION_ID:-}"
 DB_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 PORTAL_CONTAINER="${DPF_PORTAL_CONTAINER:-dpf-portal-1}"
 COMPOSE_PROJECT="${DPF_COMPOSE_PROJECT:-dpf}"
@@ -23,11 +30,13 @@ NEW_IMAGE=""
 ROLLBACK_NEEDED=false
 SANDBOX_CONTAINER=""
 BUILD_ID=""
+SELF_UPGRADE_RUN_ID="${SELF_UPGRADE_RUN_ID:-}"
+SELF_UPGRADE_TARGET_SHA="${SELF_UPGRADE_TARGET_SHA:-}"
+SELF_UPGRADE_REMOTE="${DPF_SELF_UPGRADE_REMOTE:-origin}"
+SELF_UPGRADE_BRANCH="${DPF_SELF_UPGRADE_BRANCH:-main}"
+SELF_UPGRADE_HOST_SOURCE="${DPF_HOST_SOURCE_PATH:-/host-source}"
 
 log() { echo "[promoter] $(date +%H:%M:%S) $1"; }
-
-# ─── Input validation (prevent SQL/shell injection) ─────────────────────────
-echo "$PROMOTION_ID" | grep -qE '^[a-zA-Z0-9_-]+$' || { log "Invalid PROMOTION_ID format: $PROMOTION_ID"; exit 1; }
 
 # ─── DB helpers (psql via production container) ─────────────────────────────
 db_query() {
@@ -97,6 +106,138 @@ docker compose -p "$COMPOSE_PROJECT" -f /host-source/docker-compose.yml up -d --
 
   log "Rollback complete"
 }
+
+sql_escape() {
+  echo "$1" | sed "s/'/''/g"
+}
+
+self_upgrade_update_status() {
+  local status="$1" reason="$2" log_msg="$3" deployed_sha="$4"
+  local escaped_reason escaped_log escaped_sha
+  escaped_reason=$(sql_escape "$reason")
+  escaped_log=$(sql_escape "$log_msg")
+  escaped_sha=$(sql_escape "$deployed_sha")
+  local sql="UPDATE \"SelfUpgradeRun\" SET \"status\"='${status}', \"updatedAt\"=NOW()"
+  [ -n "$reason" ] && sql="${sql}, \"reason\"='${escaped_reason}'"
+  [ -n "$log_msg" ] && sql="${sql}, \"failureLog\"='${escaped_log}'"
+  [ -n "$deployed_sha" ] && sql="${sql}, \"deployedSha\"='${escaped_sha}'"
+  case "$status" in
+    completing|succeeded|failed|rolled_back|skipped)
+      sql="${sql}, \"completedAt\"=NOW()"
+      ;;
+  esac
+  sql="${sql} WHERE \"runId\"='${SELF_UPGRADE_RUN_ID}'"
+  db_exec "$sql" >/dev/null || true
+}
+
+self_upgrade_rollback() {
+  local reason="$1"
+  log "SELF-UPGRADE ROLLBACK: $reason"
+
+  if [ "$ROLLBACK_NEEDED" = "true" ]; then
+    log "Restoring previous portal service where possible..."
+    if [ -n "$OLD_IMAGE" ]; then
+      docker tag "$OLD_IMAGE" dpf-portal:latest 2>/dev/null || true
+      docker tag "$OLD_IMAGE" dpf-portal:local 2>/dev/null || true
+    fi
+    (cd "$SELF_UPGRADE_HOST_SOURCE" && docker compose -p "$COMPOSE_PROJECT" -f docker-compose.yml up -d --no-build --no-deps portal) 2>&1 || true
+  fi
+
+  if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
+    log "Restoring database from backup: $BACKUP_FILE"
+    docker exec -i "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$DB_NAME" --clean --if-exists < "$BACKUP_FILE" 2>/dev/null || true
+  fi
+
+  self_upgrade_update_status "rolled_back" "$reason" "Rollback triggered: $reason" ""
+}
+
+run_self_upgrade() {
+  SELF_UPGRADE_RUN_ID="${SELF_UPGRADE_RUN_ID:?SELF_UPGRADE_RUN_ID env var is required}"
+  echo "$SELF_UPGRADE_RUN_ID" | grep -qE '^[a-zA-Z0-9_-]+$' || { log "Invalid SELF_UPGRADE_RUN_ID format: $SELF_UPGRADE_RUN_ID"; exit 1; }
+
+  trap 'self_upgrade_rollback "Unexpected failure at line $LINENO"; exit 1' ERR
+
+  log "Self-upgrade run: $SELF_UPGRADE_RUN_ID"
+  [ -d "$SELF_UPGRADE_HOST_SOURCE/.git" ] || { self_upgrade_update_status "failed" "host source missing git checkout" "Missing git checkout at $SELF_UPGRADE_HOST_SOURCE" ""; exit 1; }
+
+  RUN_STATUS=$(db_query "SELECT status FROM \"SelfUpgradeRun\" WHERE \"runId\"='${SELF_UPGRADE_RUN_ID}'")
+  [ -z "$RUN_STATUS" ] && { log "SelfUpgradeRun $SELF_UPGRADE_RUN_ID not found"; exit 1; }
+  self_upgrade_update_status "running" "" "Promoter started at $(date -Iseconds)" ""
+
+  log "Fetching ${SELF_UPGRADE_REMOTE}/${SELF_UPGRADE_BRANCH}"
+  git -C "$SELF_UPGRADE_HOST_SOURCE" fetch "$SELF_UPGRADE_REMOTE" "$SELF_UPGRADE_BRANCH"
+  RESOLVED_TARGET=$(git -C "$SELF_UPGRADE_HOST_SOURCE" rev-parse "${SELF_UPGRADE_REMOTE}/${SELF_UPGRADE_BRANCH}")
+  TARGET_SHA="${SELF_UPGRADE_TARGET_SHA:-$RESOLVED_TARGET}"
+  echo "$TARGET_SHA" | grep -qE '^[0-9a-fA-F]{40}$' || { self_upgrade_update_status "failed" "target is not a git sha" "Invalid target SHA: $TARGET_SHA" ""; exit 1; }
+  [ "$TARGET_SHA" = "$RESOLVED_TARGET" ] || { self_upgrade_update_status "failed" "target mismatch" "Configured target $TARGET_SHA does not match ${SELF_UPGRADE_REMOTE}/${SELF_UPGRADE_BRANCH} $RESOLVED_TARGET" ""; exit 1; }
+
+  DIRTY=$(git -C "$SELF_UPGRADE_HOST_SOURCE" status --porcelain)
+  [ -z "$DIRTY" ] || { self_upgrade_update_status "failed" "host checkout dirty" "Host checkout has uncommitted changes; self-upgrade refused to modify it." ""; exit 1; }
+
+  log "Fast-forwarding host checkout to $TARGET_SHA"
+  git -C "$SELF_UPGRADE_HOST_SOURCE" checkout "$SELF_UPGRADE_BRANCH" 2>/dev/null || git -C "$SELF_UPGRADE_HOST_SOURCE" checkout -B "$SELF_UPGRADE_BRANCH" "${SELF_UPGRADE_REMOTE}/${SELF_UPGRADE_BRANCH}"
+  git -C "$SELF_UPGRADE_HOST_SOURCE" pull --ff-only "$SELF_UPGRADE_REMOTE" "$SELF_UPGRADE_BRANCH"
+  CURRENT_AFTER=$(git -C "$SELF_UPGRADE_HOST_SOURCE" rev-parse HEAD)
+  [ "$CURRENT_AFTER" = "$TARGET_SHA" ] || { self_upgrade_update_status "failed" "host checkout did not reach target" "Host checkout ended at $CURRENT_AFTER instead of $TARGET_SHA" ""; exit 1; }
+
+  log "Backing up production database"
+  BACKUP_DIR="/backups"
+  mkdir -p "$BACKUP_DIR"
+  BACKUP_FILE="${BACKUP_DIR}/pre-self-upgrade-${SELF_UPGRADE_RUN_ID}-$(date +%Y%m%d%H%M%S).dump"
+  docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB_NAME" > "$BACKUP_FILE"
+  BACKUP_SIZE=$(stat -c%s "$BACKUP_FILE" 2>/dev/null || stat -f%z "$BACKUP_FILE" 2>/dev/null || echo 0)
+  log "Backup complete: $BACKUP_FILE (${BACKUP_SIZE} bytes)"
+
+  OLD_IMAGE=$(docker inspect "$PORTAL_CONTAINER" --format='{{.Config.Image}}' 2>/dev/null || echo "")
+  log "Old image: $OLD_IMAGE"
+
+  log "Building portal and portal-init through docker compose"
+  (cd "$SELF_UPGRADE_HOST_SOURCE" && DPF_VERSION="$TARGET_SHA" docker compose -p "$COMPOSE_PROJECT" -f docker-compose.yml build portal portal-init)
+
+  log "Running portal-init for migrations and seed"
+  (cd "$SELF_UPGRADE_HOST_SOURCE" && DPF_VERSION="$TARGET_SHA" docker compose -p "$COMPOSE_PROJECT" -f docker-compose.yml up --no-build --force-recreate portal-init)
+
+  ROLLBACK_NEEDED=true
+  log "Recreating portal service"
+  (cd "$SELF_UPGRADE_HOST_SOURCE" && DPF_VERSION="$TARGET_SHA" docker compose -p "$COMPOSE_PROJECT" -f docker-compose.yml up -d --no-build --no-deps --force-recreate portal)
+
+  STATE="unknown"
+  for i in $(seq 1 30); do
+    STATE=$(docker inspect "$PORTAL_CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "missing")
+    [ "$STATE" = "running" ] && break
+    sleep 2
+  done
+  [ "$STATE" = "running" ] || { self_upgrade_rollback "New portal failed to start (state: $STATE)"; exit 1; }
+
+  HEALTHY=false
+  for i in $(seq 1 "$HEALTH_RETRIES"); do
+    log "  Health check attempt $i/$HEALTH_RETRIES..."
+    if docker exec "$PORTAL_CONTAINER" wget -qO /dev/null -T 10 http://127.0.0.1:3000/api/health 2>/dev/null; then
+      HEALTHY=true
+      break
+    fi
+    sleep "$HEALTH_INTERVAL"
+  done
+  [ "$HEALTHY" = "true" ] || { self_upgrade_rollback "Health check failed after $HEALTH_RETRIES attempts"; exit 1; }
+
+  ROLLBACK_NEEDED=false
+  self_upgrade_update_status "completing" "" "Health check passed; waiting for build completion sweep." "$TARGET_SHA"
+  trap - ERR
+
+  log "========================================"
+  log "SELF-UPGRADE HEALTHY: $SELF_UPGRADE_RUN_ID"
+  log "  Deployed: $TARGET_SHA"
+  log "  Backup:   $BACKUP_FILE"
+  log "========================================"
+}
+
+if [ "$SELF_UPGRADE_MODE" = "true" ]; then
+  run_self_upgrade
+  exit 0
+fi
+
+PROMOTION_ID="${PROMOTION_ID:?PROMOTION_ID env var is required}"
+echo "$PROMOTION_ID" | grep -qE '^[a-zA-Z0-9_-]+$' || { log "Invalid PROMOTION_ID format: $PROMOTION_ID"; exit 1; }
 
 # Trap any unhandled error — ensures rollback runs AND script exits
 trap 'rollback "Unexpected failure at line $LINENO"; exit 1' ERR
