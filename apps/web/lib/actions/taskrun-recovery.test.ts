@@ -1,0 +1,244 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock prisma at the module boundary so the tests don't need a real DB.
+// Each test installs its own findUnique / findFirst / update / create
+// implementations via the helpers below.
+const {
+  taskRunFindUnique,
+  taskRunFindMany,
+  taskRunUpdate,
+  taskRunCreate,
+  featureBuildFindUnique,
+  stallEventFindFirst,
+  stallEventUpdate,
+  stallEventCreate,
+  notificationCreate,
+  transactionImpl,
+} = vi.hoisted(() => {
+  // Mocks are untyped (any) to keep the test ergonomic — production typing
+  // is enforced by the actual prisma client in lib/actions/taskrun-recovery.ts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anyFn = (): any => vi.fn();
+  const taskRunFindUnique = anyFn();
+  const taskRunFindMany = anyFn();
+  const taskRunUpdate = anyFn();
+  const taskRunCreate = anyFn();
+  const featureBuildFindUnique = anyFn();
+  const stallEventFindFirst = anyFn();
+  const stallEventUpdate = anyFn();
+  const stallEventCreate = anyFn();
+  const notificationCreate = anyFn();
+  const transactionImpl = vi.fn(async (fn: (tx: unknown) => unknown) =>
+    fn({
+      taskRun: { update: taskRunUpdate, create: taskRunCreate, findMany: taskRunFindMany },
+      stallEvent: { findFirst: stallEventFindFirst, update: stallEventUpdate, create: stallEventCreate },
+      notification: { create: notificationCreate },
+    }),
+  );
+  return {
+    taskRunFindUnique,
+    taskRunFindMany,
+    taskRunUpdate,
+    taskRunCreate,
+    featureBuildFindUnique,
+    stallEventFindFirst,
+    stallEventUpdate,
+    stallEventCreate,
+    notificationCreate,
+    transactionImpl,
+  };
+});
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    taskRun: { findUnique: taskRunFindUnique, findMany: taskRunFindMany, update: taskRunUpdate, create: taskRunCreate },
+    featureBuild: { findUnique: featureBuildFindUnique },
+    stallEvent: { findFirst: stallEventFindFirst, update: stallEventUpdate, create: stallEventCreate },
+    notification: { create: notificationCreate },
+    $transaction: transactionImpl,
+  },
+}));
+
+import { taskrunRetry, taskrunAbandon, taskrunEscalate, TaskrunRecoveryError } from "./taskrun-recovery";
+
+function stalledRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "cuid-stalled-1",
+    taskRunId: "TR-STALL-1",
+    userId: "user-1",
+    threadId: "thread-1",
+    contextId: "ctx-1",
+    buildId: null,
+    routeContext: "/build",
+    title: "Stalled task",
+    objective: "Do the thing",
+    source: "coworker",
+    status: "stalled",
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  taskRunFindUnique.mockReset();
+  taskRunFindMany.mockReset();
+  taskRunFindMany.mockImplementation(async () => []);
+  taskRunUpdate.mockReset();
+  taskRunUpdate.mockImplementation(async () => ({}));
+  taskRunCreate.mockReset();
+  featureBuildFindUnique.mockReset();
+  featureBuildFindUnique.mockImplementation(async () => null);
+  stallEventFindFirst.mockReset();
+  stallEventFindFirst.mockImplementation(async () => null);
+  stallEventUpdate.mockReset();
+  stallEventUpdate.mockImplementation(async () => ({}));
+  stallEventCreate.mockReset();
+  stallEventCreate.mockImplementation(async () => ({}));
+  notificationCreate.mockReset();
+  notificationCreate.mockImplementation(async () => ({}));
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("taskrunRetry", () => {
+  it("rejects when the row is not in stalled status", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), status: "working" });
+    await expect(taskrunRetry("TR-STALL-1", "op-1")).rejects.toBeInstanceOf(TaskrunRecoveryError);
+    await expect(taskrunRetry("TR-STALL-1", "op-1")).rejects.toThrow(/not_stalled|status is working/);
+  });
+
+  it("rejects when the row is not found", async () => {
+    taskRunFindUnique.mockResolvedValue(null);
+    await expect(taskrunRetry("TR-MISSING", "op-1")).rejects.toBeInstanceOf(TaskrunRecoveryError);
+    await expect(taskrunRetry("TR-MISSING", "op-1")).rejects.toThrow(/not_found|not found/);
+  });
+
+  it("rejects ship-phase retry without force:true", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "ship" });
+    await expect(taskrunRetry("TR-STALL-1", "op-1")).rejects.toThrow(/ship_phase_requires_force|double-publish/);
+  });
+
+  it("permits ship-phase retry with force:true", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "ship" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-RETRY-X" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1", { force: true });
+    expect(result.newTaskRunId).toBe("TR-RETRY-X");
+  });
+
+  it("spawns a sibling TaskRun with parentTaskRunId set to the stalled row's cuid", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-RETRY-A" });
+    await taskrunRetry("TR-STALL-1", "op-1");
+    expect(taskRunCreate).toHaveBeenCalledTimes(1);
+    const createArg = taskRunCreate.mock.calls[0]![0] as { data: { parentTaskRunId: string; status: string } };
+    expect(createArg.data.parentTaskRunId).toBe("cuid-stalled-1");
+    expect(createArg.data.status).toBe("submitted");
+  });
+
+  it("closes the most recent open StallEvent as 'retry'", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    stallEventFindFirst.mockResolvedValue({ id: "se-1" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-RETRY-B" });
+    await taskrunRetry("TR-STALL-1", "op-99");
+    expect(stallEventUpdate).toHaveBeenCalledTimes(1);
+    const updateArg = stallEventUpdate.mock.calls[0]![0] as { data: { outcome: string; outcomeBy: string } };
+    expect(updateArg.data.outcome).toBe("retry");
+    expect(updateArg.data.outcomeBy).toBe("op-99");
+  });
+});
+
+describe("taskrunAbandon", () => {
+  it("rejects when the row is not stalled", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), status: "completed" });
+    await expect(taskrunAbandon("TR-STALL-1", "op-1")).rejects.toThrow(/Cannot recover.*status is completed/);
+  });
+
+  it("transitions the stalled row to canceled", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    await taskrunAbandon("TR-STALL-1", "op-1");
+    const firstUpdate = taskRunUpdate.mock.calls[0]![0] as { data: { status: string } };
+    expect(firstUpdate.data.status).toBe("canceled");
+  });
+
+  it("closes the most recent open StallEvent as 'abandoned'", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    stallEventFindFirst.mockResolvedValue({ id: "se-1" });
+    await taskrunAbandon("TR-STALL-1", "op-1");
+    const updateArg = stallEventUpdate.mock.calls[0]![0] as { data: { outcome: string } };
+    expect(updateArg.data.outcome).toBe("abandoned");
+  });
+
+  it("cascades one level to live children with reason=parent_abandoned", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    taskRunFindMany.mockResolvedValue([
+      { id: "cuid-child-1", taskRunId: "TR-CHILD-1", startedAt: new Date(), buildId: null, lastHeartbeatAt: null },
+      { id: "cuid-child-2", taskRunId: "TR-CHILD-2", startedAt: new Date(), buildId: null, lastHeartbeatAt: null },
+    ]);
+    await taskrunAbandon("TR-STALL-1", "op-1");
+    // 1 update for parent + 2 for children = 3 total
+    expect(taskRunUpdate).toHaveBeenCalledTimes(3);
+    // 2 cascade StallEvent rows
+    expect(stallEventCreate).toHaveBeenCalledTimes(2);
+    const cascadeReasons = stallEventCreate.mock.calls.map(
+      (c: unknown[]) => (c[0] as { data: { reason: string } }).data.reason,
+    );
+    expect(cascadeReasons).toEqual(["parent_abandoned", "parent_abandoned"]);
+  });
+
+  it("does not touch terminal children", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    // findMany filters by status: { in: IN_FLIGHT_STATUSES } so terminal
+    // children would never be returned — the mock simulates that filter by
+    // returning only one live child plus a completed one filtered out.
+    taskRunFindMany.mockResolvedValue([
+      { id: "cuid-child-1", taskRunId: "TR-CHILD-1", startedAt: new Date(), buildId: null, lastHeartbeatAt: null },
+    ]);
+    await taskrunAbandon("TR-STALL-1", "op-1");
+    // 1 parent + 1 live child = 2 updates total
+    expect(taskRunUpdate).toHaveBeenCalledTimes(2);
+    // Verify the findMany call used the in-flight filter
+    const findManyArg = taskRunFindMany.mock.calls[0]![0] as { where: { status: { in: string[] } } };
+    expect(findManyArg.where.status.in).toEqual(["submitted", "working", "input-required", "auth-required"]);
+  });
+});
+
+describe("taskrunEscalate", () => {
+  it("rejects when the row is not stalled", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), status: "completed" });
+    await expect(taskrunEscalate("TR-STALL-1", "op-1")).rejects.toThrow(/Cannot recover.*status is completed/);
+  });
+
+  it("writes StallEvent.outcome=escalated with notes when provided", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    stallEventFindFirst.mockResolvedValue({ id: "se-1" });
+    await taskrunEscalate("TR-STALL-1", "op-1", "Needs human review");
+    const updateArg = stallEventUpdate.mock.calls[0]![0] as { data: { outcome: string; notes?: string } };
+    expect(updateArg.data.outcome).toBe("escalated");
+    expect(updateArg.data.notes).toBe("Needs human review");
+  });
+
+  it("does NOT transition the TaskRun status — escalation parks the row", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    await taskrunEscalate("TR-STALL-1", "op-1");
+    expect(taskRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("notifies the build owner when buildId resolves to a FeatureBuild.createdById", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ createdById: "user-owner" });
+    await taskrunEscalate("TR-STALL-1", "op-1");
+    const notifyArg = notificationCreate.mock.calls[0]![0] as { data: { userId: string; type: string } };
+    expect(notifyArg.data.userId).toBe("user-owner");
+    expect(notifyArg.data.type).toBe("taskrun.escalated");
+  });
+
+  it("falls back to the task's userId when no buildId is present", async () => {
+    taskRunFindUnique.mockResolvedValue(stalledRow());
+    await taskrunEscalate("TR-STALL-1", "op-1");
+    const notifyArg = notificationCreate.mock.calls[0]![0] as { data: { userId: string } };
+    expect(notifyArg.data.userId).toBe("user-1");
+  });
+});

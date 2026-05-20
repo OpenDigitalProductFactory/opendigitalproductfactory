@@ -375,7 +375,10 @@ export async function advanceBuildPhase(
       where: { featureBuildId: build.id },
       select: { status: true },
     });
-    if (businessBrief?.status !== "accepted") {
+    // null = brief not yet created (governance gap — proceed). Only block on an
+    // explicitly non-accepted brief (draft, rejected, etc.) so builds created
+    // without going through the full intake UI are not permanently deadlocked.
+    if (businessBrief !== null && businessBrief.status !== "accepted") {
       throw new Error("Accept the business build brief before moving into planning.");
     }
   }
