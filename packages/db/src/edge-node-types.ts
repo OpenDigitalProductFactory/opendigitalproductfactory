@@ -72,6 +72,9 @@ export const RESERVED_CAPABILITIES = [
   "discovery.network",
   "discovery.software",
   "metrics.host",
+  // Network telemetry adapters — spec: 2026-05-19-edge-node-network-telemetry-adapters-design.md
+  "metrics.network",
+  "discovery.lldp",
   "identity.broker",
   "mcp.gateway",
   "a2a.gateway",

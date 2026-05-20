@@ -12,10 +12,13 @@
     "verify-lifecycle": "tsx scripts/verify-lifecycle.ts"
   },
   "dependencies": {
+    "@dpf/validators": "workspace:*",
+    "net-snmp": "^3.14.0",
     "undici": "^8.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/net-snmp": "^3.11.0",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.6",
     "typescript": "^5.7.3",

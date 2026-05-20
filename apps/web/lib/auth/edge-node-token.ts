@@ -45,6 +45,7 @@ export type ResolvedEdgeNodeAuth = {
 
 export type EdgeNodeScope =
   | "edge:heartbeat"
+  | "edge:metrics"
   | "edge:rotate"
   | "discovery:submit";
 
@@ -116,9 +117,13 @@ export async function resolveEdgeNodeAuth(
     };
   }
 
-  // Per-scope refinement. discovery:submit requires trustState=trusted
-  // (pending and quarantined nodes can heartbeat but cannot submit).
-  if (requiredScope === "discovery:submit" && node.trustState !== "trusted") {
+  // Per-scope refinement. discovery:submit and edge:metrics require
+  // trustState=trusted (pending and quarantined nodes can heartbeat
+  // but cannot submit observations or metrics).
+  if (
+    (requiredScope === "discovery:submit" || requiredScope === "edge:metrics") &&
+    node.trustState !== "trusted"
+  ) {
     return {
       ok: false,
       error: "scope_disallowed",
