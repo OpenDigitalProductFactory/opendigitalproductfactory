@@ -1,0 +1,275 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { decideHostMatch, enforceCanonicalHost } from "./canonical-host";
+
+const path = "/foo";
+const search = "?bar=1";
+
+describe("decideHostMatch", () => {
+  it("passthrough when canonicalUrl is undefined (bootstrap-before-DNS)", () => {
+    const result = decideHostMatch({
+      host: "localhost:3000",
+      path,
+      search,
+      config: { canonicalUrl: undefined, aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "no-canonical-configured" });
+  });
+
+  it("passthrough when canonicalUrl is empty string", () => {
+    const result = decideHostMatch({
+      host: "localhost:3000",
+      path,
+      search,
+      config: { canonicalUrl: "", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "no-canonical-configured" });
+  });
+
+  it("passthrough when host header is missing", () => {
+    const result = decideHostMatch({
+      host: null,
+      path,
+      search,
+      config: { canonicalUrl: "https://portal.example.com", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "no-host-header" });
+  });
+
+  it("passthrough when host matches canonical exactly", () => {
+    const result = decideHostMatch({
+      host: "portal.example.com",
+      path,
+      search,
+      config: { canonicalUrl: "https://portal.example.com", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "host-matches-canonical" });
+  });
+
+  it("passthrough is case-insensitive on host comparison", () => {
+    const result = decideHostMatch({
+      host: "PORTAL.EXAMPLE.COM",
+      path,
+      search,
+      config: { canonicalUrl: "https://portal.example.com", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "host-matches-canonical" });
+  });
+
+  it("passthrough when host:port matches canonical:port", () => {
+    const result = decideHostMatch({
+      host: "portal.example.com:3000",
+      path,
+      search,
+      config: { canonicalUrl: "https://portal.example.com:3000", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "host-matches-canonical" });
+  });
+
+  it("redirect when port mismatches (different origin per browser)", () => {
+    const result = decideHostMatch({
+      host: "portal.example.com",
+      path,
+      search,
+      config: { canonicalUrl: "https://portal.example.com:3000", aliases: "" },
+    });
+    expect(result).toEqual({
+      kind: "redirect",
+      targetUrl: "https://portal.example.com:3000/foo?bar=1",
+    });
+  });
+
+  it("passthrough when host matches alias entry", () => {
+    const result = decideHostMatch({
+      host: "192.168.1.10:3000",
+      path,
+      search,
+      config: {
+        canonicalUrl: "https://portal.example.com",
+        aliases: "192.168.1.10:3000",
+      },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "host-matches-alias" });
+  });
+
+  it("alias entries are trimmed and case-insensitive", () => {
+    const result = decideHostMatch({
+      host: "192.168.1.10:3000",
+      path,
+      search,
+      config: {
+        canonicalUrl: "https://portal.example.com",
+        aliases: " 192.168.1.10:3000 , portal.local ",
+      },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "host-matches-alias" });
+  });
+
+  it("redirect preserves path and query string", () => {
+    const result = decideHostMatch({
+      host: "localhost:3000",
+      path: "/foo",
+      search: "?bar=1&baz=2",
+      config: { canonicalUrl: "https://portal.example.com", aliases: "" },
+    });
+    expect(result).toEqual({
+      kind: "redirect",
+      targetUrl: "https://portal.example.com/foo?bar=1&baz=2",
+    });
+  });
+
+  it("redirect to root path when path is /", () => {
+    const result = decideHostMatch({
+      host: "localhost:3000",
+      path: "/",
+      search: "",
+      config: { canonicalUrl: "https://portal.example.com", aliases: "" },
+    });
+    expect(result).toEqual({
+      kind: "redirect",
+      targetUrl: "https://portal.example.com/",
+    });
+  });
+
+  it("passthrough on malformed canonicalUrl (graceful — do not crash app on env typo)", () => {
+    const result = decideHostMatch({
+      host: "localhost:3000",
+      path,
+      search,
+      config: { canonicalUrl: ":://broken", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "no-canonical-configured" });
+  });
+
+  it("passthrough for IPv6 literal hosts matching canonical", () => {
+    const result = decideHostMatch({
+      host: "[::1]:3000",
+      path,
+      search,
+      config: { canonicalUrl: "http://[::1]:3000", aliases: "" },
+    });
+    expect(result).toEqual({ kind: "passthrough", reason: "host-matches-canonical" });
+  });
+
+  it("normalizes trailing slash in canonicalUrl when building redirect target", () => {
+    const result = decideHostMatch({
+      host: "localhost:3000",
+      path: "/foo",
+      search: "",
+      config: { canonicalUrl: "https://portal.example.com/", aliases: "" },
+    });
+    expect(result).toEqual({
+      kind: "redirect",
+      targetUrl: "https://portal.example.com/foo",
+    });
+  });
+});
+
+// Helper: build a NextRequest with optional host / x-forwarded-host headers.
+function buildRequest(opts: {
+  url: string;
+  host?: string;
+  xForwardedHost?: string;
+}): NextRequest {
+  const headers = new Headers();
+  if (opts.host !== undefined) headers.set("host", opts.host);
+  if (opts.xForwardedHost !== undefined) headers.set("x-forwarded-host", opts.xForwardedHost);
+  return new NextRequest(opts.url, { headers });
+}
+
+describe("enforceCanonicalHost (Next.js wrapper)", () => {
+  let originalPublicUrl: string | undefined;
+  let originalAliases: string | undefined;
+
+  beforeEach(() => {
+    originalPublicUrl = process.env.PUBLIC_URL;
+    originalAliases = process.env.PUBLIC_URL_ALIASES;
+  });
+
+  afterEach(() => {
+    if (originalPublicUrl === undefined) delete process.env.PUBLIC_URL;
+    else process.env.PUBLIC_URL = originalPublicUrl;
+    if (originalAliases === undefined) delete process.env.PUBLIC_URL_ALIASES;
+    else process.env.PUBLIC_URL_ALIASES = originalAliases;
+  });
+
+  it("returns null (passthrough) when PUBLIC_URL is unset", () => {
+    delete process.env.PUBLIC_URL;
+    delete process.env.PUBLIC_URL_ALIASES;
+    const req = buildRequest({
+      url: "http://localhost:3000/foo",
+      host: "localhost:3000",
+    });
+    expect(enforceCanonicalHost(req)).toBeNull();
+  });
+
+  it("returns null when host matches canonical", () => {
+    process.env.PUBLIC_URL = "https://portal.example.com";
+    const req = buildRequest({
+      url: "https://portal.example.com/foo",
+      host: "portal.example.com",
+    });
+    expect(enforceCanonicalHost(req)).toBeNull();
+  });
+
+  it('returns 301 redirect with Clear-Site-Data: "storage" for non-canonical host', () => {
+    process.env.PUBLIC_URL = "https://portal.example.com";
+    delete process.env.PUBLIC_URL_ALIASES;
+    const req = buildRequest({
+      url: "http://192.168.1.10:3000/foo",
+      host: "192.168.1.10:3000",
+    });
+    const res = enforceCanonicalHost(req);
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(301);
+    expect(res!.headers.get("location")).toBe("https://portal.example.com/foo");
+    expect(res!.headers.get("clear-site-data")).toBe('"storage"');
+  });
+
+  it("returns null when host matches PUBLIC_URL_ALIASES entry (LAN bypass)", () => {
+    process.env.PUBLIC_URL = "https://portal.example.com";
+    process.env.PUBLIC_URL_ALIASES = "192.168.1.10:3000";
+    const req = buildRequest({
+      url: "http://192.168.1.10:3000/foo",
+      host: "192.168.1.10:3000",
+    });
+    expect(enforceCanonicalHost(req)).toBeNull();
+  });
+
+  it("prefers x-forwarded-host over host header (reverse-proxy scenario)", () => {
+    process.env.PUBLIC_URL = "https://portal.example.com";
+    delete process.env.PUBLIC_URL_ALIASES;
+    const req = buildRequest({
+      url: "http://localhost:3000/foo",
+      host: "localhost:3000",
+      xForwardedHost: "portal.example.com",
+    });
+    expect(enforceCanonicalHost(req)).toBeNull();
+  });
+
+  it("preserves path and query string in redirect target", () => {
+    process.env.PUBLIC_URL = "https://portal.example.com";
+    delete process.env.PUBLIC_URL_ALIASES;
+    const req = buildRequest({
+      url: "http://localhost:3000/foo?bar=1&baz=2",
+      host: "localhost:3000",
+    });
+    const res = enforceCanonicalHost(req);
+    expect(res!.headers.get("location")).toBe(
+      "https://portal.example.com/foo?bar=1&baz=2",
+    );
+  });
+
+  it.each(["/api/health", "/api/healthz", "/api/ready"])(
+    "never redirects health-probe path %s (load-balancer probe protection)",
+    (probePath) => {
+      process.env.PUBLIC_URL = "https://portal.example.com";
+      delete process.env.PUBLIC_URL_ALIASES;
+      const req = buildRequest({
+        url: `http://192.168.1.10:3000${probePath}`,
+        host: "192.168.1.10:3000",
+      });
+      expect(enforceCanonicalHost(req)).toBeNull();
+    },
+  );
+});
