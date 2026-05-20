@@ -53,7 +53,12 @@ export function buildFailedState(
   failedAt: string,
   error: string,
 ): BuildExecutionState {
-  return { ...current, step: "failed", failedAt, error };
+  // Strip completedAt so a previous success cannot leave the appearance of a
+  // completed-yet-failed checkpoint. The recovery surfaces (retryBuildExecution,
+  // workflow-action selection) rely on step alone to discriminate states.
+  const { completedAt: _omitCompletedAt, ...rest } = current;
+  void _omitCompletedAt;
+  return { ...rest, step: "failed", failedAt, error };
 }
 
 // ─── Pipeline Orchestration ───────────────────────────────────────────────────
@@ -126,8 +131,13 @@ export async function runBuildPipeline(params: {
     }
   }
 
+  // Strip error/failedAt so a successful resume after a prior failure does
+  // not retain stale failure breadcrumbs on the final completed checkpoint.
+  const { error: _omitError, failedAt: _omitFailedAt, ...stateWithoutFailureFields } = state;
+  void _omitError;
+  void _omitFailedAt;
   const complete: BuildExecutionState = {
-    ...state,
+    ...stateWithoutFailureFields,
     step: "complete",
     completedAt: new Date().toISOString(),
   };
