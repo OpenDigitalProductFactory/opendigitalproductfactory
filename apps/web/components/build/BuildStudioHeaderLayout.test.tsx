@@ -1,4 +1,7 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from "vitest";
+import { render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import {
@@ -7,9 +10,15 @@ import {
 } from "@/lib/feature-build-types";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
 
+const routerMocks = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  replace: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
-    refresh: vi.fn(),
+    refresh: routerMocks.refresh,
+    replace: routerMocks.replace,
   }),
 }));
 
@@ -167,6 +176,24 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(html).toContain("Backlog launched build");
     expect(html).not.toContain("First build</h2>");
+  });
+
+  it("URL-backs the selected default build when /build has no buildId", async () => {
+    routerMocks.replace.mockClear();
+
+    render(
+      <BuildStudio
+        builds={[makeBuild({ buildId: "FB-DEFAULT", title: "Default build" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(routerMocks.replace).toHaveBeenCalledWith("/build?buildId=FB-DEFAULT", { scroll: false });
+    });
   });
 
   it("bounds the active-build title so long work names cannot take over the canvas", () => {

@@ -41,6 +41,27 @@ describe("portal context cache helpers", () => {
 
     expect(tags).toEqual(["portal-context", "portal-context:user:user-1", "portal-context:build:FB-123"]);
   });
+
+  it("returns entity-specific tags for every anchored work object", () => {
+    const tags = portalContextCacheTags(
+      {
+        pathname: "/build/work/WC-123",
+        routeContext: "/build/work",
+        buildId: "FB-123",
+        capsuleId: "WC-123",
+        threadId: "thread-789",
+      },
+      "user-1",
+    );
+
+    expect(tags).toEqual([
+      "portal-context",
+      "portal-context:user:user-1",
+      "portal-context:build:FB-123",
+      "portal-context:capsule:WC-123",
+      "portal-context:thread:thread-789",
+    ]);
+  });
 });
 
 describe("resolvePortalContextEnvelopeUncached", () => {
@@ -179,6 +200,71 @@ describe("resolvePortalContextEnvelopeUncached", () => {
     expect(db.agent.findMany).toHaveBeenCalled();
     expect(envelope.coworkers.map((candidate) => candidate.agentId)).toContain("AGT-CONTEXT-ARCH");
     expect(envelope.coworkers.map((candidate) => candidate.agentId)).not.toContain("work-context-architect");
+  });
+
+  it("returns a partial envelope with source_unavailable when a sub-resolver fails", async () => {
+    const db = createDbMock({
+      featureBuild: {
+        id: "build-row-1",
+        buildId: "FB-123",
+        title: "Build with offline capsule source",
+        phase: "implement",
+        status: "working",
+      },
+    });
+    db.workCapsule.findFirst.mockRejectedValueOnce(new Error("capsule source offline"));
+
+    const envelope = await resolvePortalContextEnvelopeUncached(
+      { pathname: "/build", routeContext: "/build", buildId: "FB-123" },
+      "user-1",
+      {
+        now: () => new Date("2026-05-17T18:23:41.123Z"),
+        db,
+        getRouteDataContext: vi.fn().mockResolvedValue(null),
+      },
+    );
+
+    expect(envelope.route.routeContext).toBe("/build");
+    expect(envelope.work.featureBuild).toBeNull();
+    expect(envelope.attention).toContainEqual(
+      expect.objectContaining({
+        kind: "source_unavailable",
+        severity: "warning",
+      }),
+    );
+    expect(envelope.promptDigest).toContain("Attention: source_unavailable(warning)");
+  });
+
+  it("returns a partial envelope with envelope_timeout when a sub-resolver exceeds the soft timeout", async () => {
+    const db = createDbMock();
+    db.featureBuild.findUnique.mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(() => resolve(null), 50)),
+    );
+
+    const envelope = await resolvePortalContextEnvelopeUncached(
+      { pathname: "/build", routeContext: "/build", buildId: "FB-SLOW" },
+      "user-1",
+      {
+        now: () => new Date("2026-05-17T18:23:41.123Z"),
+        db,
+        getRouteDataContext: vi.fn().mockResolvedValue(null),
+        resolverTimeoutMs: 5,
+      },
+    );
+
+    expect(envelope.route.routeContext).toBe("/build");
+    expect(envelope.attention).toContainEqual(
+      expect.objectContaining({
+        kind: "envelope_timeout",
+        severity: "warning",
+      }),
+    );
+    expect(envelope.attention).toContainEqual(
+      expect.objectContaining({
+        kind: "source_unavailable",
+        severity: "warning",
+      }),
+    );
   });
 });
 

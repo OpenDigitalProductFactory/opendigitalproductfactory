@@ -108,6 +108,13 @@ export function BuildStudio({
       progressVisibility,
     })
     : null;
+
+  useEffect(() => {
+    if (!activeBuild?.buildId) return;
+    if (initialBuildId === activeBuild.buildId) return;
+    router.replace(buildStudioBuildHref(activeBuild.buildId), { scroll: false });
+  }, [activeBuild?.buildId, initialBuildId, router]);
+
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
     const [freshResult, flowResult, progressResult] = await Promise.allSettled([
       getFeatureBuild(buildId),
@@ -708,6 +715,10 @@ function resolveInitialActiveBuild(
   }
 
   return buildRows.find((build) => build.phase !== "complete" && build.phase !== "failed") ?? null;
+}
+
+function buildStudioBuildHref(buildId: string): string {
+  return `/build?buildId=${encodeURIComponent(buildId)}`;
 }
 
 function BuildFailedBanner({ execState }: { execState: BuildExecutionState | null }) {
