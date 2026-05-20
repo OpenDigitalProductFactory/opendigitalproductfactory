@@ -7,7 +7,10 @@ import type { GraphViewName, PositionedNode, LayoutResult } from "@/lib/graph/ty
 import { VIEW_CONFIGS, resolveViewForTaxonomy } from "@/lib/graph/view-config";
 import { useGraphLayout } from "@/lib/graph/use-graph-layout";
 import { getDeviceVisual, LEGEND_ENTRIES } from "@/lib/graph/device-icons";
+import { isDockerOriginNode } from "@/lib/graph/docker-filter";
 import { describeGraphScope, filterBySubnet, filterGraphData } from "@/lib/graph/subnet-scope";
+
+const SHOW_DOCKER_STORAGE_KEY = "dpf:topology:show-docker";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -94,6 +97,7 @@ export function resolveDisplayedGraphData(
   activeSubnetId: string | null,
   focusNodeId: string | null,
   maxHops: number,
+  hideDocker = false,
 ) {
   const viewConfig = VIEW_CONFIGS[selectedView];
   const scopeState = resolveSubnetScopeState(graph, selectedView, activeSubnetId);
@@ -104,6 +108,7 @@ export function resolveDisplayedGraphData(
     selectedView,
     subnetFilter: "all",
     viewConfig,
+    hideDocker,
   });
 }
 
@@ -212,6 +217,19 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
   const [dynamicData, setDynamicData] = useState<GraphData | null>(null);
   const effectiveData = useMemo(() => dynamicData ?? data, [dynamicData, data]);
 
+  // Show Docker-origin nodes? Default off — Docker subnets/containers are
+  // noise for the external-of-platform viewpoint operators usually want.
+  // Persisted to localStorage so opt-ins survive across sessions.
+  const [showDocker, setShowDocker] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SHOW_DOCKER_STORAGE_KEY) === "1";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SHOW_DOCKER_STORAGE_KEY, showDocker ? "1" : "0");
+  }, [showDocker]);
+  const hideDocker = !showDocker;
+
   // Subnet filter (for subnet-topology view)
   const [activeSubnetId, setActiveSubnetId] = useState<string | null>(null);
   const [scopeToken, setScopeToken] = useState(() =>
@@ -222,7 +240,9 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
     return effectiveData.nodes
       .filter((n) => {
         const ct = (n as Record<string, unknown>).ciType;
-        return ct === "subnet" || ct === "vlan";
+        if (ct !== "subnet" && ct !== "vlan") return false;
+        if (hideDocker && isDockerOriginNode(n)) return false;
+        return true;
       })
       .map((n) => ({ id: n.id, name: n.name }))
       .sort((a, b) => {
@@ -231,15 +251,15 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
         if (aDocker !== bDocker) return aDocker ? 1 : -1;
         return a.name.localeCompare(b.name);
       });
-  }, [effectiveData.nodes, selectedView]);
+  }, [effectiveData.nodes, hideDocker, selectedView]);
 
   const scopeState = useMemo(
     () => resolveSubnetScopeState(effectiveData, selectedView, activeSubnetId),
     [effectiveData, selectedView, activeSubnetId],
   );
   const filteredData = useMemo(
-    () => resolveDisplayedGraphData(effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops),
-    [effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops],
+    () => resolveDisplayedGraphData(effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops, hideDocker),
+    [effectiveData, selectedView, activeSubnetId, focusNodeId, maxHops, hideDocker],
   );
 
   // Layout computation
@@ -291,6 +311,19 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
       setFocusNodeId(null);
     }
   }, [filteredData.nodes, focusNodeId]);
+
+  // If the Docker toggle hides the currently-selected subnet, drop the
+  // selection so the dropdown falls back to "All subnets". We skip when
+  // the subnet has gone missing from the underlying graph too — the
+  // invalidScope effect above already resets in that case, and stacking
+  // both bumps the scope-token sequence twice for the same event.
+  useEffect(() => {
+    if (!activeSubnetId) return;
+    if (scopeState.invalidScope) return;
+    if (!availableSubnets.some((s) => s.id === activeSubnetId)) {
+      applySubnetSelection(null);
+    }
+  }, [activeSubnetId, applySubnetSelection, availableSubnets, scopeState.invalidScope]);
 
   useEffect(() => {
     if (selectedView !== "subnet-topology") {
@@ -712,6 +745,21 @@ export function TopologyGraph({ data, defaultView, taxonomyNodeId, initialFocusN
               ))}
             </select>
           </div>
+
+          {/* Show-Docker toggle. Off by default — the topology view is
+              normally used to look OUT from the platform at the real LAN,
+              and Docker bridges add one noisy subnet per compose network.
+              Operators debugging the platform itself can opt in here. */}
+          <label className="flex items-center gap-1 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showDocker}
+              onChange={(e) => setShowDocker(e.target.checked)}
+              aria-label="Show Docker-internal subnets and containers"
+              className="h-3 w-3 accent-[var(--dpf-accent)]"
+            />
+            <span className="text-[9px] text-[var(--dpf-muted)]">Show Docker</span>
+          </label>
 
           {/* Focus node info */}
           {focusNode && (
