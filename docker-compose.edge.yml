@@ -51,12 +51,15 @@
 
 services:
   edge-node:
+    # Compose uses `image` as the local tag; if it can't pull (GHCR auth
+    # denied, offline, dev branch not released yet), `build` runs and tags
+    # the resulting image with the `image` name. Operators don't have to
+    # swap blocks manually for dev vs release.
     image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
-    # For dev work on unreleased changes, swap the `image:` line above
-    # for a build block. Comment-out + uncomment as needed:
-    # build:
-    #   context: .
-    #   dockerfile: services/edge-node/Dockerfile
+    build:
+      context: .
+      dockerfile: services/edge-node/Dockerfile
+    pull_policy: missing
     restart: unless-stopped
     environment:
       # Authority Core URL — point at the portal service in the same
@@ -142,6 +145,10 @@ services:
     profiles:
       - linux-host-network
     image: ghcr.io/${GHCR_OWNER:-opendigitalproductfactory}/dpf-edge-node:${DPF_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/edge-node/Dockerfile
+    pull_policy: missing
     restart: unless-stopped
     network_mode: host
     environment:

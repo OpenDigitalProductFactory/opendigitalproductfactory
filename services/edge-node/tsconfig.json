@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    // CommonJS output keeps the existing extensionless imports
+    // (e.g. `import {…} from "./api-client"`) working at runtime under
+    // Node's ESM resolver, which would otherwise refuse them with
+    // ERR_MODULE_NOT_FOUND. tsx (used by the dev/test scripts) handles
+    // either module style, so this only changes what tsc emits to dist/.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
