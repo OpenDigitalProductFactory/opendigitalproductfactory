@@ -32,7 +32,7 @@ import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
-import type { PortalObjectAnchor } from "@/lib/portal-context";
+import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -85,7 +85,7 @@ async function buildPortalContextPromptSection(input: {
   routeContext: string;
   threadId: string;
   buildId?: string | null;
-}, userId: string): Promise<string | null> {
+}, userId: string): Promise<{ section: string; envelope: PortalContextEnvelope } | null> {
   const pathname = normalizePortalContextPathname(input.routeContext);
   if (!isPortalContextSupportedPath(pathname)) return null;
 
@@ -103,7 +103,8 @@ async function buildPortalContextPromptSection(input: {
       userId,
     );
 
-    return formatPortalContextPromptSection(envelope.promptDigest, envelope.anchors);
+    const section = formatPortalContextPromptSection(envelope.promptDigest, envelope.anchors);
+    return section ? { section, envelope } : null;
   } catch (error) {
     console.warn("[portal-context] Failed to resolve coworker prompt context", error);
     return null;
@@ -117,6 +118,101 @@ function formatPortalContextPromptSection(promptDigest: string, anchors: PortalO
     : null;
   const lines = ["--- PORTAL CONTEXT ---", digest, anchorLine].filter((line): line is string => Boolean(line));
   return lines.length > 1 ? lines.join("\n") : null;
+}
+
+async function persistCoworkerResponseArtifact(input: {
+  taskRunId: string | null;
+  responseContent: string;
+  routeContext: string;
+  threadId: string;
+  agentId: string;
+  agentName: string;
+  providerId: string | null;
+  modelId: string | null;
+  portalContext: PortalContextEnvelope | null;
+  userId: string;
+}): Promise<void> {
+  if (!input.taskRunId) return;
+  if (!isSubstantiveCoworkerOutput(input.responseContent)) return;
+
+  try {
+    const { createTaskArtifact } = await import("@/lib/tak/task-records");
+    await createTaskArtifact({
+      taskRunId: input.taskRunId,
+      artifactType: "coworker_response",
+      name: "Coworker response",
+      summary: input.responseContent.slice(0, 240),
+      content: {
+        routeContext: input.routeContext,
+        threadId: input.threadId,
+        response: input.responseContent,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        anchors: input.portalContext?.anchors ?? [],
+      },
+      metadata: {
+        kind: "coworker-response",
+        deliveryState: "responded",
+        routeContext: input.routeContext,
+        envelopeId: input.portalContext?.envelopeId ?? null,
+      },
+      producerAgentId: input.agentId,
+    });
+
+    const capsuleId = input.portalContext?.work?.capsule?.capsuleId ?? null;
+    if (capsuleId) {
+      const { recordWorkCapsuleEvidence } = await import("@/lib/work-capsules/work-capsule-store");
+      await recordWorkCapsuleEvidence({
+        db: prisma,
+        capsuleId,
+        evidence: {
+          kind: "note",
+          summary: `${input.agentName} response captured for the current portal context.`,
+          result: {
+            taskRunId: input.taskRunId,
+            threadId: input.threadId,
+            agentId: input.agentId,
+            routeContext: input.routeContext,
+          },
+        },
+        actor: {
+          userId: input.userId,
+          agentId: input.agentId,
+          principalId: input.portalContext?.user?.principalId ?? null,
+        },
+      });
+    }
+
+    const backlogItemId = input.portalContext?.work?.backlogItem?.backlogItemId ?? null;
+    if (backlogItemId) {
+      const { recordPortalContextBacklogEvidence } = await import("@/lib/portal-context/evidence-recording");
+      await recordPortalContextBacklogEvidence({
+        db: prisma,
+        backlogItemId,
+        kind: "portal-context-coworker-response",
+        summary: `${input.agentName} response captured for the current portal context.`,
+        payload: {
+          taskRunId: input.taskRunId,
+          threadId: input.threadId,
+          agentId: input.agentId,
+          routeContext: input.routeContext,
+          envelopeId: input.portalContext?.envelopeId ?? null,
+        },
+        actor: {
+          userId: input.userId,
+          agentId: input.agentId,
+        },
+      });
+    }
+  } catch (error) {
+    console.warn("[portal-context] Failed to persist coworker response artifact", error);
+  }
+}
+
+function isSubstantiveCoworkerOutput(content: string): boolean {
+  const trimmed = content.trim();
+  if (trimmed.length < 40) return false;
+  return !/^(?:ok|yes|no|thanks|thank you|sure|got it|hello|hi|hey)$/i.test(trimmed);
 }
 
 function normalizePortalContextPathname(routeContext: string): string {
@@ -435,7 +531,7 @@ export async function sendMessage(input: {
 
   // Track build ID at function scope — used in both prompt assembly and post-inference research dispatch
   let resolvedBuildId = input.buildId;
-  const portalContextPrompt = await buildPortalContextPromptSection(
+  const portalContextPromptContext = await buildPortalContextPromptSection(
     {
       routeContext: input.routeContext,
       threadId: input.threadId,
@@ -443,6 +539,7 @@ export async function sendMessage(input: {
     },
     user.id!,
   );
+  const portalContextPrompt = portalContextPromptContext?.section ?? null;
 
   // Build inference context: recent window + semantic recall for older context.
   // Build phases need more context (research findings, schema details, tool results)
@@ -1231,6 +1328,8 @@ export async function sendMessage(input: {
           where: { buildId: activeBuild!.buildId, phase: "build" },
           data: { phase: "review" },
         });
+        const { revalidatePortalContextForBuild } = await import("@/lib/portal-context/invalidation");
+        revalidatePortalContextForBuild(activeBuild!.buildId);
       } catch { /* already advanced or concurrent update — fine */ }
 
       const needsReview = (activeBuild!.taskResults as { tasks?: Array<{ outcome: string; title: string }> })?.tasks
@@ -1720,6 +1819,19 @@ export async function sendMessage(input: {
       routeContext: true,
       createdAt: true,
     },
+  });
+
+  await persistCoworkerResponseArtifact({
+    taskRunId: currentTaskRun?.taskRunId ?? null,
+    responseContent,
+    routeContext: input.routeContext,
+    threadId: input.threadId,
+    agentId: agent.agentId,
+    agentName: agent.agentName,
+    providerId: responseProviderId,
+    modelId: responseModelId,
+    portalContext: portalContextPromptContext?.envelope ?? null,
+    userId: user.id!,
   });
 
   const { resolveAIDocForAgent } = await import("@/lib/identity/aidoc-resolver");

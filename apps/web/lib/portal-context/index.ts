@@ -13,14 +13,17 @@ import { resolvePortalEvidence } from "./evidence-resolver";
 import { resolveHiveMindCandidates } from "./hive-mind-resolver";
 import { createPortalContextPromptDigest } from "./prompt-digest";
 import { resolvePortalRoute } from "./route-resolver";
-import { resolvePortalWork } from "./work-resolver";
+import { resolvePortalWork, type WorkResolution } from "./work-resolver";
 import type { AttentionSignal, PortalContextEnvelope, PortalContextInput } from "./types";
 
 type ResolverDeps = {
   db?: PortalContextDb;
   now?: () => Date;
   getRouteDataContext?: (routeContext: string, userId: string) => Promise<string | null>;
+  resolverTimeoutMs?: number;
 };
+
+const DEFAULT_RESOLVER_TIMEOUT_MS = 3_000;
 
 export async function resolvePortalContextEnvelope(
   input: PortalContextInput,
@@ -50,20 +53,49 @@ export async function resolvePortalContextEnvelopeUncached(
   const db = deps.db ?? (prisma as unknown as PortalContextDb);
   const now = deps.now?.() ?? new Date();
   const bucket = bucketPortalContextTimestamp(now);
+  const resolverTimeoutMs = deps.resolverTimeoutMs ?? DEFAULT_RESOLVER_TIMEOUT_MS;
   const routeProjection = resolvePortalRoute(input);
   const attention: AttentionSignal[] = [...routeProjection.attention];
 
-  const [user, principalAlias, organization] = await Promise.all([
-    resolveUser(db, userId),
-    resolvePrincipalAlias(db, userId),
-    resolveOrganization(db),
-    (deps.getRouteDataContext ?? getDefaultRouteDataContext)(input.routeContext, userId).catch(() => null),
+  const [userResult, principalAliasResult, organizationResult, routeDataResult] = await Promise.all([
+    resolveSource("user", resolveUser(db, userId), null, resolverTimeoutMs),
+    resolveSource("principal", resolvePrincipalAlias(db, userId), null, resolverTimeoutMs),
+    resolveSource("organization", resolveOrganization(db), null, resolverTimeoutMs),
+    resolveSource(
+      "route-data",
+      (deps.getRouteDataContext ?? getDefaultRouteDataContext)(input.routeContext, userId),
+      null,
+      resolverTimeoutMs,
+    ),
   ]);
+  attention.push(
+    ...userResult.attention,
+    ...principalAliasResult.attention,
+    ...organizationResult.attention,
+    ...routeDataResult.attention,
+  );
+  const user = userResult.value;
+  const principalAlias = principalAliasResult.value;
+  const organization = organizationResult.value;
 
-  const workProjection = await resolvePortalWork(input, db, now);
+  const workProjectionResult = await resolveSource(
+    "work",
+    resolvePortalWork(input, db, now),
+    emptyWorkResolution(),
+    resolverTimeoutMs,
+  );
+  const workProjection = workProjectionResult.value;
+  attention.push(...workProjectionResult.attention);
   attention.push(...workProjection.attention);
 
-  const evidence = await resolvePortalEvidence(workProjection.work, db);
+  const evidenceResult = await resolveSource(
+    "evidence",
+    resolvePortalEvidence(workProjection.work, db),
+    [],
+    resolverTimeoutMs,
+  );
+  const evidence = evidenceResult.value;
+  attention.push(...evidenceResult.attention);
   if (evidence.some((item) => item.isGap)) {
     attention.push({
       kind: "missing_evidence",
@@ -79,12 +111,19 @@ export async function resolvePortalContextEnvelopeUncached(
     work: workProjection.work,
     domainTools: routeProjection.domainTools,
   });
-  const coworkers = await resolveHiveMindCandidates({
-    routeDomain: routeProjection.route.domain,
-    work: workProjection.work,
-    attention,
-    db,
-  });
+  const coworkersResult = await resolveSource(
+    "hive-mind",
+    resolveHiveMindCandidates({
+      routeDomain: routeProjection.route.domain,
+      work: workProjection.work,
+      attention,
+      db,
+    }),
+    [],
+    resolverTimeoutMs,
+  );
+  const coworkers = coworkersResult.value;
+  attention.push(...coworkersResult.attention);
 
   const baseEnvelope: Omit<PortalContextEnvelope, "promptDigest"> = {
     envelopeId: createPortalContextEnvelopeId(input, userId, bucket),
@@ -163,6 +202,73 @@ async function resolveOrganization(db: PortalContextDb): Promise<OrganizationRow
 
 function platformRoleForUser(user: PortalUserRow | null): string {
   return user?.groups?.[0]?.platformRole?.roleId ?? "none";
+}
+
+class PortalContextResolverTimeoutError extends Error {
+  constructor(source: string) {
+    super(`${source} resolver timed out`);
+    this.name = "PortalContextResolverTimeoutError";
+  }
+}
+
+async function resolveSource<T>(
+  source: string,
+  promise: Promise<T>,
+  fallback: T,
+  timeoutMs: number,
+): Promise<{ value: T; attention: AttentionSignal[] }> {
+  try {
+    return {
+      value: await withTimeout(source, promise, timeoutMs),
+      attention: [],
+    };
+  } catch (error) {
+    const timedOut = error instanceof PortalContextResolverTimeoutError;
+    const attention: AttentionSignal[] = [
+      {
+        kind: "source_unavailable",
+        severity: "warning",
+        message: `Portal context ${source} source is unavailable.`,
+      },
+    ];
+    if (timedOut) {
+      attention.push({
+        kind: "envelope_timeout",
+        severity: "warning",
+        message: `Portal context ${source} source exceeded the soft timeout.`,
+      });
+    }
+    return { value: fallback, attention };
+  }
+}
+
+async function withTimeout<T>(source: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new PortalContextResolverTimeoutError(source)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function emptyWorkResolution(): WorkResolution {
+  return {
+    work: {
+      backlogItem: null,
+      epic: null,
+      capsule: null,
+      featureBuild: null,
+      taskRun: null,
+      agentThread: null,
+      branch: null,
+    },
+    anchors: [],
+    attention: [],
+  };
 }
 
 export type {

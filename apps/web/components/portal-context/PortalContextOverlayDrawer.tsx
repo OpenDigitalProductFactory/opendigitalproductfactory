@@ -55,7 +55,15 @@ export function PortalContextOverlayDrawer({
             {
               id: "hive",
               label: "Hive",
-              panel: <HiveMindCandidateList candidates={envelope.coworkers} />,
+              panel: (
+                <HiveMindCandidateList
+                  candidates={envelope.coworkers}
+                  work={envelope.work}
+                  authority={envelope.authority}
+                  routeContext={envelope.route.routeContext}
+                  envelopeId={envelope.envelopeId}
+                />
+              ),
             },
             {
               id: "evidence",

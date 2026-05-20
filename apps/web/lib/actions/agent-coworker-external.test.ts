@@ -85,6 +85,14 @@ vi.mock("@/lib/tak/reflection-triggers", () => ({
   processRuntimeIssueReflection: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tak/task-records", () => ({
+  createTaskArtifact: vi.fn(),
+}));
+
+vi.mock("@/lib/work-capsules/work-capsule-store", () => ({
+  recordWorkCapsuleEvidence: vi.fn(),
+}));
+
 vi.mock("@/lib/process-observer-hook", () => ({
   observeConversation: vi.fn().mockResolvedValue(undefined),
 }));
@@ -154,6 +162,12 @@ vi.mock("@dpf/db", () => ({
     taskRun: {
       findFirst: vi.fn(),
     },
+    backlogItem: {
+      findUnique: vi.fn(),
+    },
+    backlogItemActivity: {
+      create: vi.fn(),
+    },
     agentActionProposal: {
       create: vi.fn(),
     },
@@ -184,6 +198,8 @@ import { classifyTask } from "@/lib/task-classifier";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
+import { createTaskArtifact } from "@/lib/tak/task-records";
+import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 
@@ -196,6 +212,8 @@ const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
 const mockGovernedExecuteTool = governedExecuteTool as ReturnType<typeof vi.fn>;
 const mockResolvePortalContextEnvelope = resolvePortalContextEnvelope as ReturnType<typeof vi.fn>;
+const mockCreateTaskArtifact = createTaskArtifact as ReturnType<typeof vi.fn>;
+const mockRecordWorkCapsuleEvidence = recordWorkCapsuleEvidence as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
 
 describe("agent coworker external access", () => {
@@ -241,12 +259,19 @@ describe("agent coworker external access", () => {
     });
     mockPrisma.agentModelConfig.findUnique.mockResolvedValue(null);
     mockPrisma.toolExecution.create.mockResolvedValue({});
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ id: "backlog-row-1" });
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({ id: "backlog-activity-1" });
+    mockCreateTaskArtifact.mockResolvedValue({ id: "artifact-row-1", artifactId: "ta_123" });
+    mockRecordWorkCapsuleEvidence.mockResolvedValue({ id: "activity-1" });
     mockResolvePortalContextEnvelope.mockResolvedValue({
       promptDigest: "Route: /build\nBuild: FB-123 phase=implement status=active\nCapsule: WC-123 status=claimed executor=codex",
       anchors: [
         { kind: "build", id: "FB-123", label: "Portal context build", href: "/build?buildId=FB-123" },
         { kind: "capsule", id: "WC-123", label: "Portal context capsule", href: "/build/work/WC-123" },
       ],
+      work: {
+        capsule: { capsuleId: "WC-123" },
+      },
     });
     mockClassifyTask.mockReturnValue({
       taskType: "conversation",
@@ -675,6 +700,71 @@ describe("agent coworker external access", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           taskRunId: "run-123",
+        }),
+      }),
+    );
+  });
+
+  it("persists substantive coworker responses as TaskArtifact and Work Capsule evidence", async () => {
+    mockPrisma.taskRun.findFirst.mockResolvedValue({ taskRunId: "run-123" });
+    mockGetAvailableTools.mockReturnValue([]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "I reviewed the anchored capsule and recommend finishing the evidence handoff before promotion.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+    });
+    mockResolvePortalContextEnvelope.mockResolvedValueOnce({
+      envelopeId: "env-1",
+      promptDigest: "Route: /build\nBuild: FB-123 phase=implement status=active\nCapsule: WC-123 status=claimed executor=codex",
+      anchors: [
+        { kind: "build", id: "FB-123", label: "Portal context build", href: "/build?buildId=FB-123" },
+        { kind: "capsule", id: "WC-123", label: "Portal context capsule", href: "/build/work/WC-123" },
+        { kind: "backlogItem", id: "BI-123", label: "Portal context backlog", href: "/ops/backlog/BI-123" },
+      ],
+      work: {
+        capsule: { capsuleId: "WC-123" },
+        backlogItem: { backlogItemId: "BI-123" },
+      },
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "What should happen next?",
+      routeContext: "/build",
+      buildId: "FB-123",
+    });
+
+    expect(mockCreateTaskArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskRunId: "run-123",
+        artifactType: "coworker_response",
+        name: "Coworker response",
+        producerAgentId: "admin-assistant",
+      }),
+    );
+    expect(mockRecordWorkCapsuleEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capsuleId: "WC-123",
+        evidence: expect.objectContaining({
+          kind: "note",
+          summary: "Admin Assistant response captured for the current portal context.",
+        }),
+      }),
+    );
+    expect(mockPrisma.backlogItemActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          backlogItemId: "backlog-row-1",
+          kind: "portal-context-coworker-response",
+          summary: "Admin Assistant response captured for the current portal context.",
+          recordedById: "user-1",
+          recordedByAgentId: "admin-assistant",
         }),
       }),
     );
