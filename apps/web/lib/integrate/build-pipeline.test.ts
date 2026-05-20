@@ -61,4 +61,21 @@ describe("buildFailedState", () => {
     expect(result.error).toBe("Connection refused");
     expect(result.containerId).toBe("abc");
   });
+
+  it("strips completedAt so a prior success cannot leave a completed-yet-failed checkpoint", () => {
+    const base: BuildExecutionState = {
+      step: "complete",
+      retryCount: 0,
+      startedAt: "2026-01-01T00:00:00Z",
+      completedAt: "2026-01-01T00:05:00Z",
+      containerId: "sb-1",
+    };
+    const result = buildFailedState(base, "deps_installed", "brief.targetRoles undefined");
+    expect(result.step).toBe("failed");
+    expect(result.failedAt).toBe("deps_installed");
+    expect(result.error).toBe("brief.targetRoles undefined");
+    // completedAt must be gone -- contradictory state was the FB-78E967D4 root
+    expect(result.completedAt).toBeUndefined();
+    expect(result.containerId).toBe("sb-1");
+  });
 });
