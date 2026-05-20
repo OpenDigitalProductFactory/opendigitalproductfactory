@@ -425,7 +425,14 @@ function resolveTaskRunStationId(row: OperationsMapTaskRun, template: Operations
 
 function severityForTaskRunStatus(status: string): OperationsMapSeverity {
   if (status === "failed" || status === "rejected") return "critical";
-  if (status === "input-required" || status === "auth-required") return "attention";
+  // BI-4ab6be39 — stalled is operator-actionable: surfaces with attention
+  // severity so it filters alongside input-required / auth-required in the
+  // AI Operations Map projection list, and so ProjectionInspector's
+  // StalledTaskRecoveryActions component receives projections with the
+  // right summary suffix. Without this, stalled rows fell through to
+  // "normal" and were invisible to the attention filter (caught in the
+  // F1+F2 UX dogfooding pass, 2026-05-20).
+  if (status === "input-required" || status === "auth-required" || status === "stalled") return "attention";
   return "normal";
 }
 
