@@ -114,11 +114,38 @@ describe("buildSandboxStageCommand", () => {
   it("stages releasable sandbox changes while excluding caches and generated artifacts", () => {
     const command = buildSandboxStageCommand();
 
-    expect(command).toContain("cd /workspace && git add -A --");
+    expect(command).toContain("cd /workspace");
     expect(command).toContain(":!**/node_modules/**");
     expect(command).toContain(":!**/.next/**");
     expect(command).toContain(":!**/*.tsbuildinfo");
     expect(command).toContain(":!pnpm-lock*");
+    expect(command).toContain(":!packages/db/generated/**");
+  });
+
+  it("does not use git add -A which exits 1 when gitignored directories are present in the working tree", () => {
+    // git add -A errors (exit code 1) on gitignored untracked paths such as
+    // .pnpm-store, node_modules, and packages/db/generated even when those paths
+    // are listed in the exclude pathspecs — crashing the Continue to Release action.
+    const command = buildSandboxStageCommand();
+    expect(command).not.toContain("git add -A");
+  });
+
+  it("uses git add -u to stage tracked modifications without touching gitignored untracked paths", () => {
+    const command = buildSandboxStageCommand();
+    expect(command).toContain("git add -u");
+  });
+
+  it("uses git ls-files --others --exclude-standard to discover new non-gitignored source files", () => {
+    const command = buildSandboxStageCommand();
+    expect(command).toContain("git ls-files");
+    expect(command).toContain("--others");
+    expect(command).toContain("--exclude-standard");
+  });
+
+  it("pipes new-file list through xargs git add to handle any count of new source files", () => {
+    const command = buildSandboxStageCommand();
+    expect(command).toContain("xargs");
+    expect(command).toContain("git add --");
   });
 });
 
