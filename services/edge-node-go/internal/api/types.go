@@ -64,3 +64,25 @@ type AuthorityErrorBody struct {
 	Error   string `json:"error,omitempty"`
 	Message string `json:"message,omitempty"`
 }
+
+// SubmissionEnvelope mirrors the shape services/edge-node/src/sweep.ts
+// builds for POST /api/v1/edge/discovery-runs. The Authority side
+// (apps/web/app/api/v1/edge/discovery-runs/route.ts) validates this
+// shape with its own Zod schema — wire-contract parity tests on the
+// Authority side replay captured fixtures from both runtimes against
+// that schema.
+//
+// items + relationships are typed as `any` here because the collect
+// package owns the concrete shapes (collect.Item, collect.Relationship)
+// and we don't want to create an import cycle. The Authority's Zod
+// validates each item separately.
+type SubmissionEnvelope struct {
+	RunKey        string   `json:"runKey"`
+	AgentMode     string   `json:"agentMode"`
+	AgentVersion  string   `json:"agentVersion"`
+	ObservedAt    string   `json:"observedAt"` // RFC 3339
+	Capabilities  []string `json:"capabilities"`
+	Items         []any    `json:"items"`
+	Relationships []any    `json:"relationships"`
+	Warnings      []string `json:"warnings,omitempty"`
+}

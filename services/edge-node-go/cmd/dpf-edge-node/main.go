@@ -32,7 +32,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/api"
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/collect"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/config"
 	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/state"
 )
@@ -142,6 +145,15 @@ func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*s
 		slog.String("authority", cfg.AuthorityURL),
 	)
 
+	// Populate metadata.host.ipAddresses from the host's real NICs so
+	// the Admin UI can identify the node by its LAN address without
+	// SQL-querying the metadata blob. Mirrors T2.4 in the TS path
+	// (services/edge-node/src/collectors/host-network.ts).
+	ipAddresses := collect.RealLANAddresses()
+	if ipAddresses == nil {
+		ipAddresses = []string{}
+	}
+
 	resp, err := client.Enroll(ctx, cfg.BootstrapToken, api.EnrollRequest{
 		DisplayName:            cfg.EdgeNodeName,
 		Platform:               cfg.Platform,
@@ -151,11 +163,8 @@ func enrollOnce(ctx context.Context, cfg *config.Config, client *api.Client) (*s
 		Metadata: map[string]any{
 			"hostname": cfg.EdgeNodeName,
 			"host": map[string]any{
-				"hostname": cfg.EdgeNodeName,
-				// ipAddresses populated by the host-network collector
-				// in W2; W1 sends an empty slice to keep the contract
-				// shape stable.
-				"ipAddresses": []string{},
+				"hostname":    cfg.EdgeNodeName,
+				"ipAddresses": ipAddresses,
 			},
 		},
 	})
@@ -246,12 +255,36 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 	}
 }
 
-// runSweep is a W1 placeholder. Real collectors land in W2 (host info)
-// and W3 (ARP via GetIpNetTable). We submit an empty envelope so the
-// Authority sees the runtime alive and the wire-contract parity test
-// has Go fixtures to compare. Replace with the real collector chain
-// in subsequent slices.
-func runSweep(ctx context.Context, _ *config.Config, _ *api.Client, st *state.EdgeNodeState) error {
+// runSweep collects host facts each interval and submits them to
+// /api/v1/edge/discovery-runs. W2 ships the host-info collector; W3
+// adds ARP via the platform-specific neighbor table; W4 adds SNMP.
+// The collector chain composes — each adds items + relationships +
+// warnings to the same envelope.
+//
+// The sweep also runs once immediately on startup (in addition to the
+// ticker schedule) so the first submission lands within ~1 second
+// of enrollment rather than waiting a full interval. The TS path in
+// services/edge-node/src/sweep.ts has the same "drain-then-collect"
+// pattern; this matches it.
+func runSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
+	doTick := func() {
+		if err := submitSweep(ctx, cfg, client, st); err != nil {
+			if api.IsRevoked(err) {
+				// Heartbeat owns the terminal-revocation lifecycle;
+				// sweep just stops submitting and lets the other loop
+				// clear state and exit.
+				slog.Error("Sweep got node_revoked — pausing until heartbeat handles it")
+				return
+			}
+			slog.Warn("Sweep submission failed", slog.String("err", err.Error()))
+			return
+		}
+	}
+
+	// One immediate sweep on startup so the operator sees data within
+	// seconds, not after the first 5-minute interval elapses.
+	doTick()
+
 	ticker := time.NewTicker(time.Duration(st.SweepIntervalSec) * time.Second)
 	defer ticker.Stop()
 
@@ -261,8 +294,50 @@ func runSweep(ctx context.Context, _ *config.Config, _ *api.Client, st *state.Ed
 			return nil
 		case <-ticker.C:
 		}
-		slog.Info("Sweep tick — W1 placeholder, collectors land in W2+")
+		doTick()
 	}
+}
+
+// submitSweep builds one envelope from the current collector chain and
+// POSTs it. Pulled into its own function so tests can drive it without
+// constructing a ticker.
+func submitSweep(ctx context.Context, cfg *config.Config, client *api.Client, st *state.EdgeNodeState) error {
+	hostResult := collect.HostInfo()
+
+	// Convert []collect.Item → []any so the SubmissionEnvelope's typed
+	// `[]any` accepts them. The JSON marshal layer produces identical
+	// bytes either way; the indirection only matters at the Go type
+	// level.
+	items := make([]any, 0, len(hostResult.Items))
+	for _, item := range hostResult.Items {
+		items = append(items, item)
+	}
+	rels := make([]any, 0, len(hostResult.Relationships))
+	for _, rel := range hostResult.Relationships {
+		rels = append(rels, rel)
+	}
+
+	envelope := api.SubmissionEnvelope{
+		RunKey:        uuid.NewString(),
+		AgentMode:     cfg.InstallMode,
+		AgentVersion:  cfg.Version,
+		ObservedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		Capabilities:  phase0Capabilities,
+		Items:         items,
+		Relationships: rels,
+		Warnings:      hostResult.Warnings,
+	}
+
+	if _, err := client.SubmitDiscoveryRun(ctx, st.NodeToken, envelope); err != nil {
+		return err
+	}
+	slog.Info("Discovery run submitted",
+		slog.String("runKey", envelope.RunKey),
+		slog.Int("items", len(envelope.Items)),
+		slog.Int("relationships", len(envelope.Relationships)),
+		slog.Int("warnings", len(envelope.Warnings)),
+	)
+	return nil
 }
 
 // printEnrollFixture emits a canonical EnrollRequest JSON document to
@@ -271,13 +346,6 @@ func runSweep(ctx context.Context, _ *config.Config, _ *api.Client, st *state.Ed
 // from services/edge-node. The two must round-trip through the same
 // Zod schema without field-level drift.
 func printEnrollFixture() {
-	cfg := &config.Config{
-		EdgeNodeName:           "fixture-host",
-		Platform:               "linux",
-		InstallMode:            "native",
-		Version:                "0.1.0-fixture",
-	}
-	_ = cfg
 	fixture := api.EnrollRequest{
 		DisplayName:            "fixture-host",
 		Platform:               "linux",
