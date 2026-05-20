@@ -57,6 +57,21 @@ function generateBranchName(buildId: string, title: string): string {
   return `build/${buildId}/${slugify(title)}`;
 }
 
+/**
+ * Format a PR title that stays within GitHub's 256-char limit.
+ *
+ * The wrapper text (`feat: ` prefix + ` (Build FB-XXXXXXXX)` suffix) consumes
+ * around 25 characters, so we cap the body of the title at 220 to leave
+ * headroom and append a single-character ellipsis when truncation fires.
+ */
+export function formatContributionPrTitle(rawTitle: string, buildId: string): string {
+  const PR_TITLE_BODY_LIMIT = 220;
+  const body = rawTitle.length > PR_TITLE_BODY_LIMIT
+    ? rawTitle.slice(0, PR_TITLE_BODY_LIMIT - 1).trimEnd() + "…"
+    : rawTitle;
+  return `feat: ${body} (Build ${buildId})`;
+}
+
 // ─── PR Body Generation ────────────────────────────────────────────────────
 
 function generatePRBody(input: {
@@ -240,7 +255,7 @@ export async function submitBuildAsPR(
   } catch { /* non-fatal */ }
 
   const branchName = generateBranchName(input.buildId, input.title);
-  const prTitle = `feat: ${input.title} (Build ${input.buildId})`;
+  const prTitle = formatContributionPrTitle(input.title, input.buildId);
 
   const prBody = generatePRBody({
     buildId: input.buildId,
