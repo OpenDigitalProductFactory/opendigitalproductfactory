@@ -7,18 +7,24 @@
 //   3b. If state missing: require DPF_BOOTSTRAP_TOKEN env, run enrollment,
 //       persist state, then run heartbeat + sweep loops.
 //
-// Heartbeat and sweep loops run concurrently. Heartbeat owns
-// liveness + runtime-config refresh; sweep owns periodic discovery
-// submission. If either loop returns (e.g. node revoked), the
+// Three loops run concurrently:
+//   - Heartbeat loop: liveness + runtime-config refresh.
+//   - Sweep loop: periodic discovery submission.
+//   - Metrics loop: SNMP ifTable + LLDP peer collection (every 10 s,
+//     gated on SNMP_TARGET env and trustState=trusted).
+//
+// If the heartbeat or sweep loop returns (e.g. node revoked), the
 // process exits so the supervisor can restart it.
 //
 // Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
 // Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md A3 + A5
+// Metrics spec: docs/superpowers/specs/2026-05-19-edge-node-network-telemetry-adapters-design.md
 
 import { AuthorityApiClient } from "./api-client";
 import { loadConfig } from "./config";
 import { runEnrollment } from "./enroll";
 import { runHeartbeatLoop } from "./heartbeat";
+import { runMetricsLoop } from "./metrics-loop";
 import { loadState } from "./state";
 import { runSweepLoop } from "./sweep";
 
@@ -45,17 +51,22 @@ async function main(): Promise<void> {
     );
   }
 
+  const metricsIntervalSec = state.metricsIntervalSec ?? 10;
   log(
     "info",
-    `Starting heartbeat (every ${state.heartbeatIntervalSec}s) + sweep (every ${state.sweepIntervalSec}s) loops.`,
+    `Starting heartbeat (every ${state.heartbeatIntervalSec}s) + sweep (every ${state.sweepIntervalSec}s) + metrics (every ${metricsIntervalSec}s) loops.`,
   );
 
-  // Race: if either loop returns (heartbeat exits on revocation,
-  // sweep currently runs forever), let the process exit. The
-  // container supervisor will restart with a fresh state load.
+  // Race: if the heartbeat or sweep loop returns (revocation signal),
+  // let the process exit. The metrics loop runs as a fire-and-forget
+  // peer — it never causes the process to exit on failure.
   await Promise.race([
     runHeartbeatLoop({ config, api, state }),
     runSweepLoop({ config, api, state }),
+    runMetricsLoop({ config, api, state }).catch((err) => {
+      log("warn", `metrics-loop exited unexpectedly: ${(err as Error).message}`);
+      // Don't propagate — heartbeat/sweep are the authoritative loops.
+    }),
   ]);
 }
 

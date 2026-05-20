@@ -22,6 +22,8 @@ export type EnrollResponse = {
   trustState: "pending" | "trusted";
   heartbeatIntervalSec: number;
   sweepIntervalSec: number;
+  /** Cadence for the metrics collection loop. Defaults to 10 s if absent. */
+  metricsIntervalSec?: number;
   acceptedCapabilities: string[];
 };
 
@@ -37,6 +39,8 @@ export type HeartbeatResponse = {
   ok: true;
   heartbeatIntervalSec: number;
   sweepIntervalSec: number;
+  /** Cadence for the metrics collection loop. Defaults to 10 s if absent. */
+  metricsIntervalSec?: number;
   acceptedCapabilities: string[];
   trustState: "pending" | "trusted" | "quarantined" | "revoked";
 };
@@ -107,6 +111,21 @@ export class AuthorityApiClient {
   ): Promise<Record<string, unknown>> {
     return this.post<Record<string, unknown>>(
       "/api/v1/edge/discovery-runs",
+      nodeToken,
+      body,
+    );
+  }
+
+  /**
+   * POST /api/v1/edge/metrics using the node token.
+   * Sends network interface metrics and LLDP peer discoveries.
+   */
+  async postMetrics(
+    nodeToken: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>(
+      "/api/v1/edge/metrics",
       nodeToken,
       body,
     );
