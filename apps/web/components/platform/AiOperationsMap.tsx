@@ -31,6 +31,7 @@ import {
   saveOperationsMapViewPreference,
   type OperationsMapStoredQuickViewId,
 } from "./ai-operations-map-prefs";
+import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -2520,6 +2521,15 @@ function ProjectionInspector({ projection }: { projection: OperationsMapProjecti
     projection.links.coworkerHref ? { href: projection.links.coworkerHref, label: "Open coworker" } : null,
   ].filter((item): item is { href: string; label: string } => item !== null);
 
+  // BI-4ab6be39 — detect stalled task-run projections. projectTaskRun
+  // renders summary as "${title} (${status})" — when status is "stalled"
+  // and the projection has a taskRunId in refs, expose the operator
+  // recovery actions (Retry / Abandon / Escalate).
+  const isStalledTaskRun =
+    projection.source === "task-run" &&
+    projection.refs.taskRunId != null &&
+    projection.summary.includes("(stalled)");
+
   return (
     <div className="mt-4 space-y-4">
       <div>
@@ -2535,6 +2545,16 @@ function ProjectionInspector({ projection }: { projection: OperationsMapProjecti
         {projection.refs.threadId ? <InspectorFact label="Thread" value={projection.refs.threadId} /> : null}
         {projection.refs.backlogItemId ? <InspectorFact label="Backlog item" value={projection.refs.backlogItemId} /> : null}
       </dl>
+      {isStalledTaskRun && projection.refs.taskRunId ? (
+        <StalledTaskRecoveryActions
+          taskRunId={projection.refs.taskRunId}
+          // Phase is unknown here — we don't carry it in projection.refs.
+          // The server action will look it up. Passing null disables the
+          // ship-phase confirm branch in the UI (server still enforces
+          // ship_phase_requires_force, so this is safe).
+          phase={null}
+        />
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {linkItems.map((item) => (
           <Link key={item.href} href={item.href} className="text-sm text-[var(--dpf-accent)] hover:underline">
