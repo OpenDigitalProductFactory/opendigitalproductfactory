@@ -434,6 +434,18 @@ export async function advanceBuildPhase(
     }
   }
 
+  if (currentPhase === "build" && targetPhase === "review") {
+    if (!build.sandboxId) {
+      throw new Error("Build Studio cannot advance to review because the sandbox is no longer available.");
+    }
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId);
+    if (releasableFiles.length === 0) {
+      throw new Error(
+        "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
+      );
+    }
+  }
+
   if (currentPhase === "review" && targetPhase === "ship") {
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot continue to release because the sandbox is no longer available.");

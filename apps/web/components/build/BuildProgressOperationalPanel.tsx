@@ -55,7 +55,10 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
           </div>
 
           {projection.progress.conflicts.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div
+              className="mt-3 flex max-h-24 flex-wrap gap-2 overflow-y-auto pr-1"
+              aria-label={`${projection.progress.conflicts.length} source-of-truth conflicts`}
+            >
               {projection.progress.conflicts.map((conflict) => (
                 <TruthSourceBadge
                   key={`${conflict.source}-${conflict.observedAt}`}
