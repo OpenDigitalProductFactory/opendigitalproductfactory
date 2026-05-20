@@ -156,9 +156,10 @@ describe("buildSandboxSourceCurrencyProbeCommand", () => {
     expect(command).toContain("rev-parse HEAD^{tree}");
     expect(command).toContain("rev-parse origin/main^{tree}");
     expect(command).toContain("rev-list --left-right --count HEAD...origin/main");
-    expect(command).toContain("status --porcelain");
+    expect(command).toContain("status --porcelain --untracked-files=all -- .");
     expect(command).toContain("localSourceChangeCount");
     expect(command).toContain(":!**/.next/**");
+    expect(command).toContain(":!.pnpm-store");
   });
 });
 
