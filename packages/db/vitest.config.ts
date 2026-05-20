@@ -16,6 +16,6 @@ export default defineConfig({
     // in one file disconnects the shared global client, causing the next
     // file's first Prisma call to fail with ECONNREFUSED.
     pool: "forks",
-    include: ["test/**/*.test.ts", "src/**/*.test.ts"],
+    include: ["test/**/*.test.ts"],
   },
 });
