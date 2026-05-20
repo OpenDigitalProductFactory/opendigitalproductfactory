@@ -9,6 +9,7 @@ import {
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
+  enrichToolDescriptions,
 } from "./agentic-loop";
 
 vi.mock("@dpf/db", () => ({
@@ -178,6 +179,75 @@ describe("buildRepeatedToolStopMessage", () => {
       routeContext: "/build",
       reasonHint: "",
     })).toContain("Check the build evidence for what was completed.");
+  });
+});
+
+describe("enrichToolDescriptions — review-fail veto on write tool", () => {
+  const baseTools = [
+    { type: "function", name: "saveBuildEvidence", description: "Save evidence", inputSchema: {} },
+    { type: "function", name: "reviewDesignDoc", description: "Review design doc", inputSchema: {} },
+  ];
+
+  it("annotates saveBuildEvidence when reviewDesignDoc returned decision:fail", () => {
+    const enriched = enrichToolDescriptions(baseTools, [
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
+      { name: "reviewDesignDoc", args: {}, result: { success: true, message: "Design review: fail.", data: { review: { decision: "fail", rationale: "Missing codebase research section." } } } },
+    ]);
+    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
+    expect(save.description).toContain("REVIEW REJECTION");
+    expect(save.description).toContain("Missing codebase research section.");
+    expect(save.description).toContain("submitting identical arguments will be rejected");
+  });
+
+  it("clears the veto on a later passing review", () => {
+    const enriched = enrichToolDescriptions(baseTools, [
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
+      { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "fail", rationale: "Missing research." } } } },
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v2" }, result: { success: true, message: "Evidence saved." } },
+      { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "pass" } } } },
+    ]);
+    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
+    expect(save.description).toBe("Save evidence");
+  });
+
+  it("keeps the veto sticky across a subsequent saveBuildEvidence success (intermediate save still rejected)", () => {
+    // This is the FB-C26D5B50 scenario: the next saveBuildEvidence succeeds at
+    // the protocol level but the review veto from the prior failed review
+    // must remain visible until a passing review clears it.
+    const enriched = enrichToolDescriptions(baseTools, [
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
+      { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "fail", rationale: "Missing codebase research." } } } },
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1-again" }, result: { success: true, message: "Evidence saved." } },
+    ]);
+    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
+    expect(save.description).toContain("REVIEW REJECTION");
+    expect(save.description).toContain("Missing codebase research.");
+  });
+
+  it("treats data.blocked=true as a veto even without decision:fail", () => {
+    const enriched = enrichToolDescriptions(baseTools, [
+      { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "pass" }, blocked: true } } },
+    ]);
+    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
+    expect(save.description).toContain("REVIEW REJECTION");
+  });
+
+  it("does nothing when there are no review failures and no tool errors", () => {
+    const enriched = enrichToolDescriptions(baseTools, [
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: true, message: "Evidence saved." } },
+      { name: "reviewDesignDoc", args: {}, result: { success: true, data: { review: { decision: "pass" } } } },
+    ]);
+    expect(enriched.find((t) => t.name === "saveBuildEvidence")!.description).toBe("Save evidence");
+    expect(enriched.find((t) => t.name === "reviewDesignDoc")!.description).toBe("Review design doc");
+  });
+
+  it("preserves the existing error-warning path when a tool itself failed", () => {
+    const enriched = enrichToolDescriptions(baseTools, [
+      { name: "saveBuildEvidence", args: { field: "designDoc", value: "v1" }, result: { success: false, error: "Network timeout on persistence layer" } },
+    ]);
+    const save = enriched.find((t) => t.name === "saveBuildEvidence")!;
+    expect(save.description).toContain("WARNING");
+    expect(save.description).toContain("Network timeout on persistence layer");
   });
 });
 
