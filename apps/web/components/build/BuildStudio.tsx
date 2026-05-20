@@ -589,7 +589,7 @@ export function BuildStudio({
                     className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
                     style={getTabStyle(buildView === "topology")}
                   >
-                    Topology
+                    Workflow
                   </button>
                   {/* Details tab — always available so design doc / brief is visible during ideate/plan */}
                   <button

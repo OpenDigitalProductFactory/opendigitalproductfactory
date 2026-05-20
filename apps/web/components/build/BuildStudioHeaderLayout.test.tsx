@@ -239,7 +239,7 @@ describe("BuildStudio active-build header layout", () => {
     );
 
     expect(html).toContain(">Progress<");
-    expect(html).toContain(">Topology<");
+    expect(html).toContain(">Workflow<");
     expect(html).toContain("Loading build progress...");
     expect(html).not.toContain("code-intelligence-status-card");
     expect(html).not.toContain("process-graph");
