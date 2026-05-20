@@ -4437,6 +4437,10 @@ model TaskRun {
   startedAt          DateTime          @default(now())
   completedAt        DateTime?
   archivedAt         DateTime?
+  // Cooperative heartbeat written by long-running loops (agent runtime,
+  // deliberation rounds, sandbox pipeline, Codex CLI) so the watchdog can
+  // distinguish a live task from a wedged one. See BI-4ab6be39 §6.1.
+  lastHeartbeatAt    DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4445,6 +4449,7 @@ model TaskRun {
   artifacts          TaskArtifact[]
   deliberationRuns   DeliberationRun[]
   decisionInteractions DecisionInteraction[]
+  stallEvents        StallEvent[]
 
   @@index([userId, status])
   @@index([threadId])
@@ -4452,6 +4457,40 @@ model TaskRun {
   @@index([parentTaskRunId])
   @@index([routeContext, status])
   @@index([repeatedPatternKey])
+  // Watchdog query: WHERE status = 'working' AND lastHeartbeatAt < ...
+  @@index([status, lastHeartbeatAt])
+}
+
+// ─── Build Studio Stall Detection — audit trail (BI-4ab6be39) ─────
+//
+// One row per stall detection or operator-initiated recovery action.
+// Captures the watchdog's decision evidence (reason, observed values,
+// thresholds in effect) and the resulting operator outcome (retry,
+// abandon, escalate). Used by the Build Studio phase panel history
+// strip and as candidate WWMD profile material in v2.
+model StallEvent {
+  id                   String    @id @default(cuid())
+  taskRunId            String
+  buildId              String?
+  phase                String?   // FeatureBuild.phase at detection time
+  reason               String    // "heartbeat_timeout" | "total_timeout" | "never_started" | "parent_stalled" | "parent_abandoned"
+  detectedAt           DateTime  @default(now())
+  lastHeartbeatAt      DateTime?
+  startedAt            DateTime
+  thresholdHeartbeatS  Int
+  thresholdTotalS      Int
+  outcome              String?   // null (pending) | "retry" | "abandoned" | "escalated" | "auto-recovered"
+  outcomeAt            DateTime?
+  outcomeBy            String?   // User.id of operator who acted; null if watchdog auto-action
+  notes                String?   @db.Text
+  createdAt            DateTime  @default(now())
+
+  taskRun              TaskRun   @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskRunId])
+  @@index([buildId])
+  @@index([phase, reason])
+  @@index([outcome])
 }
 
 model TaskMessage {
@@ -7166,6 +7205,22 @@ model OrgSettings {
   lastRateFetchAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// ─── Build Studio Stall Detection (BI-4ab6be39) ───────────────────
+//
+// Per-phase timeout thresholds consumed by the taskrun-watchdog cron.
+// Operator-editable at runtime via Admin > Build Studio > Stall Thresholds.
+// See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §7.2.
+model BuildStudioStallThreshold {
+  id                       String   @id @default(cuid())
+  scope                    String   @unique // "phase.ideate" | "phase.plan" | "phase.build" | "phase.review" | "phase.ship" | "default"
+  heartbeatTimeoutSeconds  Int
+  totalPhaseTimeoutSeconds Int
+  updatedAt                DateTime @updatedAt
+  updatedBy                String?  // User.id of last operator edit; null if seeded
+
+  @@index([scope])
 }
 
 // ─── Course Management ────────────────────────────────────────────
