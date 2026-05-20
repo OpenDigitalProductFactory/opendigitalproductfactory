@@ -80,9 +80,9 @@ Verified:
 - `pnpm --filter web build` - passed. Existing Turbopack/NFT broad-trace warnings remain in backlog/spec search and discovery catalog import traces.
 - Disposable Docker UX verification against the phase-2 image on `localhost:3101` passed for `/build`, URL-backed active build selection, Portal Context strip, overlay drawer, Hive tab, and mobile drawer width. Screenshots: `apps/web/output/playwright/phase2-build-overlay-hive.png`, `apps/web/output/playwright/phase2-build-overlay-hive-mobile.png`.
 
-Remaining dependency:
+Remaining dependency — resolved 2026-05-19:
 
-- The hive action calls the existing `dispatchAgentThread` seam after creating or reusing the child task. That dispatcher is still a placeholder in current mainline code, so this slice makes hive participation durable and visible in `TaskRun`/artifact/evidence records, but full autonomous child-thread execution still depends on the A2A/team-orchestration runtime landing behind that seam.
+- The hive action calls the existing `dispatchAgentThread` seam after creating or reusing the child task. As of BI-57ED34F7 that seam is wired into the existing async coworker runtime: `dispatchAgentThread` transitions the child `TaskRun` to `working`, fires `executeAutonomousAgenticLoop` against the child thread (same runtime used by interactive coworker chat, MCP `tasks/submit`, and scheduled tasks), persists the resulting assistant `AgentMessage`, and writes `completed` / `failed` with a populated `progressPayload.summary` so the existing `get_thread_result` and `get_child_threads` MCP tools surface progress. Cross-specialist (A2A) coworker team orchestration is still pending under EP-A2A / BI-9DB7C332 — the portal context overlay no longer blocks on that work.
 
 ## Known Gaps From Architectural Review — 2026-05-20
 
