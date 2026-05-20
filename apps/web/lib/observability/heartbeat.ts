@@ -32,7 +32,11 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
     });
     return result.count > 0;
   } catch (err) {
-    console.warn(`[heartbeat] write failed for ${taskRunId}:`, err instanceof Error ? err.message : err);
+    // Pass taskRunId as a separate console arg (not interpolated into the
+    // format string) to satisfy CodeQL's externally-controlled-format-string
+    // rule. console APIs treat the first arg as a format string in some
+    // runtimes; keeping it a literal avoids the warning.
+    console.warn("[heartbeat] write failed for", taskRunId, err instanceof Error ? err.message : err);
     return true;
   }
 }
