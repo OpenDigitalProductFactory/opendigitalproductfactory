@@ -645,8 +645,12 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     lines.push(`  Title: ${ctx.brief.title}`);
     lines.push(`  Description: ${ctx.brief.description}`);
     lines.push(`  Portfolio: ${ctx.brief.portfolioContext}`);
-    lines.push(`  Target roles: ${ctx.brief.targetRoles.join(", ")}`);
-    lines.push(`  Acceptance criteria: ${ctx.brief.acceptanceCriteria.join("; ")}`);
+    if (Array.isArray(ctx.brief.targetRoles) && ctx.brief.targetRoles.length > 0) {
+      lines.push(`  Target roles: ${ctx.brief.targetRoles.join(", ")}`);
+    }
+    if (Array.isArray(ctx.brief.acceptanceCriteria) && ctx.brief.acceptanceCriteria.length > 0) {
+      lines.push(`  Acceptance criteria: ${ctx.brief.acceptanceCriteria.join("; ")}`);
+    }
   }
 
   if (ctx.designDoc) {
