@@ -181,6 +181,19 @@ describe("buildSandboxListReleasableFilesCommand", () => {
     expect(command).toContain(":(exclude)**/node_modules/**");
     expect(command).not.toContain("grep -v");
   });
+
+  it("compares the index against baseRef when provided so committed branch work is visible", () => {
+    // Without baseRef, `git diff --cached` only shows index-vs-HEAD (i.e. staged
+    // but uncommitted). Once the build-phase agent has committed onto the
+    // build branch, HEAD already contains those changes and the diff goes
+    // empty — even though the branch is N commits ahead of where it forked.
+    // Passing the client branch as baseRef makes committed + uncommitted work
+    // both appear, which is what the PR #850 gate needs to recognize.
+    const command = buildSandboxListReleasableFilesCommand("/workspace", "client/abc-123");
+
+    expect(command).toContain("git diff --cached 'client/abc-123' --name-only -- .");
+    expect(command).toContain(":(exclude)**/.next/**");
+  });
 });
 
 describe("buildSandboxDiffForFilesCommand", () => {
@@ -193,6 +206,16 @@ describe("buildSandboxDiffForFilesCommand", () => {
     expect(command).toContain("git diff --cached --");
     expect(command).toContain("'apps/web/components/build/BuildStudio.tsx'");
     expect(command).toContain("'apps/web/components/build/O'\"'\"'Malley Panel.tsx'");
+  });
+
+  it("compares against baseRef when provided so the diff body includes committed work", () => {
+    const command = buildSandboxDiffForFilesCommand(
+      ["apps/web/lib/foo.ts"],
+      "/workspace",
+      "client/abc-123",
+    );
+
+    expect(command).toContain("git diff --cached 'client/abc-123' -- 'apps/web/lib/foo.ts'");
   });
 });
 

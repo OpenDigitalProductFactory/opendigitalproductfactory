@@ -438,7 +438,9 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot advance to review because the sandbox is no longer available.");
     }
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId);
+    const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+    const { clientBranch } = await getClientIdentity();
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length === 0) {
       throw new Error(
         "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
@@ -450,7 +452,9 @@ export async function advanceBuildPhase(
     if (!build.sandboxId) {
       throw new Error("Build Studio cannot continue to release because the sandbox is no longer available.");
     }
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId);
+    const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+    const { clientBranch } = await getClientIdentity();
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length === 0) {
       throw new Error(
         "No releasable source changes are present in the sandbox. Resume implementation and make a real code change before continuing to release.",
@@ -829,7 +833,9 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
     if (!build.sandboxId) {
       throw new Error("This release-phase build has no sandbox attached, so implementation cannot be resumed safely.");
     }
-    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId);
+    const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+    const { clientBranch } = await getClientIdentity();
+    const releasableFiles = await listReleasableSandboxFiles(build.sandboxId, { baseRef: clientBranch });
     if (releasableFiles.length > 0) {
       throw new Error("This build already has releasable source changes. Continue from the release decisions instead of reopening implementation.");
     }

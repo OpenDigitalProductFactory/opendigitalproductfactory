@@ -31,8 +31,17 @@ describe("shouldRetry", () => {
   it("denies retry when count equals max", () => {
     expect(shouldRetry("sandbox_created", 3)).toBe(false);
   });
-  it("never retries tests_run or complete", () => {
-    expect(shouldRetry("tests_run", 0)).toBe(false);
+  it("retries the stepComplete (diff/commit capture) dispatch up to its budget", () => {
+    // The "tests_run" slot dispatches stepComplete, which now extracts the
+    // sandbox diff and commit hashes back onto the FeatureBuild row. A
+    // transient sandbox hiccup (index lock, mid-rebuild) shouldn't strand
+    // an otherwise-complete build — give it retry budget like the other
+    // sandbox-touching steps.
+    expect(shouldRetry("tests_run", 0)).toBe(true);
+    expect(shouldRetry("tests_run", 1)).toBe(true);
+    expect(shouldRetry("tests_run", 2)).toBe(false);
+  });
+  it("never retries the terminal complete step", () => {
     expect(shouldRetry("complete", 0)).toBe(false);
   });
 });
