@@ -348,12 +348,34 @@ export type AuthoritySummary = {
   proposalModeActive: boolean;
 };
 
+// Authority derivation (normative):
+// - canActOnCapsule: TRUE when the user is the current capsule executor OR
+//   holds an active scope claim that overlaps this capsule. Platform-role
+//   permissions alone are NOT sufficient — read WorkCapsule.executorKind /
+//   executor user linkage and WorkCapsule.scopeClaims against userId.
+// - canActOnBuild: TRUE when the user can author Build Studio evidence on
+//   the active build (platform role admit + build-author membership), not
+//   merely view it.
+// - canReviewPromotion: TRUE when the user holds the build-scoped promotion
+//   reviewer grant for the active build, OR a platform-level promotion
+//   reviewer role. A blanket `manage_backlog` is NOT a substitute.
+// - proposalModeActive: read from the current route's agent context (the
+//   same `proposal` mode flag the coworker shell uses). Never derive it
+//   from "a build/capsule exists" — Build Studio anchors are not a proxy
+//   for proposal mode.
+// Resolver implementations must not weaken these checks. If a source is
+// unavailable, return `false` for the dependent flag and emit a typed
+// `source_unavailable` attention signal — never default to `true`.
+
 export type AttentionSignal = {
   kind:
     | "missing_evidence"
     | "lease_expired"
     | "scope_overlap"
-    | "build_stalled"
+    | "build_stalled"            // emitted by work-resolver when FeatureBuild.phase is "build"
+                                  // AND no observable activity (last TaskRun event, dispatch,
+                                  // or sandbox write) within the configured stall window.
+                                  // NEVER inferred from absence of evidence alone.
     | "capsule_not_linked"
     | "no_active_build"
     | "missing_grants"
@@ -375,6 +397,16 @@ export type AttentionSignal = {
 3. Tool execution receives stable IDs from the server-resolved context, not client-invented context.
 4. If a source is unavailable, the envelope includes a typed missing-source signal and still renders from remaining sources.
 5. Prompt injection defense applies at the projection boundary: user-authored free text is summarized into `promptDigest` and not blindly copied into tool instructions.
+
+**Digest-safe field whitelist (normative).** Only the following envelope fields may be copied verbatim into `promptDigest`:
+
+- `route.routeContext` (route registry-derived; not user input)
+- `work.featureBuild.buildId`, `phase`, `status` (system IDs / enum)
+- `work.capsule.capsuleId`, `status`, `executorKind` (system IDs / enum)
+- `work.epic.epicId`, `work.backlogItem.backlogItemId`, `status` (system IDs / enum)
+- `attention[].kind`, `severity` (enum)
+
+Any field that is user-shaped — including `branch.branchName` (worktree creation accepts custom suffixes), `capsule.title`, `featureBuild.title`, `backlogItem.title`, `reason`, free-text labels, and any URL — must be sanitized through a `safeDigestText()` helper before inclusion (strip newlines, cap at N chars, escape any prompt-injection markers like `<<` / `>>>>` / `### system`). When in doubt, omit. The current implementation omits titles entirely; if titles are later added, sanitize first.
 
 ### 7.3 Resolver Input Type
 
@@ -509,6 +541,14 @@ export type HiveMindCandidate = {
 
 `taskType` maps to the `TaskRun.taskType` field used by the existing coworker runtime for routing and model-tier selection. The resolver must emit a `taskType` that is valid per the current `TaskRun` schema enum; do not invent new values. The UI uses `taskType` only for display labelling; the runtime uses it for dispatch.
 
+**Role-resolution rule (normative):** the resolver must NOT infer `role` from substring matches against the agent name, description, or skill text. Such keyword sniffing is just a hardcoded map in a different layer and misclassifies any new agent whose blurb happens to include an unrelated word ("review", "test", "operate"). The role must come from a typed Agent registry field. Until the `Agent` schema carries an explicit `role` (or a structured `capabilityTags` array the resolver can map deterministically), the resolver may use a transitional, well-documented keyword-inference helper but must:
+
+1. Treat the inferred role as a low-confidence default.
+2. Log a one-time warning per `agentId` whose role had to be inferred.
+3. Be removed when the Agent registry exposes the typed field. Tracked as a follow-up alongside this slice; do not extend keyword inference with new heuristics in lieu of the schema change.
+
+**`requiredGrantKeys` rule (normative):** `requiredGrantKeys` lists ONLY the `Agent.toolGrants[].grantKey` values the activation needs. It must NOT include `Skill.capability` values — capability is a declaration of what an agent can do, not a permission a user must hold to invoke it. Mixing the two surfaces false "Missing grant" chips when the user has the relevant tool grant but the agent declares an unrelated capability string.
+
 ### 8.5 Envelope Caching
 
 `PortalContextEnvelope` is produced by server-side code and cached using Next.js server caching.
@@ -521,7 +561,11 @@ Caching rules:
 - `envelopeId`: `sha256(pathname + buildId + capsuleId + threadId + userId + bucketedTimestamp).hex().slice(0, 16)`. Use Node's built-in `crypto.createHash` — no additional dependency.
 - Cache key tags: `["portal-context", userId, buildId ?? "", capsuleId ?? "", threadId ?? ""]`. Tag the call so Next.js can targeted-revalidate it.
 - Cache `revalidate`: 30 seconds. This is the outer ceiling; internal resolution may be faster.
-- Invalidation: call `revalidateTag("portal-context")` when `WorkCapsuleActivity`, `TaskRun.status`, or `FeatureBuild.phase` changes.
+- Invalidation (preferred): use the scoped helpers in `apps/web/lib/portal-context/invalidation.ts` — `revalidatePortalContextForBuild(buildId)`, `revalidatePortalContextForCapsule(capsuleId)`, `revalidatePortalContextForTaskRun(taskRunId, threadId?)`, `revalidatePortalContextForThread(threadId)`, `revalidatePortalContextForUser(userId)`. Mutation points should call the narrowest helper available:
+  - `WorkCapsuleActivity` create / update → `revalidatePortalContextForCapsule` (and `revalidatePortalContextForBuild` when the activity affects a linked build).
+  - `TaskRun.status` change → `revalidatePortalContextForTaskRun`.
+  - `FeatureBuild.phase` change → `revalidatePortalContextForBuild`.
+- Invalidation (fallback): broad `revalidateTag("portal-context")` is the last resort when a mutation affects an unknown set of envelopes. Acceptable temporarily; prefer narrowing as the call site stabilizes.
 - The browser receives the resolved envelope as a serialized prop or via a server action; it does not cache the envelope or construct its fields. A Client Component may hold a local reference for the lifetime of the current render only.
 
 ## 9. Hive-Mind Activation Model
@@ -560,7 +604,7 @@ The system creates or reuses a child `TaskRun` with:
 - current route context and sensitivity
 - clear expected artifact type
 
-**Dedup rule:** Before creating a child `TaskRun`, query for an existing child with the same `parentTaskRunId`, `contextId`, and `hiveMindRole` that is not in a terminal state (`completed`, `failed`, `cancelled`). If one exists, reuse it rather than create a duplicate. Parallel hive invocations for different roles are allowed; parallel invocations for the same role against the same parent are not.
+**Dedup rule:** Before creating a child `TaskRun`, query for an existing child with the same `(parentTaskRunId, contextId, a2aMetadata.hiveMindRole)` tuple whose `status` is not in the terminal set (`completed`, `failed`, `cancelled`, `canceled`, `rejected`, `archived`). If one exists, reuse it rather than create a duplicate. Parallel hive invocations for different roles are allowed; parallel invocations for the same role against the same parent are not. `envelopeId` is intentionally NOT part of the dedup key — the same logical hive request issued from two different envelope refreshes must collapse to one child task.
 
 The coworker output becomes a `TaskArtifact` and, when it affects delivery state, Work Capsule or backlog evidence.
 
@@ -753,6 +797,14 @@ Required focused tests:
 - hive dedup rule: second invocation with same parent + role + non-terminal state returns existing TaskRun, not a new one
 - drawer renders with theme tokens and no hardcoded colors
 - coworker prompt digest includes stable IDs and excludes raw tool payloads
+- **resolver fallback:** when a sub-resolver throws, envelope resolves with a typed `source_unavailable` attention signal and the rest of the envelope still renders
+- **resolver timeout:** when a sub-resolver exceeds the 3-second soft timeout, envelope resolves with both `source_unavailable` AND `envelope_timeout` attention signals; the page never throws
+- **authority resolver — capsule executor:** `canActOnCapsule` is TRUE for the user who is the current capsule executor and FALSE for an unrelated user with the same platform role
+- **authority resolver — promotion grant:** `canReviewPromotion` is TRUE only when the user holds the build-scoped promotion reviewer grant (or a platform-level promotion reviewer role); a bare `manage_backlog` role is not sufficient
+- **authority resolver — proposal mode:** `proposalModeActive` is read from the route agent context, NOT derived from the presence of a capsule/build anchor; a Build Studio route with no proposal mode active reports `proposalModeActive: false`
+- **digest sanitization:** when a digest-eligible field (e.g., branch name) contains newlines or prompt-injection markers, the digest output is sanitized per the §7.2 whitelist rules
+
+Implementation status as of the 2026-05-20 architectural review gap pass: the added authority, digest-sanitization, hive grant, inferred-role warning, and `build_stalled` tests are covered by `apps/web/lib/portal-context/authority-resolver.test.ts`, `apps/web/lib/portal-context/hive-mind-resolver.test.ts`, `apps/web/lib/portal-context/prompt-digest.test.ts`, and `apps/web/lib/portal-context/portal-context.test.ts`. The long-term removal of keyword role inference remains tracked separately as `BI-REFACTOR-B6A61421`; the current runtime warning is transitional by design.
 
 ## 16. Verification Plan
 
@@ -787,7 +839,7 @@ The first shipped overlay slice is acceptable when:
 2. `/build/work` and `/build/work/[capsuleId]` show capsule context and evidence health.
 3. The coworker prompt for supported routes gets the same stable work anchors shown in the UI.
 4. Hive-mind recommendations are explainable, grant-aware, and tied to the current work object.
-5. Any coworker participation writes to `TaskRun`/`TaskArtifact` and relevant Work Capsule/backlog evidence, not only chat.
+5. Any coworker participation writes to `TaskRun`/`TaskArtifact` and relevant Work Capsule/backlog evidence, not only chat. **Scope note:** the invocation/request side of this criterion is satisfied today (Phase 2 writes `hive_invocation_request` task artifacts, Work Capsule evidence, and backlog activity). The completion side — durable artifacts from the invoked coworker's actual output — depends on `dispatchAgentThread` becoming a real dispatcher rather than the current placeholder. AC #5 should not be marked closed until the dispatcher landing.
 6. The UI uses DPF theme tokens and remains dense, calm, and scan-friendly.
 7. No new durable evidence/event/context source of truth is introduced.
 8. At least 20 percent of implementation work is spent on reducing duplicated context seams.
@@ -806,8 +858,8 @@ The first shipped overlay slice is acceptable when:
 
 ## 19. Open Questions
 
-**Open: Q1 — Overlay drawer placement.**
-Should `PortalContextOverlayDrawer` live inside the existing `AgentCoworkerShell` (sharing its open/close state) or as a sibling shell-level component that the coworker panel can also invoke? The trade-off is coupling vs. coordination overhead. This decision affects where the drawer open control sits and whether the coworker panel and overlay drawer can be open simultaneously. **Resolution required before the first implementation PR is opened.**
+**Resolved: Q1 — Overlay drawer placement.**
+Implementation landed `PortalContextOverlayDrawer.tsx` as a standalone Client Component sibling to the coworker shell, with its open/close state owned by the immediate parent (Build Studio shell / Work Control panel). The coworker panel and overlay drawer can therefore be open simultaneously. Justification: decoupling the drawer from `AgentCoworkerShell` keeps the overlay reusable from Work Control routes that don't host the coworker shell, and avoids a circular dependency between context (which informs the coworker prompt) and the coworker shell (which would otherwise own it). Revisit only if simultaneous-open ergonomics prove confusing in live UX.
 
 **Resolved: Q2 — Build Studio attachment dependency.**
 Build Studio attachment has landed on `origin/main` via PR #724. The overlay implementation should consume the landed Work Capsule linkage fields and keep the create/link fallback only for historical or unlinked builds.

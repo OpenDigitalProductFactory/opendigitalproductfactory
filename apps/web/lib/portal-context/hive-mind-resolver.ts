@@ -2,6 +2,10 @@ import type { AttentionSignal, HiveMindCandidate, PortalContextEnvelope } from "
 import type { AgentRegistryRow, PortalContextDb } from "./db-types";
 
 type WorkProjection = PortalContextEnvelope["work"];
+type HiveRole = HiveMindCandidate["role"];
+
+const HIVE_ROLES = new Set<HiveRole>(["builder", "reviewer", "architect", "tester", "operator", "specialist"]);
+const warnedInferredRoleAgentIds = new Set<string>();
 
 export async function resolveHiveMindCandidates(args: {
   routeDomain: string;
@@ -97,7 +101,7 @@ function toHiveMindCandidate(
 
   if (score <= 0) return null;
 
-  const role = inferRole(text);
+  const role = resolveAgentRole(agent, text);
   return {
     agentId: agent.agentId,
     label: agent.name,
@@ -123,7 +127,27 @@ function searchableAgentText(agent: AgentRegistryRow): string {
     .toLowerCase();
 }
 
-function inferRole(text: string): HiveMindCandidate["role"] {
+function resolveAgentRole(agent: AgentRegistryRow, text: string): HiveRole {
+  const typedRole = normalizeRole(agent.role);
+  if (typedRole) return typedRole;
+
+  warnOnceForInferredRole(agent.agentId);
+  return inferRole(text);
+}
+
+function normalizeRole(value: unknown): HiveRole | null {
+  return typeof value === "string" && HIVE_ROLES.has(value as HiveRole) ? (value as HiveRole) : null;
+}
+
+function warnOnceForInferredRole(agentId: string) {
+  if (warnedInferredRoleAgentIds.has(agentId)) return;
+  warnedInferredRoleAgentIds.add(agentId);
+  console.warn(
+    `[portal-context] inferred hive-mind role for ${agentId}; add typed agent role metadata before removing keyword fallback.`,
+  );
+}
+
+function inferRole(text: string): HiveRole {
   if (text.includes("architect") || text.includes("context")) return "architect";
   if (text.includes("review") || text.includes("evidence") || text.includes("promotion")) return "reviewer";
   if (text.includes("test") || text.includes("verify")) return "tester";
@@ -158,10 +182,7 @@ function reasonForCandidate(role: HiveMindCandidate["role"], attention: Attentio
 }
 
 function requiredGrantKeys(agent: AgentRegistryRow): string[] {
-  return Array.from(new Set([
-    ...(agent.toolGrants ?? []).map((grant) => grant.grantKey),
-    ...(agent.skills ?? []).map((skill) => skill.capability).filter((capability): capability is string => Boolean(capability)),
-  ]));
+  return Array.from(new Set((agent.toolGrants ?? []).map((grant) => grant.grantKey)));
 }
 
 function taskTypeForAgent(agent: AgentRegistryRow, role: HiveMindCandidate["role"]): HiveMindCandidate["taskType"] {

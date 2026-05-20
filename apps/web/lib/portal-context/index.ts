@@ -8,7 +8,7 @@ import {
   portalContextCacheTags,
 } from "./cache";
 import type { OrganizationRow, PortalContextDb, PortalUserRow } from "./db-types";
-import { resolvePortalAuthority } from "./authority-resolver";
+import { resolvePortalAuthority, resolvePromotionReviewerGrantKeys } from "./authority-resolver";
 import { resolvePortalEvidence } from "./evidence-resolver";
 import { resolveHiveMindCandidates } from "./hive-mind-resolver";
 import { createPortalContextPromptDigest } from "./prompt-digest";
@@ -77,6 +77,7 @@ export async function resolvePortalContextEnvelopeUncached(
   const user = userResult.value;
   const principalAlias = principalAliasResult.value;
   const organization = organizationResult.value;
+  const principalId = principalAlias?.principal?.principalId ?? null;
 
   const workProjectionResult = await resolveSource(
     "work",
@@ -105,11 +106,27 @@ export async function resolvePortalContextEnvelopeUncached(
   }
 
   const platformRole = platformRoleForUser(user);
+  const promotionReviewerGrantKeysResult = await resolveSource(
+    "authority",
+    resolvePromotionReviewerGrantKeys({
+      db,
+      work: workProjection.work,
+      routeContext: input.routeContext,
+      userId,
+      principalId,
+      platformRole,
+    }),
+    [],
+    resolverTimeoutMs,
+  );
+  attention.push(...promotionReviewerGrantKeysResult.attention);
   const authority = resolvePortalAuthority({
     user,
+    userPrincipalId: principalId,
     platformRole,
     work: workProjection.work,
     domainTools: routeProjection.domainTools,
+    promotionReviewerGrantKeys: promotionReviewerGrantKeysResult.value,
   });
   const coworkersResult = await resolveSource(
     "hive-mind",
@@ -136,7 +153,7 @@ export async function resolvePortalContextEnvelopeUncached(
     },
     user: {
       userId,
-      principalId: principalAlias?.principal?.principalId ?? null,
+      principalId,
       platformRole,
     },
     anchors: [...routeProjection.anchors, ...workProjection.anchors],
