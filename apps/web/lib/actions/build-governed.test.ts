@@ -45,9 +45,10 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
   },
 }));
 
-const { mockIsSandboxAvailable, mockStartBuildBranch } = vi.hoisted(() => ({
+const { mockIsSandboxAvailable, mockStartBuildBranch, mockGetClientIdentity } = vi.hoisted(() => ({
   mockIsSandboxAvailable: vi.fn(),
   mockStartBuildBranch: vi.fn(),
+  mockGetClientIdentity: vi.fn(),
 }));
 
 const { mockQueueBuildReviewVerification } = vi.hoisted(() => ({
@@ -77,6 +78,7 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/integrate/sandbox/build-branch", () => ({
   isSandboxAvailable: mockIsSandboxAvailable,
   startBuildBranch: mockStartBuildBranch,
+  getClientIdentity: mockGetClientIdentity,
 }));
 
 vi.mock("@/lib/build-review-verification-trigger", () => ({
@@ -149,6 +151,13 @@ describe("governed build start approvals", () => {
       errors: [],
     });
     mockListReleasableSandboxFiles.mockResolvedValue(["apps/web/components/build/BuildStudio.tsx"]);
+    mockGetClientIdentity.mockResolvedValue({
+      clientId: "test-client-id",
+      gitAgentEmail: "agent-test@hive.dpf",
+      gitAuthorName: "dpf-agent-test",
+      clientBranch: "client/test-client-id",
+      upstreamRemoteUrl: null,
+    });
   });
 
   it("createFeatureBuild attaches a Work Capsule to direct Build Studio work", async () => {
@@ -521,7 +530,10 @@ describe("governed build start approvals", () => {
 
     await resumeBuildImplementation("FB-789");
 
-    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith("dpf-sandbox-1");
+    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith(
+      "dpf-sandbox-1",
+      { baseRef: "client/test-client-id" },
+    );
     expect(mockStartBuildBranch).toHaveBeenCalledWith("FB-789");
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
