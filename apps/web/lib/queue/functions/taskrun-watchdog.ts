@@ -137,13 +137,17 @@ export const taskrunWatchdog = inngest.createFunction(
           },
         });
 
-        // 3. BuildActivity row when this stall is tied to a build.
-        if (d.candidate.buildId) {
+        // 3. BuildActivity row when this stall is tied to a build that
+        //    still exists. d.candidate.phase is non-null iff the LEFT JOIN
+        //    matched a FeatureBuild row — use that as the FK-safety check.
+        //    Catches the case where TaskRun.buildId references a deleted
+        //    FeatureBuild (observed in live data 2026-05-20).
+        if (d.candidate.buildId && d.candidate.phase) {
           await tx.buildActivity.create({
             data: {
               buildId: d.candidate.buildId,
               tool: "watchdog:stall",
-              summary: `Watchdog detected stall (${d.reason}) in phase ${d.candidate.phase ?? "—"}`,
+              summary: `Watchdog detected stall (${d.reason}) in phase ${d.candidate.phase}`,
             },
           });
         }

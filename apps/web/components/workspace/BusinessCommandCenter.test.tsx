@@ -15,7 +15,7 @@ const fixtureView: WorkspaceCommandCenterView = {
   ],
   snapshot: [
     { id: "ai", label: "AI coworkers", value: 4, href: "/platform/ai" },
-    { id: "work", label: "Open work", value: 7, href: "/work/backlog" },
+    { id: "work", label: "Open work", value: 7, href: "/ops" },
   ],
   readiness: [
     {
