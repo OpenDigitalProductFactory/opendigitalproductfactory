@@ -1,4 +1,4 @@
-// Pure host-matching logic for canonical-URL middleware.
+// Canonical-URL host matching + enforcement.
 //
 // Decides whether an incoming request's Host header matches the operator's
 // configured canonical URL (PUBLIC_URL) or one of the configured aliases
@@ -10,8 +10,9 @@
 // admin sets a public canonical URL, LAN clients may still need to reach
 // the install at the LAN IP without being bounced to the public name.
 //
-// Kept pure and Next-free so it can be unit-tested without pulling in the
-// edge runtime. The middleware (apps/web/middleware.ts) wires it up.
+// `decideHostMatch` is the pure, Next-free core; `enforceCanonicalHost` is
+// the Next.js wrapper called from apps/web/proxy.ts (Next 16's edge
+// middleware entry point — renamed from middleware.ts in Next 16).
 
 export type CanonicalHostConfig = {
   /** `process.env.PUBLIC_URL` — full URL string including scheme. */
@@ -87,4 +88,51 @@ export function decideHostMatch(args: {
   }
 
   return { kind: "redirect", targetUrl: `${canonical.origin}${path}${search}` };
+}
+
+// ─── Next.js wrapper ──────────────────────────────────────────────────────
+
+import { NextResponse, type NextRequest } from "next/server";
+
+const HEALTH_PROBE_PATHS = new Set(["/api/health", "/api/healthz", "/api/ready"]);
+
+/** Enforce canonical-host policy on an incoming Next request.
+ *
+ *  Returns a 301 redirect response (with `Clear-Site-Data: "storage"`) when
+ *  the request host does not match PUBLIC_URL or PUBLIC_URL_ALIASES, and
+ *  `null` when the request should pass through unchanged.
+ *
+ *  Health-probe paths (`/api/health`, `/api/healthz`, `/api/ready`) are
+ *  always excluded — load balancers hit these on the LAN IP and a redirect
+ *  would fail the probe.
+ *
+ *  Header is set on the response object after construction (not via init
+ *  options) — Next can strip headers during redirect normalization, and
+ *  the Clear-Site-Data value MUST be the quoted string `"storage"` per
+ *  the W3C spec (directives are quoted-string values, not bare tokens). */
+export function enforceCanonicalHost(
+  req: Pick<NextRequest, "headers" | "nextUrl">,
+): NextResponse | null {
+  const { pathname, search } = req.nextUrl;
+
+  if (HEALTH_PROBE_PATHS.has(pathname)) return null;
+
+  const host =
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? null;
+
+  const decision = decideHostMatch({
+    host,
+    path: pathname,
+    search,
+    config: {
+      canonicalUrl: process.env.PUBLIC_URL,
+      aliases: process.env.PUBLIC_URL_ALIASES ?? "",
+    },
+  });
+
+  if (decision.kind === "passthrough") return null;
+
+  const response = NextResponse.redirect(decision.targetUrl, 301);
+  response.headers.set("Clear-Site-Data", '"storage"');
+  return response;
 }

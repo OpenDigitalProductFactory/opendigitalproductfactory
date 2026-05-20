@@ -4,6 +4,7 @@
 // defence-in-depth for role/capability checks within authenticated areas.
 
 import { auth } from "@/lib/auth";
+import { enforceCanonicalHost } from "@/lib/canonical-host";
 import { classifyRoute, RouteClass } from "@/lib/storefront-middleware";
 import { NextResponse } from "next/server";
 import type { NextAuthRequest } from "next-auth";
@@ -18,6 +19,13 @@ const SANDBOX_BLOCKED_PREFIXES = ["/build", "/platform", "/admin"];
 const isSandbox = process.env.DPF_ENVIRONMENT === "sandbox";
 
 export default auth(async function proxy(req: NextAuthRequest) {
+  // Canonical-host enforcement runs first: redirects non-canonical origins
+  // (e.g. raw LAN IP) to PUBLIC_URL with Clear-Site-Data, eliminating
+  // per-origin browser-storage divergence. Pass-through when PUBLIC_URL is
+  // unset (local dev / bootstrap-before-DNS). Health probes excluded.
+  const canonicalRedirect = enforceCanonicalHost(req);
+  if (canonicalRedirect) return canonicalRedirect;
+
   const { pathname } = req.nextUrl;
 
   // Sandbox instances exist for feature preview only — block admin,
