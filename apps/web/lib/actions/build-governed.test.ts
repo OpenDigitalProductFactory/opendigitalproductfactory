@@ -565,12 +565,14 @@ describe("governed build start approvals", () => {
       acceptanceMet: null,
       uxTestResults: null,
       uxVerificationStatus: null,
+      sandboxId: "dpf-sandbox-1",
       threadId: null,
     });
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       governedBacklogEnabled: true,
     });
     mockPrisma.featureBuild.update.mockResolvedValue({});
+    mockListReleasableSandboxFiles.mockResolvedValue(["apps/web/components/build/BuildStudio.tsx"]);
 
     await advanceBuildPhase("FB-123", "review");
 
@@ -762,6 +764,47 @@ describe("governed build start approvals", () => {
           buildId: "FB-321",
           tool: "record_acceptance",
         }),
+      }),
+    );
+  });
+
+  it("advanceBuildPhase blocks build to review when the sandbox has no releasable source diff (fake-task-complete guard)", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "build-row-fake-1",
+      phase: "build",
+      createdById: "user-1",
+      originatingBacklogItemId: "backlog-row-1",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      designDoc: { problemStatement: "Fix overlap" },
+      designReview: { decision: "pass", summary: "ok", issues: [] },
+      plan: null,
+      brief: { acceptanceCriteria: ["Header does not overlap content."] },
+      buildPlan: {
+        fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Fix overlap" }],
+        tasks: [{ title: "Fix overlap", testFirst: "Reproduce", implement: "Patch layout", verify: "Run checks" }],
+      },
+      planReview: { decision: "pass", summary: "ok", issues: [] },
+      taskResults: { completedTasks: 1, totalTasks: 1, tasks: [{ title: "Fix overlap", outcome: "DONE" }] },
+      verificationOut: { typecheckPassed: true, testsFailed: 0, testsPassed: 4 },
+      acceptanceMet: [{ criterion: "Header does not overlap content.", met: true }],
+      uxTestResults: [{ step: "Header remains visible", passed: true }],
+      uxVerificationStatus: "complete",
+      sandboxId: "dpf-sandbox-1",
+      threadId: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      governedBacklogEnabled: true,
+    });
+    mockListReleasableSandboxFiles.mockResolvedValue([]);
+
+    await expect(advanceBuildPhase("FB-123", "review")).rejects.toThrow(
+      "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
+    );
+
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-123" },
+        data: expect.objectContaining({ phase: "review" }),
       }),
     );
   });
