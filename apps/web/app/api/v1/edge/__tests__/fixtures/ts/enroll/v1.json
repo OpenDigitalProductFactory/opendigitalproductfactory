@@ -1,0 +1,18 @@
+{
+  "displayName": "fixture-host",
+  "platform": "linux",
+  "installMode": "container-host",
+  "version": "0.1.0-fixture",
+  "advertisedCapabilities": [
+    "discovery.network"
+  ],
+  "metadata": {
+    "hostname": "fixture-host",
+    "host": {
+      "hostname": "fixture-host",
+      "ipAddresses": [
+        "192.168.0.10"
+      ]
+    }
+  }
+}
