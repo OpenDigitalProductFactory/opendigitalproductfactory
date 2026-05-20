@@ -119,10 +119,13 @@ func TestDedupeArpByIP_keepsFirstOccurrence(t *testing.T) {
 }
 
 func TestArpNeighbors_returnsItemsWithCanonicalShape(t *testing.T) {
+	// DE:AD:BE is a private/reserved OUI not in the IEEE registry,
+	// so this entry hits the unknown-vendor path and we can assert
+	// the unenriched item shape.
 	stub := ArpAdapter(func() ArpResult {
 		return ArpResult{
 			Entries: []ArpEntry{
-				{IP: "192.168.0.10", MAC: "aa:bb:cc:dd:ee:ff", Iface: "eth0"},
+				{IP: "192.168.0.10", MAC: "de:ad:be:dd:ee:ff", Iface: "eth0"},
 			},
 		}
 	})
@@ -148,8 +151,43 @@ func TestArpNeighbors_returnsItemsWithCanonicalShape(t *testing.T) {
 	if item.RawData["discoveredVia"] != "arp_table" {
 		t.Errorf("discoveredVia = %v", item.RawData["discoveredVia"])
 	}
-	if !strings.Contains(item.Name, "192.168.0.10") {
-		t.Errorf("name should include IP: %q", item.Name)
+	if item.Name != "LAN Host 192.168.0.10" {
+		t.Errorf("name = %q, want 'LAN Host 192.168.0.10'", item.Name)
+	}
+	if _, ok := item.RawData["vendor"]; ok {
+		t.Errorf("unknown OUI should not stamp vendor field")
+	}
+}
+
+func TestArpNeighbors_enrichesItemsWithKnownVendor(t *testing.T) {
+	// FC:A1:83 is one of Amazon Technologies Inc.'s OUIs in the
+	// bundled IEEE registry. The collector should stamp vendor
+	// fields and rebrand the item's name.
+	stub := ArpAdapter(func() ArpResult {
+		return ArpResult{
+			Entries: []ArpEntry{
+				{IP: "192.168.0.49", MAC: "fc:a1:83:de:ad:be", Iface: "Wi-Fi"},
+			},
+		}
+	})
+	got := ArpNeighbors(stub)
+	if len(got.Items) != 1 {
+		t.Fatalf("Items = %d, want 1", len(got.Items))
+	}
+	item := got.Items[0]
+	vendor, _ := item.RawData["vendor"].(string)
+	if !strings.HasPrefix(vendor, "Amazon") {
+		t.Errorf("vendor = %q, want starts with 'Amazon'", vendor)
+	}
+	if item.RawData["vendorOui"] != "FCA183" {
+		t.Errorf("vendorOui = %v, want FCA183", item.RawData["vendorOui"])
+	}
+	short, _ := item.RawData["vendorShort"].(string)
+	if short != "Amazon" {
+		t.Errorf("vendorShort = %q, want Amazon", short)
+	}
+	if item.Name != "Amazon 192.168.0.49" {
+		t.Errorf("name = %q, want 'Amazon 192.168.0.49'", item.Name)
 	}
 }
 
