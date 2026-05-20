@@ -108,6 +108,11 @@ function joinQuotedArgs(args: readonly string[]): string {
   return args.map((arg) => quotePosixArg(arg)).join(" ");
 }
 
+export function buildDockerExecSandboxCommand(containerId: string, command: string): string {
+  const safeCommand = prefixSafeWorkspaceCommand(command);
+  return `docker exec ${quotePosixArg(containerId)} sh -c ${quotePosixArg(safeCommand)}`;
+}
+
 export function buildSandboxStageCommand(workspace: string = SANDBOX_WORKSPACE): string {
   // Two-pass staging avoids the exit-code 1 that `git add -A` emits when gitignored
   // untracked directories (.pnpm-store, node_modules, packages/db/generated) are
@@ -316,8 +321,7 @@ export async function initializeSandboxWorkspace(containerId: string): Promise<v
 }
 
 export async function execInSandbox(containerId: string, command: string): Promise<string> {
-  const safeCommand = prefixSafeWorkspaceCommand(command);
-  const { stdout } = await exec(`docker exec ${containerId} sh -c ${JSON.stringify(safeCommand)}`, {
+  const { stdout } = await exec(buildDockerExecSandboxCommand(containerId, command), {
     maxBuffer: 100 * 1024 * 1024,
   });
   return stdout;

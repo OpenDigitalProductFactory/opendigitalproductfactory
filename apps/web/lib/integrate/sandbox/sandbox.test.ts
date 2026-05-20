@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildSandboxAppsWebCopyCommand,
+  buildDockerExecSandboxCommand,
   buildSandboxDiffForFilesCommand,
   buildSandboxCreateArgs,
   buildSandboxListReleasableFilesCommand,
@@ -107,6 +108,28 @@ describe("prefixSafeWorkspaceCommand", () => {
 
     expect(command).toContain('git config --global --add safe.directory "/workspace"');
     expect(command).toContain("cd /workspace && git status -sb");
+  });
+});
+
+describe("buildDockerExecSandboxCommand", () => {
+  it("single-quotes the sandbox shell command so substitutions execute inside the sandbox", () => {
+    const command = buildDockerExecSandboxCommand(
+      "dpf-sandbox-1",
+      "branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true) && printf 'branch=%s\\n' \"$branch\"",
+    );
+
+    expect(command).toContain("docker exec 'dpf-sandbox-1' sh -c '");
+    expect(command).toContain("branch=$(git rev-parse --abbrev-ref HEAD");
+    expect(command).toContain("\"$branch\"");
+    expect(command).not.toContain('sh -c "');
+  });
+
+  it("quotes container names and embedded single quotes without breaking command substitution", () => {
+    const command = buildDockerExecSandboxCommand("sandbox'name", "printf 'x' && target=$(pwd)");
+
+    expect(command).toContain("'sandbox'\"'\"'name'");
+    expect(command).toContain("target=$(pwd)");
+    expect(command).toContain("'\"'\"'");
   });
 });
 
