@@ -2,9 +2,25 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import * as React from "react";
 import { getImpactData } from "@/lib/actions/graph";
 import { TopologyGraph } from "./TopologyGraph";
+
+// useTransition is mocked at module level so tests can flip `mockIsPending`
+// before render. `vi.spyOn(React, "useTransition")` does not work under ESM —
+// module namespaces are not configurable — so we follow vitest's recommended
+// pattern: vi.mock with importOriginal, exposing a controllable stub.
+let mockIsPending = false;
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useTransition: () =>
+      [mockIsPending, (fn: () => void) => fn()] as readonly [
+        boolean,
+        (fn: () => void) => void,
+      ],
+  };
+});
 
 vi.mock("@/lib/actions/graph", () => ({
   getImpactData: vi.fn().mockResolvedValue({
@@ -37,11 +53,14 @@ beforeEach(() => {
     })),
   });
 
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  }));
+  // Must be a real constructor (arrow function fails `new ResizeObserver()`
+  // in TopologyGraph.tsx:552). Previously masked by an unrelated spy failure
+  // on the spinner test; surfaced once useTransition mocking was repaired.
+  global.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof globalThis.ResizeObserver;
 
   global.requestAnimationFrame = vi.fn().mockReturnValue(0);
   global.cancelAnimationFrame = vi.fn();
@@ -102,7 +121,7 @@ describe("TopologyGraph", () => {
   });
 
   it("shows spinner overlay while isPending is true", () => {
-    vi.spyOn(React, "useTransition").mockReturnValue([true, vi.fn()]);
+    mockIsPending = true;
 
     const dataWithNodes = {
       nodes: [{ id: "n1", name: "Server", label: "InfraCI", color: "#ef4444", size: 6 }],
@@ -119,4 +138,7 @@ describe("TopologyGraph", () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Module-level mocks (vi.mock) are not reset by restoreAllMocks, so reset
+  // the controllable flag explicitly to keep test isolation.
+  mockIsPending = false;
 });

@@ -88,6 +88,11 @@ vi.mock("react", () => ({
   },
   useMemo: <T,>(factory: () => T) => factory(),
   useCallback: <T extends (...args: never[]) => unknown>(callback: T) => callback,
+  // TopologyGraph calls useTransition() to mark async data refreshes; the
+  // synthetic hook harness has no scheduler, so stub it as not-pending with
+  // a synchronous startTransition.
+  useTransition: () =>
+    [false, (fn: () => void) => fn()] as readonly [boolean, (fn: () => void) => void],
 }));
 
 vi.mock("@/lib/graph/scope-helpers", () => ({
