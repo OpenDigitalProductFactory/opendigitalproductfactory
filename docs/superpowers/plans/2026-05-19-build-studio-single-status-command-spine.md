@@ -28,55 +28,69 @@
 
 ## Task 1: Projection-Backed Command Status
 
-- [ ] Add a failing test in `build-studio-workflow-actions.test.ts` where task summaries are generic but progress projection has a `usage-limit` dispatch-derived heading.
-- [ ] Add a paired test that asserts the spec invariant: with the same fixture, both `deriveBuildStudioWorkflowAction` and `deriveWorkflowStageGuidance(...).workflowAction` return `failureAxis === progressVisibility.statusHeading.failureAxis`.
-- [ ] Add a degradation test: projection null → action still derives from build row (no skeleton, no throw).
-- [ ] Update `deriveBuildStudioWorkflowAction` to accept optional `progressVisibility`.
-- [ ] Update `deriveWorkflowStageGuidance` to accept and forward `progressVisibility`.
-- [ ] In implementation recovery, use the projection's `failureAxis` and `operatorAction` when present, respecting the precedence ladder in the spec (axis null → fall back; copy null → fall back).
-- [ ] Pass `progressVisibility` from `BuildStudio.tsx` to the action card **and** to `WorkflowStageInspector`.
-- [ ] Verify the focused workflow-action tests pass.
+- [x] Add a failing test where task summaries are generic but progress projection has a `usage-limit` heading. — landed in `8d2e334e`.
+- [x] Paired invariant test: both `deriveBuildStudioWorkflowAction` and `deriveWorkflowStageGuidance(...).workflowAction` return `failureAxis === progressVisibility.statusHeading.failureAxis`. — landed in `628fc741`.
+- [x] Degradation test: projection null → action still derives from build row. — landed in `628fc741`.
+- [x] Update `deriveBuildStudioWorkflowAction` to accept optional `progressVisibility`. — `8d2e334e`.
+- [x] Update `deriveWorkflowStageGuidance` to accept and forward `progressVisibility`. — `628fc741`.
+- [x] In implementation recovery, use the projection's `failureAxis` and `operatorAction` when present, respecting the precedence ladder. — `8d2e334e`.
+- [x] Pass `progressVisibility` from `BuildStudio.tsx` → action card AND `WorkflowStageInspector` (via `ProcessGraph`). — `628fc741`.
+- [x] Verify the focused workflow-action tests pass. — 21/21 green.
 
 ## Task 2: One Visible Operator Status
 
-- [ ] Add or update component tests so `BuildStudioWorkflowActionCard` renders `Build Status`.
-- [ ] Update `BuildProgressOperationalPanel.test.tsx` to assert the panel no longer renders `Operational status` or the operator-action text.
-- [ ] Update the action card and progress panel accordingly.
-- [ ] Keep DB/Chat/Sandbox/Dispatch/Verification evidence visible.
+- [x] `BuildStudioWorkflowActionCard` renders `Build Status` — tested in `BuildStudioWorkflowActionCard.test.tsx` (2 assertions).
+- [x] `BuildStudioHeaderLayout.test.tsx` updated from legacy `Studio Control` to `Build Status` — `628fc741`.
+- [x] `BuildProgressOperationalPanel.test.tsx` asserts the panel no longer renders `Operational status` or operator-action text. — `8d2e334e`.
+- [x] Action card and progress panel updates. — `8d2e334e`.
+- [x] DB/Chat/Sandbox/Dispatch/Verification evidence remains visible.
 
 ## Task 3: Source Currency Age
 
-- [ ] Add a `BuildSandboxCard` test for `checkedAt` within the 5-minute window (no stale badge) and a paired test past it (stale badge visible).
-- [ ] Define the threshold as a single named constant inside `BuildSandboxCard` (e.g., `SOURCE_CURRENCY_STALE_MS = 5 * 60 * 1000`) so future tuning is one-line.
-- [ ] Render a source-currency checked badge with relative age and a stale warning past the threshold inside `BuildSandboxCard`.
-- [ ] Do not add a live refresh action in this slice; that requires a server action/MCP observer follow-up.
+> **Implementation note.** Threshold and helper landed at the truth-model layer (`apps/web/lib/build/progress-visibility-types.ts`), not inside the sandbox card. The card consumes `getTruthSourceAge` and `BUILD_TRUTH_STALE_THRESHOLD_MS`. The spec was updated to match — do not relocate the constant back into the card during this task.
+
+- [x] Define the threshold as a single named constant — landed as `BUILD_TRUTH_STALE_THRESHOLD_MS = 5 * 60 * 1000` in `progress-visibility-types.ts`. Shared with the rest of the build truth model so one surface can't call "stale" what another calls "fresh."
+- [x] Render a source-currency checked badge with relative age and a stale warning past the threshold inside `BuildSandboxCard`.
+- [x] `BuildSandboxCard` test for `checkedAt` within the 5-minute window vs past it.
+- [ ] Do not add a live refresh action in this slice; that requires a server action/MCP observer follow-up. (Pure scope guardrail — leave unchecked.)
 
 ## Task 4: Dispatch Root Cause Quality
 
-- [ ] Add a failing dispatch-attempt test with `Reading prompt from stdin...` before a Codex usage-limit error.
-- [ ] Add a prologue-corpus fixture test that asserts no axis matcher fires on any prologue line (`Reading prompt from stdin`, `OpenAI Codex`, `codex `, plus any others discovered in current dispatch logs).
-- [ ] Tighten `lineMatchesFailureAxis` per the spec:
-  - `test-failure`: require `test` AND one of `fail|error| × ` (not bare `fail`).
-  - `typecheck-failure`: require `error TS` or `typecheck` (drop bare `typescript`).
-  - `out-of-scope-noise`: drop the bare `workspace` substring; keep `out-of-scope`.
-- [ ] Update root-cause extraction to skip prologue lines and prefer lines matching the classified failure axis.
-- [ ] Preserve redaction, excerpt bounds, and root-cause hash behavior.
+> **Status:** prologue-skip path is in place (`isCliPrologueLine` plus `extractRootCauseSummary`'s "axis line first, prologue-skipped first-line second" preference). This continuation pass also pins the prologue corpus and tightens the per-axis matchers so benign `fail`, `typescript`, and `workspace` text no longer classify as root cause.
+
+- [x] Failing test with `Reading prompt from stdin...` before a Codex usage-limit error. — `8d2e334e`.
+- [x] Skip prologue lines in `extractRootCauseSummary` and prefer the classified axis line. — `8d2e334e` (`isCliPrologueLine` runs before the fallback first-line pick).
+- [x] Preserve redaction, excerpt bounds, and root-cause hash behavior. — `sanitizeDispatchOutput`/`normalizeRootCauseForHash` unchanged.
+- [x] Add a prologue-corpus fixture test that asserts no axis matcher fires on any prologue line (`Reading prompt from stdin`, `OpenAI Codex`, `codex `, plus TypeScript/workspace prompt prologues).
+- [x] Tighten `lineMatchesFailureAxis` in `apps/web/lib/build/dispatch-attempts.ts`:
+  - `test-failure`: require `test` AND one of `fail|error| × `.
+  - `typecheck-failure`: require `error TS` or `typecheck`.
+  - `out-of-scope-noise`: drop the bare `workspace` substring.
 
 ## Task 5: Verification And Handoff
 
-- [ ] Run focused Vitest for the touched tests.
-- [ ] Run `pnpm --filter web typecheck`.
-- [ ] If dependencies/environment allow, run `pnpm --filter web exec next build`.
-- [ ] Rebuild or start the Docker-served portal from this branch for `/build` UX verification when the root portal target is available. Drive the portal: select the affected build, confirm the top card shows the projection-derived failure axis, confirm the Progress tab no longer carries an operator-action heading, confirm the stage inspector matches, confirm the source-currency stale badge appears when `checkedAt` is older than 5 minutes, and confirm the dispatch root-cause line is the classified line — not the CLI prologue. Per `structural-verification-is-not-functional`, structural test passes alone do not close this slice.
-- [ ] Commit with DCO and push the branch.
+- [x] Run focused Vitest for the touched tests. — 55/55 in the reviewed focus suite green after the final rebase; the prior broader `components/build` sweep was green after `628fc741`.
+- [x] Run `pnpm --filter web typecheck`. — clean after the final rebase.
+- [x] Run `pnpm --filter web exec next build`. — passed after the final rebase; only pre-existing Turbopack/NFT trace warnings remain.
+- [x] Commit with DCO and push the branch. — `8d2e334e` and `628fc741` are signed off; this continuation pass is included in the final signed handoff commit.
+- [ ] **Open.** Rebuild or start the Docker-served portal from this branch for `/build` UX verification when the root portal target is available. Drive the portal: select the affected build, confirm the top card shows the projection-derived failure axis, confirm the Progress tab no longer carries an operator-action heading, confirm the stage inspector matches, confirm the source-currency stale badge appears when `checkedAt` is older than 5 minutes, and confirm the dispatch root-cause line is the classified line — not the CLI prologue. Per `structural-verification-is-not-functional`, structural test passes alone do not close this slice.
 
 ---
 
 ## Execution Status
 
-Implemented on `feat/build-studio-command-spine` (commit `8d2e334e`). Focused Vitest, `pnpm --filter web typecheck`, and `pnpm --filter web exec next build` passed at that point. Outstanding work introduced by this revision of the plan:
+Resolved on `feat/build-studio-command-spine`:
 
-- **`WorkflowStageInspector` was not threaded with `progressVisibility`** — the inspector still re-derives stage guidance from the build row, recreating the second-narrator split inside the stage detail panel. Tasks 1 above now cover this.
-- **Source-currency staleness has no defined threshold** in the original implementation; Task 3 now nails it to 5 minutes via a named constant.
-- **Dispatch axis matchers are too loose** for `test-failure` / `typecheck-failure` / `out-of-scope-noise`; Task 4 tightens them.
-- **Full `/build` UX verification remains pending.** The temporary worktree server reached authentication but could not connect to Docker Postgres from the host. Per kernel principle [`structural-verification-is-not-functional`](../../../../docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md), this slice is not complete until the live portal has been driven through the scenarios listed in Task 5.
+- **`8d2e334e`** — projection-backed command status; relabel to `Build Status`; Progress tab deduplication; initial source-currency UI; dispatch prologue skip.
+- **`628fc741`** — `WorkflowStageInspector` threaded with `progressVisibility` (closes the second-narrator gap that originally remained); single-narrator invariant test + degradation test added; `BuildStudioHeaderLayout.test.tsx` updated from `Studio Control` → `Build Status` (cleanup of pre-existing failure from the relabel). 113/113 build-component tests pass; `pnpm --filter web typecheck` clean.
+
+Outstanding before this slice closes:
+
+- **Task 4 — dispatch axis matcher tightening + prologue-corpus fixture.** Implemented in this continuation pass. `lineMatchesFailureAxis` now rejects CLI prologue lines and no longer treats bare `fail`, bare `typescript`, or bare `workspace` as a root-cause match.
+- **Live `/build` UX verification.** The temporary worktree server reached authentication but could not connect to Docker Postgres from the host. Per kernel principle [`structural-verification-is-not-functional`](../../founder-kernel/wiki/principles/structural-verification-is-not-functional.md), this slice is not complete until the live portal has been driven through the Task 5 scenarios. Suggested path: full Docker rebuild from this branch (`docker compose up --build` against the governed portal target), then drive `/build?buildId=FB-71FB3A53` (the original observed build) and capture screenshots of the four invariants into `output/playwright/`.
+
+Recommended next-commit sequence:
+
+1. Push the branch.
+2. Run the live `/build` drive against the rebuilt Docker portal; record evidence.
+3. Open a PR against `main` only after step 2.

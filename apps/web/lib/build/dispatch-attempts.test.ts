@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildDispatchAttemptData,
   classifyDispatchFailureAxis,
+  lineMatchesFailureAxis,
   recordBuildDispatchAttempt,
 } from "./dispatch-attempts";
+import type { BuildFailureAxis } from "./progress-visibility-types";
 
 const prismaMock = vi.hoisted(() => ({
   buildDispatchAttempt: {
@@ -184,5 +186,44 @@ describe("buildDispatchAttemptData", () => {
         attemptNumber: 3,
       }),
     });
+  });
+});
+
+describe("lineMatchesFailureAxis", () => {
+  const axes: BuildFailureAxis[] = [
+    "usage-limit",
+    "rate-limit",
+    "auth",
+    "timeout",
+    "test-failure",
+    "typecheck-failure",
+    "out-of-scope-noise",
+    "provider-unavailable",
+  ];
+
+  it("does not match CLI prologue lines for any failure axis", () => {
+    const prologueLines = [
+      "Reading prompt from stdin...",
+      "Reading prompt from stdin for Build Studio task",
+      "OpenAI Codex v0.42.0",
+      "codex exec --sandbox workspace-write",
+      "Reading TypeScript prompt from stdin",
+      "Reading prompt from workspace verification context",
+    ];
+
+    for (const line of prologueLines) {
+      for (const axis of axes) {
+        expect(lineMatchesFailureAxis(line, axis), `${axis} matched ${line}`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps test, typecheck, and out-of-scope root-cause matching specific", () => {
+    expect(lineMatchesFailureAxis("Failure preparing artifact bundle", "test-failure")).toBe(false);
+    expect(lineMatchesFailureAxis("vitest run failed: 3 test errors", "test-failure")).toBe(true);
+    expect(lineMatchesFailureAxis("Reading TypeScript prompt from stdin", "typecheck-failure")).toBe(false);
+    expect(lineMatchesFailureAxis("error TS2345: Argument type mismatch", "typecheck-failure")).toBe(true);
+    expect(lineMatchesFailureAxis("workspace prompt prepared", "out-of-scope-noise")).toBe(false);
+    expect(lineMatchesFailureAxis("out-of-scope workspace noise detected", "out-of-scope-noise")).toBe(true);
   });
 });
