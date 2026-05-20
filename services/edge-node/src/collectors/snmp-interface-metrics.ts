@@ -1,4 +1,4 @@
-// SNMP ifXTable / ifTable walk for network interface metrics.
+// SNMP ifXTable walk for network interface metrics.
 //
 // Walks ifXTable (RFC 2863 §ifXTable) to collect 64-bit counters:
 //   - ifHCInOctets  (1.3.6.1.2.1.31.1.1.1.6)
@@ -6,9 +6,11 @@
 //   - ifDescr       (1.3.6.1.2.1.2.2.1.2)  — from base ifTable
 //   - ifAlias       (1.3.6.1.2.1.31.1.1.1.18)
 //
-// Uses the `net-snmp` npm package (no shell-out). Falls back to 32-bit
-// counters (ifInOctets / ifOutOctets) when 64-bit counters return zero for
-// all interfaces, which indicates an agent that only exposes the base ifTable.
+// Uses the `net-snmp` npm package (no shell-out). Requires an SNMP agent
+// that exposes ifXTable (most managed switches do under SNMPv2c). If the
+// target only exposes the base ifTable (32-bit counters), all rows are
+// filtered out (HC OIDs return 0 or error) and an empty array is returned.
+// Phase 2 will add a 32-bit fallback walk — tracked as a known gap.
 //
 // Spec: docs/superpowers/specs/2026-05-19-edge-node-network-telemetry-adapters-design.md
 //   § SNMP ifTable walk, § BigInt serialization
@@ -127,10 +129,10 @@ export async function walkInterfaceMetrics(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Exported helpers (also used in tests)
 // ---------------------------------------------------------------------------
 
-function walkOid(
+export function walkOid(
   session: snmp.Session,
   oid: string,
   cb: (oid: string, value: unknown) => void,
@@ -156,14 +158,14 @@ function walkOid(
 }
 
 /** Extract ifIndex from the last OID component. */
-function extractIfIndex(oid: string): number | null {
+export function extractIfIndex(oid: string): number | null {
   const parts = oid.split(".");
   const n = parseInt(parts[parts.length - 1]!, 10);
   return isNaN(n) ? null : n;
 }
 
 /** Coerce net-snmp value to BigInt (handles Buffer, number, bigint, string). */
-function asBigInt(value: unknown): bigint {
+export function asBigInt(value: unknown): bigint {
   if (typeof value === "bigint") return value;
   if (typeof value === "number") return BigInt(Math.trunc(value));
   if (typeof value === "string" && /^\d+$/.test(value)) return BigInt(value);

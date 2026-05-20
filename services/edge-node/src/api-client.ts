@@ -117,12 +117,12 @@ export class AuthorityApiClient {
   }
 
   /**
-   * POST /api/v1/edge/metrics using the node token.
-   * Sends network interface metrics and LLDP peer discoveries.
+   * POST /api/v1/edge/metrics — send a MetricsEnvelope to the portal.
+   * The envelope shape is defined in @dpf/validators MetricsEnvelope.
    */
   async postMetrics(
     nodeToken: string,
-    body: Record<string, unknown>,
+    body: object,
   ): Promise<Record<string, unknown>> {
     return this.post<Record<string, unknown>>(
       "/api/v1/edge/metrics",

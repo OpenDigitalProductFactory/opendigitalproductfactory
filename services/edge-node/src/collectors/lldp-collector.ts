@@ -163,7 +163,7 @@ function walkOid(
   });
 }
 
-function lastOidComponent(oid: string): number | null {
+export function lastOidComponent(oid: string): number | null {
   const parts = oid.split(".");
   const n = parseInt(parts[parts.length - 1]!, 10);
   return isNaN(n) ? null : n;
@@ -173,7 +173,7 @@ function lastOidComponent(oid: string): number | null {
  * Extract "{timeMark}.{localPortNum}.{remIndex}" from a lldpRemTable OID.
  * The final 3 index components encode the row identity.
  */
-function remKey(oid: string): string | null {
+export function remKey(oid: string): string | null {
   const parts = oid.split(".");
   if (parts.length < 3) return null;
   const [i, p, t] = [
@@ -185,7 +185,7 @@ function remKey(oid: string): string | null {
 }
 
 /** Format a net-snmp Buffer as a colon-delimited MAC, or return the string value. */
-function formatMac(value: unknown): string {
+export function formatMac(value: unknown): string {
   if (Buffer.isBuffer(value)) {
     return Array.from(value)
       .map((b) => b.toString(16).padStart(2, "0"))
