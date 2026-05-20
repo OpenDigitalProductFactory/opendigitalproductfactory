@@ -1,5 +1,5 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { promises as fs, statSync } from "node:fs";
+import path from "node:path";
 
 export type SpecPlanKind = "spec" | "plan";
 
@@ -45,11 +45,13 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 
 function repoRoot(): string {
-  const cwdResolved = path.resolve(process.cwd());
-  const docsMarker = path.join(cwdResolved, "docs", "superpowers");
+  // turbopackIgnore: process.cwd() and these resolves are runtime filesystem
+  // walks of the deployed install root; they must not be traced into the bundle.
+  const cwdResolved = path.resolve(/*turbopackIgnore: true*/ process.cwd());
+  const docsMarker = path.join(/*turbopackIgnore: true*/ cwdResolved, "docs", "superpowers");
   if (existsSyncCached(docsMarker)) return cwdResolved;
   // apps/web/<...> dev scenarios — climb to repo root.
-  const climbed = path.resolve(cwdResolved, "..", "..");
+  const climbed = path.resolve(/*turbopackIgnore: true*/ cwdResolved, "..", "..");
   return climbed;
 }
 
@@ -57,7 +59,7 @@ const existsCache = new Map<string, boolean>();
 function existsSyncCached(p: string): boolean {
   if (existsCache.has(p)) return existsCache.get(p)!;
   try {
-    require("fs").statSync(p);
+    statSync(p);
     existsCache.set(p, true);
     return true;
   } catch {
@@ -151,11 +153,15 @@ export async function searchSpecsAndPlans(
   const epicNeedle = opts.epicId?.toLowerCase() ?? null;
 
   const dirs: Array<{ kind: SpecPlanKind; path: string }> = [];
+  // turbopackIgnore: the `root` argument resolves to repoRoot() at runtime and
+  // points at filesystem content that is intentionally not bundled. Without
+  // these annotations Turbopack treats process.cwd() as unbounded and traces
+  // the whole monorepo into every output asset that reaches this module.
   if (opts.kind == null || opts.kind === "spec") {
-    dirs.push({ kind: "spec", path: path.join(root, SPEC_DIR) });
+    dirs.push({ kind: "spec", path: path.join(/*turbopackIgnore: true*/ root, SPEC_DIR) });
   }
   if (opts.kind == null || opts.kind === "plan") {
-    dirs.push({ kind: "plan", path: path.join(root, PLAN_DIR) });
+    dirs.push({ kind: "plan", path: path.join(/*turbopackIgnore: true*/ root, PLAN_DIR) });
   }
 
   const results: SpecPlanResult[] = [];
@@ -211,14 +217,16 @@ export async function buildSpecPlanReferenceIndex(): Promise<{
   const root = repoRoot();
   const specs = new Set<string>();
   const plans = new Set<string>();
-  const specFiles = await listMarkdown(path.join(root, SPEC_DIR));
+  // turbopackIgnore: see note in searchSpecsAndPlans — these paths are runtime
+  // filesystem reads of docs/, not bundled inputs.
+  const specFiles = await listMarkdown(path.join(/*turbopackIgnore: true*/ root, SPEC_DIR));
   for (const file of specFiles) {
     const entry = await loadFile(file);
     if (!entry) continue;
     for (const id of entry.refs.items) specs.add(id);
     for (const id of entry.refs.epics) specs.add(id);
   }
-  const planFiles = await listMarkdown(path.join(root, PLAN_DIR));
+  const planFiles = await listMarkdown(path.join(/*turbopackIgnore: true*/ root, PLAN_DIR));
   for (const file of planFiles) {
     const entry = await loadFile(file);
     if (!entry) continue;
