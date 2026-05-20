@@ -42,11 +42,13 @@ describe("heartbeat()", () => {
     expect(await heartbeat("TR-1")).toBe(false);
   });
 
-  it("only updates rows where status='working' (cooperative-cancel signal)", async () => {
+  it("only updates rows in an in-flight state (cooperative-cancel signal)", async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
     await heartbeat("TR-2");
     expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-2", status: "working" },
+      // Accepts both "working" (canonical) and "active" (legacy) — see
+      // heartbeat.ts inline comment.
+      where: { taskRunId: "TR-2", status: { in: ["working", "active"] } },
       data: { lastHeartbeatAt: expect.any(Date) },
     });
   });

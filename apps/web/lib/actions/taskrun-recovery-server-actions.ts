@@ -40,12 +40,12 @@ function describeError(err: unknown): string {
 export async function serverTaskrunRetry(
   taskRunId: string,
   opts: { force?: boolean } = {},
-): Promise<Result<{ newTaskRunId: string }>> {
+): Promise<Result<{ newTaskRunId: string; strategy: string }>> {
   const userId = await operatorUserId();
   if (!userId) return { ok: false, error: "Not authenticated" };
   try {
-    const { newTaskRunId } = await taskrunRetry(taskRunId, userId, opts);
-    return { ok: true, newTaskRunId };
+    const { newTaskRunId, strategy } = await taskrunRetry(taskRunId, userId, opts);
+    return { ok: true, newTaskRunId, strategy };
   } catch (err) {
     return { ok: false, error: describeError(err) };
   }

@@ -13,6 +13,7 @@ const {
   stallEventUpdate,
   stallEventCreate,
   notificationCreate,
+  deliberationRunFindFirst,
   transactionImpl,
 } = vi.hoisted(() => {
   // Mocks are untyped (any) to keep the test ergonomic — production typing
@@ -28,6 +29,7 @@ const {
   const stallEventUpdate = anyFn();
   const stallEventCreate = anyFn();
   const notificationCreate = anyFn();
+  const deliberationRunFindFirst = anyFn();
   const transactionImpl = vi.fn(async (fn: (tx: unknown) => unknown) =>
     fn({
       taskRun: { update: taskRunUpdate, create: taskRunCreate, findMany: taskRunFindMany },
@@ -45,6 +47,7 @@ const {
     stallEventUpdate,
     stallEventCreate,
     notificationCreate,
+    deliberationRunFindFirst,
     transactionImpl,
   };
 });
@@ -55,6 +58,7 @@ vi.mock("@dpf/db", () => ({
     featureBuild: { findUnique: featureBuildFindUnique },
     stallEvent: { findFirst: stallEventFindFirst, update: stallEventUpdate, create: stallEventCreate },
     notification: { create: notificationCreate },
+    deliberationRun: { findFirst: deliberationRunFindFirst },
     $transaction: transactionImpl,
   },
 }));
@@ -95,6 +99,8 @@ beforeEach(() => {
   stallEventCreate.mockImplementation(async () => ({}));
   notificationCreate.mockReset();
   notificationCreate.mockImplementation(async () => ({}));
+  deliberationRunFindFirst.mockReset();
+  deliberationRunFindFirst.mockImplementation(async () => null);
 });
 
 afterEach(() => {
@@ -147,6 +153,80 @@ describe("taskrunRetry", () => {
     const updateArg = stallEventUpdate.mock.calls[0]![0] as { data: { outcome: string; outcomeBy: string } };
     expect(updateArg.data.outcome).toBe("retry");
     expect(updateArg.data.outcomeBy).toBe("op-99");
+  });
+});
+
+describe("taskrunRetry per-phase strategy (Phase H)", () => {
+  function expectMetadata(strategy: string) {
+    const createArg = taskRunCreate.mock.calls[0]![0] as { data: { a2aMetadata: { retryStrategy: string } } };
+    expect(createArg.data.a2aMetadata.retryStrategy).toBe(strategy);
+  }
+
+  it("build phase → resume-build", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "build" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-1" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1");
+    expect(result.strategy).toBe("resume-build");
+    expectMetadata("resume-build");
+  });
+
+  it("plan phase with a prior completed DeliberationRun → resume-plan", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "plan" });
+    deliberationRunFindFirst.mockResolvedValue({ id: "DR-PRIOR", consensusState: "consensus" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-2" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1");
+    expect(result.strategy).toBe("resume-plan");
+    const createArg = taskRunCreate.mock.calls[0]![0] as { data: { a2aMetadata: { retryStrategy: string; priorDeliberationRunId: string } } };
+    expect(createArg.data.a2aMetadata.priorDeliberationRunId).toBe("DR-PRIOR");
+  });
+
+  it("plan phase with NO prior DeliberationRun → falls back to fresh", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "plan" });
+    deliberationRunFindFirst.mockResolvedValue(null);
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-3" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1");
+    expect(result.strategy).toBe("fresh");
+    expectMetadata("fresh");
+  });
+
+  it("review phase → review-current", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "review" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-4" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1");
+    expect(result.strategy).toBe("review-current");
+    expectMetadata("review-current");
+  });
+
+  it("ship phase with force → ship-force", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "ship" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-5" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1", { force: true });
+    expect(result.strategy).toBe("ship-force");
+    expectMetadata("ship-force");
+  });
+
+  it("ideate phase (default) → fresh", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "ideate" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-6" });
+    const result = await taskrunRetry("TR-STALL-1", "op-1");
+    expect(result.strategy).toBe("fresh");
+    expectMetadata("fresh");
+  });
+
+  it("records the strategy in the StallEvent.notes column", async () => {
+    taskRunFindUnique.mockResolvedValue({ ...stalledRow(), buildId: "FB-1" });
+    featureBuildFindUnique.mockResolvedValue({ phase: "build" });
+    stallEventFindFirst.mockResolvedValue({ id: "se-1" });
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-R-7" });
+    await taskrunRetry("TR-STALL-1", "op-1");
+    const updateArg = stallEventUpdate.mock.calls[0]![0] as { data: { notes?: string } };
+    expect(updateArg.data.notes).toMatch(/Build phase.*runBuildPipeline.*resume/);
   });
 });
 
