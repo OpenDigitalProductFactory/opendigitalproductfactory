@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { seedStallThresholds, STALL_THRESHOLD_SEEDS } from "./seed-stall-thresholds";
+import { seedStallThresholds, STALL_THRESHOLD_SEEDS } from "../src/seed-stall-thresholds";
 
 interface FakeRow {
   scope: string;
