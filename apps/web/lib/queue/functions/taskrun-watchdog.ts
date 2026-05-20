@@ -53,7 +53,11 @@ export const taskrunWatchdog = inngest.createFunction(
              tr."lastHeartbeatAt" AS "lastHeartbeatAt"
       FROM "TaskRun" tr
       LEFT JOIN "FeatureBuild" fb ON tr."buildId" = fb."buildId"
-      WHERE tr.status = 'working'
+      -- Catches both the canonical "working" state AND the legacy "active"
+      -- value still written by deliberation-run.ts and any other paths that
+      -- haven't been migrated. They mean the same thing semantically (work
+      -- in flight, not terminal). Audited 2026-05-20.
+      WHERE tr.status IN ('working', 'active')
         AND (
           tr."lastHeartbeatAt" IS NULL
           OR now() - tr."lastHeartbeatAt" > make_interval(secs => ${minHeartbeatS})
