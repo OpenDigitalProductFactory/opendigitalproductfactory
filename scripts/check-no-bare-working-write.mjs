@@ -34,6 +34,12 @@ const ALLOWLIST = new Set([
   // Creates the Build Studio work-capsule TaskRun envelope in "working" at
   // birth. Build pipeline (Phase D3) heartbeats from the step loop.
   "apps/web/lib/work-capsules/build-studio-attachment.ts",
+  // Agent thread dispatcher — transitions a queued TaskRun to working at the
+  // moment dispatch starts, in the SAME update that sets startedAt,
+  // currentAgentId, AND lastHeartbeatAt. That's the invariant the helper
+  // exists to enforce; this file just inlines it because it also needs to
+  // set other dispatcher-only fields in the same atomic write.
+  "apps/web/lib/actions/agent-thread-dispatcher-runtime.ts",
 ]);
 
 const PATTERNS = [/status:\s*["']working["']/];

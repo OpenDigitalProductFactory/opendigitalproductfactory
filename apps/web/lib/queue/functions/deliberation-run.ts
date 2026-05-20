@@ -50,15 +50,19 @@ export async function runDeliberation(input: RunDeliberationInput): Promise<void
   const { computeActualDiversity } = await import("@/lib/deliberation/orchestrator");
   const { routeEndpointV2 } = await import("@/lib/routing/pipeline-v2");
 
-  // Mark TaskRun active (idempotent).
+  // Mark TaskRun working (idempotent). Uses the canonical A2A "working"
+  // state via markTaskRunWorking() so lastHeartbeatAt is set atomically and
+  // the stall-detection watchdog (BI-4ab6be39) can do its job. Was previously
+  // writing the non-canonical "active" — pre-existing rows in that state are
+  // still caught because the watchdog accepts both values.
   try {
-    await prisma.taskRun.update({
-      where: { taskRunId: input.taskRunId },
-      data: { status: "active" },
-    });
+    const { markTaskRunWorking } = await import("@/lib/observability/heartbeat");
+    await markTaskRunWorking(input.taskRunId);
   } catch (err) {
     console.warn(
-      `[deliberation-run] failed to mark TaskRun ${input.taskRunId} active: ${err instanceof Error ? err.message : String(err)}`,
+      "[deliberation-run] failed to mark TaskRun working",
+      input.taskRunId,
+      err instanceof Error ? err.message : err,
     );
   }
 

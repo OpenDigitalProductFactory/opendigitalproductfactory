@@ -25,9 +25,13 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
   // hiccup or an incomplete test mock must not crash the long-running loop
   // that called us. Failure is logged and surfaces as "alive=true" so the
   // caller doesn't treat it as a cooperative-cancel signal.
+  //
+  // Filter accepts both "working" (canonical A2A) and "active" (legacy
+  // value still written by deliberation-run.ts and a couple of paths that
+  // haven't been migrated). The watchdog uses the same dual-state filter.
   try {
     const result = await prisma.taskRun.updateMany({
-      where: { taskRunId, status: "working" },
+      where: { taskRunId, status: { in: ["working", "active"] } },
       data: { lastHeartbeatAt: new Date() },
     });
     return result.count > 0;
