@@ -5,7 +5,7 @@
 export type TableSensitivity = "public" | "internal" | "confidential" | "restricted";
 
 /**
- * Classification of all 194 Prisma models by data sensitivity.
+ * Classification of all 195 Prisma models by data sensitivity.
  *
  * - public:       Reference / lookup data safe for any environment.
  * - internal:     Operational data with no PII — copy as-is to dev.
@@ -30,7 +30,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   EmploymentType: "public",
   WorkLocation: "public",
 
-  // -- internal (86) --
+  // -- internal (87) --
   Portfolio: "internal",
   DigitalProduct: "internal",
   ProductVersion: "internal",
@@ -88,6 +88,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   RuntimeAdvisory: "internal",
   PlatformSetupProgress: "internal",
   PlatformConfig: "internal",
+  SelfUpgradeRun: "internal",
   ScheduledJob: "internal",
   McpServer: "internal",
   McpServerTool: "internal",
