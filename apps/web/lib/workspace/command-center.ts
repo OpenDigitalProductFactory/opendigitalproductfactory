@@ -516,9 +516,9 @@ function buildSnapshot(metrics: WorkspaceMetrics): SnapshotItem[] {
       id: "work",
       label: "Open work",
       value: metrics.openBacklogCount + metrics.inProgressBacklogCount,
-      href: "/work/backlog",
+      href: "/ops",
     },
-    { id: "customers", label: "Customer accounts", value: metrics.customerAccountCount, href: "/customers" },
+    { id: "customers", label: "Customer accounts", value: metrics.customerAccountCount, href: "/customer" },
     { id: "finance", label: "Finance items", value: metrics.financeOutstandingCount, href: "/finance" },
     { id: "compliance", label: "Open incidents", value: metrics.openIncidentCount, href: "/compliance" },
     { id: "delivery", label: "Builds", value: metrics.buildCount, href: "/build" },
@@ -540,7 +540,7 @@ function buildReadinessMatrix(input: WorkspaceCommandCenterInput): BusinessDomai
         hasRouteScope: metrics.activeProviderCount > 0,
       }) !== "blocked",
     }),
-    readinessRow("customers-delivery", "Customers and delivery", "/customers", {
+    readinessRow("customers-delivery", "Customers and delivery", "/customer", {
       hasFreshEvidence: metrics.customerAccountCount > 0 || metrics.buildCount > 0,
       hasActiveConnection: metrics.customerAccountCount > 0,
       hasActor: metrics.activeEmployeeCount > 0 || metrics.agentCount > 0,
