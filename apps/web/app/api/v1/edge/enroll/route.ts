@@ -16,15 +16,10 @@
 //     via the `autoApprove` flag in the issuance call
 
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
-
-import {
-  EDGE_NODE_INSTALL_MODES,
-  EDGE_NODE_PLATFORMS,
-} from "@dpf/db/edge-node-types";
 
 import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
 import { enrollEdgeNode } from "@/lib/edge-node/enrollment";
+import { EnrollBody } from "@/lib/edge-node/wire-contract";
 
 const ROUTE_CONTEXT = "/api/v1/edge/enroll";
 
@@ -34,16 +29,9 @@ const ROUTE_CONTEXT = "/api/v1/edge/enroll";
 //
 // We DO NOT accept the bootstrap token in the request body to avoid
 // the operator-pasted-token-leaking-into-logs anti-pattern.
-
-const EnrollBody = z.object({
-  displayName: z.string().min(1).max(200),
-  platform: z.enum(EDGE_NODE_PLATFORMS),
-  installMode: z.enum(EDGE_NODE_INSTALL_MODES),
-  version: z.string().min(1).max(40),
-  advertisedCapabilities: z.array(z.string().min(1)).min(1),
-  hostFingerprint: z.string().max(200).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+//
+// The EnrollBody schema lives at @/lib/edge-node/wire-contract so both
+// this route and the cross-runtime parity test import the same shape.
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const startedAt = Date.now();

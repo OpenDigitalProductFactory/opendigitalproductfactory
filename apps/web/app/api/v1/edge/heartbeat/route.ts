@@ -9,33 +9,17 @@
 //   § Edge Node lifecycle (heartbeat).
 
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
-
-import {
-  EDGE_NODE_CAPABILITY_STATUSES,
-  RESERVED_CAPABILITIES,
-} from "@dpf/db/edge-node-types";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { writeEdgeNodeAudit } from "@/lib/edge-node/audit";
 import { recordHeartbeat } from "@/lib/edge-node/enrollment";
 import { checkEdgeRateLimit } from "@/lib/edge-node/rate-limit";
+import { HeartbeatBody } from "@/lib/edge-node/wire-contract";
 
 const ROUTE_CONTEXT = "/api/v1/edge/heartbeat";
 
-const HeartbeatBody = z
-  .object({
-    capabilityReports: z
-      .array(
-        z.object({
-          capability: z.enum(RESERVED_CAPABILITIES),
-          status: z.enum(EDGE_NODE_CAPABILITY_STATUSES),
-          evidence: z.record(z.string(), z.unknown()).optional(),
-        }),
-      )
-      .optional(),
-  })
-  .default({});
+// HeartbeatBody schema lives at @/lib/edge-node/wire-contract so both
+// this route and the cross-runtime parity test import the same shape.
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const startedAt = Date.now();
