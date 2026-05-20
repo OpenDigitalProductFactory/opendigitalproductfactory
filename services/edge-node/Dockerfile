@@ -47,6 +47,11 @@ WORKDIR /app
 COPY services/edge-node/package.json ./package.json
 COPY --from=build /app/services/edge-node/dist ./dist
 COPY --from=build /app/services/edge-node/node_modules ./node_modules
+# Bundled IEEE OUI dataset (~1.2 MB, ~39k entries). lib/mac-oui.ts
+# reads this lazily on the first ARP enrichment lookup. The build
+# stage doesn't need it (tsc is happy without it); we COPY straight
+# from the build context into the runtime image.
+COPY services/edge-node/data ./data
 
 # State directory; mounted as a volume in docker-compose.edge.yml
 # (A6) so the node token survives container restarts.
