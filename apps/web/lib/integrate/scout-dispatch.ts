@@ -76,15 +76,50 @@ async function fetchAndParseUrl(url: string): Promise<{
   }
 }
 
+type DispatchResult = { success: boolean; result?: ScoutResult; error?: string };
+
+// Per-featureBuild single-flight guard. If a dispatch is already in flight for
+// a given buildId, additional callers await the same promise instead of
+// starting a parallel pass. Cleared on settle (resolve or reject) so the next
+// request after completion runs fresh. See BI-6588414f for context.
+const inflightByBuildId = new Map<string, Promise<DispatchResult>>();
+
+/** Test-only: clears the mutex between cases. Not exported for production use. */
+export function _resetScoutMutexForTests(): void {
+  inflightByBuildId.clear();
+}
+
 /**
  * Main scout dispatch function.
  * Searches codebase and parses external URLs in parallel.
  */
 export async function dispatchScoutResearch(params: {
+  buildId: string;
   featureTitle: string;
   featureDescription: string;
   externalUrls?: string[];
-}): Promise<{ success: boolean; result?: ScoutResult; error?: string }> {
+}): Promise<DispatchResult> {
+  const existing = inflightByBuildId.get(params.buildId);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<DispatchResult> => {
+    try {
+      return await runScoutResearch(params);
+    } finally {
+      inflightByBuildId.delete(params.buildId);
+    }
+  })();
+
+  inflightByBuildId.set(params.buildId, promise);
+  return promise;
+}
+
+async function runScoutResearch(params: {
+  buildId: string;
+  featureTitle: string;
+  featureDescription: string;
+  externalUrls?: string[];
+}): Promise<DispatchResult> {
   const startTime = Date.now();
 
   try {
