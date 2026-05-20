@@ -7647,9 +7647,15 @@ export async function executeTool(
         };
       }
 
-      // Extract diff from sandbox
+      // Extract diff from sandbox. Pass clientBranch as the diff base so
+      // committed work on the build branch (`git commit` from generate_code)
+      // is captured — without the base ref, `git diff --cached` only sees
+      // staged-but-uncommitted changes and returns empty for any build whose
+      // agent committed before deploy_feature ran.
       const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/integrate/sandbox/sandbox-promotion");
-      const extracted = await extractAndCategorizeDiff(build.sandboxId);
+      const { getClientIdentity } = await import("@/lib/integrate/sandbox/build-branch");
+      const { clientBranch } = await getClientIdentity();
+      const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
       if (!extracted.fullDiff.trim()) {
         await prisma.featureBuild.update({
           where: { buildId },
@@ -7693,9 +7699,21 @@ export async function executeTool(
         };
       }
 
+      // Capture commit hashes alongside the diff so the contribution flow
+      // (which pushes build/<buildId> upstream) has the exact list of
+      // commits being submitted. Without this, FB.gitCommitHashes stays
+      // empty for committed-work builds and contribute_to_hive cannot
+      // attribute the PR's commits back to specific FBs.
+      const { listSandboxCommitsAheadOfBase } = await import("@/lib/integrate/sandbox/sandbox");
+      const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch);
+
       await prisma.featureBuild.update({
         where: { buildId },
-        data: { diffPatch: extracted.fullDiff, diffSummary: extracted.fullDiff.slice(0, 500) },
+        data: {
+          diffPatch: extracted.fullDiff,
+          diffSummary: extracted.fullDiff.slice(0, 500),
+          gitCommitHashes: commitHashes,
+        },
       });
 
       // Scan migrations for destructive operations
