@@ -12,7 +12,12 @@
 FROM node:24-alpine AS build
 WORKDIR /app/services/edge-node
 COPY services/edge-node/package.json services/edge-node/tsconfig.json ./
-RUN corepack enable && pnpm install --no-frozen-lockfile
+# pnpm 10 fails the install when transitive deps have ignored postinstall
+# scripts (esbuild ships a native-binary downloader). The edge-node build
+# only needs tsc to produce dist/; esbuild is pulled in by tsx + vitest as
+# devDependencies that the runtime image doesn't consume. Skipping scripts
+# avoids the gate without changing what's actually executed.
+RUN corepack enable && pnpm install --no-frozen-lockfile --ignore-scripts
 COPY services/edge-node/src ./src
 RUN pnpm build
 
