@@ -218,7 +218,9 @@ export async function executePromotion(
   let diffPatch = build?.diffPatch as string | null;
   if (!diffPatch && build?.sandboxId) {
     try {
-      const extracted = await extractAndCategorizeDiff(build.sandboxId);
+      const { getClientIdentity } = await import("./build-branch");
+      const { clientBranch } = await getClientIdentity();
+      const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
       diffPatch = extracted.fullDiff;
 
       // Persist for future reference
@@ -476,14 +478,17 @@ export function detectSchemaRegressions(fullDiff: string): string[] {
   return regressions;
 }
 
-export async function extractAndCategorizeDiff(containerId: string): Promise<{
+export async function extractAndCategorizeDiff(
+  containerId: string,
+  opts?: { baseRef?: string },
+): Promise<{
   fullDiff: string;
   migrationFiles: string[];
   codeFiles: string[];
   hasMigrations: boolean;
   schemaRegressions: string[];
 }> {
-  const fullDiff = await extractDiff(containerId);
+  const fullDiff = await extractDiff(containerId, opts);
 
   // Parse file paths from diff headers: lines like "diff --git a/path/to/file b/path/to/file"
   const filePaths: string[] = [];

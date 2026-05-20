@@ -133,15 +133,29 @@ export function buildSandboxStageCommand(workspace: string = SANDBOX_WORKSPACE):
   ].join(" && ");
 }
 
-export function buildSandboxListReleasableFilesCommand(workspace: string = SANDBOX_WORKSPACE): string {
-  return `cd ${workspace} && git diff --cached --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
+export function buildSandboxListReleasableFilesCommand(
+  workspace: string = SANDBOX_WORKSPACE,
+  baseRef?: string,
+): string {
+  // `git diff --cached` defaults to comparing the index against HEAD, which
+  // only surfaces uncommitted staged work. Once the build-phase agent commits
+  // its changes onto the build branch (`git commit` from generate_code or
+  // direct invocation), HEAD already contains those changes and the cached
+  // diff goes empty — even though the branch is N commits ahead of where it
+  // forked. Passing `baseRef` (typically the client branch tip) compares the
+  // post-stage index against the merge base so committed + uncommitted work
+  // both appear.
+  const base = baseRef ? ` ${quotePosixArg(baseRef)}` : "";
+  return `cd ${workspace} && git diff --cached${base} --name-only -- . ${joinQuotedArgs(SANDBOX_DIFF_EXCLUDES)}`;
 }
 
 export function buildSandboxDiffForFilesCommand(
   files: readonly string[],
   workspace: string = SANDBOX_WORKSPACE,
+  baseRef?: string,
 ): string {
-  return `cd ${workspace} && git diff --cached -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
+  const base = baseRef ? ` ${quotePosixArg(baseRef)}` : "";
+  return `cd ${workspace} && git diff --cached${base} -- ${files.map((file) => quotePosixArg(file)).join(" ")}`;
 }
 
 export function buildSandboxNextDevReadinessCommand(workspace: string = SANDBOX_WORKSPACE): string {
@@ -209,13 +223,43 @@ async function stageSandboxWorkspaceChanges(containerId: string): Promise<void> 
   await execInSandbox(containerId, buildSandboxStageCommand());
 }
 
-export async function listReleasableSandboxFiles(containerId: string): Promise<string[]> {
+export async function listReleasableSandboxFiles(
+  containerId: string,
+  opts?: { baseRef?: string },
+): Promise<string[]> {
   await stageSandboxWorkspaceChanges(containerId);
   try {
-    const output = await execInSandbox(containerId, buildSandboxListReleasableFilesCommand());
+    const output = await execInSandbox(
+      containerId,
+      buildSandboxListReleasableFilesCommand(SANDBOX_WORKSPACE, opts?.baseRef),
+    );
     return parseSandboxChangedFiles(output);
   } finally {
     await resetSandboxGitIndex(containerId);
+  }
+}
+
+/**
+ * Returns the commit hashes on the sandbox's current HEAD that are ahead of
+ * `baseRef` (typically the client branch tip). Excludes merge commits so the
+ * list maps cleanly to FeatureBuild.gitCommitHashes.
+ *
+ * Returns [] if HEAD == baseRef or if the rev-list command errors (e.g. the
+ * base ref does not exist yet in the sandbox).
+ */
+export async function listSandboxCommitsAheadOfBase(
+  containerId: string,
+  baseRef: string,
+  workspace: string = SANDBOX_WORKSPACE,
+): Promise<string[]> {
+  try {
+    const output = await execInSandbox(
+      containerId,
+      `cd ${workspace} && git rev-list --no-merges ${quotePosixArg(baseRef)}..HEAD`,
+    );
+    return output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  } catch {
+    return [];
   }
 }
 
@@ -414,13 +458,22 @@ export async function getSandboxLogs(containerId: string, tail: number = 50): Pr
   return stdout;
 }
 
-export async function extractDiff(containerId: string): Promise<string> {
+export async function extractDiff(
+  containerId: string,
+  opts?: { baseRef?: string },
+): Promise<string> {
   await stageSandboxWorkspaceChanges(containerId);
   try {
-    const changedFiles = await execInSandbox(containerId, buildSandboxListReleasableFilesCommand());
+    const changedFiles = await execInSandbox(
+      containerId,
+      buildSandboxListReleasableFilesCommand(SANDBOX_WORKSPACE, opts?.baseRef),
+    );
     const files = parseSandboxChangedFiles(changedFiles);
     if (files.length === 0) return "";
-    return execInSandbox(containerId, buildSandboxDiffForFilesCommand(files));
+    return execInSandbox(
+      containerId,
+      buildSandboxDiffForFilesCommand(files, SANDBOX_WORKSPACE, opts?.baseRef),
+    );
   } finally {
     await resetSandboxGitIndex(containerId);
   }

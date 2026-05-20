@@ -80,13 +80,43 @@ export async function runBuildPipeline(params: {
 }): Promise<BuildExecutionState> {
   const { buildId, taskRunId, existingState, updateState, emit } = params;
 
-  const resumeStep = getResumeStep(existingState);
+  // Self-heal: if a prior run reached "complete" with an empty diff capture
+  // (the pre-fix stepComplete was a no-op and stranded any build whose agent
+  // committed work inside the sandbox), re-arm the pipeline to re-run the
+  // capture step. Without this, builds created before the fix landed would
+  // stay blocked at the PR #850 gate forever because the orchestration loop
+  // immediately breaks when state.step === "complete".
+  let effectiveExistingState = existingState;
+  if (existingState?.step === "complete" && existingState.containerId) {
+    const { prisma } = await import("@dpf/db");
+    const fbRow = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { diffPatch: true },
+    });
+    const hasNoCapture = !fbRow?.diffPatch || fbRow.diffPatch.length === 0;
+    if (hasNoCapture) {
+      console.log(
+        `[build-pipeline] self-heal: ${buildId} is "complete" but has empty diffPatch — rewinding to re-run stepComplete capture`,
+      );
+      // Rewind to "code_generated". getResumeStep then advances to "tests_run",
+      // and the orchestration loop dispatches stepComplete (which is the
+      // diff/commit capture step) without re-running stepRunTests or any
+      // earlier sandbox setup. The capture is idempotent.
+      effectiveExistingState = {
+        ...existingState,
+        step: "code_generated",
+        retryCount: 0,
+      };
+    }
+  }
+
+  const resumeStep = getResumeStep(effectiveExistingState);
 
   // Build the slice of STEP_ORDER we still need to execute.
   const resumeIdx = STEP_ORDER.indexOf(resumeStep);
   const stepsToRun = resumeIdx === -1 ? STEP_ORDER : STEP_ORDER.slice(resumeIdx);
 
-  let state: BuildExecutionState = existingState ?? {
+  let state: BuildExecutionState = effectiveExistingState ?? {
     step: "pending",
     retryCount: 0,
     startedAt: new Date().toISOString(),
@@ -397,9 +427,42 @@ async function stepRunTests(
 }
 
 async function stepComplete(
-  _buildId: string,
+  buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  // No-op: the pipeline loop handles the "complete" transition.
+  // Capture the sandbox's releasable diff and commit hashes onto the
+  // FeatureBuild row so downstream gates (build→review, review→ship, the
+  // contribution flow, the release decision panel) see the work the agent
+  // actually did. Before this step ran inside the pipeline, the pipeline
+  // would mark itself "complete" with a 5-commit branch in the sandbox but
+  // diffPatch=NULL and gitCommitHashes=[] in the DB — and PR #850's gate
+  // would then reject the build for "no releasable source changes."
+  if (!state.containerId) return state;
+
+  const { prisma } = await import("@dpf/db");
+  const { extractDiff, listSandboxCommitsAheadOfBase } = await import("./sandbox/sandbox");
+  const { getClientIdentity } = await import("./sandbox/build-branch");
+
+  const identity = await getClientIdentity();
+  const baseRef = identity.clientBranch;
+
+  const [fullDiff, commitHashes] = await Promise.all([
+    extractDiff(state.containerId, { baseRef }),
+    listSandboxCommitsAheadOfBase(state.containerId, baseRef),
+  ]);
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      diffPatch: fullDiff,
+      diffSummary: fullDiff.slice(0, 500),
+      gitCommitHashes: commitHashes,
+    },
+  });
+
+  console.log(
+    `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${buildId}`,
+  );
+
   return state;
 }

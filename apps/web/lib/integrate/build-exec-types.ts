@@ -60,7 +60,11 @@ export const MAX_RETRIES: Record<BuildExecStep, number> = {
   db_ready: 3,
   deps_installed: 2,
   code_generated: 2,
-  tests_run: 0,
+  // tests_run is the dispatch slot that runs stepComplete (the diff/commit
+  // capture step). Diff extraction can fail transiently when the sandbox is
+  // mid-rebuild or the index lock is briefly held — give it retry budget so
+  // a one-off hiccup doesn't strand an otherwise-complete build.
+  tests_run: 2,
   complete: 0,
   failed: 0,
 };
