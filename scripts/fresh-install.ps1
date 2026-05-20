@@ -293,7 +293,107 @@ pnpm --filter @dpf/db seed
 if ($LASTEXITCODE -ne 0) { Write-Fail "Database seed failed" }
 Write-Ok "Base seed complete"
 
-Write-Host "========================================================" 
+Write-Host "========================================================"
+
+# Edge Node bootstrap. Mirror install-dpf.sh's auto-approve flow on Windows
+# so a fresh install brings up an enrolled Edge Node alongside the portal.
+# Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+#   § Approval policy ("Auto-approve when the bootstrap token is issued by
+#   the local installer for the DPF host's own Edge Node")
+Write-Step "Edge Node bootstrap"
+
+$edgeComposeArgs = @(
+    "-f", "docker-compose.yml",
+    "-f", "docker-compose.override.yml",
+    "-f", "docker-compose.edge.yml"
+)
+
+# Wait for portal /api/health so the token mint can talk to Prisma /
+# Authority. Up to 5 minutes — matches dpf-start.ps1.
+Write-Host "  Waiting for portal /api/health..."
+$portalReady = $false
+for ($i = 0; $i -lt 60; $i++) {
+    try {
+        $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/health" `
+                    -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
+        if ($resp -and $resp.StatusCode -eq 200) { $portalReady = $true; break }
+    } catch {}
+    Start-Sleep -Seconds 5
+}
+if (-not $portalReady) {
+    Write-Warn "Portal did not become healthy in time -- skipping Edge Node bootstrap."
+    Write-Warn "Re-run scripts/fresh-install.ps1 or issue a token from Admin > Platform Development > Edge Nodes."
+} else {
+    # Mint a single-use auto-approve bootstrap token. We run the script
+    # INSIDE the portal container instead of via host pnpm so we get a
+    # Prisma client that matches the just-migrated DB schema regardless of
+    # whether the host's `pnpm install` produced one. This also lets the
+    # consumer install path (no host Node/pnpm) reach the same code path.
+    # Plaintext token is the LAST stdout line; diagnostic output is on stderr.
+    $portalContainer = (docker compose -f "$InstallRoot\docker-compose.yml" `
+                              -f "$InstallRoot\docker-compose.edge.yml" `
+                              ps -q portal 2>$null) -split "`n" | Select-Object -First 1
+    if (-not $portalContainer) { $portalContainer = "dpf-portal-1" }
+
+    $edgeToken = $null
+    try {
+        $tokenOutput = docker exec $portalContainer sh -c `
+            'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
+        if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
+            $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
+            $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
+            if ($candidate -match "^dpfboot_") {
+                $edgeToken = $candidate
+            }
+        }
+    } catch {
+        # Captured below by the null check.
+    }
+
+    if (-not $edgeToken) {
+        Write-Warn "Bootstrap token issuance failed -- skipping enrollment wiring."
+        Write-Warn "You can re-issue manually via Admin > Platform Development > Edge Nodes."
+    } else {
+        # Append (or replace) DPF_BOOTSTRAP_TOKEN + DPF_EDGE_NODE_NAME in .env.
+        # Idempotent: re-running the installer overwrites the prior token.
+        $envPath = Join-Path $InstallRoot ".env"
+        $envText = Get-Content $envPath -Raw -ErrorAction SilentlyContinue
+        if ($null -eq $envText) { $envText = "" }
+
+        if ($envText -match "(?m)^DPF_BOOTSTRAP_TOKEN=.*$") {
+            $envText = [System.Text.RegularExpressions.Regex]::Replace(
+                $envText, "(?m)^DPF_BOOTSTRAP_TOKEN=.*$", "DPF_BOOTSTRAP_TOKEN=$edgeToken")
+        } else {
+            if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+            $envText += "`n# Edge Node bootstrap token -- installer-issued, auto-approve.`n"
+            $envText += "DPF_BOOTSTRAP_TOKEN=$edgeToken`n"
+        }
+
+        if ($envText -notmatch "(?m)^DPF_EDGE_NODE_NAME=") {
+            $envText += "DPF_EDGE_NODE_NAME=$([System.Net.Dns]::GetHostName())`n"
+        }
+
+        Set-Content -Path $envPath -Value $envText -Encoding UTF8 -NoNewline
+        Write-Ok "Bootstrap token wired into .env (auto-approve)"
+
+        # Force-recreate the edge-node service so it picks up the new env.
+        # --no-deps avoids touching the portal.
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker compose @edgeComposeArgs up -d --no-deps --force-recreate edge-node 2>&1 | Out-Null
+        $edgeUpExit = $LASTEXITCODE
+        $ErrorActionPreference = $oldEAP
+
+        if ($edgeUpExit -eq 0) {
+            Write-Ok "Edge Node container started -- enrolls within ~10s"
+        } else {
+            Write-Warn "edge-node container restart failed; node may not have enrolled."
+            Write-Warn "  Inspect: docker compose -f docker-compose.yml -f docker-compose.edge.yml logs edge-node --tail 50"
+        }
+    }
+}
+
+Write-Host "========================================================"
 
 Write-Host ""
 Write-Host "   Fresh install complete!" -ForegroundColor Green
