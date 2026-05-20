@@ -109,7 +109,23 @@ function joinQuotedArgs(args: readonly string[]): string {
 }
 
 export function buildSandboxStageCommand(workspace: string = SANDBOX_WORKSPACE): string {
-  return `cd ${workspace} && git add -A -- ${joinQuotedArgs(SANDBOX_STAGE_EXCLUDES)}`;
+  // Two-pass staging avoids the exit-code 1 that `git add -A` emits when gitignored
+  // untracked directories (.pnpm-store, node_modules, packages/db/generated) are
+  // present in the sandbox working tree, even with the exclude pathspecs — which
+  // crashes the "Continue to Release" portal action.
+  //
+  // Pass 1 — git add -u: stages modifications and deletions for already-tracked files.
+  //   It never scans gitignored untracked paths, so no spurious exit-code 1.
+  // Pass 2 — git ls-files | xargs git add: discovers new non-gitignored source files
+  //   (e.g. TopologyGraph.test.tsx created by the coworker) via --exclude-standard,
+  //   applies the same pathspec exclusions, then stages them individually.
+  //   -z / -0 handles file names that contain spaces.
+  const excludes = joinQuotedArgs(SANDBOX_STAGE_EXCLUDES);
+  return [
+    `cd ${workspace}`,
+    `git add -u`,
+    `git ls-files -z --others --exclude-standard -- . ${excludes} | xargs -0 -r git add --`,
+  ].join(" && ");
 }
 
 export function buildSandboxListReleasableFilesCommand(workspace: string = SANDBOX_WORKSPACE): string {
