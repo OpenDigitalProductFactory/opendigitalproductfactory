@@ -6,6 +6,7 @@ import { lazyExec, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import * as os from "os";
 import { prisma } from "@dpf/db";
 import { extractDiff } from "@/lib/sandbox";
+import { isInWindow } from "@/lib/deployment-window-utils";
 
 const exec = lazyExec();
 
@@ -76,25 +77,13 @@ export function getRestoreInstructions(backupFilePath: string): string {
 
 /**
  * Returns true if the current time falls within any of the given deployment windows.
- * Checks day-of-week and time range (HH:mm format, evaluated in server timezone).
+ * Delegates to the shared isInWindow evaluator from deployment-windows.
  */
 export function isNowInWindow(
   windows: Array<{ dayOfWeek: number[]; startTime: string; endTime: string }>,
   now?: Date,
 ): boolean {
-  const d = now ?? new Date();
-  const currentDay = d.getDay(); // 0=Sun
-  const currentTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-
-  return windows.some((w) => {
-    if (!w.dayOfWeek.includes(currentDay)) return false;
-    // Handle overnight windows (e.g., 22:00-06:00)
-    if (w.startTime <= w.endTime) {
-      return currentTime >= w.startTime && currentTime < w.endTime;
-    }
-    // Overnight: 22:00-06:00 means >= 22:00 OR < 06:00
-    return currentTime >= w.startTime || currentTime < w.endTime;
-  });
+  return isInWindow(windows, now);
 }
 
 // ─── Post-Deployment Health Check ───────────────────────────────────────────
@@ -218,9 +207,7 @@ export async function executePromotion(
   let diffPatch = build?.diffPatch as string | null;
   if (!diffPatch && build?.sandboxId) {
     try {
-      const { getClientIdentity } = await import("./build-branch");
-      const { clientBranch } = await getClientIdentity();
-      const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
+      const extracted = await extractAndCategorizeDiff(build.sandboxId);
       diffPatch = extracted.fullDiff;
 
       // Persist for future reference
@@ -432,24 +419,17 @@ export async function backupProductionDb(
 }
 
 /**
- * Detects schema regressions in a diff patch by scanning for removed lines
- * inside model/enum blocks of packages/db/prisma/schema.prisma.
- *
- * Returns an array of removed lines (empty = no regression). A regression
- * means the sandbox was initialized from a stale portal image and the diff
- * would overwrite main's schema with the older version, silently dropping
- * fields that main added after the sandbox was created.
+ * Detects lines removed from schema.prisma that would regress main's schema
+ * if this diff were applied — i.e. the sandbox was initialized from a stale
+ * portal image and the diff would overwrite newer schema additions on main.
  */
 export function detectSchemaRegressions(fullDiff: string): string[] {
   const SCHEMA_FILE = "packages/db/prisma/schema.prisma";
-
-  // Find the schema.prisma section of the diff
   const diffHeaderRegex = /^diff --git a\/(.+) b\/.+$/gm;
   let schemaSection = "";
   let match;
   while ((match = diffHeaderRegex.exec(fullDiff)) !== null) {
     if (match[1] === SCHEMA_FILE) {
-      // Capture everything from this diff header to the next one (or end)
       const start = match.index;
       const remaining = fullDiff.slice(start);
       const nextHeader = remaining.search(/\ndiff --git /);
@@ -457,20 +437,12 @@ export function detectSchemaRegressions(fullDiff: string): string[] {
       break;
     }
   }
-
-  if (!schemaSection) return []; // schema.prisma not in this diff
-
-  // Extract removed lines (lines starting with "-") that look like Prisma
-  // field/enum/index definitions — 2-space-indented lines inside a model block.
-  // These are the lines that would be dropped from main if the patch landed.
+  if (!schemaSection) return [];
   const regressions: string[] = [];
   for (const line of schemaSection.split("\n")) {
     if (!line.startsWith("-")) continue;
-    if (line.startsWith("---")) continue; // diff header
-
-    const content = line.slice(1); // strip leading "-"
-    // Match field/enum value lines (2-space indent + identifier) and
-    // model/enum declaration lines, but not blank lines or pure comment lines.
+    if (line.startsWith("---")) continue;
+    const content = line.slice(1);
     if (/^  [a-zA-Z@]/.test(content) || /^(?:model|enum) /.test(content)) {
       regressions.push(line);
     }
@@ -488,7 +460,7 @@ export async function extractAndCategorizeDiff(
   hasMigrations: boolean;
   schemaRegressions: string[];
 }> {
-  const fullDiff = await extractDiff(containerId, opts);
+  const fullDiff = await extractDiff(containerId, opts as Parameters<typeof extractDiff>[1]);
 
   // Parse file paths from diff headers: lines like "diff --git a/path/to/file b/path/to/file"
   const filePaths: string[] = [];

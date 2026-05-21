@@ -1,50 +1,96 @@
-import { z } from "zod";
-
 import { prisma } from "@dpf/db";
 
-export const SELF_UPGRADE_CONFIG_KEY = "self_upgrade";
+export type MaintenanceWindow = {
+  dayOfWeek: number[];
+  startTime: string;
+  endTime: string;
+};
 
-const SAFE_NAME_RE = /^[A-Za-z0-9_.:-]+$/;
-const SAFE_PATH_RE = /^[A-Za-z0-9_./:\\-]+$/;
+export type SelfUpgradeConfig = {
+  enabled: boolean;
+  channel: string;
+  checkIntervalHours: number;
+  healthTarget: number;
+  maintenanceWindows: MaintenanceWindow[];
+};
 
-export const SelfUpgradeConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  hostInstallPath: z.string().min(1).regex(SAFE_PATH_RE),
-  hostSourceMountPath: z.string().min(1).regex(SAFE_PATH_RE).default("/host-source"),
-  composeProject: z.string().min(1).regex(SAFE_NAME_RE).default("dpf"),
-  portalContainerName: z.string().min(1).regex(SAFE_NAME_RE).default("dpf-portal-1"),
-  dbContainerName: z.string().min(1).regex(SAFE_NAME_RE).default("dpf-postgres-1"),
-  repositoryRemote: z.string().min(1).regex(SAFE_NAME_RE).default("origin"),
-  repositoryBranch: z.string().min(1).regex(SAFE_NAME_RE).default("main"),
-  healthUrl: z.string().url().default("http://localhost:3000/api/health"),
-  promoterImage: z.string().min(1).regex(SAFE_NAME_RE).default("dpf-promoter"),
-});
+const DEFAULTS: SelfUpgradeConfig = {
+  enabled: false,
+  channel: "stable",
+  checkIntervalHours: 24,
+  healthTarget: 100,
+  maintenanceWindows: [],
+};
 
-export type SelfUpgradeConfig = z.infer<typeof SelfUpgradeConfigSchema>;
+/**
+ * Returns true if `now` (defaults to current time) falls within any of the
+ * configured maintenance windows. Uses local timezone for day/time checks
+ * (same semantics as the shared isInWindow in deployment-windows.ts).
+ */
+export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): boolean {
+  const d = now ?? new Date();
+  const currentDay = d.getDay();
+  const currentTime = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-function envDefaults(): Partial<SelfUpgradeConfig> {
+  return config.maintenanceWindows.some((w) => {
+    if (!w.dayOfWeek.includes(currentDay)) return false;
+    if (w.startTime <= w.endTime) {
+      return currentTime >= w.startTime && currentTime < w.endTime;
+    }
+    // Overnight window: e.g. 22:00-06:00 → matches >= 22:00 OR < 06:00
+    return currentTime >= w.startTime || currentTime < w.endTime;
+  });
+}
+
+/** @deprecated Use getSelfUpgradeConfig instead */
+export const loadSelfUpgradeConfig = (): Promise<SelfUpgradeConfig> => getSelfUpgradeConfig();
+
+export const SELF_UPGRADE_CONFIG_KEY = "portal.selfUpgrade";
+
+export async function getSelfUpgradeConfig(): Promise<SelfUpgradeConfig> {
+  const row = await prisma.platformConfig.findUnique({
+    where: { key: "portal.selfUpgrade" },
+  });
+  return parseSelfUpgradeConfig(row?.value ?? null);
+}
+
+export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULTS };
+  const cfg = raw as Record<string, unknown>;
   return {
-    enabled: process.env.DPF_SELF_UPGRADE_ENABLED !== "false",
-    hostInstallPath: process.env.DPF_HOST_INSTALL_PATH ?? process.env.PROJECT_ROOT,
-    hostSourceMountPath: process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ?? "/host-source",
-    composeProject: process.env.COMPOSE_PROJECT_NAME ?? "dpf",
-    portalContainerName: process.env.DPF_PRODUCTION_PORTAL_CONTAINER ?? "dpf-portal-1",
-    dbContainerName: process.env.DPF_PRODUCTION_DB_CONTAINER ?? "dpf-postgres-1",
-    repositoryRemote: process.env.DPF_SELF_UPGRADE_REMOTE ?? "origin",
-    repositoryBranch: process.env.DPF_SELF_UPGRADE_BRANCH ?? "main",
-    healthUrl: process.env.DPF_SELF_UPGRADE_HEALTH_URL ?? "http://localhost:3000/api/health",
-    promoterImage: process.env.DPF_PROMOTER_IMAGE ?? "dpf-promoter",
+    enabled: typeof cfg.enabled === "boolean" ? cfg.enabled : DEFAULTS.enabled,
+    channel:
+      typeof cfg.channel === "string" && cfg.channel.length > 0
+        ? cfg.channel
+        : DEFAULTS.channel,
+    checkIntervalHours:
+      typeof cfg.checkIntervalHours === "number" && cfg.checkIntervalHours > 0
+        ? cfg.checkIntervalHours
+        : DEFAULTS.checkIntervalHours,
+    healthTarget:
+      typeof cfg.healthTarget === "number" &&
+      cfg.healthTarget >= 0 &&
+      cfg.healthTarget <= 100
+        ? cfg.healthTarget
+        : DEFAULTS.healthTarget,
+    maintenanceWindows: parseWindows(cfg.maintenanceWindows),
   };
 }
 
-export async function loadSelfUpgradeConfig(): Promise<SelfUpgradeConfig> {
-  const row = await prisma.platformConfig.findUnique({
-    where: { key: SELF_UPGRADE_CONFIG_KEY },
-    select: { value: true },
-  });
+function parseWindows(raw: unknown): MaintenanceWindow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isValidWindow);
+}
 
-  return SelfUpgradeConfigSchema.parse({
-    ...envDefaults(),
-    ...(row?.value && typeof row.value === "object" ? row.value : {}),
-  });
+function isValidWindow(w: unknown): w is MaintenanceWindow {
+  if (!w || typeof w !== "object") return false;
+  const win = w as Record<string, unknown>;
+  return (
+    Array.isArray(win.dayOfWeek) &&
+    win.dayOfWeek.every((d) => typeof d === "number" && d >= 0 && d <= 6) &&
+    typeof win.startTime === "string" &&
+    /^\d{2}:\d{2}$/.test(win.startTime) &&
+    typeof win.endTime === "string" &&
+    /^\d{2}:\d{2}$/.test(win.endTime)
+  );
 }

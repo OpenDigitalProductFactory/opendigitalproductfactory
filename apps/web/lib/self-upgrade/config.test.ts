@@ -1,96 +1,346 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const { mockFindUnique } = vi.hoisted(() => ({
-  mockFindUnique: vi.fn(),
-}));
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { parseSelfUpgradeConfig, getSelfUpgradeConfig, isInMaintenanceWindow } from "./config";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformConfig: {
-      findUnique: mockFindUnique,
+      findUnique: vi.fn(),
     },
   },
 }));
 
-import {
-  SELF_UPGRADE_CONFIG_KEY,
-  SelfUpgradeConfigSchema,
-  loadSelfUpgradeConfig,
-} from "./config";
+import { prisma } from "@dpf/db";
+const mockFindUnique = vi.mocked(prisma.platformConfig.findUnique);
 
-describe("SelfUpgradeConfigSchema", () => {
-  it("accepts the installed Windows host path and normal dpf compose names", () => {
-    const parsed = SelfUpgradeConfigSchema.parse({
-      enabled: true,
-      hostInstallPath: "D:/DPF",
-      hostSourceMountPath: "/host-source",
-      composeProject: "dpf",
-      portalContainerName: "dpf-portal-1",
-      dbContainerName: "dpf-postgres-1",
-      repositoryRemote: "origin",
-      repositoryBranch: "main",
-      healthUrl: "http://localhost:3000/api/health",
+describe("parseSelfUpgradeConfig", () => {
+  it("returns disabled defaults when raw is null (missing config)", () => {
+    expect(parseSelfUpgradeConfig(null)).toEqual({
+      enabled: false,
+      channel: "stable",
+      checkIntervalHours: 24,
+      healthTarget: 100,
+      maintenanceWindows: [],
     });
-
-    expect(parsed.hostInstallPath).toBe("D:/DPF");
   });
 
-  it("rejects shell metacharacters in host paths and container names", () => {
-    expect(() =>
-      SelfUpgradeConfigSchema.parse({
-        enabled: true,
-        hostInstallPath: "D:/DPF; rm -rf /",
-        hostSourceMountPath: "/host-source",
-        composeProject: "dpf",
-        portalContainerName: "dpf-portal-1",
-        dbContainerName: "dpf-postgres-1",
-        repositoryRemote: "origin",
-        repositoryBranch: "main",
-        healthUrl: "http://localhost:3000/api/health",
-      }),
-    ).toThrow();
+  it("returns disabled defaults when raw is undefined", () => {
+    expect(parseSelfUpgradeConfig(undefined)).toEqual({
+      enabled: false,
+      channel: "stable",
+      checkIntervalHours: 24,
+      healthTarget: 100,
+      maintenanceWindows: [],
+    });
+  });
+
+  it("returns disabled defaults when raw is a non-object scalar (malformed)", () => {
+    expect(parseSelfUpgradeConfig("bad")).toEqual({
+      enabled: false,
+      channel: "stable",
+      checkIntervalHours: 24,
+      healthTarget: 100,
+      maintenanceWindows: [],
+    });
+    expect(parseSelfUpgradeConfig(42)).toEqual({
+      enabled: false,
+      channel: "stable",
+      checkIntervalHours: 24,
+      healthTarget: 100,
+      maintenanceWindows: [],
+    });
+  });
+
+  it("returns disabled defaults when raw is an empty object (partial malformed)", () => {
+    const cfg = parseSelfUpgradeConfig({});
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.channel).toBe("stable");
+    expect(cfg.checkIntervalHours).toBe(24);
+    expect(cfg.maintenanceWindows).toEqual([]);
+  });
+
+  it("parses a fully-specified enabled config", () => {
+    const cfg = parseSelfUpgradeConfig({
+      enabled: true,
+      channel: "beta",
+      checkIntervalHours: 12,
+      maintenanceWindows: [],
+    });
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.channel).toBe("beta");
+    expect(cfg.checkIntervalHours).toBe(12);
+  });
+
+  it("parses the seeded disabled config", () => {
+    const cfg = parseSelfUpgradeConfig({
+      enabled: false,
+      channel: "stable",
+      checkIntervalHours: 24,
+    });
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.channel).toBe("stable");
+    expect(cfg.checkIntervalHours).toBe(24);
+  });
+
+  it("falls back to default channel when channel is empty string (malformed)", () => {
+    expect(parseSelfUpgradeConfig({ channel: "" }).channel).toBe("stable");
+  });
+
+  it("falls back to default channel when channel is non-string (malformed)", () => {
+    expect(parseSelfUpgradeConfig({ channel: 5 }).channel).toBe("stable");
+  });
+
+  it("falls back to default checkIntervalHours when value is 0 (malformed)", () => {
+    expect(parseSelfUpgradeConfig({ checkIntervalHours: 0 }).checkIntervalHours).toBe(24);
+  });
+
+  it("falls back to default checkIntervalHours when value is negative (malformed)", () => {
+    expect(parseSelfUpgradeConfig({ checkIntervalHours: -5 }).checkIntervalHours).toBe(24);
+  });
+
+  it("falls back to default checkIntervalHours when value is non-numeric (malformed)", () => {
+    expect(parseSelfUpgradeConfig({ checkIntervalHours: "12" }).checkIntervalHours).toBe(24);
+  });
+
+  it("falls back to default enabled when value is non-boolean (malformed)", () => {
+    expect(parseSelfUpgradeConfig({ enabled: "yes" }).enabled).toBe(false);
+    expect(parseSelfUpgradeConfig({ enabled: 1 }).enabled).toBe(false);
+    expect(parseSelfUpgradeConfig({ enabled: "true" }).enabled).toBe(false);
+  });
+
+  describe("healthTarget", () => {
+    it("defaults to 100 when missing", () => {
+      expect(parseSelfUpgradeConfig({}).healthTarget).toBe(100);
+    });
+
+    it("accepts a valid health target between 0 and 100", () => {
+      expect(parseSelfUpgradeConfig({ healthTarget: 80 }).healthTarget).toBe(80);
+      expect(parseSelfUpgradeConfig({ healthTarget: 0 }).healthTarget).toBe(0);
+      expect(parseSelfUpgradeConfig({ healthTarget: 100 }).healthTarget).toBe(100);
+    });
+
+    it("falls back to 100 when healthTarget is above 100 (out of range)", () => {
+      expect(parseSelfUpgradeConfig({ healthTarget: 101 }).healthTarget).toBe(100);
+    });
+
+    it("falls back to 100 when healthTarget is negative (out of range)", () => {
+      expect(parseSelfUpgradeConfig({ healthTarget: -1 }).healthTarget).toBe(100);
+    });
+
+    it("falls back to 100 when healthTarget is non-numeric (malformed)", () => {
+      expect(parseSelfUpgradeConfig({ healthTarget: "80" }).healthTarget).toBe(100);
+      expect(parseSelfUpgradeConfig({ healthTarget: null }).healthTarget).toBe(100);
+    });
+  });
+
+  describe("maintenanceWindows", () => {
+    it("returns empty array when maintenanceWindows is missing", () => {
+      expect(parseSelfUpgradeConfig({}).maintenanceWindows).toEqual([]);
+    });
+
+    it("returns empty array when maintenanceWindows is not an array (malformed)", () => {
+      expect(parseSelfUpgradeConfig({ maintenanceWindows: "bad" }).maintenanceWindows).toEqual([]);
+      expect(parseSelfUpgradeConfig({ maintenanceWindows: {} }).maintenanceWindows).toEqual([]);
+      expect(parseSelfUpgradeConfig({ maintenanceWindows: null }).maintenanceWindows).toEqual([]);
+    });
+
+    it("accepts valid maintenance windows", () => {
+      const cfg = parseSelfUpgradeConfig({
+        maintenanceWindows: [{ dayOfWeek: [6, 0], startTime: "02:00", endTime: "04:00" }],
+      });
+      expect(cfg.maintenanceWindows).toHaveLength(1);
+      expect(cfg.maintenanceWindows[0]).toEqual({
+        dayOfWeek: [6, 0],
+        startTime: "02:00",
+        endTime: "04:00",
+      });
+    });
+
+    it("filters out entries missing dayOfWeek (malformed)", () => {
+      const cfg = parseSelfUpgradeConfig({
+        maintenanceWindows: [
+          { dayOfWeek: [1], startTime: "02:00", endTime: "04:00" },
+          { startTime: "02:00", endTime: "04:00" },
+        ],
+      });
+      expect(cfg.maintenanceWindows).toHaveLength(1);
+    });
+
+    it("filters out entries with bad time format (malformed)", () => {
+      const cfg = parseSelfUpgradeConfig({
+        maintenanceWindows: [
+          { dayOfWeek: [1], startTime: "02:00", endTime: "04:00" },
+          { dayOfWeek: [1], startTime: "2am", endTime: "4am" },
+          { dayOfWeek: [1], startTime: "2:00", endTime: "4:00" },
+        ],
+      });
+      expect(cfg.maintenanceWindows).toHaveLength(1);
+    });
+
+    it("filters out entries with null or non-object values", () => {
+      const cfg = parseSelfUpgradeConfig({
+        maintenanceWindows: [
+          { dayOfWeek: [1], startTime: "02:00", endTime: "04:00" },
+          null,
+          "bad",
+          42,
+        ],
+      });
+      expect(cfg.maintenanceWindows).toHaveLength(1);
+    });
+
+    it("filters out windows with out-of-range dayOfWeek values (0-6 only)", () => {
+      const cfg = parseSelfUpgradeConfig({
+        maintenanceWindows: [
+          { dayOfWeek: [7], startTime: "02:00", endTime: "04:00" },
+          { dayOfWeek: [-1], startTime: "02:00", endTime: "04:00" },
+        ],
+      });
+      expect(cfg.maintenanceWindows).toHaveLength(0);
+    });
+
+    it("accepts multiple valid windows", () => {
+      const cfg = parseSelfUpgradeConfig({
+        maintenanceWindows: [
+          { dayOfWeek: [6], startTime: "02:00", endTime: "06:00" },
+          { dayOfWeek: [0], startTime: "03:00", endTime: "05:00" },
+        ],
+      });
+      expect(cfg.maintenanceWindows).toHaveLength(2);
+    });
   });
 });
 
-describe("loadSelfUpgradeConfig", () => {
+describe("isInMaintenanceWindow", () => {
+  // Jan 5 2026 = Monday (day 1), Jan 6 = Tuesday (day 2)
+  const MONDAY_3AM = new Date(2026, 0, 5, 3, 0);
+  const MONDAY_5AM = new Date(2026, 0, 5, 5, 0);
+  const TUESDAY_3AM = new Date(2026, 0, 6, 3, 0);
+  const MONDAY_23PM = new Date(2026, 0, 5, 23, 0);
+
+  it("returns false when no windows are configured", () => {
+    const cfg = parseSelfUpgradeConfig({ maintenanceWindows: [] });
+    expect(isInMaintenanceWindow(cfg, MONDAY_3AM)).toBe(false);
+  });
+
+  it("returns false when maintenanceWindows defaults to empty (missing from config)", () => {
+    const cfg = parseSelfUpgradeConfig({});
+    expect(isInMaintenanceWindow(cfg, MONDAY_3AM)).toBe(false);
+  });
+
+  it("returns true when now is inside a configured window", () => {
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }],
+    });
+    expect(isInMaintenanceWindow(cfg, MONDAY_3AM)).toBe(true);
+  });
+
+  it("returns false when now is outside the window time range", () => {
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }],
+    });
+    expect(isInMaintenanceWindow(cfg, MONDAY_5AM)).toBe(false);
+  });
+
+  it("returns false when now is on the wrong day", () => {
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }],
+    });
+    expect(isInMaintenanceWindow(cfg, TUESDAY_3AM)).toBe(false);
+  });
+
+  it("returns true for overnight window (startTime > endTime) when now is after start", () => {
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "22:00", endTime: "06:00" }],
+    });
+    expect(isInMaintenanceWindow(cfg, MONDAY_23PM)).toBe(true);
+  });
+
+  it("handles overnight window spanning two days when both days are in dayOfWeek", () => {
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1, 2], startTime: "22:00", endTime: "06:00" }],
+    });
+    const TUESDAY_1AM = new Date(2026, 0, 6, 1, 0);
+    expect(isInMaintenanceWindow(cfg, TUESDAY_1AM)).toBe(true);
+  });
+
+  it("evaluates day and time in local timezone (new Date(y,m,d,h) constructs local time)", () => {
+    // new Date(year, month, day, hour, minute) creates a date in local time.
+    // isInWindow uses getDay()/getHours() which also read local time, so they agree.
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [{ dayOfWeek: [1], startTime: "03:00", endTime: "04:00" }],
+    });
+    const localMonday3_30am = new Date(2026, 0, 5, 3, 30);
+    expect(isInMaintenanceWindow(cfg, localMonday3_30am)).toBe(true);
+  });
+
+  it("returns true when now matches the second of multiple windows", () => {
+    const cfg = parseSelfUpgradeConfig({
+      maintenanceWindows: [
+        { dayOfWeek: [6], startTime: "02:00", endTime: "04:00" }, // Saturday
+        { dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }, // Monday
+      ],
+    });
+    expect(isInMaintenanceWindow(cfg, MONDAY_3AM)).toBe(true);
+  });
+});
+
+describe("getSelfUpgradeConfig", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("DPF_HOST_INSTALL_PATH", "D:/DPF");
-    vi.stubEnv("COMPOSE_PROJECT_NAME", "dpf");
-    vi.stubEnv("DPF_PRODUCTION_DB_CONTAINER", "dpf-postgres-1");
   });
 
-  it("loads operator PlatformConfig over environment defaults", async () => {
-    mockFindUnique.mockResolvedValue({
-      value: {
-        enabled: false,
-        hostInstallPath: "E:/DPF",
-        composeProject: "dpf-prod",
-        portalContainerName: "dpf-prod-portal-1",
-      },
-    });
-
-    const config = await loadSelfUpgradeConfig();
-
-    expect(mockFindUnique).toHaveBeenCalledWith({
-      where: { key: SELF_UPGRADE_CONFIG_KEY },
-      select: { value: true },
-    });
-    expect(config.enabled).toBe(false);
-    expect(config.hostInstallPath).toBe("E:/DPF");
-    expect(config.composeProject).toBe("dpf-prod");
-    expect(config.portalContainerName).toBe("dpf-prod-portal-1");
-    expect(config.repositoryBranch).toBe("main");
-  });
-
-  it("falls back to install environment when PlatformConfig is absent", async () => {
+  it("returns disabled defaults when no DB row exists (missing config)", async () => {
     mockFindUnique.mockResolvedValue(null);
+    const cfg = await getSelfUpgradeConfig();
+    expect(cfg).toEqual({
+      enabled: false,
+      channel: "stable",
+      checkIntervalHours: 24,
+      healthTarget: 100,
+      maintenanceWindows: [],
+    });
+  });
 
-    const config = await loadSelfUpgradeConfig();
+  it("queries the portal.selfUpgrade key", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    await getSelfUpgradeConfig();
+    expect(mockFindUnique).toHaveBeenCalledWith({ where: { key: "portal.selfUpgrade" } });
+  });
 
-    expect(config.enabled).toBe(true);
-    expect(config.hostInstallPath).toBe("D:/DPF");
-    expect(config.composeProject).toBe("dpf");
-    expect(config.portalContainerName).toBe("dpf-portal-1");
+  it("parses the seeded disabled config correctly", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "1",
+      key: "portal.selfUpgrade",
+      value: { enabled: false, channel: "stable", checkIntervalHours: 24 },
+      updatedAt: new Date(),
+    });
+    const cfg = await getSelfUpgradeConfig();
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.channel).toBe("stable");
+    expect(cfg.checkIntervalHours).toBe(24);
+  });
+
+  it("returns enabled config when explicitly enabled in DB", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "1",
+      key: "portal.selfUpgrade",
+      value: { enabled: true, channel: "beta", checkIntervalHours: 6 },
+      updatedAt: new Date(),
+    });
+    const cfg = await getSelfUpgradeConfig();
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.channel).toBe("beta");
+    expect(cfg.checkIntervalHours).toBe(6);
+  });
+
+  it("handles malformed DB value gracefully", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "1",
+      key: "portal.selfUpgrade",
+      value: "corrupted" as unknown as object,
+      updatedAt: new Date(),
+    });
+    const cfg = await getSelfUpgradeConfig();
+    expect(cfg.enabled).toBe(false);
   });
 });

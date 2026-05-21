@@ -12,7 +12,7 @@ export function generateSelfUpgradeRunId(): string {
 
 export async function createSelfUpgradeRun(input: {
   trigger: "manual" | "scheduled";
-  config: Partial<SelfUpgradeConfig>;
+  config: Partial<SelfUpgradeConfig> | Record<string, unknown>;
   versionState: UpgradeVersionState;
 }): Promise<{ runId: string }> {
   const runId = generateSelfUpgradeRunId();
@@ -26,9 +26,7 @@ export async function createSelfUpgradeRun(input: {
       completionEvidence: {
         reason: input.versionState.reason,
         comparable: input.versionState.comparable,
-        composeProject: input.config.composeProject ?? null,
-        repositoryRemote: input.config.repositoryRemote ?? null,
-        repositoryBranch: input.config.repositoryBranch ?? null,
+        ...(input.config as Record<string, unknown>),
       } satisfies Prisma.InputJsonObject,
     },
   });

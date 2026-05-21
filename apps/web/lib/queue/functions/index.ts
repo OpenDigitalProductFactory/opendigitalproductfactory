@@ -17,6 +17,7 @@ import {
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import { selfUpgradeScheduled, selfUpgradeManual } from "./self-upgrade";
 import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
@@ -67,4 +68,6 @@ export const allFunctions = [
   postgresBackupRequested,
   neo4jBackupRequested,
   qdrantBackupRequested,
+  selfUpgradeScheduled,
+  selfUpgradeManual,
 ];

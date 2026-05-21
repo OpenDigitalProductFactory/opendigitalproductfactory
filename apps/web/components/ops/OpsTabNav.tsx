@@ -8,7 +8,7 @@ const TABS = [
   { label: "Improvements", href: "/ops/improvements" },
   { label: "Changes", href: "/ops/changes" },
   { label: "Promotions", href: "/ops/promotions" },
-  { label: "Self-Upgrade", href: "/ops/self-upgrade" },
+  { label: "Self-upgrade", href: "/ops/self-upgrade" },
 ];
 
 export function OpsTabNav() {
