@@ -111,18 +111,41 @@ export async function listDiscoveryConnections(): Promise<
 }
 
 /**
+ * Strip every trailing "/" without using `replace(/\/+$/, "")` — that
+ * regex tripped a CodeQL polynomial-ReDoS alert on user-supplied input,
+ * and an explicit slice loop is both safer and easier to reason about.
+ */
+function trimTrailingSlashes(input: string): string {
+  let end = input.length;
+  while (end > 0 && input.charCodeAt(end - 1) === 0x2f /* "/" */) end--;
+  return input.slice(0, end);
+}
+
+/** Strip a leading "http://" or "https://" without a regex (CodeQL-safe). */
+function stripScheme(input: string): string {
+  if (input.startsWith("https://")) return input.slice(8);
+  if (input.startsWith("http://")) return input.slice(7);
+  if (input.startsWith("HTTPS://")) return input.slice(8);
+  if (input.startsWith("HTTP://")) return input.slice(7);
+  return input;
+}
+
+/**
  * Normalize user input into a proper endpoint URL.
  * Accepts: "192.168.0.1", "http://192.168.0.1", "https://192.168.0.1:8443/"
  * Returns: "https://192.168.0.1" (HTTPS by default for UniFi/SNMP controllers)
  */
 function normalizeEndpointUrl(raw: string, collectorType: string): string {
-  let url = raw.trim().replace(/\/+$/, "");
+  let url = trimTrailingSlashes(raw.trim());
 
   // For ARP scan, the input is a subnet not a URL
   if (collectorType === "arp_scan") return url;
 
-  // If no protocol specified, add one
-  if (!/^https?:\/\//i.test(url)) {
+  // If no protocol specified, add one. Fixed-prefix checks instead of a
+  // regex — no backtracking risk.
+  const hasScheme = url.startsWith("http://") || url.startsWith("https://")
+    || url.startsWith("HTTP://") || url.startsWith("HTTPS://");
+  if (!hasScheme) {
     // UniFi controllers always use HTTPS
     const protocol = collectorType === "unifi" ? "https" : "http";
     url = `${protocol}://${url}`;
@@ -156,7 +179,7 @@ export async function configureDiscoveryConnection(input: {
   if (!authResult.ok) return authResult;
 
   const endpointUrl = normalizeEndpointUrl(input.endpointUrl, input.collectorType);
-  const connectionKey = `${input.collectorType}:${endpointUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  const connectionKey = `${input.collectorType}:${trimTrailingSlashes(stripScheme(endpointUrl))}`;
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
 
