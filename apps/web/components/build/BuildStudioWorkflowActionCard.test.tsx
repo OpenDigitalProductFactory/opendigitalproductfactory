@@ -4,7 +4,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
+import {
+  BuildStudioWorkflowActionCard,
+  deriveActionBannerState,
+} from "./BuildStudioWorkflowActionCard";
 import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import {
   normalizeHappyPathState,
@@ -259,5 +262,139 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
     });
     expect(mockResumeBuildImplementation).toHaveBeenCalledWith("FB-9B19098C");
     expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("deriveActionBannerState", () => {
+  // The card delegates compact rendering to ActionBanner; this helper is the
+  // contract between dispatch + presentation. Pinning the mapping ensures the
+  // banner color/detail behavior stays consistent across phase changes.
+
+  it("returns 'blocked' when action.disabledReason is set, regardless of phase", () => {
+    expect(deriveActionBannerState({ phase: "ideate" }, { disabledReason: "Awaiting design review" })).toBe("blocked");
+    expect(deriveActionBannerState({ phase: "complete" }, { disabledReason: "Decision pending" })).toBe("blocked");
+  });
+
+  it("returns 'review_failed' when phase is failed and no disabledReason", () => {
+    expect(deriveActionBannerState({ phase: "failed" }, { disabledReason: null })).toBe("review_failed");
+  });
+
+  it("returns 'complete' when phase is complete", () => {
+    expect(deriveActionBannerState({ phase: "complete" }, { disabledReason: null })).toBe("complete");
+  });
+
+  it("returns 'running' when phase is build or review", () => {
+    expect(deriveActionBannerState({ phase: "build" }, { disabledReason: null })).toBe("running");
+    expect(deriveActionBannerState({ phase: "review" }, { disabledReason: null })).toBe("running");
+  });
+
+  it("returns 'ready' for ideate / plan / ship phases", () => {
+    expect(deriveActionBannerState({ phase: "ideate" }, { disabledReason: null })).toBe("ready");
+    expect(deriveActionBannerState({ phase: "plan" }, { disabledReason: null })).toBe("ready");
+    expect(deriveActionBannerState({ phase: "ship" }, { disabledReason: null })).toBe("ready");
+  });
+
+  it("disabledReason has higher precedence than phase=failed", () => {
+    // If a failed build also reports a disabledReason, the operator should
+    // see 'blocked' (action needs them) before 'review_failed' (status info).
+    expect(deriveActionBannerState({ phase: "failed" }, { disabledReason: "Resolve upstream first" })).toBe("blocked");
+  });
+});
+
+describe("BuildStudioWorkflowActionCard compact rendering", () => {
+  function actionFor(phase: FeatureBuildRow["phase"]): BuildStudioWorkflowAction {
+    return {
+      kind: "advance-phase",
+      title: "Ready to advance",
+      message: "Move this reviewed plan into sandbox execution so the coworker can start work.",
+      primaryLabel: "Start Implementation",
+      targetPhase: "build",
+      disabledReason: null,
+      coworkerLabel: "Ask coworker",
+      coworkerPrompt: "Tell me what's needed before I can start build.",
+    };
+  }
+
+  it("compact=true delegates the visible heading + sentence to ActionBanner (one sentence, no duplicate Build Status label)", () => {
+    const action = actionFor("plan");
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan", decisionInteraction: null })}
+        action={action}
+        compact
+      />,
+    );
+
+    // ActionBanner emits a region with the canonical aria-label.
+    const banner = screen.getByRole("region", { name: "Current build action" });
+    expect(banner).toBeInTheDocument();
+    // The sentence is from action.message — no separate "Build Status" or
+    // "Operational status" label duplicates the heading.
+    expect(banner).toHaveTextContent(action.message);
+    expect(screen.queryByText("Build Status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
+  });
+
+  it("compact=true exposes a primary action wired to handlePrimaryAction (delegation, not new dispatch)", async () => {
+    mockAdvanceBuildPhase.mockResolvedValue({ buildId: "FB-9B19098C" });
+    const onCompleted = vi.fn();
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan", decisionInteraction: null })}
+        action={actionFor("plan")}
+        compact
+        onCompleted={onCompleted}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Implementation" }));
+    await waitFor(() => {
+      expect(mockAdvanceBuildPhase).toHaveBeenCalledWith("FB-9B19098C", "build");
+    });
+    expect(onCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("compact=true with disabledReason renders the banner in 'blocked' state with detail visible", () => {
+    const blocked: BuildStudioWorkflowAction = {
+      ...actionFor("plan"),
+      disabledReason: "Plan review failed. Refine the plan first.",
+    };
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan", decisionInteraction: null })}
+        action={blocked}
+        compact
+      />,
+    );
+    const banner = screen.getByRole("region", { name: "Current build action" });
+    expect(banner).toHaveAttribute("data-state", "blocked");
+    expect(banner).toHaveTextContent("Plan review failed. Refine the plan first.");
+  });
+
+  it("compact=true falls back to the full card when a decision interaction needs capture", () => {
+    // makeBuild() default already includes a decisionInteraction that
+    // requires capture — perfect setup for the fallback path.
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan" })}
+        action={actionFor("plan")}
+        compact
+      />,
+    );
+    // Decision panel needs the larger card; the banner does not render here.
+    expect(screen.queryByRole("region", { name: "Current build action" })).not.toBeInTheDocument();
+    // The full card heading should be present instead.
+    expect(screen.getByText("Build Status")).toBeInTheDocument();
+  });
+
+  it("compact=false renders the full card unchanged (back-compat with existing callers)", () => {
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "plan" })}
+        action={actionFor("plan")}
+      />,
+    );
+    expect(screen.getByText("Build Status")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Current build action" })).not.toBeInTheDocument();
   });
 });

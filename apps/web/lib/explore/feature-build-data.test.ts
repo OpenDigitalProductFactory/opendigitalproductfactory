@@ -1,0 +1,114 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  prisma: {
+    featureBuild: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
+    platformDevConfig: {
+      findUnique: vi.fn(),
+    },
+    taxonomyNode: {
+      findUnique: vi.fn(),
+    },
+    digitalProduct: {
+      findMany: vi.fn(),
+    },
+    portfolio: {
+      findUnique: vi.fn(),
+    },
+    businessContext: {
+      findFirst: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: mocks.prisma,
+}));
+
+vi.mock("@/lib/decision-perspective/types", () => ({
+  PLAN_READINESS_DOMAIN_CLASS: "plan-readiness",
+}));
+
+vi.mock("@/lib/decision-perspective/view-model", () => ({
+  DECISION_INTERACTION_GATE_SELECT: { id: true },
+  decisionInteractionRowToGateView: vi.fn(() => null),
+}));
+
+vi.mock("@/lib/brand/read", () => ({
+  readBrandContext: vi.fn(async () => ({ structured: null, legacyMarkdown: null })),
+}));
+
+vi.mock("@/lib/design-intelligence", () => ({
+  generateDesignSystem: vi.fn(() => "Generated design system"),
+}));
+
+import { prisma } from "@dpf/db";
+import { getFeatureBuildForContext } from "./feature-build-data";
+
+describe("getFeatureBuildForContext taxonomy context", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValue({ contributionMode: "private" } as never);
+    vi.mocked(prisma.businessContext.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.digitalProduct.findMany).mockResolvedValue([
+      { name: "Agent Runtime" },
+      { name: "Agent Authority" },
+    ] as never);
+  });
+
+  it("resolves confirmed taxonomy nodeId slugs to internal taxonomy rows before walking context", async () => {
+    const confirmedNodeId = "foundational/platform_services/ai_and_agent_platform";
+    vi.mocked(prisma.featureBuild.findUnique)
+      .mockResolvedValueOnce({
+        buildId: "FB-1",
+        title: "Agent cost controls",
+        phase: "ideate",
+        brief: { title: "Agent cost controls" },
+        designDoc: null,
+        designReview: null,
+        buildPlan: null,
+        planReview: null,
+        verificationOut: null,
+        acceptanceMet: null,
+        uxVerificationStatus: null,
+        uxTestResults: null,
+        plan: null,
+        portfolioId: null,
+        createdById: "user-1",
+        scoutFindings: null,
+        phaseHandoffs: [],
+        taxonomyAttribution: {
+          confirmedNodeId,
+        },
+      } as never);
+
+    vi.mocked(prisma.taxonomyNode.findUnique).mockImplementation((async (input: unknown) => {
+      const where = (input as { where: Record<string, string> }).where;
+      if (where.nodeId === confirmedNodeId || where.id === "node-ai") {
+        return { id: "node-ai", name: "AI and Agent Platform", parentId: "node-platform" } as never;
+      }
+      if (where.id === "node-platform") {
+        return { id: "node-platform", name: "Platform Services", parentId: "node-foundational" } as never;
+      }
+      if (where.id === "node-foundational") {
+        return { id: "node-foundational", name: "Foundational", parentId: null } as never;
+      }
+      return null as never;
+    }) as never);
+
+    const context = await getFeatureBuildForContext("FB-1", "user-1");
+
+    expect(context?.taxonomyContext).toEqual({
+      path: "Foundational > Platform Services > AI and Agent Platform",
+      siblingProducts: ["Agent Runtime", "Agent Authority"],
+    });
+    expect(prisma.digitalProduct.findMany).toHaveBeenCalledWith({
+      where: { taxonomyNodeId: "node-ai" },
+      select: { name: true },
+      take: 10,
+    });
+  });
+});

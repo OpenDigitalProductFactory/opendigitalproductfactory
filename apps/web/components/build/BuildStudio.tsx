@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GitBranch } from "lucide-react";
-import { PhaseIndicator } from "./PhaseIndicator";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { PreviewUrlCard } from "./PreviewUrlCard";
@@ -500,14 +499,10 @@ export function BuildStudio({
                         </span>
                       </>
                     )}
-                    {activeLifecycleLabel && (
-                      <>
-                        <span>&middot;</span>
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
-                          Workflow: {activeLifecycleLabel}
-                        </span>
-                      </>
-                    )}
+                    {/* "Workflow: <label>" header pill removed per spec — the
+                        workflow rail / mini-rail already conveys the same
+                        information without duplicating it in the header.
+                        See docs/superpowers/specs/2026-05-20-build-studio-layout-redesign-design.md */}
                     {branchBadge && (
                       <>
                         <span>&middot;</span>
@@ -561,10 +556,15 @@ export function BuildStudio({
                   </div>
                 )}
                 {activeBuild && workflowAction && activeBuild.phase !== "ship" && (
-                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                  <div className="border-b border-[var(--dpf-border)]">
+                    {/* compact=true renders the 40px ActionBanner via the
+                        delegation in BuildStudioWorkflowActionCard (T9). The
+                        ~200px card is the legacy presentation; the compact
+                        path is now the default per spec §1 (center zone). */}
                     <BuildStudioWorkflowActionCard
                       build={activeBuild}
                       action={workflowAction}
+                      compact
                       onCompleted={() => refreshActiveBuildState(activeBuild.buildId)}
                     />
                   </div>
@@ -699,9 +699,11 @@ export function BuildStudio({
         </div>
       </div>
 
-      {activeBuild && buildView !== "topology" && (
-        <PhaseIndicator currentPhase={activeBuild.phase} flowState={flowState} />
-      )}
+      {/* PhaseIndicator bottom strip removed per spec — phase progression
+          is now visible exactly once per surface: the ProcessGraph nodes
+          carry it for the active build, and the (still-pending) compact
+          fleet mini-rail carries it for the aggregate.
+          See docs/superpowers/specs/2026-05-20-build-studio-layout-redesign-design.md §1, §9 #2 */}
     </div>
   );
 }

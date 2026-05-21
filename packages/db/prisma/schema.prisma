@@ -911,8 +911,34 @@ model TaxonomyNode {
   inventoryEntities        InventoryEntity[]
   portfolioQualityIssues   PortfolioQualityIssue[]
   triageSelectionDecisions DiscoveryTriageDecision[]  @relation("DiscoveryTriageDecisionSelectedTaxonomy")
+  taxonomyProposalParents  TaxonomyProposal[]         @relation("TaxonomyProposalParent")
+  createdTaxonomyProposals TaxonomyProposal[]         @relation("TaxonomyProposalCreatedNode")
   parent                   TaxonomyNode?              @relation("TaxonomyTree", fields: [parentId], references: [id])
   children                 TaxonomyNode[]             @relation("TaxonomyTree")
+}
+
+model TaxonomyProposal {
+  id             String        @id @default(cuid())
+  parentNodeId   String
+  proposedName   String
+  description    String?
+  rationale      String
+  status         String        @default("proposed")
+  featureBuildId String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewNotes    String?
+  createdNodeId  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  parentNode     TaxonomyNode  @relation("TaxonomyProposalParent", fields: [parentNodeId], references: [id], onDelete: Cascade)
+  createdNode    TaxonomyNode? @relation("TaxonomyProposalCreatedNode", fields: [createdNodeId], references: [id], onDelete: SetNull)
+  featureBuild   FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([parentNodeId])
+  @@index([featureBuildId])
+  @@index([createdNodeId])
 }
 
 model BacklogItem {
@@ -4190,6 +4216,7 @@ model FeatureBuild {
   phaseHandoffs            PhaseHandoff[]
   phaseRuns                BuildPhaseRun[]
   toolExecutionReceipts    ToolExecutionReceipt[]
+  taxonomyProposals        TaxonomyProposal[]
   activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
   accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy                User                    @relation(fields: [createdById], references: [id])
