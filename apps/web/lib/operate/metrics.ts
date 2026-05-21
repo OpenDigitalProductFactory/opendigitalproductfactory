@@ -63,6 +63,20 @@ export const aiInferenceCostUsd = new Counter({
   registers: [metricsRegistry],
 });
 
+export const aiCacheCreationTokens = new Counter({
+  name: "dpf_ai_cache_creation_tokens_total",
+  help: "Tokens written into the Anthropic prompt cache (billed at cache-write rate)",
+  labelNames: ["provider", "model"] as const,
+  registers: [metricsRegistry],
+});
+
+export const aiCacheReadTokens = new Counter({
+  name: "dpf_ai_cache_read_tokens_total",
+  help: "Tokens read from the Anthropic prompt cache (billed at cache-read rate)",
+  labelNames: ["provider", "model"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── Semantic Memory Metrics ────────────────────────────────────────────────
 
 export const semanticMemoryOps = new Counter({
