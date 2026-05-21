@@ -670,6 +670,82 @@ function readPersistedSourceCurrency(value: unknown): unknown {
   return sourceCurrency;
 }
 
+/**
+ * FB-78E967D4 — operator-initiated reset for a build whose `buildExecState`
+ * is in a self-contradictory shape that the existing retry/resume paths
+ * refuse to handle. The canonical case (FB-F0476EF3) is
+ * `step="complete"` with a populated `error`/`failedAt` — a relic of a
+ * partial run that the pipeline short-circuited past on a subsequent pass.
+ *
+ * PR #859 prevents new builds from reaching this shape going forward. This
+ * server action exists for rows that were stranded before that fix landed.
+ *
+ * Behavior:
+ *  - Validates the caller owns the build (same auth contract as
+ *    {@link retryBuildExecution}).
+ *  - Throws if the state is not in fact contradictory. We never null
+ *    `buildExecState` on a healthy build — that would discard live
+ *    container/port pointers and orphan a running sandbox.
+ *  - Clears `buildExecState`, logs an activity row, and fires
+ *    {@link autoExecuteBuild} so the pipeline restarts from the beginning
+ *    on a clean checkpoint.
+ */
+export async function resetBuildExecution(buildId: string): Promise<void> {
+  const userId = await requireBuildAccess();
+
+  const build = await prisma.featureBuild.findUnique({
+    where: { buildId },
+    select: { createdById: true, buildExecState: true, phase: true },
+  });
+  if (!build) throw new Error("Build not found");
+  if (build.createdById !== userId) throw new Error("Forbidden");
+
+  const state = build.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null;
+  if (state == null) {
+    throw new Error("Build has no execution state to reset.");
+  }
+
+  const isContradictory =
+    state.step !== "failed" && (state.error != null || state.failedAt != null);
+  if (!isContradictory) {
+    throw new Error(
+      "Build execution state is not contradictory. Use Retry Build for failed states or Resume Implementation for partial task failures.",
+    );
+  }
+
+  await prisma.featureBuild.update({
+    where: { buildId },
+    data: {
+      buildExecState: null as unknown as Prisma.InputJsonValue,
+      ...(build.phase === "failed" ? { phase: "build" } : {}),
+    },
+  });
+
+  revalidatePortalContextForBuild(buildId);
+
+  prisma.buildActivity
+    .create({
+      data: {
+        buildId,
+        tool: "resetBuildExecution",
+        summary:
+          `Reset contradictory pipeline checkpoint (prior step=${state.step}` +
+          `${state.failedAt ? `, failedAt=${state.failedAt}` : ""}` +
+          `${state.error ? `, error=${state.error.slice(0, 200)}` : ""}` +
+          `)`,
+      },
+    })
+    .catch(() => {});
+
+  // Fire-and-forget — pipeline starts from a clean state and self-heals.
+  // buildId is passed as a separate console.error arg (not embedded in the
+  // format string) to avoid CodeQL js/tainted-format-string on the user-
+  // routable identifier.
+  autoExecuteBuild(buildId).catch((err) =>
+    console.error("[build] resetBuildExecution failed for", buildId, err),
+  );
+}
+
 export async function retryBuildExecution(buildId: string): Promise<void> {
   const userId = await requireBuildAccess();
 

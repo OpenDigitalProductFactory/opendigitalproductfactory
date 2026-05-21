@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/opendigitalproductfactory/dpf/services/edge-node-go/internal/oui"
 )
 
 // ArpEntry is one resolved IP↔MAC binding the kernel/OS knows about.
@@ -207,27 +209,43 @@ type ArpResult struct {
 // Authority's normalization treats Mode 1 (TS) and Mode 4 (Go)
 // submissions as one set.
 //
-// OUI vendor enrichment (PR #846 in the TS path) lands in a separate
-// Go slice — until then the item's name is the generic "LAN Host <ip>"
-// form. The vendor fields are optional in the wire contract so this
-// is forward-compatible.
+// OUI vendor enrichment matches PR #846's behavior in the TS path:
+// when oui.Lookup() recognizes the MAC's manufacturer prefix, the
+// item's name becomes "<short-vendor> <ip>" (e.g. "Amazon
+// 192.168.0.49") and rawData gets vendor/vendorOui/vendorShort
+// fields. Unknown OUIs fall back to "LAN Host <ip>" with no vendor
+// fields — operators see the same shape regardless of which runtime
+// submitted.
 func arpToItems(entries []ArpEntry) []Item {
 	items := make([]Item, 0, len(entries))
 	for _, e := range entries {
+		rawData := map[string]any{
+			"address":        e.IP,
+			"mac":            e.MAC,
+			"iface":          e.Iface,
+			"osiLayer":       3,
+			"osiLayerName":   "network",
+			"protocolFamily": "ipv4",
+			"discoveredVia":  "arp_table",
+		}
+
+		// Vendor enrichment. The lookup is local-only — bundled IEEE
+		// OUI dataset, no network call.
+		name := fmt.Sprintf("LAN Host %s", e.IP)
+		if vendor := oui.Lookup(e.MAC); vendor != nil {
+			short := oui.ShortVendor(vendor.Vendor)
+			name = fmt.Sprintf("%s %s", short, e.IP)
+			rawData["vendor"] = vendor.Vendor
+			rawData["vendorOui"] = vendor.OUI
+			rawData["vendorShort"] = short
+		}
+
 		items = append(items, Item{
 			ObservedKey: fmt.Sprintf("arp:%s", e.IP),
 			ItemType:    "host",
-			Name:        fmt.Sprintf("LAN Host %s", e.IP),
+			Name:        name,
 			Confidence:  0.7,
-			RawData: map[string]any{
-				"address":        e.IP,
-				"mac":            e.MAC,
-				"iface":          e.Iface,
-				"osiLayer":       3,
-				"osiLayerName":   "network",
-				"protocolFamily": "ipv4",
-				"discoveredVia":  "arp_table",
-			},
+			RawData:     rawData,
 		})
 	}
 	return items
