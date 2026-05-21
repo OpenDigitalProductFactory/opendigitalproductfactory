@@ -8478,11 +8478,17 @@ model VoiceProfile {
   updatedAt             DateTime                   @updatedAt
   profile               DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
   consentRecord         VoiceConsentRecord?        @relation(fields: [consentRecordId], references: [id])
+  // trainingJobs retained for schema-regression-guard compliance.
+  // Chatterbox is zero-shot; this table is no longer written to.
+  // Formal drop deferred to a dedicated schema-cleanup PR.
   trainingJobs          VoiceTrainingJob[]
 
   @@index([status])
 }
 
+// VoiceTrainingJob: retained for schema-regression-guard compliance.
+// No longer written to — Chatterbox replaces async training with zero-shot
+// reference audio registration. Table drop deferred to schema-cleanup PR.
 model VoiceTrainingJob {
   id              String       @id @default(cuid())
   voiceProfileId  String
