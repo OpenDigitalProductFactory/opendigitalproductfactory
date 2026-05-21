@@ -738,8 +738,11 @@ export async function resetBuildExecution(buildId: string): Promise<void> {
     .catch(() => {});
 
   // Fire-and-forget — pipeline starts from a clean state and self-heals.
+  // buildId is passed as a separate console.error arg (not embedded in the
+  // format string) to avoid CodeQL js/tainted-format-string on the user-
+  // routable identifier.
   autoExecuteBuild(buildId).catch((err) =>
-    console.error(`[build] resetBuildExecution failed for ${buildId}:`, err),
+    console.error("[build] resetBuildExecution failed for", buildId, err),
   );
 }
 
