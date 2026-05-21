@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db"
 import { buildNarrationText } from "./narration-builder"
+import { applyPersonaStyle } from "./persona-style"
 import { synthesizeSpeech, VoiceSynthesisError } from "./voice-service"
 import { writeAudioBlob } from "./audio-storage"
 import type { NarrationOutcomeType } from "./types"
@@ -32,11 +33,18 @@ export async function runVoiceSynthesisJob(interactionId: string): Promise<void>
     return
   }
 
-  const narrationText = buildNarrationText({
+  const personaSystemPrompt = (profile.personaConfig as { systemPrompt?: string } | null)?.systemPrompt
+
+  const rawNarrationText = buildNarrationText({
     outcomeType: interaction.outcomeType as NarrationOutcomeType,
     confidenceScore: interaction.confidenceAfter ?? 0,
     rationale: interaction.rationale ?? "",
-    personaSystemPrompt: (profile.personaConfig as { systemPrompt?: string } | null)?.systemPrompt,
+    personaSystemPrompt,
+  })
+
+  const narrationText = await applyPersonaStyle({
+    narrationText: rawNarrationText,
+    personaSystemPrompt,
   })
 
   try {

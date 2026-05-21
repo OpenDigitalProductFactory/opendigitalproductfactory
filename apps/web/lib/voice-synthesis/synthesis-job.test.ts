@@ -17,6 +17,9 @@ const mockPrisma = vi.hoisted(() => ({
 }))
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }))
+vi.mock("./persona-style", () => ({
+  applyPersonaStyle: vi.fn().mockImplementation(async (input: { narrationText: string }) => input.narrationText),
+}))
 vi.mock("./voice-service", () => ({
   synthesizeSpeech: vi.fn().mockResolvedValue({
     audioBuffer: Buffer.from("AUDIO").buffer,
