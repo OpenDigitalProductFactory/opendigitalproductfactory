@@ -3638,6 +3638,12 @@ model ToolExecution {
   taskRunId               String?
   // Governed Hermes learning Slice 1: nullable active skill attribution.
   skillId                 String?
+  // EP-COST-001 Phase 1: token metering for AI-backed tool execution paths.
+  // Populated by tools that make inference calls (design system generation,
+  // code review, etc.). Non-inference tools (file reads, sandbox runs) leave these null.
+  inputTokens             Int?
+  outputTokens            Int?
+  costUsd                 Float?
   receipt                 ToolExecutionReceipt?
   documentLifecycleEvents DocumentLifecycleEvent[]
 
@@ -4182,6 +4188,7 @@ model FeatureBuild {
   dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
   phaseHandoffs            PhaseHandoff[]
+  phaseRuns                BuildPhaseRun[]
   toolExecutionReceipts    ToolExecutionReceipt[]
   activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
   accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
@@ -4390,6 +4397,35 @@ model BuildDispatchAttempt {
   @@index([buildId, startedAt])
   @@index([buildId, taskTitle, startedAt])
   @@index([failureAxis, startedAt])
+}
+
+// ─── EP-COST-001 Phase 3: Build Phase Run cost rollup ─────────────────────────
+//
+// One row per Build Studio phase (ideate, plan, build, review, ship) per build.
+// Written when the phase completes (gate passes or skip) with a token/cost rollup
+// from AdapterRunTelemetry rows created during the phase window.
+//
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §Phase 3
+model BuildPhaseRun {
+  id             String       @id @default(cuid())
+  buildId        String
+  phase          String       // "ideate" | "plan" | "build" | "review" | "ship"
+  startedAt      DateTime
+  completedAt    DateTime?
+  durationMs     Int?
+  inputTokens    Int          @default(0)
+  outputTokens   Int          @default(0)
+  /// Estimated USD cost for this phase (token usage × model pricing)
+  costUsd        Decimal?     @db.Decimal(10, 6)
+  /// Primary provider used in this phase (populated on write; may be "mixed" for multi-provider phases)
+  providerId     String?
+  /// Number of AI inference calls made during this phase
+  inferenceCount Int          @default(0)
+  build          FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@unique([buildId, phase])
+  @@index([buildId, phase])
+  @@index([buildId, startedAt])
 }
 
 /// Structured context passed between build phases. Written on phase advance,
