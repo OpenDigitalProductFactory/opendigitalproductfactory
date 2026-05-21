@@ -4,12 +4,12 @@ const OUTCOME_OPENERS: Record<string, string> = {
   recommend: "My recommendation is to proceed.",
   arbitrate: "I'm deciding to proceed.",
   escalate: "I need a human decision on this one.",
-  defer:    "I don't have enough guidance to weigh in here.",
+  defer:    "There is not enough guidance to weigh in here.",
 }
 
 function confidencePhrase(score: number): string {
-  if (score >= 0.85) return "high confidence"
-  if (score >= 0.55) return "moderate confidence"
+  if (score >= 0.75) return "high confidence"
+  if (score >= 0.45) return "moderate confidence"
   return "low confidence"
 }
 
