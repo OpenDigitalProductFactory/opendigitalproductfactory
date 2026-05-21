@@ -251,22 +251,18 @@ export async function taskrunRetry(
       },
     });
 
-    // Close the most recent open StallEvent on the stalled row as "retry".
-    const openEvent = await tx.stallEvent.findFirst({
-      where: { taskRunId: stalled.id, outcome: null },
-      orderBy: { detectedAt: "desc" },
+    // Close the most recent open StallEvent on the stalled row as "retry",
+    // or synthesize one if no open event exists (audit completeness — see
+    // upsertRecoveryOutcome).
+    await upsertRecoveryOutcome(tx, {
+      stalledCuid: stalled.id,
+      buildId: stalled.buildId,
+      phase: stalled.phase,
+      outcome: "retry",
+      operatorUserId,
+      now,
+      notes: decision.notes,
     });
-    if (openEvent) {
-      await tx.stallEvent.update({
-        where: { id: openEvent.id },
-        data: {
-          outcome: "retry",
-          outcomeAt: now,
-          outcomeBy: operatorUserId,
-          notes: decision.notes,
-        },
-      });
-    }
 
     return { newTaskRunId: newRun.taskRunId };
   });
@@ -296,21 +292,17 @@ export async function taskrunAbandon(
       data: { status: "canceled", completedAt: now },
     });
 
-    // 2. Close the most recent open StallEvent as "abandoned".
-    const openEvent = await tx.stallEvent.findFirst({
-      where: { taskRunId: stalled.id, outcome: null },
-      orderBy: { detectedAt: "desc" },
+    // 2. Close the most recent open StallEvent as "abandoned", or
+    //    synthesize one if no open event exists (audit completeness — see
+    //    upsertRecoveryOutcome).
+    await upsertRecoveryOutcome(tx, {
+      stalledCuid: stalled.id,
+      buildId: stalled.buildId,
+      phase: stalled.phase,
+      outcome: "abandoned",
+      operatorUserId,
+      now,
     });
-    if (openEvent) {
-      await tx.stallEvent.update({
-        where: { id: openEvent.id },
-        data: {
-          outcome: "abandoned",
-          outcomeAt: now,
-          outcomeBy: operatorUserId,
-        },
-      });
-    }
 
     // 3. Cascade one level: find live children, cancel them, write
     //    parent_abandoned StallEvent for each.
@@ -356,6 +348,15 @@ export async function taskrunAbandon(
  * outcome). Writes StallEvent.outcome=escalated and notifies the accountable
  * human — build owner if buildId resolves to a FeatureBuild.createdById,
  * else the task's userId.
+ *
+ * Audit completeness (BI-4ab6be39 follow-up, 2026-05-20): if no open
+ * StallEvent exists for this row when the operator escalates, we synthesize
+ * one with the outcome already set. The earlier behavior silently skipped
+ * the audit row when the watchdog hadn't yet inserted a fresh open event,
+ * leaving the StallEvent ledger one record short of the Notification row —
+ * caught during F2 UX dogfooding when the notification fired but no
+ * outcome='escalated' row appeared in StallEvent. Retry and Abandon have
+ * the same pattern; see taskrunRetry / taskrunAbandon for parity.
  */
 export async function taskrunEscalate(
   taskRunId: string,
@@ -376,21 +377,15 @@ export async function taskrunEscalate(
   }
 
   await prisma.$transaction(async (tx) => {
-    const openEvent = await tx.stallEvent.findFirst({
-      where: { taskRunId: stalled.id, outcome: null },
-      orderBy: { detectedAt: "desc" },
+    await upsertRecoveryOutcome(tx, {
+      stalledCuid: stalled.id,
+      buildId: stalled.buildId,
+      phase: stalled.phase,
+      outcome: "escalated",
+      operatorUserId,
+      now,
+      notes,
     });
-    if (openEvent) {
-      await tx.stallEvent.update({
-        where: { id: openEvent.id },
-        data: {
-          outcome: "escalated",
-          outcomeAt: now,
-          outcomeBy: operatorUserId,
-          notes,
-        },
-      });
-    }
 
     if (notifyUserId) {
       await tx.notification.create({
@@ -403,5 +398,79 @@ export async function taskrunEscalate(
         },
       });
     }
+  });
+}
+
+/**
+ * Close the most recent open StallEvent for a recovery operation, or
+ * synthesize one with the outcome pre-set if no open event exists.
+ *
+ * The watchdog only INSERTs a StallEvent when it transitions a row from
+ * working/active → stalled. If an operator recovers a row whose open event
+ * has already been resolved (e.g. earlier action, or the row was force-
+ * stalled by an admin tool that didn't write an event), the prior behavior
+ * silently dropped the outcome row, leaving the StallEvent ledger missing
+ * a record of the operator action. This helper guarantees one outcome row
+ * lands per recovery call.
+ *
+ * thresholdHeartbeatS / thresholdTotalS are 0 sentinels on synthesized
+ * rows (matching the parent_abandoned cascade rows in taskrunAbandon),
+ * since the original watchdog thresholds aren't recoverable after the fact.
+ *
+ * The `startedAt` field is required by the schema. We look it up rather
+ * than threading it through every call site, so the helper stays tight.
+ */
+async function upsertRecoveryOutcome(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  args: {
+    stalledCuid: string;
+    buildId: string | null;
+    phase: string | null;
+    outcome: "retry" | "abandoned" | "escalated";
+    operatorUserId: string;
+    now: Date;
+    notes?: string;
+  },
+): Promise<void> {
+  const openEvent = await tx.stallEvent.findFirst({
+    where: { taskRunId: args.stalledCuid, outcome: null },
+    orderBy: { detectedAt: "desc" },
+  });
+  if (openEvent) {
+    await tx.stallEvent.update({
+      where: { id: openEvent.id },
+      data: {
+        outcome: args.outcome,
+        outcomeAt: args.now,
+        outcomeBy: args.operatorUserId,
+        notes: args.notes,
+      },
+    });
+    return;
+  }
+
+  // No open event — synthesize one so the audit row lands. Pull startedAt
+  // from the TaskRun itself; lastHeartbeatAt may legitimately be null on
+  // rows that never reported a heartbeat before transitioning to stalled.
+  const row = await tx.taskRun.findUnique({
+    where: { id: args.stalledCuid },
+    select: { startedAt: true, lastHeartbeatAt: true },
+  });
+  if (!row) return; // Shouldn't happen — loadStalled already validated.
+  await tx.stallEvent.create({
+    data: {
+      taskRunId: args.stalledCuid,
+      buildId: args.buildId,
+      phase: args.phase,
+      reason: "operator_recovery_synthesized",
+      lastHeartbeatAt: row.lastHeartbeatAt,
+      startedAt: row.startedAt,
+      thresholdHeartbeatS: 0,
+      thresholdTotalS: 0,
+      outcome: args.outcome,
+      outcomeAt: args.now,
+      outcomeBy: args.operatorUserId,
+      notes: args.notes ?? "Synthesized on operator recovery — no open StallEvent at recovery time.",
+    },
   });
 }
