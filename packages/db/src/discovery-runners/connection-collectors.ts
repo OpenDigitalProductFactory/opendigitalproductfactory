@@ -1,11 +1,12 @@
 // connection-collectors.ts
 // Loads DiscoveryConnection records from the database and runs the appropriate
-// collector for each active connection. Supports UniFi, SNMP, and ARP scan.
+// collector for each active connection. Supports SNMP and ARP scan.
+//
+// UniFi was retired here by BI-35de9ce8 — edge nodes now poll UniFi
+// controllers themselves via GET /api/v1/edge/adapters. The portal
+// still hosts the credential store (DiscoveryConnection rows) and the
+// one-shot test action; the recurring sweep is no longer its job.
 
-import {
-  collectUnifiDiscovery,
-  buildDepsFromConnection,
-} from "../discovery-collectors/unifi";
 import { collectSnmpDiscovery } from "../discovery-collectors/snmp";
 import { collectArpScanDiscovery } from "../discovery-collectors/arp-scan";
 import { mergeCollectorOutputs } from "../discovery-runner";
@@ -119,21 +120,18 @@ async function runSingleConnection(
 
   switch (conn.collectorType) {
     case "unifi": {
-      if (!conn.encryptedApiKey) return null;
-      const apiKey = decrypt(conn.encryptedApiKey);
-      if (!apiKey) {
-        console.warn(`[discovery] Connection ${conn.connectionKey}: cannot decrypt API key`);
-        return null;
-      }
-      const deps = buildDepsFromConnection({
-        endpointUrl: conn.endpointUrl,
-        apiKey,
-        configuration: {
-          site: (config.site as string) ?? "default",
-          discoverClients: (config.discoverClients as boolean) ?? true,
-        },
-      });
-      return collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
+      // Portal-side UniFi runs were retired in BI-35de9ce8. Edge nodes
+      // now poll UniFi controllers themselves after fetching their
+      // configs from GET /api/v1/edge/adapters. The portal still hosts
+      // the credential store (encrypted DiscoveryConnection rows) and
+      // the one-shot Test Connection action (testDiscoveryConnection)
+      // for first-paste UX feedback; the recurring sweep is no longer
+      // its job.
+      //
+      // The collector module + buildDepsFromConnection helper are
+      // still exported so testDiscoveryConnection can reuse them, but
+      // the scheduled connection runner skips this collectorType.
+      return null;
     }
 
     case "snmp": {

@@ -45,7 +45,8 @@ export const EDGE_NODE_AUDIT_EXECUTION_MODE = "edge-rest";
 export type EdgeAuditRoute =
   | "edge.enroll"
   | "edge.heartbeat"
-  | "edge.discovery_runs.submit";
+  | "edge.discovery_runs.submit"
+  | "edge.adapters";
 
 export type EdgeAuditInput = {
   /** Logical tool name; doubles as the toolName column. */
