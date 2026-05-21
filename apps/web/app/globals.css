@@ -16,8 +16,14 @@
   --dpf-success: #16a34a;
   --dpf-warning: #d97706;
   --dpf-error: #dc2626;
-  --dpf-state-warning: var(--dpf-warning);
-  --dpf-state-error: var(--dpf-error);
+  /* State backgrounds are TINTED versions of the foreground color so chips can
+     pair fg + bg without becoming a solid color block (e.g. AttentionChip in
+     PortalContextStrip). Use color-mix to derive a subtle background while
+     preserving the surface beneath. */
+  --dpf-state-warning: color-mix(in srgb, var(--dpf-warning) 13%, var(--dpf-surface-1));
+  --dpf-state-error: color-mix(in srgb, var(--dpf-error) 13%, var(--dpf-surface-1));
+  --dpf-state-info: color-mix(in srgb, var(--dpf-info) 13%, var(--dpf-surface-1));
+  --dpf-state-success: color-mix(in srgb, var(--dpf-success) 13%, var(--dpf-surface-1));
   --dpf-info: #0284c7;
   --dpf-font-body: Inter, system-ui, sans-serif;
   --dpf-font-heading: Inter, system-ui, sans-serif;
@@ -40,8 +46,11 @@
     --dpf-success: #4ade80;
     --dpf-warning: #fbbf24;
     --dpf-error: #f87171;
-    --dpf-state-warning: var(--dpf-warning);
-    --dpf-state-error: var(--dpf-error);
+    /* See light-mode comment above — tinted backgrounds preserve fg/bg contrast. */
+    --dpf-state-warning: color-mix(in srgb, var(--dpf-warning) 18%, var(--dpf-surface-1));
+    --dpf-state-error: color-mix(in srgb, var(--dpf-error) 18%, var(--dpf-surface-1));
+    --dpf-state-info: color-mix(in srgb, var(--dpf-info) 18%, var(--dpf-surface-1));
+    --dpf-state-success: color-mix(in srgb, var(--dpf-success) 18%, var(--dpf-surface-1));
     --dpf-info: #38bdf8;
   }
 }
