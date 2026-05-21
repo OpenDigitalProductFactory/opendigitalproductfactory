@@ -37,7 +37,8 @@ describe("PortalContextStrip", () => {
     // Must not collapse to a single var-source (the bug).
     expect(html).not.toMatch(/bg-\[var\(--dpf-warning\)\][^"]*text-\[var\(--dpf-warning\)\]/);
     // And the signal label must be in the DOM so the chip isn't visually empty.
-    // Note: signalLabel() returns "Lease expired" (capital L) for the lease_expired kind.
+    // signalLabel() in PortalContextStrip.tsx returns "Lease expired" (Capital L)
+    // for kind="lease_expired"; the assertion matches that canonical label.
     expect(html).toContain("Lease expired");
   });
 
