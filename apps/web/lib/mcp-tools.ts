@@ -5686,6 +5686,8 @@ export async function executeTool(
         data: {
           method: attribution.method,
           confidence: attribution.confidence,
+          invalidPortfolioContext: attribution.invalidPortfolioContext ?? null,
+          validPortfolioOptions: attribution.validPortfolioOptions ?? [],
           topCandidate: attribution.topCandidate,
           candidates: attribution.candidates,
         },
@@ -5715,14 +5717,22 @@ export async function executeTool(
           // When parentNodeId/name are empty, silently ignore proposeNew — fall through to nodeId path
         }
         const result = await confirmFeatureTaxonomy(buildId, nodeId, proposeNew);
-        if (result.success && nodeId) {
+        if (result.success && result.confirmedNodeId) {
           await updateBuildHappyPathState(userId, {
             intake: {
-              taxonomyNodeId: nodeId,
+              taxonomyNodeId: result.confirmedNodeId,
             },
           }, buildId);
         }
-        return { success: result.success, entityId: buildId, message: result.message };
+        return {
+          success: result.success,
+          entityId: buildId,
+          message: result.message,
+          data: {
+            confirmedNodeId: result.confirmedNodeId ?? null,
+            proposalId: result.proposalId ?? null,
+          },
+        };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         console.error(`[confirm_taxonomy_placement] Error:`, msg);

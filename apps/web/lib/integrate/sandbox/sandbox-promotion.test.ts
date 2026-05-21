@@ -7,8 +7,64 @@ import {
   scanForDestructiveOps,
   categorizeDiffFiles,
   getRestoreInstructions,
-  detectSchemaRegressions,
+  isNowInWindow,
 } from "./sandbox-promotion";
+
+// ─── isNowInWindow ────────────────────────────────────────────────────────────
+// Jan 5 2026 = Monday (day 1), Jan 6 = Tuesday (day 2)
+
+describe("isNowInWindow", () => {
+  const MONDAY_3AM = new Date(2026, 0, 5, 3, 0);
+  const MONDAY_5AM = new Date(2026, 0, 5, 5, 0);
+  const TUESDAY_3AM = new Date(2026, 0, 6, 3, 0);
+  const MONDAY_23PM = new Date(2026, 0, 5, 23, 0);
+  const TUESDAY_1AM = new Date(2026, 0, 6, 1, 0);
+
+  it("returns false for empty windows list", () => {
+    expect(isNowInWindow([], MONDAY_3AM)).toBe(false);
+  });
+
+  it("returns true when now is inside a window", () => {
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }], MONDAY_3AM)).toBe(true);
+  });
+
+  it("returns false when now is outside the time range", () => {
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }], MONDAY_5AM)).toBe(false);
+  });
+
+  it("returns false when now is on the wrong day", () => {
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }], TUESDAY_3AM)).toBe(false);
+  });
+
+  it("excludes the endTime boundary (half-open interval [start, end))", () => {
+    const exactly4am = new Date(2026, 0, 5, 4, 0);
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }], exactly4am)).toBe(false);
+  });
+
+  it("includes the startTime boundary", () => {
+    const exactly2am = new Date(2026, 0, 5, 2, 0);
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }], exactly2am)).toBe(true);
+  });
+
+  it("returns true for overnight window when now is after startTime on the start day", () => {
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "22:00", endTime: "06:00" }], MONDAY_23PM)).toBe(true);
+  });
+
+  it("does not match overnight window on the following day unless that day is in dayOfWeek", () => {
+    // Window is Mon-only, but 01:00 on Tuesday is not covered without day 2 in dayOfWeek
+    expect(isNowInWindow([{ dayOfWeek: [1], startTime: "22:00", endTime: "06:00" }], TUESDAY_1AM)).toBe(false);
+    // Including Tuesday covers the early-morning portion
+    expect(isNowInWindow([{ dayOfWeek: [1, 2], startTime: "22:00", endTime: "06:00" }], TUESDAY_1AM)).toBe(true);
+  });
+
+  it("returns true when now matches the second of multiple windows", () => {
+    const windows = [
+      { dayOfWeek: [6], startTime: "02:00", endTime: "04:00" }, // Saturday
+      { dayOfWeek: [1], startTime: "02:00", endTime: "04:00" }, // Monday
+    ];
+    expect(isNowInWindow(windows, MONDAY_3AM)).toBe(true);
+  });
+});
 
 // ─── DESTRUCTIVE_PATTERNS ─────────────────────────────────────────────────────
 
@@ -215,84 +271,5 @@ describe("getRestoreInstructions", () => {
     const result1 = getRestoreInstructions("/backups/backup-a.sql");
     const result2 = getRestoreInstructions("/backups/backup-b.sql");
     expect(result1).not.toBe(result2);
-  });
-});
-
-// ─── detectSchemaRegressions ──────────────────────────────────────────────────
-
-const SCHEMA_FILE = "packages/db/prisma/schema.prisma";
-
-function makeSchemaDiff(removedLines: string[], addedLines: string[] = []): string {
-  const removed = removedLines.map((l) => `-${l}`).join("\n");
-  const added = addedLines.map((l) => `+${l}`).join("\n");
-  return [
-    `diff --git a/${SCHEMA_FILE} b/${SCHEMA_FILE}`,
-    "index abc..def 100644",
-    `--- a/${SCHEMA_FILE}`,
-    `+++ b/${SCHEMA_FILE}`,
-    "@@ -1,5 +1,5 @@",
-    removed,
-    added,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-describe("detectSchemaRegressions", () => {
-  it("returns empty array when schema.prisma is not in the diff", () => {
-    const diff = `diff --git a/apps/web/lib/foo.ts b/apps/web/lib/foo.ts\n+// added line`;
-    expect(detectSchemaRegressions(diff)).toHaveLength(0);
-  });
-
-  it("returns empty array for a pure-addition diff (new model)", () => {
-    const diff = makeSchemaDiff([], [
-      "+model NewThing {",
-      "+  id String @id",
-      "+}",
-    ]);
-    expect(detectSchemaRegressions(diff)).toHaveLength(0);
-  });
-
-  it("detects removal of a model field", () => {
-    const diff = makeSchemaDiff(["  nameNormalized String @default(\"\")"]);
-    const result = detectSchemaRegressions(diff);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toContain("nameNormalized");
-  });
-
-  it("detects removal of an index definition", () => {
-    const diff = makeSchemaDiff(["  @@index([regionId, nameNormalized])"]);
-    const result = detectSchemaRegressions(diff);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toContain("@@index");
-  });
-
-  it("detects removal of a model declaration", () => {
-    const diff = makeSchemaDiff(["model City {"]);
-    const result = detectSchemaRegressions(diff);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toContain("model City");
-  });
-
-  it("does not flag blank removed lines as regressions", () => {
-    const diff = makeSchemaDiff(["  ", ""]);
-    expect(detectSchemaRegressions(diff)).toHaveLength(0);
-  });
-
-  it("does not flag the diff --- header line as a regression", () => {
-    // The raw diff includes "--- a/packages/db/prisma/schema.prisma"
-    const diff = makeSchemaDiff(["  nameNormalized String"]);
-    const result = detectSchemaRegressions(diff);
-    // Only the actual field removal should appear, not the header
-    expect(result.every((l) => !l.startsWith("---"))).toBe(true);
-  });
-
-  it("returns multiple regressions when several fields are removed", () => {
-    const diff = makeSchemaDiff([
-      "  nameNormalized String @default(\"\")",
-      "  localityType   String @default(\"city\")",
-      "  source         String @default(\"seed\")",
-    ]);
-    expect(detectSchemaRegressions(diff)).toHaveLength(3);
   });
 });

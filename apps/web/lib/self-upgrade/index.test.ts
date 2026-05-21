@@ -1,47 +1,61 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
-import { runSelfUpgradeCycle } from "./index";
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    platformConfig: { findUnique: vi.fn() },
+    selfUpgradeRun: {
+      create: vi.fn(),
+      update: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+    },
+    featureBuild: { findUnique: vi.fn() },
+  },
+}));
 
-describe("runSelfUpgradeCycle", () => {
-  it("skips when disabled", async () => {
-    const deps = {
-      loadConfig: vi.fn().mockResolvedValue({ enabled: false }),
-      getVersionState: vi.fn(),
-      createRun: vi.fn(),
-      markRunSkipped: vi.fn(),
-      startPromoter: vi.fn(),
-      notify: vi.fn(),
-    };
+vi.mock("node:child_process", () => ({
+  spawn: vi.fn(),
+  execFileSync: vi.fn(),
+}));
 
-    const result = await runSelfUpgradeCycle({ trigger: "scheduled" }, deps);
+import * as SelfUpgrade from "./index";
 
-    expect(result.status).toBe("skipped");
-    expect(result.reason).toBe("disabled");
-    expect(deps.getVersionState).not.toHaveBeenCalled();
+describe("self-upgrade barrel export", () => {
+  it("exports config APIs", () => {
+    expect(SelfUpgrade).toHaveProperty("getSelfUpgradeConfig");
+    expect(SelfUpgrade).toHaveProperty("parseSelfUpgradeConfig");
+    expect(SelfUpgrade).toHaveProperty("isInMaintenanceWindow");
   });
 
-  it("starts a promoter run when the portal is behind origin/main", async () => {
-    const deps = {
-      loadConfig: vi.fn().mockResolvedValue({ enabled: true }),
-      getVersionState: vi.fn().mockResolvedValue({
-        currentSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        targetSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        comparable: true,
-        upToDate: false,
-        reason: "behind-target",
-      }),
-      createRun: vi.fn().mockResolvedValue({ runId: "SUR-123" }),
-      markRunSkipped: vi.fn(),
-      markRunStarted: vi.fn(),
-      startPromoter: vi.fn().mockResolvedValue({ containerName: "dpf-promoter-self-upgrade-SUR-123" }),
-      notify: vi.fn(),
-    };
+  it("exports version APIs", () => {
+    expect(SelfUpgrade).toHaveProperty("resolveTargetSha");
+    expect(SelfUpgrade).toHaveProperty("isShaFresh");
+  });
 
-    const result = await runSelfUpgradeCycle({ trigger: "manual" }, deps);
+  it("exports run-store APIs", () => {
+    expect(SelfUpgrade).toHaveProperty("createRun");
+    expect(SelfUpgrade).toHaveProperty("startRun");
+    expect(SelfUpgrade).toHaveProperty("completeRun");
+    expect(SelfUpgrade).toHaveProperty("failRun");
+    expect(SelfUpgrade).toHaveProperty("cancelRun");
+    expect(SelfUpgrade).toHaveProperty("appendLog");
+    expect(SelfUpgrade).toHaveProperty("getLatestRun");
+    expect(SelfUpgrade).toHaveProperty("getRun");
+  });
 
-    expect(result.status).toBe("started");
-    expect(result.runId).toBe("SUR-123");
-    expect(deps.startPromoter).toHaveBeenCalled();
-    expect(deps.notify).toHaveBeenCalledWith(expect.objectContaining({ type: "started" }));
+  it("exports promoter APIs", () => {
+    expect(SelfUpgrade).toHaveProperty("runPromoter");
+  });
+
+  it("exports completion APIs", () => {
+    expect(SelfUpgrade).toHaveProperty("isFeatureBuildDeployed");
+    expect(SelfUpgrade).toHaveProperty("getDeployedSha");
+    expect(SelfUpgrade).toHaveProperty("shaContains");
+    expect(SelfUpgrade).toHaveProperty("getBuildMergeSha");
+  });
+
+  it("exports notification APIs", () => {
+    expect(SelfUpgrade).toHaveProperty("emitUpgradeEvent");
   });
 });

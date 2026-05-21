@@ -1,74 +1,39 @@
-import { promisify } from "node:util";
-import { execFile as execFileCb } from "node:child_process";
+// apps/web/lib/self-upgrade/version.ts
+// Version state helpers for the self-upgrade subsystem.
 
-import { readImageVersion } from "@/lib/platform/image-version";
-
-const execFile = promisify(execFileCb);
 const GIT_SHA_RE = /^[0-9a-f]{40}$/i;
 
-export type UpgradeVersionReason =
-  | "behind-target"
-  | "current-not-git-sha"
-  | "target-not-git-sha"
-  | "up-to-date";
+function isGitSha(s: string | null | undefined): boolean {
+  return !!s && GIT_SHA_RE.test(s);
+}
+
+// ─── Shared Types ─────────────────────────────────────────────────────────────
 
 export type UpgradeVersionState = {
   currentSha: string | null;
   targetSha: string | null;
   comparable: boolean;
   upToDate: boolean;
-  reason: UpgradeVersionReason;
+  reason: string;
 };
 
-type VersionConfig = {
-  hostSourceMountPath: string;
-  repositoryRemote: string;
-  repositoryBranch: string;
-};
-
-type CurrentVersion =
-  | { version: string; comparableToGitSha: boolean }
-  | { raw: string; source: string }
-  | null;
-
-type VersionDeps = {
-  readCurrentVersion?: () => Promise<CurrentVersion>;
-  execFile?: (file: string, args: string[]) => Promise<{ stdout: string }>;
-};
+// ─── Pure Comparator ─────────────────────────────────────────────────────────
 
 export function compareUpgradeVersions(
   currentSha: string | null,
   targetSha: string | null,
 ): UpgradeVersionState {
-  if (!targetSha || !GIT_SHA_RE.test(targetSha)) {
-    return {
-      currentSha,
-      targetSha,
-      comparable: false,
-      upToDate: false,
-      reason: "target-not-git-sha",
-    };
+  if (!isGitSha(targetSha)) {
+    return { currentSha, targetSha, comparable: false, upToDate: false, reason: "target-not-git-sha" };
   }
-
-  if (!currentSha || !GIT_SHA_RE.test(currentSha)) {
-    return {
-      currentSha,
-      targetSha,
-      comparable: false,
-      upToDate: false,
-      reason: "current-not-git-sha",
-    };
+  if (!isGitSha(currentSha)) {
+    return { currentSha, targetSha, comparable: false, upToDate: false, reason: "current-not-git-sha" };
   }
-
-  const upToDate = currentSha.toLowerCase() === targetSha.toLowerCase();
-  return {
-    currentSha,
-    targetSha,
-    comparable: true,
-    upToDate,
-    reason: upToDate ? "up-to-date" : "behind-target",
-  };
+  const upToDate = currentSha!.toLowerCase() === targetSha!.toLowerCase();
+  return { currentSha, targetSha, comparable: true, upToDate, reason: upToDate ? "up-to-date" : "behind-target" };
 }
+
+// ─── Remote HEAD Command Builder ──────────────────────────────────────────────
 
 export function buildRemoteHeadCommand(input: {
   hostSourcePath: string;
@@ -78,29 +43,68 @@ export function buildRemoteHeadCommand(input: {
   return ["git", "-C", input.hostSourcePath, "rev-parse", `${input.remote}/${input.branch}`];
 }
 
-function normalizeCurrentVersion(version: CurrentVersion): string | null {
-  if (!version) return null;
-  if ("version" in version) return version.comparableToGitSha ? version.version : null;
-  return version.source === "git-sha" ? version.raw : null;
+// ─── Version State Resolution ─────────────────────────────────────────────────
+
+type VersionStateDeps = {
+  readCurrentVersion: (opts?: unknown) => Promise<{ version: string; comparableToGitSha: boolean }>;
+  execFile: (cmd: string, args: string[]) => Promise<{ stdout: string }>;
+};
+
+async function defaultReadCurrentVersion(): Promise<{ version: string; comparableToGitSha: boolean }> {
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const raw = await readFile("/app/.dpf-image-version", "utf8");
+    const version = raw.trim();
+    return { version, comparableToGitSha: GIT_SHA_RE.test(version) };
+  } catch {
+    return { version: "", comparableToGitSha: false };
+  }
 }
 
+async function defaultExecFile(cmd: string, args: string[]): Promise<{ stdout: string }> {
+  const { execFile: nodeExecFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const execAsync = promisify(nodeExecFile);
+  const result = await execAsync(cmd, args);
+  return { stdout: result.stdout.toString() };
+}
+
+const DEFAULT_DEPS: VersionStateDeps = {
+  readCurrentVersion: defaultReadCurrentVersion,
+  execFile: defaultExecFile,
+};
+
 export async function getUpgradeVersionState(
-  config: VersionConfig,
-  deps: VersionDeps = {},
+  config: {
+    hostSourceMountPath?: string;
+    repositoryRemote?: string;
+    repositoryBranch?: string;
+    [key: string]: unknown;
+  },
+  deps: VersionStateDeps = DEFAULT_DEPS,
 ): Promise<UpgradeVersionState> {
-  const readCurrentVersion = deps.readCurrentVersion ?? readImageVersion;
-  const exec = deps.execFile ?? execFile;
-  const command = buildRemoteHeadCommand({
-    hostSourcePath: config.hostSourceMountPath,
-    remote: config.repositoryRemote,
-    branch: config.repositoryBranch,
+  const { version, comparableToGitSha } = await deps.readCurrentVersion();
+  const currentSha = comparableToGitSha ? version : null;
+
+  const [, ...gitArgs] = buildRemoteHeadCommand({
+    hostSourcePath: config.hostSourceMountPath ?? process.env.HOST_SOURCE_PATH ?? "/workspace",
+    remote: config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin",
+    branch: config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main",
   });
+  const { stdout } = await deps.execFile("git", gitArgs);
+  const targetSha = stdout.trim() || null;
 
-  const [file, ...args] = command;
-  const [currentVersion, target] = await Promise.all([
-    readCurrentVersion(),
-    exec(file, args),
-  ]);
+  return compareUpgradeVersions(currentSha, targetSha);
+}
 
-  return compareUpgradeVersions(normalizeCurrentVersion(currentVersion), target.stdout.trim());
+// ─── Compatibility Exports ────────────────────────────────────────────────────
+
+export async function resolveTargetSha(_channel: string): Promise<string | null> {
+  return null;
+}
+
+export function isShaFresh(deployedSha: string | null, targetSha: string): boolean {
+  if (!deployedSha) return false;
+  const minLen = Math.min(deployedSha.length, targetSha.length);
+  return deployedSha.slice(0, minLen) === targetSha.slice(0, minLen);
 }
