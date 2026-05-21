@@ -15,6 +15,7 @@ import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { BuildListItem } from "./BuildListItem";
+import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
@@ -423,54 +424,29 @@ export function BuildStudio({
             </div>
           )}
 
-          <div className="flex-1 overflow-auto p-2">
-            {buildRows.length === 0 ? (
-              <div className="p-6 text-center">
-                <div className="text-3xl mb-3 opacity-20">&#128161;</div>
-                <p className="text-sm text-[var(--dpf-muted)] mb-2">No builds yet</p>
-                <p className="text-xs text-[var(--dpf-muted)] opacity-70">
-                  Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
-                </p>
-              </div>
-            ) : (
-              buildRows.map((build, idx) => {
-                const lifecycleLabel = deriveLifecycleLabel({
-                  backlogItem: build.originator
-                    ? {
-                      status: build.originator.status,
-                      triageOutcome: build.originator.triageOutcome,
-                      activeBuildId: build.originator.activeBuildId,
-                    }
-                    : null,
-                  featureBuild: build,
-                  governedBacklogEnabled,
-                });
-
-                return (
-                  <BuildListItem
-                    key={build.buildId}
-                    build={build}
-                    active={activeBuild?.buildId === build.buildId}
-                    index={idx}
-                    lifecycleLabel={lifecycleLabel}
-                    isDevEnvironment={isDevEnvironment}
-                    onSelect={() => {
-                      setActiveBuild(build);
-                      setSidebarOpen(true);
-                    }}
-                    onDelete={() => {
-                      if (isDevEnvironment) return;
-                      if (!confirm(`Delete "${build.title}"?`)) return;
-                      deleteFeatureBuild(build.buildId).then(() => {
-                        if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
-                        router.refresh();
-                      });
-                    }}
-                  />
-                );
-              })
-            )}
-          </div>
+          {/* Fleet rail (compact density) — replaces the legacy comfortable
+              build cards. Per spec §1: one row per in-flight build, ≤32px
+              tall, phase mini-rail + queue badge + needs-attention dot.
+              Order: running → blocked → queued → idle. Falls back to FB
+              ascending for same-kind tie-break. */}
+          <FleetRailZone
+            buildRows={buildRows}
+            activeBuildId={activeBuild?.buildId ?? null}
+            governedBacklogEnabled={governedBacklogEnabled}
+            isDevEnvironment={isDevEnvironment}
+            onSelectBuild={(build) => {
+              setActiveBuild(build);
+              setSidebarOpen(true);
+            }}
+            onDeleteBuild={(build) => {
+              if (isDevEnvironment) return;
+              if (!confirm(`Delete "${build.title}"?`)) return;
+              deleteFeatureBuild(build.buildId).then(() => {
+                if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
+                router.refresh();
+              });
+            }}
+          />
         </div>
 
         {/* Right: Preview or Brief */}
@@ -752,6 +728,114 @@ function BuildFailedBanner({ execState }: { execState: BuildExecutionState | nul
           <p className="text-xs text-[var(--dpf-muted)] mt-2">{hint}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FleetRailZone({
+  buildRows,
+  activeBuildId,
+  governedBacklogEnabled,
+  isDevEnvironment,
+  onSelectBuild,
+  onDeleteBuild,
+}: {
+  buildRows: FeatureBuildRow[];
+  activeBuildId: string | null;
+  governedBacklogEnabled: boolean;
+  isDevEnvironment: boolean;
+  onSelectBuild: (build: FeatureBuildRow) => void;
+  onDeleteBuild: (build: FeatureBuildRow) => void;
+}) {
+  // Derive per-row fleet entries: queueState + needsAttention + lifecycle.
+  // queueState falls back to phase-based heuristics until the concurrency
+  // dispatcher exposes real values (its thread owns that surface).
+  const entries = buildRows.map((build) => ({
+    build,
+    queueState: deriveQueueState(build),
+    needsAttention: deriveNeedsAttention(build),
+    lifecycleLabel: deriveLifecycleLabel({
+      backlogItem: build.originator
+        ? {
+          status: build.originator.status,
+          triageOutcome: build.originator.triageOutcome,
+          activeBuildId: build.originator.activeBuildId,
+        }
+        : null,
+      featureBuild: build,
+      governedBacklogEnabled,
+    }),
+  }));
+
+  // Sort: running → blocked → queued (by position) → idle. Stable tie-break
+  // by buildId so render order doesn't flicker across re-renders.
+  const kindRank = { running: 0, blocked: 1, queued: 2, idle: 3 } as const;
+  const sorted = [...entries].sort((a, b) => {
+    const ra = kindRank[a.queueState.kind];
+    const rb = kindRank[b.queueState.kind];
+    if (ra !== rb) return ra - rb;
+    if (a.queueState.kind === "queued" && b.queueState.kind === "queued") {
+      return a.queueState.position - b.queueState.position;
+    }
+    return a.build.buildId.localeCompare(b.build.buildId);
+  });
+
+  const counts = deriveFleetCounts(entries.map((e) => e.queueState));
+
+  if (buildRows.length === 0) {
+    return (
+      <div className="flex-1 overflow-auto p-2">
+        <div className="p-6 text-center">
+          <div className="text-3xl mb-3 opacity-20">&#128161;</div>
+          <p className="text-sm text-[var(--dpf-muted)] mb-2">No builds yet</p>
+          <p className="text-xs text-[var(--dpf-muted)] opacity-70">
+            Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Compact fleet header — surfaces in-flight aggregate so the
+          operator can see queue pressure without opening every build.
+          Click target is currently inert; the DetailsDrawer queue
+          subsection lands in a follow-up slice. */}
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="build-studio-fleet-header"
+        className="flex shrink-0 items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-[11px] font-semibold text-[var(--dpf-text)]"
+      >
+        <span data-testid="fleet-header-label">
+          Builds: {counts.runningCount} running
+          {counts.blockedCount > 0 && (
+            <> · <span className="text-[var(--dpf-warning)]">{counts.blockedCount} blocked</span></>
+          )}
+          {counts.queuedCount > 0 && (
+            <> · {counts.queuedCount} queued</>
+          )}
+        </span>
+      </div>
+      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
+        {sorted.map((entry, idx) => (
+          <li key={entry.build.buildId}>
+            <BuildListItem
+              build={entry.build}
+              active={activeBuildId === entry.build.buildId}
+              index={idx}
+              lifecycleLabel={entry.lifecycleLabel}
+              isDevEnvironment={isDevEnvironment}
+              density="fleet"
+              queueState={entry.queueState}
+              needsAttention={entry.needsAttention}
+              onSelect={() => onSelectBuild(entry.build)}
+              onDelete={() => onDeleteBuild(entry.build)}
+            />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
