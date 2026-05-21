@@ -23,10 +23,14 @@ describe("IntegrationReadinessPanel", () => {
 
     expect(screen.getByRole("heading", { name: "QuickBooks Online readiness" })).toBeVisible();
     expect(screen.getByText("Acme Services LLC")).toBeVisible();
-    expect(screen.getAllByText("Read only")).toHaveLength(9);
-    expect(screen.getByText("Vendors")).toBeVisible();
-    expect(screen.getByText("Expenses")).toBeVisible();
+    expect(screen.getAllByText("Import ready")).toHaveLength(9);
+    expect(screen.getAllByText("Vendors").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Expenses").length).toBeGreaterThan(0);
     expect(screen.getByText(/API coverage: QuickBooks Purchase query/i)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Import staging posture" })).toBeVisible();
+    expect(screen.getByText("Non-editable")).toBeVisible();
+    expect(screen.getAllByText("External-owned")).toHaveLength(9);
+    expect(screen.getByText("Invoice")).toBeVisible();
     expect(screen.getAllByText("Not mapped").length).toBeGreaterThan(0);
     expect(screen.getByText("Connected")).toBeVisible();
     expect(screen.queryByText(/clientSecret/i)).not.toBeInTheDocument();

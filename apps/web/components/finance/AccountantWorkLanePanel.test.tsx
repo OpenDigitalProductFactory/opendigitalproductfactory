@@ -52,7 +52,7 @@ describe("AccountantWorkLanePanel", () => {
     expect(html).toContain("Vendors");
     expect(html).toContain("Bank transactions");
     expect(html).toContain("QuickBooks reconciliation");
-    expect(html).toContain("BI-C61B5202");
     expect(html).toContain("BI-07D76D6B");
+    expect(html).toContain("source-attributed");
   });
 });
