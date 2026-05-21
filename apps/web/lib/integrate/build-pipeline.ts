@@ -193,7 +193,7 @@ export async function runBuildPipeline(params: {
     // acquired a slot (e.g. failed before stepCreateSandbox ran).
     const { releaseSandbox } = await import("./sandbox/sandbox-pool");
     await releaseSandbox(buildId).catch((err) =>
-      console.error(`[build-pipeline] Failed to release sandbox slot for ${buildId}:`, err),
+      console.error("[build-pipeline] Failed to release sandbox slot:", { buildId }, err),
     );
   }
 }
@@ -250,7 +250,7 @@ async function stepCreateSandbox(
     pollIntervalMs: 30_000,
     timeoutMs: 1_800_000,
     onWaiting: (attempt) => {
-      console.log(`[build-pipeline] ${buildId} waiting for sandbox slot (attempt ${attempt})`);
+      console.log("[build-pipeline] waiting for sandbox slot:", { buildId, attempt });
       emit({ type: "phase:change", buildId, phase: "slot_queued" as import("@/lib/build-exec-types").BuildExecStep });
     },
   });
@@ -374,7 +374,7 @@ async function stepGenerateCode(
     (t) => !t.buildPhases || t.buildPhases.includes("build"),
   );
   const toolsForProvider = toolsToOpenAIFormat(tools);
-  console.log(`[build-pipeline] stepGenerateCode buildId=${buildId} tools=${tools.length} (build-phase filtered from ${allTools.length} total)`);
+  console.log("[build-pipeline] stepGenerateCode:", { buildId, tools: tools.length, allTools: allTools.length });
 
   // Build the initial message from the brief
   const userMessage = [
