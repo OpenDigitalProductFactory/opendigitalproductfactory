@@ -5,10 +5,6 @@ import { can } from "@/lib/permissions";
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
-// isInWindow lives in a non-"use server" module so it can be a sync function.
-// Re-export here for backward compatibility with existing importers.
-export { isInWindow } from "@/lib/deployment-window-utils";
-
 // ─── Auth Guard ──────────────────────────────────────────────────────────────
 
 async function requireOpsAccess(): Promise<string> {
