@@ -44,7 +44,7 @@ describe("bookkeeper accountant work lane", () => {
     );
   });
 
-  it("derives QuickBooks read and missing entity families from the readiness descriptor", () => {
+  it("derives QuickBooks import-ready and missing entity families from the readiness descriptor", () => {
     const lane = getBookkeeperAccountantWorkLane();
     const quickBooks = lane.providerBoundaries.find((boundary) => boundary.provider === "quickbooks");
 
@@ -66,7 +66,8 @@ describe("bookkeeper accountant work lane", () => {
         "Accountant workflow",
       ]),
     );
-    expect(quickBooks?.nextBacklogItemId).toBe("BI-C61B5202");
+    expect(quickBooks?.writeBoundary).toContain("source-attributed");
+    expect(quickBooks?.nextBacklogItemId).toBe("BI-07D76D6B");
   });
 
   it("anchors Stripe and bank feeds as reconciliation dependencies, not replacement claims", () => {
