@@ -6299,6 +6299,20 @@ export async function executeTool(
           };
         }
 
+        // Validate that every fileStructure entry has a path field — missing paths
+        // cause normalizeBuildPlanPaths to crash with "Cannot read properties of
+        // undefined (reading 'trim')".
+        const missingPathEntries = (fileStructure as Array<Record<string, unknown>>)
+          .map((e, i) => ({ i, path: e["path"] }))
+          .filter(({ path }) => !path || typeof path !== "string");
+        if (missingPathEntries.length > 0) {
+          return {
+            success: false,
+            error: "buildPlan fileStructure entries must all have a path field.",
+            message: `REJECTED: ${missingPathEntries.length} fileStructure entries are missing a "path" field (indices: ${missingPathEntries.map(({ i }) => i).join(", ")}). Every entry must have { "path": "apps/web/...", "action": "create"|"modify", "purpose": "..." }.`,
+          };
+        }
+
         const normalizedPlan = normalizeBuildPlanPaths(plan as Parameters<typeof normalizeBuildPlanPaths>[0]);
         if (normalizedPlan.unresolvedModifyPaths.length > 0) {
           return {
