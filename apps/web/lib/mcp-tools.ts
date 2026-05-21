@@ -6681,6 +6681,10 @@ export async function executeTool(
             happyPathState,
           });
           if (gate.allowed) {
+            // EP-COST Phase 3: record ideate-phase cost rollup and start plan-phase tracking
+            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+            void completeBuildPhaseRun(buildId, "ideate");
+            void startBuildPhaseRun(buildId, "plan");
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
@@ -6838,6 +6842,10 @@ export async function executeTool(
                 logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
               } else {
                 await startBuildBranch(buildId);
+                // EP-COST Phase 3: record plan-phase cost rollup and start build-phase tracking
+                const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+                void completeBuildPhaseRun(buildId, "plan");
+                void startBuildPhaseRun(buildId, "build");
                 await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
                 if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
                 logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
