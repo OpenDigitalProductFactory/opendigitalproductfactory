@@ -49,8 +49,7 @@ function toPhaseRailPhase(phase: FeatureBuildRow["phase"]): PhaseRailPhase {
     case "complete":
       return "ship";
     case "failed":
-    case "abandoned":
-      // Treat terminal-failure states as still-in-review for the mini-rail.
+      // Treat terminal-failure as still-in-review for the mini-rail.
       return "review";
     default:
       return "ideate";
