@@ -15,6 +15,7 @@ import { captureDecisionInteraction } from "@/lib/actions/decision-perspective";
 import type { ResumeBuildImplementationOutcome } from "@/lib/build/progress-visibility-types";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
+import { ActionBanner, type ActionBannerState } from "./ActionBanner";
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 import type { BuildStudioWorkflowAction } from "./build-studio-workflow-actions";
@@ -25,6 +26,32 @@ type Props = {
   compact?: boolean;
   onCompleted?: () => Promise<void> | void;
 };
+
+/**
+ * Map (build phase + action.disabledReason) onto an ActionBannerState.
+ *
+ * The card carries dispatch + derivation logic; the banner is just a
+ * compact presentation. This helper is the contract between the two —
+ * extracted so T9's delegation can be tested without instantiating the
+ * full card and so the derivation rule lives in one place.
+ *
+ * Precedence:
+ *   1. disabledReason set → "blocked" (operator needs to clear an upstream gap)
+ *   2. phase=failed → "review_failed"
+ *   3. phase=complete → "complete"
+ *   4. phase ∈ {build, review} → "running" (sandbox flow in motion)
+ *   5. fallback → "ready"
+ */
+export function deriveActionBannerState(
+  build: Pick<FeatureBuildRow, "phase">,
+  action: Pick<BuildStudioWorkflowAction, "disabledReason">,
+): ActionBannerState {
+  if (action.disabledReason) return "blocked";
+  if (build.phase === "failed") return "review_failed";
+  if (build.phase === "complete") return "complete";
+  if (build.phase === "build" || build.phase === "review") return "running";
+  return "ready";
+}
 
 export function BuildStudioWorkflowActionCard({
   build,
@@ -144,6 +171,45 @@ export function BuildStudioWorkflowActionCard({
     );
     router.refresh();
     await onCompleted?.();
+  }
+
+  // ── Compact rendering — delegate to ActionBanner ───────────────────────
+  // Per spec §6, the BuildStudio shell mounts a 40px pinned ActionBanner
+  // at the top of the active-build zone instead of the legacy ~200px card.
+  // The derivation logic (action computation, dispatch flow, decision
+  // interaction) stays in this file — the banner only changes presentation.
+  //
+  // If there's an open decision interaction that needs capture, fall back to
+  // the full card so the DecisionPerspectiveGatePanel still renders — the
+  // 40px banner has no room for the capture UI.
+  const compactBannerEligible = compact && !decisionInteraction;
+  if (compactBannerEligible) {
+    const bannerState = deriveActionBannerState(build, action);
+    const bannerPrimaryAction = primaryLabel
+      ? {
+        label: primaryLabel,
+        onClick: handlePrimaryAction,
+        disabled: !primaryEnabled || pending,
+      }
+      : undefined;
+    return (
+      <div data-testid="build-studio-workflow-action-card">
+        <ActionBanner
+          state={bannerState}
+          sentence={action.message}
+          primaryAction={bannerPrimaryAction}
+          detail={action.disabledReason ?? undefined}
+        />
+        {error && (
+          <div
+            role="alert"
+            className="mt-1 rounded-md border border-[var(--dpf-error)] bg-[color-mix(in_srgb,var(--dpf-error)_8%,var(--dpf-surface-1))] px-3 py-1.5 text-[11px] leading-snug text-[var(--dpf-error)]"
+          >
+            {error}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
