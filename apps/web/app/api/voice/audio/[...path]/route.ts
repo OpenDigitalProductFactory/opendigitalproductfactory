@@ -14,9 +14,10 @@ function getStorageRoot(): string {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { path: string[] } },
+  { params }: { params: Promise<{ path: string[] }> },
 ): Promise<NextResponse> {
-  const joined = (params.path ?? []).join("/")
+  const { path: pathSegments } = await params
+  const joined = (pathSegments ?? []).join("/")
 
   // Reject path traversal
   if (joined.includes("..") || path.isAbsolute(joined)) {
