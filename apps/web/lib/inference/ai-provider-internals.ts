@@ -515,7 +515,7 @@ export async function profileModelsInternal(
           friendlyName: m.modelId,
           summary: "Not accessible with current provider credentials",
           capabilityCategory: "restricted",
-          costTier: "$",
+          costTier: "routine",  // restricted = inaccessible, treat as cheapest
           bestFor: [],
           avoidFor: [],
           modelStatus: "retired",
@@ -546,7 +546,7 @@ export async function profileModelsInternal(
           providerId, modelId: m.modelId,
           friendlyName: card.displayName || m.modelId,
           summary: "Deprecated by provider",
-          capabilityCategory: "deprecated", costTier: "$",
+          capabilityCategory: "deprecated", costTier: "deprecated",
           bestFor: [], avoidFor: [],
           modelStatus: "retired",
           retiredAt: new Date(),
@@ -575,7 +575,7 @@ export async function profileModelsInternal(
           providerId, modelId: m.modelId,
           friendlyName: card.displayName || m.modelId,
           summary: "Past deprecation date",
-          capabilityCategory: "deprecated", costTier: "$",
+          capabilityCategory: "deprecated", costTier: "deprecated",
           bestFor: [], avoidFor: [],
           modelStatus: "retired",
           retiredAt: new Date(),
@@ -608,7 +608,18 @@ export async function profileModelsInternal(
       : reasoning >= 50 ? "moderate"
       : "fast-cheap";
     const price = card.pricing.outputPerMToken;
-    const costTier = price == null ? "$" : price < 5 ? "$" : price < 15 ? "$$" : "$$$";
+    // EP-COST-001: use canonical tier vocabulary (routine | standard | critical).
+    // When price is known, derive from output cost per MTok.
+    // When price is null, fall back to capabilityCategory so we always have a
+    // meaningful tier even for models where pricing data hasn't been fetched yet.
+    const costTierFromPrice = price == null ? null
+      : price < 5 ? "routine"
+      : price < 20 ? "standard"
+      : "critical";
+    const costTierFromCategory = capabilityCategory === "deep-thinker" ? "critical"
+      : capabilityCategory === "strong" ? "standard"
+      : "routine";
+    const costTier = costTierFromPrice ?? costTierFromCategory;
 
     // EP-INF-003: Drift detection — check if provider metadata changed
     const existingProfile = await prisma.modelProfile.findUnique({
