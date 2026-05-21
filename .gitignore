@@ -75,3 +75,12 @@ __pycache__/
 
 # Third-party copyrighted reference material is kept outside this repository
 # under D:\DPF_References (Windows) — see ACKNOWLEDGMENTS.md for citations.
+
+# Windows-only git-lfs footgun: when a Windows clone has `core.hookspath`
+# misconfigured (or git-lfs is installed without the hooks dir resolving
+# correctly), the LFS install script writes the four sample hooks
+# (post-checkout / post-commit / post-merge / pre-push) into a literal
+# `dev\null\` directory at the worktree root instead of the intended
+# `.git/hooks/`. Multiple Windows worktrees in this repo have observed it.
+# Without this entry, a `git add -A` would happily commit the stray hooks.
+dev/null/

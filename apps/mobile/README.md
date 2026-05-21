@@ -9,7 +9,7 @@ Native companion app for the Open Digital Product Factory platform.
 - Expo Router (file-based navigation)
 - Zustand (state management)
 - NativeWind v4 (Tailwind CSS for React Native)
-- expo-sqlite + react-native-mmkv (offline caching)
+- expo-sqlite (offline caching)
 - Jest + React Native Testing Library (unit/component tests)
 - Maestro (E2E tests)
 

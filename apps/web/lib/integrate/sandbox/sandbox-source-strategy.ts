@@ -144,17 +144,20 @@ export class LocalSourceStrategy implements SandboxSourceStrategy {
 
     // 2. Copy full source from the active shared workspace when present.
     //    If the portal is running from an image-only bootstrap, fall back to -src paths.
+    //    maxBuffer: 100 MB — tar piping large source trees can produce >1 MB of stderr
+    //    (file-modified warnings, etc.) which exhausts Node's default 1 MB buffer.
+    const LARGE_COPY_OPTS = { timeout: 60_000, maxBuffer: 100 * 1024 * 1024 };
     await exec(
       buildWorkspacePackagesCopyCommand(portalContainer, containerId, sourcePaths.packagesDir),
-      { timeout: 60_000 },
+      LARGE_COPY_OPTS,
     );
     await exec(
       buildWorkspaceAppsWebCopyCommand(portalContainer, containerId, sourcePaths.webAppDir),
-      { timeout: 60_000 },
+      LARGE_COPY_OPTS,
     );
     await exec(
       buildWorkspaceScriptsCopyCommand(portalContainer, containerId, sourcePaths.rootConfigDir),
-      { timeout: 20_000 },
+      { timeout: 20_000, maxBuffer: 100 * 1024 * 1024 },
     ).catch(() => console.log("[source-strategy] scripts/ not found, skipping"));
 
     // 3. Remove app-local generated artifacts before later pipeline steps
