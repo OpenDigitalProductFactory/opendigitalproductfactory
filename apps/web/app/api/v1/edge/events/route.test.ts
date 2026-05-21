@@ -6,12 +6,14 @@ const {
   mockEdgeEventFindUnique,
   mockEdgeEventCreate,
   mockEdgeEventUpdate,
+  mockChangeEventUpsert,
   mockTransaction,
 } = vi.hoisted(() => ({
   mockResolveAuth: vi.fn(),
   mockEdgeEventFindUnique: vi.fn(),
   mockEdgeEventCreate: vi.fn(),
   mockEdgeEventUpdate: vi.fn(),
+  mockChangeEventUpsert: vi.fn(),
   mockTransaction: vi.fn(),
 }));
 
@@ -26,6 +28,9 @@ vi.mock("@dpf/db", () => ({
       findUnique: mockEdgeEventFindUnique,
       create: mockEdgeEventCreate,
       update: mockEdgeEventUpdate,
+    },
+    changeEvent: {
+      upsert: mockChangeEventUpsert,
     },
   },
 }));
@@ -45,6 +50,7 @@ function freshObservedAt(): string {
 }
 
 type EventOverrides = Partial<{
+  eventType: "alert" | "change";
   dedupKey: string;
   source: string;
   component: string;
@@ -109,13 +115,20 @@ type CapturedUpdate = {
   where: Record<string, unknown>;
   data: Record<string, unknown>;
 };
+type CapturedUpsert = {
+  where: Record<string, unknown>;
+  create: Record<string, unknown>;
+  update: Record<string, unknown>;
+};
 const creates: CapturedCreate[] = [];
 const updates: CapturedUpdate[] = [];
+const changeUpserts: CapturedUpsert[] = [];
 
 beforeEach(() => {
   vi.resetAllMocks();
   creates.length = 0;
   updates.length = 0;
+  changeUpserts.length = 0;
 
   // Default: $transaction simply runs the callback with the same prisma-
   // shaped mock; tests that need rollback behavior override per-test.
@@ -125,6 +138,9 @@ beforeEach(() => {
         findUnique: mockEdgeEventFindUnique,
         create: mockEdgeEventCreate,
         update: mockEdgeEventUpdate,
+      },
+      changeEvent: {
+        upsert: mockChangeEventUpsert,
       },
     });
   });
@@ -137,6 +153,10 @@ beforeEach(() => {
   mockEdgeEventUpdate.mockImplementation(async (args: CapturedUpdate) => {
     updates.push(args);
     return { id: String(args.where.id ?? "edgeevent_updated") };
+  });
+  mockChangeEventUpsert.mockImplementation(async (args: CapturedUpsert) => {
+    changeUpserts.push(args);
+    return { id: `changeevent_${changeUpserts.length}` };
   });
 
   _resetEdgeRateLimits();
@@ -366,6 +386,134 @@ describe("POST /api/v1/edge/events — persistence", () => {
     expect(json.created).toBe(1);
     expect(json.resolved).toBe(1);
     expect(json.accepted).toBe(2);
+  });
+});
+
+// Slice 1 (BI-8405FDA5): change-event discriminator path. The route should
+// dispatch eventType="change" to ChangeEvent.upsert and leave EdgeEvent
+// untouched; omitting eventType must continue to route to EdgeEvent (alert).
+describe("POST /api/v1/edge/events — change events (Slice 1)", () => {
+  beforeEach(() => mockResolveAuth.mockResolvedValue(AUTHED));
+
+  function makeChangeEvent(overrides: EventOverrides = {}): Record<string, unknown> {
+    return makeValidEvent({
+      eventType: "change",
+      dedupKey: "git.deploy:web@abcdef1",
+      source: "git.deploy",
+      component: "web",
+      eventGroup: "deploy",
+      eventClass: "deploy",
+      severity: "info",
+      action: "trigger",
+      summary: "Deploy abcdef1 to web (production)",
+      customDetails: {
+        gitSha: "abcdef1",
+        deployedBy: "ci-bot",
+        targetEnv: "production",
+      },
+      ...overrides,
+    });
+  }
+
+  it("routes eventType=change to ChangeEvent.upsert and not EdgeEvent", async () => {
+    const res = await POST(makeReq(makeValidBody({ events: [makeChangeEvent()] })));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.changes).toBe(1);
+    expect(json.created).toBe(0);
+    expect(creates).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+    expect(changeUpserts).toHaveLength(1);
+    expect(changeUpserts[0]!.where).toEqual({
+      edgeNodeId_changeKey: {
+        edgeNodeId: "edgenode_cuid_1",
+        changeKey: "git.deploy:web@abcdef1",
+      },
+    });
+    expect(changeUpserts[0]!.create).toMatchObject({
+      edgeNodeId: "edgenode_cuid_1",
+      changeKey: "git.deploy:web@abcdef1",
+      source: "git.deploy",
+      severity: "info",
+      summary: "Deploy abcdef1 to web (production)",
+    });
+  });
+
+  it("defaults eventType to alert when omitted (Slice 0 wire compatibility)", async () => {
+    // makeValidEvent does NOT include eventType; route should treat as alert
+    // and go down the EdgeEvent create path, leaving ChangeEvent untouched.
+    const res = await POST(makeReq(makeValidBody()));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.created).toBe(1);
+    expect(json.changes).toBe(0);
+    expect(creates).toHaveLength(1);
+    expect(changeUpserts).toHaveLength(0);
+  });
+
+  it("dispatches a mixed batch — alerts and changes both land in one transaction", async () => {
+    const body = makeValidBody({
+      events: [
+        makeValidEvent({ dedupKey: "alert-1" }),
+        makeChangeEvent({ dedupKey: "deploy-1" }),
+        makeValidEvent({ dedupKey: "alert-2" }),
+        makeChangeEvent({ dedupKey: "deploy-2" }),
+      ],
+    });
+    const res = await POST(makeReq(body));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.accepted).toBe(4);
+    expect(json.created).toBe(2);
+    expect(json.changes).toBe(2);
+    expect(creates).toHaveLength(2);
+    expect(changeUpserts).toHaveLength(2);
+    expect(mockTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("change-event update path refreshes summary + customDetails without resetting firstSeenAt", async () => {
+    // Two submissions of the same changeKey should produce two upserts;
+    // the second's `update` payload must include lastSeenAt + refreshed
+    // summary/customDetails but NOT firstSeenAt or occurredAt.
+    await POST(makeReq(makeValidBody({ events: [makeChangeEvent()] })));
+    await POST(
+      makeReq(
+        makeValidBody({
+          runKey: crypto.randomUUID(),
+          events: [
+            makeChangeEvent({
+              summary: "Deploy abcdef1 verified post-rollout",
+              customDetails: {
+                gitSha: "abcdef1",
+                deployedBy: "ci-bot",
+                targetEnv: "production",
+                verifiedAt: new Date().toISOString(),
+              },
+            }),
+          ],
+        }),
+      ),
+    );
+    expect(changeUpserts).toHaveLength(2);
+    const updateData = changeUpserts[1]!.update;
+    expect(updateData).toMatchObject({
+      summary: "Deploy abcdef1 verified post-rollout",
+    });
+    expect(updateData).not.toHaveProperty("firstSeenAt");
+    expect(updateData).not.toHaveProperty("occurredAt");
+    expect(updateData.lastSeenAt).toBeInstanceOf(Date);
+  });
+
+  it("rejects an unknown eventType at the envelope layer (422)", async () => {
+    const body = makeValidBody({
+      events: [makeValidEvent({ eventType: "incident" as never })],
+    });
+    const res = await POST(makeReq(body));
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error).toBe("invalid_envelope");
+    expect(changeUpserts).toHaveLength(0);
+    expect(creates).toHaveLength(0);
   });
 });
 

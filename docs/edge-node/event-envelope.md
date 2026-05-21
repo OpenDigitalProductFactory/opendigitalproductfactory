@@ -60,7 +60,8 @@
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `dedupKey` | string (1..255) | yes | Anchor for collapse. Same key = same row. |
+| `eventType` | enum | no | `alert` (default) &#124; `change`. Discriminator selecting the persistence path. Omitting it keeps Slice 0 wire compatibility. See [Change events](#change-events-slice-1) below. |
+| `dedupKey` | string (1..255) | yes | Anchor for collapse. Same key = same row. For changes, this is the change's stable identifier (git SHA, deploy ID). |
 | `source` | string (1..100) | yes | Detector identifier — `snmp.trap`, `syslog`, `ping`, `unifi.events`. |
 | `component` | string (1..200) | no | Operator-readable sub-source — hostname, IP, MAC, port. |
 | `eventGroup` | string (1..100) | no | Logical bucket — `network`, `host`, `ups`. |
@@ -164,13 +165,71 @@ curl -X POST https://localhost:3000/api/v1/edge/events \
 JSON
 ```
 
+## Change events (Slice 1)
+
+> Slice 1 of the detection engine. BI: `BI-8405FDA5`. Spec:
+> [`2026-05-21-edge-change-events-design.md`](../superpowers/specs/2026-05-21-edge-change-events-design.md).
+
+Set `eventType: "change"` on an event to record a **point-in-time fact** — a deploy, config push,
+feature-flag flip, infra apply — that the correlation engine (separate slice) joins to alerts that
+fire shortly after. This is the highest-leverage pattern borrowed from PagerDuty's PD-CEF model:
+most production incidents trace back to a recent change, and surfacing the join shaves the
+biggest single chunk off MTTR.
+
+**Wire shape:** identical to an alert event. The discriminator is `eventType`. Omit it (or set
+`"alert"`) and the event lands in `EdgeEvent` with the Slice 0 lifecycle. Set it to `"change"`
+and the event lands in `ChangeEvent` instead.
+
+**Semantic differences from alerts:**
+
+| | Alerts | Changes |
+|---|---|---|
+| Lifecycle | triggered → acknowledged → resolved (re-opens on later trigger) | Point-in-time only — no lifecycle, no `resolvedAt`, no `occurrenceCount` |
+| `action` | Drives the state machine | Required by the wire schema for envelope uniformity, but **ignored**. Use `"trigger"`. |
+| `dedupKey` | Detector-composed (`source:component:eventClass[:instance]`) so flap noise collapses | The change's stable identifier — git SHA, deploy ID, change-ticket ref. Re-submitting with the same key **updates** summary + customDetails instead of duplicating. |
+| Replay update | Bumps `occurrenceCount`; may reopen from resolved | Refreshes `summary` / `customDetails` / `lastSeenAt`; `firstSeenAt` + `occurredAt` preserved so the original observation is pinned in time |
+| Persistence | `EdgeEvent` table | `ChangeEvent` table |
+| Useful `severity` | `info` → `critical` based on detector confidence | `info` for routine deploys, `warn` for canaries, `error`/`critical` for emergency hotfixes / rollbacks |
+| Useful `customDetails` | Probe response, syslog body, varbinds | `gitSha`, `deployedBy`, `targetEnv`, `runId`, `ticketRef`, diff URL |
+
+**Example — a deploy:**
+
+```jsonc
+{
+  "eventType": "change",
+  "dedupKey": "git.deploy:web@abcdef1",
+  "source": "git.deploy",
+  "component": "web",
+  "eventGroup": "deploy",
+  "eventClass": "deploy",
+  "severity": "info",
+  "action": "trigger",
+  "summary": "Deploy abcdef1 to web (production)",
+  "occurredAt": "2026-05-21T02:28:30Z",
+  "customDetails": {
+    "gitSha": "abcdef1",
+    "deployedBy": "ci-bot",
+    "targetEnv": "production"
+  }
+}
+```
+
+A mixed batch (alerts + changes) is fine — they share one envelope and land in one transaction.
+The route response splits the counts:
+
+```jsonc
+{ "ok": true, "accepted": 4, "created": 2, "changes": 2, ... }
+```
+
 ## What this is NOT (yet)
 
-Slice 0 ships ingest + persistence only. There is **no** event list UI, **no** correlation across
-sources, **no** escalation, **no** on-call. Those land in follow-on slices:
+Slice 0 + Slice 1 ship the envelope + ingest + per-event persistence only. There is **no** event
+list UI, **no** correlation engine joining alerts to changes, **no** escalation, **no** on-call.
+Those land in follow-on slices:
 
-- Slice 1 — edge detector framework
-- Slice 2 — first built-in detector pack
-- Portal slices A / B / C — correlation, lifecycle UX, escalation + on-call
+- Slice 2 — edge detector framework (registry/scheduler/bus/dedupe/transport in `edge-node-go`)
+- Slice 3 — first built-in detector pack (reachability, SNMP poll+trap, syslog, ARP/DHCP, host self)
+- Portal slice — alert ⇄ change correlation engine (N-minute window join)
+- Portal slices A / B / C — incident lifecycle UX, escalation, on-call
 
-Track the parent BI `BI-9FE9D48D` for the slice plan.
+Track the parent BI `BI-9FE9D48D` (foundation) and follow-on `BI-8405FDA5` (Slice 1 change events).

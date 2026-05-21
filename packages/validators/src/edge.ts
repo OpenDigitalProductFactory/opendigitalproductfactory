@@ -142,33 +142,56 @@ export const EDGE_EVENT_ACTIONS = [
 ] as const;
 export type EdgeEventAction = (typeof EDGE_EVENT_ACTIONS)[number];
 
+// Slice 1 (BI-8405FDA5): discriminator separating fire-and-collapse alert
+// events from point-in-time change events (deploys, config pushes, feature
+// flips). Defaulted to "alert" so every Slice 0 producer remains untouched
+// on the wire. The portal route discriminates: "alert" upserts EdgeEvent
+// (full lifecycle, replay-collapsed); "change" upserts ChangeEvent (no
+// lifecycle, kept as point-in-time facts the correlation engine joins to
+// alerts within an N-minute window).
+//
+// For eventType="change", `action` should be "trigger" (lifecycle doesn't
+// apply to changes; the route accepts but ignores other values). `dedupKey`
+// is reused as the change's stable identifier — a git SHA, deploy ID, etc.
+// — so re-submissions update rather than duplicate.
+export const EDGE_EVENT_TYPES = ["alert", "change"] as const;
+export type EdgeEventType = (typeof EDGE_EVENT_TYPES)[number];
+
 export const edgeEventSchema = z.object({
   /**
-   * Dedup anchor — detectors compose from source + component + class
-   * (+ instance) so the same condition collapses on replay. Scoped per
-   * edge node by the portal's @@unique([edgeNodeId, dedupKey]).
+   * Discriminator: "alert" (default) follows the Slice 0 lifecycle and
+   * collapses on (edgeNodeId, dedupKey); "change" is a point-in-time fact
+   * persisted to ChangeEvent for downstream correlation to alerts. Optional
+   * with default "alert" so Slice 0 producers don't need to change.
+   */
+  eventType: z.enum(EDGE_EVENT_TYPES).optional().default("alert"),
+  /**
+   * Dedup anchor — for alerts, detectors compose from source + component +
+   * class (+ instance) so the same condition collapses on replay; for
+   * changes, this is the change's stable identifier (git SHA, deploy ID).
+   * Scoped per edge node by the @@unique on each table.
    */
   dedupKey: z.string().min(1).max(255),
   /** Producing detector — "snmp.trap", "syslog", "ping", "unifi.events". */
   source: z.string().min(1).max(100),
   /** Operator-readable sub-source — hostname, IP, MAC, port. */
   component: z.string().max(200).optional(),
-  /** PD-CEF group — logical bucket ("network", "host", "ups"). */
+  /** PD-CEF group — logical bucket ("network", "host", "ups", "deploy"). */
   eventGroup: z.string().max(100).optional(),
-  /** PD-CEF class — specific condition ("interface_down", "cert_expiring"). */
+  /** PD-CEF class — specific condition ("interface_down", "deploy", "rollback"). */
   eventClass: z.string().max(100).optional(),
   severity: z.enum(EDGE_EVENT_SEVERITIES),
   /**
-   * trigger raises or re-raises an event; acknowledge marks under-investigation;
-   * resolve closes it. A later trigger on the same dedupKey re-opens
-   * (resolvedAt cleared, occurrenceCount++).
+   * For alerts: trigger raises or re-raises; acknowledge marks
+   * under-investigation; resolve closes it. For changes: should be
+   * "trigger" — lifecycle does not apply and the route ignores the value.
    */
   action: z.enum(EDGE_EVENT_ACTIONS),
   /** Short human-readable line for incident lists. */
   summary: z.string().min(1).max(500),
   /** RFC 3339 timestamp the edge detector observed the condition. */
   occurredAt: z.string().datetime(),
-  /** Free-form detector payload — varbinds, deltas, parsed syslog, etc. */
+  /** Free-form detector payload — varbinds, deltas, parsed syslog, deploy metadata. */
   customDetails: z.record(z.string(), z.unknown()).optional(),
 });
 
