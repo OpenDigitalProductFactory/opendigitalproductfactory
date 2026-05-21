@@ -18,6 +18,7 @@ import type {
   DecisionPerspectiveProfile,
 } from "./types";
 import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
+import { runVoiceSynthesisJob } from "../voice-synthesis/synthesis-job";
 
 type BuildStudioGateClient = Parameters<typeof resolveProfileMaterial>[0]["db"]
   & Parameters<typeof persistDecisionInteraction>[0]["db"]
@@ -311,6 +312,12 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
     interactionId,
   });
   traceWwmd("wwmd.ledger.written", { interactionId: persisted.interactionId, outcomeType: evaluation.outcomeType });
+
+  setImmediate(() => {
+    runVoiceSynthesisJob(persisted.interactionId).catch((err: unknown) => {
+      console.error("[tool-trace] wwmd.voice.dispatch.failed", { interactionId: persisted.interactionId, error: String(err) });
+    });
+  });
 
   return {
     allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
