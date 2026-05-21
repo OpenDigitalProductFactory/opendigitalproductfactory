@@ -28,7 +28,7 @@ export type AccountantProviderBoundary = {
   provider: string;
   label: string;
   href: string;
-  posture: "read-first" | "reconciliation-anchor" | "not-mapped";
+  posture: "read-first" | "import-staging" | "reconciliation-anchor" | "not-mapped";
   currentCoverage: string[];
   missingCoverage: string[];
   writeBoundary: string;
@@ -67,11 +67,11 @@ const quickBooksReadiness = buildQuickBooksReadinessDescriptor({
 });
 
 const quickBooksReadCoverage = quickBooksReadiness.capabilities
-  .filter((capability) => capability.state === "read")
+  .filter((capability) => capability.state === "read" || capability.state === "import-ready")
   .map((capability) => capability.label);
 
 const quickBooksMissingCoverage = quickBooksReadiness.capabilities
-  .filter((capability) => capability.state !== "read")
+  .filter((capability) => capability.state !== "read" && capability.state !== "import-ready")
   .map((capability) => capability.label);
 
 export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
@@ -157,12 +157,12 @@ export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
       provider: "quickbooks",
       label: "QuickBooks Online",
       href: "/platform/tools/integrations/quickbooks",
-      posture: "read-first",
+      posture: "import-staging",
       currentCoverage: quickBooksReadCoverage,
       missingCoverage: quickBooksMissingCoverage,
       writeBoundary:
-        "No imports, write-back, or DPF-primary accounting ownership until read expansion, staging metadata, reconciliation evidence, and accountant review are proven.",
-      nextBacklogItemId: "BI-C61B5202",
+        "QuickBooks staging is source-attributed and non-editable; no write-back or DPF-primary accounting ownership until entity links, reconciliation evidence, rollback/export, and accountant review are proven.",
+      nextBacklogItemId: "BI-07D76D6B",
     },
     {
       provider: "stripe",
@@ -190,11 +190,11 @@ export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
   promotionGuardrail:
     "DPF does not become the accounting system of record until read coverage, import staging, reconciliation evidence, rollback/export, and accountant review workflows are proven in dual-run.",
   nextWorkflow: {
-    backlogItemId: "BI-C61B5202",
-    title: "QuickBooks read expansion for vendors, bills, expenses, payments, accounts, and reports",
+    backlogItemId: "BI-07D76D6B",
+    title: "QuickBooks import staging and ownership posture for core accounting records",
     route: "/platform/tools/integrations/quickbooks",
     reason:
-      "The accountant lane needs AP, payment, account, report, and tax visibility before import staging or write-back gates.",
+      "The accountant lane needs source-attributed, non-editable staging before entity links, reconciliation, or write-back gates.",
   },
 };
 

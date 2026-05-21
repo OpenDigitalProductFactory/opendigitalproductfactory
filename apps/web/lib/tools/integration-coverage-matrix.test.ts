@@ -40,9 +40,9 @@ describe("integration coverage matrix", () => {
     expect(quickBooksRows).toHaveLength(1);
     expect(quickBooksRows[0]).toMatchObject({
       productName: "QuickBooks Online",
-      maturity: "read",
+      maturity: "stage",
       posture: "hybrid",
-      nextBacklogItemId: "BI-C61B5202",
+      nextBacklogItemId: "BI-07D76D6B",
     });
     expect(quickBooksRows[0]?.employeeRoles).toContain("bookkeeper_accountant");
     expect(quickBooksRows[0]?.taxonomyNodeIds).toContain("for_employees/financial_management");
