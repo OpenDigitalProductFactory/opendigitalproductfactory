@@ -32,7 +32,11 @@ const {
   const deliberationRunFindFirst = anyFn();
   const transactionImpl = vi.fn(async (fn: (tx: unknown) => unknown) =>
     fn({
-      taskRun: { update: taskRunUpdate, create: taskRunCreate, findMany: taskRunFindMany },
+      // tx.taskRun.findUnique is reached by upsertRecoveryOutcome when no
+      // open StallEvent exists and it has to look up startedAt to synthesize
+      // one. Tests that exercise the synthesize path use mockResolvedValueOnce
+      // chains to differentiate the loadStalled call from this lookup.
+      taskRun: { update: taskRunUpdate, create: taskRunCreate, findMany: taskRunFindMany, findUnique: taskRunFindUnique },
       stallEvent: { findFirst: stallEventFindFirst, update: stallEventUpdate, create: stallEventCreate },
       notification: { create: notificationCreate },
     }),
@@ -253,6 +257,10 @@ describe("taskrunAbandon", () => {
 
   it("cascades one level to live children with reason=parent_abandoned", async () => {
     taskRunFindUnique.mockResolvedValue(stalledRow());
+    // Have an open StallEvent on the parent so upsertRecoveryOutcome takes
+    // the update path; the cascade-create assertions below stay focused on
+    // child synthesis without conflating with parent synthesis.
+    stallEventFindFirst.mockResolvedValue({ id: "se-parent-open" });
     taskRunFindMany.mockResolvedValue([
       { id: "cuid-child-1", taskRunId: "TR-CHILD-1", startedAt: new Date(), buildId: null, lastHeartbeatAt: null },
       { id: "cuid-child-2", taskRunId: "TR-CHILD-2", startedAt: new Date(), buildId: null, lastHeartbeatAt: null },
@@ -320,5 +328,92 @@ describe("taskrunEscalate", () => {
     await taskrunEscalate("TR-STALL-1", "op-1");
     const notifyArg = notificationCreate.mock.calls[0]![0] as { data: { userId: string } };
     expect(notifyArg.data.userId).toBe("user-1");
+  });
+});
+
+describe("audit completeness — synthesize StallEvent when no open event exists", () => {
+  // Caught during F2 UX dogfooding (2026-05-20): the Escalate path fired a
+  // Notification but no StallEvent.outcome='escalated' row appeared in the
+  // ledger because the watchdog hadn't inserted a fresh open event for that
+  // taskRun. Same gap existed for Retry and Abandon. upsertRecoveryOutcome
+  // now synthesizes a StallEvent with reason='operator_recovery_synthesized'
+  // whenever there's no open event to close.
+
+  function setupNoOpenEvent() {
+    // First findUnique call = loadStalled → returns the stalled row.
+    // Second findUnique call = upsertRecoveryOutcome lookup for startedAt.
+    const startedAt = new Date("2026-05-20T10:00:00Z");
+    const lastHeartbeatAt = new Date("2026-05-20T10:00:30Z");
+    taskRunFindUnique
+      .mockResolvedValueOnce(stalledRow())
+      .mockResolvedValueOnce({ startedAt, lastHeartbeatAt });
+    stallEventFindFirst.mockResolvedValue(null);
+    return { startedAt, lastHeartbeatAt };
+  }
+
+  it("Retry synthesizes a StallEvent with outcome='retry' when no open event exists", async () => {
+    setupNoOpenEvent();
+    taskRunCreate.mockResolvedValue({ taskRunId: "TR-RETRY-SYN" });
+    await taskrunRetry("TR-STALL-1", "op-syn");
+    expect(stallEventUpdate).not.toHaveBeenCalled();
+    expect(stallEventCreate).toHaveBeenCalledTimes(1);
+    const createArg = stallEventCreate.mock.calls[0]![0] as {
+      data: { outcome: string; reason: string; outcomeBy: string; thresholdHeartbeatS: number; thresholdTotalS: number };
+    };
+    expect(createArg.data.outcome).toBe("retry");
+    expect(createArg.data.reason).toBe("operator_recovery_synthesized");
+    expect(createArg.data.outcomeBy).toBe("op-syn");
+    expect(createArg.data.thresholdHeartbeatS).toBe(0);
+    expect(createArg.data.thresholdTotalS).toBe(0);
+  });
+
+  it("Abandon synthesizes a StallEvent with outcome='abandoned' when no open event exists", async () => {
+    setupNoOpenEvent();
+    await taskrunAbandon("TR-STALL-1", "op-syn");
+    // Only the parent abandon synthesize — there are no live children in this setup.
+    expect(stallEventCreate).toHaveBeenCalledTimes(1);
+    const createArg = stallEventCreate.mock.calls[0]![0] as {
+      data: { outcome: string; reason: string; outcomeBy: string };
+    };
+    expect(createArg.data.outcome).toBe("abandoned");
+    expect(createArg.data.reason).toBe("operator_recovery_synthesized");
+    expect(createArg.data.outcomeBy).toBe("op-syn");
+  });
+
+  it("Escalate synthesizes a StallEvent with outcome='escalated' when no open event exists", async () => {
+    setupNoOpenEvent();
+    await taskrunEscalate("TR-STALL-1", "op-syn", "operator note");
+    expect(stallEventUpdate).not.toHaveBeenCalled();
+    expect(stallEventCreate).toHaveBeenCalledTimes(1);
+    const createArg = stallEventCreate.mock.calls[0]![0] as {
+      data: { outcome: string; reason: string; outcomeBy: string; notes: string };
+    };
+    expect(createArg.data.outcome).toBe("escalated");
+    expect(createArg.data.reason).toBe("operator_recovery_synthesized");
+    expect(createArg.data.outcomeBy).toBe("op-syn");
+    expect(createArg.data.notes).toBe("operator note");
+  });
+
+  it("synthesized StallEvent carries the startedAt and lastHeartbeatAt of the underlying TaskRun", async () => {
+    const { startedAt, lastHeartbeatAt } = setupNoOpenEvent();
+    await taskrunEscalate("TR-STALL-1", "op-syn");
+    const createArg = stallEventCreate.mock.calls[0]![0] as {
+      data: { startedAt: Date; lastHeartbeatAt: Date | null };
+    };
+    expect(createArg.data.startedAt).toEqual(startedAt);
+    expect(createArg.data.lastHeartbeatAt).toEqual(lastHeartbeatAt);
+  });
+
+  it("synthesized StallEvent tolerates lastHeartbeatAt=null (row never reported a heartbeat)", async () => {
+    const startedAt = new Date("2026-05-20T10:00:00Z");
+    taskRunFindUnique
+      .mockResolvedValueOnce(stalledRow())
+      .mockResolvedValueOnce({ startedAt, lastHeartbeatAt: null });
+    stallEventFindFirst.mockResolvedValue(null);
+    await taskrunEscalate("TR-STALL-1", "op-syn");
+    const createArg = stallEventCreate.mock.calls[0]![0] as {
+      data: { lastHeartbeatAt: Date | null };
+    };
+    expect(createArg.data.lastHeartbeatAt).toBeNull();
   });
 });
