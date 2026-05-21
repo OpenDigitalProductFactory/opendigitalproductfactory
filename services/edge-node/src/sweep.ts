@@ -52,6 +52,7 @@ import {
 import {
   collectUnifi,
   type UnifiAdapter,
+  type UnifiAdapterConfig,
   type UnifiRelationship,
 } from "./collectors/unifi";
 import type { EdgeNodeConfig } from "./config";
@@ -179,8 +180,27 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
       // up with whatever the ARP collector emitted earlier in the same
       // envelope — gives the Authority's normalization layer the best
       // chance to collapse `unifi:<mac>` and `arp:<ip>` in one pass.
-      // Opt-in: zero-output no-op when adapters.json is absent.
-      const unifi = await collectUnifi(unifiAdapter);
+      //
+      // Adapter configs are fetched fresh from the Authority each sweep
+      // via GET /api/v1/edge/adapters. An empty list is a no-op (no
+      // DiscoveryConnection rows configured). A fetch failure logs a
+      // warning and skips the UniFi run for this tick rather than
+      // killing the whole envelope — the other collectors still flow.
+      let unifiConfigs: UnifiAdapterConfig[] = [];
+      const unifiAdapterWarnings: string[] = [];
+      try {
+        const resp = await api.fetchAdapters(state.nodeToken);
+        unifiConfigs = (resp.adapters ?? []).map((row) => ({
+          controllerUrl: row.endpointUrl,
+          apiKey: row.apiKey,
+          site: row.configuration.site,
+          tlsInsecure: row.configuration.tlsInsecure,
+        }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        unifiAdapterWarnings.push(`adapters: fetch failed (${msg}) — UniFi sweep skipped this tick`);
+      }
+      const unifi = await collectUnifi(unifiConfigs, unifiAdapter);
 
       const items: ObservationItem[] = [
         ...host.items,
@@ -198,6 +218,7 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
         ...arp.warnings,
         ...nmap.warnings,
         ...snmp.warnings,
+        ...unifiAdapterWarnings,
         ...unifi.warnings,
       ];
 
