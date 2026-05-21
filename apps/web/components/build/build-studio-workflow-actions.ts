@@ -346,6 +346,17 @@ function hasContradictoryExecState(
   verificationOut?: FeatureBuildRow["verificationOut"] | null,
 ): boolean {
   if (!state) return false;
+  // Pipeline died before setting the first step (e.g. portal restart killed
+  // the fire-and-forget autoExecuteBuild call during stepCreateSandbox).
+  // The state object has content (sourceCurrency, ideateResearchRequested, etc.)
+  // but no `step` key — so no standard recovery path applies:
+  //   • retryBuildExecution requires step==="failed"
+  //   • resumeBuildImplementation requires a releasable diff
+  //   • advance-phase (review) is blocked without verificationOut
+  // Reset Build is the only viable restart path.
+  if (state.step == null) {
+    return true;
+  }
   // `failed` is a legitimate terminal step that retryBuildExecution handles;
   // every other step with an error/failedAt breadcrumb is contradictory.
   if (state.step !== "failed" && (state.error != null || state.failedAt != null)) {
@@ -445,6 +456,8 @@ export function deriveBuildStudioWorkflowAction({
     // with an error breadcrumb), Resume Implementation will fail regardless
     // of task state. Reset Build is the only viable recovery path.
     if (hasContradictoryExecState(build.buildExecState, build.verificationOut)) {
+      const isStalledAtPending =
+        build.buildExecState != null && build.buildExecState.step == null;
       const isSilentComplete =
         build.buildExecState?.step === "complete" &&
         (build.buildExecState?.error == null && build.buildExecState?.failedAt == null) &&
@@ -452,16 +465,20 @@ export function deriveBuildStudioWorkflowAction({
       return {
         kind: "reset-build",
         title: "Build Pipeline Needs Reset",
-        message: isSilentComplete
-          ? "The pipeline reported completion but verification results are missing — the sandbox likely ran but tests were never captured. Reset will restart the full build from the beginning."
-          : "The build pipeline checkpoint is in a contradictory shape (a prior run left an error breadcrumb on a non-failed step). Clear the checkpoint and re-run the pipeline from the start.",
+        message: isStalledAtPending
+          ? "The build pipeline stalled before it could start — the process was likely interrupted (e.g. portal restart) before the first step completed. Reset will restart the pipeline from scratch."
+          : isSilentComplete
+            ? "The pipeline reported completion but verification results are missing — the sandbox likely ran but tests were never captured. Reset will restart the full build from the beginning."
+            : "The build pipeline checkpoint is in a contradictory shape (a prior run left an error breadcrumb on a non-failed step). Clear the checkpoint and re-run the pipeline from the start.",
         primaryLabel: "Reset Build",
         targetPhase: null,
         disabledReason: null,
         coworkerLabel: "Diagnose with coworker",
-        coworkerPrompt: isSilentComplete
-          ? "The build shows step=complete but verificationOut is null, meaning tests never ran or the result was not captured. Explain what likely happened and confirm whether a full Reset Build is the right recovery."
-          : "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",
+        coworkerPrompt: isStalledAtPending
+          ? "The build pipeline has no recorded step — it was likely interrupted before the first step completed. Confirm whether a Reset Build is safe to restart the pipeline from scratch."
+          : isSilentComplete
+            ? "The build shows step=complete but verificationOut is null, meaning tests never ran or the result was not captured. Explain what likely happened and confirm whether a full Reset Build is the right recovery."
+            : "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",
       };
     }
 
