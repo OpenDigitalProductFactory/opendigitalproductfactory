@@ -47,6 +47,7 @@ export type EdgeNodeScope =
   | "edge:heartbeat"
   | "edge:metrics"
   | "edge:rotate"
+  | "edge:adapters"
   | "discovery:submit";
 
 /**
@@ -117,17 +118,20 @@ export async function resolveEdgeNodeAuth(
     };
   }
 
-  // Per-scope refinement. discovery:submit and edge:metrics require
-  // trustState=trusted (pending and quarantined nodes can heartbeat
-  // but cannot submit observations or metrics).
+  // Per-scope refinement. discovery:submit, edge:metrics, and edge:adapters
+  // all require trustState=trusted (pending and quarantined nodes can
+  // heartbeat but cannot submit observations, send metrics, or read
+  // adapter credentials).
   if (
-    (requiredScope === "discovery:submit" || requiredScope === "edge:metrics") &&
+    (requiredScope === "discovery:submit"
+      || requiredScope === "edge:metrics"
+      || requiredScope === "edge:adapters") &&
     node.trustState !== "trusted"
   ) {
     return {
       ok: false,
       error: "scope_disallowed",
-      message: `Edge Node trust state '${node.trustState}' cannot submit observations`,
+      message: `Edge Node trust state '${node.trustState}' cannot access scope '${requiredScope}'`,
     };
   }
 

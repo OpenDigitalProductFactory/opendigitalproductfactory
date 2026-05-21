@@ -43,12 +43,21 @@
 import { Agent, fetch as undiciFetch } from "undici";
 
 import { lookupOui, shortVendor } from "../lib/mac-oui";
-import {
-  resolveAdaptersConfig,
-  type AdaptersConfigAdapter,
-  type UnifiAdapterConfig,
-} from "./adapters-config";
 import type { ObservationItem } from "./host-info";
+
+/**
+ * Per-adapter UniFi configuration, supplied by the sweep loop from the
+ * Authority's GET /api/v1/edge/adapters response. The legacy file-based
+ * loader (adapters-config.ts) was retired in the consolidation that
+ * moved credential storage into the DiscoveryConnection table — see
+ * BI-35de9ce8 for the full rationale.
+ */
+export type UnifiAdapterConfig = {
+  controllerUrl: string;
+  apiKey: string;
+  site: string;
+  tlsInsecure: boolean;
+};
 
 export type UnifiRelationship = {
   fromObservedKey: string;
@@ -114,15 +123,13 @@ type UnifiClient = {
   sw_port?: number;
 };
 
-/** Adapter for tests — replaces fetch + the config resolver. */
+/** Adapter for tests — replaces fetch only. Config is supplied by the caller. */
 export type UnifiAdapter = {
   /** HTTP fetch. Default uses undici with the tlsInsecure dispatcher. */
   fetch: (
     url: string,
     init: { method?: string; headers?: Record<string, string> },
   ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown>; text: () => Promise<string> }>;
-  /** Config source (defaults to file + env). */
-  configAdapter?: AdaptersConfigAdapter;
 };
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -396,18 +403,42 @@ function buildClientMemberOfLink(client: UnifiClient): UnifiRelationship | null 
  * collector. A clients fetch failure doesn't kill the devices
  * payload, and vice versa — each endpoint is independent.
  */
+/**
+ * Run the UniFi collector for every configured adapter and merge the
+ * results. Caller (the sweep loop) supplies the array of active configs
+ * from GET /api/v1/edge/adapters; an empty array is a no-op.
+ *
+ * Each adapter runs independently — one controller being down doesn't
+ * stop the others from contributing. Per-adapter warnings are prefixed
+ * with the connection name so operators can tell which controller is
+ * misbehaving when there are multiple.
+ */
 export async function collectUnifi(
+  configs: UnifiAdapterConfig[],
   adapter?: UnifiAdapter,
 ): Promise<UnifiCollectResult> {
-  const configResolution = resolveAdaptersConfig(adapter?.configAdapter);
-  const warnings = [...configResolution.warnings];
-  const unifi = configResolution.config.unifi;
-  if (!unifi) return { items: [], relationships: [], warnings };
+  const items: ObservationItem[] = [];
+  const relationships: UnifiRelationship[] = [];
+  const warnings: string[] = [];
 
-  // Tests always pass a concrete adapter; production builds the
-  // default once we know whether tlsInsecure should be honored. The
-  // dispatcher selection has to happen here (not at module init)
-  // because the flag lives in the JSON config we just read.
+  for (const unifi of configs) {
+    const single = await collectUnifiOne(unifi, adapter);
+    items.push(...single.items);
+    relationships.push(...single.relationships);
+    warnings.push(...single.warnings);
+  }
+
+  return { items, relationships, warnings };
+}
+
+/** Single-adapter collection — split out so the multi-adapter wrapper stays small. */
+async function collectUnifiOne(
+  unifi: UnifiAdapterConfig,
+  adapter?: UnifiAdapter,
+): Promise<UnifiCollectResult> {
+  // Tests pass a concrete adapter; production builds the default once
+  // we know whether tlsInsecure should be honored. The dispatcher
+  // selection has to happen per-adapter because the flag is per-config.
   const effectiveAdapter: UnifiAdapter = adapter ?? buildDefaultAdapter(unifi.tlsInsecure);
 
   // Fan out both endpoint calls concurrently. Promise.all is fine
@@ -421,9 +452,10 @@ export async function collectUnifi(
 
   const items: ObservationItem[] = [];
   const relationships: UnifiRelationship[] = [];
+  const warnings: string[] = [];
 
   if ("error" in devicesResult) {
-    warnings.push(`unifi: ${devicesResult.error}`);
+    warnings.push(`unifi[${unifi.controllerUrl}]: ${devicesResult.error}`);
   } else {
     const sameAsLinks: UnifiRelationship[] = [];
     for (const device of devicesResult.devices) {
@@ -438,7 +470,7 @@ export async function collectUnifi(
   }
 
   if ("error" in clientsResult) {
-    warnings.push(`unifi: ${clientsResult.error}`);
+    warnings.push(`unifi[${unifi.controllerUrl}]: ${clientsResult.error}`);
   } else {
     for (const client of clientsResult.clients) {
       const item = buildItemFromClient(client);
@@ -449,11 +481,7 @@ export async function collectUnifi(
     }
   }
 
-  return {
-    items,
-    relationships,
-    warnings,
-  };
+  return { items, relationships, warnings };
 }
 
 function buildDefaultAdapter(tlsInsecure: boolean): UnifiAdapter {

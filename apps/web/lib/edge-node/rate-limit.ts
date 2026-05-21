@@ -18,7 +18,10 @@
 // Spec: docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
 //   § REST ingestion controls (Phase 0) — Per-node rate limits
 
-export type EdgeRateLimitedRoute = "edge.heartbeat" | "edge.discovery_runs.submit";
+export type EdgeRateLimitedRoute =
+  | "edge.heartbeat"
+  | "edge.discovery_runs.submit"
+  | "edge.adapters";
 
 export type EdgeRateLimitResult = {
   allowed: boolean;
@@ -49,6 +52,10 @@ const ROUTE_CEILINGS: Record<EdgeRateLimitedRoute, WindowCeiling[]> = {
     { limit: 4, windowMs: 60_000 },
     { limit: 60, windowMs: 60 * 60_000 },
   ],
+  // Adapter polling — typically once per sweepIntervalSec (300s = ~0.2/min).
+  // 12/min absorbs startup bursts + retry; same ceiling as heartbeat since
+  // the payload size + cost is comparable.
+  "edge.adapters": [{ limit: 12, windowMs: 60_000 }],
 };
 
 type Bucket = {
