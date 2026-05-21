@@ -36,8 +36,11 @@ describe("PortalContextStrip", () => {
     expect(html).toContain("text-[var(--dpf-warning)]");
     // Must not collapse to a single var-source (the bug).
     expect(html).not.toMatch(/bg-\[var\(--dpf-warning\)\][^"]*text-\[var\(--dpf-warning\)\]/);
-    // And the signal label must be in the DOM so the chip isn't visually empty.
-    expect(html).toContain("lease expired");
+    // And the signal label must be in the DOM so the chip isn't visually
+    // empty. The label is sentence-cased ("Lease expired"); use a
+    // case-insensitive containment so the test doesn't break if anyone
+    // tightens or relaxes the casing rule later.
+    expect(html.toLowerCase()).toContain("lease expired");
   });
 
   it("error AttentionChip uses distinct fg/bg tokens (same class of bug)", () => {
