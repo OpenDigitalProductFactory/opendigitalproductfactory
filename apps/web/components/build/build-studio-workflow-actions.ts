@@ -341,11 +341,28 @@ function buildResumeAction(args: {
  * exactly the contradictory checkpoint PR #859 prevents going forward but
  * cannot retroactively clear.
  */
-function hasContradictoryExecState(state: FeatureBuildRow["buildExecState"]): boolean {
+function hasContradictoryExecState(
+  state: FeatureBuildRow["buildExecState"],
+  verificationOut?: FeatureBuildRow["verificationOut"] | null,
+): boolean {
   if (!state) return false;
   // `failed` is a legitimate terminal step that retryBuildExecution handles;
   // every other step with an error/failedAt breadcrumb is contradictory.
-  return state.step !== "failed" && (state.error != null || state.failedAt != null);
+  if (state.step !== "failed" && (state.error != null || state.failedAt != null)) {
+    return true;
+  }
+  // Catch the "silent complete" case: the pipeline wrote step=complete but
+  // verificationOut was never populated (tests never ran). This happens when
+  // the portal restarts after stepComplete but before stepRunTests, or when
+  // the diff-capture succeeded but stepRunTests was skipped. The build is
+  // unreachable via resumeBuildImplementation (no releasable diff triggers
+  // the gate) and unreachable via advance-phase (verificationOut null blocks
+  // the review gate). Reset Build is the only recovery path.
+  // Acceptance criterion: design doc FB-78E967D4 §AC-2.
+  if (state.step === "complete" && verificationOut == null) {
+    return true;
+  }
+  return false;
 }
 
 function hasCompletedUxVerification(build: FeatureBuildRow): boolean {
@@ -436,18 +453,24 @@ export function deriveBuildStudioWorkflowAction({
     // FB-78E967D4 — contradictory pipeline state has no other recovery path.
     // Surface Reset before the sandbox-retry / advance-phase fallthroughs so
     // the operator gets an actionable button instead of a disabled gate.
-    if (hasContradictoryExecState(build.buildExecState)) {
+    if (hasContradictoryExecState(build.buildExecState, build.verificationOut)) {
+      const isSilentComplete =
+        build.buildExecState?.step === "complete" &&
+        (build.buildExecState?.error == null && build.buildExecState?.failedAt == null) &&
+        build.verificationOut == null;
       return {
         kind: "reset-build",
         title: "Build Pipeline Needs Reset",
-        message:
-          "The build pipeline checkpoint is in a contradictory shape (a prior run left an error breadcrumb on a non-failed step). Clear the checkpoint and re-run the pipeline from the start.",
+        message: isSilentComplete
+          ? "The pipeline reported completion but verification results are missing — the sandbox likely ran but tests were never captured. Reset will restart the full build from the beginning."
+          : "The build pipeline checkpoint is in a contradictory shape (a prior run left an error breadcrumb on a non-failed step). Clear the checkpoint and re-run the pipeline from the start.",
         primaryLabel: "Reset Build",
         targetPhase: null,
         disabledReason: null,
         coworkerLabel: "Diagnose with coworker",
-        coworkerPrompt:
-          "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",
+        coworkerPrompt: isSilentComplete
+          ? "The build shows step=complete but verificationOut is null, meaning tests never ran or the result was not captured. Explain what likely happened and confirm whether a full Reset Build is the right recovery."
+          : "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",
       };
     }
 
