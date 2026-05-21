@@ -563,15 +563,23 @@ export function classifyOutcome(result: AgenticResult | CodexResult | ClaudeResu
       return "BLOCKED";
     }
     // CLI succeeded — check content for concern indicators using contextual patterns.
-    // Avoids false positives from phrases like "Fixed the error handling".
+    // Avoids false positives from phrases like "Fixed the error handling",
+    // "failure path", "failure handling", or task names that include "failure".
+    // Patterns must match *output diagnostics*, not narrative descriptions.
     const CLI_CONCERN_PATTERNS = [
       /\berrors?[:]\s/i,           // "error: something" or "errors: 3"
-      /\bfailed\b/i,              // "failed" as standalone word (not "fixed the failed")
+      // NOTE: plain /\bfailed\b/i is intentionally absent — it causes false positives
+      // on tasks whose subject matter is about failure scenarios (e.g. "Queue failure path",
+      // "UI history and failure details") where the QA summary naturally mentions "failed"
+      // cases as part of a correct implementation description.
       /\bwarnings?[:]\s/i,        // "warning: something"
       /\d+\s+errors?\b/i,         // "3 errors"
       /\d+\s+warnings?\b/i,       // "5 warnings"
       /typecheck.*fail/i,         // "typecheck failed"
       /build.*fail/i,             // "build failed"
+      /\d+\s+tests?\s+failed\b/i, // "3 tests failed" (numeric test failure count)
+      /\b\d+\s+failed\b/i,        // "2 failed" (standalone numeric count, e.g. jest/vitest output)
+      /test\s+suite.*fail/i,      // "test suite failed"
     ];
     if (CLI_CONCERN_PATTERNS.some(pat => pat.test(content))) {
       return "DONE_WITH_CONCERNS";

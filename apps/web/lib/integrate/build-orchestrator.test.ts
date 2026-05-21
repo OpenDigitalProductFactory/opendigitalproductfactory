@@ -108,7 +108,7 @@ describe("classifyOutcome", () => {
     expect(classifyOutcome(result, "frontend-engineer")).toBe("BLOCKED");
   });
 
-  it("returns DONE for QA even with errors (test results are informational)", () => {
+  it("returns DONE_WITH_CONCERNS when CLI content contains numeric test failure count ('2 failed')", () => {
     const result = mockResult({
       content: "Typecheck passed. 8 tests pass, 2 failed.",
       executedTools: [
@@ -116,6 +116,32 @@ describe("classifyOutcome", () => {
       ],
     });
     expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
+  // Regression: tasks whose subject matter is failure handling (e.g. "Queue failure path",
+  // "UI history and failure details") should not be classified as DONE_WITH_CONCERNS
+  // just because the QA summary naturally uses the word "failure" or "failed" in a
+  // narrative description of correct behavior.  The plain /\bfailed\b/ pattern caused
+  // false positives; we now require a numeric count ("2 failed") instead.
+  it("returns DONE when CLI dispatch result describes failure-handling code correctly (no numeric failure count)", () => {
+    // ClaudeResult (has durationMs, no providerId) → CLI dispatch path
+    const result = {
+      content: "The failure path correctly catches errors and marks the run as failed. All failure-handling tests verify the expected behavior.",
+      success: true,
+      executedTools: [],
+      durationMs: 1000,
+    };
+    expect(classifyOutcome(result, "qa-engineer")).toBe("DONE");
+  });
+
+  it("returns DONE_WITH_CONCERNS when CLI dispatch result has 'error:' prefix diagnostic", () => {
+    const result = {
+      content: "error: Cannot find module '@/lib/foo'",
+      success: true,
+      executedTools: [],
+      durationMs: 500,
+    };
+    expect(classifyOutcome(result, "software-engineer")).toBe("DONE_WITH_CONCERNS");
   });
 });
 
