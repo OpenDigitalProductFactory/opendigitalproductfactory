@@ -205,6 +205,7 @@ export async function seedSandboxDb(
 ): Promise<void> {
   await exec(
     `docker exec ${productionDbContainerName} pg_dump --data-only -U dpf dpf | docker exec -i ${sandboxDbContainerId} psql -U dpf dpf`,
+    { maxBuffer: 100 * 1024 * 1024 },
   );
 }
 
