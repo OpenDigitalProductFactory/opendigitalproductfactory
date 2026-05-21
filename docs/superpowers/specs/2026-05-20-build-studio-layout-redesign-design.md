@@ -71,6 +71,7 @@ Three-zone shell with the workflow graph as the canvas and everything else docki
 | AI Coworker panel | Unchanged width, position, and content. | User explicitly out-of-scope. |
 | Status and action authority | Keep `BuildStudioWorkflowActionCard` semantics as the single command/status source, rendered as a compact `ActionBanner`. Keep `BuildProgressOperationalPanel` content as evidence in the drawer. | Preserves the 2026-05-19 single-status command-spine fix and prevents a new split-brain status surface. |
 | Refactor budget | 20% minimum. Deletes obsolete tab state, fixed inspectors, duplicate phase indicators, and preview-tab code after replacements are wired. | The point is a simpler operating surface, not a new layer sitting on top of the old one. |
+| Queue surface (concurrency cap) | The fleet rail and each `BuildListItem` must visibly reflect each build's **queue state** (running / queued@N / blocked / idle). A platform-wide queue indicator lives in the fleet rail header showing the concurrency cap and how many slots are taken. | DPF Build Studio enforces a concurrency cap on coworker-driven feature builds (Mark, 2026-05-21: "concurrency issue with BS, separate thread working on that"). Without visual queue state the operator cannot tell whether an in-flight build is silent because it's working, blocked, or waiting in queue. |
 
 ---
 
@@ -85,6 +86,9 @@ Three-zone shell with the workflow graph as the canvas and everything else docki
 - Attention dot: shape + color (red dot with concentric ring) so it carries to color-blind users.
 - Active build row uses left-border accent (4px), `aria-current="true"`, and bumped background; not just color.
 - Delete remains reachable but is visually secondary. At 32px density it should be an icon button shown on hover/focus, not permanent text or a large trailing column.
+- **Queue state badge** sits between the claim badge and the attention dot. Values: `running` (filled play glyph), `queued@N` (numbered hourglass; N is the queue position, 1-indexed), `blocked` (paused glyph), `idle` (no badge). The badge carries both shape and color so color is not the sole conveyor (WCAG 1.4.1). On hover/focus it surfaces a tooltip with the reason (`"Waiting on 2 builds ahead"`, `"Blocked: review failed — Refine the plan"`, `"Running step 4 of 8 — Generate code"`).
+- **Fleet rail header** shows a compact platform-wide indicator: `Builds: {running}/{cap} · {queuedCount} queued`. Clicking it opens the DetailsDrawer scrolled to the BS Queue section (§5). The indicator uses a `role="status"` live region so a queue-cap change is announced.
+- The fleet rail sort order is: running → blocked → queued (by position) → idle. The user can override sort via the header menu, but queue-aware order is the default so the operator's eye lands on what needs attention.
 
 ### Center — Active Build
 
@@ -237,6 +241,7 @@ This drawer is an evidence surface, not a second command/status narrator. It mus
 - Drawer is scrollable; sections are collapsible accordions, the section relevant to the active build's current phase is expanded by default.
 - **Sandbox evidence subsection** comes from `BuildSandboxCard` / progress projection source-currency data. It shows branch, diffstat, expected-file reality, and checked age. It does not become another preview launcher.
 - **Dispatch / verification subsections** preserve the current projection-backed history and scoped verification cards; do not move this logic into ad hoc local state.
+- **BS Queue subsection** (new) shows the platform-wide concurrency cap, the current running set, and the FIFO queue with each waiting build's position, requested-at timestamp, and a reason (`"capacity"` / `"waiting on dependency"`). Each row links to its `BuildListItem` (focus the build in the fleet rail). The clicked-fleet-header indicator scrolls the drawer here. This subsection is **read-only** in this redesign — queue management actions remain on the existing admin/diagnostics route until the concurrency thread lands its own UI.
 
 ### Width and overlay rules
 
@@ -252,6 +257,12 @@ This drawer is an evidence surface, not a second command/status narrator. It mus
 ### `BuildListItem` (compact one-line variant)
 
 ```ts
+type BuildQueueState =
+  | { kind: "running"; stepLabel: string | null }
+  | { kind: "queued"; position: number; reason: "capacity" | "dependency"; ahead: number }
+  | { kind: "blocked"; reason: string }
+  | { kind: "idle" };
+
 type BuildListItemProps = {
   build: FeatureBuildRow;
   active: boolean;
@@ -259,6 +270,7 @@ type BuildListItemProps = {
   lifecycleLabel: string;
   isDevEnvironment: boolean;
   needsAttention: boolean;   // ← computed: blocked, awaiting user, stalled
+  queueState: BuildQueueState; // ← new: drives the queue-state badge between claim badge and attention dot
   density?: "comfortable" | "fleet";
   onSelect: () => void;
   onDelete: () => void;
@@ -270,6 +282,7 @@ type BuildListItemProps = {
 - Fleet density renders no `Updated May 20` text — that's chrome the fleet rail doesn't need at this density.
 - `bi-cost-*` code appears as a hover tooltip on the FB code, not inline.
 - Delete button is icon-only, focusable, and disabled in dev environments exactly as today. It must not expand row height.
+- Queue-state badge: render a 14×14 inline SVG with shape that matches `queueState.kind` (filled play, numbered hourglass, paused, none-when-idle). The tooltip reads from the discriminated union. The badge never expands the row past 32px. When `queueState.kind === "queued"`, render the position number inside the hourglass with role="img" and `aria-label="Queued, position {position}"`.
 
 ### `ActionBanner`
 
@@ -376,6 +389,8 @@ A build is "done" against this spec when all of these are true:
 13. Focused component tests cover `BuildListItem`, `ActionBanner`, `WorkflowNodeInspector`, `OpenSandboxButton`, `DetailsDrawer`, and `BuildStudio` layout integration.
 14. Verification gates: focused Vitest for touched files, `pnpm --filter web typecheck`, `pnpm --filter web exec next build`, and a production-path `/build` UX exercise against the Docker-served app after rebuild.
 15. `reviewDesignDoc` returns success when run against this spec (or its in-database mirror) — no critical or important risks remaining.
+16. Each `BuildListItem` in fleet density renders the queue-state badge corresponding to the build's runtime state (running / queued@N / blocked / idle). Color is not the sole conveyor — verified by an axe-core run with color filters and by a snapshot assertion on the shape glyph for each `kind`. The fleet rail header renders `Builds: {running}/{cap} · {queuedCount} queued` and announces changes via `role="status"`.
+17. DetailsDrawer's BS Queue subsection lists running and queued builds, ordered FIFO with explicit position, requested-at timestamp, and a reason. Each row focuses its `BuildListItem` on click. The subsection is read-only — queue mutation actions belong to the concurrency thread, not this layout work.
 
 ---
 
@@ -387,6 +402,7 @@ A build is "done" against this spec when all of these are true:
 - Telemetry on layout adoption / fleet rail usage. Future work.
 - Mobile layout. The redesign is desktop-first; existing mobile breakpoint behavior (sidebar collapses) is preserved. The only mobile-adjacent requirement here is that the desktop drawer degrades without covering the coworker rail on narrower screens.
 - Build Studio process modeling via EaView. The workflow canvas may remain React Flow over existing `process-graph-builder` data. Model-driven Build Studio remains a separate north-star track.
+- **BS queue mutation / scheduler logic.** A separate thread owns the concurrency-cap implementation: the dispatcher, queue store, and any operator actions to promote/cancel queued builds. This layout spec only describes the **surface** that displays whatever runtime state that thread produces. If the queue thread changes the discriminated union shape of `BuildQueueState`, this spec updates to match, not the other way around.
 
 ---
 

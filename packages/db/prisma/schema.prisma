@@ -1122,6 +1122,7 @@ model RuntimeVerification {
   @@index([workCapsuleId, kind, status])
   @@index([kind, status])
 }
+
 model Epic {
   id                    String           @id @default(cuid())
   epicId                String           @unique
@@ -3637,6 +3638,12 @@ model ToolExecution {
   taskRunId     String?
   // Governed Hermes learning Slice 1: nullable active skill attribution.
   skillId       String?
+  // EP-COST-001 Phase 1: token metering for AI-backed tool execution paths.
+  // Populated by tools that make inference calls (design system generation,
+  // code review, etc.). Non-inference tools (file reads, sandbox runs) leave these null.
+  inputTokens   Int?
+  outputTokens  Int?
+  costUsd       Float?
   receipt       ToolExecutionReceipt?
   documentLifecycleEvents DocumentLifecycleEvent[]
 
@@ -4181,6 +4188,7 @@ model FeatureBuild {
   dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
   phaseHandoffs            PhaseHandoff[]
+  phaseRuns                BuildPhaseRun[]
   toolExecutionReceipts    ToolExecutionReceipt[]
   activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
   accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
@@ -4389,6 +4397,35 @@ model BuildDispatchAttempt {
   @@index([buildId, startedAt])
   @@index([buildId, taskTitle, startedAt])
   @@index([failureAxis, startedAt])
+}
+
+// ─── EP-COST-001 Phase 3: Build Phase Run cost rollup ─────────────────────────
+//
+// One row per Build Studio phase (ideate, plan, build, review, ship) per build.
+// Written when the phase completes (gate passes or skip) with a token/cost rollup
+// from AdapterRunTelemetry rows created during the phase window.
+//
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §Phase 3
+model BuildPhaseRun {
+  id             String       @id @default(cuid())
+  buildId        String
+  phase          String // "ideate" | "plan" | "build" | "review" | "ship"
+  startedAt      DateTime
+  completedAt    DateTime?
+  durationMs     Int?
+  inputTokens    Int          @default(0)
+  outputTokens   Int          @default(0)
+  /// Estimated USD cost for this phase (token usage × model pricing)
+  costUsd        Decimal?     @db.Decimal(10, 6)
+  /// Primary provider used in this phase (populated on write; may be "mixed" for multi-provider phases)
+  providerId     String?
+  /// Number of AI inference calls made during this phase
+  inferenceCount Int          @default(0)
+  build          FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
+
+  @@unique([buildId, phase])
+  @@index([buildId, phase])
+  @@index([buildId, startedAt])
 }
 
 /// Structured context passed between build phases. Written on phase advance,
@@ -4910,7 +4947,6 @@ model EaElement {
   @@index([digitalProductId])
   @@index([elementTypeId])
 }
-
 
 model BusinessCapability {
   id                String                        @id @default(cuid())
@@ -8542,6 +8578,7 @@ model EdgeNode {
   capabilityRows EdgeNodeCapability[]
   discoveryRuns  DiscoveryRun[]       @relation("EdgeNodeDiscoveryRuns")
   consumedTokens BootstrapToken[]     @relation("BootstrapTokenConsumer")
+  events         EdgeEvent[]          @relation("EdgeNodeEvents")
 
   @@index([trustState])
   @@index([status])
@@ -8626,6 +8663,77 @@ model EdgeNodeCapability {
   @@index([capability])
 }
 
+// ─── Edge-detected events (PagerDuty-equivalent) ─────────────────────────────
+// Canonical PD-CEF-style envelope persisted from POST /api/v1/edge/events.
+// Detectors on the edge (reachability probes, SNMP poll/trap, syslog, ARP/DHCP
+// delta, host self, vendor adapters) emit Events; the route upserts by
+// (edgeNodeId, dedupKey) so flap/flood noise that survived edge-side dedupe
+// collapses here too rather than fanning out into duplicate rows.
+//
+// Lifecycle (action drives status):
+//   action="trigger"     -> status="triggered" on insert; lastSeenAt bumped on replay
+//   action="acknowledge" -> status="acknowledged" (preserves lastSeenAt)
+//   action="resolve"     -> status="resolved", resolvedAt set; later "trigger"
+//                            on the same dedupKey re-opens (resolvedAt=null,
+//                            occurrenceCount++)
+//
+// Slice 0 owns ingest + persistence only. Cross-source correlation, escalation
+// policies, on-call routing, and ML grouping are separate downstream slices
+// — see BI-9FE9D48D.
+model EdgeEvent {
+  id              String    @id @default(cuid())
+  // FK to EdgeNode.id (the cuid surrogate); distinct from EdgeNode.nodeId.
+  // The route fills this from the bearer-token auth, never from the body.
+  edgeNodeId      String
+  // Dedup anchor. Edge-side detectors compose this from
+  // source + component + class (+ instance) so the same condition collapses
+  // on replay. Scoped per-node by the @@unique to keep keyspaces isolated.
+  dedupKey        String
+  // Producing detector — "snmp.trap", "syslog", "ping", "unifi.events", etc.
+  source          String
+  // Sub-source identifier the operator can read — hostname, IP, MAC, port.
+  component       String?
+  // PD-CEF group: logical bucket within the source ("network", "host", "ups").
+  eventGroup      String?
+  // PD-CEF class: the specific condition ("interface_down", "high_cpu",
+  // "cert_expiring", "rogue_ap").
+  eventClass      String?
+  // info | warn | error | critical
+  severity        String    @default("warn")
+  // Lifecycle state. Mirrors PagerDuty incident states.
+  //   triggered | acknowledged | resolved | suppressed
+  status          String    @default("triggered")
+  // Last action submitted by the edge: trigger | acknowledge | resolve.
+  // Kept distinct from `status` because actions can race with operator state.
+  action          String    @default("trigger")
+  // Short human-readable line for incident lists.
+  summary         String
+  // Free-form: probe response details, syslog message, SNMP varbinds,
+  // counter deltas, vendor payload — whatever the detector wants to attach.
+  customDetails   Json?
+  // When the edge detector observed the condition (RFC 3339, set by detector).
+  occurredAt      DateTime
+  // When this dedupKey first appeared at the portal.
+  firstSeenAt     DateTime  @default(now())
+  // Bumped on every replay (including trigger after resolve).
+  lastSeenAt      DateTime  @default(now())
+  // Set when action=resolve; cleared on re-open.
+  resolvedAt      DateTime?
+  // Number of times the same dedupKey has been submitted.
+  occurrenceCount Int       @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  node EdgeNode @relation("EdgeNodeEvents", fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, dedupKey])
+  @@index([edgeNodeId, status])
+  @@index([severity])
+  @@index([source])
+  @@index([occurredAt])
+}
+
 // ─── Integration Coverage Matrix ─────────────────────────────────────────────
 
 enum WriteGateRequirement {
@@ -8663,4 +8771,34 @@ model IntegrationRoleCoverage {
 
   @@unique([organizationId, providerKey, role, surface])
   @@index([organizationId])
+}
+
+// ─── EP-COST-001 Phase 4: CLI Pool Status ──────────────────────────────────
+//
+// Tracks the last-known rate-limit state for each CLI adapter pool.
+// Written by cli-adapter.ts and codex-cli-adapter.ts when they receive a
+// 429 / rate-limit error from the underlying subprocess. The orchestrator
+// consults this table before dispatching CLI-backed tasks so it can
+// wait or fall back to the API adapter rather than firing into a known-
+// exhausted pool.
+//
+// One row per adapter type; upserted on each 429 event.
+// The row is cleared (resetAt set to null) once the wall clock passes resetAt.
+//
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
+model CliPoolStatus {
+  id                String    @id @default(cuid())
+  /// "claude-cli" | "codex-cli"
+  adapterType       String    @unique
+  providerId        String
+  rateLimitedAt     DateTime
+  /// Best-effort reset time parsed from Retry-After/X-RateLimit-Reset in stderr.
+  /// Null when the CLI didn't emit a parseable header.
+  resetAt           DateTime?
+  retryAfterSeconds Int?
+  /// First 300 chars of the stderr / error message for debugging.
+  errorSnippet      String?
+  updatedAt         DateTime  @updatedAt
+
+  @@index([adapterType, resetAt])
 }

@@ -1,0 +1,33 @@
+{
+  "runKey": "7c2d6f4a-3b1e-4d8a-9e1b-1234567890ab",
+  "nodeId": "edge_fixture_ts",
+  "observedAt": "2026-05-21T02:30:01Z",
+  "eventsVersion": "1",
+  "events": [
+    {
+      "dedupKey": "snmp.trap:10.0.0.5:ifaceDown:ifIndex=42",
+      "source": "snmp.trap",
+      "component": "10.0.0.5",
+      "eventGroup": "network",
+      "eventClass": "interface_down",
+      "severity": "error",
+      "action": "trigger",
+      "summary": "Interface ifIndex=42 link state down on 10.0.0.5",
+      "occurredAt": "2026-05-21T02:30:00Z",
+      "customDetails": {
+        "ifIndex": 42,
+        "ifDescr": "GigabitEthernet0/1",
+        "trapSource": "10.0.0.5"
+      }
+    },
+    {
+      "dedupKey": "ping:192.168.0.10:loss",
+      "source": "ping",
+      "component": "192.168.0.10",
+      "severity": "warn",
+      "action": "resolve",
+      "summary": "Packet loss to 192.168.0.10 cleared",
+      "occurredAt": "2026-05-21T02:29:45Z"
+    }
+  ]
+}

@@ -11,6 +11,10 @@ import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { SyncProvidersButton } from "@/components/platform/SyncProvidersButton";
 import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
+import { getAllCliPoolStatuses } from "@/lib/routing/cli-pool-status";
+import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
+import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
+import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
 import Link from "next/link";
 
 
@@ -43,13 +47,16 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses, budgetEvents, recentRejections] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
     prisma.scheduledJob.findMany({ orderBy: { jobId: "asc" } }),
     detectMcpServers(),
     getProviderModelSummaries(),
+    getAllCliPoolStatuses(),
+    getRecentBudgetEvents(),
+    countRecentRejections(),
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
@@ -66,6 +73,12 @@ export default async function ProvidersPage() {
       </div>
 
       <DetectedServicesBanner detected={detected} />
+
+      {/* EP-COST Phase 4: CLI Pool Status — surface rate-limit state for claude-cli and codex-cli */}
+      <CliPoolStatusPanel statuses={cliPoolStatuses} />
+
+      {/* EP-COST Phase 2: Agent Budget Events — surface warning_95 and rejected threshold crossings */}
+      <AgentBudgetEventsPanel events={budgetEvents} recentRejections={recentRejections} />
 
       <div
         style={{

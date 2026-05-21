@@ -21,6 +21,7 @@ import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as sharedExtractToolCalls } from "./extract-tool-calls";
+import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -299,6 +300,8 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
                 providerId,
               ));
             } else if (stderr.includes("rate") || stderr.includes("429")) {
+              // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
+              void recordCliRateLimit("codex-cli", providerId, stderr);
               reject(new InferenceError(
                 `Codex CLI rate limited: ${stderr.slice(0, 300)}`,
                 "rate_limit",
@@ -398,6 +401,9 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
           `[tool-trace] CALLS-PARSED head=${JSON.stringify(text.slice(0, 600))}`,
         );
       }
+
+      // EP-COST Phase 4: successful call proves the pool is available — clear any stale exhaustion record.
+      void clearCliRateLimit("codex-cli");
 
       return {
         text: toolCalls.length > 0 ? text.replace(/```json\n?\{[\s\S]*?```/g, "").trim() : text,

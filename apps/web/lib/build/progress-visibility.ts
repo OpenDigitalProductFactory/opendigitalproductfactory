@@ -23,6 +23,18 @@ export type ChatProgressMessageInput = {
   createdAt: Date | string | null;
 };
 
+/** EP-COST Phase 3: per-phase cost rollup from BuildPhaseRun table */
+export type PhaseRunSummary = {
+  phase: string;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: string | null; // Decimal serialized as string
+  inferenceCount: number;
+};
+
 export type BuildProgressVisibility = {
   buildId: string;
   generatedAt: string;
@@ -44,6 +56,8 @@ export type BuildProgressVisibility = {
     minutesQuiet: number;
     lastObservableSignalAt: string | null;
   };
+  /** Phase-level cost rollup; empty array when BuildPhaseRun rows don't exist yet */
+  phaseRuns: PhaseRunSummary[];
 };
 
 export function buildProgressProjectionFromParts(args: {
@@ -55,6 +69,7 @@ export function buildProgressProjectionFromParts(args: {
   dispatchHistory: BuildDispatchAttemptView[];
   verification: ScopedVerificationView | null;
   lastActivityAt: string | null;
+  phaseRuns?: PhaseRunSummary[];
 }): BuildProgressVisibility {
   const now = args.now ?? new Date();
   const conflicts = getProgressConflicts(args.dbTasks.source, args.chatSnapshots);
@@ -103,6 +118,7 @@ export function buildProgressProjectionFromParts(args: {
       minutesQuiet,
       lastObservableSignalAt,
     },
+    phaseRuns: args.phaseRuns ?? [],
   };
 }
 
@@ -141,6 +157,32 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     })
     : [];
 
+  // EP-COST Phase 3: fetch BuildPhaseRun rows for cost breakdown panel
+  const phaseRunRows = await prisma.buildPhaseRun.findMany({
+    where: { buildId },
+    orderBy: { startedAt: "asc" },
+    select: {
+      phase: true,
+      startedAt: true,
+      completedAt: true,
+      durationMs: true,
+      inputTokens: true,
+      outputTokens: true,
+      costUsd: true,
+      inferenceCount: true,
+    },
+  });
+  const phaseRuns: PhaseRunSummary[] = phaseRunRows.map((r) => ({
+    phase: r.phase,
+    startedAt: r.startedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+    durationMs: r.durationMs,
+    inputTokens: r.inputTokens,
+    outputTokens: r.outputTokens,
+    costUsd: r.costUsd?.toString() ?? null,
+    inferenceCount: r.inferenceCount,
+  }));
+
   return buildProgressProjectionFromParts({
     buildId,
     dbTasks: normalizeTaskResults(build.taskResults),
@@ -149,6 +191,7 @@ export async function getBuildProgressVisibility(buildId: string): Promise<Build
     dispatchHistory: await getDispatchHistoryForBuild(buildId),
     verification: await getScopedVerificationForBuild(buildId),
     lastActivityAt: build.activities[0]?.createdAt.toISOString() ?? build.updatedAt.toISOString(),
+    phaseRuns,
   });
 }
 

@@ -16,9 +16,47 @@ describe("PortalContextStrip", () => {
     expect(html).toContain("border-[var(--dpf-border)]");
     expect(html).not.toMatch(/text-gray|bg-white|#[0-9a-fA-F]{3,6}/);
   });
+
+  it("warning AttentionChip does NOT use the same token for background and foreground (regression: yellow-on-yellow chip)", () => {
+    // Repro: AttentionChip rendered a solid yellow rectangle because
+    // bg-[var(--dpf-state-warning)] resolved to the same CSS variable as
+    // text-[var(--dpf-warning)] (--dpf-state-warning was aliased to --dpf-warning).
+    // The token separation lives in globals.css; this assertion pins the
+    // component contract so a future refactor can't reintroduce the alias.
+    const html = renderToStaticMarkup(<PortalContextStrip envelope={makeEnvelope({
+      attention: [{
+        kind: "lease_expired",
+        severity: "warning",
+        message: "Work capsule lease expired.",
+      }],
+    })} />);
+
+    // The chip must render and use distinct fg/bg tokens.
+    expect(html).toContain("bg-[var(--dpf-state-warning)]");
+    expect(html).toContain("text-[var(--dpf-warning)]");
+    // Must not collapse to a single var-source (the bug).
+    expect(html).not.toMatch(/bg-\[var\(--dpf-warning\)\][^"]*text-\[var\(--dpf-warning\)\]/);
+    // And the signal label must be in the DOM so the chip isn't visually empty.
+    expect(html).toContain("lease expired");
+  });
+
+  it("error AttentionChip uses distinct fg/bg tokens (same class of bug)", () => {
+    const html = renderToStaticMarkup(<PortalContextStrip envelope={makeEnvelope({
+      attention: [{
+        kind: "missing_evidence",
+        severity: "error",
+        message: "Required design doc is missing.",
+      }],
+    })} />);
+
+    expect(html).toContain("bg-[var(--dpf-state-error)]");
+    expect(html).toContain("text-[var(--dpf-error)]");
+    expect(html).not.toMatch(/bg-\[var\(--dpf-error\)\][^"]*text-\[var\(--dpf-error\)\]/);
+    expect(html).toContain("Missing evidence");
+  });
 });
 
-function makeEnvelope(): PortalContextEnvelope {
+function makeEnvelope(overrides: Partial<PortalContextEnvelope> = {}): PortalContextEnvelope {
   return {
     envelopeId: "env-1",
     resolvedAt: "2026-05-17T18:23:30.000Z",
@@ -68,5 +106,6 @@ function makeEnvelope(): PortalContextEnvelope {
       },
     ],
     promptDigest: "Route: /build\nAttention: no_active_build(info)",
+    ...overrides,
   };
 }

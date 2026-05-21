@@ -30,8 +30,14 @@ jobs:
           #   - Prisma field definitions (2-space indent + identifier)
           #   - model / enum declarations
           # "+" lines and diff headers are excluded.
+          #
+          # `-w` suppresses pairs where the line content is unchanged modulo
+          # whitespace — those are formatter / column-alignment edits, not
+          # real field removals. A genuine drop (or a type / attribute change)
+          # still produces non-whitespace-equivalent +/- pairs, which awk
+          # still reports.
           REMOVED=$(
-            git diff origin/main...HEAD -- packages/db/prisma/schema.prisma \
+            git diff -w origin/main...HEAD -- packages/db/prisma/schema.prisma \
               | awk '/^-/ && !/^---/ && (/^-  [a-zA-Z@]/ || /^-(model|enum) /) { print }'
           )
 
