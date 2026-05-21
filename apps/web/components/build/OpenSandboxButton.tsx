@@ -1,0 +1,62 @@
+// apps/web/components/build/OpenSandboxButton.tsx
+//
+// Single shared "Open sandbox" button. Lives in the BuildStudio footer; the
+// per-build Preview tab is removed in this redesign because the sandbox is
+// shared across all in-flight builds (project_self_upgrade_kills_in_session_ux).
+//
+// Per the design spec §1 (Footer) and §6 (component contract):
+//   - Renders <a target="_blank" rel="noopener noreferrer"> — rel is non-optional.
+//   - Label: "Open sandbox · driving: {code | 'idle'}".
+//   - Disabled visual + aria-disabled when sandboxUrl is empty.
+//   - Deterministic driver via sandbox-driver helper (R1 from peer review).
+//
+// This component is intentionally dumb: it consumes a pre-computed driver
+// code + URL. The shell that mounts it (T8c) is responsible for calling
+// computeDrivingBuild() and passing the resulting code in.
+
+"use client";
+
+import { BUILD_STUDIO_TEST_IDS } from "./build-studio-layout";
+import { formatSandboxLabel } from "@/lib/build/sandbox-driver";
+
+export type OpenSandboxButtonProps = {
+  /** Semantic FB-* code of the build that owns the sandbox right now, or null
+   *  when nothing is running. */
+  drivingBuildCode: string | null;
+  /** Sandbox preview URL. Empty/null disables the button. */
+  sandboxUrl: string;
+};
+
+export function OpenSandboxButton({ drivingBuildCode, sandboxUrl }: OpenSandboxButtonProps) {
+  const label = formatSandboxLabel(drivingBuildCode);
+  const isDisabled = !sandboxUrl || sandboxUrl.trim().length === 0;
+
+  if (isDisabled) {
+    // Render a non-link span so we don't emit a dangling anchor with no href.
+    // aria-disabled communicates the disabled state to screen readers.
+    return (
+      <span
+        role="link"
+        aria-disabled="true"
+        data-testid={BUILD_STUDIO_TEST_IDS.openSandbox}
+        data-driving={drivingBuildCode ?? "idle"}
+        className="inline-flex cursor-not-allowed select-none items-center gap-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-muted)] opacity-60"
+      >
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={sandboxUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-testid={BUILD_STUDIO_TEST_IDS.openSandbox}
+      data-driving={drivingBuildCode ?? "idle"}
+      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+    >
+      {label}
+    </a>
+  );
+}

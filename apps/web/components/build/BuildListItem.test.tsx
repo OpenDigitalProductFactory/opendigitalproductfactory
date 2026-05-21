@@ -111,3 +111,237 @@ describe("BuildListItem", () => {
     expect(html.slice(openControlStart, deleteControlStart)).toContain("</button>");
   });
 });
+
+describe("BuildListItem fleet density", () => {
+  it("renders the compact fleet row instead of the comfortable card", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain('data-density="fleet"');
+    expect(html).toContain("fleet-row");
+    // Fleet density must NOT use the comfortable min/max-h tokens.
+    expect(html).not.toContain("min-h-[88px]");
+    expect(html).not.toContain("max-h-[128px]");
+  });
+
+  it("uses the ≤32px row height class from the layout helper (no pixel assertion)", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    // Class assertion only — jsdom can't measure layout reliably.
+    expect(html).toContain("max-h-8");
+    expect(html).toContain("min-h-8");
+  });
+
+  it("does NOT render the 'Updated MMM DD' chrome at fleet density", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).not.toContain("Updated Apr");
+  });
+
+  it("renders the phase mini-rail wrapper", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    // PhaseMiniRail emits role=img + Active: <phase> in its aria-label.
+    expect(html).toMatch(/role="img"/);
+    expect(html).toContain("Active: build");
+  });
+
+  it("renders QueueStateBadge when queueState !== 'idle'", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        queueState={{ kind: "queued", position: 3, reason: "capacity", ahead: 2 }}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain('aria-label="Queued, position 3"');
+    expect(html).toContain('data-kind="queued"');
+  });
+
+  it("omits the QueueStateBadge when queueState is 'idle' (or missing)", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    // No badge rendered for idle / undefined queueState.
+    expect(html).not.toContain('data-kind="running"');
+    expect(html).not.toContain('data-kind="queued"');
+    expect(html).not.toContain('data-kind="blocked"');
+  });
+
+  it("renders the attention dot when needsAttention is true", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        needsAttention
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain('data-testid="fleet-row-attention"');
+    expect(html).toContain('aria-label="Needs attention"');
+  });
+
+  it("omits the attention dot when needsAttention is false (default)", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).not.toContain('data-testid="fleet-row-attention"');
+  });
+
+  it("uses 4px left-border accent + aria-current for the active row (not just color)", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("border-[var(--dpf-accent)]");
+    expect(html).toContain('aria-current="true"');
+    expect(html).toContain('data-active="true"');
+  });
+
+  it("inactive row uses transparent border (not aria-current)", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain("border-transparent");
+    expect(html).not.toContain('aria-current="true"');
+  });
+
+  it("shows the BI-* originator code as a hover tooltip on the FB code", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    // The originator itemId becomes the title attribute on the FB code span.
+    expect(html).toMatch(/title="BI-5B839D74"/);
+  });
+
+  it("delete button is icon-only and hidden by default at fleet density", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active={false}
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).toContain('data-testid="fleet-row-delete"');
+    expect(html).toContain("hidden"); // hidden until hover/focus
+    expect(html).toContain("group-hover:flex");
+  });
+
+  it("renders no hex literals at fleet density (DPF variable invariant)", () => {
+    const html = renderToStaticMarkup(
+      <BuildListItem
+        build={makeBuild()}
+        active
+        index={0}
+        lifecycleLabel={null}
+        isDevEnvironment={false}
+        density="fleet"
+        queueState={{ kind: "running", stepLabel: "Generate" }}
+        needsAttention
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(html).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+  });
+});
