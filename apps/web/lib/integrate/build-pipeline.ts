@@ -122,70 +122,80 @@ export async function runBuildPipeline(params: {
     startedAt: new Date().toISOString(),
   };
 
-  for (const step of stepsToRun) {
-    // Skip terminal steps — these are not executable.
-    if (step === "complete" || step === "failed") break;
+  try {
+    for (const step of stepsToRun) {
+      // Skip terminal steps — these are not executable.
+      if (step === "complete" || step === "failed") break;
 
-    emit({ type: "phase:change", buildId, phase: step });
+      emit({ type: "phase:change", buildId, phase: step });
 
-    let attempt = 0;
-    const maxAttempts = (MAX_RETRIES[step] ?? 0) + 1;
+      let attempt = 0;
+      const maxAttempts = (MAX_RETRIES[step] ?? 0) + 1;
 
-    while (attempt < maxAttempts) {
-      try {
-        // BI-e299d4d3 — wrap the slow step with withHeartbeatTicker.
-        // executeStep can take 5-30 minutes (code generation, test runs,
-        // sandbox spin-up). The post-step heartbeat below covers transition
-        // boundaries but not the in-flight step itself. The ticker keeps
-        // heartbeats flowing at (heartbeatTimeoutSeconds / 3) cadence so the
-        // watchdog doesn't false-positive on legitimately slow steps.
-        if (taskRunId) {
-          const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
-          state = await withHeartbeatTicker(taskRunId, () => executeStep(step, buildId, state));
-        } else {
-          state = await executeStep(step, buildId, state);
-        }
-        // Checkpoint the completed step.
-        const advanced = nextStep(step);
-        state = { ...state, step: advanced ?? step, retryCount: 0 };
-        await updateState(state);
-        // BI-4ab6be39 — heartbeat at the step-transition boundary (only
-        // when a taskRunId was provided by the caller). Belt-and-braces
-        // alongside the in-step ticker above.
-        if (taskRunId) {
-          const { heartbeat } = await import("@/lib/observability/heartbeat");
-          await heartbeat(taskRunId);
-        }
-        break; // step succeeded — move on
-      } catch (err) {
-        attempt++;
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        if (attempt < maxAttempts) {
-          const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
-          await new Promise<void>((resolve) => setTimeout(resolve, delay));
-        } else {
-          // All retries exhausted — persist failure.
-          const failed = buildFailedState(state, step, errorMsg);
-          await updateState(failed);
-          return failed;
+      while (attempt < maxAttempts) {
+        try {
+          // BI-e299d4d3 — wrap the slow step with withHeartbeatTicker.
+          // executeStep can take 5-30 minutes (code generation, test runs,
+          // sandbox spin-up). The post-step heartbeat below covers transition
+          // boundaries but not the in-flight step itself. The ticker keeps
+          // heartbeats flowing at (heartbeatTimeoutSeconds / 3) cadence so the
+          // watchdog doesn't false-positive on legitimately slow steps.
+          if (taskRunId) {
+            const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
+            state = await withHeartbeatTicker(taskRunId, () => executeStep(step, buildId, state, emit));
+          } else {
+            state = await executeStep(step, buildId, state, emit);
+          }
+          // Checkpoint the completed step.
+          const advanced = nextStep(step);
+          state = { ...state, step: advanced ?? step, retryCount: 0 };
+          await updateState(state);
+          // BI-4ab6be39 — heartbeat at the step-transition boundary (only
+          // when a taskRunId was provided by the caller). Belt-and-braces
+          // alongside the in-step ticker above.
+          if (taskRunId) {
+            const { heartbeat } = await import("@/lib/observability/heartbeat");
+            await heartbeat(taskRunId);
+          }
+          break; // step succeeded — move on
+        } catch (err) {
+          attempt++;
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          if (attempt < maxAttempts) {
+            const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
+            await new Promise<void>((resolve) => setTimeout(resolve, delay));
+          } else {
+            // All retries exhausted — persist failure.
+            const failed = buildFailedState(state, step, errorMsg);
+            await updateState(failed);
+            return failed;
+          }
         }
       }
     }
-  }
 
-  // Strip error/failedAt so a successful resume after a prior failure does
-  // not retain stale failure breadcrumbs on the final completed checkpoint.
-  const { error: _omitError, failedAt: _omitFailedAt, ...stateWithoutFailureFields } = state;
-  void _omitError;
-  void _omitFailedAt;
-  const complete: BuildExecutionState = {
-    ...stateWithoutFailureFields,
-    step: "complete",
-    completedAt: new Date().toISOString(),
-  };
-  await updateState(complete);
-  emit({ type: "phase:change", buildId, phase: "complete" });
-  return complete;
+    // Strip error/failedAt so a successful resume after a prior failure does
+    // not retain stale failure breadcrumbs on the final completed checkpoint.
+    const { error: _omitError, failedAt: _omitFailedAt, ...stateWithoutFailureFields } = state;
+    void _omitError;
+    void _omitFailedAt;
+    const complete: BuildExecutionState = {
+      ...stateWithoutFailureFields,
+      step: "complete",
+      completedAt: new Date().toISOString(),
+    };
+    await updateState(complete);
+    emit({ type: "phase:change", buildId, phase: "complete" });
+    return complete;
+  } finally {
+    // Always release the sandbox slot — whether the pipeline succeeded, failed,
+    // or threw unexpectedly. releaseSandbox is a no-op if this build never
+    // acquired a slot (e.g. failed before stepCreateSandbox ran).
+    const { releaseSandbox } = await import("./sandbox/sandbox-pool");
+    await releaseSandbox(buildId).catch((err) =>
+      console.error("[build-pipeline] Failed to release sandbox slot:", { buildId }, err),
+    );
+  }
 }
 
 // ─── Step Dispatcher ──────────────────────────────────────────────────────────
@@ -204,9 +214,10 @@ async function executeStep(
   step: BuildExecStep,
   buildId: string,
   state: BuildExecutionState,
+  emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
 ): Promise<BuildExecutionState> {
   switch (step) {
-    case "pending":              return stepCreateSandbox(buildId, state);
+    case "pending":              return stepCreateSandbox(buildId, state, emit);
     case "sandbox_created":      return stepInitWorkspace(buildId, state);
     case "workspace_initialized":return stepInitDb(buildId, state);
     case "db_ready":             return stepInstallDeps(buildId, state);
@@ -222,20 +233,31 @@ async function executeStep(
 async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
+  emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
 ): Promise<BuildExecutionState> {
   const { isSandboxAvailable, startBuildBranch } = await import("./sandbox/build-branch");
+  const { waitForSandboxSlot } = await import("./sandbox/sandbox-pool");
 
   const available = await isSandboxAvailable();
   if (!available) {
-    throw new Error("Sandbox container (dpf-sandbox-1) is not running. Start it with: docker compose up -d sandbox");
+    throw new Error("Sandbox container is not running. Start it with: docker compose up -d sandbox");
   }
 
-  const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-  const hostPort = Number(process.env.SANDBOX_PORT ?? "3035");
+  // Acquire a slot from the pool — waits up to 30 min if all slots are busy.
+  // Emits "slot_queued" progress events so Build Studio shows a waiting state
+  // rather than appearing stuck at "Pending".
+  const slot = await waitForSandboxSlot(buildId, "system", {
+    pollIntervalMs: 30_000,
+    timeoutMs: 1_800_000,
+    onWaiting: (attempt) => {
+      console.log("[build-pipeline] waiting for sandbox slot:", { buildId, attempt });
+      emit({ type: "phase:change", buildId, phase: "slot_queued" as import("@/lib/build-exec-types").BuildExecStep });
+    },
+  });
 
   const sourceCurrency = await startBuildBranch(buildId);
 
-  return { ...state, containerId, hostPort, sourceCurrency };
+  return { ...state, containerId: slot.containerId, hostPort: slot.port, sourceCurrency };
 }
 
 async function stepInitWorkspace(
@@ -352,7 +374,7 @@ async function stepGenerateCode(
     (t) => !t.buildPhases || t.buildPhases.includes("build"),
   );
   const toolsForProvider = toolsToOpenAIFormat(tools);
-  console.log(`[build-pipeline] stepGenerateCode buildId=${buildId} tools=${tools.length} (build-phase filtered from ${allTools.length} total)`);
+  console.log("[build-pipeline] stepGenerateCode:", { buildId, tools: tools.length, allTools: allTools.length });
 
   // Build the initial message from the brief
   const userMessage = [
