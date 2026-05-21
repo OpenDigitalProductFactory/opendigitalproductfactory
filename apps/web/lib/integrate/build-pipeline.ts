@@ -338,10 +338,21 @@ async function stepGenerateCode(
   });
   const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
 
-  // Get sandbox tools — use a system-level context with full platform access
+  // Get sandbox tools — scoped to build phase only.
+  // Filtering by buildPhases: ["build"] gives the agent the file-editing surface
+  // (read_sandbox_file, edit_sandbox_file, write_sandbox_file, run_sandbox_command,
+  // run_sandbox_tests, search_sandbox, list_sandbox_files, saveBuildEvidence, …)
+  // without overwhelming it with the 100+ tool surface used by the full coworker.
+  //
+  // Tools with no buildPhases tag (null/undefined) are platform-wide utilities
+  // that are safe to include regardless of phase.
   const adminContext = { userId: "system", platformRole: "HR-000", isSuperuser: true } as Parameters<typeof getAvailableTools>[0];
-  const tools = await getAvailableTools(adminContext, { mode: "act", unifiedMode: true });
+  const allTools = await getAvailableTools(adminContext, { mode: "act", unifiedMode: true });
+  const tools = allTools.filter(
+    (t) => !t.buildPhases || t.buildPhases.includes("build"),
+  );
   const toolsForProvider = toolsToOpenAIFormat(tools);
+  console.log(`[build-pipeline] stepGenerateCode buildId=${buildId} tools=${tools.length} (build-phase filtered from ${allTools.length} total)`);
 
   // Build the initial message from the brief
   const userMessage = [
@@ -374,7 +385,11 @@ async function stepGenerateCode(
     routeContext: `/build/${buildId}`,
     agentId: "build-architect",
     threadId,
-    taskType: "code_generation",
+    // Use "analysis" routing so the request goes to the Anthropic API (Claude),
+    // which supports proper function/tool calling in the agentic loop.
+    // "code_generation" routes to Codex CLI which dispatches single-shot prompts
+    // and cannot call the sandbox file-editing tools iteratively.
+    taskType: "analysis",
     requireTools: true,
     onProgress: (event) => {
       if (thread?.id) agentEventBus.emit(thread.id, event);
