@@ -1,0 +1,98 @@
+# Security findings — workflow and baseline
+
+This directory holds the operational substrate for the security inflow gate
+introduced by **BI-04701325** (Security & quality findings → Build Studio
+intake with full phase rigor).
+
+## The two-loop model
+
+We run two complementary loops over GitHub code-scanning findings:
+
+1. **Inflow gate** (this directory). Per-PR, machine-enforced. Blocks new
+   critical/high findings from landing on `main`. Implemented by
+   `.github/workflows/security-inflow-gate.yml` and the helper scripts in
+   `scripts/security/`.
+
+2. **Backlog sweep** (separate work, BI-04701325). Nightly portal job that
+   triages existing findings into cluster BIs, runs them through Build
+   Studio with regression-test-first rigor, and contributes the fix
+   patterns (plus CodeQL rules) back to the hive.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `codeql-baseline.json` | Snapshot of CodeQL alerts that pre-existed when the gate landed. PRs are allowed to leave these alone; they're burned down through the BS pipeline. |
+| `../../scripts/security/check-inflow-gate.mjs` | The gate script. Fetches current open alerts, diffs against baseline, fails if a new critical/high appears. |
+| `../../scripts/security/regenerate-baseline.mjs` | Re-snapshot the baseline. Run after fixing or dismissing alerts. |
+| `../../.github/workflows/security-inflow-gate.yml` | Wires the gate to run after every CodeQL completion. |
+
+## What the baseline contains
+
+At inception, the baseline carries every open CodeQL alert. Each entry is
+keyed by GitHub's stable per-finding `number`. The diff is alert-number
+based (not count-based) so a PR that closes one finding and opens a
+different one is still caught.
+
+The 8 criticals in the baseline are tracked by these cluster BIs and will
+be removed as fixes ship:
+
+- **BI-5E53A265** — SSRF cluster (alerts #33-38, `js/request-forgery`)
+- **BI-7DB95878** — Command injection (alert #55, `js/command-line-injection`)
+- **BI-5940955C** — GitHub Actions code injection (alert #1, `actions/code-injection/critical`)
+
+The 43 high and 20 medium findings will be clustered as the nightly sweep
+(BI-04701325) automates that triage.
+
+## When you need to regenerate the baseline
+
+After **any** of the following lands on `main`:
+
+1. A PR fixes one or more findings (so they close in CodeQL).
+2. A maintainer dismisses a false positive in the GitHub UI with a written
+   justification.
+3. CodeQL re-numbers alerts (rare, but happens on configuration changes).
+
+Run:
+
+```bash
+GH_REPOSITORY=OpenDigitalProductFactory/opendigitalproductfactory \
+  GH_TOKEN=$(gh auth token) \
+  node scripts/security/regenerate-baseline.mjs
+```
+
+Commit the updated `codeql-baseline.json` in the same PR as the fix.
+
+## What this gate is NOT
+
+- **Not a substitute for review.** It catches CodeQL-detectable regressions
+  in a known severity floor. It does not see logic bugs, design flaws,
+  privilege escalation in business logic, etc. Human + bot review still
+  matter.
+- **Not a substitute for fixing the backlog.** The whole point is to stop
+  the bleeding while the backlog is burned down through Build Studio. If
+  the baseline grows over time, the gate has failed its job.
+- **Not authorized to dismiss alerts.** It only reads. Dismissals are
+  explicit human decisions with audit trails — see the kernel principle
+  proposed for "Every security finding gets a regression test before a fix"
+  and the dismissal-justification requirement in BI-04701325.
+
+## Why workflow_run trigger (not pull_request)
+
+The gate must run AFTER CodeQL has analyzed the PR's merge commit. If we
+triggered directly on `pull_request`, we'd race CodeQL and see stale alerts
+(making every PR pass trivially). `workflow_run` fires once CodeQL
+completes, ensuring we diff against fresh data.
+
+## Trust-boundary note
+
+The gate workflow runs in the base-repo context with access to
+`GITHUB_TOKEN`. It MUST NOT check out the PR's head SHA and execute code
+from it — that would let a malicious fork PR tamper with the gate's own
+logic. The workflow explicitly omits a `ref:` parameter so checkout pins
+to the default branch (which contains the trusted gate script).
+
+This pattern was reinforced by **BI-5940955C** (GitHub Actions code
+injection finding in `dco-signoff-dependabot.yml`). Workflows touching
+`pull_request_target` or `workflow_run` triggers are trust-boundary code
+and are subject to the two-maintainer carve-out described in **BI-860603DA**.
