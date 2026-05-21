@@ -21,7 +21,8 @@
 export type EdgeRateLimitedRoute =
   | "edge.heartbeat"
   | "edge.discovery_runs.submit"
-  | "edge.adapters";
+  | "edge.adapters"
+  | "edge.events.submit";
 
 export type EdgeRateLimitResult = {
   allowed: boolean;
@@ -56,6 +57,15 @@ const ROUTE_CEILINGS: Record<EdgeRateLimitedRoute, WindowCeiling[]> = {
   // 12/min absorbs startup bursts + retry; same ceiling as heartbeat since
   // the payload size + cost is comparable.
   "edge.adapters": [{ limit: 12, windowMs: 60_000 }],
+  // Events are bursty during incidents (interface flap, log storm) but
+  // the envelope already batches up to 500 events per submission, so
+  // a generous 30 req/min absorbs a real-world flap window without
+  // throttling, and the 600/hour sustained cap protects against a
+  // detector stuck in a tight loop. Spec: BI-9FE9D48D Slice 0.
+  "edge.events.submit": [
+    { limit: 30, windowMs: 60_000 },
+    { limit: 600, windowMs: 60 * 60_000 },
+  ],
 };
 
 type Bucket = {

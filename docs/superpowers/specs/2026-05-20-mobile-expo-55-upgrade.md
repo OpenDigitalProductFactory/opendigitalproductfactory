@@ -45,7 +45,7 @@ This is **not** a routine dep bump. It is a coordinated framework upgrade with:
 - **Native module replacements.** No swapping Zustand, NativeWind, expo-router, expo-sqlite, expo-secure-store, etc. for alternates.
 - **Migrating off Maestro for E2E.** Same harness, same `apps/mobile/e2e/flows/`.
 - **Web/db workspace changes.** Out of scope by hard boundary — handled by [PR #871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/871) and follow-up sweeps.
-- **Jest 30 + TypeScript 6 in this spec's scope.** Tracked as Phase 4 (orthogonal); see Phasing.
+- **Jest 30 + TypeScript 6 in this spec's scope.** Tracked as Phase 4 (split into 4a — TypeScript 6, orthogonal — and 4b — jest 30, gated on upstream jest-expo); see Phasing.
 
 ## Current state (2026-05-20)
 
@@ -110,7 +110,7 @@ Sourced from the [Expo SDK 55 changelog](https://expo.dev/changelog/sdk-55) and 
 
 ## Phasing
 
-The work splits into four phases. Phases 1–3 are mandatory and sequenced; Phase 4 is independent and can land before, after, or in parallel as a separate PR.
+The work splits into four phases. Phases 1–3 are mandatory and sequenced; Phase 4 splits into 4a (orthogonal, landed) and 4b (gated on upstream jest-expo).
 
 ### Phase 1 — Pre-flight cleanup (one PR, ~30 min)
 
@@ -149,15 +149,35 @@ The headline bump. Single PR with one commit per logical group inside the PR if 
 
 **Stop condition:** any crash, any regression on a manual flow.
 
-### Phase 4 — Jest 30 + TypeScript 6 (separate PR, ~half-day, **orthogonal**)
+### Phase 4 — Jest 30 + TypeScript 6 (split into 4a and 4b after audit)
 
-Decoupled from the SDK upgrade so failures don't co-mingle.
+The audit during execution showed the original framing was half-right: TypeScript 6 is genuinely orthogonal, but jest 30 is gated specifically on jest-expo internals, not just the SDK cycle. The phase is therefore split:
 
-1. `pnpm --filter mobile add -D jest@^30 typescript@^6`.
-2. Apply the [Jest 30 codemod](https://jestjs.io/docs/upgrading-to-jest30) if the test specs trigger it (RNTL is already 13.x-compatible per its current release notes).
-3. Re-run `pnpm --filter mobile typecheck && pnpm --filter mobile test`.
+#### Phase 4a — TypeScript 6 (truly orthogonal, **landed**)
 
-This phase MAY land before Phase 2 (TypeScript 6 is independent of Expo SDK) or after. The spec recommends **after** — reduces variables when diagnosing any Phase-2 surprise.
+Shipped in [PR #883](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/883) ahead of Phase 2. Brings `apps/mobile` in line with `apps/web` and `packages/db`, both of which were already on `typescript ^6.0.3`.
+
+#### Phase 4b — Jest 30 (gated on upstream jest-expo, **deferred**)
+
+Originally scoped as "gated on Phase 2 (SDK 55 → jest-expo 55)." Audit on the Phase 2 branch ([PR #888](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/888)) showed this is **not enough** — `jest-expo@55.0.18` still pins internal `@jest/*@^29.2.1` (`@jest/globals`, `babel-jest`, `jest-environment-jsdom`, `jest-snapshot`, `@jest/create-cache-key-function`). Bumping jest to 30 against a jest-expo that still carries jest 29 internals mixes runner and matcher versions — near-certain runtime breakage.
+
+The block is upstream-library-owned and **upstream fixes are in flight**:
+
+- [expo/expo#43535 — jest-expo support Jest v30](https://github.com/expo/expo/issues/43535) — the main tracking issue
+- [expo/expo#44188 — fix(expo-router): Fix Jest 30 compatibility in testing library](https://github.com/expo/expo/pull/44188) — the expo-router side of the migration
+- [expo/expo#44167 — fix(jest-expo): add jest as peer dependency to prevent silent major version mismatches](https://github.com/expo/expo/pull/44167) — directly addresses the *silent* mismatch class that made this gate hard to discover (no error from npm/pnpm; only runtime test breakage)
+
+**Recheck criteria** (don't reopen until at least one is true):
+
+- `pnpm view jest-expo dependencies` lists `@jest/*@^30`
+- A jest-expo release notes entry calls out jest 30 support
+- expo/expo#43535 closes
+
+When unblocked:
+
+1. `pnpm --filter mobile add -D jest@^30 @types/jest@^30`
+2. Apply the [Jest 30 codemod](https://jestjs.io/docs/upgrading-to-jest30) if the test specs trigger it (RNTL is already 13.x-compatible per its release notes).
+3. `pnpm --filter mobile typecheck && pnpm --filter mobile test`.
 
 ## Research & Benchmarking
 
@@ -197,27 +217,37 @@ The "phase-gated upgrade" pattern is the React Native community's documented app
 
 Per AGENTS.md §5 Build Gate + §14 Release Testing:
 
-| Gate | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
-|---|---|---|---|---|
-| `pnpm --filter mobile typecheck` | ✓ | ✓ | n/a | ✓ |
-| `pnpm --filter mobile test` (Jest + RNTL) | ✓ | ✓ | n/a | ✓ |
-| `npx expo doctor` | — | ✓ | — | — |
-| `npx expo install --check` | — | ✓ | — | — |
-| EAS preview build (iOS + Android) | — | ✓ | — | — |
-| Maestro E2E (`apps/mobile/e2e/flows/`) | — | ✓ | ✓ | — |
-| Manual device soak (24h TestFlight + internal track) | — | — | ✓ | — |
-| App-store release procedure | — | — | ✓ | — |
+| Gate | Phase 1 | Phase 2 | Phase 3 | Phase 4a | Phase 4b |
+|---|---|---|---|---|---|
+| `pnpm --filter mobile typecheck` | ✓ | ✓ | n/a | ✓ | ✓ |
+| `pnpm --filter mobile test` (Jest + RNTL) | ✓ | ✓ | n/a | ✓ | ✓ |
+| `npx expo-doctor` | — | ✓ | — | — | — |
+| `npx expo install --check` | — | ✓ | — | — | — |
+| EAS preview build (iOS + Android) | — | ✓ | — | — | — |
+| Maestro E2E (`apps/mobile/e2e/flows/`) | — | ✓ | ✓ | — | — |
+| Manual device soak (24h TestFlight + internal track) | — | — | ✓ | — | — |
+| App-store release procedure | — | — | ✓ | — | — |
 
 ## Open questions
 
-- **Who owns the EAS account?** Phase 2 step 8 requires an EAS Build credential. If this is a single-maintainer account today, the spec needs a note on credential handoff.
+- **Who owns the EAS account?** Phase 2 step 8 requires an EAS Build credential. If this is a single-maintainer account today, the spec needs a note on credential handoff. **Still open — Phase 2 PR #888 explicitly defers this to the maintainer's session.**
 - **CI Node version.** SDK 55 requires Node `^20.19.4` / `^22.13.0` / `^24.3.0` / `^25.0.0`. The local Claude session runs Node 24.13.1 ✓, but the GitHub Actions runner pin should be checked before Phase 2 lands.
-- **Do we want to land Phase 1 (MMKV removal) as a stand-alone hygiene PR before this spec is approved?** The answer is "yes" if anyone is concerned about cumulative diff size; "no" if the reviewer prefers all mobile-workspace changes to be batched. The spec defaults to standalone-PR per the "one concern per PR" rule.
-- **Should the spec also call out the `lucide-react` web update**? (Not directly — mobile uses `@expo/vector-icons`, not lucide. Mentioned only because the audit confused them in the `pnpm outdated` output across workspaces.)
 - **Is there a `BI-` epic for mobile-platform maintenance?** If yes, link from the implementation PRs; if no, this spec can stand alone as the tracking artifact.
 
-## Implementation note (not for spec sign-off)
+### Resolved during execution
 
-This spec was produced as a research deliverable from the chore-lane sweep that landed [PR #865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/865), [PR #871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/871), and [PR #874](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/874). No code change is requested in the PR carrying this spec; the spec is the deliverable.
+- **Phase 1 standalone vs batched** — landed standalone as [PR #879](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/879) per the "one concern per PR" default.
+- **`lucide-react` confusion** — confirmed mobile uses `@expo/vector-icons`, not lucide; the `pnpm outdated` output across workspaces was misleading. No mobile change needed.
+- **Phase 4 ordering** — split into 4a (TypeScript 6, landed in [PR #883](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/883)) and 4b (jest 30, gated on upstream jest-expo per the Phase 4b section above).
 
-The natural follow-up after spec approval is a Phase 1 PR (`react-native-mmkv` removal) — small, fast, isolates the cleanup from the framework jump.
+## Implementation log
+
+Spec produced as a research deliverable from the chore-lane sweep that landed [PR #865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/865), [PR #871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/871), and [PR #874](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/874). Subsequent execution:
+
+| Phase | PR | Status |
+|---|---|---|
+| 1 — `react-native-mmkv` removal | [#879](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/879) | merged |
+| 4a — TypeScript 6 in mobile | [#883](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/883) | merged |
+| 2 — SDK 55 + RN 0.83 + React 19.2 + @testing-library/react-native 13 + jest-expo 55 | [#888](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/888) | open (awaits maintainer EAS build + Maestro pass before merge) |
+| 4b — jest 30 | deferred upstream | gated on [expo/expo#43535](https://github.com/expo/expo/issues/43535) |
+| 3 — Production verification | n/a yet | follows Phase 2 merge |
