@@ -32,10 +32,11 @@ const (
 	SeverityCritical Severity = "critical"
 )
 
-// Action drives the portal-side lifecycle. trigger opens or re-opens an
-// event; acknowledge marks it under investigation; resolve closes it.
-// A later trigger on the same dedupKey re-opens the row (resolvedAt
-// cleared, occurrenceCount++).
+// Action drives the portal-side lifecycle for alert events. trigger opens
+// or re-opens an event; acknowledge marks it under investigation; resolve
+// closes it. A later trigger on the same dedupKey re-opens the row
+// (resolvedAt cleared, occurrenceCount++). For change events the lifecycle
+// does not apply — set Action=ActionTrigger; the portal ignores the value.
 type Action string
 
 const (
@@ -44,15 +45,38 @@ const (
 	ActionResolve     Action = "resolve"
 )
 
+// EventType discriminates between fire-and-collapse alerts (the Slice 0
+// default — full lifecycle, replay-collapsed on dedupKey) and point-in-time
+// change events (deploys, config pushes, feature flips — persisted to
+// ChangeEvent for downstream correlation to alerts).
+//
+// Slice 1 (BI-8405FDA5). The portal route discriminates and dispatches to
+// the correct persistence path. Defaulted to EventTypeAlert in Validate()
+// so existing Slice 0 detectors remain wire-compatible without changes.
+type EventType string
+
+const (
+	EventTypeAlert  EventType = "alert"
+	EventTypeChange EventType = "change"
+)
+
 // Event is one detector observation. DedupKey is the only field detectors
-// MUST compose carefully — the portal collapses replays on
-// (edgeNodeId, dedupKey), so the same condition observed twice must produce
-// byte-identical dedupKey strings. Recommended composition:
+// MUST compose carefully — for alerts the portal collapses replays on
+// (edgeNodeId, dedupKey), so the same condition observed twice must
+// produce byte-identical dedupKey strings. For changes, DedupKey is the
+// change's stable identifier (git SHA, deploy ID) so re-submissions update
+// the existing row instead of duplicating.
+//
+// Recommended composition for alerts:
 //
 //	source + ":" + component + ":" + eventClass [+ ":" + instance]
 //
 // e.g. "snmp.trap:10.0.0.5:ifaceDown:ifIndex=42".
 type Event struct {
+	// EventType discriminator. Empty / omitted defaults to EventTypeAlert
+	// for Slice 0 wire compatibility; the portal Zod applies the same
+	// default. Detectors that emit changes MUST set this explicitly.
+	EventType     EventType      `json:"eventType,omitempty"`
 	DedupKey      string         `json:"dedupKey"`
 	Source        string         `json:"source"`
 	Component     string         `json:"component,omitempty"`
@@ -107,6 +131,13 @@ func (e Event) Validate() error {
 	}
 	if len(e.Summary) > 500 {
 		return fmt.Errorf("summary exceeds 500 chars: %d", len(e.Summary))
+	}
+	// EventType: empty defaults to alert (Slice 0 compatibility); otherwise
+	// must be a known type. Matches the portal Zod default behavior.
+	switch e.EventType {
+	case "", EventTypeAlert, EventTypeChange:
+	default:
+		return fmt.Errorf("invalid eventType %q (want alert|change)", e.EventType)
 	}
 	switch e.Severity {
 	case SeverityInfo, SeverityWarn, SeverityError, SeverityCritical:

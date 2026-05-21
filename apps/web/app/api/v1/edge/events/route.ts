@@ -1,8 +1,13 @@
 // POST /api/v1/edge/events — accept a batch of PD-CEF-style events from
-// edge-side detectors and upsert them into EdgeEvent.
+// edge-side detectors and route each to its persistence path by eventType.
 //
-// Slice 0 of the edge-node detection engine (BI-9FE9D48D).
-// Spec: docs/superpowers/specs/2026-05-21-edge-event-envelope-design.md
+// Slice 0 of the edge-node detection engine (BI-9FE9D48D) defined the
+// alert path. Slice 1 (BI-8405FDA5) adds the change path: eventType
+// discriminator on the wire selects EdgeEvent (default, full lifecycle)
+// vs. ChangeEvent (point-in-time, no lifecycle).
+// Specs:
+//   docs/superpowers/specs/2026-05-21-edge-event-envelope-design.md
+//   docs/superpowers/specs/2026-05-21-edge-change-events-design.md
 //
 // Order of operations (matches /api/v1/edge/metrics):
 //   1. Body size cap (256 KB — events allow up to 500 records with details)
@@ -11,14 +16,24 @@
 //   4. Zod envelope validation (returns 422 on shape drift)
 //   5. Freshness window (5 min past, 5 min future)
 //   6. Per-node rate limit (edge.events.submit)
-//   7. Upsert per event on (edgeNodeId, dedupKey); action drives lifecycle
+//   7. Per-event dispatch on eventType:
+//        "alert"  (default) — upsert EdgeEvent on (edgeNodeId, dedupKey);
+//                             action drives the triggered/ack/resolved
+//                             lifecycle
+//        "change"           — upsert ChangeEvent on (edgeNodeId, dedupKey);
+//                             point-in-time fact, no lifecycle, action
+//                             accepted but ignored
 //
-// Lifecycle on replay:
+// Alert lifecycle on replay:
 //   action="trigger"     — new row, or re-open resolved row (resolvedAt
 //                          cleared, occurrenceCount incremented, severity/
 //                          summary/customDetails refreshed)
 //   action="acknowledge" — status="acknowledged" (does not reset occurrenceCount)
 //   action="resolve"     — status="resolved", resolvedAt=now
+//
+// Change replay: same (edgeNodeId, changeKey) — update summary +
+// customDetails + lastSeenAt; firstSeenAt preserved. No occurrenceCount,
+// no resolved/reopened distinction.
 //
 // nodeId always derived from the bearer token; the body nodeId field is
 // informational only.
@@ -41,6 +56,10 @@ type IngestSummary = {
   acknowledged: number;
   resolved: number;
   updated: number; // existing rows whose trigger replay only bumped counters
+  // Slice 1: ChangeEvent rows inserted or updated. Not split by created vs
+  // updated because changes have no meaningful "re-opened" semantics and the
+  // operator-facing distinction is low value at this layer.
+  changes: number;
 };
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -140,12 +159,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     acknowledged: 0,
     resolved: 0,
     updated: 0,
+    changes: 0,
   };
 
   try {
     await prisma.$transaction(async (tx) => {
       for (const ev of parsed.data.events) {
-        await ingestOne(tx, edgeNodeRowId, ev, summary);
+        // Slice 1 (BI-8405FDA5): dispatch by eventType. The Zod default of
+        // "alert" guarantees ev.eventType is always set after parsing, so
+        // a bare equality check is safe; existing Slice 0 producers omit
+        // the field and land on the alert branch unchanged.
+        if (ev.eventType === "change") {
+          await ingestChange(tx, edgeNodeRowId, ev, summary);
+        } else {
+          await ingestOne(tx, edgeNodeRowId, ev, summary);
+        }
       }
     });
   } catch (err) {
@@ -301,4 +329,62 @@ function statusFromAction(action: EdgeEvent["action"]): string {
     case "resolve":
       return "resolved";
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// ingestChange — Slice 1: upsert a point-in-time change record by
+// (edgeNodeId, changeKey). Changes have no lifecycle — `action` is required
+// by the wire schema for envelope uniformity but ignored here. Re-submission
+// of the same changeKey updates summary + customDetails + lastSeenAt while
+// preserving firstSeenAt; the upstream emitter is expected to use a stable
+// identifier (git SHA, deploy ID, change-ticket ref) so retries collapse
+// rather than duplicating rows.
+// ──────────────────────────────────────────────────────────────────────────
+async function ingestChange(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  edgeNodeId: string,
+  ev: EdgeEvent,
+  summary: IngestSummary,
+): Promise<void> {
+  const now = new Date();
+  const occurredAt = new Date(ev.occurredAt);
+  const customDetailsValue =
+    ev.customDetails === undefined ? undefined : (ev.customDetails as object);
+
+  await tx.changeEvent.upsert({
+    where: {
+      edgeNodeId_changeKey: { edgeNodeId, changeKey: ev.dedupKey },
+    },
+    create: {
+      edgeNodeId,
+      changeKey: ev.dedupKey,
+      source: ev.source,
+      component: ev.component ?? null,
+      eventGroup: ev.eventGroup ?? null,
+      eventClass: ev.eventClass ?? null,
+      severity: ev.severity,
+      summary: ev.summary,
+      customDetails: customDetailsValue,
+      occurredAt,
+      firstSeenAt: now,
+      lastSeenAt: now,
+    },
+    update: {
+      // Refresh the operator-visible fields on replay so an emitter can
+      // amend a change (e.g. post-deploy verification status) without
+      // needing a separate route.
+      source: ev.source,
+      component: ev.component ?? null,
+      eventGroup: ev.eventGroup ?? null,
+      eventClass: ev.eventClass ?? null,
+      severity: ev.severity,
+      summary: ev.summary,
+      customDetails: customDetailsValue,
+      lastSeenAt: now,
+      // firstSeenAt + occurredAt intentionally NOT refreshed — they pin
+      // the original observation in time, which is what the correlation
+      // engine cares about.
+    },
+  });
+  summary.changes++;
 }
