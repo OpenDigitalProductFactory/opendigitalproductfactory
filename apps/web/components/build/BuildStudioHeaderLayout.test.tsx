@@ -274,9 +274,17 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Build Status");
+    // The legacy "Build Status" heading + "Review with coworker" secondary
+    // button are gone — BuildStudio now renders the compact ActionBanner
+    // for the active workflow action (T8 + T9). The primary action label
+    // ("Record Approve Start") still appears as the banner's primary button.
+    expect(html).toContain('data-testid="build-studio-action-banner"');
     expect(html).toContain("Record Approve Start");
-    expect(html).toContain("Review with coworker");
+    // Banner exposes its current state via data-state — approve-start is "ready".
+    expect(html).toMatch(/data-state="ready"/);
+    // Legacy chrome explicitly absent.
+    expect(html).not.toContain(">Build Status<");
+    expect(html).not.toContain(">Review with coworker<");
   });
 
   it("renders an implementation control once the plan is approved and start approval is recorded", () => {
@@ -302,9 +310,15 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Ready for Implementation");
+    // Legacy card's "Ready for Implementation" heading and "Refine the plan"
+    // secondary button are gone — compact ActionBanner shows the action's
+    // sentence + primary button only. "Start Implementation" remains as the
+    // banner's primary action label.
+    expect(html).toContain('data-testid="build-studio-action-banner"');
     expect(html).toContain("Start Implementation");
-    expect(html).toContain("Refine the plan");
+    // Detail line surfaces the intake-incomplete reason (banner shows detail
+    // only when state ∈ {blocked, review_failed}, which intake-missing maps to).
+    expect(html).toContain('data-testid="action-banner-detail"');
   });
 
   it("renders the dedicated release decision surface when a build reaches ship", () => {
