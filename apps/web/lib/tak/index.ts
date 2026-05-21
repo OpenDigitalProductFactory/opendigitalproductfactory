@@ -20,6 +20,8 @@ export * from "./agent-action-registry";
 export * from "./agent-action-types";
 export * from "./agent-event-bus";
 export * from "./agent-grants";
+export * from "./agent-card-types";
+export * from "./agent-card-service";
 export * from "./mcp-server-tools";
 export * from "./mcp-server-types";
 export * from "./mcp-server-health";
