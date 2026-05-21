@@ -2300,7 +2300,9 @@ model AdapterRunTelemetry {
   errorClass          String?
   inputTokens         Int?
   cachedInputTokens   Int?
+  cacheCreationInputTokens Int?  // tokens written into the Anthropic prompt cache this call
   outputTokens        Int?
+
   reasoningTokens     Int?
   estimatedCostUsd    Decimal?  @db.Decimal(10, 6)
   quotaPoolConsumed   String?   // "anthropic-api" | "anthropic-oauth" | "openai-api" | "openai-chatgpt" | "local"
@@ -2319,6 +2321,24 @@ model AdapterRunTelemetry {
   @@index([raceCohortId])
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
+}
+
+// EP-COST Phase 2 prerequisite — one row per budget event so the
+// budget gate in callProvider can enforce per-agent and per-build spend limits.
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §3 Phase 2
+model AgentBudgetEvent {
+  id          String   @id @default(cuid())
+  agentId     String
+  buildRunId  String?  // FK intentionally soft — build runs may be ephemeral
+  eventKind   String   // "inference" | "tool_call" | "budget_exceeded"
+  amountUsd   Decimal  @db.Decimal(10, 6)
+  tokensTotal Int?
+  modelId     String?
+  providerId  String?
+  createdAt   DateTime @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([buildRunId])
 }
 
 // Voice Slice 2 — Transcript cleanup audit row.

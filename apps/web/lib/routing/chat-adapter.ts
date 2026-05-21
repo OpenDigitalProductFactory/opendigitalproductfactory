@@ -373,6 +373,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
     let toolCalls: ToolCallEntry[] = [];
     let inputTokens: number;
     let outputTokens: number;
+    let cacheCreationInputTokens: number | undefined;
+    let cacheReadInputTokens: number | undefined;
 
     if (isAnthropic(providerId)) {
       // Anthropic response
@@ -383,6 +385,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
       const usage = (data.usage as Record<string, number>) ?? {};
       inputTokens = usage.input_tokens ?? 0;
       outputTokens = usage.output_tokens ?? 0;
+      // Prompt-cache token counts (only present when cache is active; 0 means no cache activity)
+      if ((usage.cache_creation_input_tokens ?? 0) > 0) cacheCreationInputTokens = usage.cache_creation_input_tokens;
+      if ((usage.cache_read_input_tokens ?? 0) > 0) cacheReadInputTokens = usage.cache_read_input_tokens;
 
     } else if (providerId === "gemini") {
       // Gemini response
@@ -482,7 +487,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
     return {
       text,
       toolCalls,
-      usage: { inputTokens, outputTokens },
+      usage: { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens },
       inferenceMs,
     };
   },

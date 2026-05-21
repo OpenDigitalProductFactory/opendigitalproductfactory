@@ -55,6 +55,8 @@ export type AdapterTelemetryInput = {
   httpStatus?: number;
   inputTokens?: number;
   cachedInputTokens?: number;
+  /** Tokens written into the Anthropic prompt cache this call. */
+  cacheCreationInputTokens?: number;
   outputTokens?: number;
   reasoningTokens?: number;
   estimatedCostUsd?: number;
@@ -128,6 +130,7 @@ export async function writeAdapterTelemetry(
     if (input.httpStatus !== undefined) data.httpStatus = input.httpStatus;
     if (input.inputTokens !== undefined) data.inputTokens = input.inputTokens;
     if (input.cachedInputTokens !== undefined) data.cachedInputTokens = input.cachedInputTokens;
+    if (input.cacheCreationInputTokens !== undefined) data.cacheCreationInputTokens = input.cacheCreationInputTokens;
     if (input.outputTokens !== undefined) data.outputTokens = input.outputTokens;
     if (input.reasoningTokens !== undefined) data.reasoningTokens = input.reasoningTokens;
     if (input.estimatedCostUsd !== undefined) data.estimatedCostUsd = input.estimatedCostUsd;
