@@ -95,22 +95,15 @@ function emptySnmpAdapter() {
 }
 
 /**
- * Default UniFi adapter for sweep tests — no adapters.json present.
- * The collector returns empty without ever calling fetch, so existing
- * sweep assertions stay deterministic regardless of the runner's
- * /etc/dpf-edge/adapters.json contents.
+ * Default UniFi adapter for sweep tests — fetch is never called because
+ * the default makeApi() stub returns zero adapters from /api/v1/edge/adapters.
+ * Tests that exercise the UniFi-active path override fetchAdapters AND
+ * supply a real fetch stub.
  */
 function emptyUnifiAdapter() {
   return {
     fetch: async () => {
       throw new Error("emptyUnifiAdapter.fetch must not be called");
-    },
-    configAdapter: {
-      env: {},
-      readFile: () => "",
-      statMode: () => {
-        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
-      },
     },
   };
 }
@@ -120,6 +113,10 @@ function makeApi(submit: AuthorityApiClient["submitDiscoveryRun"]): AuthorityApi
     submitDiscoveryRun: submit,
     enroll: vi.fn(),
     heartbeat: vi.fn(),
+    // Default: zero adapters, so the UniFi collector is a no-op even
+    // when emptyUnifiAdapter is supplied. Tests that need active
+    // UniFi configs override this on the api object.
+    fetchAdapters: vi.fn().mockResolvedValue({ ok: true, adapters: [] }),
   } as unknown as AuthorityApiClient;
 }
 

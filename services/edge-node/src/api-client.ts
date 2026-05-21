@@ -45,6 +45,31 @@ export type HeartbeatResponse = {
   trustState: "pending" | "trusted" | "quarantined" | "revoked";
 };
 
+/**
+ * Adapter row shape returned by GET /api/v1/edge/adapters. Mirrors the
+ * authority's EdgeAdapter schema (apps/web/lib/edge-node/wire-contract.ts).
+ * The apiKey field is decrypted server-side and MUST be treated as
+ * sensitive by the caller — don't log it, don't write it to disk.
+ */
+export type EdgeAdapterRow = {
+  id: string;
+  connectionKey: string;
+  name: string;
+  collectorType: "unifi";
+  endpointUrl: string;
+  apiKey: string;
+  configuration: {
+    site: string;
+    discoverClients: boolean;
+    tlsInsecure: boolean;
+  };
+};
+
+export type AdaptersFetchResponse = {
+  ok: true;
+  adapters: EdgeAdapterRow[];
+};
+
 export class AuthorityHttpError extends Error {
   constructor(
     public readonly status: number,
@@ -129,6 +154,57 @@ export class AuthorityApiClient {
       nodeToken,
       body,
     );
+  }
+
+  /**
+   * GET /api/v1/edge/adapters — fetch the active DiscoveryConnection rows
+   * the Authority wants this node to run, with apiKey decrypted server-side.
+   *
+   * Returns shape (validated minimally here; the wire-contract test asserts
+   * the full Zod schema match):
+   *   { ok: true, adapters: [{ id, connectionKey, name, collectorType,
+   *     endpointUrl, apiKey, configuration: {site, discoverClients, tlsInsecure} }] }
+   *
+   * Replaces the legacy bind-mounted /etc/dpf-edge/adapters.json — see
+   * BI-35de9ce8 (consolidation BI) for the rationale.
+   */
+  async fetchAdapters(nodeToken: string): Promise<AdaptersFetchResponse> {
+    return this.get<AdaptersFetchResponse>("/api/v1/edge/adapters", nodeToken);
+  }
+
+  private async get<T>(path: string, token: string): Promise<T> {
+    const url = `${this.base}${path}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await request(url, {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+      const text = await response.body.text();
+      let parsed: unknown = null;
+      if (text.length > 0) {
+        try { parsed = JSON.parse(text); } catch { /* fall through */ }
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        const errorCode =
+          parsed && typeof parsed === "object" && "error" in parsed
+            ? String((parsed as Record<string, unknown>).error)
+            : undefined;
+        const message =
+          parsed && typeof parsed === "object" && "message" in parsed
+            ? String((parsed as Record<string, unknown>).message)
+            : `Authority returned ${response.statusCode} for ${path}`;
+        throw new AuthorityHttpError(response.statusCode, errorCode, message);
+      }
+      return parsed as T;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async post<T>(

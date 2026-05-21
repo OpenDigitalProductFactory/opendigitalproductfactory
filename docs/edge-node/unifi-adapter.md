@@ -1,6 +1,6 @@
 # UniFi Adapter — Operator Setup
 
-The UniFi adapter pulls topology from a local UniFi Network controller and submits it through the same discovery pipeline the rest of the edge node uses. After setup, the topology view shows your real network — gateway → switches → access points — **plus** every connected client (Amazon Echos, Reolink cameras, phones, IoT devices) with vendor labels, all hanging off the AP or switch they're actually connected through.
+The UniFi adapter pulls topology from a local UniFi Network controller and feeds it into the same discovery pipeline the rest of the edge node uses. After setup, the topology view shows your real network — gateway → switches → access points — **plus** every connected client (Amazon Echos, Reolink cameras, phones, IoT devices) with vendor labels, all hanging off the AP or switch they're actually connected through.
 
 This page covers Slices A + B: read-only discovery of UniFi-managed devices AND the WiFi/wired clients the controller has authenticated. Per-port throughput, LLDP, and the metrics channel land in a follow-up.
 
@@ -17,67 +17,43 @@ This page covers Slices A + B: read-only discovery of UniFi-managed devices AND 
 3. Click **Create New** under API Keys. Name it something like `dpf-edge-node`.
 4. Copy the key once — it isn't shown again. Treat it like a password.
 
-The adapter calls `GET /proxy/network/api/s/{site}/stat/device`, so the key needs read access to the Network application. Read-only keys are sufficient.
+The adapter calls `GET /proxy/network/api/s/{site}/stat/device` and `GET /proxy/network/api/s/{site}/stat/sta`, so the key needs read access to the Network application. Read-only keys are sufficient.
 
-## Step 2 — Place the adapter config on the host
+## Step 2 — Add the connection in the portal
 
-Create `/etc/dpf-edge/adapters.json` on the host running the edge node container, with mode `0600`:
+1. Open **Platform → Tools → Estate Discovery** (`/platform/tools/discovery`).
+2. Click **Add Connection** (or **Configure** on the detected gateway tile if your edge node has already surfaced one).
+3. Fill in:
+   - **Discovery Method**: `Ubiquiti UniFi`
+   - **Site**: `default` (or the slug from your UniFi UI for multi-site installs)
+   - **Controller URL**: full URL to the controller. UDM/UDM-Pro: `https://<gateway-ip>`. Hosted Network (`https://unifi.ui.com`) is not supported on this path — local LAN only.
+   - **API Key**: paste the value from Step 1.
+4. Click **Save & Test**. The portal:
+   - Encrypts the key with AES-256-GCM (`CREDENTIAL_ENCRYPTION_KEY`) and stores the ciphertext in the `DiscoveryConnection` table.
+   - Calls the controller once to verify the key works.
+   - Flips status to `active` on success, or reports `auth_failed` / `unreachable` / `tls_error` with the failure reason.
 
-```json
-{
-  "unifi": {
-    "controllerUrl": "https://192.168.1.1",
-    "apiKey": "PASTE-YOUR-API-KEY-HERE",
-    "site": "default",
-    "tlsInsecure": false
-  }
-}
-```
+That's it. No file on disk, no bind mount, no container restart needed.
 
-Fields:
+## Step 3 — The edge node picks it up automatically
 
-| Field | Required | Notes |
-|---|---|---|
-| `controllerUrl` | yes | Full URL to the controller. UDM/UDM-Pro: `https://<gateway-ip>`. Hosted Network: `https://unifi.ui.com` won't work for Slice A — local LAN only. |
-| `apiKey` | yes | From Step 1. |
-| `site` | no | Site slug, default `default`. Multi-site installs: check **Settings → System** for the slug. |
-| `tlsInsecure` | no | Default `false`. Set `true` if your controller uses a self-signed cert (common on UDM-Pro), but only if you trust the local network — TLS verification is skipped when this is on. |
+Every sweep tick (default 5 minutes) the edge node calls `GET /api/v1/edge/adapters` with its node token. The portal returns every `active` UniFi DiscoveryConnection row with its `apiKey` decrypted server-side. The edge node then polls each controller and submits the results through the existing `/api/v1/edge/discovery-runs` channel.
 
-The file must be readable by UID `10001` (the edge-node container user) or the same group. Mode `0600` works if you `chown 10001 /etc/dpf-edge/adapters.json` first; or `0640` with a group the container is in. A world-readable file works too but the edge node will log a warning every sweep.
-
-## Step 3 — Bind-mount the file into the container
-
-Add to your local `.env`:
-
-```bash
-DPF_EDGE_ADAPTERS_CONFIG=/etc/dpf-edge/adapters.json
-```
-
-…or override the path explicitly via env. Either way, the file needs to be inside the edge-node container. The simplest mount is to add a `volumes:` entry to `docker-compose.edge.yml` in a local override:
-
-```yaml
-services:
-  edge-node:
-    volumes:
-      - /etc/dpf-edge:/etc/dpf-edge:ro
-```
-
-Drop that into a `docker-compose.override.yml` next to the main compose file, or paste it directly into `docker-compose.edge.yml` if you don't mind editing the checked-in file.
-
-## Step 4 — Recreate the container
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.edge.yml \
-  up -d --no-deps --force-recreate edge-node
-```
-
-The adapter runs on every sweep tick (default 5 minutes). To verify it picked the config up immediately:
+To verify the next sweep picked the connection up:
 
 ```bash
 docker compose logs edge-node --tail 50
 ```
 
-…look for a line like `Discovery run submitted: runKey=<uuid> items=<N>` where `N` is now larger than before. The first sweep after restart submits items but the topology view may take a tick or two to project them into Neo4j.
+…look for `Discovery run submitted: runKey=<uuid> items=<N>` where `N` jumps up after you saved the connection.
+
+## Editing or rotating the key
+
+The connection row on `/platform/tools/discovery` has per-row **Re-test**, **Edit**, and **Delete** buttons:
+
+- **Re-test** — runs the one-shot probe against the controller and updates `lastTestStatus`.
+- **Edit** — opens the form with controller URL + site pre-filled; leave the API key field blank to keep the existing ciphertext, paste a new value to rotate.
+- **Delete** — removes the row (with a confirmation step). The edge node's next sweep will see it's gone and stop polling that controller.
 
 ## What the adapter emits
 
@@ -113,15 +89,19 @@ The topology view treats all of these the same way as any other discovered CI, s
 
 ## Troubleshooting
 
+**Status stuck at `auth_failed` after Save & Test.** The portal couldn't authenticate with the controller using the key you pasted.
+- Check the key wasn't truncated when copying — paste it into a plain-text scratch space first and verify the length.
+- Re-generate in the UniFi UI; rotate via the **Edit** button.
+- Try **Re-test** — sometimes the controller momentarily 401s during an upgrade.
+
+**Status `unreachable`.** The portal container can't reach the controller IP. Check the controller is on the same network the portal can route to, and that no firewall blocks the HTTPS port.
+
+**Status `tls_error`.** Common on UDM-Pro home installs with self-signed certs. The connection-edit form does not currently expose `tlsInsecure`; if you need it for a closed LAN, set the field directly in the DB or open an issue. (TLS bypass is intentionally not a one-click UX.)
+
 **No new items appear after a sweep.** Run `docker compose logs edge-node --tail 100 | grep -i unifi`. Common causes:
-- `network error reaching ...` — the container can't reach the controller. Check `DPF_EDGE_DISCOVERY_SUBNETS` doesn't exclude the controller's subnet, and that the host's network mode permits the call.
-- `HTTP 401` — API key is wrong or revoked. Re-generate in Step 1.
-- `HTTP 404` — the controller version doesn't expose `/proxy/network/api/...`. You're likely on UniFi OS 3.x; upgrade or wait for the cookie-auth slice.
-- `controller response was not JSON` — the controller served the login page. Means the API key isn't being honored; double-check the key wasn't truncated when copying.
-
-**`group/world-readable` warning every sweep.** `chmod 0600 /etc/dpf-edge/adapters.json && chown 10001 /etc/dpf-edge/adapters.json`. The warning is informational only — the adapter still runs.
-
-**TLS warning.** If you intentionally need `tlsInsecure: true`, that's fine for a closed LAN. Don't enable it across the public internet.
+- The edge node's `fetchAdapters` call failed — log line `adapters: fetch failed (...)` tells you why (token mismatch, portal unreachable, etc.).
+- HTTP 404 on the UniFi side — the controller version doesn't expose `/proxy/network/api/...`. You're likely on UniFi OS 3.x; upgrade or wait for the cookie-auth slice.
+- `controller response was not JSON` — the controller served the login page. The API key isn't being honored; rotate it.
 
 ## What's NOT in this slice
 
@@ -131,8 +111,9 @@ The topology view treats all of these the same way as any other discovered CI, s
 | LLDP-derived L2 wiring | Same spec, § 4.2 — separate collector. |
 | WebSocket event-driven sweep on client/device join | Same spec, § 4.3 — both slices poll on the regular sweep cadence (5 min). |
 | Cookie-auth for pre-9.0 controllers | If you need this, open an issue with your controller version and we'll add the auth fallback. |
+| Multi-node routing (`targetEdgeNodeId`) | BI-35de9ce8 follow-up. Today every trusted edge node polls every active UniFi controller. Single-node installs Just Work; multi-node installs see duplicate idempotent work until the column lands. |
 
 ## Reference
 
 - Spec: [`docs/superpowers/specs/2026-05-19-edge-node-network-telemetry-adapters-design.md`](../superpowers/specs/2026-05-19-edge-node-network-telemetry-adapters-design.md) § 4.3
-- Code: [`services/edge-node/src/collectors/unifi.ts`](../../services/edge-node/src/collectors/unifi.ts), [`services/edge-node/src/collectors/adapters-config.ts`](../../services/edge-node/src/collectors/adapters-config.ts)
+- Code: [`services/edge-node/src/collectors/unifi.ts`](../../services/edge-node/src/collectors/unifi.ts), [`apps/web/app/api/v1/edge/adapters/route.ts`](../../apps/web/app/api/v1/edge/adapters/route.ts)
