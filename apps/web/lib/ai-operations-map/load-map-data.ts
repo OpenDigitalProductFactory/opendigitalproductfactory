@@ -24,6 +24,21 @@ import type {
 
 export const RECENT_TOOL_LIMIT = 40;
 
+/**
+ * Cap on how many stalled TaskRuns are lifted into the projection set
+ * regardless of the recent-40 cutoff. The operator-recovery UI (Retry /
+ * Abandon / Escalate) needs every stalled row to be clickable; without
+ * this independent fetch, rows that age out of the recent-40 window
+ * become orphaned — the server actions still work but no tile renders
+ * in any station inspector. See BI-OPS-MAP-STALLED-WINDOW (2026-05-21,
+ * surfaced during the F2 cleanup-pass dogfooding).
+ *
+ * 200 is intentionally generous: stalled is operator-actionable and
+ * shouldn't silently drop off; in practice we'd expect well under that
+ * once the spawn-loop concurrency issue is fixed.
+ */
+export const STALLED_TASK_RUN_LIMIT = 200;
+
 export type OperationsMapData = {
   template: OperationsMapTemplate;
   agents: StationedOperationsMapAgent[];
@@ -36,7 +51,8 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
   const [
     storefrontConfig,
     agents,
-    taskRuns,
+    recentTaskRuns,
+    stalledTaskRuns,
     toolExecutions,
     toolReceipts,
     backlogEvidence,
@@ -90,6 +106,32 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       },
       orderBy: { startedAt: "desc" },
       take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        taskRunId: true,
+        status: true,
+        source: true,
+        currentAgentId: true,
+        routeContext: true,
+        title: true,
+        startedAt: true,
+        completedAt: true,
+      },
+    }),
+    // BI-OPS-MAP-STALLED-WINDOW (2026-05-21): lift stalled rows into the
+    // projection set independently of the recent-40 cap. The operator
+    // needs every stalled TaskRun to render as a clickable tile so Retry/
+    // Abandon/Escalate stay reachable through the UI. Without this query,
+    // stalled rows older than the 40th-most-recent proactive task were
+    // silently dropped from the inspector list. We dedupe in app code
+    // after merging — a row stalled AND in the recent-40 appears once.
+    prisma.taskRun.findMany({
+      where: {
+        archivedAt: null,
+        status: "stalled",
+      },
+      orderBy: { startedAt: "desc" },
+      take: STALLED_TASK_RUN_LIMIT,
       select: {
         id: true,
         taskRunId: true,
@@ -338,6 +380,12 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     },
   }));
 
+  // Merge recent + stalled task-runs, deduping by cuid id. A row that is
+  // both stalled AND in the recent-40 (typical case) appears once. Order
+  // doesn't matter for the projection set — the final sort by occurredAt
+  // below handles display order.
+  const taskRuns = mergeTaskRunsDedupeById(recentTaskRuns, stalledTaskRuns);
+
   const projections = [
     ...taskRuns.map((row) => projectTaskRun(row as OperationsMapTaskRun, template)),
     ...toolExecutions.map((row) => projectToolExecution(row as OperationsMapToolExecution, template)),
@@ -384,4 +432,34 @@ function getActivationProfileType(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const profileType = (value as { profileType?: unknown }).profileType;
   return typeof profileType === "string" ? profileType : null;
+}
+
+/**
+ * Merge the recent-40 task-run window with the stalled-200 window,
+ * keeping each cuid id once. Exported so the unit test can lock in the
+ * dedup behavior — the AI Operations Map's correctness depends on a row
+ * appearing exactly once in the projection set.
+ *
+ * Both inputs share the same row shape (the Prisma select clauses match).
+ * Recent rows are inserted first, then stalled rows that haven't already
+ * appeared — this keeps existing test snapshots stable and matches the
+ * mental model "stalled is added on top of recent."
+ */
+export function mergeTaskRunsDedupeById<T extends { id: string }>(
+  recent: T[],
+  stalled: T[],
+): T[] {
+  const seen = new Set<string>();
+  const merged: T[] = [];
+  for (const row of recent) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
+  for (const row of stalled) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
+  return merged;
 }
