@@ -6,7 +6,7 @@ import { lazyExec, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import * as os from "os";
 import { prisma } from "@dpf/db";
 import { extractDiff } from "@/lib/sandbox";
-import { isInWindow } from "@/lib/actions/deployment-windows";
+import { isInWindow } from "@/lib/deployment-window-utils";
 
 const exec = lazyExec();
 

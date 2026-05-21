@@ -26,7 +26,7 @@ export async function createSelfUpgradeRun(input: {
       completionEvidence: {
         reason: input.versionState.reason,
         comparable: input.versionState.comparable,
-        channel: (input.config as Record<string, unknown>).channel ?? null,
+        ...(input.config as Record<string, unknown>),
       } satisfies Prisma.InputJsonObject,
     },
   });

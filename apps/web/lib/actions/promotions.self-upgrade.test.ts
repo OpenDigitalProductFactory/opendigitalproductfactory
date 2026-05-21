@@ -39,7 +39,11 @@ vi.mock("@/lib/self-upgrade", () => ({
 }));
 
 vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: vi.fn().mockResolvedValue(undefined) },
+  inngest: {
+    send: vi.fn().mockResolvedValue(undefined),
+    // createFunction is called at module-init by self-upgrade.ts; stub it to avoid TypeError
+    createFunction: vi.fn().mockReturnValue({ id: "mocked-fn" }),
+  },
 }));
 
 import { auth } from "@/lib/auth";
