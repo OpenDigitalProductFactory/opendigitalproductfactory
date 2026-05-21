@@ -34,12 +34,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
 
+import { edgeEventEnvelopeSchema } from "@dpf/validators";
+
 import { EnrollBody, HeartbeatBody } from "@/lib/edge-node/wire-contract";
 
 const FIXTURE_ROOT = join(__dirname, "fixtures");
 
 type RuntimeName = "ts" | "go";
-type EndpointName = "enroll" | "heartbeat";
+type EndpointName = "enroll" | "heartbeat" | "events";
 
 function loadFixture(runtime: RuntimeName, endpoint: EndpointName): unknown {
   const path = join(FIXTURE_ROOT, runtime, endpoint, "v1.json");
@@ -59,6 +61,10 @@ describe("Wire contract parity — both runtimes pass the same schema", () => {
   }> = [
     { endpoint: "enroll", schema: EnrollBody },
     { endpoint: "heartbeat", schema: HeartbeatBody },
+    // Slice 0 of the edge-node detection engine (BI-9FE9D48D) — keeps
+    // edge-node-go internal/envelope/event.go in lockstep with the
+    // packages/validators Zod via captured TS + Go fixtures.
+    { endpoint: "events", schema: edgeEventEnvelopeSchema },
   ];
 
   for (const { endpoint, schema } of cases) {
