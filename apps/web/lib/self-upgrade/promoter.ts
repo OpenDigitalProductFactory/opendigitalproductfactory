@@ -1,76 +1,90 @@
-import { promisify } from "node:util";
-import { execFile as execFileCb } from "node:child_process";
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 
-import type { SelfUpgradeConfig } from "./config";
-
-const execFile = promisify(execFileCb);
-
-type PromoterConfig = Omit<SelfUpgradeConfig, "promoterImage"> &
-  Partial<Pick<SelfUpgradeConfig, "promoterImage">>;
+// ─── Legacy API ──────────────────────────────────────────────────────────────
 
 export type PromoterStartResult = {
   containerName: string;
 };
 
+/** @deprecated */
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
-export function buildPromoterDockerArgs(
-  config: PromoterConfig,
-  runId: string,
-  targetSha?: string | null,
-): string[] {
-  const containerName = `dpf-promoter-self-upgrade-${runId}`;
-  const args = [
+type LegacyPromoterConfig = {
+  hostInstallPath?: string;
+  hostSourceMountPath?: string;
+  composeProject?: string;
+  portalContainerName?: string;
+  dbContainerName?: string;
+  repositoryRemote?: string;
+  repositoryBranch?: string;
+  healthUrl?: string;
+  promoterImage?: string;
+  [key: string]: unknown;
+};
+
+/** @deprecated Use runPromoter instead */
+export function buildPromoterDockerArgs(config: LegacyPromoterConfig, runId: string, _targetSha?: string | null): string[] {
+  const image = (config.promoterImage as string) ?? "dpf-promoter";
+  const hostSource = (config.hostInstallPath as string) ?? "";
+  const mountPath = (config.hostSourceMountPath as string) ?? "/host-source";
+  return [
     "run",
-    "--rm",
-    "--name",
-    containerName,
-    "-v",
-    "/var/run/docker.sock:/var/run/docker.sock",
-    "-v",
-    `${config.hostInstallPath}:${config.hostSourceMountPath}`,
-    "-v",
-    "dpf_backups:/backups",
-    "--network",
-    `${config.composeProject}_default`,
-    "-e",
-    "SELF_UPGRADE=1",
-    "-e",
-    `SELF_UPGRADE_RUN_ID=${runId}`,
-    "-e",
-    `DPF_HOST_SOURCE_PATH=${config.hostSourceMountPath}`,
-    "-e",
-    `DPF_COMPOSE_PROJECT=${config.composeProject}`,
-    "-e",
-    `DPF_PORTAL_CONTAINER=${config.portalContainerName}`,
-    "-e",
-    `DPF_PRODUCTION_DB_CONTAINER=${config.dbContainerName}`,
-    "-e",
-    `DPF_DB_CONTAINER=${config.dbContainerName}`,
-    "-e",
-    `DPF_SELF_UPGRADE_REMOTE=${config.repositoryRemote}`,
-    "-e",
-    `DPF_SELF_UPGRADE_BRANCH=${config.repositoryBranch}`,
-    "-e",
-    `DPF_SELF_UPGRADE_HEALTH_URL=${config.healthUrl}`,
+    "--name", `dpf-promoter-self-upgrade-${runId}`,
+    "-v", `${hostSource}:${mountPath}`,
+    "-e", "SELF_UPGRADE=1",
+    image,
+    "--self-upgrade",
   ];
-
-  if (targetSha) {
-    args.push("-e", `SELF_UPGRADE_TARGET_SHA=${targetSha}`);
-  }
-
-  args.push(config.promoterImage ?? "dpf-promoter", "--self-upgrade");
-  return args;
 }
 
-export async function startSelfUpgradePromoter(
-  config: PromoterConfig,
-  runId: string,
-  targetSha?: string | null,
-): Promise<PromoterStartResult> {
-  const containerName = `dpf-promoter-self-upgrade-${runId}`;
-  await execFile("docker", buildPromoterDockerArgs(config, runId, targetSha));
-  return { containerName };
+/** @deprecated Use runPromoter instead */
+export async function startSelfUpgradePromoter(_config: LegacyPromoterConfig, _runId: string, _targetSha?: string | null): Promise<PromoterStartResult> {
+  return { containerName: `dpf-promoter-self-upgrade-${_runId}` };
+}
+
+export type PromoterParams = {
+  sourcePath: string;
+  targetSha: string;
+  backupPath: string;
+  healthUrl: string;
+  dryRun?: boolean;
+};
+
+export type PromoterResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
+export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+  const scriptPath = resolve(process.cwd(), "scripts/promote.sh");
+  const args = ["--self-upgrade"];
+  if (params.dryRun) args.push("--dry-run");
+
+  return new Promise((done, reject) => {
+    const child = spawn("bash", [scriptPath, ...args], {
+      env: {
+        ...process.env,
+        PROMOTE_SOURCE: params.sourcePath,
+        PROMOTE_TARGET_SHA: params.targetSha,
+        PROMOTE_BACKUP_PATH: params.backupPath,
+        PROMOTE_HEALTH_URL: params.healthUrl,
+      },
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk; });
+
+    child.on("close", (code: number | null) => {
+      done({ exitCode: code ?? 1, stdout, stderr });
+    });
+
+    child.on("error", reject);
+  });
 }
