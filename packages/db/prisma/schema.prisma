@@ -8451,24 +8451,8 @@ model VoiceProfile {
   updatedAt             DateTime                   @updatedAt
   profile               DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
   consentRecord         VoiceConsentRecord?        @relation(fields: [consentRecordId], references: [id])
-  trainingJobs          VoiceTrainingJob[]
 
   @@index([status])
-}
-
-model VoiceTrainingJob {
-  id              String       @id @default(cuid())
-  voiceProfileId  String
-  status          String       @default("pending")
-  providerJobId   String?
-  inputSamples    Json         @default("[]")
-  errorMessage    String?
-  startedAt       DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime     @default(now())
-  voiceProfile    VoiceProfile @relation(fields: [voiceProfileId], references: [id], onDelete: Cascade)
-
-  @@index([voiceProfileId, status])
 }
 
 model DecisionInteractionVoiceOutput {
