@@ -114,3 +114,78 @@ export const edgeHeartbeatSchema = z.object({
 });
 
 export type EdgeHeartbeat = z.infer<typeof edgeHeartbeatSchema>;
+
+// ---------------------------------------------------------------------------
+// EdgeEvent — canonical PD-CEF-style envelope for POST /api/v1/edge/events
+//
+// Slice 0 of the edge-node detection engine (BI-9FE9D48D).
+// Spec: docs/superpowers/specs/2026-05-21-edge-event-envelope-design.md
+//
+// The wire shape mirrors PagerDuty's PD-CEF (source / component / group /
+// class / severity / custom_details) with an explicit dedupKey + action so
+// the portal can collapse replays and run a triggered → acknowledged →
+// resolved lifecycle without inventing a new contract per detector.
+// ---------------------------------------------------------------------------
+
+export const EDGE_EVENT_SEVERITIES = [
+  "info",
+  "warn",
+  "error",
+  "critical",
+] as const;
+export type EdgeEventSeverity = (typeof EDGE_EVENT_SEVERITIES)[number];
+
+export const EDGE_EVENT_ACTIONS = [
+  "trigger",
+  "acknowledge",
+  "resolve",
+] as const;
+export type EdgeEventAction = (typeof EDGE_EVENT_ACTIONS)[number];
+
+export const edgeEventSchema = z.object({
+  /**
+   * Dedup anchor — detectors compose from source + component + class
+   * (+ instance) so the same condition collapses on replay. Scoped per
+   * edge node by the portal's @@unique([edgeNodeId, dedupKey]).
+   */
+  dedupKey: z.string().min(1).max(255),
+  /** Producing detector — "snmp.trap", "syslog", "ping", "unifi.events". */
+  source: z.string().min(1).max(100),
+  /** Operator-readable sub-source — hostname, IP, MAC, port. */
+  component: z.string().max(200).optional(),
+  /** PD-CEF group — logical bucket ("network", "host", "ups"). */
+  eventGroup: z.string().max(100).optional(),
+  /** PD-CEF class — specific condition ("interface_down", "cert_expiring"). */
+  eventClass: z.string().max(100).optional(),
+  severity: z.enum(EDGE_EVENT_SEVERITIES),
+  /**
+   * trigger raises or re-raises an event; acknowledge marks under-investigation;
+   * resolve closes it. A later trigger on the same dedupKey re-opens
+   * (resolvedAt cleared, occurrenceCount++).
+   */
+  action: z.enum(EDGE_EVENT_ACTIONS),
+  /** Short human-readable line for incident lists. */
+  summary: z.string().min(1).max(500),
+  /** RFC 3339 timestamp the edge detector observed the condition. */
+  occurredAt: z.string().datetime(),
+  /** Free-form detector payload — varbinds, deltas, parsed syslog, etc. */
+  customDetails: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type EdgeEvent = z.infer<typeof edgeEventSchema>;
+
+export const edgeEventEnvelopeSchema = z.object({
+  /** UUID idempotency key — same pattern as discovery-runs + metrics. */
+  runKey: z.string().uuid(),
+  /**
+   * nodeId from the client. The portal IGNORES this field and uses the
+   * nodeId resolved from the bearer token instead (mirrors metrics).
+   */
+  nodeId: z.string().min(1).max(100).optional(),
+  /** ISO 8601 timestamp when the batch left the edge node. */
+  observedAt: z.string().datetime(),
+  eventsVersion: z.literal("1"),
+  events: z.array(edgeEventSchema).min(1).max(500),
+});
+
+export type EdgeEventEnvelope = z.infer<typeof edgeEventEnvelopeSchema>;

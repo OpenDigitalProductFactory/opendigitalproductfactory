@@ -46,6 +46,7 @@ export type ResolvedEdgeNodeAuth = {
 export type EdgeNodeScope =
   | "edge:heartbeat"
   | "edge:metrics"
+  | "edge:events"
   | "edge:rotate"
   | "edge:adapters"
   | "discovery:submit";
@@ -118,14 +119,15 @@ export async function resolveEdgeNodeAuth(
     };
   }
 
-  // Per-scope refinement. discovery:submit, edge:metrics, and edge:adapters
-  // all require trustState=trusted (pending and quarantined nodes can
-  // heartbeat but cannot submit observations, send metrics, or read
-  // adapter credentials).
+  // Per-scope refinement. discovery:submit, edge:metrics, edge:events, and
+  // edge:adapters all require trustState=trusted (pending and quarantined
+  // nodes can heartbeat but cannot submit observations, send metrics, emit
+  // events, or read adapter credentials).
   if (
-    (requiredScope === "discovery:submit"
-      || requiredScope === "edge:metrics"
-      || requiredScope === "edge:adapters") &&
+    (requiredScope === "discovery:submit" ||
+      requiredScope === "edge:metrics" ||
+      requiredScope === "edge:events" ||
+      requiredScope === "edge:adapters") &&
     node.trustState !== "trusted"
   ) {
     return {

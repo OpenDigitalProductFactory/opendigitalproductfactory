@@ -75,6 +75,9 @@ export const RESERVED_CAPABILITIES = [
   // Network telemetry adapters — spec: 2026-05-19-edge-node-network-telemetry-adapters-design.md
   "metrics.network",
   "discovery.lldp",
+  // Detection engine — spec: 2026-05-21-edge-event-envelope-design.md (BI-9FE9D48D).
+  // Slice 0: edge emits PD-CEF-style events to POST /api/v1/edge/events.
+  "events.emit",
   "identity.broker",
   "mcp.gateway",
   "a2a.gateway",
