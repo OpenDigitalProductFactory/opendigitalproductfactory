@@ -2,6 +2,7 @@
 // Shows kernel pages + the platform organization's overlay rows.
 // Server component; queries Prisma directly.
 
+import Link from "next/link";
 import { prisma } from "@dpf/db";
 
 import { WikiPageList, type WikiPageListItem } from "@/components/wiki/WikiPageList";
@@ -80,6 +81,22 @@ export default async function WikiBrowsePage({
       </header>
 
       <WikiPageList pages={pages} />
+
+      {/* Decision Perspectives — voice admin entry point */}
+      <div className="mt-8 rounded-lg border border-border p-4 flex items-center justify-between">
+        <div>
+          <p className="font-medium text-sm">Decision Perspectives</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Configure voice narration for WWMD / WWTD persona profiles
+          </p>
+        </div>
+        <Link
+          href="/wiki/perspectives"
+          className="text-sm text-primary hover:underline shrink-0 ml-4"
+        >
+          Manage →
+        </Link>
+      </div>
     </div>
   );
 }
