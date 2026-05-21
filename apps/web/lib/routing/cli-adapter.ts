@@ -24,6 +24,7 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
 import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
@@ -548,6 +549,8 @@ export const cliAdapter: ExecutionAdapterHandler = {
                 providerId,
               ));
             } else if (stderr.includes("rate") || stderr.includes("429")) {
+              // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
+              void recordCliRateLimit("claude-cli", providerId, stderr);
               reject(new InferenceError(
                 `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
                 "rate_limit",
@@ -631,6 +634,9 @@ export const cliAdapter: ExecutionAdapterHandler = {
           `[tool-trace] adapter=claude-cli CALLS-PARSED head=${JSON.stringify(parsed.text.slice(0, 600))}`,
         );
       }
+
+      // EP-COST Phase 4: successful call proves the pool is available — clear any stale exhaustion record.
+      void clearCliRateLimit("claude-cli");
 
       return {
         text: parsed.text,

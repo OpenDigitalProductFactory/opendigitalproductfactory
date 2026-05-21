@@ -8736,3 +8736,33 @@ model IntegrationRoleCoverage {
   @@unique([organizationId, providerKey, role, surface])
   @@index([organizationId])
 }
+
+// ─── EP-COST-001 Phase 4: CLI Pool Status ──────────────────────────────────
+//
+// Tracks the last-known rate-limit state for each CLI adapter pool.
+// Written by cli-adapter.ts and codex-cli-adapter.ts when they receive a
+// 429 / rate-limit error from the underlying subprocess. The orchestrator
+// consults this table before dispatching CLI-backed tasks so it can
+// wait or fall back to the API adapter rather than firing into a known-
+// exhausted pool.
+//
+// One row per adapter type; upserted on each 429 event.
+// The row is cleared (resetAt set to null) once the wall clock passes resetAt.
+//
+// Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
+model CliPoolStatus {
+  id                String    @id @default(cuid())
+  /// "claude-cli" | "codex-cli"
+  adapterType       String    @unique
+  providerId        String
+  rateLimitedAt     DateTime
+  /// Best-effort reset time parsed from Retry-After/X-RateLimit-Reset in stderr.
+  /// Null when the CLI didn't emit a parseable header.
+  resetAt           DateTime?
+  retryAfterSeconds Int?
+  /// First 300 chars of the stderr / error message for debugging.
+  errorSnippet      String?
+  updatedAt         DateTime  @updatedAt
+
+  @@index([adapterType, resetAt])
+}

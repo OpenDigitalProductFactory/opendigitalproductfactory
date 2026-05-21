@@ -27,6 +27,7 @@ import {
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
+import { getCliPoolStatus } from "../routing/cli-pool-status";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
 import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
@@ -455,6 +456,24 @@ export async function callProvider(
   const isCliAdapter =
     selector !== null &&
     (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+
+  // EP-COST Phase 4: consult CliPoolStatus before dispatching a CLI-backed call.
+  // If the pool is known-exhausted (resetAt is in the future), throw rate_limit
+  // so routed-inference.ts falls back to the next provider in the priority list
+  // rather than firing into an already-saturated CLI pool.
+  if (isCliAdapter && selector !== null) {
+    const cliAdapterType = selector.kind === "claude-code-cli" ? "claude-cli" : "codex-cli";
+    const poolState = await getCliPoolStatus(cliAdapterType);
+    if (poolState?.isExhausted) {
+      const waitSecs = poolState.secondsUntilReset ?? "unknown";
+      throw new InferenceError(
+        `${cliAdapterType} pool exhausted — resets in ~${waitSecs}s (EP-COST pool check)`,
+        "rate_limit",
+        providerId,
+      );
+    }
+  }
+
   const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
   const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
