@@ -53,6 +53,8 @@ func TestEvent_Validate_MissingRequired(t *testing.T) {
 		{"bad severity", func(e *Event) { e.Severity = "panic" }, "severity"},
 		{"bad action", func(e *Event) { e.Action = "page" }, "action"},
 		{"bad occurredAt", func(e *Event) { e.OccurredAt = "yesterday" }, "occurredAt"},
+		// Slice 1 (BI-8405FDA5): eventType enum validation.
+		{"bad eventType", func(e *Event) { e.EventType = "incident" }, "eventType"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,6 +68,39 @@ func TestEvent_Validate_MissingRequired(t *testing.T) {
 				t.Fatalf("error %q does not mention %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// Slice 1 (BI-8405FDA5): EventType acceptance matrix. Empty must accept
+// (Slice 0 wire compatibility); explicit alert + change must accept.
+func TestEvent_Validate_EventTypeAccepted(t *testing.T) {
+	cases := []EventType{"", EventTypeAlert, EventTypeChange}
+	for _, et := range cases {
+		t.Run(string(et), func(t *testing.T) {
+			e := validEvent()
+			e.EventType = et
+			if err := e.Validate(); err != nil {
+				t.Fatalf("eventType %q rejected: %v", et, err)
+			}
+		})
+	}
+}
+
+// JSON tag for EventType uses omitempty so Slice 0 producers omitting the
+// field don't add a noisy "eventType":"" pair on the wire. Verify both
+// directions: explicit type round-trips; omitted type produces no key.
+func TestEvent_EventType_JSONOmitempty(t *testing.T) {
+	withType := validEvent()
+	withType.EventType = EventTypeChange
+	raw, _ := json.Marshal(withType)
+	if !strings.Contains(string(raw), `"eventType":"change"`) {
+		t.Fatalf("explicit eventType missing from JSON: %s", raw)
+	}
+
+	withoutType := validEvent()
+	raw2, _ := json.Marshal(withoutType)
+	if strings.Contains(string(raw2), `"eventType"`) {
+		t.Fatalf("omitted eventType leaked into JSON: %s", raw2)
 	}
 }
 
