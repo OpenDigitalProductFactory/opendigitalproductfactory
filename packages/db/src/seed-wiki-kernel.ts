@@ -284,9 +284,11 @@ function walkMarkdownFiles(dir: string): string[] {
  */
 export function deriveSlug(absolutePath: string, baseDir: string): string {
   const rel = absolutePath.startsWith(baseDir)
-    ? absolutePath.slice(baseDir.length).replace(/^\/+/, "")
+    ? absolutePath.slice(baseDir.length).replace(/^[/\\]+/, "")
     : absolutePath;
-  return rel.replace(/\.md$/, "");
+  // Normalise Windows backslashes to forward slashes so slugs are
+  // consistent across platforms and the upsert key never duplicates.
+  return rel.replace(/\\/g, "/").replace(/\.md$/, "");
 }
 
 // ─── Seed: Raw Sources ──────────────────────────────────────────────────────
