@@ -122,6 +122,23 @@ export async function runBuildPipeline(params: {
     startedAt: new Date().toISOString(),
   };
 
+  // Persist the initial "pending" checkpoint before entering the step loop.
+  // This closes a race window where the DB has buildExecState content
+  // (e.g. sourceCurrency from recordBuildSourceCurrency) but no `step` field
+  // — which is indistinguishable from a portal-restart-killed stall.
+  // Without this write, the UI correctly shows "Reset Build" for a stalled run
+  // but also incorrectly shows it during a legitimately in-flight first step.
+  // Guarded to new/stalled-at-pending runs only; resumes already have a valid step.
+  if (state.step == null) {
+    state = {
+      ...state,
+      step: "pending",
+      retryCount: state.retryCount ?? 0,
+      startedAt: state.startedAt ?? new Date().toISOString(),
+    };
+    await updateState(state);
+  }
+
   try {
     for (const step of stepsToRun) {
       // Skip terminal steps — these are not executable.
