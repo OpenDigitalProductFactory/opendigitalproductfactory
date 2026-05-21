@@ -69,6 +69,51 @@ export type BudgetEventKind =
  * Persists an AgentBudgetEvent row. Fire-and-forget — a DB error here must
  * never block an inference call.
  */
+/**
+ * Resolve the blended per-token cost for a given model/provider pair.
+ * Prefers ModelProfile.inputPricePerMToken when available; falls back to
+ * ModelProvider.inputPricePerMToken; falls back to $3/MTok blended average.
+ * Returns cost-per-token (not per-million-token).
+ */
+async function resolveBlendedCostPerToken(
+  providerId: string | undefined,
+  modelId: string | undefined,
+): Promise<number> {
+  const FALLBACK_PER_MTOKEN = 3; // $3/MTok — conservative blended average
+  try {
+    if (providerId && modelId) {
+      const profile = await prisma.modelProfile.findUnique({
+        where: { providerId_modelId: { providerId, modelId } },
+        select: { inputPricePerMToken: true, outputPricePerMToken: true },
+      });
+      const profileInput = profile?.inputPricePerMToken;
+      const profileOutput = profile?.outputPricePerMToken;
+      if (profileInput != null && profileOutput != null) {
+        // Blended: assume ~60% input, ~40% output (typical for inference workloads)
+        return ((profileInput * 0.6 + profileOutput * 0.4) / 1_000_000);
+      }
+    }
+    if (providerId) {
+      const provider = await prisma.modelProvider.findUnique({
+        where: { providerId },
+        select: { inputPricePerMToken: true, outputPricePerMToken: true },
+      });
+      const inp = provider?.inputPricePerMToken;
+      const out = provider?.outputPricePerMToken;
+      if (inp != null && out != null) {
+        return ((inp * 0.6 + out * 0.4) / 1_000_000);
+      }
+    }
+  } catch {
+    // Non-fatal — fall through to fallback
+  }
+  return FALLBACK_PER_MTOKEN / 1_000_000;
+}
+
+/**
+ * Persists an AgentBudgetEvent row. Fire-and-forget — a DB error here must
+ * never block an inference call.
+ */
 export async function writeBudgetEvent(params: {
   agentId: string;
   eventKind: BudgetEventKind;
@@ -78,7 +123,9 @@ export async function writeBudgetEvent(params: {
   providerId?: string;
   buildRunId?: string;
 }): Promise<void> {
-  const costPerToken = 0.000_015; // rough $15/MTok average as a placeholder
+  // Resolve the actual blended cost rate for this model/provider pair.
+  // Falls back through: ModelProfile → ModelProvider → $3/MTok blended average.
+  const costPerToken = await resolveBlendedCostPerToken(params.providerId, params.modelId);
   await prisma.agentBudgetEvent.create({
     data: {
       agentId: params.agentId,
