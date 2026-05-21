@@ -120,7 +120,7 @@ importers:
         version: 53.0.14(@babel/core@7.29.0)(expo@53.0.27(@babel/core@7.29.0)(@expo/metro-runtime@5.0.5(react-native@0.79.7(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.0.6)))(graphql@16.14.0)(react-native@0.79.7(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.0.6))(react@19.0.6))(jest@29.7.0(@types/node@25.9.1))(react-native@0.79.7(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.0.6))(react@19.0.6)
       msw:
         specifier: ^2.14.5
-        version: 2.14.5(@types/node@25.9.1)(typescript@5.9.3)
+        version: 2.14.5(@types/node@25.9.1)(typescript@6.0.3)
       react-test-renderer:
         specifier: 19.0.6
         version: 19.0.6(react@19.0.6)
@@ -128,8 +128,8 @@ importers:
         specifier: ^4.3.0
         version: 4.3.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.3
+        version: 6.0.3
 
   apps/web:
     dependencies:
@@ -17181,31 +17181,6 @@ snapshots:
       - '@types/node'
     optional: true
 
-  msw@2.14.5(@types/node@25.9.1)(typescript@5.9.3):
-    dependencies:
-      '@inquirer/confirm': 6.0.12(@types/node@25.9.1)
-      '@mswjs/interceptors': 0.41.8
-      '@open-draft/deferred-promise': 3.0.0
-      '@types/statuses': 2.0.6
-      cookie: 1.1.1
-      graphql: 16.14.0
-      headers-polyfill: 5.0.1
-      is-node-process: 1.2.0
-      outvariant: 1.4.3
-      path-to-regexp: 6.3.0
-      picocolors: 1.1.1
-      rettime: 0.11.11
-      statuses: 2.0.2
-      strict-event-emitter: 0.5.1
-      tough-cookie: 6.0.1
-      type-fest: 5.6.0
-      until-async: 3.0.2
-      yargs: 17.7.2
-    optionalDependencies:
-      typescript: 5.9.3
-    transitivePeerDependencies:
-      - '@types/node'
-
   msw@2.14.5(@types/node@25.9.1)(typescript@6.0.3):
     dependencies:
       '@inquirer/confirm': 6.0.12(@types/node@25.9.1)
@@ -17230,7 +17205,6 @@ snapshots:
       typescript: 6.0.3
     transitivePeerDependencies:
       - '@types/node'
-    optional: true
 
   mute-stream@3.0.0: {}
 
