@@ -1,9 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { evaluateBuildStudioPlanAdvancementGate } from "./build-studio-gate";
 import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+
+// Mock the voice synthesis job so it doesn't attempt real DB/API calls in tests
+const mockRunVoiceSynthesisJob = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../voice-synthesis/synthesis-job", () => ({
+  runVoiceSynthesisJob: mockRunVoiceSynthesisJob,
+}));
 
 function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
   return {
@@ -299,6 +305,34 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       }),
     );
     expect(trace).toHaveBeenCalledWith(expect.stringContaining("[tool-trace] wwmd.evaluator.failed"));
+    trace.mockRestore();
+  });
+
+  it("fires voice synthesis job after returning gate result (non-blocking)", async () => {
+    vi.useFakeTimers();
+    mockRunVoiceSynthesisJob.mockClear();
+
+    const db = makeDb();
+    const trace = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      triggeredByUserId: "user-1",
+      now: new Date("2026-05-17T12:00:00.000Z"),
+    });
+
+    // Gate returns immediately — synthesis job not yet called (setImmediate deferred)
+    expect(result.interactionId).toBeDefined();
+    expect(mockRunVoiceSynthesisJob).not.toHaveBeenCalled();
+
+    // Flush setImmediate queue
+    await vi.runAllTimersAsync();
+
+    // Now synthesis job was called with the persisted interactionId
+    expect(mockRunVoiceSynthesisJob).toHaveBeenCalledWith(result.interactionId);
+
+    vi.useRealTimers();
     trace.mockRestore();
   });
 });

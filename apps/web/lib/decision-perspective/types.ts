@@ -1,4 +1,12 @@
-export const DECISION_PROFILE_KINDS = ["platform", "organization", "customer", "team"] as const;
+export const DECISION_PROFILE_KINDS = [
+  "platform",
+  "organization",
+  "customer",
+  "team",
+  "persona-real",
+  "persona-fictional",
+  "persona-synthetic",
+] as const;
 export type DecisionPerspectiveProfileKind = typeof DECISION_PROFILE_KINDS[number];
 
 export const DECISION_RISK_TIERS = ["low", "medium", "high", "critical"] as const;

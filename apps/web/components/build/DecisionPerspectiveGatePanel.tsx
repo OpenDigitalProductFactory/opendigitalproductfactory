@@ -9,10 +9,12 @@ import {
 } from "lucide-react";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
+import { VoiceRationalePlayer } from "./VoiceRationalePlayer";
 
 type Props = {
-  interaction: DecisionInteractionGateView | null | undefined;
+  interaction: (DecisionInteractionGateView & { profile?: { voiceEnabled?: boolean } | null }) | null | undefined;
   onCapture?: (capture: DecisionGateCaptureDraft) => Promise<void> | void;
+  voiceOutput?: { audioStorageKey: string; durationMs: number } | null;
 };
 
 type ConfidenceTier = "High" | "Medium" | "Low";
@@ -80,7 +82,7 @@ function SourceList({ sources }: { sources: DecisionInteractionGateView["sources
   );
 }
 
-export function DecisionPerspectiveGatePanel({ interaction, onCapture }: Props) {
+export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutput }: Props) {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [answer, setAnswer] = useState("");
   const [criteriaText, setCriteriaText] = useState("");
@@ -198,6 +200,13 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture }: Props) 
           <p className="text-xs leading-relaxed text-[var(--dpf-muted)]">
             {activeInteraction.rationale}
           </p>
+        )}
+
+        {activeInteraction.profile?.voiceEnabled && (
+          <VoiceRationalePlayer
+            audioUrl={voiceOutput ? `/api/voice/audio/${voiceOutput.audioStorageKey}` : undefined}
+            durationMs={voiceOutput?.durationMs}
+          />
         )}
 
         <div className="grid gap-2 text-xs text-[var(--dpf-muted)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">

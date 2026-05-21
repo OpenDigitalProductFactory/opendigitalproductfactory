@@ -262,4 +262,37 @@ describe("evaluateDecisionPerspective", () => {
     expect(stale.effectiveWeight).toBeLessThan(current.effectiveWeight);
     expect(superseded.effectiveWeight).toBeLessThan(stale.effectiveWeight);
   });
+
+  it("accepts persona-real kind without throwing", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        profile: profile({ kind: "persona-real" }),
+        riskTier: "medium",
+        materials: [material({ confidenceWeight: 1 })],
+      }),
+    );
+    expect(result.outcomeType).toBeDefined();
+  });
+
+  it("accepts persona-fictional kind without throwing", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        profile: profile({ kind: "persona-fictional" }),
+        riskTier: "medium",
+        materials: [material({ confidenceWeight: 1 })],
+      }),
+    );
+    expect(result.outcomeType).toBeDefined();
+  });
+
+  it("accepts persona-synthetic kind without throwing", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        profile: profile({ kind: "persona-synthetic" }),
+        riskTier: "medium",
+        materials: [material({ confidenceWeight: 1 })],
+      }),
+    );
+    expect(result.outcomeType).toBeDefined();
+  });
 });
