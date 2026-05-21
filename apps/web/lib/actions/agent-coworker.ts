@@ -568,10 +568,19 @@ export async function sendMessage(input: {
   }
   // Track message IDs for semantic recall dedup
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
-  const chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
+  let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
   }));
+
+  // EP-COST Phase 3: rolling thread compaction.
+  // If the assembled window still exceeds the threshold (e.g. large build-phase
+  // window), summarize the oldest turns rather than dropping them silently.
+  // Non-fatal: errors inside applyRollingCompaction return the original list.
+  if (chatHistory.length > 0) {
+    const { applyRollingCompaction } = await import("@/lib/actions/thread-compaction");
+    chatHistory = await applyRollingCompaction(chatHistory);
+  }
   const recentContentForClassification = chatHistory
     .slice(-3)
     .map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content));

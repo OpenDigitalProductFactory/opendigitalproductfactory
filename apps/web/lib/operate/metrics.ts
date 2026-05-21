@@ -77,6 +77,20 @@ export const aiCacheReadTokens = new Counter({
   registers: [metricsRegistry],
 });
 
+export const buildPhaseCostUsd = new Counter({
+  name: "dpf_build_phase_cost_usd_total",
+  help: "Estimated USD cost per Build Studio phase (from token usage × model pricing)",
+  labelNames: ["phase", "agent"] as const,
+  registers: [metricsRegistry],
+});
+
+export const threadCompactionTotal = new Counter({
+  name: "dpf_thread_compaction_total",
+  help: "Number of rolling thread compaction cycles fired across all coworker threads",
+  labelNames: ["route"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── Semantic Memory Metrics ────────────────────────────────────────────────
 
 export const semanticMemoryOps = new Counter({
