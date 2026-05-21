@@ -2,11 +2,12 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft |
+| **Status** | Draft — architectural-review pass applied 2026-05-21 |
 | **Date** | 2026-05-21 |
 | **Author** | Codex + Mark Bodman |
-| **Primary Objective** | Turn the existing four-portfolio taxonomy into an investment, gap-analysis, and operations surface for DPF's agent control plane maturity |
-| **Scope** | Portfolio taxonomy, capability maturity scoring, hive-mind refinement, backlog fan-out, and build-first vendor-replacement posture |
+| **Reviewers** | Chief-architect pass (Claude, 2026-05-21): added evidence-gated scoring (§5.1), `riskTier`-derived MVP targets (§5.2), confidence decay (§5.3), Productize Mode (§7.3), capability-record extensions (§8), assessment cadence (§8.1), capability dependency graph + effective maturity invariant (§10.3), productize promotion loop (§10.4), `boundary_adapter` qualifying criteria (§11), architectural acceptance criteria (§15.2), and four new risks (§16). |
+| **Primary Objective** | Turn the existing four-portfolio taxonomy into an investment, gap-analysis, operations, and productization surface for DPF's agent control plane maturity |
+| **Scope** | Portfolio taxonomy, capability maturity scoring, hive-mind refinement, backlog fan-out, build-first vendor-replacement posture, and recursion-driven productization |
 | **Non-Goals** | This spec does not implement schema, routes, or backlog mutations. It defines the operating model that later plans should implement. |
 | **Primary Inputs** | `docs/Reference/digital_product_portfolio_mgmt.txt`, `packages/db/data/portfolio_registry.json`, `docs/superpowers/specs/2026-03-10-portfolio-route-design.md`, `docs/superpowers/specs/2026-03-21-digital-product-unified-ontology-design.md`, `docs/superpowers/specs/2026-04-14-taxonomy-to-action-v4-v5-design.md` |
 
@@ -135,38 +136,64 @@ DPF should build these as one owned control plane, not integrate one vendor per 
 
 The MVP metric is not whether a feature exists. The metric is whether it is mature enough to cover a vendor category without needing that vendor as a core dependency.
 
-| Score | Meaning | Investment Interpretation | Operations Interpretation |
-|-------|---------|---------------------------|---------------------------|
-| 0 | Missing | Create discovery/spec backlog | No operations surface |
-| 1 | Isolated primitive | Build foundation and canonical data home | Manual inspection only |
-| 2 | Used in one workflow | Expand coverage and close enforcement gaps | Workflow-local status |
-| 3 | Used across primary workflows | Productize UX, metrics, and ownership | Basic management surface |
-| 4 | Governed and operator-visible | Harden edge cases and automate feedback | Normal operations surface |
-| 5 | Self-improving through hive-mind/user feedback | Invest in optimization and monetization | Continuous improvement surface |
+### 5.1 Score Definitions (Evidence-Gated)
 
-MVP target for broad-spectrum vendor replacement is normally score `3` or `4`, depending on risk:
+Each score is gated by observable evidence in the repository, schema, or live install, not by author judgement. A score may only be claimed when the gate criteria are citable.
 
-- `3` is acceptable for non-critical or low-risk areas.
-- `4` is required for identity, authority, runtime control, tool execution, data access, evidence, spend, and kill switch.
-- `5` is an optimization target, not an MVP requirement.
+| Score | Meaning | Gate Criteria (all required) |
+|-------|---------|------------------------------|
+| 0 | Missing | No primitive exists in repo, schema, or live install. |
+| 1 | Isolated primitive | Schema or code exists for the concept; no live workflow consumes it end-to-end. |
+| 2 | Used in one workflow | At least one primary workflow exercises it end-to-end with recorded evidence (`ToolExecution`, `RuntimeVerification`, Build Studio evidence, or equivalent). |
+| 3 | Used across primary workflows | Two or more primary workflows depend on it; evidence is generated continuously, not by spot test. |
+| 4 | Governed and operator-visible | Owner assigned, operations surface live, policy/kill-switch hooks wired, exception/regression alerts active, and score evidence is continuously refreshed. Dependency maturity does not change the raw score; it bounds `effectiveMaturity` (§10.3). |
+| 5 | Self-improving through hive-mind/user feedback | Hive-mind signals (§9) measurably tune routing, prompts, coworkers, thresholds, or scores; the improvement is auditable. |
+
+A capability's **effective score** is bounded by its dependency capabilities (§10.3). Reporting a score of 4 while a load-bearing dependency sits at 2 is a defect, not a milestone — see `effectiveMaturity` in §8.
+
+### 5.2 MVP Target Derivation (RiskTier, not per-row authoring)
+
+MVP target is derived from the capability's risk tier, not authored per row. This prevents seed drift and forces the designer to justify "why is this critical" rather than picking a target number.
+
+| Risk Tier | MVP Target | Applies When |
+|-----------|------------|--------------|
+| `critical` | 4 | A failure or compromise would breach safety, identity integrity, authority correctness, evidence ledger, kill-switch reachability, or spend custody. |
+| `elevated` | 4 | Capability is on the primary runtime, tool, data, or governance path for any `owned_core` agent workflow. |
+| `standard` | 3 | Capability supports an internal workflow; degraded operation does not breach safety, evidence, or spend invariants. |
+| `low` | 3 | Capability is convenience or cosmetic; degraded operation is recoverable without governance impact. |
+
+Score `5` is never an MVP requirement. It is an optimization milestone reserved for capabilities that have a working improvement loop and an audit trail proving the loop changed behavior.
+
+### 5.3 Confidence and Decay
+
+A score is paired with a `confidenceGrade` (§8):
+
+| Grade | Meaning |
+|-------|---------|
+| `verified` | Evidence reviewed by governance within the last 30 days; outcomes recorded. |
+| `evidenced` | Continuous evidence stream within the last 30 days; not yet governance-reviewed. |
+| `claimed` | Score authored from primitives; no continuous evidence stream. |
+| `stale` | Evidence stream silent for > 30 days OR last review > 90 days. |
+
+A `stale` score automatically demotes the **effective** score by 1 (floor 0) until refreshed. This is the anti-rot rule — without it, the maturity surface drifts into a vanity dashboard.
 
 ## 6. Initial DPF Maturity Assessment
 
 These scores are an initial design assessment based on repository evidence and live DB fallback. They are not final audited scores.
 
-| Capability | Primary Portfolio | Supporting Portfolios | Current Score | MVP Target | Existing DPF Strength | Main Maturity Gap | Existing Epic Anchor |
-|------------|-------------------|-----------------------|---------------|------------|-----------------------|-------------------|----------------------|
-| Principal identity and authority | Foundational | For Employees, Products and Services Sold | 3 | 4 | Principal, PrincipalAlias, grants, authority specs | Universal principal propagation, delegated consent, token vault | `EP-TAK-3F9A21`, `EP-COWORKER-RT` |
-| MCP and tool governance | Foundational | Manufacturing and Delivery | 3 | 4 | MCP tools, grants, token onboarding, marketplace direction | Gateway hardening, readiness, scope UX, external MCP maturity | `EP-MCP`, `EP-WWMD-MCP` |
-| A2A coworker coordination | Manufacturing and Delivery | For Employees | 2 | 4 | A2A spec and coworker runtime work | Task-native handoff, resumability, acceptance evidence | `EP-A2A`, `EP-COWORKER-RT` |
-| Work Capsules and runtime control | Manufacturing and Delivery | Foundational | 3 | 4 | WorkCapsule, runtime target direction, Build Studio attachment | Mandatory wrapper across all meaningful agent work | `EP-CAPSULE`, `EP-BUILD-STUDIO` |
-| Governance evidence ledger | Manufacturing and Delivery | Foundational, For Employees | 3 | 4 | ToolExecution, receipts, runtime verification, Build Studio evidence | Unified operator evidence UX and cross-surface linking | `EP-CAPSULE`, `EP-AI-OPSMAP` |
-| Hive mind and user refinement | For Employees | Manufacturing and Delivery, Products and Services Sold | 2 | 4 | Hive Scout, portal context overlay, contribution direction | Measurable signal capture and promotion rules | `EP-HIVE-SCOUT`, `EP-BIZ-CAP`, `EP-CAPSULE` |
-| Observability, evals, and cost ledger | Foundational | Manufacturing and Delivery | 2 | 4 | Cost governance plan, ToolExecution, Grafana/Prometheus | Trace/eval datasets, outcome scoring, cost per useful result | `EP-COST-001`, `EP-AI-OPSMAP` |
-| Semantic data and knowledge plane | Foundational | All portfolios | 1 | 3 | Qdrant, Neo4j, docs/specs, backlog, knowledge foundations | Governed semantic metrics, lineage, freshness, policy-aware RAG/query | Candidate effort: Semantic Data Plane |
-| Spend/payment authority | Foundational | Products and Services Sold | 1 | 3 | Invoice/Payment models, cost governance, integration harness | Agent spend limits, payment custody, approvals, receipts, freeze controls | Candidate effort: Agent Commerce and Spend Authority |
-| Customer-facing agent services | Products and Services Sold | Foundational, For Employees | 2 | 3 | Customer assistant direction, portal/product surfaces | Packaging, trust reports, sellable offers, customer evidence | Candidate effort: Agent Control Plane Productization |
-| Cross-layer kill switch | Foundational | All portfolios | 2 | 4 | Grants, runtime records, cost controls, tool execution records | One stop/revoke/freeze operation across runtime, tools, tokens, spend, deployment | Candidate effort: Cross-Layer Kill Switch |
+| Capability | Primary Portfolio | Supporting Portfolios | Risk Tier | Current Score | Derived MVP Target | Existing DPF Strength | Main Maturity Gap | Existing Epic Anchor |
+|------------|-------------------|-----------------------|-----------|---------------|--------------------|-----------------------|-------------------|----------------------|
+| Principal identity and authority | Foundational | For Employees, Products and Services Sold | `critical` | 3 | 4 | Principal, PrincipalAlias, grants, authority specs | Universal principal propagation, delegated consent, token vault | `EP-TAK-3F9A21`, `EP-COWORKER-RT` |
+| MCP and tool governance | Foundational | Manufacturing and Delivery | `elevated` | 3 | 4 | MCP tools, grants, token onboarding, marketplace direction | Gateway hardening, readiness, scope UX, external MCP maturity | `EP-MCP`, `EP-WWMD-MCP` |
+| A2A coworker coordination | Manufacturing and Delivery | For Employees | `elevated` | 2 | 4 | A2A spec and coworker runtime work | Task-native handoff, resumability, acceptance evidence | `EP-A2A`, `EP-COWORKER-RT` |
+| Work Capsules and runtime control | Manufacturing and Delivery | Foundational | `elevated` | 3 | 4 | WorkCapsule, runtime target direction, Build Studio attachment | Mandatory wrapper across all meaningful agent work | `EP-CAPSULE`, `EP-BUILD-STUDIO` |
+| Governance evidence ledger | Manufacturing and Delivery | Foundational, For Employees | `critical` | 3 | 4 | ToolExecution, receipts, runtime verification, Build Studio evidence | Unified operator evidence UX and cross-surface linking | `EP-CAPSULE`, `EP-AI-OPSMAP` |
+| Hive mind and user refinement | For Employees | Manufacturing and Delivery, Products and Services Sold | `standard` | 2 | 3 | Hive Scout, portal context overlay, contribution direction | Measurable signal capture and promotion rules | `EP-HIVE-SCOUT`, `EP-BIZ-CAP`, `EP-CAPSULE` |
+| Observability, evals, and cost ledger | Foundational | Manufacturing and Delivery | `elevated` | 2 | 4 | Cost governance plan, ToolExecution, Grafana/Prometheus | Trace/eval datasets, outcome scoring, cost per useful result | `EP-COST-001`, `EP-AI-OPSMAP` |
+| Semantic data and knowledge plane | Foundational | All portfolios | `elevated` | 1 | 4 | Qdrant, Neo4j, docs/specs, backlog, knowledge foundations | Governed semantic metrics, lineage, freshness, policy-aware RAG/query | Candidate effort: Semantic Data Plane |
+| Spend/payment authority | Foundational | Products and Services Sold | `critical` | 1 | 4 | Invoice/Payment models, cost governance, integration harness | Agent spend limits, payment custody, approvals, receipts, freeze controls | Candidate effort: Agent Commerce and Spend Authority |
+| Customer-facing agent services | Products and Services Sold | Foundational, For Employees | `standard` | 2 | 3 | Customer assistant direction, portal/product surfaces | Packaging, trust reports, sellable offers, customer evidence | Candidate effort: Agent Control Plane Productization |
+| Cross-layer kill switch | Foundational | All portfolios | `critical` | 2 | 4 | Grants, runtime records, cost controls, tool execution records | One stop/revoke/freeze operation across runtime, tools, tokens, spend, deployment | Candidate effort: Cross-Layer Kill Switch |
 
 ## 7. Investment vs Operations Surface
 
@@ -202,11 +229,30 @@ If a capability meets or exceeds its MVP target, the portal should treat it as a
 - improvement backlog
 - export/adaptor status
 
-This prevents the taxonomy from becoming a static catalog. It becomes the operating map for both investment and management.
+### 7.3 Productize Mode
+
+If a capability is `productizationStatus ∈ {eligible, candidate}` (§10.4), the portal overlays a "ready to package" affordance on top of operations mode:
+
+- packaging checklist status (trust report, parity matrix, customer-facing evidence sample, pricing hypothesis)
+- last `productizationStatus` transition with evidence link
+- 14-day score-change watch (anti-inflation guard)
+- candidate `Products and Services Sold` taxonomy slot
+- governance reviewer and decision queue link
+
+This mode is what closes the DPF recursion loop — mature internal capability → candidate sellable product — without making productization a side-channel that bypasses the maturity model. It also prevents the taxonomy from becoming a static catalog; the taxonomy becomes the operating map for investment, management, and monetization.
 
 ## 8. Required Capability Record
 
-Implementation should introduce a capability record or assessment layer that links to existing taxonomy nodes rather than overloading `TaxonomyNode` with all maturity semantics. The implementation plan must audit `Portfolio`, `DigitalProduct`, `TaxonomyNode`, `BacklogItem`, `EaElement`, `RuntimeTarget`, `RuntimeVerification`, `ToolExecution`, and related models before adding schema.
+Implementation must **audit before adding**. `EaElement` is the most likely existing carrier — it already models architecture elements with relationships and could be extended with a `MaturityAssessment` companion model rather than greenfielding a new top-level entity. The audit set is: `Portfolio`, `DigitalProduct`, `TaxonomyNode`, `BacklogItem`, `EaElement`, `RuntimeTarget`, `RuntimeVerification`, `ToolExecution`, and any existing portfolio quality/scorecard models. Greenfielding only after this audit demonstrates none of them fit.
+
+`capabilityCategory` is an enumerated set, aligned to the seven control points from §4.1:
+
+```text
+runtime | identity_authority | tool_gateway | data_plane | budget_spend
+        | evidence_eval | human_override | composition_helper
+```
+
+`composition_helper` is the escape hatch for cross-cutting capabilities (e.g. kill switch) that compose multiple control points rather than owning one.
 
 Each assessed capability needs these fields at minimum:
 
@@ -214,19 +260,37 @@ Each assessed capability needs these fields at minimum:
 |-------|---------|
 | `portfolioId` | One of the four canonical portfolio roots |
 | `taxonomyNodeId` | The node where the capability is managed |
-| `capabilityCategory` | Agent-control-plane category, such as runtime, identity, data, observability, spend, gateway |
-| `maturityScore` | Current 0-5 score |
-| `mvpTargetScore` | Required MVP score |
+| `capabilityCategory` | Enumerated category from the set above |
+| `riskTier` | `critical` / `elevated` / `standard` / `low` — derives `mvpTargetScore` per §5.2 |
+| `maturityScore` | Current 0-5 score; gated by §5.1 evidence criteria |
+| `mvpTargetScore` | **Derived** from `riskTier`; never authored directly |
+| `effectiveMaturity` | `min(maturityScore, min(dependsOn.effectiveMaturity))`, then -1 if `confidenceGrade = stale` (floor 0). This is the number all UX and gating logic must read. |
+| `dependsOn` | Capability records this capability requires to function (§10.3); forms a DAG, cycles rejected at write time |
 | `strategicOwnership` | `owned_core`, `embedded_accelerator`, `boundary_adapter`, or `avoid` |
-| `vendorReplacementConfidence` | Low, medium, high, or verified |
+| `vendorReplacementConfidence` | `low` / `medium` / `high` / `verified` — `verified` requires a recorded parity checklist and at least one production replacement |
+| `installScope` | `canonical` / `dpf_dogfood` / `customer_overlay` — scores from different scopes never aggregate silently |
+| `archetypeScope` | Null for canonical; business archetype identifier when overlay |
+| `kernelPrinciples` | Founder Kernel principle slugs this capability enforces (e.g. `destructive-actions-require-explicit-go`, `evidence-before-diagnosis`) |
 | `existingPrimitives` | DPF models, routes, tools, specs, and epics already covering the capability |
 | `maturityGaps` | Enforcement, UX, data, policy, evidence, and workflow gaps |
 | `operationalSurface` | Route or product surface where robust capabilities are managed |
 | `investmentBacklogLinks` | Epics/backlog items that close maturity gaps |
 | `evidenceSources` | Tool executions, runtime verification, Build Studio evidence, PRs, tests, user outcomes |
+| `evidenceFreshness` | Age of newest evidence supporting the score; drives `confidenceGrade` |
+| `confidenceGrade` | `verified` / `evidenced` / `claimed` / `stale` per §5.3 |
 | `hiveMindSignals` | Feedback signals used to refine routing, prompts, coworkers, tools, and taxonomy placement |
+| `productizationStatus` | `not_eligible` / `eligible` / `candidate` / `productized` per §10.4 |
 | `lastAssessmentAt` | Timestamp for stale-score detection |
 | `assessedBy` | Human, coworker, hive process, or governed automation |
+
+### 8.1 Assessment Cadence and Governance
+
+Scores rot unless the act of scoring is itself a governed process. The implementation plan must establish:
+
+- **Continuous re-scoring**: hive-mind signal capture (§9) and evidence streams (§5.3) update `evidenceFreshness` and may auto-demote `confidenceGrade` without human action.
+- **Quarterly review**: every `critical` and `elevated` capability has its score and `vendorReplacementConfidence` reviewed by a governed reviewer (human or WWMD-arbitrated coworker, grounded in `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md`) at least once per quarter.
+- **Triggered re-assessment**: any landed PR that touches a capability's `existingPrimitives` enqueues a re-assessment task on its record. Score changes are evidence-linked PR-by-PR, not batch-edited.
+- **Single writer**: maturity scoring logic lives in one module. Routes, UX, and reports read derived values; nothing else mutates `effectiveMaturity` or `confidenceGrade`.
 
 ## 9. Hive-Mind Refinement Loop
 
@@ -266,7 +330,9 @@ Customer refinements promote to the shared taxonomy only when they are:
 4. tied to backlog/evidence,
 5. reviewed through a governed taxonomy change process.
 
-## 10. DPF Recursion and Business Archetypes
+## 10. Recursion, Archetypes, Dependencies, and Productization
+
+### 10.1 DPF Recursion
 
 DPF is recursive:
 
@@ -275,16 +341,61 @@ DPF is recursive:
 - DPF uses hive-mind contribution to decide investment priorities.
 - DPF uses the backlog to convert accepted contributions into product work.
 
+### 10.2 Customer Archetypes
+
 Other business archetypes are different. A clinic, MSP, retailer, manufacturer, or professional services firm sells different goods and services. Their `Products and Services Sold` portfolio should reflect their market offer, not DPF's portal. Their `Manufacturing and Delivery` portfolio should reflect how they deliver those goods and services, not blindly mirror Build Studio.
 
 Therefore, DPF must separate:
 
 - canonical platform capability taxonomy,
-- DPF-on-DPF operating truth,
-- customer archetype overlays,
-- customer local refinements.
+- DPF-on-DPF operating truth (`installScope = dpf_dogfood`),
+- customer archetype overlays (`installScope = customer_overlay`, `archetypeScope` set),
+- customer local refinements (overlays with no promotion intent).
 
-This prevents the platform from pretending every customer is a software factory while still letting DPF use itself recursively as the reference implementation.
+This prevents the platform from pretending every customer is a software factory while still letting DPF use itself recursively as the reference implementation. Scores from different `installScope` values are never aggregated silently — a capability at 4 in `dpf_dogfood` and 1 in a fresh customer install must surface both, with the smaller number driving any "ready to sell" claim.
+
+### 10.3 Capability Dependency Graph and Effective Maturity
+
+Capabilities are not islands. A cross-layer kill switch (§6) is only as strong as the runtime, tool gateway, identity, and spend authority it must stop. An evidence ledger is only as credible as the tool execution records it ingests. The maturity model treats this explicitly.
+
+**Rules:**
+
+1. Each capability record names its `dependsOn` set — other capability records it must call through to function.
+2. The dependency relationship is a DAG. Cycles are rejected at write time; this is enforced by the writer module, not by social convention.
+3. `effectiveMaturity = min(maturityScore, min(dependsOn.effectiveMaturity))`, then -1 if `confidenceGrade = stale` (floor 0).
+4. **All gating logic, UX badges, vendor-replacement claims, and productization eligibility (§10.4) read `effectiveMaturity`, never `maturityScore` directly.** This is the single most important invariant in the design — without it, the model lies whenever its dependencies regress.
+5. Authoring a `maturityScore` higher than the dependency floor is permitted (it expresses intent) but the dashboard renders the effective number prominently and the raw score as muted secondary text with a "blocked by `<dep>`" annotation.
+
+**Example:** "Cross-Layer Kill Switch" depends on `runtime`, `tool_gateway`, `identity_authority`, `budget_spend`, `evidence_eval`. If any of those is at 2, the kill switch's effective maturity is 2, regardless of how complete the kill-switch UX itself is. The investment surface (§7.1) then surfaces the *dependency* as the unblocking work, not the kill switch.
+
+### 10.4 Productize Promotion Loop
+
+The DPF recursion principle says that mature internal capabilities should become sellable. The maturity model encodes this rather than leaving it as folklore.
+
+**Eligibility rule:** a capability becomes `productizationStatus = eligible` when ALL of the following hold:
+
+1. `strategicOwnership = owned_core`
+2. `effectiveMaturity >= mvpTargetScore`
+3. `confidenceGrade in {evidenced, verified}`
+4. `installScope = canonical` (overlays are not productizable; they are install-local)
+5. No open `critical`-severity exceptions in the operations surface
+
+**State machine:**
+
+```text
+not_eligible  ──(criteria met)──▶  eligible
+                                      │
+                       (governed go)  ▼
+                                  candidate  ──(packaging, trust report,
+                                                customer evidence shipped)──▶  productized
+                                      │
+                       (regression)   ▼
+                                  not_eligible (or eligible, if score still meets target)
+```
+
+**Surface rendering:** a third UX mode — "Productize Mode" (§7.3) — is required when `productizationStatus ∈ {eligible, candidate}`. This mode does not replace operations mode; it overlays a "ready to package" affordance on top.
+
+**Anti-pattern guard:** productization pressure must not become an incentive to inflate scores. The implementation must record `productizationStatus` transitions as evidence-linked events, and any score change within 14 days of a `candidate` transition triggers governance review. This protects the score from becoming a sales artifact.
 
 ## 11. Build-vs-Buy Policy
 
@@ -319,6 +430,16 @@ Capabilities that can be `boundary_adapter`:
 - customer ticketing system
 - customer CRM/ERP source of record
 - optional observability export
+
+**`boundary_adapter` qualifying criteria** (all must hold; otherwise it is an `embedded_accelerator` or it is `avoid`):
+
+1. The external system is owned by the customer or by a market-wide rail (Stripe, Plaid, an enterprise IdP), not by a single vendor whose disappearance would strand DPF.
+2. The integration is over an open or multi-vendor protocol (OIDC, OAuth2, OpenTelemetry, SCIM, ACH, FHIR, SQL, MCP), not a proprietary client SDK with no replaceable peer.
+3. DPF retains the source of truth for the corresponding `capabilityCategory` (identity *authority* stays at DPF even when identity *edge* is Okta).
+4. The adapter is swap-out testable: at least one alternate provider in the same category has a documented adapter path, even if not yet implemented.
+5. Customer data flowing through the adapter remains attributable in the DPF evidence ledger; the adapter does not become a black-box gap in `evidenceSources`.
+
+A `boundary_adapter` that fails any of these criteria during review must be reclassified — either upgraded to `owned_core` (rare; the external system is genuinely customer-owned but the protocol is proprietary) or downgraded to `avoid` (the dependency is vendor lock-in dressed up).
 
 ## 12. UX Surface Requirements
 
@@ -447,37 +568,57 @@ Refactoring is not cosmetic here. It is part of the anti-sprawl strategy.
 
 ## 15. Acceptance Criteria
 
-The design is successful when later implementation can prove:
+The design is successful when later implementation can prove the following. **Functional criteria** describe what users see; **architectural criteria** describe invariants the implementation must preserve.
+
+### 15.1 Functional
 
 1. Each agent-control-plane capability is mapped to one of the four portfolios.
-2. Each assessed capability has a current score and MVP target score.
+2. Each assessed capability has a current score and an MVP target score *derived from `riskTier`*, not authored per row.
 3. Lagging capabilities generate investment/gap-analysis views.
 4. Mature capabilities generate operations/management views.
-5. Backlog links show which efforts will raise maturity.
-6. Evidence links show why a score is credible.
-7. Hive-mind signals can refine scores, routing, backlog, and taxonomy placement.
-8. Vendor categories are evaluated as `owned_core`, `embedded_accelerator`, `boundary_adapter`, or `avoid`.
-9. Customer overlays can refine local taxonomy without mutating the canonical shared taxonomy.
-10. DPF-on-DPF recursion is explicit: Build Studio manufactures DPF, and DPF itself is the sold product for the DPF archetype.
+5. Capabilities at `productizationStatus ∈ {eligible, candidate}` generate productize-mode views (§7.3).
+6. Backlog links show which efforts will raise maturity.
+7. Evidence links show why a score is credible, with `confidenceGrade` visible.
+8. Hive-mind signals can refine scores, routing, backlog, and taxonomy placement.
+9. Vendor categories are evaluated as `owned_core`, `embedded_accelerator`, `boundary_adapter`, or `avoid`, with `boundary_adapter` decisions backed by the §11 qualifying criteria.
+10. Customer overlays can refine local taxonomy without mutating the canonical shared taxonomy.
+11. DPF-on-DPF recursion is explicit: Build Studio manufactures DPF, and DPF itself is the sold product for the DPF archetype.
+
+### 15.2 Architectural (invariants the implementation must preserve)
+
+12. **No parallel taxonomy**: the maturity model attaches to existing `Portfolio` / `TaxonomyNode` / `EaElement`; greenfielded substrate is justified by a written audit that proves the existing models cannot carry the concept.
+13. **Single source of maturity logic**: `effectiveMaturity` and `confidenceGrade` are computed in one module; routes, UX, and reports read derived values and never mutate them.
+14. **Dependency cascade enforced**: every UX badge, gate, vendor-replacement claim, and productization eligibility check reads `effectiveMaturity`, not `maturityScore`.
+15. **Scope isolation**: scores from different `installScope` values never aggregate silently; any roll-up renders the minimum prominently.
+16. **Evidence decay active**: scores without recent evidence demote to `stale` and lose 1 effective point automatically; this rule is wired in code, not in policy documents.
+17. **Anti-inflation guard**: score changes within 14 days of a `productizationStatus = candidate` transition route through governance review.
+18. **DAG enforcement**: the writer for `dependsOn` rejects cycles at write time, not at render time.
 
 ## 16. Risks and Mitigations
 
 | Risk | Mitigation |
 |------|------------|
 | Creating a parallel agent taxonomy | Attach capability maturity to the existing four-portfolio taxonomy. |
-| Overloading `TaxonomyNode` with maturity state | Audit schema first and prefer a separate assessment record linked to taxonomy nodes. |
+| Overloading `TaxonomyNode` with maturity state | Audit schema first; prefer extending `EaElement` or a separate assessment record linked to taxonomy nodes. |
 | Turning benchmarks into vendor dependencies | Record vendors as references and adapters, not sources of truth. |
-| Scoring becoming subjective | Require evidence links and stale-score detection. |
+| Scoring becoming subjective | Require §5.1 evidence gates, §5.3 decay, and §8.1 governed cadence. |
 | Customer refinements polluting core taxonomy | Use overlays and governed promotion rules. |
-| UI becoming a dashboard blob | Split investment mode from operations mode and keep views portfolio-native. |
-| Integration sprawl returning through "accelerators" | Require `strategicOwnership` classification and replaceability review. |
+| UI becoming a dashboard blob | Split investment / operations / productize modes and keep views portfolio-native. |
+| Integration sprawl returning through "accelerators" | Require `strategicOwnership` classification and the §11 `boundary_adapter` qualifying criteria. |
+| **Dependency-cascade blindness** — capability scored 4 while a load-bearing dep is at 2; kill switch claimed governed while runtime substrate is immature | `effectiveMaturity = min(self, deps)` enforced in single writer module (§10.3); UX renders effective number prominently with dep-blocked annotation. |
+| **Productization pressure inflating scores** — sales narrative pushes scores up to unblock a candidate offering | §10.4 anti-pattern guard: any score change within 14 days of `candidate` transition triggers governance review; transitions are evidence-linked events. |
+| **Hive-mind feedback hijack** — biased or manipulated signal sources cause unwarranted score movement or routing changes | Signal sources carry provenance and weight; score deltas from hive-mind inputs are auditable and reversible; the writer rejects signal batches without provenance metadata. |
+| **Score rot in `dpf_dogfood` masking customer reality** — DPF's own install scores carry the dashboard while a fresh customer install would score far lower | `installScope` separation (§10.2); any "ready to sell" or `productizationStatus = eligible` claim requires `installScope = canonical` and validation against at least one non-dogfood install. |
 
 ## 17. Open Decisions for the Implementation Plan
 
-1. Should the first implementation create a new `CapabilityMaturityAssessment` model, or should it reuse an existing portfolio quality/EA assessment model?
+1. Should the first implementation create a new `CapabilityMaturityAssessment` model, or extend `EaElement` (or another existing portfolio quality/scorecard model) with a maturity companion? The §8 audit must answer this before any migration is written.
 2. Should the first UI land under `/portfolio`, `/platform/ai/operations`, or both with one canonical data source?
 3. Should vendor benchmark data be repo-seeded JSON first, DB-managed later, or managed immediately through the portal?
-4. What minimum hive-mind signals are already captured and can be reused without new event models?
-5. Which capability scores should be treated as DPF-authored initial seed versus live assessed state?
+4. What minimum hive-mind signals are already captured and can be reused without new event models? Specifically, can `ToolExecution`, `RuntimeVerification`, Build Studio acceptance events, and existing coworker feedback rows carry the §9 signal payload, or is a new `MaturitySignal` event model required?
+5. Which capability scores should be treated as DPF-authored initial seed versus live assessed state? Seed scores must carry `confidenceGrade = claimed` and a fixed `lastAssessmentAt` that triggers decay quickly — seed is bootstrap, never the resting state.
+6. Where does the single-writer module for `effectiveMaturity` and `confidenceGrade` live? Candidate: a `packages/maturity` module consumed by both API routes and Build Studio gates.
+7. Who is the governed reviewer of record for `critical` and `elevated` quarterly reviews? Human-only, or WWMD-arbitrated coworker grounded in `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` with human escalation?
+8. How are `productizationStatus = candidate` transitions surfaced for governance — Build Studio brief, dedicated portal queue, or both?
 
 These decisions should be resolved in the implementation plan after schema and route audit.
