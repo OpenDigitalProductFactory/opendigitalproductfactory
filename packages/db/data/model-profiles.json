@@ -6,11 +6,14 @@
     "modelStatus": "retired",
     "retiredReason": "Claude 3 Haiku returns empty responses via subscription OAuth — use Haiku 4.5 instead",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
-    "avoidFor": ["complex tasks", "tool use via subscription"],
+    "avoidFor": [
+      "complex tasks",
+      "tool use via subscription"
+    ],
     "contextWindow": null,
     "speedRating": null,
     "supportsToolUse": false,
@@ -67,8 +70,8 @@
     "instructionFollowingScore": 55,
     "maxContextTokens": 200000,
     "maxOutputTokens": 4096,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "qualityTier": "adequate",
@@ -88,8 +91,13 @@
     "friendlyName": "Claude Sonnet 4.6",
     "modelStatus": "active",
     "capabilityCategory": "frontier",
-    "costTier": "$$",
-    "bestFor": ["code generation", "complex reasoning", "analysis", "platform tool use"],
+    "costTier": "standard",
+    "bestFor": [
+      "code generation",
+      "complex reasoning",
+      "analysis",
+      "platform tool use"
+    ],
     "avoidFor": [],
     "contextWindow": "200k",
     "speedRating": "fast",
@@ -118,7 +126,9 @@
     "structuredOutputScore": 93,
     "conversational": 95,
     "contextRetention": 95,
-    "summary": "Claude Sonnet 4.6 by Anthropic - best balance of speed and capability"
+    "summary": "Claude Sonnet 4.6 by Anthropic - best balance of speed and capability",
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0
   },
   {
     "providerId": "anthropic-sub",
@@ -126,8 +136,13 @@
     "friendlyName": "Claude Opus 4.6",
     "modelStatus": "active",
     "capabilityCategory": "frontier",
-    "costTier": "$$$",
-    "bestFor": ["deep reasoning", "complex code", "architecture", "long context"],
+    "costTier": "critical",
+    "bestFor": [
+      "deep reasoning",
+      "complex code",
+      "architecture",
+      "long context"
+    ],
     "avoidFor": [],
     "contextWindow": "200k",
     "speedRating": "moderate",
@@ -156,7 +171,9 @@
     "structuredOutputScore": 93,
     "conversational": 95,
     "contextRetention": 95,
-    "summary": "Claude Opus 4.6 by Anthropic - most capable model for complex tasks"
+    "summary": "Claude Opus 4.6 by Anthropic - most capable model for complex tasks",
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0
   },
   {
     "providerId": "anthropic-sub",
@@ -164,11 +181,16 @@
     "friendlyName": "Claude Haiku 4.5",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
-      "general purpose tasks", "fast responses", "simple platform tool use"
+      "general purpose tasks",
+      "fast responses",
+      "simple platform tool use"
     ],
-    "avoidFor": ["complex code generation", "deep reasoning"],
+    "avoidFor": [
+      "complex code generation",
+      "deep reasoning"
+    ],
     "contextWindow": null,
     "speedRating": null,
     "supportsToolUse": true,
@@ -178,7 +200,8 @@
     "modelClass": "chat",
     "maxInputTokens": 200000,
     "inputModalities": [
-      "text", "image"
+      "text",
+      "image"
     ],
     "outputModalities": [
       "text"
@@ -225,14 +248,15 @@
     "instructionFollowingScore": 75,
     "maxContextTokens": 200000,
     "maxOutputTokens": 8192,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "qualityTier": "strong",
     "supportedModalities": {
       "input": [
-        "text", "image"
+        "text",
+        "image"
       ],
       "output": [
         "text"
@@ -246,7 +270,7 @@
     "friendlyName": "GPT-5.4 (ChatGPT Subscription)",
     "modelStatus": "active",
     "capabilityCategory": "advanced",
-    "costTier": "subscription",
+    "costTier": "critical",
     "bestFor": [
       "conversation",
       "coding",
@@ -289,8 +313,8 @@
     "toolFidelity": 10,
     "maxContextTokens": 128000,
     "maxOutputTokens": 16384,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -303,73 +327,73 @@
     },
     "summary": "GPT-5.4 (ChatGPT Subscription) by ChatGPT - optimized for conversation"
   },
-    {
-      "providerId": "codex",
-      "modelId": "gpt-5.3-codex",
-      "friendlyName": "GPT-5 Codex",
-      "modelStatus": "active",
-      "capabilityCategory": "advanced",
-      "costTier": "$$$",
-      "bestFor": [
-        "coding",
-        "reasoning",
-        "agentic-tasks"
-      ],
-      "avoidFor": [
-        "conversation"
-      ],
-      "contextWindow": null,
-      "speedRating": null,
-      "supportsToolUse": true,
-      "codingCapability": null,
-      "instructionFollowing": null,
-      "modelFamily": "codex",
-      "modelClass": "code",
-      "maxInputTokens": null,
-      "inputModalities": [
-        "text"
-      ],
-      "outputModalities": [
-        "text"
-      ],
-      "capabilities": {
-        "toolUse": true,
-        "streaming": true,
-        "imageInput": false,
-        "structuredOutput": true
-      },
-      "pricing": {},
-      "instructType": null,
-      "trainingDataCutoff": null,
-      "codegen": 96,
-      "contextRetention": 78,
-      "conversational": 50,
-      "reasoning": 88,
-      "structuredOutputScore": 84,
-      "toolFidelity": 90,
-      "maxContextTokens": 128000,
-      "maxOutputTokens": 16384,
-      "inputPricePerMToken": null,
-      "outputPricePerMToken": null,
-      "profileConfidence": "medium",
-      "profileSource": "seed",
-      "supportedModalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "summary": "GPT-5 Codex by OpenAI Codex - flagship coding model"
+  {
+    "providerId": "codex",
+    "modelId": "gpt-5.3-codex",
+    "friendlyName": "GPT-5 Codex",
+    "modelStatus": "active",
+    "capabilityCategory": "advanced",
+    "costTier": "critical",
+    "bestFor": [
+      "coding",
+      "reasoning",
+      "agentic-tasks"
+    ],
+    "avoidFor": [
+      "conversation"
+    ],
+    "contextWindow": null,
+    "speedRating": null,
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": "codex",
+    "modelClass": "code",
+    "maxInputTokens": null,
+    "inputModalities": [
+      "text"
+    ],
+    "outputModalities": [
+      "text"
+    ],
+    "capabilities": {
+      "toolUse": true,
+      "streaming": true,
+      "imageInput": false,
+      "structuredOutput": true
     },
+    "pricing": {},
+    "instructType": null,
+    "trainingDataCutoff": null,
+    "codegen": 96,
+    "contextRetention": 78,
+    "conversational": 50,
+    "reasoning": 88,
+    "structuredOutputScore": 84,
+    "toolFidelity": 90,
+    "maxContextTokens": 128000,
+    "maxOutputTokens": 16384,
+    "inputPricePerMToken": 5.0,
+    "outputPricePerMToken": 20.0,
+    "profileConfidence": "medium",
+    "profileSource": "seed",
+    "supportedModalities": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ]
+    },
+    "summary": "GPT-5 Codex by OpenAI Codex - flagship coding model"
+  },
   {
     "providerId": "codex",
     "modelId": "codex-mini-latest",
     "friendlyName": "Codex Mini",
     "modelStatus": "disabled",
-      "capabilityCategory": "advanced",
-      "costTier": "$$",
+    "capabilityCategory": "advanced",
+    "costTier": "standard",
     "bestFor": [
       "coding",
       "agentic-tasks"
@@ -379,11 +403,11 @@
     ],
     "contextWindow": null,
     "speedRating": null,
-      "supportsToolUse": true,
-      "codingCapability": null,
-      "instructionFollowing": null,
-      "modelFamily": "codex",
-      "modelClass": "code",
+    "supportsToolUse": true,
+    "codingCapability": null,
+    "instructionFollowing": null,
+    "modelFamily": "codex",
+    "modelClass": "code",
     "maxInputTokens": null,
     "inputModalities": [
       "text"
@@ -408,8 +432,8 @@
     "toolFidelity": 85,
     "maxContextTokens": 128000,
     "maxOutputTokens": 16384,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.5,
+    "outputPricePerMToken": 6.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -428,7 +452,7 @@
     "friendlyName": "Deep Research Pro Preview (Dec-12-2025)",
     "modelStatus": "retired",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -467,8 +491,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -488,8 +512,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 131072,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -508,7 +532,7 @@
     "friendlyName": "Gemini 2.0 Flash",
     "modelStatus": "retired",
     "capabilityCategory": "strong",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -547,8 +571,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.075,
+      "outputPerMToken": 0.3,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -568,8 +592,8 @@
     "toolFidelity": 70,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.075,
+    "outputPricePerMToken": 0.3,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -588,7 +612,7 @@
     "friendlyName": "Gemini 2.0 Flash 001",
     "modelStatus": "active",
     "capabilityCategory": "strong",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -627,8 +651,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.075,
+      "outputPerMToken": 0.3,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -648,8 +672,8 @@
     "toolFidelity": 70,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.075,
+    "outputPricePerMToken": 0.3,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -668,7 +692,7 @@
     "friendlyName": "Gemini 2.0 Flash-Lite",
     "modelStatus": "retired",
     "capabilityCategory": "strong",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -707,8 +731,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.04,
+      "outputPerMToken": 0.15,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -728,8 +752,8 @@
     "toolFidelity": 70,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.04,
+    "outputPricePerMToken": 0.15,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -748,7 +772,7 @@
     "friendlyName": "Gemini 2.0 Flash-Lite 001",
     "modelStatus": "retired",
     "capabilityCategory": "strong",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -787,8 +811,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.04,
+      "outputPerMToken": 0.15,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -808,8 +832,8 @@
     "toolFidelity": 70,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.04,
+    "outputPricePerMToken": 0.15,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -828,7 +852,7 @@
     "friendlyName": "Gemini 2.5 Computer Use Preview 10-2025",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -867,8 +891,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -888,8 +912,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 131072,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -908,7 +932,7 @@
     "friendlyName": "Gemini 2.5 Flash",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -947,8 +971,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.075,
+      "outputPerMToken": 0.3,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -968,8 +992,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.075,
+    "outputPricePerMToken": 0.3,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -988,7 +1012,7 @@
     "friendlyName": "Nano Banana",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1027,8 +1051,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.075,
+      "outputPerMToken": 0.3,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1048,8 +1072,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 32768,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.075,
+    "outputPricePerMToken": 0.3,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -1068,7 +1092,7 @@
     "friendlyName": "Gemini 2.5 Flash-Lite",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1107,8 +1131,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.04,
+      "outputPerMToken": 0.15,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1128,8 +1152,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.04,
+    "outputPricePerMToken": 0.15,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1148,7 +1172,7 @@
     "friendlyName": "Gemini 2.5 Flash-Lite Preview Sep 2025",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1187,8 +1211,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.04,
+      "outputPerMToken": 0.15,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1208,8 +1232,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.04,
+    "outputPricePerMToken": 0.15,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -1228,7 +1252,7 @@
     "friendlyName": "Gemini 2.5 Flash Preview TTS",
     "modelStatus": "retired",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1267,8 +1291,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.075,
+      "outputPerMToken": 0.3,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1288,8 +1312,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 8192,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.075,
+    "outputPricePerMToken": 0.3,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1308,7 +1332,7 @@
     "friendlyName": "Gemini 2.5 Pro",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1347,8 +1371,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1368,8 +1392,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1388,7 +1412,7 @@
     "friendlyName": "Gemini 2.5 Pro Preview TTS",
     "modelStatus": "retired",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1427,8 +1451,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1448,8 +1472,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 8192,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1468,7 +1492,7 @@
     "friendlyName": "Gemini 3 Flash Preview",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1507,8 +1531,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.4,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1528,8 +1552,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.1,
+    "outputPricePerMToken": 0.4,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1548,7 +1572,7 @@
     "friendlyName": "Nano Banana Pro",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1587,8 +1611,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.5,
+      "outputPerMToken": 6.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1608,8 +1632,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 131072,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.5,
+    "outputPricePerMToken": 6.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1628,7 +1652,7 @@
     "friendlyName": "Gemini 3 Pro Preview",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1667,8 +1691,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.5,
+      "outputPerMToken": 6.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1688,8 +1712,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.5,
+    "outputPricePerMToken": 6.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -1708,7 +1732,7 @@
     "friendlyName": "Nano Banana 2",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1747,8 +1771,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.4,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1768,8 +1792,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 65536,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.1,
+    "outputPricePerMToken": 0.4,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -1788,7 +1812,7 @@
     "friendlyName": "Gemini 3.1 Flash Lite Preview",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1827,8 +1851,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.04,
+      "outputPerMToken": 0.15,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1848,8 +1872,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.04,
+    "outputPricePerMToken": 0.15,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -1868,7 +1892,7 @@
     "friendlyName": "Gemini 3.1 Pro Preview",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1907,8 +1931,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.5,
+      "outputPerMToken": 6.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -1928,8 +1952,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.5,
+    "outputPricePerMToken": 6.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -1948,7 +1972,7 @@
     "friendlyName": "Gemini 3.1 Pro Preview Custom Tools",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -1987,8 +2011,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.5,
+      "outputPerMToken": 6.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -2008,8 +2032,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.5,
+    "outputPricePerMToken": 6.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -2028,7 +2052,7 @@
     "friendlyName": "Gemini Flash Latest",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2067,8 +2091,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.075,
+      "outputPerMToken": 0.3,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -2088,8 +2112,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.075,
+    "outputPricePerMToken": 0.3,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2108,7 +2132,7 @@
     "friendlyName": "Gemini Flash-Lite Latest",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2147,8 +2171,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 0.04,
+      "outputPerMToken": 0.15,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -2168,8 +2192,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.04,
+    "outputPricePerMToken": 0.15,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
@@ -2188,7 +2212,7 @@
     "friendlyName": "Gemini Pro Latest",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2227,8 +2251,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -2248,8 +2272,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2268,7 +2292,7 @@
     "friendlyName": "Gemini Robotics-ER 1.5 Preview",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2307,8 +2331,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -2328,8 +2352,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 1048576,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2348,7 +2372,7 @@
     "friendlyName": "Gemma 3 12B",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2408,8 +2432,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 32768,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2428,7 +2452,7 @@
     "friendlyName": "Gemma 3 1B",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2488,8 +2512,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 32768,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2508,7 +2532,7 @@
     "friendlyName": "Gemma 3 27B",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2568,8 +2592,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 131072,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2588,7 +2612,7 @@
     "friendlyName": "Gemma 3 4B",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2648,8 +2672,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 32768,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2668,7 +2692,7 @@
     "friendlyName": "Gemma 3n E2B",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2728,8 +2752,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 8192,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2748,7 +2772,7 @@
     "friendlyName": "Gemma 3n E4B",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "routine",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2808,8 +2832,8 @@
     "toolFidelity": 33,
     "maxContextTokens": 8192,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 0.0,
+    "outputPricePerMToken": 0.0,
     "profileConfidence": "medium",
     "profileSource": "evaluated",
     "supportedModalities": {
@@ -2828,7 +2852,7 @@
     "friendlyName": "Nano Banana Pro",
     "modelStatus": "active",
     "capabilityCategory": "moderate",
-    "costTier": "$",
+    "costTier": "standard",
     "bestFor": [
       "general purpose tasks"
     ],
@@ -2867,8 +2891,8 @@
     "pricing": {
       "discount": null,
       "requestFixed": null,
-      "inputPerMToken": null,
-      "outputPerMToken": null,
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 5.0,
       "cacheReadPerMToken": null,
       "imageOutputPerUnit": null,
       "reasoningPerMToken": null,
@@ -2888,8 +2912,8 @@
     "toolFidelity": 50,
     "maxContextTokens": 131072,
     "maxOutputTokens": null,
-    "inputPricePerMToken": null,
-    "outputPricePerMToken": null,
+    "inputPricePerMToken": 1.25,
+    "outputPricePerMToken": 5.0,
     "profileConfidence": "medium",
     "profileSource": "seed",
     "supportedModalities": {
