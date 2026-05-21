@@ -157,6 +157,10 @@ services:
       # tokens, origin checks, and grant scopes are still enforced — this
       # only relaxes the transport-layer TLS gate for known internal hosts.
       MCP_INSECURE_INTERNAL_HOSTS: ${MCP_INSECURE_INTERNAL_HOSTS:-portal,host.docker.internal,sandbox}
+      # TTS provider — defaults to self-hosted Chatterbox (prefer-self-hosted-infrastructure).
+      # Override: TTS_PROVIDER=cartesia or TTS_PROVIDER=fish-audio to use a managed API.
+      TTS_PROVIDER: ${TTS_PROVIDER:-chatterbox}
+      DPF_TTS_URL: ${DPF_TTS_URL:-http://dpf-tts:8000}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
     depends_on:
@@ -641,6 +645,46 @@ services:
       # developer-machine smoke testing only.
       - "127.0.0.1:8765:9000"
 
+  # ─── Voice Output — Text-to-speech sidecar (opt-in via `tts` profile) ──────
+  #
+  # Provider: Chatterbox (Resemble AI, MIT license) — self-hosted, zero-shot
+  # voice cloning. No API key required. No per-call cost. Data never leaves
+  # the Docker network.
+  # Principle: prefer-self-hosted-infrastructure
+  # Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md
+  #
+  # Hardware tiers:
+  #   Tier 1 (CPU):   DPF_TTS_IMAGE=devnen/chatterbox-tts-server:latest-cpu
+  #                   ~10–30x slower but requires no GPU. Good for testing.
+  #   Tier 2 (CUDA):  Default. Requires NVIDIA GPU ≥ 6 GB VRAM (Turbo model).
+  #                   Can share GPU with dpf-stt when total VRAM ≥ 10 GB.
+  #   Tier 3 (API):   Set TTS_PROVIDER=cartesia or TTS_PROVIDER=fish-audio in
+  #                   the portal service env to route to a managed API instead.
+  #
+  # Opt-in: docker compose --profile tts up
+  dpf-tts:
+    image: ${DPF_TTS_IMAGE:-devnen/chatterbox-tts-server:latest-cuda}
+    profiles: ["tts"]
+    restart: unless-stopped
+    environment:
+      # turbo = 350M params, ~5-6 GB VRAM, fastest inference.
+      # Override to `original` (500M, ~7 GB) or `multilingual` (550M, 23 langs).
+      TTS_MODEL: ${TTS_CHATTERBOX_MODEL:-turbo}
+    volumes:
+      # Persists registered reference audio clips across container restarts.
+      - dpf_tts_voices:/app/voices
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # First start downloads model weights (~600 MB for Turbo).
+      start_period: 120s
+    ports:
+      # Localhost-only. Portal reaches sidecar via dpf-tts:8000 on the
+      # Docker network; host mapping is for developer smoke testing only.
+      - "127.0.0.1:8766:8000"
+
 volumes:
   pgdata:
   neo4jdata:
@@ -654,6 +698,7 @@ volumes:
   dev_node_modules:
   sandbox_pgdata:
   sandbox_workspace:
+  dpf_tts_voices:
   prometheus_data:
   grafana_data:
   dpf_stt_models:

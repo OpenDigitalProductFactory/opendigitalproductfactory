@@ -15,7 +15,7 @@ vi.mock("@dpf/db", () => ({ prisma: mockPrisma }))
 vi.mock("./voice-service", () => ({
   synthesizeSpeech: vi.fn().mockResolvedValue({
     audioBuffer: Buffer.from("AUDIO").buffer,
-    provider: "cartesia",
+    provider: "chatterbox",  // default provider is now self-hosted Chatterbox
     ttsCostUnits: 10,
   }),
   VoiceSynthesisError: class VoiceSynthesisError extends Error {
@@ -27,8 +27,8 @@ vi.mock("./voice-service", () => ({
 }))
 
 vi.mock("./audio-storage", () => ({
-  writeAudioBlob: vi.fn().mockResolvedValue({ storageKey: "voice/DI-abc/test.mp3" }),
-  audioStorageKeyToUrl: vi.fn().mockReturnValue("/api/voice/audio/voice/DI-abc/test.mp3"),
+  writeAudioBlob: vi.fn().mockResolvedValue({ storageKey: "voice/DI-abc/test.wav" }),
+  audioStorageKeyToUrl: vi.fn().mockReturnValue("/api/voice/audio/voice/DI-abc/test.wav"),
 }))
 
 vi.mock("./persona-style", () => ({
@@ -37,6 +37,7 @@ vi.mock("./persona-style", () => ({
 
 import { runVoiceSynthesisJob } from "./synthesis-job"
 
+// Default interaction uses chatterbox (self-hosted zero-shot cloning)
 const fakeInteractionVoiceEnabled = {
   interactionId: "DI-abc",
   rationale: "The plan is architecturally sound.",
@@ -47,8 +48,8 @@ const fakeInteractionVoiceEnabled = {
     personaConfig: null,
     voiceProfile: {
       id: "vp-1",
-      providerVoiceId: "voice-xyz",
-      provider: "cartesia",
+      providerVoiceId: "voice_mark_dpf",
+      provider: "chatterbox",
       language: "en",
       status: "ready",
     },
@@ -67,7 +68,8 @@ describe("Voice Synthesis End-to-End Integration", () => {
     expect(mockPrisma.decisionInteractionVoiceOutput.create).toHaveBeenCalledOnce()
     const { data } = mockPrisma.decisionInteractionVoiceOutput.create.mock.calls[0][0]
     expect(data.interactionId).toBe("DI-abc")
-    expect(data.audioStorageKey).toBe("voice/DI-abc/test.mp3")
+    expect(data.audioStorageKey).toBe("voice/DI-abc/test.wav")
+    expect(data.provider).toBe("chatterbox")
   })
 
   it("skips synthesis when voiceEnabled is false", async () => {
@@ -92,5 +94,16 @@ describe("Voice Synthesis End-to-End Integration", () => {
 
     await expect(runVoiceSynthesisJob("DI-abc")).resolves.toBeUndefined()
     expect(mockPrisma.decisionInteractionVoiceOutput.create).not.toHaveBeenCalled()
+  })
+
+  it("routes to chatterbox adapter when provider field is chatterbox", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(fakeInteractionVoiceEnabled)
+    mockPrisma.decisionInteractionVoiceOutput.create.mockResolvedValue({ id: "vo-2" })
+
+    await runVoiceSynthesisJob("DI-abc")
+
+    const { synthesizeSpeech } = await import("./voice-service")
+    const callArgs = vi.mocked(synthesizeSpeech).mock.calls[0]
+    expect(callArgs[1].provider).toBe("chatterbox")
   })
 })
