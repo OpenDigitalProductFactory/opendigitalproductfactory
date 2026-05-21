@@ -10,10 +10,10 @@ import {
   summarizeDiscoveryHealth,
 } from "@/lib/discovery-data";
 import { getFullGraphData } from "@/lib/actions/graph";
-import { AddDiscoveryConnection } from "@/components/inventory/AddDiscoveryConnection";
 import { DiscoveryRunSummary } from "@/components/inventory/DiscoveryRunSummary";
 import { InventoryExceptionQueue } from "@/components/inventory/InventoryExceptionQueue";
 import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQualityIssuesPanel";
+import { SavedConnectionsPanel } from "@/components/inventory/SavedConnectionsPanel";
 import { SubnetGroupedInventoryPanel } from "@/components/inventory/SubnetGroupedInventoryPanel";
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
 
@@ -37,7 +37,6 @@ export async function DiscoveryOperationsPage({
     triageQueues,
     openIssues,
     graphData,
-    connectionCount,
     detectedGateways,
   ] = await Promise.all([
     prisma.digitalProduct.findMany({
@@ -55,7 +54,6 @@ export async function DiscoveryOperationsPage({
     getInventoryTriageQueues(),
     getOpenPortfolioQualityIssues(),
     getFullGraphData(),
-    prisma.discoveryConnection.count(),
     prisma.inventoryEntity.findMany({
       where: {
         entityType: "gateway",
@@ -137,7 +135,7 @@ export async function DiscoveryOperationsPage({
 
       <div className="space-y-4">
         <DiscoveryRunSummary run={latestRun} health={health} />
-        {connectionCount === 0 && <AddDiscoveryConnection detectedGateway={realGatewayIp} />}
+        <SavedConnectionsPanel detectedGateway={realGatewayIp} />
         <InventoryExceptionQueue queues={triageQueues} />
         <SubnetGroupedInventoryPanel groups={groupedInventory} />
         <PortfolioQualityIssuesPanel issues={openIssues} />

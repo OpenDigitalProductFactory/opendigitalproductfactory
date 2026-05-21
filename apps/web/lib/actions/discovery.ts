@@ -111,18 +111,41 @@ export async function listDiscoveryConnections(): Promise<
 }
 
 /**
+ * Strip every trailing "/" without using `replace(/\/+$/, "")` — that
+ * regex tripped a CodeQL polynomial-ReDoS alert on user-supplied input,
+ * and an explicit slice loop is both safer and easier to reason about.
+ */
+function trimTrailingSlashes(input: string): string {
+  let end = input.length;
+  while (end > 0 && input.charCodeAt(end - 1) === 0x2f /* "/" */) end--;
+  return input.slice(0, end);
+}
+
+/** Strip a leading "http://" or "https://" without a regex (CodeQL-safe). */
+function stripScheme(input: string): string {
+  if (input.startsWith("https://")) return input.slice(8);
+  if (input.startsWith("http://")) return input.slice(7);
+  if (input.startsWith("HTTPS://")) return input.slice(8);
+  if (input.startsWith("HTTP://")) return input.slice(7);
+  return input;
+}
+
+/**
  * Normalize user input into a proper endpoint URL.
  * Accepts: "192.168.0.1", "http://192.168.0.1", "https://192.168.0.1:8443/"
  * Returns: "https://192.168.0.1" (HTTPS by default for UniFi/SNMP controllers)
  */
 function normalizeEndpointUrl(raw: string, collectorType: string): string {
-  let url = raw.trim().replace(/\/+$/, "");
+  let url = trimTrailingSlashes(raw.trim());
 
   // For ARP scan, the input is a subnet not a URL
   if (collectorType === "arp_scan") return url;
 
-  // If no protocol specified, add one
-  if (!/^https?:\/\//i.test(url)) {
+  // If no protocol specified, add one. Fixed-prefix checks instead of a
+  // regex — no backtracking risk.
+  const hasScheme = url.startsWith("http://") || url.startsWith("https://")
+    || url.startsWith("HTTP://") || url.startsWith("HTTPS://");
+  if (!hasScheme) {
     // UniFi controllers always use HTTPS
     const protocol = collectorType === "unifi" ? "https" : "http";
     url = `${protocol}://${url}`;
@@ -136,8 +159,15 @@ function normalizeEndpointUrl(raw: string, collectorType: string): string {
   return url;
 }
 
-/** Create or update a discovery connection. API key is encrypted at rest. */
+/**
+ * Create or update a discovery connection. API key is encrypted at rest.
+ *
+ * Edit mode (when `id` is supplied) uses an update-by-id so the operator can
+ * change endpointUrl + connectionKey without orphaning the old row. Without
+ * `id`, we upsert by connectionKey (the create-from-scratch path).
+ */
 export async function configureDiscoveryConnection(input: {
+  id?: string;
   gatewayEntityId?: string;
   name: string;
   collectorType: string;
@@ -149,9 +179,27 @@ export async function configureDiscoveryConnection(input: {
   if (!authResult.ok) return authResult;
 
   const endpointUrl = normalizeEndpointUrl(input.endpointUrl, input.collectorType);
-  const connectionKey = `${input.collectorType}:${endpointUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  const connectionKey = `${input.collectorType}:${trimTrailingSlashes(stripScheme(endpointUrl))}`;
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
+
+  // Edit-by-id path: lets URL changes flow without splitting the row.
+  if (input.id) {
+    const updated = await prisma.discoveryConnection.update({
+      where: { id: input.id },
+      data: {
+        connectionKey,
+        name: input.name,
+        endpointUrl,
+        ...(encryptedApiKey ? { encryptedApiKey } : {}),
+        configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
+        ...(encryptedApiKey ? { status: "active" } : {}),
+        gatewayEntityId: input.gatewayEntityId ?? null,
+      },
+    });
+    revalidateDiscoverySurfaces();
+    return { ok: true, connectionId: updated.id };
+  }
 
   const result = await prisma.discoveryConnection.upsert({
     where: { connectionKey },
@@ -168,9 +216,15 @@ export async function configureDiscoveryConnection(input: {
     update: {
       name: input.name,
       endpointUrl,
+      // Only overwrite the encrypted key when a fresh one was supplied; the
+      // edit-mode UX intentionally lets operators rotate URL/site without
+      // pasting the API key again.
       ...(encryptedApiKey ? { encryptedApiKey } : {}),
       configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
-      status: encryptedApiKey ? "active" : "unconfigured",
+      // Only reset status when we just stored a fresh key (re-test will
+      // overwrite this in seconds). Without a fresh key, preserve the
+      // current status so an edit to URL/site doesn't wipe `active`.
+      ...(encryptedApiKey ? { status: "active" } : {}),
       gatewayEntityId: input.gatewayEntityId ?? null,
     },
   });
