@@ -4,22 +4,49 @@
 # Roadmap: docs/superpowers/plans/2026-05-12-edge-node-phase0-roadmap.md A3
 #
 # Phase 0 deployment mode: container with `network_mode: host` (Linux only).
-# macOS / Windows native binary modes ship in T3.
+# macOS / Windows native binary modes ship in T3 (Mode 4 Go binary).
 #
 # Node 24 — same major as the rest of the DPF stack so undici@8 works
 # (markAsUncloneable was added in Node 22).
 
 FROM node:24-alpine AS build
-WORKDIR /app/services/edge-node
-COPY services/edge-node/package.json services/edge-node/tsconfig.json ./
-# pnpm 10 fails the install when transitive deps have ignored postinstall
-# scripts (esbuild ships a native-binary downloader). The edge-node build
-# only needs tsc to produce dist/; esbuild is pulled in by tsx + vitest as
-# devDependencies that the runtime image doesn't consume. Skipping scripts
-# avoids the gate without changing what's actually executed.
-RUN corepack enable && pnpm install --no-frozen-lockfile --ignore-scripts
-COPY services/edge-node/src ./src
-RUN pnpm build
+WORKDIR /app
+
+# Workspace skeleton — pnpm needs to see pnpm-workspace.yaml + the
+# root package.json + lockfile to resolve `workspace:*` protocols.
+# PR #853 (SNMP ifTable / LLDP) introduced @dpf/validators as a direct
+# dependency of services/edge-node, so the workspace context has to
+# come along; we can no longer install from just the edge-node
+# package.json.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+
+# Every workspace package edge-node depends on (transitively). Today
+# that's @dpf/validators only; add more here if the dep tree grows.
+COPY packages/validators ./packages/validators
+
+# Edge-node's own package metadata. Source comes AFTER deps install so
+# source edits don't bust the install layer (Docker layer caching).
+COPY services/edge-node/package.json services/edge-node/tsconfig.json ./services/edge-node/
+
+# Filter narrows the install to just dpf-edge-node + its workspace
+# transitive deps (`...` suffix). --ignore-scripts skips esbuild's
+# postinstall (only used by tsx / vitest devDeps that the runtime
+# image doesn't consume).
+RUN corepack enable && pnpm install --filter dpf-edge-node... \
+    --no-frozen-lockfile --ignore-scripts
+
+COPY services/edge-node/src ./services/edge-node/src
+RUN pnpm --filter dpf-edge-node build
+
+# pnpm deploy bundles the edge-node package + all its dependencies
+# (workspace and external alike) into a single self-contained
+# directory with REAL files in node_modules — no symlinks back into
+# /app/packages, no workspace context required at runtime. The
+# runner stage just copies /app/deploy/edge-node and runs it.
+RUN pnpm deploy --filter dpf-edge-node --prod --legacy --ignore-scripts /app/deploy/edge-node
+# pnpm deploy --prod strips devDependencies but ALSO doesn't include
+# our just-built dist/. Copy it in explicitly.
+RUN cp -r /app/services/edge-node/dist /app/deploy/edge-node/dist
 
 FROM node:24-alpine AS runner
 
@@ -32,25 +59,21 @@ FROM node:24-alpine AS runner
 # - net-snmp-tools  C3's network-device poll. Ships snmpget/snmpwalk
 #                   with v2c + v3 support. No daemon, no listener —
 #                   the binaries are invoked per query.
-#
-# Future collectors will add `arp-scan` (alternative ARP-request
-# probe) — held off until that collector lands so the image surface
-# stays small.
 RUN apk add --no-cache nmap net-snmp-tools
 
 # Phase 0 runs as a non-root user. The container needs no special
-# capabilities for the Phase 0 collector set (ip addr, docker ps, ss
-# from outside the host? - actually Phase 0 collectors live in A5; A3
-# only needs network egress to the Authority).
+# capabilities for the Phase 0 collector set; future collectors that
+# need CAP_NET_RAW are granted via docker-compose.edge*.yml.
 RUN addgroup -S dpf && adduser -S -G dpf -u 10001 dpf
 WORKDIR /app
-COPY services/edge-node/package.json ./package.json
-COPY --from=build /app/services/edge-node/dist ./dist
-COPY --from=build /app/services/edge-node/node_modules ./node_modules
+# Self-contained deploy from pnpm — includes the edge-node package
+# metadata, its dist/, and node_modules with @dpf/validators inlined
+# as a real copy (no workspace symlinks). One directory, runtime-ready.
+COPY --from=build /app/deploy/edge-node/ ./
 # Bundled IEEE OUI dataset (~1.2 MB, ~39k entries). lib/mac-oui.ts
-# reads this lazily on the first ARP enrichment lookup. The build
-# stage doesn't need it (tsc is happy without it); we COPY straight
-# from the build context into the runtime image.
+# reads this lazily on the first ARP enrichment lookup. Sourced from
+# the build context rather than the deploy/ directory — pnpm deploy
+# only includes files referenced by the package, not the bundled data.
 COPY services/edge-node/data ./data
 
 # State directory; mounted as a volume in docker-compose.edge.yml
