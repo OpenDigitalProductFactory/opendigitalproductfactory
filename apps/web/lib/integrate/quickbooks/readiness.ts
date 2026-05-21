@@ -4,6 +4,11 @@ import {
   type IntegrationReadinessDescriptor,
   type IntegrationReadinessState,
 } from "@/lib/integrate/readiness";
+import {
+  QUICKBOOKS_IMPORT_STAGING_ENTITY_FAMILIES,
+  buildQuickBooksImportStagingDescriptor,
+  type QuickBooksImportStagingEntityFamily,
+} from "./import-staging";
 
 export type QuickBooksReadinessConnection = {
   status: "unconfigured" | "connected" | "error";
@@ -148,6 +153,7 @@ export function buildQuickBooksReadinessDescriptor({
   const isConnected = status === "connected";
   const isError = status === "error";
   const isAuthError = isError && isCredentialError(connection?.lastErrorMsg);
+  const importStaging = buildQuickBooksImportStagingDescriptor();
 
   return {
     schemaVersion: "1.0",
@@ -176,6 +182,7 @@ export function buildQuickBooksReadinessDescriptor({
           status,
           supportedNow: capability.supportedNow,
           isAuthError,
+          supportsImportStaging: isImportStagingFamily(capability.key),
         }),
         operatingMode: "integration-led",
         supportedNow: capability.supportedNow,
@@ -188,6 +195,7 @@ export function buildQuickBooksReadinessDescriptor({
             : undefined,
       }),
     ),
+    importStaging,
     nextSafeActions: resolveNextSafeActions(status),
     updatedAt: connection?.lastTestedAt ?? null,
   };
@@ -197,10 +205,12 @@ function resolveCapabilityState({
   status,
   supportedNow,
   isAuthError,
+  supportsImportStaging,
 }: {
   status: QuickBooksReadinessConnection["status"];
   supportedNow: boolean;
   isAuthError: boolean;
+  supportsImportStaging: boolean;
 }): IntegrationReadinessState {
   if (status === "unconfigured") {
     return "not-connected";
@@ -208,6 +218,10 @@ function resolveCapabilityState({
 
   if (status === "error" && supportedNow && isAuthError) {
     return "credential-expired";
+  }
+
+  if (status === "connected" && supportedNow && supportsImportStaging) {
+    return "import-ready";
   }
 
   if (status === "connected" && supportedNow) {
@@ -222,6 +236,7 @@ function resolveNextSafeActions(status: QuickBooksReadinessConnection["status"])
     return [
       "Review mapped read coverage",
       "Use expanded QuickBooks read coverage to plan source-attributed staging before imports or writes",
+      "Review non-editable import staging fields before creating local accounting links",
       "Keep bank feeds, tax authority, and accountant workflow blocked until their ownership gates are designed",
       "Keep write operations blocked until proposal-mode approval exists",
     ];
@@ -232,6 +247,12 @@ function resolveNextSafeActions(status: QuickBooksReadinessConnection["status"])
   }
 
   return ["Connect QuickBooks credentials"];
+}
+
+function isImportStagingFamily(key: QuickBooksEntityFamily): key is QuickBooksImportStagingEntityFamily {
+  return QUICKBOOKS_IMPORT_STAGING_ENTITY_FAMILIES.includes(
+    key as QuickBooksImportStagingEntityFamily,
+  );
 }
 
 function isCredentialError(message: string | null | undefined): boolean {

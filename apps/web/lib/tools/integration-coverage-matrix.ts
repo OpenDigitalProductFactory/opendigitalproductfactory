@@ -121,13 +121,13 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     dpfSurfaces: ["/finance", "/platform/tools/integrations/quickbooks"],
     coworkerIds: ["finance-controller", "finance-agent", "coo"],
     posture: "hybrid",
-    maturity: "read",
+    maturity: "stage",
     csdmDomain: "service-offering",
     it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill", "detect-to-correct"],
-    nextBacklogItemId: "BI-C61B5202",
+    nextBacklogItemId: "BI-07D76D6B",
     replacementCriteria:
-      "DPF stays integration-led until read expansion, import staging, reconciliation evidence, accountant collaboration, and governed write-back gates prove system-of-record promotion criteria.",
-    notes: "Approved readiness snapshot becomes the long-tail accounting parity sequence before any write posture.",
+      "DPF stays integration-led until source-attributed import staging, entity links, reconciliation evidence, accountant collaboration, rollback/export, and governed write-back gates prove system-of-record promotion criteria.",
+    notes: "QuickBooks read coverage now feeds non-editable staging posture before any entity-link or write-back work.",
   },
   {
     id: "stripe-payments",
