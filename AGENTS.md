@@ -1,6 +1,6 @@
 # DPF — Agent Rulebook
 
-This is the canonical operating contract for AI agents working in the Digital Product Factory. Read in full before any action. Subdirectory `AGENTS.md` files extend this with area-specific detail (`apps/web/AGENTS.md`, `packages/db/AGENTS.md`).
+This is the canonical operating contract for AI agents working in the Digital Product Factory. Read in full before any action. Subdirectory `AGENTS.md` files MAY extend this with area-specific detail in the future (e.g. `apps/web/AGENTS.md`, `packages/db/AGENTS.md`); none exist today, so this root file is the only AGENTS.md to consult.
 
 Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/copilot-instructions.md`, `CONVENTIONS.md`, `.continue/rules/`) are pointers to this file. Do not duplicate rules into them.
 
