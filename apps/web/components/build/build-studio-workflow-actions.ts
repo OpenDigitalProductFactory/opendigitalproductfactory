@@ -75,6 +75,24 @@ export type BuildStudioWorkflowAction =
     coworkerPrompt: string;
   } & BuildStudioWorkflowActionMetadata)
   | ({
+    // FB-78E967D4 — Reset Build affordance. Surfaces when the pipeline left
+    // FeatureBuild.buildExecState in a self-contradictory shape that the
+    // existing retry/resume paths refuse to handle (e.g. step=complete with a
+    // lingering error/failedAt from a partial run). PR #859 prevents new
+    // builds from reaching this shape going forward; this affordance is the
+    // UX recovery path for rows that hit the bug before the forward-going fix
+    // landed. The action clears buildExecState and re-fires autoExecuteBuild
+    // so the pipeline can self-heal from a clean checkpoint.
+    kind: "reset-build";
+    title: string;
+    message: string;
+    primaryLabel: string;
+    targetPhase: null;
+    disabledReason: string | null;
+    coworkerLabel: string;
+    coworkerPrompt: string;
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
     kind: "resume-implementation";
     title: string;
     message: string;
@@ -308,6 +326,28 @@ function buildResumeAction(args: {
   };
 }
 
+/**
+ * FB-78E967D4 — detect a buildExecState shape that no existing recovery path
+ * accepts:
+ *   - `retryBuildExecution` rejects unless `state.step === "failed"`.
+ *   - `resumeBuildImplementation` rejects unless a releasable diff exists.
+ *   - The phase-gate `advance-phase` action surfaces but is disabled because
+ *     `verificationOut` is null.
+ *
+ * The canonical failure mode is FB-F0476EF3: a step threw mid-run on an older
+ * portal build, the pipeline retried, and the second pass short-circuited to
+ * `step="complete"` because the resume index landed past the failed step.
+ * That left a row with `step="complete"` AND a populated `error`/`failedAt` —
+ * exactly the contradictory checkpoint PR #859 prevents going forward but
+ * cannot retroactively clear.
+ */
+function hasContradictoryExecState(state: FeatureBuildRow["buildExecState"]): boolean {
+  if (!state) return false;
+  // `failed` is a legitimate terminal step that retryBuildExecution handles;
+  // every other step with an error/failedAt breadcrumb is contradictory.
+  return state.step !== "failed" && (state.error != null || state.failedAt != null);
+}
+
 function hasCompletedUxVerification(build: FeatureBuildRow): boolean {
   const status = build.uxVerificationStatus;
   if (status !== "complete" && status !== "skipped") {
@@ -391,6 +431,24 @@ export function deriveBuildStudioWorkflowAction({
         coworkerPrompt:
           "The current build still has flagged execution or verification concerns. Explain what failed, then rerun the non-clean implementation work on a healthy sandbox and tell me when verification is genuinely ready.",
       });
+    }
+
+    // FB-78E967D4 — contradictory pipeline state has no other recovery path.
+    // Surface Reset before the sandbox-retry / advance-phase fallthroughs so
+    // the operator gets an actionable button instead of a disabled gate.
+    if (hasContradictoryExecState(build.buildExecState)) {
+      return {
+        kind: "reset-build",
+        title: "Build Pipeline Needs Reset",
+        message:
+          "The build pipeline checkpoint is in a contradictory shape (a prior run left an error breadcrumb on a non-failed step). Clear the checkpoint and re-run the pipeline from the start.",
+        primaryLabel: "Reset Build",
+        targetPhase: null,
+        disabledReason: null,
+        coworkerLabel: "Diagnose with coworker",
+        coworkerPrompt:
+          "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",
+      };
     }
 
     // Sandbox launch failed before writing any task results — exec state is

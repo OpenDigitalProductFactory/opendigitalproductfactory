@@ -28,6 +28,7 @@ vi.mock("@/lib/actions/build", () => ({
   approveBuildStart: vi.fn(),
   recordBuildAcceptance: vi.fn(),
   resumeBuildImplementation: mockResumeBuildImplementation,
+  resetBuildExecution: vi.fn(),
   retryBuildExecution: vi.fn(),
   runBuildReviewVerification: vi.fn(),
 }));

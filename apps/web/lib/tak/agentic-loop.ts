@@ -955,12 +955,30 @@ export async function runAgenticLoop(params: {
     inferenceCallCount++;
     let result: RoutedInferenceResult;
     try {
-      result = await routeAndCall(
-        compactAgenticMessages(messages),
-        systemPrompt,
-        sensitivity,
-        { ...enrichedRouteOptions, previousResponseId },
-      );
+      // BI-e299d4d3 — wrap the slow inference with withHeartbeatTicker.
+      // routeAndCall is the loop's long-running work; an inference can take
+      // 30-300 seconds. The iteration-boundary heartbeat fires before this
+      // await and the next one fires after — no coverage during the call.
+      // The ticker keeps heartbeats flowing at (heartbeatTimeoutSeconds / 3)
+      // cadence so the watchdog doesn't false-positive on slow models.
+      if (taskRunId) {
+        const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
+        result = await withHeartbeatTicker(taskRunId, () =>
+          routeAndCall(
+            compactAgenticMessages(messages),
+            systemPrompt,
+            sensitivity,
+            { ...enrichedRouteOptions, previousResponseId },
+          ),
+        );
+      } else {
+        result = await routeAndCall(
+          compactAgenticMessages(messages),
+          systemPrompt,
+          sensitivity,
+          { ...enrichedRouteOptions, previousResponseId },
+        );
+      }
     } catch (routeErr) {
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);

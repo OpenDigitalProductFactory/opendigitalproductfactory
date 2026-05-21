@@ -27,6 +27,7 @@ vi.mock("@/lib/actions/build", () => ({
   advanceBuildPhase: vi.fn(),
   createFeatureBuild: vi.fn(),
   deleteFeatureBuild: vi.fn(),
+  resetBuildExecution: vi.fn(),
   retryBuildExecution: vi.fn(),
 }));
 
