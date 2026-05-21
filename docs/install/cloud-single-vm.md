@@ -319,6 +319,15 @@ on the customer's network using
 Point it at `https://dpf.example.com` via `DPF_AUTHORITY_URL`. It
 phones home over outbound HTTPS — no VPC peering or VPN required.
 
+> **Picking the right Edge Node runtime for the on-prem host:** the
+> Edge Node ships in two runtimes (Linux container vs. native binary
+> on Windows / macOS / embedded). On Docker Desktop hosts the container
+> path is a dead end — WSL2 mirrored networking does not cross the
+> Docker Engine boundary, so the container only sees Docker's internal
+> services network. The user-guide page
+> [Edge Nodes — Deployment Modes](../user-guide/platform/edge-nodes#deployment-modes)
+> has the full matrix and the verified-2026-05-20 finding behind it.
+
 See [edge-node-multi-host.md](edge-node-multi-host.md) for the
 standalone Edge Node runbook.
 
@@ -342,10 +351,35 @@ Same lifecycle commands as bare-metal Linux:
 |------|---------|
 | Stop the stack | `bash dpf-stop.sh` |
 | Start the stack | `bash dpf-start.sh` |
-| Update images | `git pull && bash dpf-stop.sh && bash dpf-start.sh` |
+| Update images (manual) | `git pull && bash dpf-stop.sh && bash dpf-start.sh` |
 | Diagnostic bundle | `bash install-dpf.sh doctor` |
 | Uninstall (keep data) | `bash uninstall-dpf.sh` |
 | Uninstall (wipe data) | `bash uninstall-dpf.sh --purge --yes` |
+
+### Portal self-upgrade (cloud VM operators)
+
+The platform ships a governed **portal self-upgrade** runtime that
+detects when the running portal is behind `origin/main` and runs an
+in-place upgrade through the same promoter, backup, swap, health, and
+rollback path used for Build Studio ship-phase promotions. For a
+single cloud VM this removes the SSH-and-`git pull` cycle from your
+weekly maintenance.
+
+| Surface | What it does |
+|---------|--------------|
+| `/ops/self-upgrade` | Operations dashboard panel — current SHA, target SHA, recent run history, manual trigger. Read access is gated by the `view_operations` capability; manual triggers require `manage_provider_connections`. |
+| **Daily cron** | `portal/self-upgrade-scheduled` runs at `0 8 * * *` (`SelfUpgradeRun` row written for each cycle; runs that find no new commits exit with `status: "skipped"`). |
+| **Manual trigger** | The dashboard's manual-trigger button fires the `portal/self-upgrade.requested` event, which runs the same cycle on demand. |
+| **Completion sweep** | A separate `*/15 * * * *` cron reconciles runs in the `completing` state — important when the swap succeeded but the post-build verification needs to confirm the running SHA before the run flips to `succeeded`. |
+
+Canonical status enum: `queued | running | succeeded | failed | rolled_back | completing | skipped`. On health-check failure during the swap the promoter rolls back to the previous image and the run lands in `rolled_back`; the operator can investigate from the dashboard without losing the running portal.
+
+To **disable** scheduled self-upgrade on a particular install, set the
+relevant `PlatformConfig.selfUpgrade.*` flag from the admin surface —
+the manual trigger remains available for operators who want to run
+the cycle on their own schedule.
+
+Implementation reference: [`docs/superpowers/plans/2026-05-20-portal-self-upgrade-local.md`](../superpowers/plans/2026-05-20-portal-self-upgrade-local.md).
 
 ## What Phase 0 does NOT cover
 
