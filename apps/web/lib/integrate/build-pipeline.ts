@@ -133,13 +133,25 @@ export async function runBuildPipeline(params: {
 
     while (attempt < maxAttempts) {
       try {
-        state = await executeStep(step, buildId, state);
+        // BI-e299d4d3 — wrap the slow step with withHeartbeatTicker.
+        // executeStep can take 5-30 minutes (code generation, test runs,
+        // sandbox spin-up). The post-step heartbeat below covers transition
+        // boundaries but not the in-flight step itself. The ticker keeps
+        // heartbeats flowing at (heartbeatTimeoutSeconds / 3) cadence so the
+        // watchdog doesn't false-positive on legitimately slow steps.
+        if (taskRunId) {
+          const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
+          state = await withHeartbeatTicker(taskRunId, () => executeStep(step, buildId, state));
+        } else {
+          state = await executeStep(step, buildId, state);
+        }
         // Checkpoint the completed step.
         const advanced = nextStep(step);
         state = { ...state, step: advanced ?? step, retryCount: 0 };
         await updateState(state);
         // BI-4ab6be39 — heartbeat at the step-transition boundary (only
-        // when a taskRunId was provided by the caller).
+        // when a taskRunId was provided by the caller). Belt-and-braces
+        // alongside the in-step ticker above.
         if (taskRunId) {
           const { heartbeat } = await import("@/lib/observability/heartbeat");
           await heartbeat(taskRunId);

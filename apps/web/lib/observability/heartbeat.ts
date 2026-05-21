@@ -57,9 +57,24 @@ export async function withHeartbeatTicker<T>(
   fn: () => Promise<T>,
   _intervalMsForTests?: number,
 ): Promise<T> {
-  const intervalMs =
-    _intervalMsForTests ??
-    Math.floor((await resolveThresholdForTaskRun(taskRunId)).heartbeatTimeoutSeconds * 1000 / 3);
+  // Best-effort threshold lookup — same resilience contract as heartbeat().
+  // A transient DB hiccup or incomplete test mock must not crash the
+  // long-running loop this wraps. Fall back to a safe default (60s tick)
+  // so the wrapper still emits heartbeats even when the lookup fails.
+  let intervalMs = _intervalMsForTests ?? 60_000;
+  if (_intervalMsForTests === undefined) {
+    try {
+      const threshold = await resolveThresholdForTaskRun(taskRunId);
+      intervalMs = Math.floor(threshold.heartbeatTimeoutSeconds * 1000 / 3);
+    } catch (err) {
+      console.warn(
+        "[withHeartbeatTicker] threshold lookup failed for",
+        taskRunId,
+        "using 60s default —",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
   const handle = setInterval(() => {
     void heartbeat(taskRunId);
   }, intervalMs);

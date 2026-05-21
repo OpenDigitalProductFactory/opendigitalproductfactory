@@ -564,7 +564,23 @@ export async function orchestrateDeliberation(
 
       let result: BranchDispatchResult;
       try {
-        result = await input.dispatcher.dispatch(contract, br.branchNodeId);
+        // BI-e299d4d3 — wrap the slow LLM dispatch with withHeartbeatTicker.
+        // dispatcher.dispatch is the orchestrator's long-running work: each
+        // branch is an LLM inference that can take 5-15 minutes. The earlier
+        // heartbeat at the branch-planning boundary (line 437) fires in ms
+        // and doesn't cover this await, so the watchdog saw the row go
+        // silent and (incorrectly) flagged it as stalled. The ticker keeps
+        // heartbeats flowing at (heartbeatTimeoutSeconds / 3) cadence while
+        // the dispatch is in flight, proving the orchestrator is alive.
+        const dispatcher = input.dispatcher;
+        if (taskRunId) {
+          const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
+          result = await withHeartbeatTicker(taskRunId, () =>
+            dispatcher.dispatch(contract, br.branchNodeId),
+          );
+        } else {
+          result = await dispatcher.dispatch(contract, br.branchNodeId);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         br.status = "failed";
