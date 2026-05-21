@@ -4,7 +4,11 @@
 
 **Goal:** Build the first governed vertical slice of the four-portfolio agent-control-plane maturity surface: canonical scoring logic, schema foundation, seed assessments, portfolio read model, and read-only portfolio UI.
 
-**Architecture:** The first slice keeps the four-portfolio taxonomy as the anchor and adds a maturity assessment companion model rather than overloading `TaxonomyNode`. A single domain module computes `mvpTargetScore`, `confidenceGrade`, dependency-bounded `effectiveMaturity`, and DAG validation; UI and reports read those derived values. The slice is read-only in the portal: no score editing, hive-mind mutation, productization transitions, or backlog creation yet.
+**Architecture:** The first slice keeps the four-portfolio taxonomy as the anchor and adds a maturity assessment companion model rather than overloading `TaxonomyNode`. A single shared domain module (`packages/db/src/capability-maturity.ts`, exported as `@dpf/db/capability-maturity`) is the **single writer/deriver** for `mvpTargetScore`, `confidenceGrade`, dependency-bounded `effectiveMaturity`, and DAG validation (spec §15.2 #13). UI, reports, and the seeder read derived values through this package boundary; nothing imports `apps/web` from `packages/db`. The seeder is the only mutation path in slice 1 and calls `validateCapabilityDependencyGraph` before any write (§15.2 #18).
+
+**Feature flag:** No flag for this slice. The surface is read-only, additive, and renders only when assessments exist for the selected node — a zero-data install sees nothing. Productize-mode mutations, hive-mind capture, and customer overlay scoring all ship behind flags in their respective follow-on plans.
+
+**Ship documentation:** When slice 1 reaches `main`, update `docs/superpowers/specs/2026-03-10-portfolio-route-design.md` and the portal user guide to describe the maturity panel. Do not pre-document the follow-on phases.
 
 **Tech Stack:** Next.js 16, React 19, Prisma 7, PostgreSQL, Vitest, DPF theme tokens, existing `/portfolio` route and portfolio components.
 
@@ -34,8 +38,8 @@ The following are follow-on efforts and should get separate plans after this sli
 
 **Create**
 
-- `apps/web/lib/maturity/capability-maturity.ts` — domain constants, enums, score derivation, effective maturity, confidence decay, DAG validation.
-- `apps/web/lib/maturity/capability-maturity.test.ts` — unit tests for score derivation, dependency cascade, stale decay, cycle rejection.
+- `packages/db/src/capability-maturity.ts` — domain constants, enums, score derivation, effective maturity, confidence decay, DAG validation.
+- `packages/db/src/capability-maturity.test.ts` — unit tests for score derivation, dependency cascade, stale decay, cycle rejection.
 - `apps/web/lib/maturity/capability-maturity-data.ts` — Prisma-backed read model for portfolio/taxonomy maturity rollups.
 - `apps/web/lib/maturity/capability-maturity-data.test.ts` — mocked Prisma-shape tests for rollup behavior.
 - `apps/web/components/portfolio/CapabilityMaturityPanel.tsx` — read-only maturity summary for a selected portfolio/taxonomy node.
@@ -47,6 +51,7 @@ The following are follow-on efforts and should get separate plans after this sli
 **Modify**
 
 - `packages/db/prisma/schema.prisma` — add maturity assessment companion models and relations.
+- `packages/db/package.json` — export `@dpf/db/capability-maturity`.
 - `packages/db/src/seed.ts` — call the new seed helper.
 - `apps/web/components/portfolio/PortfolioNodeDetail.tsx` — render the maturity panel in the selected taxonomy node view.
 - `apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx` — load maturity rollup data for the selected node.
@@ -61,12 +66,13 @@ The following are follow-on efforts and should get separate plans after this sli
 
 **Files:**
 
-- Create: `apps/web/lib/maturity/capability-maturity.ts`
-- Create: `apps/web/lib/maturity/capability-maturity.test.ts`
+- Create: `packages/db/src/capability-maturity.ts`
+- Create: `packages/db/src/capability-maturity.test.ts`
+- Modify: `packages/db/package.json`
 
 - [ ] **Step 1: Write failing tests for derived targets, confidence decay, effective maturity, and cycle detection**
 
-Create `apps/web/lib/maturity/capability-maturity.test.ts`:
+Create `packages/db/src/capability-maturity.test.ts`:
 
 ```ts
 import {
@@ -86,26 +92,51 @@ describe("capability maturity scoring", () => {
     expect(deriveMvpTargetScore(riskTier)).toBe(expected);
   });
 
-  it("marks stale when newest evidence is older than 30 days", () => {
+  it("returns claimed when no evidence stream has ever flowed and no review", () => {
+    // Spec §5.3 precedence rule 4: fresh-authored seed rows stay claimed; they do not
+    // decay to stale on age alone because there was nothing to go silent.
     const now = new Date("2026-05-21T12:00:00.000Z");
 
     expect(deriveConfidenceGrade({
       now,
-      evidenceFreshnessAt: new Date("2026-04-20T12:00:00.000Z"),
-      lastGovernanceReviewAt: new Date("2026-05-01T12:00:00.000Z"),
-      hasContinuousEvidence: true,
+      evidenceFreshnessAt: null,
+      lastGovernanceReviewAt: null,
+      hasContinuousEvidence: false,
+    })).toBe("claimed");
+  });
+
+  it("returns stale when evidence stream existed and has been silent > 30 days", () => {
+    const now = new Date("2026-05-21T12:00:00.000Z");
+
+    expect(deriveConfidenceGrade({
+      now,
+      evidenceFreshnessAt: new Date("2026-04-15T12:00:00.000Z"),
+      lastGovernanceReviewAt: null,
+      hasContinuousEvidence: false,
     })).toBe("stale");
   });
 
-  it("returns verified when governance review and evidence are fresh", () => {
+  it("returns verified when governance review is fresh, even if evidence lapsed", () => {
+    // Spec §5.3 precedence rule 1: fresh review overrides stale evidence signal.
+    const now = new Date("2026-05-21T12:00:00.000Z");
+
+    expect(deriveConfidenceGrade({
+      now,
+      evidenceFreshnessAt: new Date("2026-04-15T12:00:00.000Z"),
+      lastGovernanceReviewAt: new Date("2026-05-10T12:00:00.000Z"),
+      hasContinuousEvidence: true,
+    })).toBe("verified");
+  });
+
+  it("returns evidenced when continuous evidence is fresh and review is absent", () => {
     const now = new Date("2026-05-21T12:00:00.000Z");
 
     expect(deriveConfidenceGrade({
       now,
       evidenceFreshnessAt: new Date("2026-05-20T12:00:00.000Z"),
-      lastGovernanceReviewAt: new Date("2026-05-10T12:00:00.000Z"),
+      lastGovernanceReviewAt: null,
       hasContinuousEvidence: true,
-    })).toBe("verified");
+    })).toBe("evidenced");
   });
 
   it("bounds effective maturity by dependency maturity", () => {
@@ -124,10 +155,35 @@ describe("capability maturity scoring", () => {
     })).toBe(2);
   });
 
-  it("rejects dependency cycles", () => {
+  it("does not demote claimed effective maturity (claimed is not decay)", () => {
+    // Spec §5.3: claimed carries its own visual treatment; it does not -1 the score.
+    expect(deriveEffectiveMaturity({
+      maturityScore: 3,
+      dependencyEffectiveMaturities: [4],
+      confidenceGrade: "claimed",
+    })).toBe(3);
+  });
+
+  it("floors stale demotion at zero", () => {
+    expect(deriveEffectiveMaturity({
+      maturityScore: 0,
+      dependencyEffectiveMaturities: [],
+      confidenceGrade: "stale",
+    })).toBe(0);
+  });
+
+  it("rejects direct dependency cycles", () => {
     expect(() => validateCapabilityDependencyGraph([
       { id: "runtime", dependsOnIds: ["gateway"] },
       { id: "gateway", dependsOnIds: ["runtime"] },
+    ])).toThrow(/cycle/i);
+  });
+
+  it("rejects transitive dependency cycles", () => {
+    expect(() => validateCapabilityDependencyGraph([
+      { id: "a", dependsOnIds: ["b"] },
+      { id: "b", dependsOnIds: ["c"] },
+      { id: "c", dependsOnIds: ["a"] },
     ])).toThrow(/cycle/i);
   });
 });
@@ -138,14 +194,14 @@ describe("capability maturity scoring", () => {
 Run:
 
 ```powershell
-pnpm --filter web test apps/web/lib/maturity/capability-maturity.test.ts
+pnpm --filter @dpf/db test capability-maturity.test.ts
 ```
 
-Expected: FAIL because `apps/web/lib/maturity/capability-maturity.ts` does not exist.
+Expected: FAIL because `packages/db/src/capability-maturity.ts` does not exist.
 
 - [ ] **Step 3: Implement the domain module**
 
-Create `apps/web/lib/maturity/capability-maturity.ts`:
+Create `packages/db/src/capability-maturity.ts`:
 
 ```ts
 export const CAPABILITY_MATURITY_RISK_TIERS = ["critical", "elevated", "standard", "low"] as const;
@@ -197,19 +253,35 @@ export function deriveConfidenceGrade(input: {
   lastGovernanceReviewAt: Date | null;
   hasContinuousEvidence: boolean;
 }): CapabilityMaturityConfidenceGrade {
-  const evidenceAgeDays = input.evidenceFreshnessAt
-    ? Math.floor((input.now.getTime() - input.evidenceFreshnessAt.getTime()) / DAY_MS)
-    : Number.POSITIVE_INFINITY;
-  const reviewAgeDays = input.lastGovernanceReviewAt
-    ? Math.floor((input.now.getTime() - input.lastGovernanceReviewAt.getTime()) / DAY_MS)
-    : Number.POSITIVE_INFINITY;
+  // Returns null when input timestamp is null — distinguishes "never happened" from "happened long ago".
+  const ageDays = (at: Date | null): number | null =>
+    at === null ? null : Math.floor((input.now.getTime() - at.getTime()) / DAY_MS);
 
-  if (evidenceAgeDays > 30 || reviewAgeDays > 90) return "stale";
-  if (reviewAgeDays <= 30 && input.hasContinuousEvidence) return "verified";
-  if (evidenceAgeDays <= 30 && input.hasContinuousEvidence) return "evidenced";
+  const evidenceAge = ageDays(input.evidenceFreshnessAt);
+  const reviewAge = ageDays(input.lastGovernanceReviewAt);
+
+  // Spec §5.3 precedence:
+  // 1. Fresh review (≤30d) AND any evidence ever → verified (fresh review overrides stale evidence)
+  if (reviewAge !== null && reviewAge <= 30 && (evidenceAge !== null || input.hasContinuousEvidence)) {
+    return "verified";
+  }
+
+  // 2. Fresh continuous evidence (≤30d) AND no recent review → evidenced
+  if (evidenceAge !== null && evidenceAge <= 30 && input.hasContinuousEvidence) {
+    return "evidenced";
+  }
+
+  // 3. Evidence existed and lapsed (>30d) OR review existed and lapsed (>90d) → stale
+  if ((evidenceAge !== null && evidenceAge > 30) || (reviewAge !== null && reviewAge > 90)) {
+    return "stale";
+  }
+
+  // 4. No evidence stream and no review → claimed (the seed/authored default)
   return "claimed";
 }
 
+// Spec §10.3: effectiveMaturity = min(maturityScore, min(dependsOn.effectiveMaturity)),
+// then -1 if confidenceGrade === "stale" (floor 0). `claimed` does not demote.
 export function deriveEffectiveMaturity(input: {
   maturityScore: number;
   dependencyEffectiveMaturities: number[];
@@ -243,20 +315,28 @@ export function validateCapabilityDependencyGraph(records: Array<{ id: string; d
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Export the domain module**
+
+Modify `packages/db/package.json` exports:
+
+```json
+"./capability-maturity": "./src/capability-maturity.ts"
+```
+
+- [ ] **Step 5: Run test to verify it passes**
 
 Run:
 
 ```powershell
-pnpm --filter web test apps/web/lib/maturity/capability-maturity.test.ts
+pnpm --filter @dpf/db test capability-maturity.test.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```powershell
-git add apps/web/lib/maturity/capability-maturity.ts apps/web/lib/maturity/capability-maturity.test.ts
+git add packages/db/src/capability-maturity.ts packages/db/src/capability-maturity.test.ts packages/db/package.json
 git commit -s -m "feat(maturity): add capability scoring domain logic"
 ```
 
@@ -300,12 +380,19 @@ model CapabilityMaturityAssessment {
   installScope                String                         @default("canonical")
   archetypeScope              String?
   productizationStatus        String                         @default("not_eligible")
+  // Spec §10.4 anti-inflation guard: any maturityScore change within 14 days of this
+  // timestamp must route through governance review. Nullable; written on status transitions.
+  productizationStatusChangedAt DateTime?
+  // Spec §8: vendorReplacementConfidence = "verified" requires a recorded parity checklist
+  // and at least one production replacement. Stored as opaque JSON, schema-validated in code.
+  parityChecklistEvidence     Json                           @default("[]")
   existingPrimitives          Json                           @default("[]")
   maturityGaps                Json                           @default("[]")
   evidenceSources             Json                           @default("[]")
   hiveMindSignals             Json                           @default("[]")
   kernelPrinciples            String[]                       @default([])
   operationalSurface          String?
+  hasContinuousEvidence       Boolean                        @default(false)
   evidenceFreshnessAt         DateTime?
   lastGovernanceReviewAt      DateTime?
   lastAssessmentAt            DateTime                       @default(now())
@@ -427,7 +514,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-IDENTITY-AUTHORITY",
     "name": "Principal identity and authority",
     "portfolioSlug": "foundational",
-    "taxonomyNodePath": "foundational/platform-services/identity-and-access-platform",
+    "taxonomyNodePath": "foundational/platform_services/identity_and_access_platform",
     "capabilityCategory": "identity_authority",
     "riskTier": "critical",
     "maturityScore": 3,
@@ -448,7 +535,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-MCP-TOOL-GOVERNANCE",
     "name": "MCP and tool governance",
     "portfolioSlug": "foundational",
-    "taxonomyNodePath": "foundational/platform-services/api-management-platform",
+    "taxonomyNodePath": "foundational/platform_services/api_management_platform",
     "capabilityCategory": "tool_gateway",
     "riskTier": "elevated",
     "maturityScore": 3,
@@ -469,7 +556,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-A2A-COORDINATION",
     "name": "A2A coworker coordination",
     "portfolioSlug": "manufacturing_and_delivery",
-    "taxonomyNodePath": "manufacturing_and_delivery/build-and-integrate/build-studio",
+    "taxonomyNodePath": "manufacturing_and_delivery/request_to_fulfill/delivery_distribution_activation/ai_ml_and_agent_ci_cd_modelops_agentops_digital_delivery",
     "capabilityCategory": "runtime",
     "riskTier": "elevated",
     "maturityScore": 2,
@@ -490,7 +577,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-RUNTIME-CONTROL",
     "name": "Work Capsules and runtime control",
     "portfolioSlug": "manufacturing_and_delivery",
-    "taxonomyNodePath": "manufacturing_and_delivery/build-and-integrate/build-studio",
+    "taxonomyNodePath": "manufacturing_and_delivery/request_to_fulfill/delivery_distribution_activation/ai_ml_and_agent_ci_cd_modelops_agentops_digital_delivery",
     "capabilityCategory": "runtime",
     "riskTier": "elevated",
     "maturityScore": 3,
@@ -511,7 +598,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-GOVERNANCE-EVIDENCE",
     "name": "Governance evidence ledger",
     "portfolioSlug": "manufacturing_and_delivery",
-    "taxonomyNodePath": "manufacturing_and_delivery/build-and-integrate/evidence",
+    "taxonomyNodePath": "manufacturing_and_delivery/request_to_fulfill/delivery_distribution_activation/release_governance_and_evidence_automation_digital_delivery",
     "capabilityCategory": "evidence_eval",
     "riskTier": "critical",
     "maturityScore": 3,
@@ -532,7 +619,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-HIVE-REFINEMENT",
     "name": "Hive mind and user refinement",
     "portfolioSlug": "for_employees",
-    "taxonomyNodePath": "for_employees/workforce-productivity/ai-coworkers",
+    "taxonomyNodePath": "for_employees/productivity_services/productivity_applications",
     "capabilityCategory": "human_override",
     "riskTier": "standard",
     "maturityScore": 2,
@@ -553,7 +640,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-OBS-EVAL-COST",
     "name": "Observability, evals, and cost ledger",
     "portfolioSlug": "foundational",
-    "taxonomyNodePath": "foundational/platform-services/observability-platform",
+    "taxonomyNodePath": "foundational/platform_services/observability_platform",
     "capabilityCategory": "evidence_eval",
     "riskTier": "elevated",
     "maturityScore": 2,
@@ -574,7 +661,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-SEMANTIC-DATA",
     "name": "Semantic data and knowledge plane",
     "portfolioSlug": "foundational",
-    "taxonomyNodePath": "foundational/data-and-knowledge/semantic-data-plane",
+    "taxonomyNodePath": "foundational/data_and_storage_management/data_analytics_and_visualizations",
     "capabilityCategory": "data_plane",
     "riskTier": "elevated",
     "maturityScore": 1,
@@ -595,7 +682,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-SPEND-AUTHORITY",
     "name": "Spend/payment authority",
     "portfolioSlug": "foundational",
-    "taxonomyNodePath": "foundational/platform-services/finance-and-billing-platform",
+    "taxonomyNodePath": "foundational/platform_services",
     "capabilityCategory": "budget_spend",
     "riskTier": "critical",
     "maturityScore": 1,
@@ -616,7 +703,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-CUSTOMER-AGENT-SERVICES",
     "name": "Customer-facing agent services",
     "portfolioSlug": "products_and_services_sold",
-    "taxonomyNodePath": "products_and_services_sold/platform-products/agent-control-plane",
+    "taxonomyNodePath": "products_and_services_sold/digital_platform_services/ai_platforms/ai_agent_platform_as_a_service",
     "capabilityCategory": "composition_helper",
     "riskTier": "standard",
     "maturityScore": 2,
@@ -637,7 +724,7 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
     "assessmentId": "ACPM-CROSS-LAYER-KILL-SWITCH",
     "name": "Cross-layer kill switch",
     "portfolioSlug": "foundational",
-    "taxonomyNodePath": "foundational/platform-services/security-and-control-plane",
+    "taxonomyNodePath": "foundational/platform_services/ai_and_agent_platform",
     "capabilityCategory": "composition_helper",
     "riskTier": "critical",
     "maturityScore": 2,
@@ -657,17 +744,69 @@ Create `packages/db/data/agent_control_plane_maturity_seed.json` with this compl
 ]
 ```
 
-- [ ] **Step 3: Implement idempotent seed helper**
+- [ ] **Step 3: Implement idempotent seed helper with pre-write validation**
+
+Per spec §15.2 #18, cycles are rejected at write time, not at render time. Per spec §8, `kernelPrinciples` slugs are not free-text — they must reference real Founder Kernel pages under `docs/founder-kernel/wiki/principles/`. The seed helper validates both before any DB write.
 
 Create `packages/db/src/seed-agent-control-plane-maturity.ts` with an exported function:
 
 ```ts
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { PrismaClient } from "@prisma/client";
 import seedRows from "../data/agent_control_plane_maturity_seed.json";
+import { validateCapabilityDependencyGraph } from "./capability-maturity";
 
 type SeedRow = (typeof seedRows)[number];
 
+function loadValidKernelPrincipleSlugs(): Set<string> {
+  // Founder Kernel principles ship as one file per principle. Repo root is two levels up
+  // from packages/db; tests can override via DPF_KERNEL_PRINCIPLES_DIR.
+  const dir = process.env.DPF_KERNEL_PRINCIPLES_DIR
+    ?? join(__dirname, "..", "..", "..", "docs", "founder-kernel", "wiki", "principles");
+  const entries = readdirSync(dir, { withFileTypes: true });
+  return new Set(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => entry.name.replace(/\.md$/, "")),
+  );
+}
+
 export async function seedAgentControlPlaneMaturity(prisma: PrismaClient): Promise<void> {
+  // Spec §15.2 #18 — reject cycles before any write
+  validateCapabilityDependencyGraph(
+    (seedRows as SeedRow[]).map((row) => ({
+      id: row.assessmentId,
+      dependsOnIds: row.dependsOnAssessmentIds ?? [],
+    })),
+  );
+
+  // Spec §8 — every kernelPrinciples slug must resolve to a real kernel page
+  const validPrinciples = loadValidKernelPrincipleSlugs();
+  const unknown: Array<{ assessmentId: string; slug: string }> = [];
+  for (const row of seedRows as SeedRow[]) {
+    for (const slug of row.kernelPrinciples ?? []) {
+      if (!validPrinciples.has(slug)) unknown.push({ assessmentId: row.assessmentId, slug });
+    }
+  }
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown kernelPrinciples slugs in maturity seed: ${unknown
+        .map((u) => `${u.assessmentId}→${u.slug}`)
+        .join(", ")}. Add the principle to docs/founder-kernel/wiki/principles/ or fix the slug.`,
+    );
+  }
+
+  // Spec §8 — vendorReplacementConfidence === "verified" requires parity-checklist evidence
+  for (const row of seedRows as SeedRow[]) {
+    const checklist = (row as { parityChecklistEvidence?: unknown[] }).parityChecklistEvidence ?? [];
+    if (row.vendorReplacementConfidence === "verified" && checklist.length === 0) {
+      throw new Error(
+        `Seed row ${row.assessmentId} claims vendorReplacementConfidence="verified" without parityChecklistEvidence (spec §8).`,
+      );
+    }
+  }
+
   const created = new Map<string, string>();
 
   for (const row of seedRows as SeedRow[]) {
@@ -776,6 +915,8 @@ git commit -s -m "feat(db): seed agent control plane maturity assessments"
 
 - [ ] **Step 1: Write read-model tests**
 
+Per spec §7.3, productize mode is an **overlay** on operations mode, not a replacement. The read model returns two channels: `lifecycleMode` (investment | operations) and `productizationOverlay` (none | eligible | candidate | productized). Per spec §15.2 #15, scores from different `installScope` values do not aggregate silently — the reader requires a single explicit scope.
+
 Create `apps/web/lib/maturity/capability-maturity-data.test.ts`:
 
 ```ts
@@ -783,7 +924,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getCapabilityMaturityForPortfolioNode } from "./capability-maturity-data";
 
 describe("getCapabilityMaturityForPortfolioNode", () => {
-  it("derives targets, effective maturity, and display mode", async () => {
+  it("derives targets, effective maturity, lifecycle mode, and dep-blocked annotation", async () => {
     const prisma = {
       capabilityMaturityAssessment: {
         findMany: vi.fn().mockResolvedValue([
@@ -797,8 +938,27 @@ describe("getCapabilityMaturityForPortfolioNode", () => {
             riskTier: "elevated",
             maturityScore: 4,
             confidenceGrade: "evidenced",
+            installScope: "canonical",
             productizationStatus: "not_eligible",
-            dependencies: [{ dependency: { id: "a2", maturityScore: 2, confidenceGrade: "evidenced", dependencies: [] } }],
+            hasContinuousEvidence: true,
+            evidenceFreshnessAt: new Date("2026-05-20T12:00:00.000Z"),
+            lastGovernanceReviewAt: null,
+            dependencies: [
+              {
+                dependency: {
+                  id: "a2",
+                  assessmentId: "ACPM-MCP-TOOL-GOVERNANCE",
+                  name: "MCP gateway",
+                  maturityScore: 2,
+                  confidenceGrade: "evidenced",
+                  installScope: "canonical",
+                  hasContinuousEvidence: true,
+                  evidenceFreshnessAt: new Date("2026-05-20T12:00:00.000Z"),
+                  lastGovernanceReviewAt: null,
+                  dependencies: [],
+                },
+              },
+            ],
           },
         ]),
       },
@@ -808,6 +968,7 @@ describe("getCapabilityMaturityForPortfolioNode", () => {
       prisma,
       portfolioId: "port-1",
       taxonomyNodeId: "tax-1",
+      installScope: "canonical",
       now: new Date("2026-05-21T12:00:00.000Z"),
     });
 
@@ -817,8 +978,59 @@ describe("getCapabilityMaturityForPortfolioNode", () => {
       assessmentId: "ACPM-RUNTIME-CONTROL",
       mvpTargetScore: 4,
       effectiveMaturity: 2,
-      mode: "investment",
+      lifecycleMode: "investment",
+      productizationOverlay: "none",
+      blockedByDependencies: [{ assessmentId: "ACPM-MCP-TOOL-GOVERNANCE", name: "MCP gateway", effectiveMaturity: 2 }],
     });
+  });
+
+  it("preserves operations lifecycle when productization overlay is candidate", async () => {
+    // Spec §7.3 — productize mode overlays operations, does not replace it.
+    const prisma = {
+      capabilityMaturityAssessment: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "b1",
+            assessmentId: "ACPM-SAMPLE",
+            name: "Sample",
+            portfolioId: "port-1",
+            riskTier: "standard",
+            maturityScore: 4,
+            confidenceGrade: "verified",
+            installScope: "canonical",
+            productizationStatus: "candidate",
+            hasContinuousEvidence: true,
+            evidenceFreshnessAt: new Date("2026-05-20T12:00:00.000Z"),
+            lastGovernanceReviewAt: new Date("2026-05-15T12:00:00.000Z"),
+            dependencies: [],
+          },
+        ]),
+      },
+    };
+
+    const result = await getCapabilityMaturityForPortfolioNode({
+      prisma,
+      portfolioId: "port-1",
+      installScope: "canonical",
+      now: new Date("2026-05-21T12:00:00.000Z"),
+    });
+
+    expect(result.rows[0]).toMatchObject({
+      lifecycleMode: "operations",
+      productizationOverlay: "candidate",
+    });
+  });
+
+  it("rejects mixed-scope queries (spec §15.2 #15 scope isolation)", async () => {
+    const prisma = { capabilityMaturityAssessment: { findMany: vi.fn().mockResolvedValue([]) } };
+    await expect(
+      getCapabilityMaturityForPortfolioNode({
+        prisma,
+        portfolioId: "port-1",
+        installScope: undefined as unknown as "canonical",
+        now: new Date(),
+      }),
+    ).rejects.toThrow(/installScope/);
   });
 });
 ```
@@ -828,23 +1040,35 @@ describe("getCapabilityMaturityForPortfolioNode", () => {
 Implement:
 
 ```ts
+import {
+  deriveConfidenceGrade,
+  deriveEffectiveMaturity,
+  deriveMvpTargetScore,
+} from "@dpf/db/capability-maturity";
+
 export async function getCapabilityMaturityForPortfolioNode(input: {
+  prisma: { capabilityMaturityAssessment: { findMany: Function } };
   portfolioId: string;
   taxonomyNodeId?: string | null;
+  installScope: "canonical" | "dpf_dogfood" | "customer_overlay";
   now?: Date;
 }): Promise<CapabilityMaturityRollup>
 ```
 
 The function must:
 
-- fetch assessments scoped to the selected portfolio,
-- include dependencies,
-- derive `mvpTargetScore`,
-- derive `confidenceGrade`,
-- derive `effectiveMaturity`,
-- mark mode as `productize` when `productizationStatus` is `eligible` or `candidate`,
-- mark mode as `operations` when `effectiveMaturity >= mvpTargetScore`,
-- otherwise mark mode as `investment`.
+- reject calls with missing or null `installScope` (spec §15.2 #15);
+- fetch assessments scoped to the selected portfolio AND `installScope` — never aggregate across scopes;
+- include dependencies transitively (the writer enforces DAG so a depth-bounded recursion of, say, 16 is safe);
+- derive `mvpTargetScore` from `riskTier` (spec §5.2);
+- derive `confidenceGrade` from `evidenceFreshnessAt`, `lastGovernanceReviewAt`, and `hasContinuousEvidence` (spec §5.3);
+- derive `effectiveMaturity` = min(self score, transitive min over dependency effective maturities), then -1 if `confidenceGrade === "stale"` (floor 0);
+- emit `blockedByDependencies`: any direct dependency whose `effectiveMaturity` is strictly less than this row's `maturityScore` — drives the "blocked by `<dep>`" annotation required by spec §10.3 rule 5;
+- set `lifecycleMode = "operations"` when `effectiveMaturity >= mvpTargetScore`, else `"investment"`;
+- set `productizationOverlay = productizationStatus` when status is `eligible | candidate | productized`, else `"none"`;
+- compute `summary.belowTarget` by counting `lifecycleMode === "investment"` rows.
+
+The two-channel design preserves the spec's "overlay, not replace" rule: a productized capability still renders its operations health; the productize affordance is additive.
 
 - [ ] **Step 3: Run tests**
 
@@ -878,11 +1102,13 @@ git commit -s -m "feat(portfolio): add maturity rollup read model"
 
 Tests must assert:
 
-- investment rows show "Gap"
-- operations rows show "Operational"
-- productize rows show "Productize"
-- stale rows show "Stale"
-- no hardcoded Tailwind color classes like `text-gray`, `bg-white`, or hardcoded hex appear in rendered class names
+- investment rows render the `Investment` lifecycle label and the gap delta
+- operations rows render the `Operational` lifecycle label
+- a productize-overlay row with `lifecycleMode = "operations"` and `productizationOverlay = "candidate"` renders BOTH the operations label AND the productize affordance (spec §7.3 overlay-not-replace)
+- rows whose `effectiveMaturity < maturityScore` because of a dependency render a "blocked by `<dep-name>`" annotation linking to the dependency's row (spec §10.3 rule 5)
+- rows with `confidenceGrade === "stale"` render the "stale −1" badge and the demoted effective score
+- rows with `confidenceGrade === "claimed"` render an "unproven" muted treatment but NO score demotion (spec §5.3)
+- no hardcoded Tailwind color classes like `text-gray`, `bg-white`, or hardcoded hex appear in rendered class names; every color comes from a `var(--dpf-*)` token
 
 - [ ] **Step 2: Implement `CapabilityMaturityPanel`**
 
@@ -895,7 +1121,7 @@ className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var
 Required columns:
 
 ```text
-Capability | Portfolio | Score | Target | Confidence | Mode | Anchor
+Capability | Portfolio | Score | Target | Confidence | Lifecycle | Productize | Anchor
 ```
 
 Score should render as:
@@ -904,7 +1130,9 @@ Score should render as:
 effectiveMaturity / mvpTargetScore
 ```
 
-Raw `maturityScore` may be shown as muted secondary text only when different from `effectiveMaturity`.
+Raw `maturityScore` is shown as muted secondary text only when different from `effectiveMaturity`. When the difference is caused by dependency blocking (spec §10.3 rule 5), the row must render a "blocked by `<dep-name>`" annotation linking to the blocking dependency's row. When the difference is caused by `confidenceGrade === "stale"` decay, the row shows a "stale −1" badge instead.
+
+`Lifecycle` shows `Investment` or `Operational`. `Productize` shows the overlay (`none` rendered as a muted dash; `eligible` / `candidate` / `productized` rendered as distinct theme-token-driven affordances). When `Productize` is `candidate`, the row also surfaces "score change watch" if `productizationStatusChangedAt` is within 14 days of `lastAssessmentAt` (spec §10.4 anti-inflation guard). For slice 1 this affordance is read-only and informational; the governance routing itself ships in the productize-mode follow-on.
 
 - [ ] **Step 3: Load data in portfolio page**
 
@@ -944,7 +1172,8 @@ git commit -s -m "feat(portfolio): surface capability maturity by taxonomy node"
 Run:
 
 ```powershell
-pnpm --filter web test apps/web/lib/maturity/capability-maturity.test.ts apps/web/lib/maturity/capability-maturity-data.test.ts apps/web/components/portfolio/CapabilityMaturityPanel.test.tsx
+pnpm --filter @dpf/db test capability-maturity.test.ts
+pnpm --filter web test apps/web/lib/maturity/capability-maturity-data.test.ts apps/web/components/portfolio/CapabilityMaturityPanel.test.tsx
 pnpm --filter @dpf/db test seed-agent-control-plane-maturity.test.ts
 ```
 
@@ -999,7 +1228,7 @@ git commit -s -m "fix(portfolio): polish capability maturity surface"
 
 **Files:**
 
-- No code files. Use DPF MCP backlog tools when available; if MCP token is unavailable, stop and report required token state rather than writing DB directly.
+- No code files. Use DPF MCP backlog tools when available. **Pre-condition:** the spec §3.2 noted the MCP token was `unauthorized: invalid or expired token` at design time. Before starting this task, run `list_epics` once to confirm the token works in the current session. If it fails, stop and surface a `dpf-mcp-token-refresh` action item rather than writing DB directly; AGENTS.md forbids bypassing MCP scope/token gates with hidden SQL writes.
 
 - [ ] **Step 1: Query live epics**
 
@@ -1048,23 +1277,31 @@ Expected: backlog fan-out is traceable without direct DB edits.
 
 ## Final Verification Gate
 
-Before claiming the slice complete:
+Before claiming the slice complete, run both focused and full test gates. The focused tests in Task 6 are not enough by themselves; the full vitest suites must pass locally before push, because the pre-commit hook only runs typecheck and PR CI breaks for every other contributor otherwise.
 
 ```powershell
 git status --short --branch
 git diff --check HEAD~1 HEAD
-pnpm --filter web test apps/web/lib/maturity/capability-maturity.test.ts apps/web/lib/maturity/capability-maturity-data.test.ts apps/web/components/portfolio/CapabilityMaturityPanel.test.tsx
+
+# Focused tests for this slice (fast feedback)
+pnpm --filter @dpf/db test capability-maturity.test.ts
+pnpm --filter web test apps/web/lib/maturity/capability-maturity-data.test.ts apps/web/components/portfolio/CapabilityMaturityPanel.test.tsx
 pnpm --filter @dpf/db test seed-agent-control-plane-maturity.test.ts
+
+# Full test suite — REQUIRED before push
+pnpm --filter web test
+pnpm --filter @dpf/db test
+
 pnpm --filter web typecheck
 pnpm --filter @dpf/db typecheck
 pnpm --filter web build
 ```
 
-For UI work, also capture UX evidence for `/portfolio/foundational` against the Docker-served app.
+For UI work, also capture UX evidence for `/portfolio/foundational` against the Docker-served app (screenshots of investment-mode row, operations-mode row, blocked-by-dep annotation, and stale badge). The screenshots attach to the PR description so reviewers see the spec contract is met without re-driving the portal.
 
 ## Execution Choice
 
-Plan complete once this file is reviewed. Recommended execution mode is **Subagent-Driven** with one worker per task:
+Plan complete once this file is reviewed. Recommended execution mode is **parallel workers where the active runtime explicitly supports them**; otherwise run the same tasks sequentially in one feature branch. Each task owns a narrow write set, commits independently, and runs its local verification before the next task starts:
 
 1. Domain logic
 2. Schema + migration

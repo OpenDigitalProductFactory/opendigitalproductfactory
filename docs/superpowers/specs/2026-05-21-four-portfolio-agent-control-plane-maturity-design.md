@@ -172,10 +172,17 @@ A score is paired with a `confidenceGrade` (§8):
 |-------|---------|
 | `verified` | Evidence reviewed by governance within the last 30 days; outcomes recorded. |
 | `evidenced` | Continuous evidence stream within the last 30 days; not yet governance-reviewed. |
-| `claimed` | Score authored from primitives; no continuous evidence stream. |
-| `stale` | Evidence stream silent for > 30 days OR last review > 90 days. |
+| `claimed` | Score authored from primitives; no continuous evidence stream has ever flowed. |
+| `stale` | Evidence stream existed and has now been silent for > 30 days, OR a governance review existed and is now > 90 days old. |
 
-A `stale` score automatically demotes the **effective** score by 1 (floor 0) until refreshed. This is the anti-rot rule — without it, the maturity surface drifts into a vanity dashboard.
+**Precedence (highest to lowest):**
+
+1. Fresh governance review (≤ 30 days) AND any evidence ever recorded → `verified`. A fresh review re-confirms the score; it overrides a stale evidence signal.
+2. Fresh continuous evidence (≤ 30 days) AND no recent governance review → `evidenced`.
+3. Evidence stream once existed and has lapsed (> 30 days silent) OR review existed and lapsed (> 90 days) → `stale`.
+4. No evidence stream has ever flowed AND no review → `claimed`. Fresh-authored seed rows stay `claimed` indefinitely until evidence flows; they do not decay to `stale` on age alone, because there was nothing to go silent.
+
+A `stale` score automatically demotes the **effective** score by 1 (floor 0) until refreshed. This is the anti-rot rule — without it, the maturity surface drifts into a vanity dashboard. `claimed` does not demote; it carries its own "unproven" visual treatment instead.
 
 ## 6. Initial DPF Maturity Assessment
 
