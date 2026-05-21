@@ -364,6 +364,58 @@ export async function callProvider(
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession,
   attribution?: { agentId?: string | null; threadId?: string | null; skillId?: string | null },
 ): Promise<InferenceResult> {
+  // 0. EP-COST-001 Phase 2 — pre-call budget gate.
+  // Check the agent's daily token budget before dispatching. If the agent has
+  // consumed ≥100% of its registry limit today, throw a billing error so the
+  // caller can surface a clear "budget exceeded" message rather than burning
+  // more tokens. At 80–95% log a warning; at ≥95% also write a budget event.
+  // The check is non-blocking: any DB error is swallowed so a budget-gate DB
+  // failure never breaks inference.
+  if (attribution?.agentId) {
+    try {
+      const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+      const budget = await checkAgentBudgetFromRegistry(attribution.agentId);
+
+      if (budget.status === "rejected") {
+        void writeBudgetEvent({
+          agentId: attribution.agentId,
+          eventKind: "rejected",
+          actualTokens: budget.actualTokens,
+          limitTokens: budget.limitTokens,
+          modelId,
+          providerId,
+        });
+        throw new InferenceError(
+          `Daily token budget exceeded for agent "${attribution.agentId}" ` +
+          `(${budget.actualTokens.toLocaleString()} / ${budget.limitTokens.toLocaleString()} tokens used today)`,
+          "billing",
+          providerId,
+        );
+      }
+
+      if (budget.status === "warning_95" || budget.status === "warning_80") {
+        console.warn(
+          "[budget-gate] Agent approaching daily token limit:",
+          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status },
+        );
+        if (budget.status === "warning_95") {
+          void writeBudgetEvent({
+            agentId: attribution.agentId,
+            eventKind: "warning_95",
+            actualTokens: budget.actualTokens,
+            limitTokens: budget.limitTokens,
+            modelId,
+            providerId,
+          });
+        }
+      }
+    } catch (err) {
+      // Re-throw billing errors; swallow everything else (budget gate is advisory)
+      if (err instanceof InferenceError && err.code === "billing") throw err;
+      console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
+    }
+  }
+
   // 1. Resolve provider (DB lookup + auth headers)
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
