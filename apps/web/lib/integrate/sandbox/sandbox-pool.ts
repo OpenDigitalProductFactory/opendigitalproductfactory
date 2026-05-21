@@ -79,27 +79,20 @@ export type SandboxSlot = {
   buildId: string;
 };
 
-export type SandboxLeaseOwnerType = "feature_build" | "integration_lab";
-
 export type SandboxLease = {
   slotIndex: number;
   containerId: string;
   port: number;
-  ownerType: SandboxLeaseOwnerType;
-  ownerRef: string;
   buildId: string | null;
 };
 
 export type AcquireSandboxLeaseInput = {
-  ownerType: SandboxLeaseOwnerType;
-  ownerRef: string;
   userId: string;
-  buildId?: string | null;
+  buildId: string;
 };
 
 export type ReleaseSandboxLeaseInput = {
-  ownerType: SandboxLeaseOwnerType;
-  ownerRef: string;
+  buildId: string;
 };
 
 async function syncFeatureBuildSandbox(buildId: string, containerId: string, port: number) {
@@ -115,21 +108,16 @@ async function syncFeatureBuildSandbox(buildId: string, containerId: string, por
 export async function acquireSandboxLease(
   input: AcquireSandboxLeaseInput,
 ): Promise<SandboxLease | null> {
-  const existing = await prisma.sandboxSlot.findFirst({
-    where: {
-      ownerType: input.ownerType,
-      ownerRef: input.ownerRef,
-      status: "in_use",
-    },
+  // Idempotency: if this build already holds a slot, return it.
+  // Uses buildId @unique so no extra DB fields are needed.
+  const existing = await prisma.sandboxSlot.findUnique({
+    where: { buildId: input.buildId },
   });
-
-  if (existing) {
+  if (existing?.status === "in_use") {
     return {
       slotIndex: existing.slotIndex,
       containerId: existing.containerId,
       port: existing.port,
-      ownerType: input.ownerType,
-      ownerRef: input.ownerRef,
       buildId: existing.buildId ?? null,
     };
   }
@@ -141,47 +129,34 @@ export async function acquireSandboxLease(
 
   if (!available) return null;
 
-  const buildId =
-    input.ownerType === "feature_build" ? input.buildId ?? input.ownerRef : null;
-
   const claimed = await prisma.sandboxSlot.update({
     where: { id: available.id },
     data: {
       status: "in_use",
-      buildId,
+      buildId: input.buildId,
       userId: input.userId,
-      ownerType: input.ownerType,
-      ownerRef: input.ownerRef,
       acquiredAt: new Date(),
       releasedAt: null,
     },
   });
 
-  if (buildId) {
-    await syncFeatureBuildSandbox(buildId, claimed.containerId, claimed.port);
-  }
+  await syncFeatureBuildSandbox(input.buildId, claimed.containerId, claimed.port);
 
   return {
     slotIndex: claimed.slotIndex,
     containerId: claimed.containerId,
     port: claimed.port,
-    ownerType: input.ownerType,
-    ownerRef: input.ownerRef,
-    buildId,
+    buildId: input.buildId,
   };
 }
 
 export async function releaseSandboxLease(
   input: ReleaseSandboxLeaseInput,
 ): Promise<void> {
-  const slot = await prisma.sandboxSlot.findFirst({
-    where: {
-      ownerType: input.ownerType,
-      ownerRef: input.ownerRef,
-      status: "in_use",
-    },
+  const slot = await prisma.sandboxSlot.findUnique({
+    where: { buildId: input.buildId },
   });
-  if (!slot) return;
+  if (!slot || slot.status !== "in_use") return;
 
   await prisma.sandboxSlot.update({
     where: { id: slot.id },
@@ -189,8 +164,6 @@ export async function releaseSandboxLease(
       status: "available",
       buildId: null,
       userId: null,
-      ownerType: null,
-      ownerRef: null,
       releasedAt: new Date(),
     },
   });
@@ -204,12 +177,7 @@ export async function acquireSandbox(
   buildId: string,
   userId: string,
 ): Promise<SandboxSlot | null> {
-  const lease = await acquireSandboxLease({
-    ownerType: "feature_build",
-    ownerRef: buildId,
-    userId,
-    buildId,
-  });
+  const lease = await acquireSandboxLease({ buildId, userId });
   if (!lease) return null;
 
   return {
@@ -223,12 +191,10 @@ export async function acquireSandbox(
 /**
  * Releases a sandbox slot back to the pool.
  * Called when a build completes, fails, or is cancelled.
+ * Safe to call even if the build never acquired a slot (no-op).
  */
 export async function releaseSandbox(buildId: string): Promise<void> {
-  await releaseSandboxLease({
-    ownerType: "feature_build",
-    ownerRef: buildId,
-  });
+  await releaseSandboxLease({ buildId });
 }
 
 /**
@@ -269,6 +235,55 @@ export async function getSlotForUser(
     port: slot.port,
     buildId: slot.buildId,
   };
+}
+
+// ─── Slot Waiting / Queue ──────────────────────────────────────────────────
+
+export type WaitForSlotOptions = {
+  /** How long to wait between acquisition attempts. Default: 30 000 ms. */
+  pollIntervalMs?: number;
+  /** Maximum total wait time before giving up. Default: 30 min. */
+  timeoutMs?: number;
+  /** Called on each failed acquisition attempt (for logging / UI events). */
+  onWaiting?: (attempt: number) => void;
+};
+
+/**
+ * Acquires a sandbox slot, polling until one becomes available.
+ *
+ * Design: builds waiting on human approval or review do NOT hold a slot —
+ * they release it when the pipeline ends (via the finally block in
+ * runBuildPipeline). Only the active execution steps hold the slot, so
+ * multiple builds can be in-flight while only one runs in the sandbox at a
+ * time.
+ *
+ * Throws if no slot is free within `timeoutMs`.
+ */
+export async function waitForSandboxSlot(
+  buildId: string,
+  userId: string,
+  opts: WaitForSlotOptions = {},
+): Promise<SandboxSlot> {
+  const pollInterval = opts.pollIntervalMs ?? 30_000;
+  const timeout = opts.timeoutMs ?? 1_800_000; // 30 min
+  const deadline = Date.now() + timeout;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    const slot = await acquireSandbox(buildId, userId);
+    if (slot) return slot;
+
+    attempt++;
+    opts.onWaiting?.(attempt);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise<void>((res) => setTimeout(res, Math.min(pollInterval, remaining)));
+  }
+
+  throw new Error(
+    `Sandbox slot unavailable after ${Math.round(timeout / 60_000)} min (${attempt} poll attempt${attempt !== 1 ? "s" : ""}). ` +
+    `Another build is using the sandbox. This build will automatically retry when the slot is released.`,
+  );
 }
 
 /**
