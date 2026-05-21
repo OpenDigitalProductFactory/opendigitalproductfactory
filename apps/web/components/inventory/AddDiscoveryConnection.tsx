@@ -6,9 +6,14 @@ import { ConfigureConnectionInline } from "./ConfigureConnectionInline";
 type Props = {
   /** Gateway IP detected from discovered network interfaces (e.g., "192.168.0.1") */
   detectedGateway?: string | null;
+  /**
+   * "hero" (default) is the empty-state pitch with detected-gateway copy.
+   * "compact" is the small "+ Add another" tile shown beneath an existing list.
+   */
+  variant?: "hero" | "compact";
 };
 
-export function AddDiscoveryConnection({ detectedGateway }: Props) {
+export function AddDiscoveryConnection({ detectedGateway, variant = "hero" }: Props) {
   const [showForm, setShowForm] = useState(false);
 
   if (showForm) {
@@ -18,6 +23,18 @@ export function AddDiscoveryConnection({ detectedGateway }: Props) {
         gatewayAddress={detectedGateway ?? undefined}
         onComplete={() => setShowForm(false)}
       />
+    );
+  }
+
+  if (variant === "compact") {
+    return (
+      <button
+        type="button"
+        onClick={() => setShowForm(true)}
+        className="w-full rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
+      >
+        + Add another connection (UniFi, SNMP, or ARP scan)
+      </button>
     );
   }
 

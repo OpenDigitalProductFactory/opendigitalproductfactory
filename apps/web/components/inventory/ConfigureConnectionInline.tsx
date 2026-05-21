@@ -6,11 +6,25 @@ import {
   testDiscoveryConnection,
 } from "@/lib/actions/discovery";
 
+type ExistingConnection = {
+  /** DiscoveryConnection.id — present means edit by id (URL changes allowed). */
+  id: string;
+  collectorType: string;
+  site?: string;
+  /** True if the row already has an encrypted API key; lets the form show "leave blank to keep". */
+  hasApiKey: boolean;
+};
+
 type Props = {
   gatewayEntityId?: string;
   gatewayAddress?: string;
   gatewayName: string;
   onComplete: () => void;
+  /**
+   * When set, the form starts in edit mode: collectorType + site + endpoint are pre-filled
+   * and the API key field becomes optional (omitted on save = keep existing).
+   */
+  existing?: ExistingConnection;
 };
 
 const COLLECTOR_TYPES = [
@@ -24,13 +38,15 @@ export function ConfigureConnectionInline({
   gatewayAddress,
   gatewayName,
   onComplete,
+  existing,
 }: Props) {
-  const [collectorType, setCollectorType] = useState("unifi");
+  const isEditMode = !!existing;
+  const [collectorType, setCollectorType] = useState(existing?.collectorType ?? "unifi");
   const [endpointUrl, setEndpointUrl] = useState(
-    gatewayAddress ? `https://${gatewayAddress}` : "",
+    gatewayAddress ? (gatewayAddress.startsWith("http") ? gatewayAddress : `https://${gatewayAddress}`) : "",
   );
   const [apiKey, setApiKey] = useState("");
-  const [site, setSite] = useState("default");
+  const [site, setSite] = useState(existing?.site ?? "default");
   const [status, setStatus] = useState<"idle" | "saving" | "testing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -39,9 +55,19 @@ export function ConfigureConnectionInline({
   const isSnmp = collectorType === "snmp";
   const isArpScan = collectorType === "arp_scan";
 
+  // API key requirement is relaxed in edit mode when one already exists:
+  // omitting it on save preserves the stored ciphertext (server-side upsert
+  // only overwrites `encryptedApiKey` when a new value is supplied).
+  const keyRequired = isUnifi && !(isEditMode && existing?.hasApiKey);
+
   const handleSave = () => {
-    if (isUnifi && (!endpointUrl || !apiKey)) {
+    if (keyRequired && (!endpointUrl || !apiKey)) {
       setMessage("Controller URL and API key are required");
+      setStatus("error");
+      return;
+    }
+    if (isUnifi && !keyRequired && !endpointUrl) {
+      setMessage("Controller URL is required");
       setStatus("error");
       return;
     }
@@ -66,11 +92,16 @@ export function ConfigureConnectionInline({
       if (isArpScan) configuration.subnet = endpointUrl;
 
       const result = await configureDiscoveryConnection({
+        ...(existing?.id ? { id: existing.id } : {}),
         gatewayEntityId,
         name: isArpScan ? `Subnet ${endpointUrl}` : gatewayName,
         collectorType,
         endpointUrl: isArpScan ? endpointUrl : endpointUrl,
-        apiKey: isUnifi ? apiKey : isSnmp ? apiKey || "public" : undefined,
+        // In edit mode without a fresh key, send undefined so the server-side
+        // upsert keeps the existing encryptedApiKey.
+        apiKey: isUnifi
+          ? (apiKey || undefined)
+          : isSnmp ? apiKey || "public" : undefined,
         configuration,
       });
 
@@ -168,12 +199,14 @@ export function ConfigureConnectionInline({
 
       {isUnifi && (
         <label className="block">
-          <span className="text-xs text-[var(--dpf-muted)]">API Key</span>
+          <span className="text-xs text-[var(--dpf-muted)]">
+            API Key{!keyRequired && <span className="ml-1 text-[10px]">(leave blank to keep existing)</span>}
+          </span>
           <input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Paste your UniFi OS API key"
+            placeholder={keyRequired ? "Paste your UniFi OS API key" : "•••••••••••••••• (stored)"}
             className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
           />
         </label>

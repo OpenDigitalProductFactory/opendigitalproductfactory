@@ -136,8 +136,15 @@ function normalizeEndpointUrl(raw: string, collectorType: string): string {
   return url;
 }
 
-/** Create or update a discovery connection. API key is encrypted at rest. */
+/**
+ * Create or update a discovery connection. API key is encrypted at rest.
+ *
+ * Edit mode (when `id` is supplied) uses an update-by-id so the operator can
+ * change endpointUrl + connectionKey without orphaning the old row. Without
+ * `id`, we upsert by connectionKey (the create-from-scratch path).
+ */
 export async function configureDiscoveryConnection(input: {
+  id?: string;
   gatewayEntityId?: string;
   name: string;
   collectorType: string;
@@ -152,6 +159,24 @@ export async function configureDiscoveryConnection(input: {
   const connectionKey = `${input.collectorType}:${endpointUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
+
+  // Edit-by-id path: lets URL changes flow without splitting the row.
+  if (input.id) {
+    const updated = await prisma.discoveryConnection.update({
+      where: { id: input.id },
+      data: {
+        connectionKey,
+        name: input.name,
+        endpointUrl,
+        ...(encryptedApiKey ? { encryptedApiKey } : {}),
+        configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
+        ...(encryptedApiKey ? { status: "active" } : {}),
+        gatewayEntityId: input.gatewayEntityId ?? null,
+      },
+    });
+    revalidateDiscoverySurfaces();
+    return { ok: true, connectionId: updated.id };
+  }
 
   const result = await prisma.discoveryConnection.upsert({
     where: { connectionKey },
@@ -168,9 +193,15 @@ export async function configureDiscoveryConnection(input: {
     update: {
       name: input.name,
       endpointUrl,
+      // Only overwrite the encrypted key when a fresh one was supplied; the
+      // edit-mode UX intentionally lets operators rotate URL/site without
+      // pasting the API key again.
       ...(encryptedApiKey ? { encryptedApiKey } : {}),
       configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
-      status: encryptedApiKey ? "active" : "unconfigured",
+      // Only reset status when we just stored a fresh key (re-test will
+      // overwrite this in seconds). Without a fresh key, preserve the
+      // current status so an edit to URL/site doesn't wipe `active`.
+      ...(encryptedApiKey ? { status: "active" } : {}),
       gatewayEntityId: input.gatewayEntityId ?? null,
     },
   });
