@@ -27,8 +27,7 @@ const LEGACY_BUILD_STUDIO_TEXT_ALIASES: Array<{ from: RegExp; to: string }> = [
   { from: /\bDetailsPreviewPanel\b/g, to: "BuildStudio" },
 ];
 
-function normalizeRelativePath(relativePath: string | undefined | null): string {
-  if (!relativePath) return "";
+function normalizeRelativePath(relativePath: string): string {
   return relativePath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
@@ -96,6 +95,14 @@ export function normalizeBuildPlanPaths(
   plan: BuildPlanDoc,
   options?: { exists?: ExistsFn },
 ): NormalizedBuildPlan {
+  // Guard: JSONB round-trips can produce a plan whose fileStructure or tasks
+  // field is absent (e.g. a design-phase plan was mistakenly passed here, or
+  // the DB row predates a schema change). Return the plan unchanged rather
+  // than crashing with "Cannot read properties of undefined (reading 'map')".
+  if (!plan?.fileStructure || !plan?.tasks) {
+    return { plan, rewrites: [], unresolvedModifyPaths: [] };
+  }
+
   const exists = options?.exists ?? lazyFs().existsSync;
   const rewrites: BuildPlanPathRewrite[] = [];
   const unresolvedModifyPaths: string[] = [];

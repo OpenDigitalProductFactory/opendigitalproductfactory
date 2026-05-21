@@ -192,7 +192,7 @@ export function buildTaskArtifactEntry(params: {
     title: params.task.title,
     specialist: params.task.specialist,
     outcome: params.outcome,
-    files: params.task.files.map((file) => file.path),
+    files: (params.task.files ?? []).map((file) => file.path),
     summary: conciseArtifactText(params.content),
     verification: extractVerificationHint(params.content),
     durationMs: params.durationMs,
@@ -252,9 +252,9 @@ export function buildScopedTaskContext(params: {
   void params.rawBuildContext; // Intentionally discarded: task dispatches must not inherit raw lifecycle history.
 
   const maxChars = params.maxChars ?? MAX_SCOPED_TASK_CONTEXT_CHARS;
-  const relevantFiles = params.task.files.length > 0
-    ? params.task.files
-    : params.plan.fileStructure.filter((file) => {
+  const relevantFiles = (params.task.files ?? []).length > 0
+    ? (params.task.files ?? [])
+    : (params.plan.fileStructure ?? []).filter((file) => {
       const purpose = file.purpose.toLowerCase();
       const path = file.path.toLowerCase();
       return params.task.title.toLowerCase().split(/\s+/).some((word) => word.length > 3 && (purpose.includes(word) || path.includes(word)));
@@ -818,7 +818,7 @@ async function dispatchSpecialist(params: {
 
   const systemPrompt = await buildSpecialistPrompt({
     role,
-    taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${task.files.map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
+    taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${(task.files ?? []).map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
     buildContext,
     priorResults,
   });
@@ -1374,12 +1374,6 @@ export async function runBuildOrchestrator(params: {
         verificationOut: updatedBuild.verificationOut,
       });
       if (gate.allowed) {
-        // EP-COST Phase 3: record build-phase cost rollup and compact thread before review starts.
-        const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
-        void completeBuildPhaseRun(buildId, "build");
-        void startBuildPhaseRun(buildId, "review");
-        const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
-        void persistPhaseHandoffSummary(parentThreadId, "build");
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
         await queueBuildReviewVerification(buildId);
         agentEventBus.emit(parentThreadId, { type: "phase:change", buildId, phase: "review" });
