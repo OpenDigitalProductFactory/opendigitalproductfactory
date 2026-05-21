@@ -8,6 +8,7 @@ import {
   recordBuildAcceptance,
   runBuildReviewVerification,
   resumeBuildImplementation,
+  resetBuildExecution,
   retryBuildExecution,
 } from "@/lib/actions/build";
 import { captureDecisionInteraction } from "@/lib/actions/decision-perspective";
@@ -65,6 +66,8 @@ export function BuildStudioWorkflowActionCard({
         return "Opening release decisions...";
       case "retry-build":
         return "Retrying build...";
+      case "reset-build":
+        return "Resetting build...";
       case "resume-implementation":
         return "Reopening implementation...";
       default:
@@ -90,6 +93,8 @@ export function BuildStudioWorkflowActionCard({
         await advanceBuildPhase(build.buildId, action.targetPhase);
       } else if (action.kind === "retry-build") {
         await retryBuildExecution(build.buildId);
+      } else if (action.kind === "reset-build") {
+        await resetBuildExecution(build.buildId);
       } else if (action.kind === "resume-implementation") {
         setLastOutcome(await resumeBuildImplementation(build.buildId));
       }

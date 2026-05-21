@@ -747,6 +747,79 @@ describe("deriveWorkflowStageGuidance", () => {
     expect(guidance.title).toBe("Click Resume to re-execute 2 blocked tasks");
   });
 
+  // FB-78E967D4 — Reset Build affordance for contradictory pipeline state.
+  it("surfaces Reset Build when buildExecState has lingering error on a non-failed step (FB-F0476EF3 shape)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        // No task results yet — the pipeline never produced any. This is the
+        // canonical FB-F0476EF3 shape: the original run threw inside
+        // stepGenerateCode/deps_installed, and a subsequent pipeline pass
+        // short-circuited past the failed step to step="complete" while the
+        // error/failedAt breadcrumbs from the failed run lingered.
+        taskResults: null,
+        verificationOut: null,
+        buildExecState: {
+          step: "complete",
+          retryCount: 0,
+          startedAt: "2026-05-20T06:30:00.000Z",
+          completedAt: "2026-05-20T06:38:23.171Z",
+          failedAt: "deps_installed",
+          error: "brief.targetRoles undefined",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("reset-build");
+    expect(action.primaryLabel).toBe("Reset Build");
+    expect(action.disabledReason).toBeNull();
+    expect(action.title).toContain("Reset");
+    expect(action.message).toMatch(/contradictory|checkpoint/i);
+  });
+
+  it("does NOT surface Reset Build for a legitimate step=failed state — that path uses Retry Sandbox Launch", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: null,
+        verificationOut: null,
+        buildExecState: {
+          step: "failed",
+          retryCount: 2,
+          startedAt: "2026-05-20T06:30:00.000Z",
+          failedAt: "sandbox_created",
+          error: "docker run exited 125",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("retry-build");
+    expect(action.primaryLabel).toBe("Retry Sandbox Launch");
+  });
+
+  it("does NOT surface Reset Build when the pipeline checkpoint is healthy (no error breadcrumb)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: null,
+        verificationOut: null,
+        buildExecState: {
+          step: "deps_installed",
+          retryCount: 0,
+          startedAt: "2026-05-20T06:30:00.000Z",
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).not.toBe("reset-build");
+  });
+
   it("falls back to build-row derivation when projection is absent (graceful degradation)", () => {
     const build = makeBuild({
       phase: "build",
