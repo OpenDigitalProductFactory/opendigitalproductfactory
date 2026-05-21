@@ -1,10 +1,11 @@
 // Voice profile admin page — wiki context.
 // Route: /wiki/perspectives/[profileId]/voice
 //
-// Surfaces consent capture, sample upload, training status, and
-// enable/disable toggle for WWMD/WWTD decision perspective personas.
-// Components: VoiceProfileSetup (client), VoiceConsentForm, VoiceTrainingStatus.
-// Spec: docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md
+// Surfaces consent capture, reference audio upload, and enable/disable
+// toggle for WWMD/WWTD decision perspective personas.
+// Provider: Chatterbox self-hosted TTS (zero-shot cloning, no training job).
+// Components: VoiceProfileSetup (client), VoiceConsentForm.
+// Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md
 
 import { notFound } from "next/navigation"
 import Link from "next/link"
@@ -37,17 +38,6 @@ export default async function VoiceProfileAdminPage({ params }: { params: Params
               subjectName: true,
               expiresAt: true,
               revokedAt: true,
-            },
-          },
-          trainingJobs: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: {
-              id: true,
-              status: true,
-              errorMessage: true,
-              createdAt: true,
-              completedAt: true,
             },
           },
         },
@@ -106,13 +96,6 @@ export default async function VoiceProfileAdminPage({ params }: { params: Params
                       revokedAt: profile.voiceProfile.consentRecord.revokedAt,
                     }
                   : null,
-                trainingJobs: profile.voiceProfile.trainingJobs.map(j => ({
-                  id: j.id,
-                  status: j.status,
-                  errorMessage: j.errorMessage,
-                  createdAt: j.createdAt,
-                  completedAt: j.completedAt,
-                })),
               }
             : null
         }

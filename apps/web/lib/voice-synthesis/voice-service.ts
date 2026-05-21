@@ -1,6 +1,7 @@
 import type { VoiceSynthesisConfig, TTSProvider } from "./types"
 import { synthesizeWithCartesia, VoiceSynthesisError } from "./adapters/cartesia"
 import { synthesizeWithFishAudio } from "./adapters/fish-audio"
+import { synthesizeWithChatterbox } from "./adapters/chatterbox"
 
 export interface SynthesisOutput {
   audioBuffer: ArrayBuffer
@@ -10,11 +11,22 @@ export interface SynthesisOutput {
 
 export { VoiceSynthesisError }
 
+/** Read default provider from env; falls back to self-hosted Chatterbox. */
+export function defaultProvider(): TTSProvider {
+  const env = process.env.TTS_PROVIDER
+  if (env === "cartesia" || env === "fish-audio" || env === "elevenlabs" || env === "xtts-v2") {
+    return env
+  }
+  return "chatterbox"
+}
+
 export async function synthesizeSpeech(
   text: string,
   config: VoiceSynthesisConfig,
 ): Promise<SynthesisOutput> {
   switch (config.provider) {
+    case "chatterbox":
+      return synthesizeWithChatterbox(text, config) as Promise<SynthesisOutput>
     case "cartesia":
       return synthesizeWithCartesia(text, config) as Promise<SynthesisOutput>
     case "fish-audio":

@@ -376,6 +376,9 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="note">
         Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Login credentials are shown at the end of installation and saved to <code>.admin-credentials</code> in your install directory. After installation: <code>dpf-start</code> to start, <code>dpf-stop</code> to stop.
       </div>
+      <div class="note" style="margin-top:14px;">
+        <strong>Other platforms (early access &mdash; pilots wanted):</strong> the macOS Apple Silicon, native Linux, and Cloud Single-VM (AWS / GCP / Azure, with Terraform modules) installers are code-complete on <code>main</code> with green CI. Real-hardware verification reports are what graduate them from Early Access to GA &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-start">Quick Start table</a> and the dedicated install runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
+      </div>
     </div>
   </section>
 
@@ -613,6 +616,28 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     <p class="sub" style="margin-top:14px;">
       Build Studio captures phase-by-phase evidence so the path from idea to ship is fully reconstructable &mdash; the same evidence trail the compliance module uses when it asks &ldquo;what changed and who authorized it?&rdquo;
     </p>
+    <div class="pillars" style="margin-top:18px;">
+      <div class="pillar">
+        <div class="tag">Concurrency</div>
+        <strong>Sandbox slot pool with queued builds.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Multiple builds run in parallel up to a configured sandbox-slot limit; further work queues rather than oversubscribing the host. The queue and concurrency surface is part of the Build Studio layout, not a hidden setting.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Stall detection</div>
+        <strong>Stuck pipelines surface a recovery affordance.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Heartbeat tickers wrap slow LLM awaits; the orchestrator detects stalled-at-pending and contradictory pipeline states and surfaces a <em>Reset Build</em> action so an operator can recover without writing SQL or restarting a container.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Cost visibility</div>
+        <strong>Per-phase cost breakdown.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Each build records token, tool, and cache spend per phase in <code>BuildPhaseRun</code> + <code>ToolExecution</code>. The Build Studio card breaks down where a build&rsquo;s budget went; the same numbers flow into the finance module&rsquo;s actual AI spend.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Workflow-primary layout</div>
+        <strong>Workflow, history, inspector in one view.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The Build Studio surface is workflow-primary with an anchored inspector, a history strip that folds duplicate stall events, and per-task drawers &mdash; designed for an operator running multiple concurrent builds, not a single demo path.</p>
+      </div>
+    </div>
   </section>
 
   <section id="ai-workforce">
@@ -647,14 +672,24 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Every coworker has an explicit grant set. The TOOL_TO_GRANTS map intersects user capability with agent grants on every call &mdash; missing grants are logged with a rationale code, not silently bypassed.</p>
       </div>
       <div class="pillar">
-        <div class="tag">Spend visibility</div>
+        <div class="tag">Cost governance</div>
         <strong>AI cost is a financial fact.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Provider usage flows into the finance module so AI spend appears alongside the rest of your operating costs &mdash; per provider, per agent, per workflow.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Provider usage flows into the finance module as actual AP spend &mdash; per provider, per agent, per workflow, per Build Studio phase. Anthropic prompt-cache hit/miss telemetry and accurate per-model pricing make the numbers real, not estimates. Budget events fire at phase boundaries; rolling thread compaction and phase-boundary summarization keep token consumption bounded on long-running work.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Decision Perspective Gate</div>
+        <strong>WWMD: open questions get a canonical handler.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Whenever a coworker hits an ambiguity or an open product question, the Decision Perspective Gate aggregates platform principles as weighted vectors and returns one of <em>recommend</em>, <em>arbitrate</em>, <em>escalate</em>, or <em>defer</em> with a confidence score and an audit record. Same gate is exposed as an MCP tool so external clients use it under the same rules.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Persona Voice Layer</div>
+        <strong>WWTD: coworkers speak, and they sound different.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled speaches (faster-whisper) STT service is the default for voice input. The Persona Voice Layer adds per-coworker TTS profiles &mdash; admin-configurable so each persona has a distinct voice for spoken decision rationales and read-back of design and review outputs.</p>
       </div>
       <div class="pillar">
         <div class="tag">Operations map</div>
         <strong>See the workforce as an operating system.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Saved operator views, reset controls, capacity continuity, and capability-needs review help operators see where AI work is active, blocked, underused, or asking for new platform support.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Saved operator views, reset controls, capacity continuity, and capability-needs review help operators see where AI work is active, blocked, underused, or asking for new platform support. Route topology overlays live provider activity, failover curves, quota pressure, and scheduled-window forecasts onto a single time-scrubbable map.</p>
       </div>
     </div>
   </section>
@@ -760,6 +795,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <div class="tag">Evidence</div>
         <strong>Compliance-ready evidence trails.</strong>
         <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The compliance module attaches collected evidence to mapped controls. Build Studio captures phase-by-phase artifacts (design doc, verification output, acceptance check) so the path from idea to ship is reconstructable.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Cost telemetry</div>
+        <strong>Token, cache, and dollar accounting.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Every coworker call records token counts, prompt-cache hit/miss, model, and elapsed time. <code>BuildPhaseRun</code> and <code>ToolExecution</code> roll those up by phase and by tool; <code>AgentBudgetEvent</code> records budget pressure events and pre-dispatch rate-limit checks against the CLI pool.</p>
       </div>
     </div>
   </section>
@@ -1161,9 +1201,9 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Compliance licensing workspace and route-specific coworker tools capture factual licensing posture, readiness issues, and investigation evidence.</td>
         </tr>
         <tr>
-          <td>Edge Node single-host bundle and admin surface</td>
+          <td>Edge Node &mdash; envelope, adapters, Go agent</td>
           <td><strong>Early access</strong></td>
-          <td>Single-host installs bundle Edge Node and expose trust/freshness in Admin. Multi-host and air-gapped runbooks exist; native host binaries and mTLS hardening are still follow-on work.</td>
+          <td>Canonical event envelope with change events (Slice 0/1) live on portal ingest. UniFi adapter (controller discovery + clients), ARP collector with MAC-OUI vendor enrichment, and SNMP/LLDP telemetry adapters are shipped. A Go host agent (enroll, heartbeat, host-info, ARP collector) is in place with wire-contract parity tests. Deployment matrix covers single-host, multi-host, and macvlan; air-gapped runbooks exist. Native binaries beyond the Go scaffold and mTLS hardening are follow-on.</td>
         </tr>
         <tr>
           <td>Capability-tier model routing</td>
@@ -1184,6 +1224,26 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Observability &mdash; Prometheus discovery</td>
           <td><strong>Production</strong></td>
           <td>Estate inventory, scrape-job classification, evidence trails.</td>
+        </tr>
+        <tr>
+          <td>AI cost governance (EP-COST)</td>
+          <td><strong>Early access</strong></td>
+          <td>Anthropic cache telemetry, accurate per-model pricing, <code>BuildPhaseRun</code> + <code>ToolExecution</code> metering, <code>AgentBudgetEvent</code>, rolling thread compaction, phase-boundary summarization, and CLI-pool pre-dispatch rate-limit checks are live. Per-phase cost breakdown surfaces in Build Studio. Budget enforcement (hard stops vs. soft alerts) is the closing piece.</td>
+        </tr>
+        <tr>
+          <td>Decision Perspective Gate (WWMD) + Persona Voice Layer</td>
+          <td><strong>Early access</strong></td>
+          <td>WWMD is the canonical handler for open-question and ambiguity surfaces, returning <em>recommend</em> / <em>arbitrate</em> / <em>escalate</em> / <em>defer</em> with confidence and audit trail; also exposed as an MCP tool. The Persona Voice Layer ships speaches-based STT and admin-configurable per-coworker TTS profiles for spoken decision rationales.</td>
+        </tr>
+        <tr>
+          <td>Cloud Single-VM (AWS / GCP / Azure)</td>
+          <td><strong>Early access</strong></td>
+          <td>Terraform modules for single-VM deployment on AWS, GCP, and Azure are merged on <code>main</code>; the Linux installer runs headlessly inside the VM. Pilots wanted to graduate the path to GA.</td>
+        </tr>
+        <tr>
+          <td>Portal self-upgrade runtime</td>
+          <td><strong>Early access</strong></td>
+          <td>Bundle-hash-driven self-upgrade keeps a long-lived install current with <code>main</code>; canonical-URL middleware handles multi-origin remediation. In-session UX continuity during recycles is the active hardening surface.</td>
         </tr>
         <tr>
           <td>A2A-aligned coworker runtime</td>
@@ -1247,6 +1307,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>The macOS Apple Silicon installer is code-complete on <code>main</code> with Docker Desktop and Docker Model Runner support. Real Apple Silicon install reports are needed before GA.</td>
         </tr>
         <tr>
+          <td><strong>Cloud single-VM (AWS / GCP / Azure)</strong></td>
+          <td>Early access</td>
+          <td>Terraform modules for AWS, GCP, and Azure are merged on <code>main</code>. The Linux installer runs headlessly inside the provisioned VM; the dedicated runbook adds cloud-specific provisioning, public-URL / TLS, and persistent-storage guidance. Pilots wanted before GA.</td>
+        </tr>
+        <tr>
           <td><strong>Cloud-managed services (RDS, ElastiCache, Neo4j Aura, Qdrant Cloud)</strong></td>
           <td>Designed &mdash; low coupling</td>
           <td>Postgres, Redis, Neo4j, Qdrant, browser-use, and AI inference all reach the portal through environment variables. Swapping any of them for a managed cloud equivalent is a configuration change, not a code change.</td>
@@ -1269,7 +1334,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td><strong>Mobile companion app (iOS + Android)</strong></td>
           <td>In progress</td>
-          <td>React Native + Expo SDK 53+ companion app under <code>apps/mobile</code>. Approval surfaces, coworker chat, and offline-cached views are the early targets.</td>
+          <td>React Native 0.83 + Expo SDK 55 + React 19.2 companion app under <code>apps/mobile</code>. Approval surfaces, coworker chat, and offline-cached views are the early targets.</td>
         </tr>
       </tbody>
     </table>

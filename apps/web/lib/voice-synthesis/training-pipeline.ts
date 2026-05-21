@@ -1,5 +1,11 @@
+// training-pipeline.ts
+// Legacy Cartesia training pipeline — retained for opt-in use when
+// TTS_PROVIDER=cartesia. Default provider is now Chatterbox (zero-shot);
+// see /api/voice/reference for the standard registration path.
+//
+// Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md §4.1
+
 import { prisma } from "@dpf/db"
-import type { Prisma } from "@dpf/db"
 import type { VoiceTrainingSample } from "./types"
 
 export interface StartTrainingInput {
@@ -8,6 +14,10 @@ export interface StartTrainingInput {
   audioBuffers: Buffer[]
 }
 
+/**
+ * Cartesia-specific training job — only called when TTS_PROVIDER=cartesia.
+ * For the default Chatterbox path use POST /api/voice/reference instead.
+ */
 export async function startVoiceTrainingJob(input: StartTrainingInput): Promise<{ jobId: string }> {
   const vp = await prisma.voiceProfile.findUnique({
     where: { id: input.voiceProfileId },
@@ -15,37 +25,15 @@ export async function startVoiceTrainingJob(input: StartTrainingInput): Promise<
   })
   if (!vp) throw new Error("VoiceProfile not found")
 
-  // Consent check (skip for synthetic)
   if (vp.consentType !== "not-required-synthetic") {
     if (!vp.consentRecord) throw new Error("Consent record missing")
     if (vp.consentRecord.expiresAt <= new Date()) throw new Error("Consent record is expired")
   }
 
-  const job = await prisma.voiceTrainingJob.create({
-    data: {
-      voiceProfileId: vp.id,
-      status: "pending",
-      inputSamples: input.audioSamples as unknown as Prisma.InputJsonValue,
-    },
-  })
-
-  // Dispatch to provider (currently Cartesia only)
-  if (vp.provider === "cartesia") {
-    await dispatchCartesiaTraining(vp, input, job.id)
-  }
-
-  return { jobId: job.id }
-}
-
-async function dispatchCartesiaTraining(
-  vp: { id: string },
-  input: StartTrainingInput,
-  jobId: string,
-) {
+  // Dispatch to Cartesia clone API
   const apiKey = process.env.CARTESIA_API_KEY
   if (!apiKey) throw new Error("CARTESIA_API_KEY not set")
 
-  // Build multipart form for Cartesia clone API
   const form = new FormData()
   for (let i = 0; i < input.audioBuffers.length; i++) {
     form.append(
@@ -64,20 +52,16 @@ async function dispatchCartesiaTraining(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "unknown")
-    await prisma.voiceTrainingJob.update({
-      where: { id: jobId },
-      data: { status: "failed", errorMessage: detail },
-    })
+    console.error("[tool-trace] voice.cartesia.training.failed", { voiceProfileId: vp.id, detail })
     throw new Error("Cartesia training API call failed")
   }
 
   const data = await res.json()
-  await prisma.voiceTrainingJob.update({
-    where: { id: jobId },
-    data: { status: "processing", providerJobId: data.id },
-  })
   await prisma.voiceProfile.update({
     where: { id: vp.id },
     data: { status: "training", providerVoiceId: data.id },
   })
+
+  // Return the Cartesia voice id as jobId for backwards compat
+  return { jobId: data.id }
 }

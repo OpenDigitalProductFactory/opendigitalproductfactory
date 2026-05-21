@@ -1,4 +1,4 @@
-export type TTSProvider = "cartesia" | "fish-audio" | "elevenlabs" | "xtts-v2"
+export type TTSProvider = "chatterbox" | "cartesia" | "fish-audio" | "elevenlabs" | "xtts-v2"
 
 export type VoiceConsentType =
   | "explicit-recorded"
