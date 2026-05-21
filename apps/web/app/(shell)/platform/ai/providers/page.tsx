@@ -13,6 +13,8 @@ import { ServiceSection } from "@/components/platform/ServiceSection";
 import { ServiceRow } from "@/components/platform/ServiceRow";
 import { getAllCliPoolStatuses } from "@/lib/routing/cli-pool-status";
 import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
+import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
+import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
 import Link from "next/link";
 
 
@@ -45,7 +47,7 @@ export default async function ProvidersPage() {
   const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // Bypass React cache for jobs — syncProviderRegistry() may have mutated the DB above.
-  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses] = await Promise.all([
+  const [providers, byProvider, byAgent, freshJobs, detected, modelSummaries, cliPoolStatuses, budgetEvents, recentRejections] = await Promise.all([
     getProviders(),
     getTokenSpendByProvider(currentMonth),
     getTokenSpendByAgent(currentMonth),
@@ -53,6 +55,8 @@ export default async function ProvidersPage() {
     detectMcpServers(),
     getProviderModelSummaries(),
     getAllCliPoolStatuses(),
+    getRecentBudgetEvents(),
+    countRecentRejections(),
   ]);
   const aiProviders = providers.filter((pw) => pw.provider.endpointType !== "service");
 
@@ -72,6 +76,9 @@ export default async function ProvidersPage() {
 
       {/* EP-COST Phase 4: CLI Pool Status — surface rate-limit state for claude-cli and codex-cli */}
       <CliPoolStatusPanel statuses={cliPoolStatuses} />
+
+      {/* EP-COST Phase 2: Agent Budget Events — surface warning_95 and rejected threshold crossings */}
+      <AgentBudgetEventsPanel events={budgetEvents} recentRejections={recentRejections} />
 
       <div
         style={{
