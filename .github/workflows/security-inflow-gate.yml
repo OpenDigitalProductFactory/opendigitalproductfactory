@@ -1,0 +1,80 @@
+name: Security Inflow Gate
+
+# Why this exists
+# ---------------
+# Blocks merging a PR that introduces NEW critical or high CodeQL findings.
+# Pre-existing baseline findings (tracked at docs/security/codeql-baseline.json)
+# are catalogued as backlog items (see BI-04701325 and child cluster BIs) and
+# burned down separately — they don't block unrelated PRs.
+#
+# Trigger: workflow_run after the default-setup "CodeQL" workflow completes.
+# Reason: we need CodeQL to have analyzed the PR's head SHA before we can
+# diff its alerts. Running directly on `pull_request` would race against
+# CodeQL and see stale alerts (effectively giving every PR a pass).
+#
+# Trust-boundary note (per BI-5940955C)
+# -------------------------------------
+# This workflow runs in the base-repo context with access to GITHUB_TOKEN.
+# It MUST NOT check out the PR's head SHA and execute code from it. The
+# checkout step below pins to the default branch — the script lives in the
+# trusted base repo and only the PR's alert numbers are used as data.
+#
+# When fixing baseline findings
+# -----------------------------
+# After a PR fixes one or more baseline findings (and the corresponding
+# CodeQL alerts close), regenerate the baseline so it reflects reality:
+#
+#   GH_TOKEN=$(gh auth token) GH_REPOSITORY=OpenDigitalProductFactory/opendigitalproductfactory \
+#     node scripts/security/regenerate-baseline.mjs
+#
+# Commit the updated baseline alongside the fix.
+
+on:
+  workflow_run:
+    workflows: ["CodeQL"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  security-events: read
+  contents: read
+  actions: read
+
+concurrency:
+  group: security-inflow-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Security Inflow Gate
+    # Only run for PR-triggered CodeQL completions that succeeded, or manual
+    # dispatch (for testing / on-demand checks). Pushes to main don't need
+    # gating — they ARE the new baseline once merged.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout default branch (trusted base — do not check out PR head)
+        uses: actions/checkout@v6
+        # Intentionally NO `ref:` parameter. Defaults to the workflow file's
+        # ref (default branch on workflow_run), which is what we want — the
+        # baseline file and gate script must come from the trusted base, not
+        # the PR being evaluated.
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Compare alerts against committed baseline
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass head SHA via env (BI-5940955C lesson — never interpolate
+          # github.event.* into shell). Used only for logging, not exec.
+          PR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_DISPLAY_TITLE: ${{ github.event.workflow_run.display_title }}
+        run: node scripts/security/check-inflow-gate.mjs

@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { GitBranch } from "lucide-react";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
-import { PreviewUrlCard } from "./PreviewUrlCard";
+import { OpenSandboxButton } from "./OpenSandboxButton";
+import { computeDrivingBuild, isValidSandboxPort, type SandboxDriverCandidate } from "@/lib/build/sandbox-driver";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
 import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
@@ -70,7 +71,11 @@ export function BuildStudio({
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [buildView, setBuildView] = useState<"progress" | "topology" | "preview" | "docs">("progress");
+  // "preview" removed per spec — sandbox is shared across builds, so the
+  // per-build Preview tab is dishonest. A single Open Sandbox button now
+  // lives in the footer and links to whichever build is currently driving
+  // the sandbox runtime.
+  const [buildView, setBuildView] = useState<"progress" | "topology" | "docs">("progress");
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     shouldOpenBuildStudioSidebarByDefault(
       typeof window === "undefined" ? undefined : window.innerWidth,
@@ -582,18 +587,10 @@ export function BuildStudio({
                         ? "Review"
                         : "Details"}
                   </button>
-                  {activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") && (
-                    <button
-                      role="tab"
-                      aria-selected={buildView === "preview"}
-                      aria-controls="panel-preview"
-                      onClick={() => setBuildView("preview")}
-                      className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                      style={getTabStyle(buildView === "preview")}
-                    >
-                      Preview
-                    </button>
-                  )}
+                  {/* Per-build "Preview" tab removed — sandbox is shared, so
+                      the per-build preview surface was misleading. The footer
+                      OpenSandboxButton handles the shared link labeled with
+                      whichever build is currently driving the sandbox. */}
                 </div>
                 {buildView === "topology" && (
                   <div
@@ -622,12 +619,6 @@ export function BuildStudio({
                   >
                     {buildView === "progress" ? (
                       <BuildProgressOperationalPanel projection={progressVisibility} />
-                    ) : buildView === "preview" && activeBuild.sandboxPort && (activeBuild.phase === "build" || activeBuild.phase === "review" || activeBuild.phase === "ship") ? (
-                      <PreviewUrlCard
-                        buildId={activeBuild.buildId}
-                        phase={activeBuild.phase}
-                        sandboxPort={activeBuild.sandboxPort}
-                      />
                     ) : (
                       <div className="flex-1 overflow-auto">
                         {activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete" ? (
@@ -680,6 +671,40 @@ export function BuildStudio({
           carry it for the active build, and the (still-pending) compact
           fleet mini-rail carries it for the aggregate.
           See docs/superpowers/specs/2026-05-20-build-studio-layout-redesign-design.md §1, §9 #2 */}
+
+      {/* Footer — single shared OpenSandboxButton (sandbox is shared across
+          all in-flight builds; surfacing one link labeled with the current
+          driver replaces the dishonest per-build Preview tab). */}
+      <BuildStudioFooter builds={buildRows} />
+    </div>
+  );
+}
+
+function BuildStudioFooter({ builds }: { builds: FeatureBuildRow[] }) {
+  const candidates: SandboxDriverCandidate[] = builds.map((b) => ({
+    buildCode: b.buildId,
+    sandboxPort: b.sandboxPort,
+    lastActivityAt: b.updatedAt,
+  }));
+  const driving = computeDrivingBuild(candidates);
+  const sandboxUrl =
+    driving && isValidSandboxPort(driving.sandboxPort)
+      ? `http://localhost:${driving.sandboxPort}`
+      : "";
+  return (
+    <div
+      data-testid={BUILD_STUDIO_TEST_IDS.footer}
+      className="flex h-12 shrink-0 items-center justify-between border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-2"
+    >
+      <span className="text-[11px] text-[var(--dpf-muted)]">
+        {driving
+          ? "Sandbox is shared across all in-flight builds."
+          : "No build is currently driving the sandbox."}
+      </span>
+      <OpenSandboxButton
+        drivingBuildCode={driving?.buildCode ?? null}
+        sandboxUrl={sandboxUrl}
+      />
     </div>
   );
 }
