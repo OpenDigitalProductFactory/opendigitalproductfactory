@@ -7,6 +7,16 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
+import {
+  getSelfUpgradeConfig,
+  isInMaintenanceWindow,
+  resolveTargetSha,
+  isShaFresh,
+  getDeployedSha,
+  getLatestRun,
+} from "@/lib/self-upgrade";
+import { inngest } from "@/lib/queue/inngest-client";
+import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 
 async function requireOpsAccess(): Promise<string> {
   const session = await auth();
@@ -521,4 +531,97 @@ export async function getPromotionWindowStatus(promotionId: string) {
     message: `Not in a deployment window. Available: ${windowSummary}`,
     windows: windowSummary,
   };
+}
+
+export type SelfUpgradeRunDto = {
+  runId: string;
+  status: string;
+  triggeredBy: string | null;
+  fromVersion: string | null;
+  toVersion: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  error: string | null;
+  createdAt: Date;
+};
+
+export async function listSelfUpgradeRuns(opts?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<{ runs: SelfUpgradeRunDto[]; nextCursor: string | null }> {
+  await requireOpsAccess();
+
+  const limit = Math.min(opts?.limit ?? 20, 50);
+  const cursor = opts?.cursor;
+
+  const rows = await prisma.selfUpgradeRun.findMany({
+    ...(cursor ? { cursor: { runId: cursor }, skip: 1 } : {}),
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    select: {
+      runId: true,
+      status: true,
+      triggeredBy: true,
+      fromVersion: true,
+      toVersion: true,
+      startedAt: true,
+      completedAt: true,
+      error: true,
+      createdAt: true,
+    },
+  });
+
+  const hasNext = rows.length > limit;
+  const runs = hasNext ? rows.slice(0, limit) : rows;
+  const nextCursor = hasNext ? runs[runs.length - 1].runId : null;
+  return { runs, nextCursor };
+}
+
+export async function getSelfUpgradeStatus() {
+  await requireOpsAccess();
+
+  const [config, latestRun] = await Promise.all([
+    getSelfUpgradeConfig(),
+    getLatestRun(),
+  ]);
+
+  const inMaintenanceWindow = isInMaintenanceWindow(config);
+  const deployedSha = getDeployedSha();
+  const targetSha = await resolveTargetSha(config.channel);
+  const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
+
+  return {
+    enabled: config.enabled,
+    channel: config.channel,
+    inMaintenanceWindow,
+    deployedSha,
+    targetSha,
+    isFresh,
+    latestRun,
+  };
+}
+
+export async function triggerSelfUpgrade(opts?: { dryRun?: boolean }) {
+  const userId = await requireOpsAccess();
+
+  if (!opts?.dryRun) {
+    const config = await getSelfUpgradeConfig();
+    if (!config.enabled) {
+      return { queued: false, reason: "disabled" } as const;
+    }
+  }
+
+  const latestRun = await getLatestRun();
+  if (latestRun?.status === "running") {
+    return { queued: false, reason: "already-running", runId: latestRun.runId } as const;
+  }
+
+  await inngest.send({
+    name: SELF_UPGRADE_EVENT,
+    data: {
+      triggeredBy: `manual:${userId}`,
+      ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+    },
+  });
+  return { queued: true } as const;
 }

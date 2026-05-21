@@ -13,7 +13,12 @@ vi.mock("@/lib/agent-event-bus", () => ({
   agentEventBus: { emit: vi.fn() },
 }));
 
+vi.mock("@/lib/self-upgrade/completion", () => ({
+  isFeatureBuildDeployed: vi.fn(),
+}));
+
 import { prisma } from "@dpf/db";
+import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { getBuildFlowState, reconcileBuildCompletion } from "./build-flow-state";
 
 // ─── Fixture helpers ────────────────────────────────────────────────────────
@@ -82,6 +87,7 @@ beforeEach(() => {
   mockDevConfig("selective");
   mockPack(null);
   mockActivity(null);
+  vi.mocked(isFeatureBuildDeployed).mockResolvedValue(true);
 });
 
 // ─── Main-track substep counts (A.3) ────────────────────────────────────────
@@ -368,6 +374,18 @@ describe("reconcileBuildCompletion", () => {
 
   it("is idempotent when called on an already-complete build", async () => {
     mockBuild({ phase: "complete" });
+    const changed = await reconcileBuildCompletion("FB-TEST-001");
+    expect(changed).toBe(false);
+    expect(prisma.featureBuild.update).not.toHaveBeenCalled();
+  });
+
+  it("returns false and does not update when deployed SHA does not contain the merge SHA", async () => {
+    mockBuild({
+      phase: "ship",
+      productVersions: [{ id: "pv-1", promotions: [{ promotionId: "CP-1", status: "deployed", deployedAt: new Date(), rollbackReason: null, deploymentLog: null, createdAt: new Date() }] }],
+    });
+    mockPack({ packId: "FP-1", prUrl: "https://github.com/org/repo/pull/42", prNumber: 42 });
+    vi.mocked(isFeatureBuildDeployed).mockResolvedValue(false);
     const changed = await reconcileBuildCompletion("FB-TEST-001");
     expect(changed).toBe(false);
     expect(prisma.featureBuild.update).not.toHaveBeenCalled();

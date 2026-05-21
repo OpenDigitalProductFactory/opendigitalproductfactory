@@ -13,6 +13,7 @@
 import { prisma } from "@dpf/db";
 import type { BuildPhase } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
+import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -435,6 +436,8 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
   if (!state) return false;
   if (state.currentPhase !== "ship") return false;
   if (!state.allApplicableForksTerminal) return false;
+  // Confirm the deployed runtime includes the build's merge SHA before completing.
+  if (!await isFeatureBuildDeployed(buildId)) return false;
 
   await prisma.featureBuild.update({
     where: { buildId },

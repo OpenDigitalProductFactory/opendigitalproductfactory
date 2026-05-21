@@ -62,6 +62,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       uxTestResults: true,
       uxVerificationStatus: true,
       buildExecState: true,
+      taxonomyAttribution: true,
       scoutFindings: true,
       deliberationSummary: true,
       digitalProduct: {
@@ -114,6 +115,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
     uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
     uxVerificationStatus: r.uxVerificationStatus as FeatureBuildRow["uxVerificationStatus"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+    taxonomyAttribution: r.taxonomyAttribution as FeatureBuildRow["taxonomyAttribution"],
     scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
     deliberationSummary: r.deliberationSummary as BuildDeliberationSummary | null,
     happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
@@ -164,6 +166,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       uxTestResults: true,
       uxVerificationStatus: true,
       buildExecState: true,
+      taxonomyAttribution: true,
       scoutFindings: true,
       deliberationSummary: true,
       digitalProduct: {
@@ -218,6 +221,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
     uxTestResults: r.uxTestResults as FeatureBuildRow["uxTestResults"],
     uxVerificationStatus: r.uxVerificationStatus as FeatureBuildRow["uxVerificationStatus"],
     buildExecState: r.buildExecState as FeatureBuildRow["buildExecState"],
+    taxonomyAttribution: r.taxonomyAttribution as FeatureBuildRow["taxonomyAttribution"],
     scoutFindings: r.scoutFindings as FeatureBuildRow["scoutFindings"],
     deliberationSummary: r.deliberationSummary as BuildDeliberationSummary | null,
     happyPathState: normalizeHappyPathState((r.plan as Record<string, unknown> | null)?.happyPathState ?? null),
@@ -284,6 +288,7 @@ export async function getFeatureBuildForContext(
       plan: true,
       portfolioId: true,
       createdById: true,
+      taxonomyAttribution: true,
       scoutFindings: true,
       phaseHandoffs: {
         orderBy: { createdAt: "asc" },
@@ -312,34 +317,45 @@ export async function getFeatureBuildForContext(
 
   // Resolve taxonomy path and sibling products for richer context
   let taxonomyContext: { path: string; siblingProducts: string[] } | undefined;
-  const taxonomyAttr = (await prisma.featureBuild.findUnique({
-    where: { buildId },
-    select: { taxonomyAttribution: true },
-  }))?.taxonomyAttribution as { confirmedNodeId?: string } | null;
+  const taxonomyAttr = r.taxonomyAttribution as { confirmedNodeId?: string } | null;
 
   if (taxonomyAttr?.confirmedNodeId) {
-    // Walk the taxonomy tree upward to build the full path
-    const pathParts: string[] = [];
-    let currentNodeId: string | null = taxonomyAttr.confirmedNodeId;
-    while (currentNodeId) {
-      const node: { name: string; parentId: string | null } | null = await prisma.taxonomyNode.findUnique({
-        where: { id: currentNodeId },
-        select: { name: true, parentId: true },
-      });
-      if (!node) break;
-      pathParts.unshift(node.name);
-      currentNodeId = node.parentId;
-    }
-    // Find sibling products in the same taxonomy node
-    const siblings = await prisma.digitalProduct.findMany({
-      where: { taxonomyNodeId: taxonomyAttr.confirmedNodeId },
-      select: { name: true },
-      take: 10,
+    const startingNode = await prisma.taxonomyNode.findUnique({
+      where: { nodeId: taxonomyAttr.confirmedNodeId },
+      select: { id: true, name: true, parentId: true },
+    }) ?? await prisma.taxonomyNode.findUnique({
+      where: { id: taxonomyAttr.confirmedNodeId },
+      select: { id: true, name: true, parentId: true },
     });
-    taxonomyContext = {
-      path: pathParts.join(" > "),
-      siblingProducts: siblings.map((s) => s.name),
-    };
+
+    if (startingNode) {
+      // Walk the taxonomy tree upward to build the full path. confirmedNodeId is
+      // a human-readable nodeId slug; relationships and product links use row ids.
+      const pathParts: string[] = [];
+      const seen = new Set<string>();
+      let node: { id: string; name: string; parentId: string | null } | null = startingNode;
+      while (node && !seen.has(node.id)) {
+        seen.add(node.id);
+        pathParts.unshift(node.name);
+        node = node.parentId
+          ? await prisma.taxonomyNode.findUnique({
+              where: { id: node.parentId },
+              select: { id: true, name: true, parentId: true },
+            })
+          : null;
+      }
+
+      // Find sibling products in the same taxonomy node
+      const siblings = await prisma.digitalProduct.findMany({
+        where: { taxonomyNodeId: startingNode.id },
+        select: { name: true },
+        take: 10,
+      });
+      taxonomyContext = {
+        path: pathParts.join(" > "),
+        siblingProducts: siblings.map((s) => s.name),
+      };
+    }
   } else if (r.portfolioId) {
     const portfolio = await prisma.portfolio.findUnique({
       where: { slug: r.portfolioId },
