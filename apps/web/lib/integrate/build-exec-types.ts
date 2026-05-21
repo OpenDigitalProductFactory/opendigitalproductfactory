@@ -5,6 +5,7 @@ import type { SandboxSourceCurrencySnapshot } from "./sandbox/sandbox-source-cur
 
 export type BuildExecStep =
   | "pending"
+  | "slot_queued"        // transient — emitted only; never persisted as a checkpoint
   | "sandbox_created"
   | "workspace_initialized"
   | "db_ready"
@@ -43,6 +44,7 @@ export const STEP_ORDER: BuildExecStep[] = [
 
 export const STEP_LABELS: Record<BuildExecStep, string> = {
   pending: "Pending",
+  slot_queued: "Waiting for sandbox slot…",
   sandbox_created: "Creating sandbox...",
   workspace_initialized: "Copying project...",
   db_ready: "Initializing database...",
@@ -55,6 +57,7 @@ export const STEP_LABELS: Record<BuildExecStep, string> = {
 
 export const MAX_RETRIES: Record<BuildExecStep, number> = {
   pending: 0,
+  slot_queued: 0,   // not a real step — never retried
   sandbox_created: 3,
   workspace_initialized: 2,
   db_ready: 3,

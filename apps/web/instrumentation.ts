@@ -164,6 +164,66 @@ export async function register() {
       }
     }, STARTUP_DELAY_MS);
 
+    // ── Sandbox slot pool initialization ──────────────────────────────────
+    // Resets all SandboxSlot rows to "available" on every boot.
+    // Handles stale slots from portal crashes without manual intervention:
+    // if the portal dies mid-pipeline the new instance immediately frees any
+    // held slots so queued builds don't wait indefinitely.
+    setTimeout(async () => {
+      try {
+        const { initializePool } = await import("@/lib/integrate/sandbox/sandbox-pool");
+        await initializePool();
+        console.log("[sandbox-pool] Slot pool initialized (all slots reset to available)");
+      } catch (err) {
+        console.error("[sandbox-pool] Failed to initialize slot pool:", err);
+      }
+
+      // Belt-and-suspenders stale-slot reclaim: runs 30 s after boot then
+      // every 30 min. Targets slots held by builds that are no longer in the
+      // 'build' phase OR that have a terminal buildExecState (complete/failed)
+      // despite being in 'build' phase — catches the rare case where the
+      // pipeline finished without releasing the slot.
+      async function reclaimStaleSandboxSlots() {
+        try {
+          const { prisma } = await import("@dpf/db");
+          const staleSlots = await prisma.sandboxSlot.findMany({
+            where: {
+              status: "in_use",
+              buildId: { not: null },
+              acquiredAt: { lt: new Date(Date.now() - 120 * 60 * 1000) }, // > 2 h old
+            },
+          });
+
+          for (const slot of staleSlots) {
+            if (!slot.buildId) continue;
+            const build = await prisma.featureBuild.findUnique({
+              where: { buildId: slot.buildId },
+              select: { phase: true, buildExecState: true },
+            });
+            const execState = build?.buildExecState as { step?: string } | null;
+            const execTerminal = execState?.step === "complete" || execState?.step === "failed";
+            const phaseLeft = !build || build.phase !== "build";
+
+            if (phaseLeft || execTerminal) {
+              await prisma.sandboxSlot.update({
+                where: { id: slot.id },
+                data: { status: "available", buildId: null, userId: null, releasedAt: new Date() },
+              });
+              console.log(
+                `[sandbox-pool] Reclaimed stale slot ${slot.slotIndex} from ${slot.buildId}` +
+                ` (phase=${build?.phase ?? "not found"}, execStep=${execState?.step ?? "null"})`,
+              );
+            }
+          }
+        } catch (err) {
+          console.warn("[sandbox-pool] Stale slot reclaim failed (non-fatal):", err);
+        }
+      }
+
+      await reclaimStaleSandboxSlots();
+      setInterval(reclaimStaleSandboxSlots, 30 * 60 * 1000);
+    }, 5_000);
+
     // ── CREDENTIAL_ENCRYPTION_KEY fail-loud guard ──────────────────────────
     // Refuses to boot in production when the credential store contains
     // secrets but the encryption key is unset — that combination would cause
