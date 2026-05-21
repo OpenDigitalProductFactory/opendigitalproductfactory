@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "dpf-mobile",
-    "newArchEnabled": true,
     "plugins": [
       "expo-router",
       "expo-secure-store",
