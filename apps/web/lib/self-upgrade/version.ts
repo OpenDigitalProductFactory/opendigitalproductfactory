@@ -10,7 +10,7 @@ export type UpgradeVersionState = {
 };
 
 /** @deprecated Returns a stub state — version registry not yet implemented */
-export async function getUpgradeVersionState(_config: unknown): Promise<UpgradeVersionState> {
+export async function getUpgradeVersionState(_config: unknown, _deps?: unknown): Promise<UpgradeVersionState> {
   return { currentSha: null, targetSha: null, comparable: false, upToDate: false, reason: "no-target" };
 }
 

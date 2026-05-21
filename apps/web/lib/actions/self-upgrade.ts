@@ -46,14 +46,17 @@ export type SelfUpgradeRunListItem = {
 export type SelfUpgradeDashboard = {
   config: {
     enabled: boolean;
-    hostInstallPath: string;
-    hostSourceMountPath: string;
-    composeProject: string;
-    portalContainerName: string;
-    dbContainerName: string;
-    repositoryRemote: string;
-    repositoryBranch: string;
-    healthUrl: string;
+    channel?: string;
+    checkIntervalHours?: number;
+    healthTarget?: number;
+    hostInstallPath: string | null;
+    hostSourceMountPath: string | null;
+    composeProject: string | null;
+    portalContainerName: string | null;
+    dbContainerName: string | null;
+    repositoryRemote: string | null;
+    repositoryBranch: string | null;
+    healthUrl: string | null;
   };
   versionState: UpgradeVersionState | null;
   versionError: string | null;
@@ -105,14 +108,17 @@ export async function getSelfUpgradeDashboardAction(): Promise<SelfUpgradeDashbo
   return {
     config: {
       enabled: config.enabled,
-      hostInstallPath: config.hostInstallPath,
-      hostSourceMountPath: config.hostSourceMountPath,
-      composeProject: config.composeProject,
-      portalContainerName: config.portalContainerName,
-      dbContainerName: config.dbContainerName,
-      repositoryRemote: config.repositoryRemote,
-      repositoryBranch: config.repositoryBranch,
-      healthUrl: config.healthUrl,
+      channel: config.channel,
+      checkIntervalHours: config.checkIntervalHours,
+      healthTarget: config.healthTarget,
+      hostInstallPath: null,
+      hostSourceMountPath: null,
+      composeProject: null,
+      portalContainerName: null,
+      dbContainerName: null,
+      repositoryRemote: null,
+      repositoryBranch: null,
+      healthUrl: null,
     },
     versionState,
     versionError,
