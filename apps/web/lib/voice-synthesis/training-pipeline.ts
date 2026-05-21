@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db"
+import type { Prisma } from "@dpf/db"
 import type { VoiceTrainingSample } from "./types"
 
 export interface StartTrainingInput {
@@ -24,7 +25,7 @@ export async function startVoiceTrainingJob(input: StartTrainingInput): Promise<
     data: {
       voiceProfileId: vp.id,
       status: "pending",
-      inputSamples: input.audioSamples,
+      inputSamples: input.audioSamples as unknown as Prisma.InputJsonValue,
     },
   })
 
@@ -49,7 +50,7 @@ async function dispatchCartesiaTraining(
   for (let i = 0; i < input.audioBuffers.length; i++) {
     form.append(
       "clip",
-      new Blob([input.audioBuffers[i]], {
+      new Blob([input.audioBuffers[i].buffer as ArrayBuffer], {
         type: input.audioSamples[i]?.mimeType ?? "audio/mp3",
       }),
     )

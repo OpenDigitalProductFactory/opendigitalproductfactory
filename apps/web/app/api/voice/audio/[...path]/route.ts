@@ -24,7 +24,7 @@ export async function GET(
     return NextResponse.json({ error: "Invalid path" }, { status: 400 })
   }
 
-  const absolutePath = path.join(getStorageRoot(), joined)
+  const absolutePath = path.join(/* turbopackIgnore: true */ getStorageRoot(), joined)
   const ext = path.extname(joined).slice(1).toLowerCase()
   const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream"
 
