@@ -132,6 +132,7 @@ function makeProjection(): BuildProgressVisibility {
       minutesQuiet: 7,
       lastObservableSignalAt: "2026-05-18T11:53:00.000Z",
     },
+    phaseRuns: [],
   };
 }
 

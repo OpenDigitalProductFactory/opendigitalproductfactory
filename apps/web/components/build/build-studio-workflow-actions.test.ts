@@ -344,6 +344,7 @@ describe("deriveBuildStudioWorkflowAction", () => {
         minutesQuiet: 135,
         lastObservableSignalAt: "2026-05-19T17:23:40.189Z",
       },
+      phaseRuns: [],
     } satisfies BuildProgressVisibility;
 
     const action = deriveBuildStudioWorkflowAction({
@@ -726,6 +727,7 @@ describe("deriveWorkflowStageGuidance", () => {
         minutesQuiet: 135,
         lastObservableSignalAt: "2026-05-19T17:23:40.189Z",
       },
+      phaseRuns: [],
     } satisfies BuildProgressVisibility;
 
     const topCardAction = deriveBuildStudioWorkflowAction({

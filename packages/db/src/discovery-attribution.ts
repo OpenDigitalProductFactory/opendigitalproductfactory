@@ -1,3 +1,5 @@
+import { isDockerOriginEntityKey } from "./docker-origin";
+
 const LOW_CONFIDENCE_THRESHOLD = 0.55;
 const STOP_WORDS = new Set([
   "and",
@@ -329,6 +331,15 @@ export function evaluateInventoryQuality(
   const issues: InventoryQualityIssue[] = [];
 
   for (const entity of entities) {
+    // Docker-origin entities (containers, bridge-IP hosts, vpnkit
+    // gateways) aren't real estate to manage — they spawn one quality
+    // issue per row otherwise, drowning the actual signal. Skip the
+    // entire issue-generation loop for them. Entity-key heuristics
+    // catch every Docker shape without needing a name pass-through.
+    if (isDockerOriginEntityKey(entity.entityKey)) {
+      continue;
+    }
+
     if (entity.attributionStatus === "needs_review" || entity.attributionStatus === "unmapped") {
       issues.push({
         issueKey: `inventory_entity:${entity.entityKey}:attribution_missing`,
