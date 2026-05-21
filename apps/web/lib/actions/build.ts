@@ -709,8 +709,14 @@ export async function resetBuildExecution(buildId: string): Promise<void> {
     throw new Error("Build has no execution state to reset.");
   }
 
+  // "Stalled at pending": the pipeline started accumulating state (sourceCurrency,
+  // ideateResearchRequested, etc.) but was killed before setting the first step
+  // (e.g. portal restart during the fire-and-forget autoExecuteBuild call).
+  // No step means no standard recovery path applies, so reset is valid.
+  const isStalledAtPending = state.step == null;
   const isContradictory =
-    state.step !== "failed" && (state.error != null || state.failedAt != null);
+    isStalledAtPending ||
+    (state.step !== "failed" && (state.error != null || state.failedAt != null));
   if (!isContradictory) {
     throw new Error(
       "Build execution state is not contradictory. Use Retry Build for failed states or Resume Implementation for partial task failures.",
@@ -727,13 +733,14 @@ export async function resetBuildExecution(buildId: string): Promise<void> {
 
   revalidatePortalContextForBuild(buildId);
 
+  const summaryStepLabel = isStalledAtPending ? "none (stalled before first step)" : String(state.step);
   prisma.buildActivity
     .create({
       data: {
         buildId,
         tool: "resetBuildExecution",
         summary:
-          `Reset contradictory pipeline checkpoint (prior step=${state.step}` +
+          `Reset contradictory pipeline checkpoint (prior step=${summaryStepLabel}` +
           `${state.failedAt ? `, failedAt=${state.failedAt}` : ""}` +
           `${state.error ? `, error=${state.error.slice(0, 200)}` : ""}` +
           `)`,

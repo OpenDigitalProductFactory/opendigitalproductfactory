@@ -781,6 +781,39 @@ describe("deriveWorkflowStageGuidance", () => {
     expect(action.message).toMatch(/contradictory|checkpoint/i);
   });
 
+  // Pipeline stalled before setting first step (e.g. portal restart killed
+  // autoExecuteBuild before stepCreateSandbox could write step="sandbox_created").
+  // FB-7A21E1F6 shape: buildExecState has sourceCurrency and metadata but no step.
+  it("surfaces Reset Build when buildExecState exists but has no step (stalled at pending)", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        phase: "build",
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        taskResults: null,
+        verificationOut: null,
+        buildExecState: {
+          // No `step` field — pipeline was killed before writing its first checkpoint.
+          // Casting to satisfy the type; the runtime JSONB can be missing this key.
+          sourceCurrency: {
+            dirty: false,
+            branch: "build/FB-7A21E1F6",
+            status: "current",
+            aheadBy: 0,
+            headSha: "41c46682a3f9df4b4963cb749842765f8371f27f",
+            behindBy: 0,
+            checkedAt: "2026-05-20T02:20:08.893Z",
+          } as unknown as never,
+        } as unknown as FeatureBuildRow["buildExecState"],
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("reset-build");
+    expect(action.primaryLabel).toBe("Reset Build");
+    expect(action.disabledReason).toBeNull();
+    expect(action.message).toMatch(/stalled|interrupted/i);
+  });
+
   it("does NOT surface Reset Build for a legitimate step=failed state — that path uses Retry Sandbox Launch", () => {
     const action = deriveBuildStudioWorkflowAction({
       build: makeBuild({
