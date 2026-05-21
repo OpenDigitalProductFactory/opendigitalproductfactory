@@ -321,6 +321,68 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain('data-testid="action-banner-detail"');
   });
 
+  it("mounts the footer OpenSandboxButton — single shared sandbox link", () => {
+    // Footer surfaces the shared sandbox without resorting to a per-build
+    // Preview tab. When a build has a live sandboxPort, the footer button
+    // labels itself with the driving build code.
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({
+          phase: "build",
+          sandboxPort: 5555,
+          draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+    expect(html).toContain('data-testid="build-studio-footer"');
+    expect(html).toContain('data-testid="build-studio-open-sandbox"');
+    expect(html).toContain('data-driving="FB-9B19098C"');
+    expect(html).toContain('href="http://localhost:5555"');
+    expect(html).toMatch(/rel="noopener noreferrer"/);
+  });
+
+  it("footer OpenSandboxButton shows 'idle' when no build has a live sandboxPort", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({ phase: "ideate", sandboxPort: null })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+    expect(html).toContain('data-testid="build-studio-open-sandbox"');
+    expect(html).toContain('data-driving="idle"');
+    // Disabled span renders (no anchor when sandboxUrl is empty).
+    expect(html).toContain('aria-disabled="true"');
+  });
+
+  it("removes the per-build Preview tab from the tab selector", () => {
+    // Per spec §1: per-build Preview is dishonest (sandbox is shared).
+    // The footer OpenSandboxButton handles the shared link instead.
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({
+          phase: "build",
+          sandboxPort: 5555,
+          draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+    // No tab with the Preview label.
+    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Preview<\/button>/);
+    // The aria-controls pointing at "panel-preview" must not exist.
+    expect(html).not.toContain('aria-controls="panel-preview"');
+  });
+
   it("renders the dedicated release decision surface when a build reaches ship", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
