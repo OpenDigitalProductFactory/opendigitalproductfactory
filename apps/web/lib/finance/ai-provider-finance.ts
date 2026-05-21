@@ -258,7 +258,11 @@ export async function createContractUsageSnapshot(input: CreateContractUsageSnap
 }
 
 export async function getAiSpendOverview() {
-  const [profiles, contracts, workItems, snapshots] = await Promise.all([
+  // Current month window for actual spend aggregation
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  const [profiles, contracts, workItems, snapshots, actualSpendAgg] = await Promise.all([
     prisma.aiProviderFinanceProfile.count(),
     prisma.supplierContract.findMany({
       where: { status: { in: ["draft", "active"] } },
@@ -276,11 +280,27 @@ export async function getAiSpendOverview() {
       take: 20,
       select: { projectedUnusedValue: true },
     }),
+    // EP-COST: Aggregate actual token spend from AdapterRunTelemetry for the current month.
+    // estimatedCostUsd is populated by computeTokenCost() using per-model pricing from ModelProfile.
+    // Subscription providers (anthropic-sub, chatgpt) show $0 here — their fixed monthly cost
+    // is captured in the SupplierContract.monthlyCommittedAmount below.
+    prisma.adapterRunTelemetry.aggregate({
+      where: {
+        startedAt: { gte: monthStart },
+        estimatedCostUsd: { not: null },
+      },
+      _sum: { estimatedCostUsd: true },
+      _count: { id: true },
+    }),
   ]);
 
   const committedSpend = contracts.reduce((sum, contract) => sum + Number(contract.monthlyCommittedAmount ?? 0), 0);
   const contractsNeedingSetup = contracts.filter((contract) => contract.status === "draft").length;
   const projectedUnusedCommitment = snapshots.reduce((sum, snapshot) => sum + Number(snapshot.projectedUnusedValue ?? 0), 0);
+
+  // Actual metered API spend this month (excludes subscription providers at $0/call)
+  const actualMeteredSpendUsd = Number(actualSpendAgg._sum.estimatedCostUsd ?? 0);
+  const inferenceCallsThisMonth = actualSpendAgg._count.id ?? 0;
 
   return {
     supplierCount: profiles,
@@ -288,11 +308,35 @@ export async function getAiSpendOverview() {
     contractsNeedingSetup,
     openWorkItems: workItems,
     projectedUnusedCommitment,
+    // EP-COST additions: actual spend from inference telemetry
+    actualMeteredSpendUsd,
+    inferenceCallsThisMonth,
+    monthStart,
   };
 }
 
 export async function listAiProviderFinanceProfiles() {
-  return prisma.aiProviderFinanceProfile.findMany({
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  // EP-COST: per-provider actual metered spend this month from AdapterRunTelemetry
+  const spendByProvider = await prisma.adapterRunTelemetry.groupBy({
+    by: ["providerId"],
+    where: {
+      startedAt: { gte: monthStart },
+      estimatedCostUsd: { not: null },
+    },
+    _sum: { estimatedCostUsd: true },
+    _count: { id: true },
+  });
+  const spendMap = new Map(
+    spendByProvider.map((r) => [
+      r.providerId,
+      { costUsd: Number(r._sum.estimatedCostUsd ?? 0), calls: r._count.id },
+    ]),
+  );
+
+  const profiles = await prisma.aiProviderFinanceProfile.findMany({
     include: {
       provider: {
         select: {
@@ -327,6 +371,12 @@ export async function listAiProviderFinanceProfiles() {
     },
     orderBy: { updatedAt: "desc" },
   });
+
+  // Attach actual spend data to each profile row
+  return profiles.map((p) => ({
+    ...p,
+    actualSpendMtd: spendMap.get(p.providerId) ?? { costUsd: 0, calls: 0 },
+  }));
 }
 
 export async function getAiProviderFinanceDetail(providerId: string) {
