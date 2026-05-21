@@ -1374,6 +1374,10 @@ export async function runBuildOrchestrator(params: {
         verificationOut: updatedBuild.verificationOut,
       });
       if (gate.allowed) {
+        // EP-COST Phase 3: record build-phase cost rollup before transitioning.
+        const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+        void completeBuildPhaseRun(buildId, "build");
+        void startBuildPhaseRun(buildId, "review");
         await prisma.featureBuild.update({ where: { buildId }, data: { phase: "review" } });
         await queueBuildReviewVerification(buildId);
         agentEventBus.emit(parentThreadId, { type: "phase:change", buildId, phase: "review" });

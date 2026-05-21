@@ -107,6 +107,10 @@ export async function createFeatureBuild(input: {
     return { buildId: created.buildId };
   });
 
+  // EP-COST Phase 3: start ideate-phase tracking (fire-and-forget)
+  const { startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+  void startBuildPhaseRun(result.buildId, "ideate");
+
   return result;
 }
 
