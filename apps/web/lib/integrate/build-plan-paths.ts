@@ -27,7 +27,8 @@ const LEGACY_BUILD_STUDIO_TEXT_ALIASES: Array<{ from: RegExp; to: string }> = [
   { from: /\bDetailsPreviewPanel\b/g, to: "BuildStudio" },
 ];
 
-function normalizeRelativePath(relativePath: string): string {
+function normalizeRelativePath(relativePath: string | undefined | null): string {
+  if (!relativePath) return "";
   return relativePath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
