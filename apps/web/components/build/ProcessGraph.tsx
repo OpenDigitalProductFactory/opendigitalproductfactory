@@ -18,6 +18,8 @@ import type { BuildPhase, FeatureBuildRow } from "@/lib/feature-build-types";
 import type { AssignedTask } from "@/lib/integrate/task-dependency-graph";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import { buildDependencyGraph } from "@/lib/integrate/task-dependency-graph";
+import { lookupAssignedTaskByTitle, type ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
+export type { ProcessGraphNodeKind, ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
 import {
   buildPhaseGraph,
   buildTaskGraph,
@@ -60,14 +62,25 @@ type Props = {
   workflowLabel: string | null;
   governedBacklogEnabled: boolean;
   progressVisibility?: BuildProgressVisibility | null;
+  /**
+   * Optional click delegate. When provided, ProcessGraph SKIPS its internal
+   * TaskInspector / WorkflowStageInspector and surfaces click context to the
+   * parent instead. Used by the new BuildStudio shell to open the anchored
+   * WorkflowNodeInspector inside the workflow region (see spec §2 + §6).
+   *
+   * When NOT provided, the legacy internal-inspector behavior is preserved
+   * so existing callers (and `/build?v=1`) continue to work unchanged.
+   */
+  onNodeClick?: (info: ProcessGraphNodeClickInfo) => void;
 };
 
 type AnimatedProcessEdge = ProcessEdge & { type: "animatedFlow" };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
-export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, progressVisibility }: Props) {
+export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, progressVisibility, onNodeClick }: Props) {
   const reactFlowRef = useRef<ReactFlowInstance<Node, AnimatedProcessEdge> | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // ─── Live running-task state via DOM CustomEvents ──────────────────────
   const [activeTaskTitles, setActiveTaskTitles] = useState<Set<string>>(
@@ -177,7 +190,48 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, pro
   const [inspectedPhase, setInspectedPhase] = useState<BuildPhase | null>(null);
 
   const handleNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (event: React.MouseEvent, node: Node) => {
+      // ── Delegate path ────────────────────────────────────────────────
+      // When the parent provided onNodeClick, gather the geometry the new
+      // anchored inspector needs and hand off. Do NOT touch the internal
+      // inspector state — the parent owns the inspector lifecycle.
+      if (onNodeClick) {
+        const containerEl = containerRef.current;
+        if (!containerEl) return;
+        const nodeEl = event.currentTarget as HTMLElement;
+        const anchorRect = nodeEl.getBoundingClientRect();
+        const containerRect = containerEl.getBoundingClientRect();
+        const containerScrollTop = containerEl.scrollTop;
+
+        if (node.type === "processPhase" || node.type === "processForkJoin") {
+          const data = node.data as PhaseNodeData;
+          onNodeClick({
+            nodeId: String(node.id),
+            kind: node.type === "processPhase" ? "phase" : "forkJoin",
+            phase: data.phase,
+            anchorRect,
+            containerRect,
+            containerScrollTop,
+          });
+          return;
+        }
+        if (node.type === "processTask") {
+          const data = node.data as TaskNodeData;
+          const task = lookupAssignedTaskByTitle(build, data.label) ?? undefined;
+          onNodeClick({
+            nodeId: String(node.id),
+            kind: "task",
+            task,
+            anchorRect,
+            containerRect,
+            containerScrollTop,
+          });
+          return;
+        }
+        return;
+      }
+
+      // ── Legacy internal-inspector path ───────────────────────────────
       if (node.type === "processPhase" || node.type === "processForkJoin") {
         const nodeData = node.data as PhaseNodeData;
         setInspectedTask(null);
@@ -206,7 +260,7 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, pro
         }
       }
     },
-    [build.buildPlan],
+    [build, onNodeClick],
   );
 
   const handleInspectorClose = useCallback(() => {
@@ -223,7 +277,7 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, pro
     : undefined;
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
