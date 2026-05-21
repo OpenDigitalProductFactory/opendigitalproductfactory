@@ -95,6 +95,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
         {phaseSummary && deliberationPhase && (
           <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
         )}
+        {build?.taxonomyAttribution && <TaxonomyPlacementCard attribution={build.taxonomyAttribution} />}
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-[var(--dpf-text)]">Design Research</h3>
           {designReview && (
@@ -180,6 +181,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
           <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
         )}
         {build && <HappyPathStatusCard build={build} />}
+        {build?.taxonomyAttribution && <TaxonomyPlacementCard attribution={build.taxonomyAttribution} />}
         {progressMsg && (
           <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)] animate-pulse">
             <span className="w-2 h-2 rounded-full bg-[var(--dpf-accent)] shrink-0" />
@@ -199,6 +201,7 @@ export function FeatureBriefPanel({ brief, phase, diffSummary, attachments, buil
         <DeliberationSummaryCard phase={deliberationPhase} summary={phaseSummary} />
       )}
       {build && <HappyPathStatusCard build={build} />}
+      {build?.taxonomyAttribution && <TaxonomyPlacementCard attribution={build.taxonomyAttribution} />}
       {progressMsg && (
         <div className="flex items-center gap-2 text-xs text-[var(--dpf-muted)] animate-pulse">
           <span className="w-2 h-2 rounded-full bg-[var(--dpf-accent)] shrink-0" />
@@ -272,6 +275,91 @@ function HappyPathStatusCard({ build }: { build: FeatureBuildRow }) {
         {execution.failureStage ? ` · failed at ${execution.failureStage}` : ""}
         {intake.failureReason ? ` · ${intake.failureReason}` : ""}
       </div>
+    </div>
+  );
+}
+
+function TaxonomyPlacementCard({ attribution }: { attribution: NonNullable<FeatureBuildRow["taxonomyAttribution"]> }) {
+  const confidence = Math.max(0, Math.min(100, Math.round((attribution.confidence ?? 0) * 100)));
+  const status =
+    attribution.method === "invalid_portfolio"
+      ? { label: "Needs portfolio", tone: "warning" as const }
+      : attribution.proposedNewNode
+        ? { label: "Proposed", tone: "accent" as const }
+        : attribution.confirmedNodeId
+          ? { label: "Confirmed", tone: "success" as const }
+          : confidence < 55
+            ? { label: "Low confidence", tone: "warning" as const }
+            : { label: "Suggested", tone: "accent" as const };
+  const toneVar =
+    status.tone === "success"
+      ? "var(--dpf-success)"
+      : status.tone === "warning"
+        ? "var(--dpf-warning)"
+        : "var(--dpf-accent)";
+  const primaryPlacement =
+    attribution.confirmedNodeId
+      ?? attribution.topCandidate?.nodeName
+      ?? attribution.invalidPortfolioContext
+      ?? "Unplaced";
+  const candidates = attribution.candidates?.slice(0, 3) ?? [];
+
+  return (
+    <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-xs font-semibold text-[var(--dpf-text)]">Taxonomy Placement</span>
+          <p className="mt-0.5 text-[11px] text-[var(--dpf-muted)] truncate">{safeRenderValue(primaryPlacement)}</p>
+        </div>
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={{
+            color: toneVar,
+            background: `color-mix(in srgb, ${toneVar} 12%, var(--dpf-surface-2))`,
+            border: `1px solid color-mix(in srgb, ${toneVar} 50%, var(--dpf-border))`,
+          }}
+        >
+          {status.label}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="h-1.5 flex-1 rounded-full bg-[var(--dpf-surface-1)] overflow-hidden">
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${confidence}%`, background: toneVar }}
+          />
+        </div>
+        <span className="w-9 text-right text-[11px] font-semibold text-[var(--dpf-text)]">{confidence}%</span>
+      </div>
+
+      {attribution.invalidPortfolioContext && (
+        <div className="text-[11px] leading-snug text-[var(--dpf-warning)]">
+          Invalid portfolio context: {safeRenderValue(attribution.invalidPortfolioContext)}
+        </div>
+      )}
+
+      {attribution.proposedNewNode && (
+        <div className="text-[11px] leading-snug text-[var(--dpf-muted)]">
+          Proposed node: <span className="text-[var(--dpf-text)]">{safeRenderValue(attribution.proposedNewNode.name)}</span>
+        </div>
+      )}
+
+      {candidates.length > 0 && (
+        <div className="flex flex-col gap-1 border-t border-[var(--dpf-border)] pt-2">
+          {candidates.map((candidate) => (
+            <div key={candidate.nodeId} className="grid grid-cols-[1fr_auto] gap-2 text-[11px] leading-snug">
+              <div className="min-w-0">
+                <div className="truncate font-medium text-[var(--dpf-text)]">{safeRenderValue(candidate.nodeName)}</div>
+                {candidate.evidence && (
+                  <div className="truncate text-[var(--dpf-muted)]">{safeRenderValue(candidate.evidence)}</div>
+                )}
+              </div>
+              <span className="text-[var(--dpf-muted)]">{Math.round(candidate.score * 100)}% match</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

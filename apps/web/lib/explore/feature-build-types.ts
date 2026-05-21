@@ -26,6 +26,35 @@ export type FeatureBrief = {
   acceptanceCriteria: string[];
 };
 
+export type TaxonomyAttributionView = {
+  method: "rule" | "heuristic" | "ai_proposed" | "manual" | "invalid_portfolio";
+  confidence: number;
+  portfolioSlug?: string | null;
+  invalidPortfolioContext?: string | null;
+  validPortfolioOptions?: Array<{ slug: string; name: string }>;
+  confirmedNodeId: string | null;
+  topCandidate: {
+    nodeId: string;
+    nodeName: string;
+    score: number;
+    evidence: string;
+  } | null;
+  candidates: Array<{
+    nodeId: string;
+    nodeName: string;
+    score: number;
+    evidence: string;
+  }>;
+  proposedNewNode: {
+    parentNodeId: string;
+    name: string;
+    description: string;
+    rationale: string;
+    proposalId?: string | null;
+  } | null;
+  attributedAt: string;
+};
+
 // ─── Build Disciplines Evidence Types ────────────────────────────────────────
 
 export type ReviewResult = {
@@ -249,6 +278,7 @@ export type FeatureBuildRow = {
   claimedAt: Date | null;
   claimStatus: string | null;
   buildExecState: BuildExecutionState | null;
+  taxonomyAttribution?: TaxonomyAttributionView | null;
   deliberationSummary: BuildDeliberationSummary | null;
   originator: {
     id: string;
