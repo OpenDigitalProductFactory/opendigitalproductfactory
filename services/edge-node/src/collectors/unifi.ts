@@ -1,26 +1,37 @@
-// UniFi adapter (Slice A — discovery only).
+// UniFi adapter (Slice A + Slice B — discovery only).
 //
-// Pulls the list of UniFi-managed network devices (switches, access
-// points, gateways) from a local UniFi Network controller and emits
-// them as ObservationItem records. Each device gets a SAME_AS link to
-// the `arp:<ip>` key the ARP collector already produces, so the
-// Authority Core's normalization can collapse the two into a single
-// canonical Configuration Item. Parent-child device topology
-// (gateway → switch → AP) is emitted as HOSTS relationships using the
-// controller's `uplink.uplink_mac` field.
+// Slice A — managed devices (/stat/device):
+//   Pulls the list of UniFi-managed network devices (switches, access
+//   points, gateways) from a local UniFi Network controller and emits
+//   them as ObservationItem records. Each device gets a SAME_AS link
+//   to the `arp:<ip>` key the ARP collector already produces, so the
+//   Authority Core's normalization can collapse the two into a single
+//   canonical Configuration Item. Parent-child device topology
+//   (gateway → switch → AP) is emitted as HOSTS relationships using
+//   the controller's `uplink.uplink_mac` field.
 //
-// What's NOT in this slice (lands in Slice B):
-//   - Per-port throughput telemetry (rx_bytes-r / tx_bytes-r). That
-//     needs the metrics.network capability + /api/v1/edge/metrics
-//     endpoint, neither of which exist yet.
-//   - WebSocket event subscription for instant-on device joins.
+// Slice B — clients (/stat/sta):
+//   Pulls every device the UniFi controller has authenticated — WiFi
+//   clients, wired clients, the works. This is what surfaces Amazon
+//   Echos, Reolink cameras, phones, IoT, etc. when the edge node
+//   itself can't ARP the LAN (the Docker-Desktop-on-Windows case).
+//   Each client emits an ObservationItem keyed `arp:<client-ip>` so
+//   it dedupes with the local ARP collector when both see the same
+//   device, plus a MEMBER_OF relationship to the AP / switch it
+//   connects through (matching the spec's "logical topology" intent).
+//   OUI vendor enrichment is included inline.
+//
+// What's still NOT in this slice (lands in future slices):
+//   - Per-port throughput telemetry (rx_bytes-r / tx_bytes-r). Needs
+//     the metrics.network capability + /api/v1/edge/metrics endpoint.
+//   - WebSocket event subscription for instant-on join events.
 //     5-minute sweep cadence is fine for v1.
 //   - PoE wattage per port.
 //
 // Auth: API-key header (`X-API-KEY`). UniFi Network 9.x+ generates
 // API keys in Settings → System → API. Cookie-session local auth is
-// out of scope for Slice A; if it's needed later, gate on whether
-// config.apiKey is empty and fall through to a /api/auth/login flow.
+// out of scope; if it's needed later, gate on whether config.apiKey
+// is empty and fall through to a /api/auth/login flow.
 //
 // TLS: many home UniFi installs use a self-signed cert. The
 // `tlsInsecure` config flag opts into accepting any cert by swapping
@@ -31,6 +42,7 @@
 
 import { Agent, fetch as undiciFetch } from "undici";
 
+import { lookupOui, shortVendor } from "../lib/mac-oui";
 import {
   resolveAdaptersConfig,
   type AdaptersConfigAdapter,
@@ -63,8 +75,43 @@ type UnifiDevice = {
   state?: number;
   version?: string;
   uplink?: { uplink_mac?: string; uplink_remote_port?: number; type?: string };
-  // Other fields (port_table, stat, last_seen, etc.) are ignored in
-  // Slice A; they'll be consumed by Slice B's metrics path.
+  // Other fields (port_table, stat, etc.) are ignored in Slice A;
+  // they'll be consumed by the metrics path (future slice).
+};
+
+/**
+ * Subset of the UniFi /stat/sta client shape we use. The full
+ * response carries dozens of stat counters per client; we keep the
+ * identity + topology subset and surface a few useful WiFi-only
+ * details (signal strength, AP MAC) in rawData for the topology view.
+ */
+type UnifiClient = {
+  mac: string;
+  ip?: string;
+  hostname?: string;
+  /** Operator-set friendly name in the UniFi UI ("Mark's iPhone"). */
+  name?: string;
+  /** UniFi's own MAC manufacturer lookup. We trust ours over theirs. */
+  oui?: string;
+  /** Unix-second timestamps. */
+  first_seen?: number;
+  last_seen?: number;
+  is_wired?: boolean;
+  is_guest?: boolean;
+  /** Network / VLAN name the controller has the client in. */
+  network?: string;
+  /** WiFi-only — MAC of the AP the client is associated with. */
+  ap_mac?: string;
+  essid?: string;
+  channel?: number;
+  radio?: string;
+  radio_proto?: string;
+  signal?: number;
+  rssi?: number;
+  noise?: number;
+  /** Wired-only — MAC of the switch the client is connected through. */
+  sw_mac?: string;
+  sw_port?: number;
 };
 
 /** Adapter for tests — replaces fetch + the config resolver. */
@@ -171,6 +218,32 @@ async function fetchUnifiDevices(
   adapter: UnifiAdapter,
 ): Promise<{ devices: UnifiDevice[] } | { error: string }> {
   const url = `${unifi.controllerUrl}/proxy/network/api/s/${encodeURIComponent(unifi.site)}/stat/device`;
+  const result = await fetchUnifiJsonArray<UnifiDevice>(url, unifi, adapter);
+  if ("error" in result) return result;
+  return { devices: result.data };
+}
+
+async function fetchUnifiClients(
+  unifi: UnifiAdapterConfig,
+  adapter: UnifiAdapter,
+): Promise<{ clients: UnifiClient[] } | { error: string }> {
+  const url = `${unifi.controllerUrl}/proxy/network/api/s/${encodeURIComponent(unifi.site)}/stat/sta`;
+  const result = await fetchUnifiJsonArray<UnifiClient>(url, unifi, adapter);
+  if ("error" in result) return result;
+  return { clients: result.data };
+}
+
+/**
+ * Common fetch + parse for the two `data: []` endpoints we use. The
+ * wire contract is identical between /stat/device and /stat/sta —
+ * both return `{ data: T[] }`. Each caller wraps with the field name
+ * its API consumers expect.
+ */
+async function fetchUnifiJsonArray<T>(
+  url: string,
+  unifi: UnifiAdapterConfig,
+  adapter: UnifiAdapter,
+): Promise<{ data: T[] } | { error: string }> {
   let resp: Awaited<ReturnType<UnifiAdapter["fetch"]>>;
   try {
     resp = await adapter.fetch(url, {
@@ -206,18 +279,122 @@ async function fetchUnifiDevices(
     return { error: `controller response missing data[] array` };
   }
 
+  return { data: (parsed as { data: T[] }).data };
+}
+
+/**
+ * Map a UniFi client to an ObservationItem. Keyed `arp:<ip>` so it
+ * dedupes with the local ARP collector when both see the same device.
+ * OUI vendor enrichment is included inline so the topology view
+ * shows "Amazon 192.168.0.49" without needing a downstream enricher,
+ * matching the shape the ARP collector emits (per PR #846).
+ *
+ * Returns null for clients without a usable MAC + IP — the wire
+ * contract requires an observedKey, and `arp:<empty>` is meaningless.
+ */
+function buildItemFromClient(client: UnifiClient): ObservationItem | null {
+  const mac = client.mac?.toLowerCase();
+  if (!mac || !/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) return null;
+  if (!client.ip) return null;
+
+  const oui = lookupOui(mac);
+  const displayName =
+    client.name ||
+    client.hostname ||
+    (oui ? `${shortVendor(oui.vendor)} ${client.ip}` : `LAN Host ${client.ip}`);
+
+  const rawData: Record<string, unknown> = {
+    address: client.ip,
+    mac,
+    osiLayer: 3,
+    osiLayerName: "network",
+    protocolFamily: "ipv4",
+    discoveredVia: "unifi_clients_api",
+    hostname: client.hostname ?? null,
+    operatorName: client.name ?? null,
+    isWired: client.is_wired ?? null,
+    isGuest: client.is_guest ?? null,
+    network: client.network ?? null,
+    firstSeen: client.first_seen ? new Date(client.first_seen * 1000).toISOString() : null,
+    lastSeen: client.last_seen ? new Date(client.last_seen * 1000).toISOString() : null,
+    unifiOui: client.oui ?? null,
+  };
+
+  if (oui) {
+    rawData.vendor = oui.vendor;
+    rawData.vendorOui = oui.oui;
+    rawData.vendorShort = shortVendor(oui.vendor);
+  }
+
+  if (client.is_wired) {
+    rawData.swMac = client.sw_mac ?? null;
+    rawData.swPort = client.sw_port ?? null;
+  } else {
+    rawData.apMac = client.ap_mac ?? null;
+    rawData.essid = client.essid ?? null;
+    rawData.channel = client.channel ?? null;
+    rawData.radio = client.radio ?? null;
+    rawData.radioProto = client.radio_proto ?? null;
+    rawData.signal = client.signal ?? null;
+    rawData.rssi = client.rssi ?? null;
+    rawData.noise = client.noise ?? null;
+  }
+
   return {
-    devices: (parsed as { data: UnifiDevice[] }).data,
+    observedKey: `arp:${client.ip}`,
+    itemType: "host",
+    name: displayName,
+    // Higher confidence than the ARP collector's 0.7: UniFi has
+    // authenticated this client (DHCP lease + auth handshake), not
+    // just learned a kernel neighbor entry.
+    confidence: 0.9,
+    rawData,
   };
 }
 
 /**
- * Run the UniFi adapter once. If no config block is present, returns
- * an empty result with no warnings — the adapter is opt-in.
+ * Build a MEMBER_OF relationship from each client to the UniFi-managed
+ * device it connects through (AP for wifi, switch for wired). Lets
+ * the topology view draw the logical "this phone is hanging off this
+ * AP" edges that operators care about.
  *
- * Errors are converted to warnings (and zero items) rather than
- * thrown, matching the pattern of every other collector: a single
- * adapter failure must never bring down the sweep.
+ * Returns null when the connection device MAC isn't known — that
+ * happens for clients in transitional states the UniFi controller
+ * exposes inconsistently.
+ */
+function buildClientMemberOfLink(client: UnifiClient): UnifiRelationship | null {
+  const mac = client.mac?.toLowerCase();
+  if (!mac || !client.ip) return null;
+
+  const parentMac = client.is_wired
+    ? client.sw_mac?.toLowerCase()
+    : client.ap_mac?.toLowerCase();
+  if (!parentMac) return null;
+
+  return {
+    fromObservedKey: `arp:${client.ip}`,
+    toObservedKey: `unifi:${parentMac}`,
+    relationshipType: "MEMBER_OF",
+    rawData: {
+      mechanism: client.is_wired ? "unifi_switch_port" : "unifi_wifi_assoc",
+      port: client.is_wired ? (client.sw_port ?? null) : null,
+      essid: !client.is_wired ? (client.essid ?? null) : null,
+    },
+  };
+}
+
+/**
+ * Run the UniFi adapter once. Fetches BOTH endpoints in parallel:
+ *   - /stat/device — UniFi-managed gateways/switches/APs (Slice A)
+ *   - /stat/sta    — every authenticated WiFi + wired client (Slice B)
+ *
+ * If no config block is present, returns an empty result with no
+ * warnings — the adapter is opt-in.
+ *
+ * Errors are converted to warnings (and zero items for the failing
+ * endpoint) rather than thrown, matching the pattern of every other
+ * collector. A clients fetch failure doesn't kill the devices
+ * payload, and vice versa — each endpoint is independent.
  */
 export async function collectUnifi(
   adapter?: UnifiAdapter,
@@ -233,26 +410,48 @@ export async function collectUnifi(
   // because the flag lives in the JSON config we just read.
   const effectiveAdapter: UnifiAdapter = adapter ?? buildDefaultAdapter(unifi.tlsInsecure);
 
-  const result = await fetchUnifiDevices(unifi, effectiveAdapter);
-  if ("error" in result) {
-    warnings.push(`unifi: ${result.error}`);
-    return { items: [], relationships: [], warnings };
-  }
+  // Fan out both endpoint calls concurrently. Promise.all is fine
+  // here because the two are independent and we already handle
+  // per-call errors inside each fetch function (they return
+  // {error: string} instead of throwing).
+  const [devicesResult, clientsResult] = await Promise.all([
+    fetchUnifiDevices(unifi, effectiveAdapter),
+    fetchUnifiClients(unifi, effectiveAdapter),
+  ]);
 
   const items: ObservationItem[] = [];
-  const sameAsLinks: UnifiRelationship[] = [];
-  for (const device of result.devices) {
-    const item = buildItemFromDevice(device);
-    if (!item) continue;
-    items.push(item);
-    const link = buildSameAsLink(device);
-    if (link) sameAsLinks.push(link);
+  const relationships: UnifiRelationship[] = [];
+
+  if ("error" in devicesResult) {
+    warnings.push(`unifi: ${devicesResult.error}`);
+  } else {
+    const sameAsLinks: UnifiRelationship[] = [];
+    for (const device of devicesResult.devices) {
+      const item = buildItemFromDevice(device);
+      if (!item) continue;
+      items.push(item);
+      const link = buildSameAsLink(device);
+      if (link) sameAsLinks.push(link);
+    }
+    relationships.push(...sameAsLinks);
+    relationships.push(...buildUplinkLinks(devicesResult.devices));
   }
-  const uplinkLinks = buildUplinkLinks(result.devices);
+
+  if ("error" in clientsResult) {
+    warnings.push(`unifi: ${clientsResult.error}`);
+  } else {
+    for (const client of clientsResult.clients) {
+      const item = buildItemFromClient(client);
+      if (!item) continue;
+      items.push(item);
+      const link = buildClientMemberOfLink(client);
+      if (link) relationships.push(link);
+    }
+  }
 
   return {
     items,
-    relationships: [...sameAsLinks, ...uplinkLinks],
+    relationships,
     warnings,
   };
 }
