@@ -112,6 +112,11 @@ export const PRINCIPLE_DIMENSIONS = [
   "public_safety",
   "speed_to_value",
   "schema_grounding",
+  // Added for prefer-self-hosted-infrastructure principle (PR #926)
+  "operational_independence",
+  "data_privacy",
+  "cost_efficiency",
+  "vendor_lock_in",
 ] as const;
 export type PrincipleDimension = (typeof PRINCIPLE_DIMENSIONS)[number];
 
