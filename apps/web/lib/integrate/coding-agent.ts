@@ -58,20 +58,30 @@ export async function checkCodingReadiness(): Promise<CodingReadiness> {
 
 // ─── Build Prompt ────────────────────────────────────────────────────────────
 
-export function buildCodeGenPrompt(brief: FeatureBrief, plan: Record<string, unknown>, instruction?: string): string {
+export function buildCodeGenPrompt(brief: FeatureBrief | null, plan: Record<string, unknown>, instruction?: string): string {
+  // Guard: brief may be null for builds whose ideate phase never completed
+  // (e.g. builds created before the brief was saved, or pipeline retries on
+  // a build whose brief column is null — FB-71FB3A53).
+  const title = brief?.title ?? "(no title)";
+  const description = brief?.description ?? "";
+  const portfolioContext = brief?.portfolioContext ?? "";
+  const targetRoles = brief?.targetRoles;
+  const dataNeeds = brief?.dataNeeds ?? "None specified";
+  const acceptanceCriteria = brief?.acceptanceCriteria;
+
   const parts = [
     "You are a code generation agent working inside a Next.js 14 App Router project.",
     "The project uses TypeScript, Prisma 5, and TailwindCSS with a dark theme.",
     "",
     "## Feature Brief",
-    `Title: ${brief.title}`,
-    `Description: ${brief.description}`,
-    `Portfolio: ${brief.portfolioContext}`,
-    `Target Roles: ${Array.isArray(brief.targetRoles) ? brief.targetRoles.join(", ") : brief.targetRoles ?? "All"}`,
-    `Data Needs: ${brief.dataNeeds ?? "None specified"}`,
+    `Title: ${title}`,
+    `Description: ${description}`,
+    `Portfolio: ${portfolioContext}`,
+    `Target Roles: ${Array.isArray(targetRoles) ? targetRoles.join(", ") : targetRoles ?? "All"}`,
+    `Data Needs: ${dataNeeds}`,
     "",
     "## Acceptance Criteria",
-    ...(Array.isArray(brief.acceptanceCriteria) ? brief.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`) : [String(brief.acceptanceCriteria ?? "Not specified")]),
+    ...(Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`) : [String(acceptanceCriteria ?? "Not specified")]),
     "",
     "## Implementation Plan",
     JSON.stringify(plan, null, 2),
