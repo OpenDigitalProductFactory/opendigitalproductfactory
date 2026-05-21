@@ -51,7 +51,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import { loadOperationsMapData } from "./load-map-data";
+import { loadOperationsMapData, mergeTaskRunsDedupeById } from "./load-map-data";
 
 describe("loadOperationsMapData", () => {
   beforeEach(() => {
@@ -623,3 +623,54 @@ function makeScheduledJobRow() {
     lastStatus: "ok",
   };
 }
+
+describe("mergeTaskRunsDedupeById", () => {
+  // BI-OPS-MAP-STALLED-WINDOW (2026-05-21): loadOperationsMapData fetches
+  // two task-run windows — recent-40 and stalled-200. They overlap when a
+  // row is stalled AND in the recent-40 (typical case). The merge helper
+  // dedupes by cuid id so a row appears exactly once in the projection set.
+
+  it("returns recent rows when stalled list is empty", () => {
+    const recent = [{ id: "a" }, { id: "b" }];
+    expect(mergeTaskRunsDedupeById(recent, [])).toEqual(recent);
+  });
+
+  it("returns stalled rows when recent list is empty", () => {
+    const stalled = [{ id: "x" }, { id: "y" }];
+    expect(mergeTaskRunsDedupeById([], stalled)).toEqual(stalled);
+  });
+
+  it("appends stalled rows that aren't already in recent", () => {
+    const recent = [{ id: "a" }, { id: "b" }];
+    const stalled = [{ id: "c" }, { id: "d" }];
+    expect(mergeTaskRunsDedupeById(recent, stalled).map((r) => r.id)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ]);
+  });
+
+  it("dedupes rows that appear in both lists (a row stalled AND in recent-40)", () => {
+    const recent = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const stalled = [{ id: "b" }, { id: "d" }];
+    const merged = mergeTaskRunsDedupeById(recent, stalled);
+    expect(merged.map((r) => r.id)).toEqual(["a", "b", "c", "d"]);
+    expect(merged.filter((r) => r.id === "b")).toHaveLength(1);
+  });
+
+  it("preserves the recent-list version when the same id is in both", () => {
+    // The recent-list copy wins — it's inserted first. This matters because
+    // both queries select identical fields today, but if they diverge in
+    // future (e.g. recent adds a field), the recent shape is canonical.
+    const recent = [{ id: "a", source: "recent" }];
+    const stalled = [{ id: "a", source: "stalled" }];
+    const merged = mergeTaskRunsDedupeById(recent, stalled);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.source).toBe("recent");
+  });
+
+  it("handles both empty", () => {
+    expect(mergeTaskRunsDedupeById([], [])).toEqual([]);
+  });
+});
