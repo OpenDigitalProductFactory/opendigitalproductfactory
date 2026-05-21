@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { DecisionPerspectiveGatePanel } from "./DecisionPerspectiveGatePanel";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
+
+afterEach(() => { cleanup(); });
 
 function interaction(overrides: Partial<DecisionInteractionGateView> = {}): DecisionInteractionGateView {
   return {
@@ -102,6 +104,36 @@ describe("DecisionPerspectiveGatePanel", () => {
     expect(html).toContain("Deferral open");
     expect(html).toContain("Capture missing evidence");
     expect(html).toContain("No sources");
+  });
+
+  it("renders VoiceRationalePlayer when voiceOutput is provided", () => {
+    render(
+      <DecisionPerspectiveGatePanel
+        interaction={{ ...interaction(), profile: { voiceEnabled: true } }}
+        voiceOutput={{ audioStorageKey: "voice/DI-abc/f.mp3", durationMs: 4200 }}
+      />
+    );
+    expect(screen.getByRole("button", { name: /play/i })).toBeTruthy();
+  });
+
+  it("renders loading voice player when voiceOutput is null and voiceEnabled is true", () => {
+    render(
+      <DecisionPerspectiveGatePanel
+        interaction={{ ...interaction(), profile: { voiceEnabled: true } }}
+        voiceOutput={null}
+      />
+    );
+    expect(screen.getByRole("status")).toBeTruthy();
+  });
+
+  it("does not render voice player when voiceEnabled is false", () => {
+    const { container } = render(
+      <DecisionPerspectiveGatePanel
+        interaction={{ ...interaction(), profile: { voiceEnabled: false } }}
+        voiceOutput={{ audioStorageKey: "voice/DI-abc/f.mp3", durationMs: 4200 }}
+      />
+    );
+    expect(container.querySelector('[aria-label="Play"]')).toBeNull();
   });
 
   it("collects human direction before submitting an escalation capture", async () => {

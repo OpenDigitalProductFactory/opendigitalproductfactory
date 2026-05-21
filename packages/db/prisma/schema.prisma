@@ -8207,6 +8207,8 @@ model DecisionPerspectiveProfile {
   defaultResolver     Json?
   autonomyPolicy      Json                    @default("{}")
   status              String                  @default("active")
+  personaConfig       Json?
+  voiceEnabled        Boolean                 @default(false)
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
   ownerOrganization   Organization?           @relation(fields: [ownerOrganizationId], references: [id], onDelete: SetNull)
@@ -8218,6 +8220,7 @@ model DecisionPerspectiveProfile {
   materials           PerspectiveMaterial[]
   interactions        DecisionInteraction[]   @relation("DecisionInteractionProfile")
   fallbackInteractions DecisionInteraction[]  @relation("DecisionInteractionFallbackProfile")
+  voiceProfile        VoiceProfile?
 
   @@index([kind, status])
   @@index([ownerOrganizationId])
@@ -8316,6 +8319,7 @@ model DecisionInteraction {
   triggeredByUser   User?                      @relation("DecisionInteractionTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
   escalationCapture EscalationCapture?
   deferralCapture   DeferralCapture?
+  voiceOutput       DecisionInteractionVoiceOutput?
 
   @@index([profileId, createdAt])
   @@index([profileVersionId])
@@ -8370,6 +8374,80 @@ model DeferralCapture {
   @@index([domain, createdAt])
   @@index([gapReason])
   @@index([candidateMaterial])
+}
+
+// ── Voice Layer ───────────────────────────────────────────────────────────────
+//
+// Spec: docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md
+//
+
+model VoiceConsentRecord {
+  id                      String         @id @default(cuid())
+  subjectName             String
+  subjectEmail            String?
+  consentMethod           String
+  authorizedUseCases      String[]       @default([])
+  authorizedLanguages     String[]       @default(["en"])
+  authorizedTerritories   String[]       @default(["global"])
+  expiresAt               DateTime
+  capturedByPrincipalId   String
+  evidenceRef             String?
+  revokedAt               DateTime?
+  createdAt               DateTime       @default(now())
+  voiceProfiles           VoiceProfile[]
+
+  @@index([capturedByPrincipalId])
+}
+
+model VoiceProfile {
+  id                    String                     @id @default(cuid())
+  profileId             String                     @unique
+  provider              String
+  providerVoiceId       String?
+  status                String                     @default("pending")
+  consentType           String
+  consentRecordId       String?
+  sampleCount           Int                        @default(0)
+  totalSampleDurationMs Int                        @default(0)
+  qualityScore          Float?
+  language              String                     @default("en")
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  profile               DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
+  consentRecord         VoiceConsentRecord?        @relation(fields: [consentRecordId], references: [id])
+  trainingJobs          VoiceTrainingJob[]
+
+  @@index([status])
+}
+
+model VoiceTrainingJob {
+  id              String       @id @default(cuid())
+  voiceProfileId  String
+  status          String       @default("pending")
+  providerJobId   String?
+  inputSamples    Json         @default("[]")
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  voiceProfile    VoiceProfile @relation(fields: [voiceProfileId], references: [id], onDelete: Cascade)
+
+  @@index([voiceProfileId, status])
+}
+
+model DecisionInteractionVoiceOutput {
+  id              String              @id @default(cuid())
+  interactionId   String              @unique
+  audioStorageKey String
+  narrationText   String              @db.Text
+  durationMs      Int
+  provider        String
+  voiceProfileId  String
+  ttsCostUnits    Int?
+  generatedAt     DateTime            @default(now())
+  interaction     DecisionInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([voiceProfileId])
 }
 
 // ── DPF Edge Node (Phase 0 — A1) ────────────────────────────────────────────
