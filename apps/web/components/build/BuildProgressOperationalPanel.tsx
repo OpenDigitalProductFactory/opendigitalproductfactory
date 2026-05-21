@@ -7,6 +7,7 @@ import { BuildSandboxCard } from "./BuildSandboxCard";
 import { BuildVerificationScopedCard } from "./BuildVerificationScopedCard";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 import { StallEventHistoryStrip } from "./StallEventHistoryStrip";
+import { BuildPhaseCostCard } from "./BuildPhaseCostCard";
 
 type Props = {
   projection: BuildProgressVisibility | null;
@@ -99,6 +100,7 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
         </section>
 
         <div className="grid gap-3 xl:grid-cols-3">
+          <BuildPhaseCostCard phaseRuns={projection.phaseRuns} />
           <BuildSandboxCard sandbox={projection.sandbox} />
           <BuildDispatchHistoryCard attempts={projection.dispatchHistory} />
           <BuildVerificationScopedCard verification={projection.verification} />
