@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
-import { VoiceTrainingStatus } from "@/components/admin/VoiceTrainingStatus"
 import { setVoiceEnabled } from "@/lib/actions/voice-profile"
 
 interface ConsentRecord {
@@ -10,14 +9,6 @@ interface ConsentRecord {
   subjectName: string
   expiresAt: Date | string
   revokedAt: Date | string | null
-}
-
-interface TrainingJob {
-  id: string
-  status: string
-  errorMessage: string | null
-  createdAt: Date | string
-  completedAt: Date | string | null
 }
 
 interface VoiceProfileData {
@@ -29,7 +20,6 @@ interface VoiceProfileData {
   qualityScore: number | null
   language: string
   consentRecord: ConsentRecord | null
-  trainingJobs: TrainingJob[]
 }
 
 interface Props {
@@ -50,7 +40,6 @@ export function VoiceProfileSetup({
   const [enabled, setEnabled] = useState(voiceEnabled)
   const [isPending, startTransition] = useTransition()
 
-  const latestJob = voiceProfile?.trainingJobs[0]
   const hasValidConsent =
     voiceProfile?.consentRecord &&
     !voiceProfile.consentRecord.revokedAt &&
@@ -70,7 +59,7 @@ export function VoiceProfileSetup({
       <div className="border-b border-border pb-4">
         <h2 className="text-lg font-semibold">Voice Profile</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Configure a cloned voice for <strong>{profileName}</strong>. Once trained,
+          Configure a cloned voice for <strong>{profileName}</strong>. Once ready,
           WWMD gate decisions will be narrated in this voice.
         </p>
       </div>
@@ -118,7 +107,7 @@ export function VoiceProfileSetup({
         ) : (
           <div className="rounded-md border border-border p-4">
             <p className="text-sm text-muted-foreground mb-4">
-              A consent record is required before uploading voice samples.
+              A consent record is required before uploading a voice sample.
             </p>
             <VoiceConsentForm
               capturedByPrincipalId={currentUserId}
@@ -128,13 +117,13 @@ export function VoiceProfileSetup({
         )}
       </section>
 
-      {/* Step 2: Upload & Train */}
+      {/* Step 2: Upload reference audio */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${voiceProfile?.status === "ready" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground"}`}>
             {voiceProfile?.status === "ready" ? "✓" : "2"}
           </span>
-          <h3 className="font-medium">Voice samples</h3>
+          <h3 className="font-medium">Voice sample</h3>
         </div>
 
         {!hasValidConsent ? (
@@ -151,20 +140,10 @@ export function VoiceProfileSetup({
         ) : (
           <div className="rounded-md border border-border p-4 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Upload 10–30 seconds of clean audio or video. Cartesia Sonic 3 will clone
-              the voice. Minimum: 3 seconds of clear speech with low background noise.
+              Upload 3–30 seconds of clean audio or video. Chatterbox will clone the
+              voice immediately — no training wait.
             </p>
-
-            {latestJob && (
-              <VoiceTrainingStatus
-                status={latestJob.status as any}
-                errorMessage={latestJob.errorMessage ?? undefined}
-              />
-            )}
-
-            {(!latestJob || latestJob.status === "failed") && (
-              <TrainingUploadForm profileId={profileId} consentRecordId={voiceProfile?.consentRecord?.id} />
-            )}
+            <ReferenceUploadForm profileId={profileId} />
           </div>
         )}
       </section>
@@ -189,14 +168,8 @@ export function VoiceProfileSetup({
   )
 }
 
-// Minimal upload form — posts to /api/voice/train
-function TrainingUploadForm({
-  profileId,
-  consentRecordId,
-}: {
-  profileId: string
-  consentRecordId?: string
-}) {
+// Reference audio upload form — posts to /api/voice/reference (zero-shot Chatterbox)
+function ReferenceUploadForm({ profileId }: { profileId: string }) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -211,14 +184,13 @@ function TrainingUploadForm({
 
     const body = new FormData()
     body.append("voiceProfileId", profileId)
-    if (consentRecordId) body.append("consentRecordId", consentRecordId)
     body.append("audio", file)
 
     try {
-      const res = await fetch("/api/voice/train", { method: "POST", body })
+      const res = await fetch("/api/voice/reference", { method: "POST", body })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        setError(data.error ?? `Upload failed (${res.status})`)
+        setError((data as { error?: string }).error ?? `Upload failed (${res.status})`)
       } else {
         window.location.reload()
       }
@@ -243,7 +215,7 @@ function TrainingUploadForm({
         disabled={uploading}
         className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
       >
-        {uploading ? "Uploading…" : "Start training"}
+        {uploading ? "Uploading…" : "Register voice"}
       </button>
     </form>
   )

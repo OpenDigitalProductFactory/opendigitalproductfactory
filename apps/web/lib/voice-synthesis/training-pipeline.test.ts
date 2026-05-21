@@ -1,8 +1,12 @@
+// training-pipeline.test.ts
+// Tests for the Cartesia opt-in path.
+// Default provider is now Chatterbox (zero-shot) via /api/voice/reference.
+// VoiceTrainingJob table is dropped; jobId is the Cartesia voice id directly.
+
 import { describe, it, expect, vi } from "vitest"
 
 const mockPrisma = vi.hoisted(() => ({
   voiceProfile: { findUnique: vi.fn(), update: vi.fn() },
-  voiceTrainingJob: { create: vi.fn(), update: vi.fn() },
 }))
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }))
@@ -12,8 +16,8 @@ vi.stubGlobal("fetch", mockFetch)
 
 import { startVoiceTrainingJob } from "./training-pipeline"
 
-describe("startVoiceTrainingJob", () => {
-  it("creates a VoiceTrainingJob with pending status and calls Cartesia training API", async () => {
+describe("startVoiceTrainingJob (Cartesia opt-in path)", () => {
+  it("calls Cartesia clone API and returns voice id as jobId", async () => {
     process.env.CARTESIA_API_KEY = "test-key"
     mockPrisma.voiceProfile.findUnique.mockResolvedValue({
       id: "vp-1",
@@ -21,9 +25,7 @@ describe("startVoiceTrainingJob", () => {
       consentType: "explicit-recorded",
       consentRecord: { expiresAt: new Date(Date.now() + 86400000) },
     })
-    mockPrisma.voiceTrainingJob.create.mockResolvedValue({ id: "vtj-1" })
     mockPrisma.voiceProfile.update.mockResolvedValue({})
-    mockPrisma.voiceTrainingJob.update.mockResolvedValue({})
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "cartesia-job-abc", status: "running" }),
@@ -35,7 +37,8 @@ describe("startVoiceTrainingJob", () => {
       audioBuffers: [Buffer.from("FAKE")],
     })
 
-    expect(result.jobId).toBe("vtj-1")
+    // jobId is now the Cartesia voice id (not a VoiceTrainingJob row id)
+    expect(result.jobId).toBe("cartesia-job-abc")
     expect(mockFetch).toHaveBeenCalledOnce()
     const [url] = mockFetch.mock.calls[0]
     expect(url).toContain("cartesia.ai")
@@ -66,15 +69,14 @@ describe("startVoiceTrainingJob", () => {
   })
 
   it("skips consent check for not-required-synthetic profiles", async () => {
+    process.env.CARTESIA_API_KEY = "test-key"
     mockPrisma.voiceProfile.findUnique.mockResolvedValue({
       id: "vp-3",
       provider: "cartesia",
       consentType: "not-required-synthetic",
       consentRecord: null,
     })
-    mockPrisma.voiceTrainingJob.create.mockResolvedValue({ id: "vtj-2" })
     mockPrisma.voiceProfile.update.mockResolvedValue({})
-    mockPrisma.voiceTrainingJob.update.mockResolvedValue({})
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "cartesia-job-xyz", status: "running" }),
@@ -85,6 +87,6 @@ describe("startVoiceTrainingJob", () => {
       audioSamples: [],
       audioBuffers: [],
     })
-    expect(result.jobId).toBe("vtj-2")
+    expect(result.jobId).toBe("cartesia-job-xyz")
   })
 })

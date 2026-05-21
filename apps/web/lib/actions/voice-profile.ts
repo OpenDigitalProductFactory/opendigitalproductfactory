@@ -30,17 +30,6 @@ export async function getVoiceProfileData(profileId: string) {
               revokedAt: true,
             },
           },
-          trainingJobs: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: {
-              id: true,
-              status: true,
-              errorMessage: true,
-              createdAt: true,
-              completedAt: true,
-            },
-          },
         },
       },
     },
