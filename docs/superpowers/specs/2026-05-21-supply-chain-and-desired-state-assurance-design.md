@@ -2,11 +2,12 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft |
+| **Status** | Draft — architect-reviewed 2026-05-21 |
 | **Created** | 2026-05-21 |
 | **Author** | Codex + Mark Bodman |
+| **Architect review** | Opus 4.7 (chief architect persona) 2026-05-21 — substrate-verified existing models, flagged finding-substrate reconciliation as the top open issue (see §3.3) |
 | **Primary Surfaces** | Build Studio, Product Registry, AI Operations Map, Compliance, Edge Node |
-| **Related live epics** | `EP-BUILD-STUDIO`, `EP-AI-OPSMAP`, `EP-MCP`, `EP-CI-GATES`, `EP-PROVENANCE` |
+| **Related live epics** | `EP-ASSURANCE-LEDGER`, `EP-BUILD-STUDIO`, `EP-AI-OPSMAP`, `EP-MCP`, `EP-CI-GATES`, `EP-PROVENANCE` |
 | **Research baseline** | Black Duck SCA, Puppet Enterprise, Chef Infra / Automate / InSpec, CycloneDX, SPDX, NTIA SBOM minimum elements, SLSA, OpenSSF Scorecard |
 
 ---
@@ -76,7 +77,22 @@ system.
    managers, OS patch feeds, and edge probes enter through tool-evaluated adapters.
 5. **One finding substrate:** SCA vulnerabilities, license obligations, config drift, missing
    patches, end-of-life software, failed CIS checks, and package-maintainer risk all use the same
-   lifecycle and evidence semantics.
+   lifecycle and evidence semantics. (See §3.3 for the unresolved reconciliation against existing
+   finding-shaped tables — this principle is aspirational until that is addressed.)
+6. **Background by default:** Every assurance scan, BOM generation, and desired-state probe runs as
+   an async job with progress visible through the coworker panel and the assurance center, never
+   blocking a route or page render. This follows the `background-eval-probes` operator feedback.
+7. **Hive contribution by construction:** Adapter quality telemetry, normalized component identity,
+   and de-identified finding patterns flow through `contribute_to_hive` where the privacy filter
+   permits. Vulnerability intelligence aggregated across installs is a primary DPF differentiator
+   over single-tenant tools.
+8. **Coworker improvement loop per agent:** SBOM Management Agent and Security Auditor Agent each
+   get an improvement loop — feedback on false positives, missed findings, severity miscalls, and
+   remediation-plan quality flows back to prompt + adapter tuning. Per the platform principle that
+   every coworker gets an improvement loop.
+9. **DPF is a conduit, not a partner:** Commercial scanner adapters (Black Duck, Snyk Enterprise,
+   etc.) require the operator to bring their own license and credentials. DPF never enrolls as a
+   commercial partner or brokers vendor relationships. Reuses the integration-conduit principle.
 
 ### 2.4 Rejected patterns
 
@@ -113,7 +129,44 @@ system.
 | Security auditor lacks scan/finding capability | `prompts/specialist/security-auditor-agent.prompt.md` documents `vulnerability_scan`, `dependency_audit`, `supply_chain_verify`, and `finding_create` as aspirational. | The role exists on paper but cannot produce durable machine-readable findings. |
 | Approved tools registry is empty | `packages/db/data/approved_tools_registry.json` has `"tools": []`. | Scanner adoption is not yet governed by populated approved-tool metadata. |
 | Current scanner is local and narrow | `apps/web/lib/integrate/security-scan.ts` scans git diffs for regex patterns such as SQL injection, XSS, command injection, hardcoded secrets, dependency additions, and destructive schema operations. | It should remain as one adapter/input, but it cannot stand in for Black Duck-style SCA or Puppet/Chef-style desired-state assurance. |
-| Live MCP check did not surface a direct assurance epic | `list_epics` was queried on 2026-05-21 for assurance/supply/edge overlap. The connector returned the broad live epic set with adjacent work (`EP-BUILD-STUDIO`, `EP-AI-OPSMAP`, `EP-MCP`, `EP-CI-GATES`, `EP-PROVENANCE`) but no direct Assurance/SBOM/desired-state epic title. | This spec should become the canonical starting point before implementation backlog is created or linked. |
+| Initial live MCP check did not surface a direct assurance epic | `list_epics` was queried on 2026-05-21 for assurance/supply/edge overlap. The connector returned the broad live epic set with adjacent work (`EP-BUILD-STUDIO`, `EP-AI-OPSMAP`, `EP-MCP`, `EP-CI-GATES`, `EP-PROVENANCE`) but no direct Assurance/SBOM/desired-state epic title. After architect review and a second overlap sweep, `EP-ASSURANCE-LEDGER` was created with Phase 0/1 backlog items and plan link. | `EP-ASSURANCE-LEDGER` is now the canonical implementation epic for this spec. |
+
+### 3.3 Critical reconciliation: existing finding-shaped models
+
+The current schema already contains at least six tables that carry finding-shaped data and have
+overlapping lifecycle semantics. Architect-verified 2026-05-21 against
+`packages/db/prisma/schema.prisma`:
+
+| Existing model | Domain | Overlap with proposed `AssuranceFinding` |
+|----------------|--------|------------------------------------------|
+| `PortfolioQualityIssue` (~L3420) | Portfolio quality reports | Severity, status, ownership, affected object |
+| `AuditFinding` (~L5745) | Compliance audits | Status, severity, evidence link, control linkage |
+| `WikiLintFinding` (~L7817) | Wiki/documentation lint | Status, severity, normalized run output |
+| `EaConformanceIssue` (~L5116) | Enterprise architecture conformance | Severity, owner, lifecycle |
+| `LicenseReadinessIssue` (~L3068) | Licensing readiness | Severity, status, evidence |
+| `PlatformIssueReport` (~L4084) | Cross-platform issue intake | Status, owner, severity |
+
+This means the "one finding substrate" principle (§2.3 #5) is asserted but not yet structurally
+true. The architect-level decision required before Phase 1 lands:
+
+**Option A — Extract a shared `Finding` base now.** Migrate the six existing tables behind a
+polymorphic `Finding` row plus per-domain extension tables. Highest long-term value, highest
+near-term cost (touches Compliance, EA, Portfolio, Wiki, Licensing, Platform Issues — six teams
+of code).
+
+**Option B — Scope `AssuranceFinding` narrowly and tag the divergence as tracked debt.** Phase 1
+ships `AssuranceFinding` as a supply-chain + fleet-only table, with an explicit `TechDebt` row
+filed for "Unify finding substrate across PortfolioQualityIssue / AuditFinding / WikiLintFinding /
+EaConformanceIssue / LicenseReadinessIssue / PlatformIssueReport / AssuranceFinding" before any
+seventh finding-shaped model is introduced. Lower immediate risk.
+
+**Architect recommendation: Option B for Phase 1**, with a hard gate before Phase 2 — Phase 2's
+compliance linkage forces a real decision because `AuditFinding` and `AssuranceFinding` will both
+need to satisfy controls. If both still exist by Phase 2 entry, the unification work moves into
+the Phase 2 critical path.
+
+This reconciliation is not optional and must not be papered over. The §2.3 #5 principle should
+read "one finding substrate" as a stated direction; the schema does not yet honor it.
 
 ---
 
@@ -152,16 +205,19 @@ system.
 ### 6.1 Conceptual model
 
 ```
-DigitalProduct / Build / InventoryEntity
+DigitalProduct / Build / InventoryEntity / ReleaseBundle
             |
             v
       AssuranceScope
             |
             v
-  AssurancePolicy ---- AssuranceRun ---- ToolExecutionReceipt
+  AssurancePolicy ---- AssuranceRun ===1:1=== ToolExecution + ToolExecutionReceipt
             |                 |
             |                 v
             |          AssuranceFinding
+            |                 |
+            |                 v
+            |          RemediationPlan -----> RemediationRun ----> post-check AssuranceRun
             |                 |
             v                 v
     ComplianceEvidence <--- AssuranceEvidenceLink
@@ -171,9 +227,21 @@ DigitalProduct / Build / InventoryEntity
 ```
 
 The ledger is shared. Supply-chain scans and desired-state checks differ in inputs and adapters, but
-they write the same run/finding/evidence lifecycle:
+they write the same run/finding/evidence lifecycle.
 
-- Scope: product, build, artifact, inventory entity, node group, environment, organization.
+**Required coupling — `AssuranceRun` ↔ `ToolExecution`:** Every completed `AssuranceRun` must
+reference exactly one `ToolExecution` and its `ToolExecutionReceipt`. The relation is logically 1:1
+at terminal status. `AssuranceRun` exists in addition to `ToolExecution` because it adds the
+semantic envelope tool execution does not carry: policy linkage, scope binding, normalized run
+status, and rollup summary. Implementation should treat the FK as required (`toolExecutionId
+String`, not `String?`) once the run reaches `passed | failed | partial | error`. While `running`
+the FK may be null. This is how supply-chain and desired-state assurance reuse the existing receipt
+substrate without duplicating audit semantics.
+
+The semantics are:
+
+- Scope: product, build, artifact, inventory entity, node group, environment, organization,
+  release bundle (see `ReleaseBundle` ~L4372 — the existing release-promotion substrate).
 - Policy: what should be true.
 - Run: when a tool checked it, with versioned adapter metadata and receipt.
 - Finding: what failed, severity, ownership, status, and affected object.
@@ -190,6 +258,13 @@ Inputs:
 - Dockerfile/container images and base image digests.
 - Generated build artifacts from Build Studio.
 - AI model/provider dependencies where model provenance or license obligations matter.
+  **First-class AI-model components are required, not deferred:** DPF is an AI-native platform and
+  ships agent grants against named model snapshots. `BomComponent.componentType = "model"` must
+  carry: provider, family, version/snapshot ID, weights provenance (open weights vs hosted), license
+  expression (where declared), context-window/capabilities snapshot, evaluation receipt linkage
+  (Tool Evaluation row for the provider), and an `aiModelMetadata` JSON column for provider-specific
+  fields. Treating models as ordinary library components loses the differentiator and creates
+  duplicate license/safety tracking later.
 - Commercial/open-source scanner outputs through evaluated adapters.
 
 Core outputs:
@@ -269,15 +344,42 @@ Recommended finding kinds:
 | `unsupported-component` | EOL runtime, unsupported OS, deprecated dependency. |
 | `maintainer-risk` | OpenSSF Scorecard-like posture signal. |
 
-Severity should separate **technical severity** from **business/release impact**:
+Severity should separate **technical severity** from **business/release impact**, and add
+**reachability/exposure** as a first-class dimension so policy can reason about it without
+parsing raw scanner output:
 
 - `sourceSeverity`: raw scanner severity (`critical`, `high`, `medium`, `low`, `info`, or vendor
   score).
 - `policySeverity`: DPF policy-normalized severity.
 - `releaseImpact`: `block`, `warn`, `track`, or `none`.
+- `reachability`: `reachable` | `not-reachable` | `unknown` (call-graph or runtime evidence).
+- `exposure`: `external` | `internal` | `lab` | `unknown` (deployment-surface evidence).
 
-This avoids hardcoding "critical CVE always blocks every release" when reachability, exposure,
-environment, and customer obligations matter.
+The combination feeds the WWMD Decision Perspective Kernel (`build-studio-gate.ts`) so release
+gating becomes a principle-weighted decision rather than a hand-coded severity ladder.
+
+#### 6.4.1 Stable `findingKey` formula
+
+`findingKey` MUST be deterministic so reruns merge rather than create duplicate rows:
+
+```
+findingKey = sha256(
+  adapterKey + "::" +
+  findingKind + "::" +
+  affectedType + "::" +
+  affectedId + "::" +
+  vendorIdentifier            // e.g. "CVE-2024-12345" or "CIS-1.1.1" or policy ruleKey
+).slice(0, 24)
+```
+
+Rules:
+
+- `vendorIdentifier` falls back to a normalized title hash if the scanner emits no stable ID, with
+  a `findingIdentifierStability` flag set to `weak` so the normalizer knows merge confidence is
+  reduced.
+- The de-dup contract belongs to the central normalizer (§9.2), never to individual adapters.
+- Resolved findings that re-appear must update `lastSeenAt`, increment `reopenCount`, and transition
+  status `resolved → open` — never insert a duplicate row.
 
 ---
 
@@ -310,12 +412,12 @@ model AssuranceRun {
   id                 String   @id @default(cuid())
   runKey             String   @unique
   policyId           String?
-  scopeType          String   // "product" | "build" | "artifact" | "inventory-entity" | "node-group" | "org"
+  scopeType          String   // "product" | "build" | "artifact" | "inventory-entity" | "node-group" | "release-bundle" | "org"
   scopeId            String
   adapterKey         String
   adapterVersion     String?
-  toolExecutionId    String?
-  toolReceiptId      String?
+  toolExecutionId    String?  // required at terminal status — enforced in app layer + check constraint, see §6.1
+  toolReceiptId      String?  // required at terminal status — same enforcement
   status             String   // "running" | "passed" | "failed" | "partial" | "error"
   startedAt          DateTime @default(now())
   completedAt        DateTime?
@@ -324,6 +426,10 @@ model AssuranceRun {
   summary            Json     @default("{}")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  @@index([scopeType, scopeId, completedAt])
+  @@index([adapterKey, status])
+  @@index([policyId, status])
 }
 
 model AssuranceFinding {
@@ -339,6 +445,10 @@ model AssuranceFinding {
   sourceSeverity     String?
   policySeverity     String
   releaseImpact      String   @default("track")
+  reachability       String   @default("unknown") // "reachable" | "not-reachable" | "unknown"
+  exposure           String   @default("unknown") // "external" | "internal" | "lab" | "unknown"
+  identifierStability String  @default("strong")  // "strong" | "weak" — see §6.4.1
+  reopenCount        Int      @default(0)
   status             String   @default("open")
   firstSeenAt        DateTime @default(now())
   lastSeenAt         DateTime @default(now())
@@ -504,7 +614,55 @@ model RemediationRun {
 }
 ```
 
-### 7.5 Refactoring note
+### 7.5 Polymorphic FK rationale and constraints
+
+`AssuranceRun.scopeType/scopeId` and `AssuranceFinding.affectedType/affectedId` are intentionally
+polymorphic because the ledger spans `DigitalProduct`, `Build`, `BuildArtifactRevision`,
+`InventoryEntity`, `ReleaseBundle`, and `BomComponent` — Prisma cannot express a non-degenerate
+union FK without one column per relation. The trade-off is accepted with three guardrails:
+
+1. **Closed enum, enforced at the app layer.** `scopeType` and `affectedType` are TypeScript union
+   types in shared `packages/db` exports; adapter normalizers and route handlers validate before
+   write.
+2. **Resolver helpers, not raw joins.** Reads go through `resolveAssuranceTarget(type, id)` rather
+   than ad-hoc joins per route. Missing rows fail-loud, not silent-null.
+3. **Convenience FKs for the hottest scopes.** `AssuranceFinding` gets nullable typed FKs for the
+   three highest-volume affected types — `bomComponentId`, `inventoryEntityId`, `buildArtifactRevisionId`
+   — populated alongside the polymorphic pair when applicable, so the UI can join without the
+   resolver. This is the standard Prisma pattern for "polymorphic + integrity for the common case."
+
+### 7.6 Hive contribution surface
+
+```prisma
+model AssuranceHiveContribution {
+  id                String   @id @default(cuid())
+  contributionKey   String   @unique
+  findingId         String?
+  runId             String?
+  contributionKind  String   // "adapter-quality" | "component-identity" | "vulnerability-pattern" | "policy-template"
+  payloadDigest     String
+  payload           Json
+  redactionProfile  String   // "public" | "anonymized" | "blocked"
+  submittedAt       DateTime?
+  hivePrUrl         String?
+  status            String   @default("pending") // "pending" | "submitted" | "accepted" | "rejected" | "blocked"
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([contributionKind, status])
+}
+```
+
+The hive pathway is not optional. Per platform principle, every governed substrate contributes
+anonymized telemetry where the privacy filter allows it. For assurance this means: adapter
+quality (precision/recall against operator feedback), normalized component identity (which
+package URLs resolve to which canonical components), and vulnerability-impact patterns
+(reachability rates, false-positive rates by adapter × kind). Raw scanner output, customer-specific
+package names, and internal service names MUST be filtered out by the redaction profile before
+submission. The existing `contribute_to_hive` MCP tool is the dispatch surface — do not invent a
+parallel path.
+
+### 7.7 Storage anti-patterns
 
 Do not put BOMs, vulnerability results, patch state, or desired-state drift inside
 `InventoryEntity.properties` or `DigitalProduct.metadata` as primary storage. Those JSON fields can
@@ -519,6 +677,12 @@ The Assurance experience should feel like a serious operator console: dense, leg
 and calm under pressure. It should use the DPF theme variables from AGENTS.md (`--dpf-bg`,
 `--dpf-surface-1`, `--dpf-surface-2`, `--dpf-text`, `--dpf-muted`, `--dpf-border`, `--dpf-accent`)
 and must not hardcode color classes.
+
+**Async-first UX contract:** No assurance action — scan, BOM generate, fleet probe, remediation
+dry-run — runs synchronously in a route handler or server action. Every trigger enqueues a
+background job, returns immediately, and surfaces progress through the coworker busy state and
+the assurance center activity rail. Tables and KPIs update on job completion, never block render,
+and degrade to last-known state when an adapter is unreachable.
 
 ### 8.1 Navigation
 
@@ -691,7 +855,29 @@ Minimum evaluation dimensions:
 - Sandbox behavior and rollback.
 - Data retention and privacy.
 
-### 10.2 Remediation guardrails
+### 10.1.1 Commercial scanners — conduit, never partner
+
+DPF does not enroll as a commercial partner for Black Duck, Snyk Enterprise, Veracode, or any
+similar product. Operators bring their own license, credentials, and vendor agreement; DPF
+provides the adapter, the ledger, and the UX. The Tool Evaluation pass for a commercial scanner
+must record the operator's license source and renewal expectations. This protects DPF from the
+broker liability that would otherwise come with shipping connectors to paid SaaS.
+
+### 10.2 Coworker improvement loops (required)
+
+The SBOM Management Agent and Security Auditor Agent each ship with an improvement loop, per the
+platform principle that every coworker gets one. Loop inputs:
+
+- Operator acceptance / dismissal of findings (false-positive signal).
+- Reopen rate per finding kind × adapter (false-negative signal).
+- Remediation-plan execution success and rollback rate (action quality).
+- Time-to-triage and time-to-resolution by severity (operational health).
+
+Loop outputs feed prompt revisions, adapter selection weights, and severity-normalization tuning.
+Improvement loops MUST land in the same phase as the agent's first writeable grant — no aspirational
+loops.
+
+### 10.3 Remediation guardrails
 
 No auto-remediation in Phase 1 or Phase 2. Later remediation must enforce:
 
@@ -704,7 +890,7 @@ No auto-remediation in Phase 1 or Phase 2. Later remediation must enforce:
 - Rollback plan and rollback receipt.
 - Backlog linkage when remediation cannot be completed immediately.
 
-### 10.3 Data governance
+### 10.4 Data governance
 
 - BOM raw documents may contain proprietary package names or internal service names; treat them as
   confidential by default.
@@ -722,7 +908,15 @@ No auto-remediation in Phase 1 or Phase 2. Later remediation must enforce:
 Deliverables:
 
 - This spec approved.
-- Create or link a live epic after checking overlap again via MCP.
+- Re-sweep `origin/main` and `query_backlog` for the keywords `assurance`, `SBOM`, `supply-chain`,
+  `desired-state`, `vulnerability`, `drift`, `patch` immediately before backlog creation, to honor
+  the continuous-overlap-sweep principle. Concurrent sessions may have filed adjacent work since
+  this spec was drafted.
+- Verify live epic `EP-ASSURANCE-LEDGER` remains the canonical epic for this spec. If a future
+  overlap sweep surfaces an older or duplicate epic in this space, reconcile it and document the
+  decision.
+- Verify the finding-substrate debt record `BI-REFACTOR-CC46703A` remains linked to the Phase 0
+  evidence trail.
 - Add backlog items for Phase 1.
 - Extract scanner adapter interfaces and finding normalization contracts.
 - Add readiness checks for aspirational SBOM/security grants.
@@ -732,6 +926,9 @@ Exit criteria:
 - Existing Build Studio regex scanner still passes current tests.
 - No new UI claims an unavailable scanner capability.
 - Backlog is linked to the approved spec.
+- `EP-ASSURANCE-LEDGER` (or the reconciled epic) exists in the live system and shows this spec
+  as its design-doc reference.
+- Finding-substrate tech-debt row exists and is visible in Portfolio Quality.
 
 ### Phase 1 - Read-only Supply Chain Assurance
 
@@ -771,6 +968,12 @@ Exit criteria:
 - A control can show latest passing/failing assurance evidence.
 - A release candidate can show BOM + scan + receipt bundle.
 - Findings can create/link backlog items without losing source evidence.
+- Finding-substrate reconciliation (§3.3) has a landed decision: either `AssuranceFinding` and
+  `AuditFinding` are unified, or the deferral has a dated `TechDebt` row with an explicit owner
+  and a "no seventh finding table" guard at the schema-review layer.
+- First `AssuranceHiveContribution` rows exist locally (status `pending` or `submitted`) with
+  adapter-quality telemetry and de-identified component identity for the platform's own
+  dependencies. Hive contribution is not a Phase 5 polish item.
 
 ### Phase 3 - Read-only Desired-State Fleet Assurance
 
@@ -874,20 +1077,45 @@ This spec is accepted when:
    Compliance instead of only creating a scanner page.
 6. External scanner adoption is gated by Tool Evaluation Pipeline.
 7. Compliance evidence linkage is part of the design, not a later manual export.
+8. The §3.3 finding-substrate reconciliation has a recorded decision (Option A or Option B) with
+   a `TechDebt` row if Option B.
+9. AI model components are first-class in `BomComponent` from Phase 1, not deferred.
+10. `AssuranceRun` ↔ `ToolExecution` is 1:1 at terminal status — no orphan assurance runs.
+11. Every assurance trigger is a background job; no synchronous scan/probe blocks a route.
+12. SBOM Management Agent and Security Auditor Agent ship with their improvement loops wired in
+    the same phase as their first writeable grant.
+13. Hive contribution rows are produced by Phase 2; no scanner adapter ships without a redaction
+    profile.
+14. Commercial scanner adapters require operator-supplied license; DPF records no partner
+    relationship.
 
 ---
 
 ## 14. Open Questions
 
-1. Should Phase 1 use only open-source scanners first, or should a Black Duck connector be evaluated
-   immediately as a commercial adapter option?
-2. Should the route be `/platform/assurance` or `/platform/tools/assurance`? Recommendation:
-   `/platform/assurance`, because this is a cross-cutting operating surface, not only a tool.
-3. Which release policies block PR creation versus create backlog warnings?
-4. Should desired-state policy authoring use a DPF-native JSON DSL first, or ingest InSpec-like
-   profiles as external artifacts first?
-5. Which Windows patch/feed source should be the first read-only Edge Node adapter?
-6. What retention policy should apply to raw scanner output and exported auditor bundles?
+Architect-resolved where possible; remaining items flagged with **OPEN**.
+
+1. **Commercial vs open-source first.** *Architect call: open-source first.* Phase 1 uses Syft +
+   Grype/OSV only. A Black Duck adapter is welcome but enters the Tool Evaluation Pipeline as a
+   tier-2 candidate, never on the Phase 1 critical path. Operators with Black Duck subscriptions
+   can opt in once the adapter passes evaluation. This avoids licensing the whole platform's
+   visible value to a single commercial dependency.
+2. **Route.** *Architect call: `/platform/assurance`.* Cross-cutting operating surface, not a
+   tool page.
+3. **Release-block policy matrix.** **OPEN** — needs principle-weighted decision through the WWMD
+   kernel. Recommended starting policy for Phase 1: `policySeverity=critical AND
+   reachability!=not-reachable AND exposure=external` → `block`; everything else → `warn` or
+   `track`. Refine through operator feedback rather than hand-tuning.
+4. **Desired-state policy authoring language.** *Architect call: DPF-native JSON DSL first;
+   InSpec ingestion as evidence-only.* Authoring a profile language is a multi-quarter rabbit
+   hole. Ingest InSpec output where it already exists, but do not adopt InSpec as the DPF
+   authoring layer — that would couple us to a Chef-specific runtime.
+5. **First Windows patch feed.** **OPEN** — needs Edge Node team input. Two viable candidates:
+   Windows Update Agent COM API (online) and WSUS scan results (where managed). Decision belongs
+   in Phase 3 scoping, not in this spec.
+6. **Retention policy.** **OPEN** — recommend default 365 days for raw scanner output, 7 years
+   for exported auditor bundles (aligns with common SOX/audit retention), and per-org override
+   capability. Finalize during Phase 2 compliance linkage.
 
 ---
 
