@@ -440,19 +440,10 @@ export function deriveBuildStudioWorkflowAction({
   }
 
   if (build.phase === "build") {
-    const concernState = getImplementationConcernState(build, progressVisibility);
-    if (concernState.hasRecoverableConcern) {
-      return buildResumeAction({
-        state: concernState,
-        coworkerLabel: "Review failures with coworker",
-        coworkerPrompt:
-          "The current build still has flagged execution or verification concerns. Explain what failed, then rerun the non-clean implementation work on a healthy sandbox and tell me when verification is genuinely ready.",
-      });
-    }
-
-    // FB-78E967D4 — contradictory pipeline state has no other recovery path.
-    // Surface Reset before the sandbox-retry / advance-phase fallthroughs so
-    // the operator gets an actionable button instead of a disabled gate.
+    // Check contradictory exec state BEFORE recoverable-concern: if the
+    // pipeline checkpoint is invalid (step=complete with no verification or
+    // with an error breadcrumb), Resume Implementation will fail regardless
+    // of task state. Reset Build is the only viable recovery path.
     if (hasContradictoryExecState(build.buildExecState, build.verificationOut)) {
       const isSilentComplete =
         build.buildExecState?.step === "complete" &&
@@ -472,6 +463,18 @@ export function deriveBuildStudioWorkflowAction({
           ? "The build shows step=complete but verificationOut is null, meaning tests never ran or the result was not captured. Explain what likely happened and confirm whether a full Reset Build is the right recovery."
           : "The build's execution checkpoint is contradictory (step says complete but an error breadcrumb is set). Read buildExecState and tell me whether a Reset Build is safe or if the original error needs investigation first.",
       };
+    }
+
+    // Only evaluate recoverable-concern state after the contradictory-state
+    // check — Resume Implementation requires a healthy sandbox checkpoint.
+    const concernState = getImplementationConcernState(build, progressVisibility);
+    if (concernState.hasRecoverableConcern) {
+      return buildResumeAction({
+        state: concernState,
+        coworkerLabel: "Review failures with coworker",
+        coworkerPrompt:
+          "The current build still has flagged execution or verification concerns. Explain what failed, then rerun the non-clean implementation work on a healthy sandbox and tell me when verification is genuinely ready.",
+      });
     }
 
     // Sandbox launch failed before writing any task results — exec state is
