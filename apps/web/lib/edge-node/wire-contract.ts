@@ -63,3 +63,36 @@ export const HeartbeatBody = z
   .default({});
 
 export type HeartbeatBodyT = z.infer<typeof HeartbeatBody>;
+
+/**
+ * Response shape for GET /api/v1/edge/adapters.
+ *
+ * Returns the active DiscoveryConnection rows the calling node should
+ * run, with apiKey decrypted server-side. The node MUST treat each
+ * `apiKey` as sensitive (don't log it, don't write it to disk).
+ *
+ * For Phase 0 we serve all `unifi` adapters to every trusted node —
+ * single-node installs Just Work. Multi-node routing (a `targetEdgeNodeId`
+ * column on DiscoveryConnection) is a follow-up; see BI-35de9ce8.
+ */
+export const EdgeAdapter = z.object({
+  id: z.string().min(1),
+  connectionKey: z.string().min(1),
+  name: z.string().min(1),
+  collectorType: z.literal("unifi"),
+  endpointUrl: z.string().url(),
+  apiKey: z.string().min(1),
+  configuration: z.object({
+    site: z.string().default("default"),
+    discoverClients: z.boolean().default(true),
+    tlsInsecure: z.boolean().default(false),
+  }),
+});
+
+export const EdgeAdaptersResponse = z.object({
+  ok: z.literal(true),
+  adapters: z.array(EdgeAdapter),
+});
+
+export type EdgeAdapterT = z.infer<typeof EdgeAdapter>;
+export type EdgeAdaptersResponseT = z.infer<typeof EdgeAdaptersResponse>;

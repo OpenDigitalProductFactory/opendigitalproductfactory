@@ -1,36 +1,23 @@
+// Unit tests for the UniFi collector.
+//
+// After the BI-35de9ce8 consolidation, collectUnifi takes its configs
+// as an argument instead of reading them from a bind-mounted file.
+// These tests pass `[VALID_CONFIG_OBJ]` directly to exercise the
+// collector's HTTP + parse + relationship-building paths.
+
 import { describe, expect, it } from "vitest";
-import { collectUnifi, type UnifiAdapter } from "../collectors/unifi";
-import type { AdaptersConfigAdapter } from "../collectors/adapters-config";
+import {
+  collectUnifi,
+  type UnifiAdapter,
+  type UnifiAdapterConfig,
+} from "../collectors/unifi";
 
-const VALID_CONFIG = JSON.stringify({
-  unifi: {
-    controllerUrl: "https://192.168.1.1",
-    apiKey: "test-key",
-    site: "default",
-  },
-});
-
-const NO_CONFIG_FILE_ENOENT = (p: string) => {
-  throw new Error(`ENOENT: ${p}`);
+const VALID_CONFIG_OBJ: UnifiAdapterConfig = {
+  controllerUrl: "https://192.168.1.1",
+  apiKey: "test-key",
+  site: "default",
+  tlsInsecure: false,
 };
-
-function makeConfigAdapter(
-  files: Record<string, { contents: string; mode: number }>,
-): AdaptersConfigAdapter {
-  return {
-    env: {},
-    readFile: (p) => {
-      const f = files[p];
-      if (!f) throw new Error(`ENOENT: ${p}`);
-      return f.contents;
-    },
-    statMode: (p) => {
-      const f = files[p];
-      if (!f) throw new Error(`ENOENT: ${p}`);
-      return f.mode;
-    },
-  };
-}
 
 type StubResp = {
   ok?: boolean;
@@ -46,10 +33,6 @@ type StubResp = {
  * that only cares about device behavior automatically gets a clean
  * empty-clients response from the parallel /stat/sta fetch the
  * collector now makes.
- *
- * The legacy `makeFetchStub` (single responder, ignores URL) is
- * preserved as a thin wrapper for older tests that don't need
- * per-endpoint control.
  */
 function makeFetchStubByEndpoint(
   responses: { devices?: StubResp; clients?: StubResp },
@@ -74,14 +57,15 @@ function makeFetchStubByEndpoint(
   };
 }
 
+/**
+ * Legacy stub kept for tests written before Slice B — responds only
+ * to /stat/device with the user-supplied responder; /stat/sta defaults
+ * to an empty success response.
+ */
 function makeFetchStub(
   responder: (url: string, init: { headers?: Record<string, string> }) => StubResp,
 ): UnifiAdapter["fetch"] {
   return async (url, init) => {
-    // For backwards-compat: only respond to /stat/device URLs with
-    // the user-supplied responder. /stat/sta defaults to an empty
-    // success response so tests written before Slice B keep working
-    // unchanged.
     if (!url.includes("/stat/device")) {
       return {
         ok: true,
@@ -115,17 +99,10 @@ const aDevice = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-describe("collectUnifi — adapter not configured", () => {
-  it("is a no-op when adapters.json is absent", async () => {
-    const adapter: UnifiAdapter = {
-      fetch: makeFetchStub(() => ({})),
-      configAdapter: {
-        env: {},
-        readFile: NO_CONFIG_FILE_ENOENT,
-        statMode: NO_CONFIG_FILE_ENOENT,
-      },
-    };
-    const result = await collectUnifi(adapter);
+describe("collectUnifi — no configs", () => {
+  it("is a no-op when the configs array is empty", async () => {
+    const adapter: UnifiAdapter = { fetch: makeFetchStub(() => ({})) };
+    const result = await collectUnifi([], adapter);
     expect(result.items).toEqual([]);
     expect(result.relationships).toEqual([]);
     expect(result.warnings).toEqual([]);
@@ -142,12 +119,9 @@ describe("collectUnifi — controller success", () => {
         capturedHeaders = init.headers;
         return { body: { data: [aDevice()] } };
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
 
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
 
     expect(capturedUrl).toBe("https://192.168.1.1/proxy/network/api/s/default/stat/device");
     expect(capturedHeaders?.["X-API-KEY"]).toBe("test-key");
@@ -190,11 +164,8 @@ describe("collectUnifi — controller success", () => {
           ],
         },
       })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items[0]?.itemType).toBe("gateway");
     expect(result.items[0]?.rawData.osiLayer).toBe(3);
     expect(result.items[0]?.rawData.osiLayerName).toBe("network");
@@ -221,12 +192,9 @@ describe("collectUnifi — controller success", () => {
           ],
         },
       })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
 
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     const hosts = result.relationships.filter((r) => r.relationshipType === "HOSTS");
     expect(hosts).toEqual([
       {
@@ -257,11 +225,8 @@ describe("collectUnifi — controller success", () => {
           ],
         },
       })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.relationships.filter((r) => r.relationshipType === "HOSTS")).toEqual([]);
   });
 
@@ -275,11 +240,8 @@ describe("collectUnifi — controller success", () => {
           ],
         },
       })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items.map((i) => i.observedKey)).toEqual(["unifi:11:22:33:44:55:66"]);
   });
 });
@@ -326,11 +288,8 @@ describe("collectUnifi — Slice B clients", () => {
       fetch: makeFetchStubByEndpoint({
         clients: { body: { data: [aWifiClient()] } },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toHaveLength(1);
     const item = result.items[0]!;
     expect(item.observedKey).toBe("arp:192.168.0.49");
@@ -364,11 +323,8 @@ describe("collectUnifi — Slice B clients", () => {
           },
         },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items[0]?.name).toBe("Amazon 192.168.0.49");
   });
 
@@ -388,11 +344,8 @@ describe("collectUnifi — Slice B clients", () => {
           },
         },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items[0]?.name).toBe("LAN Host 192.168.0.77");
     expect(result.items[0]?.rawData.vendor).toBeUndefined();
   });
@@ -402,11 +355,8 @@ describe("collectUnifi — Slice B clients", () => {
       fetch: makeFetchStubByEndpoint({
         clients: { body: { data: [aWifiClient()] } },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     const memberOf = result.relationships.filter((r) => r.relationshipType === "MEMBER_OF");
     expect(memberOf).toEqual([
       {
@@ -427,11 +377,8 @@ describe("collectUnifi — Slice B clients", () => {
       fetch: makeFetchStubByEndpoint({
         clients: { body: { data: [aWiredClient()] } },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     const memberOf = result.relationships.filter((r) => r.relationshipType === "MEMBER_OF");
     expect(memberOf).toEqual([
       {
@@ -466,11 +413,8 @@ describe("collectUnifi — Slice B clients", () => {
           },
         },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toHaveLength(2);
     expect(result.relationships.filter((r) => r.relationshipType === "MEMBER_OF")).toEqual([]);
   });
@@ -488,11 +432,8 @@ describe("collectUnifi — Slice B clients", () => {
           },
         },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items.map((i) => i.observedKey)).toEqual(["arp:10.0.0.42"]);
   });
 
@@ -502,11 +443,8 @@ describe("collectUnifi — Slice B clients", () => {
         devices: { body: { data: [aDevice()] } },
         clients: { body: { data: [aWifiClient()] } },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     const keys = result.items.map((i) => i.observedKey).sort();
     expect(keys).toEqual([
       "arp:192.168.0.49",         // the WiFi client
@@ -523,15 +461,15 @@ describe("collectUnifi — Slice B clients", () => {
         devices: { body: { data: [aDevice()] } },
         clients: { ok: false, status: 503, body: "service unavailable" },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     // Devices flowed through.
     expect(result.items.map((i) => i.observedKey)).toEqual(["unifi:aa:bb:cc:dd:ee:ff"]);
-    // Clients failure surfaced as a warning.
+    // Clients failure surfaced as a warning, prefixed with the
+    // controller URL so operators with multiple connections can tell
+    // which one is misbehaving.
     expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatch(/^unifi\[https:\/\/192\.168\.1\.1\]:/);
     expect(result.warnings[0]).toMatch(/HTTP 503/);
   });
 
@@ -541,11 +479,8 @@ describe("collectUnifi — Slice B clients", () => {
         devices: { ok: false, status: 500, body: "down" },
         clients: { body: { data: [aWifiClient()] } },
       }),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items.map((i) => i.observedKey)).toEqual(["arp:192.168.0.49"]);
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toMatch(/HTTP 500/);
@@ -556,23 +491,17 @@ describe("collectUnifi — controller failures", () => {
   it("returns a warning (not throw) on network failure", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStub(() => ({ throwErr: "ECONNREFUSED" })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toEqual([]);
-    expect(result.warnings[0]).toMatch(/unifi: network error/);
+    expect(result.warnings[0]).toMatch(/network error/);
   });
 
   it("returns a warning on non-2xx response", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStub(() => ({ ok: false, status: 401, body: "unauthorized" })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toEqual([]);
     expect(result.warnings[0]).toMatch(/HTTP 401/);
   });
@@ -580,12 +509,69 @@ describe("collectUnifi — controller failures", () => {
   it("returns a warning on missing data[] in response", async () => {
     const adapter: UnifiAdapter = {
       fetch: makeFetchStub(() => ({ body: { meta: {} } })),
-      configAdapter: makeConfigAdapter({
-        "/etc/dpf-edge/adapters.json": { contents: VALID_CONFIG, mode: 0o600 },
-      }),
     };
-    const result = await collectUnifi(adapter);
+    const result = await collectUnifi([VALID_CONFIG_OBJ], adapter);
     expect(result.items).toEqual([]);
     expect(result.warnings[0]).toMatch(/data\[\]/);
+  });
+});
+
+describe("collectUnifi — multiple adapters", () => {
+  it("runs each adapter config independently and merges results", async () => {
+    // Each adapter's fetch sees only its own URL via the stub.
+    // We pass two configs (different sites) and assert the collector
+    // visited both.
+    const visited: string[] = [];
+    const adapter: UnifiAdapter = {
+      fetch: async (url) => {
+        visited.push(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [] }),
+          text: async () => `{"data":[]}`,
+        };
+      },
+    };
+    await collectUnifi(
+      [
+        { ...VALID_CONFIG_OBJ, controllerUrl: "https://10.0.0.1", site: "default" },
+        { ...VALID_CONFIG_OBJ, controllerUrl: "https://10.0.0.2", site: "branch" },
+      ],
+      adapter,
+    );
+    // Both controllers + both endpoints (/stat/device + /stat/sta) hit.
+    expect(visited).toContain("https://10.0.0.1/proxy/network/api/s/default/stat/device");
+    expect(visited).toContain("https://10.0.0.1/proxy/network/api/s/default/stat/sta");
+    expect(visited).toContain("https://10.0.0.2/proxy/network/api/s/branch/stat/device");
+    expect(visited).toContain("https://10.0.0.2/proxy/network/api/s/branch/stat/sta");
+  });
+
+  it("one adapter failing doesn't stop the others", async () => {
+    const adapter: UnifiAdapter = {
+      fetch: async (url) => {
+        if (url.startsWith("https://broken")) {
+          throw new Error("ECONNREFUSED");
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [aDevice()] }),
+          text: async () => JSON.stringify({ data: [aDevice()] }),
+        };
+      },
+    };
+    const result = await collectUnifi(
+      [
+        { ...VALID_CONFIG_OBJ, controllerUrl: "https://broken.local" },
+        { ...VALID_CONFIG_OBJ, controllerUrl: "https://good.local" },
+      ],
+      adapter,
+    );
+    // The good adapter produced its item.
+    expect(result.items.length).toBeGreaterThan(0);
+    // The broken one surfaced a warning prefixed with its URL.
+    const brokenWarn = result.warnings.find((w) => w.includes("broken.local"));
+    expect(brokenWarn).toBeDefined();
   });
 });

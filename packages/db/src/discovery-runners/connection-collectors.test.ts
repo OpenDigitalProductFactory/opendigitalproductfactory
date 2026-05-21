@@ -2,30 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 
 import { runConnectionCollectors, type ConnectionLoaderDb } from "./connection-collectors";
 
-// Mock the UniFi collector
-vi.mock("../discovery-collectors/unifi", () => ({
-  collectUnifiDiscovery: vi.fn().mockResolvedValue({
-    items: [
-      {
-        sourceKind: "unifi",
-        itemType: "router",
-        name: "UDM Pro",
-        externalRef: "unifi-device:aa:bb:cc:dd:ee:01",
-      },
-    ],
-    relationships: [],
-    software: [],
-    warnings: [],
-  }),
-  buildDepsFromConnection: vi.fn().mockReturnValue({
-    fetchFn: vi.fn(),
-    unifiUrl: "https://192.168.0.1",
-    apiKey: "decrypted-key",
-    site: "default",
-    discoverClients: false,
-  }),
-}));
-
 function makeMockDb(connections: Array<{
   id: string;
   connectionKey: string;
@@ -54,7 +30,10 @@ describe("runConnectionCollectors", () => {
     expect(result.relationships).toHaveLength(0);
   });
 
-  it("runs UniFi collector for active unifi connections", async () => {
+  it("skips unifi connections (BI-35de9ce8 — edge nodes own UniFi polling now)", async () => {
+    // The portal still hosts the encrypted DiscoveryConnection row and
+    // the one-shot test action; the recurring sweep is no longer its
+    // job. Edge nodes pull adapter configs from GET /api/v1/edge/adapters.
     const db = makeMockDb([
       {
         id: "conn-1",
@@ -68,47 +47,11 @@ describe("runConnectionCollectors", () => {
     ]);
 
     const result = await runConnectionCollectors(db, mockDecrypt);
-
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].itemType).toBe("router");
-  });
-
-  it("skips connections without API key", async () => {
-    const db = makeMockDb([
-      {
-        id: "conn-2",
-        connectionKey: "unifi:10.0.0.1",
-        collectorType: "unifi",
-        endpointUrl: "https://10.0.0.1",
-        encryptedApiKey: null,
-        configuration: {},
-        status: "active",
-      },
-    ]);
-
-    const result = await runConnectionCollectors(db, mockDecrypt);
     expect(result.items).toHaveLength(0);
+    expect(result.relationships).toHaveLength(0);
   });
 
-  it("skips when decrypt fails and returns empty output", async () => {
-    const db = makeMockDb([
-      {
-        id: "conn-3",
-        connectionKey: "unifi:10.0.0.2",
-        collectorType: "unifi",
-        endpointUrl: "https://10.0.0.2",
-        encryptedApiKey: "bad",
-        configuration: {},
-        status: "active",
-      },
-    ]);
-
-    const result = await runConnectionCollectors(db, mockDecrypt);
-
-    expect(result.items).toHaveLength(0);
-  });
-
-  it("skips non-unifi collector types", async () => {
+  it("skips non-unifi unknown collector types", async () => {
     const db = makeMockDb([
       {
         id: "conn-4",
