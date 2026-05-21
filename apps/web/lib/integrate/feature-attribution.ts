@@ -4,19 +4,21 @@
 // Reuses the token-scoring pipeline from discovery-attribution,
 // adapted for feature briefs instead of infrastructure entities.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import {
   scoreTaxonomyCandidates,
   flattenEnrichmentForScoring,
   type TaxonomyNodeCandidate,
-  type RankedTaxonomyCandidate,
 } from "@dpf/db/discovery-attribution";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type TaxonomyAttribution = {
-  method: "rule" | "heuristic" | "ai_proposed" | "manual";
+  method: "rule" | "heuristic" | "ai_proposed" | "manual" | "invalid_portfolio";
   confidence: number;
+  portfolioSlug?: string | null;
+  invalidPortfolioContext?: string | null;
+  validPortfolioOptions?: Array<{ slug: string; name: string }>;
   confirmedNodeId: string | null;
   topCandidate: {
     nodeId: string;
@@ -35,6 +37,7 @@ export type TaxonomyAttribution = {
     name: string;
     description: string;
     rationale: string;
+    proposalId?: string | null;
   } | null;
   attributedAt: string;
 };
@@ -47,6 +50,89 @@ type FeatureBriefInput = {
   targetRoles?: string[];
   dataNeeds?: string;
 };
+
+type TaxonomyNodeReference = {
+  id: string;
+  nodeId: string;
+  name: string;
+  parentId: string | null;
+};
+
+type TaxonomyNodeResolution =
+  | { status: "found"; node: TaxonomyNodeReference }
+  | { status: "not_found"; message: string }
+  | { status: "ambiguous"; message: string };
+
+const TAXONOMY_NODE_REFERENCE_SELECT = {
+  id: true,
+  nodeId: true,
+  name: true,
+  parentId: true,
+} as const;
+
+function defaultAttribution(): TaxonomyAttribution {
+  return {
+    method: "manual",
+    confidence: 1.0,
+    confirmedNodeId: null,
+    topCandidate: null,
+    candidates: [],
+    proposedNewNode: null,
+    attributedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeExistingAttribution(raw: unknown): TaxonomyAttribution {
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? { ...defaultAttribution(), ...(raw as Partial<TaxonomyAttribution>) }
+    : defaultAttribution();
+}
+
+function attributionJson(attribution: TaxonomyAttribution): Prisma.InputJsonValue {
+  return attribution as unknown as Prisma.InputJsonValue;
+}
+
+async function resolveTaxonomyNodeReference(reference: string): Promise<TaxonomyNodeResolution> {
+  const trimmed = reference.trim();
+  if (!trimmed) {
+    return { status: "not_found", message: "Taxonomy node reference is empty" };
+  }
+
+  const exactNodeId = await prisma.taxonomyNode.findUnique({
+    where: { nodeId: trimmed },
+    select: TAXONOMY_NODE_REFERENCE_SELECT,
+  });
+  if (exactNodeId) return { status: "found", node: exactNodeId };
+
+  const exactRowId = await prisma.taxonomyNode.findUnique({
+    where: { id: trimmed },
+    select: TAXONOMY_NODE_REFERENCE_SELECT,
+  });
+  if (exactRowId) return { status: "found", node: exactRowId };
+
+  const suffixMatches = await prisma.taxonomyNode.findMany({
+    where: {
+      status: "active",
+      nodeId: { endsWith: `/${trimmed}` },
+    },
+    select: TAXONOMY_NODE_REFERENCE_SELECT,
+    orderBy: { nodeId: "asc" },
+    take: 5,
+  });
+
+  if (suffixMatches.length === 1) {
+    return { status: "found", node: suffixMatches[0]! };
+  }
+
+  if (suffixMatches.length > 1) {
+    return {
+      status: "ambiguous",
+      message: `Taxonomy node reference ${trimmed} is ambiguous. Use the full nodeId: ${suffixMatches.map((n) => n.nodeId).join(", ")}`,
+    };
+  }
+
+  return { status: "not_found", message: `Taxonomy node ${trimmed} not found` };
+}
 
 // ─── Attribution Pipeline ───────────────────────────────────────────────────
 
@@ -87,6 +173,7 @@ export async function attributeFeatureBuild(
     return {
       method: "rule",
       confidence: 0.98,
+      portfolioSlug: null,
       confirmedNodeId: build.digitalProduct.taxonomyNode.nodeId,
       topCandidate: {
         nodeId: build.digitalProduct.taxonomyNode.nodeId,
@@ -101,13 +188,35 @@ export async function attributeFeatureBuild(
   }
 
   // 2. Load taxonomy nodes, scoped to portfolio if provided.
+  const portfolioContext = brief.portfolioContext?.trim() ?? "";
   let portfolioId: string | null = null;
-  if (brief.portfolioContext) {
+  let portfolioSlug: string | null = null;
+  if (portfolioContext) {
     const portfolio = await prisma.portfolio.findUnique({
-      where: { slug: brief.portfolioContext },
-      select: { id: true },
+      where: { slug: portfolioContext },
+      select: { id: true, slug: true, name: true },
     });
+    if (!portfolio) {
+      const options = await prisma.portfolio.findMany({
+        select: { slug: true, name: true },
+        orderBy: { name: "asc" },
+        take: 8,
+      });
+      return {
+        method: "invalid_portfolio",
+        confidence: 0,
+        portfolioSlug: null,
+        invalidPortfolioContext: portfolioContext,
+        validPortfolioOptions: options,
+        confirmedNodeId: null,
+        topCandidate: null,
+        candidates: [],
+        proposedNewNode: null,
+        attributedAt: new Date().toISOString(),
+      };
+    }
     portfolioId = portfolio?.id ?? null;
+    portfolioSlug = portfolio?.slug ?? null;
   }
 
   const nodes = await prisma.taxonomyNode.findMany({
@@ -146,6 +255,7 @@ export async function attributeFeatureBuild(
   return {
     method: "heuristic",
     confidence,
+    portfolioSlug,
     confirmedNodeId: null,  // not confirmed until user approves
     topCandidate: best,
     candidates: mappedCandidates.slice(0, 5),
@@ -162,7 +272,7 @@ export async function confirmFeatureTaxonomy(
   buildId: string,
   nodeId: string | null,
   proposeNew?: { parentNodeId: string; name: string; description: string; rationale: string },
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; confirmedNodeId?: string; proposalId?: string }> {
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: { id: true, taxonomyAttribution: true },
@@ -172,76 +282,97 @@ export async function confirmFeatureTaxonomy(
   // Safely parse existing attribution — guard against corrupted JSON
   let existing: TaxonomyAttribution;
   try {
-    const raw = build.taxonomyAttribution;
-    existing = (raw && typeof raw === "object" ? raw : null) as TaxonomyAttribution | null ?? {
-      method: "manual" as const,
-      confidence: 1.0,
-      confirmedNodeId: null,
-      topCandidate: null,
-      candidates: [],
-      proposedNewNode: null,
-      attributedAt: new Date().toISOString(),
-    };
+    existing = normalizeExistingAttribution(build.taxonomyAttribution);
   } catch {
-    existing = {
-      method: "manual" as const,
-      confidence: 1.0,
-      confirmedNodeId: null,
-      topCandidate: null,
-      candidates: [],
-      proposedNewNode: null,
-      attributedAt: new Date().toISOString(),
-    };
+    existing = defaultAttribution();
   }
 
   if (proposeNew && !nodeId) {
-    // Validate that parentNodeId exists
-    const parentNode = await prisma.taxonomyNode.findUnique({
-      where: { nodeId: proposeNew.parentNodeId },
-      select: { nodeId: true, name: true },
+    const proposedName = proposeNew.name.trim();
+    const description = proposeNew.description.trim();
+    const rationale = proposeNew.rationale.trim();
+    if (!proposedName) {
+      return { success: false, message: "Proposed taxonomy node name is required" };
+    }
+
+    const parentResolution = await resolveTaxonomyNodeReference(proposeNew.parentNodeId);
+    if (parentResolution.status !== "found") {
+      return { success: false, message: parentResolution.message };
+    }
+    const parentNode = parentResolution.node;
+
+    const proposal = await prisma.taxonomyProposal.create({
+      data: {
+        parentNodeId: parentNode.id,
+        featureBuildId: build.id,
+        proposedName,
+        description: description || null,
+        rationale,
+        status: "proposed",
+      },
+      select: { id: true },
     });
-    if (!parentNode) return { success: false, message: `Parent taxonomy node ${proposeNew.parentNodeId} not found` };
 
     // Proposing a new taxonomy node
+    const nextAttribution: TaxonomyAttribution = {
+      ...existing,
+      method: "ai_proposed",
+      confirmedNodeId: parentNode.nodeId,  // place under parent for now
+      proposedNewNode: {
+        parentNodeId: parentNode.nodeId,
+        name: proposedName,
+        description,
+        rationale,
+        proposalId: proposal.id,
+      },
+      attributedAt: new Date().toISOString(),
+    };
     await prisma.featureBuild.update({
       where: { buildId },
       data: {
-        taxonomyAttribution: {
-          ...existing,
-          method: "ai_proposed",
-          confirmedNodeId: proposeNew.parentNodeId,  // place under parent for now
-          proposedNewNode: proposeNew,
-          attributedAt: new Date().toISOString(),
-        },
+        taxonomyAttribution: attributionJson(nextAttribution),
       },
     });
     return {
       success: true,
-      message: `Proposed new taxonomy node "${proposeNew.name}" under ${parentNode.name} (${proposeNew.parentNodeId}). The architecture team will review this proposal.`,
+      confirmedNodeId: parentNode.nodeId,
+      proposalId: proposal.id,
+      message: `Proposed new taxonomy node "${proposedName}" under ${parentNode.name} (${parentNode.nodeId}). Proposal ${proposal.id} is queued for architecture review.`,
     };
   }
 
   if (nodeId) {
     // Confirming an existing node
-    const node = await prisma.taxonomyNode.findUnique({
-      where: { nodeId },
-      select: { nodeId: true, name: true },
-    });
-    if (!node) return { success: false, message: `Taxonomy node ${nodeId} not found` };
+    const nodeResolution = await resolveTaxonomyNodeReference(nodeId);
+    if (nodeResolution.status !== "found") {
+      return { success: false, message: nodeResolution.message };
+    }
+    const node = nodeResolution.node;
 
+    const nextAttribution: TaxonomyAttribution = {
+      ...existing,
+      confirmedNodeId: node.nodeId,
+      method: existing.method === "rule" ? "rule" : "manual",
+      confidence: 1.0,
+      topCandidate: {
+        nodeId: node.nodeId,
+        nodeName: node.name,
+        score: 1,
+        evidence: "Manually confirmed taxonomy placement",
+      },
+      attributedAt: new Date().toISOString(),
+    };
     await prisma.featureBuild.update({
       where: { buildId },
       data: {
-        taxonomyAttribution: {
-          ...existing,
-          confirmedNodeId: nodeId,
-          method: existing.method === "rule" ? "rule" : "manual",
-          confidence: 1.0,
-          attributedAt: new Date().toISOString(),
-        },
+        taxonomyAttribution: attributionJson(nextAttribution),
       },
     });
-    return { success: true, message: `Taxonomy placement confirmed: ${node.name} (${nodeId})` };
+    return {
+      success: true,
+      confirmedNodeId: node.nodeId,
+      message: `Taxonomy placement confirmed: ${node.name} (${node.nodeId})`,
+    };
   }
 
   return { success: false, message: "Either nodeId or proposeNew must be provided" };
@@ -252,6 +383,13 @@ export async function confirmFeatureTaxonomy(
  */
 export function formatAttributionRecommendation(attribution: TaxonomyAttribution): string {
   const { confidence, topCandidate, candidates } = attribution;
+
+  if (attribution.method === "invalid_portfolio" && attribution.invalidPortfolioContext) {
+    const options = attribution.validPortfolioOptions?.length
+      ? ` Valid portfolio contexts: ${attribution.validPortfolioOptions.map((p) => `${p.slug} (${p.name})`).join(", ")}.`
+      : "";
+    return `${attribution.invalidPortfolioContext} is not a valid portfolio context, so I did not search the full taxonomy.${options} Update the feature brief portfolio and run placement again.`;
+  }
 
   if (attribution.method === "rule" && topCandidate) {
     return `This feature belongs under **${topCandidate.nodeName}** (inherited from the existing product). No action needed.`;
