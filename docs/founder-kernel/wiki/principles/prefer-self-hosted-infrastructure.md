@@ -5,7 +5,7 @@ status: published
 abstract: Run platform services on your own hardware first. Use external APIs only when no viable self-hosted alternative exists.
 principleTier: core
 principleDirection: Own the infrastructure stack. Self-hosted services over third-party APIs for any platform capability that has a viable open-source equivalent.
-principleDimensionVector: {"operational_independence": 1.0, "data_privacy": 0.8, "cost_efficiency": 0.7, "vendor_lock_in": -0.9}
+principleDimensionVector: {"long_term_maintainability": 0.9, "governance_compliance": 0.8, "capacity_utilization": 0.7, "blast_radius": -0.7}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -53,10 +53,10 @@ For every new AI/ML platform service:
 
 ## Decision Dimensions
 
-- `operational_independence: 1.0` — you cannot be rate-limited, deprecated, or priced out of your own platform capabilities.
-- `data_privacy: 0.8` — sensitive voice, text, and decision data never leaves your network by default.
-- `cost_efficiency: 0.7` — marginal inference cost on owned hardware approaches zero at scale; per-call API pricing does not.
-- `vendor_lock_in: -0.9` — high negative weight on lock-in. External APIs are adapters behind a shared interface, never the default path.
+- `long_term_maintainability: 0.9` — self-hosted services are not subject to upstream deprecation, breaking API changes, or provider exit. The platform's capabilities age with the hardware, not with a vendor's roadmap.
+- `governance_compliance: 0.8` — data sovereignty: sensitive voice, text, and decision data never leaves your network by default. Enterprise and regulated-industry operators require this without exception.
+- `capacity_utilization: 0.7` — owned hardware is largely a sunk cost. Marginal inference cost on existing GPU infrastructure approaches zero at scale; per-call API pricing compounds indefinitely.
+- `blast_radius: -0.7` — reduces blast radius from external dependencies. A vendor outage, rate-limit event, or pricing change cannot take down a self-hosted capability. External adapters are opt-in, not the default failure path.
 
 ## Examples
 
