@@ -9,6 +9,8 @@ import {
   aiInferenceTokens,
   aiInferenceErrors,
   aiInferenceCostUsd,
+  aiCacheCreationTokens,
+  aiCacheReadTokens,
 } from "@/lib/metrics";
 import {
   getDecryptedCredential,
@@ -465,6 +467,12 @@ export async function callProvider(
   // 4. Record token and cost metrics
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "input" }, result.usage.inputTokens);
   aiInferenceTokens.inc({ provider: providerId, model: modelId, direction: "output" }, result.usage.outputTokens);
+  if (result.usage.cacheCreationInputTokens) {
+    aiCacheCreationTokens.inc({ provider: providerId, model: modelId }, result.usage.cacheCreationInputTokens);
+  }
+  if (result.usage.cacheReadInputTokens) {
+    aiCacheReadTokens.inc({ provider: providerId, model: modelId }, result.usage.cacheReadInputTokens);
+  }
 
   // Phase A7: success-path telemetry row. Fire-and-forget so a DB outage
   // can't break the user's reply.
@@ -481,6 +489,7 @@ export async function callProvider(
     status: "success",
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
+    cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
     toolCallsTotal: result.toolCalls.length,
     agentId: attribution?.agentId ?? undefined,
     threadId: attribution?.threadId ?? undefined,

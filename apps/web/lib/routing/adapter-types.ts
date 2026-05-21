@@ -57,7 +57,14 @@ export interface AdapterRequest {
 export interface AdapterResult {
   text: string;
   toolCalls: ToolCallEntry[];
-  usage: { inputTokens: number; outputTokens: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    /** Tokens written into the Anthropic prompt cache this call (billed at write rate). */
+    cacheCreationInputTokens?: number;
+    /** Tokens read from the Anthropic prompt cache this call (billed at read rate). */
+    cacheReadInputTokens?: number;
+  };
   inferenceMs: number;
   raw?: Record<string, unknown>;
   /** Responses API: the response ID for chaining subsequent calls. */
