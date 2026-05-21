@@ -10,8 +10,10 @@ export interface ProbeQuickBooksAccountingParams {
 }
 
 export interface QuickBooksCompanyInfo {
+  Id?: string;
   CompanyName?: string;
   Country?: string;
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -19,6 +21,7 @@ export interface QuickBooksCustomer {
   Id?: string;
   DisplayName?: string;
   CompanyName?: string;
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -33,6 +36,7 @@ export interface QuickBooksInvoice {
     [key: string]: unknown;
   };
   PrivateNote?: string;
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -44,6 +48,7 @@ export interface QuickBooksVendor {
     Address?: string;
     [key: string]: unknown;
   };
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -58,6 +63,7 @@ export interface QuickBooksBill {
     [key: string]: unknown;
   };
   DueDate?: string;
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -76,6 +82,7 @@ export interface QuickBooksExpense {
     type?: string;
     [key: string]: unknown;
   };
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -87,6 +94,7 @@ export interface QuickBooksPayment {
     name?: string;
     [key: string]: unknown;
   };
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -96,6 +104,7 @@ export interface QuickBooksAccount {
   AccountType?: string;
   AccountSubType?: string;
   CurrentBalance?: number;
+  MetaData?: QuickBooksRecordMetaData;
   [key: string]: unknown;
 }
 
@@ -109,10 +118,19 @@ export type QuickBooksReportName =
 export interface QuickBooksReport {
   Header?: {
     ReportName?: string;
+    Time?: string;
+    StartPeriod?: string;
+    EndPeriod?: string;
     [key: string]: unknown;
   };
   Rows?: Record<string, unknown>;
   Columns?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface QuickBooksRecordMetaData {
+  CreateTime?: string;
+  LastUpdatedTime?: string;
   [key: string]: unknown;
 }
 
