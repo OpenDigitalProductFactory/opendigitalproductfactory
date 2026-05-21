@@ -1,3 +1,5 @@
+import type { IntegrationImportStagingDescriptor } from "@/lib/integrate/import-staging";
+
 export const INTEGRATION_READINESS_STATES = [
   "not-connected",
   "credential-expired",
@@ -59,6 +61,7 @@ export interface IntegrationReadinessDescriptor {
   entityContext: Record<string, string | null>;
   health: IntegrationReadinessHealth;
   capabilities: IntegrationReadinessCapability[];
+  importStaging?: IntegrationImportStagingDescriptor;
   nextSafeActions: string[];
   updatedAt: string | null;
 }

@@ -8,6 +8,7 @@ import {
 
 const POSTURE_LABELS: Record<AccountantProviderBoundary["posture"], string> = {
   "read-first": "Read-first",
+  "import-staging": "Import staging",
   "reconciliation-anchor": "Reconciliation anchor",
   "not-mapped": "Not mapped",
 };

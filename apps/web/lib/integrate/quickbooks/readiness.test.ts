@@ -13,7 +13,7 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     expect(descriptor.nextSafeActions).toContain("Connect QuickBooks credentials");
   });
 
-  it("marks read-supported accounting families as read when connected", () => {
+  it("marks core accounting families as import-ready when connected and staging is defined", () => {
     const descriptor = buildQuickBooksReadinessDescriptor({
       connection: {
         status: "connected",
@@ -29,7 +29,7 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     expect(descriptor.entityContext.companyName).toBe("Acme Services LLC");
     expect(
       descriptor.capabilities
-        .filter((capability) => capability.state === "read")
+        .filter((capability) => capability.state === "import-ready")
         .map((capability) => capability.key),
     ).toEqual([
       "company",
@@ -42,6 +42,21 @@ describe("buildQuickBooksReadinessDescriptor", () => {
       "accounts",
       "reports",
     ]);
+    expect(descriptor.importStaging?.readOnly).toBe(true);
+    expect(descriptor.importStaging?.families.map((family) => family.key)).toEqual([
+      "company",
+      "customers",
+      "invoices",
+      "vendors",
+      "bills",
+      "expenses",
+      "payments",
+      "accounts",
+      "reports",
+    ]);
+    expect(
+      descriptor.importStaging?.families.every((family) => family.ownerSide === "external"),
+    ).toBe(true);
     expect(
       descriptor.capabilities.find((capability) => capability.key === "expenses")?.apiCoverageNote,
     ).toContain("Purchase");
@@ -53,6 +68,9 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     );
     expect(descriptor.nextSafeActions).toContain(
       "Use expanded QuickBooks read coverage to plan source-attributed staging before imports or writes",
+    );
+    expect(descriptor.nextSafeActions).toContain(
+      "Review non-editable import staging fields before creating local accounting links",
     );
   });
 
