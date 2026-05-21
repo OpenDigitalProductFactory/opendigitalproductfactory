@@ -28,6 +28,23 @@
       "action": "resolve",
       "summary": "Packet loss to 192.168.0.10 cleared",
       "occurredAt": "2026-05-21T02:29:45Z"
+    },
+    {
+      "eventType": "change",
+      "dedupKey": "git.deploy:web@abcdef1",
+      "source": "git.deploy",
+      "component": "web",
+      "eventGroup": "deploy",
+      "eventClass": "deploy",
+      "severity": "info",
+      "action": "trigger",
+      "summary": "Deploy abcdef1 to web (production)",
+      "occurredAt": "2026-05-21T02:28:30Z",
+      "customDetails": {
+        "gitSha": "abcdef1",
+        "deployedBy": "ci-bot",
+        "targetEnv": "production"
+      }
     }
   ]
 }

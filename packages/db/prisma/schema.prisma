@@ -8579,6 +8579,7 @@ model EdgeNode {
   discoveryRuns  DiscoveryRun[]       @relation("EdgeNodeDiscoveryRuns")
   consumedTokens BootstrapToken[]     @relation("BootstrapTokenConsumer")
   events         EdgeEvent[]          @relation("EdgeNodeEvents")
+  changes        ChangeEvent[]        @relation("EdgeNodeChanges")
 
   @@index([trustState])
   @@index([status])
@@ -8730,6 +8731,70 @@ model EdgeEvent {
   @@unique([edgeNodeId, dedupKey])
   @@index([edgeNodeId, status])
   @@index([severity])
+  @@index([source])
+  @@index([occurredAt])
+}
+
+// ─── Edge-detected change events (deploys, config pushes, feature flips) ─────
+// Slice 1 of the edge-node detection engine (BI-8405FDA5). Persisted from
+// POST /api/v1/edge/events when eventType="change". The correlation engine
+// (separate slice) joins alerts to changes within an N-minute window to
+// surface deploy-driven incidents — the highest-leverage borrowed PagerDuty
+// pattern per the research brief.
+//
+// Distinct from EdgeEvent because changes are point-in-time facts, not
+// fire-and-collapse conditions:
+//   - No status lifecycle (a deploy doesn't get "acknowledged" or "resolved")
+//   - No occurrenceCount (each change is a discrete event)
+//   - Idempotency on (edgeNodeId, changeKey) so re-submitting the same
+//     change (e.g. retry after transient failure) updates summary +
+//     customDetails without duplicating the row
+//
+// The portal route accepts the same EdgeEventEnvelope wire shape and
+// discriminates on `eventType`; `action` is required by the schema for
+// envelope uniformity but ignored for changes.
+model ChangeEvent {
+  id            String   @id @default(cuid())
+  // FK to EdgeNode.id (the cuid surrogate). Route fills this from the
+  // bearer-token auth, never from the body.
+  edgeNodeId    String
+  // Stable identifier — git SHA, deploy ID, change-ticket reference.
+  // Carried as `dedupKey` in the envelope. Re-submission with the same
+  // (edgeNodeId, changeKey) updates summary + customDetails.
+  changeKey     String
+  // Producing detector — "git.deploy", "kubectl.apply", "terraform.plan", etc.
+  source        String
+  // Operator-readable sub-source — service name, environment, target host.
+  component     String?
+  // Logical bucket — "deploy", "config", "feature-flag", "rollback".
+  eventGroup    String?
+  // Specific class — "deploy", "rollback", "scale", "flag_enable".
+  eventClass    String?
+  // info | warn | error | critical — routine deploy=info, canary=warn,
+  // emergency hotfix=error.
+  severity      String   @default("info")
+  // Short human-readable line for change feeds + correlation tooltips.
+  summary       String
+  // Free-form: gitSha, deployedBy, targetEnv, runId, ticketRef, diff URL.
+  customDetails Json?
+  // When the change actually happened (RFC 3339, set by detector).
+  occurredAt    DateTime
+  // When the portal first received this changeKey for this edge node.
+  firstSeenAt   DateTime @default(now())
+  // Bumped on every replay. Cheap signal that "this change keeps being
+  // re-asserted by the detector" — useful for debouncing noisy emitters.
+  lastSeenAt    DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  node EdgeNode @relation("EdgeNodeChanges", fields: [edgeNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([edgeNodeId, changeKey])
+  // Composite index powers the correlation engine's "changes for this node
+  // in the last N minutes" join against alert events. Keep this in lockstep
+  // with the EdgeEvent.occurredAt index so both sides of the join are O(log n).
+  @@index([edgeNodeId, occurredAt])
   @@index([source])
   @@index([occurredAt])
 }
