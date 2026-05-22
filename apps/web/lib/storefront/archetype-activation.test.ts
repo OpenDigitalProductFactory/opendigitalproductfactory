@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  activationHasCapability,
   deriveCustomerConfigurationItemDefaults,
   deriveRevenueModelFromActivationProfile,
+  getCapabilityApplicability,
   isManagedServiceProviderProfile,
   readActivationProfile,
 } from "./archetype-activation";
@@ -35,6 +37,8 @@ describe("readActivationProfile", () => {
       customerGraph: "separate-customer-projection",
       estateSeparation: "strict",
     });
+    expect(getCapabilityApplicability(profile, "customer-estate")).toBe("required");
+    expect(activationHasCapability(profile, "edge-node-customer-deployment")).toBe(true);
   });
 
   it("returns null for malformed activation profile data", () => {

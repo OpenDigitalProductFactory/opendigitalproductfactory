@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getFinancialProfile, getAllProfiles } from "./profiles";
+import {
+  deriveRecurringBillingEnabled,
+  getFinancialProfile,
+  getAllProfiles,
+} from "./profiles";
 
 const EXPECTED_SLUGS = [
   "healthcare_wellness",
@@ -12,12 +16,13 @@ const EXPECTED_SLUGS = [
   "fitness_recreation",
   "beauty_personal",
   "pet_services",
+  "hoa_property_management",
 ];
 
 describe("financial profile catalog", () => {
-  it("has all 10 profiles", () => {
+  it("has all 11 profiles", () => {
     const all = getAllProfiles();
-    expect(all).toHaveLength(10);
+    expect(all).toHaveLength(11);
     const slugs = all.map((p) => p.slug);
     for (const expected of EXPECTED_SLUGS) {
       expect(slugs, `missing profile: ${expected}`).toContain(expected);
@@ -37,6 +42,14 @@ describe("financial profile catalog", () => {
       expect(typeof profile.dunningEnabled, `${profile.slug} dunningEnabled must be boolean`).toBe("boolean");
       expect(["standard", "aggressive", "gentle", "off"], `${profile.slug} invalid dunningStyle`).toContain(profile.dunningStyle);
       expect(typeof profile.recurringBillingEnabled, `${profile.slug} recurringBillingEnabled must be boolean`).toBe("boolean");
+      expect(profile.billingPatternProfile, `${profile.slug} missing billingPatternProfile`).toBeDefined();
+      expect(
+        profile.billingPatternProfile.supportedPaymentPatterns,
+        `${profile.slug} supportedPaymentPatterns must include primaryPaymentPattern`,
+      ).toContain(profile.billingPatternProfile.primaryPaymentPattern);
+      expect(profile.recurringBillingEnabled).toBe(
+        deriveRecurringBillingEnabled(profile.billingPatternProfile),
+      );
       expect(
         ["professional", "trade", "creative", "nonprofit", "minimal"],
         `${profile.slug} invalid invoiceTemplateStyle`,
@@ -103,5 +116,29 @@ describe("financial profile catalog", () => {
     expect(profile).not.toBeNull();
     expect(profile!.purchaseOrdersEnabled).toBe(true);
     expect(profile!.dunningStyle).toBe("aggressive");
+  });
+
+  it("professional services supports recurring agreements without prescribing invoice execution", () => {
+    const profile = getFinancialProfile("professional_services");
+    expect(profile?.billingPatternProfile).toMatchObject({
+      primaryPaymentPattern: "recurring-agreement",
+      recurringBillingApplicability: "required",
+      invoiceExecutionMode: "prepared-not-prescribed",
+    });
+    expect(profile?.billingPatternProfile.supportedPaymentPatterns).toEqual(
+      expect.arrayContaining(["recurring-agreement", "retainer", "project-milestone", "ad-hoc-invoice"]),
+    );
+  });
+
+  it("beauty and personal care is appointment checkout first with optional recurring packages", () => {
+    const profile = getFinancialProfile("beauty_personal");
+    expect(profile?.billingPatternProfile).toMatchObject({
+      primaryPaymentPattern: "appointment-checkout",
+      recurringBillingApplicability: "optional",
+      invoiceExecutionMode: "manual",
+    });
+    expect(profile?.billingPatternProfile.supportedPaymentPatterns).toEqual(
+      expect.arrayContaining(["appointment-checkout", "point-of-sale", "optional-package"]),
+    );
   });
 });

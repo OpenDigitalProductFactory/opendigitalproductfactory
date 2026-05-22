@@ -1,8 +1,55 @@
-import type { FinancialProfile } from "./types";
+import type { BillingPatternProfile, FinancialProfile } from "./types";
 
 // ─── Profile catalog ──────────────────────────────────────────────────────────
 
-const PROFILES: Record<string, FinancialProfile> = {
+type FinancialProfileSeed = Omit<FinancialProfile, "billingPatternProfile" | "recurringBillingEnabled"> & {
+  billingPatternProfile?: BillingPatternProfile;
+  recurringBillingEnabled?: boolean;
+};
+
+const POINT_OF_SALE_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "point-of-sale",
+  supportedPaymentPatterns: ["point-of-sale", "ad-hoc-invoice"],
+  invoiceExecutionMode: "manual",
+  recurringBillingApplicability: "optional",
+};
+
+const RECURRING_AGREEMENT_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "recurring-agreement",
+  supportedPaymentPatterns: ["recurring-agreement", "retainer", "project-milestone", "ad-hoc-invoice"],
+  invoiceExecutionMode: "prepared-not-prescribed",
+  recurringBillingApplicability: "required",
+};
+
+const APPOINTMENT_CHECKOUT_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "appointment-checkout",
+  supportedPaymentPatterns: ["appointment-checkout", "point-of-sale", "optional-package"],
+  invoiceExecutionMode: "manual",
+  recurringBillingApplicability: "optional",
+};
+
+const SUBSCRIPTION_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "subscription",
+  supportedPaymentPatterns: ["subscription", "ad-hoc-invoice"],
+  invoiceExecutionMode: "prepared-not-prescribed",
+  recurringBillingApplicability: "required",
+};
+
+const DONATION_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "donation",
+  supportedPaymentPatterns: ["donation", "subscription"],
+  invoiceExecutionMode: "manual",
+  recurringBillingApplicability: "recommended",
+};
+
+const AD_HOC_INVOICE_PATTERN: BillingPatternProfile = {
+  primaryPaymentPattern: "ad-hoc-invoice",
+  supportedPaymentPatterns: ["ad-hoc-invoice", "project-milestone"],
+  invoiceExecutionMode: "manual",
+  recurringBillingApplicability: "optional",
+};
+
+const PROFILES: Record<string, FinancialProfileSeed> = {
   healthcare_wellness: {
     archetypeCategory: "healthcare-wellness",
     displayName: "Healthcare & Wellness",
@@ -351,10 +398,50 @@ const PROFILES: Record<string, FinancialProfile> = {
 
 // ─── Exported functions ───────────────────────────────────────────────────────
 
+function defaultBillingPatternForSlug(slug: string): BillingPatternProfile {
+  switch (slug) {
+    case "professional_services":
+    case "trades_construction":
+    case "hoa_property_management":
+      return RECURRING_AGREEMENT_PATTERN;
+    case "retail":
+    case "food_hospitality":
+      return POINT_OF_SALE_PATTERN;
+    case "beauty_personal":
+    case "pet_services":
+      return APPOINTMENT_CHECKOUT_PATTERN;
+    case "education_training":
+    case "fitness_recreation":
+    case "healthcare_wellness":
+      return SUBSCRIPTION_PATTERN;
+    case "nonprofit":
+      return DONATION_PATTERN;
+    default:
+      return AD_HOC_INVOICE_PATTERN;
+  }
+}
+
+export function deriveRecurringBillingEnabled(profile: BillingPatternProfile): boolean {
+  return profile.recurringBillingApplicability !== "not-applicable";
+}
+
+function normalizeFinancialProfile(slug: string, profile: FinancialProfileSeed): FinancialProfile {
+  const billingPatternProfile = profile.billingPatternProfile ?? defaultBillingPatternForSlug(slug);
+  return {
+    ...profile,
+    billingPatternProfile,
+    recurringBillingEnabled: deriveRecurringBillingEnabled(billingPatternProfile),
+  };
+}
+
 export function getFinancialProfile(archetypeSlug: string): FinancialProfile | null {
-  return PROFILES[archetypeSlug] ?? null;
+  const profile = PROFILES[archetypeSlug];
+  return profile ? normalizeFinancialProfile(archetypeSlug, profile) : null;
 }
 
 export function getAllProfiles(): Array<{ slug: string } & FinancialProfile> {
-  return Object.entries(PROFILES).map(([slug, profile]) => ({ slug, ...profile }));
+  return Object.entries(PROFILES).map(([slug, profile]) => ({
+    slug,
+    ...normalizeFinancialProfile(slug, profile),
+  }));
 }

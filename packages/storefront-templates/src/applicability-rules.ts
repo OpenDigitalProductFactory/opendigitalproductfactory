@@ -1,0 +1,496 @@
+import {
+  CAPABILITY_KEYS,
+  CAPABILITY_REGISTRY,
+  type CapabilityKey,
+  isCapabilityKey,
+} from "./capability-registry";
+import type {
+  BillingPatternProfile,
+  CapabilityActivation,
+  CapabilityApplicability,
+  CapabilityOverride,
+  CommercialModel,
+  OperatingModelAxes,
+  PortfolioDecomposition,
+} from "./types";
+
+type CapabilityMap = Map<CapabilityKey, CapabilityActivation>;
+
+interface RuleResult {
+  key: CapabilityKey;
+  applicability: CapabilityApplicability;
+  reason: string;
+  ownershipScopes?: CapabilityActivation["ownershipScopes"];
+  transactionContexts?: CapabilityActivation["transactionContexts"];
+  isolation?: CapabilityActivation["isolation"];
+}
+
+interface ApplicabilityRule {
+  name: string;
+  evaluate: (axes: OperatingModelAxes, portfolios: PortfolioDecomposition) => RuleResult[];
+}
+
+function createBaseCapabilityMap(): CapabilityMap {
+  const map = new Map<CapabilityKey, CapabilityActivation>();
+
+  for (const key of CAPABILITY_KEYS) {
+    const registryEntry = CAPABILITY_REGISTRY[key];
+    map.set(key, {
+      capabilityKey: key,
+      applicability:
+        key === "edge-node-customer-deployment" || key === "remote-support"
+          ? "hidden"
+          : "not-applicable",
+      ownershipScopes: [registryEntry.defaultOwnershipScope],
+      isolation: registryEntry.defaultIsolation,
+      surfaces: [...registryEntry.surfaces],
+      sourceRules: [],
+    });
+  }
+
+  return map;
+}
+
+function applyRuleResult(map: CapabilityMap, ruleName: string, result: RuleResult): void {
+  const existing = map.get(result.key);
+  if (!existing) return;
+
+  map.set(result.key, {
+    ...existing,
+    applicability: result.applicability,
+    ownershipScopes: result.ownershipScopes ?? existing.ownershipScopes,
+    transactionContexts: result.transactionContexts ?? existing.transactionContexts,
+    isolation: result.isolation ?? existing.isolation,
+    reason: result.reason,
+    sourceRules: [...existing.sourceRules, ruleName],
+  });
+}
+
+function isManagedExternalEstate(
+  axes: OperatingModelAxes,
+  portfolios: PortfolioDecomposition,
+): boolean {
+  return (
+    axes.primaryConsumer === "business" &&
+    portfolios.manufactureAndDeliver.scope === "primary"
+  );
+}
+
+function isRecurringPropertyOrAssociation(axes: OperatingModelAxes): boolean {
+  return (
+    axes.commercialModel === "recurring-agreement" &&
+    axes.delivery === "physical" &&
+    (axes.primaryConsumer === "household" || axes.primaryConsumer === "business")
+  );
+}
+
+function hasDetectToCorrect(portfolios: PortfolioDecomposition): boolean {
+  return portfolios.manufactureAndDeliver.it4itStages?.includes("detect-to-correct") ?? false;
+}
+
+const RULES: ApplicabilityRule[] = [
+  {
+    name: "customer-accounts-from-external-consumer",
+    evaluate: (axes) => {
+      if (axes.primaryConsumer === "business" || axes.primaryConsumer === "household") {
+        return [
+          {
+            key: "customer-accounts",
+            applicability: "required",
+            reason: "External business or household customers need account records.",
+            ownershipScopes: ["customer-account"],
+          },
+        ];
+      }
+
+      if (axes.primaryConsumer === "individual") {
+        return [
+          {
+            key: "customer-accounts",
+            applicability: "recommended",
+            reason: "Individual services benefit from client records without making estate scope mandatory.",
+            ownershipScopes: ["organization"],
+            isolation: "organization-scope",
+          },
+        ];
+      }
+
+      return [];
+    },
+  },
+  {
+    name: "managed-external-estate",
+    evaluate: (axes, portfolios) => {
+      if (!isManagedExternalEstate(axes, portfolios)) return [];
+
+      return [
+        {
+          key: "customer-sites",
+          applicability: "required",
+          reason: "Managed external estates need customer site boundaries.",
+          ownershipScopes: ["customer-account", "customer-site"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "customer-estate",
+          applicability: "required",
+          reason: "B2B primary manufacture/delivery work manages customer estate records.",
+          ownershipScopes: ["customer-account", "customer-site"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "project-work",
+          applicability: "required",
+          reason: "Managed services produce onboarding, remediation, and migration projects.",
+          ownershipScopes: ["customer-account"],
+          isolation: "strict-customer-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "detect-to-correct-estate-operations",
+    evaluate: (axes, portfolios) => {
+      if (!isManagedExternalEstate(axes, portfolios) || !hasDetectToCorrect(portfolios)) {
+        return [];
+      }
+
+      return [
+        {
+          key: "edge-node-customer-deployment",
+          applicability: "required",
+          reason: "Detect-to-correct managed services need customer-scoped local telemetry.",
+          ownershipScopes: ["edge-node", "customer-site"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "network-inventory",
+          applicability: "required",
+          reason: "Detect-to-correct managed services need network inventory.",
+          ownershipScopes: ["customer-site", "configuration-item"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "cybersecurity-posture",
+          applicability: "required",
+          reason: "Managed customer operations include cybersecurity posture review.",
+          ownershipScopes: ["customer-account", "configuration-item"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "backup-restore-posture",
+          applicability: "required",
+          reason: "Managed customer operations include backup and restore posture.",
+          ownershipScopes: ["customer-account", "configuration-item"],
+          isolation: "strict-customer-scope",
+        },
+        {
+          key: "lifecycle-review-queues",
+          applicability: "required",
+          reason: "Managed estate operations need lifecycle review queues.",
+          ownershipScopes: ["customer-account", "configuration-item"],
+          isolation: "strict-customer-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "recurring-agreement-commercial-model",
+    evaluate: (axes) => {
+      if (axes.commercialModel !== "recurring-agreement") return [];
+
+      return [
+        {
+          key: "service-agreements",
+          applicability: "required",
+          reason: "Recurring agreement commercial models require service agreements.",
+          ownershipScopes: ["customer-account"],
+          transactionContexts: ["service-agreement"],
+        },
+        {
+          key: "recurring-agreement-billing",
+          applicability: "required",
+          reason: "Recurring agreements require billing-period readiness.",
+          ownershipScopes: ["customer-account"],
+          transactionContexts: ["billing-period"],
+        },
+        {
+          key: "billing-readiness",
+          applicability: "required",
+          reason: "Recurring agreements require invoice-ready period preparation.",
+          ownershipScopes: ["customer-account"],
+          transactionContexts: ["billing-period"],
+        },
+      ];
+    },
+  },
+  {
+    name: "appointment-checkout-commercial-model",
+    evaluate: (axes) => {
+      if (axes.commercialModel !== "appointment-checkout") return [];
+
+      return [
+        {
+          key: "appointment-checkout",
+          applicability: "required",
+          reason: "Appointment checkout is the primary payment motion.",
+          ownershipScopes: ["organization"],
+          transactionContexts: ["appointment"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "point-of-sale",
+          applicability: "required",
+          reason: "In-person appointment services usually settle through point-of-sale.",
+          ownershipScopes: ["organization"],
+          transactionContexts: ["appointment"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "recurring-agreement-billing",
+          applicability: "optional",
+          reason: "Packages or memberships are optional, not the main salon workflow.",
+          ownershipScopes: ["organization"],
+          transactionContexts: ["billing-period"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "point-of-sale-commercial-model",
+    evaluate: (axes) => {
+      if (axes.commercialModel !== "point-of-sale") return [];
+
+      return [
+        {
+          key: "point-of-sale",
+          applicability: "required",
+          reason: "Point-of-sale is the primary payment motion.",
+          ownershipScopes: ["organization"],
+          transactionContexts: ["order"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "customer-estate",
+          applicability: "optional",
+          reason: "Retail can track internal store equipment without customer-estate requirements.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "baseline-business-resilience",
+    evaluate: (axes) => {
+      if (axes.commercialModel === "recurring-agreement" && axes.primaryConsumer === "business") {
+        return [];
+      }
+
+      return [
+        {
+          key: "cybersecurity-posture",
+          applicability: "recommended",
+          reason: "Every small business benefits from security posture awareness.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "backup-restore-posture",
+          applicability: "recommended",
+          reason: "Every small business benefits from backup and recovery awareness.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "property-or-association-estate",
+    evaluate: (axes) => {
+      if (!isRecurringPropertyOrAssociation(axes)) return [];
+
+      return [
+        {
+          key: "customer-sites",
+          applicability: "required",
+          reason: "Recurring property or association operations need managed site boundaries.",
+          ownershipScopes: ["customer-account", "customer-site"],
+        },
+        {
+          key: "customer-estate",
+          applicability: "optional",
+          reason: "Property assets are useful but not always IT configuration items.",
+          ownershipScopes: ["customer-account", "customer-site"],
+        },
+        {
+          key: "edge-node-customer-deployment",
+          applicability: "optional",
+          reason: "Facilities monitoring may use edge nodes later.",
+          ownershipScopes: ["customer-site", "edge-node"],
+        },
+        {
+          key: "network-inventory",
+          applicability: "optional",
+          reason: "Facilities may need network visibility when common-area systems exist.",
+          ownershipScopes: ["customer-site"],
+        },
+        {
+          key: "project-work",
+          applicability: "required",
+          reason: "Property management frequently runs managed projects and remediation work.",
+          ownershipScopes: ["customer-account"],
+        },
+        {
+          key: "lifecycle-review-queues",
+          applicability: "required",
+          reason: "Recurring property agreements need lifecycle review queues.",
+          ownershipScopes: ["customer-account", "customer-site"],
+        },
+        {
+          key: "remote-support",
+          applicability: "optional",
+          reason: "Remote assistance can apply to managed facilities with consent.",
+          ownershipScopes: ["customer-account"],
+        },
+      ];
+    },
+  },
+  {
+    name: "non-primary-checkout-surfaces",
+    evaluate: (axes) => {
+      if (axes.commercialModel === "appointment-checkout" || axes.commercialModel === "point-of-sale") {
+        return [];
+      }
+
+      return [
+        {
+          key: "appointment-checkout",
+          applicability: axes.commercialModel === "recurring-agreement" ? "hidden" : "optional",
+          reason: "Appointment checkout is not the primary motion.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "point-of-sale",
+          applicability: "optional",
+          reason: "Point-of-sale can support incidental payments.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+];
+
+function applyOverrides(map: CapabilityMap, overrides: CapabilityOverride[]): void {
+  for (const override of overrides) {
+    if (!isCapabilityKey(override.capabilityKey)) {
+      continue;
+    }
+
+    const existing = map.get(override.capabilityKey);
+    if (!existing) continue;
+
+    map.set(override.capabilityKey, {
+      ...existing,
+      applicability: override.applicability,
+      ownershipScopes: override.ownershipScopes ?? existing.ownershipScopes,
+      transactionContexts: override.transactionContexts ?? existing.transactionContexts,
+      isolation: override.isolation ?? existing.isolation,
+      surfaces: override.surfaces ?? existing.surfaces,
+      overrideReason: override.reason,
+      sourceRules: [...existing.sourceRules, "capability-override"],
+    });
+  }
+}
+
+export function deriveCapabilityApplicability(
+  axes: OperatingModelAxes,
+  portfolios: PortfolioDecomposition,
+  overrides: CapabilityOverride[] = [],
+): CapabilityMap {
+  const map = createBaseCapabilityMap();
+
+  for (const rule of RULES) {
+    for (const result of rule.evaluate(axes, portfolios)) {
+      applyRuleResult(map, rule.name, result);
+    }
+  }
+
+  applyOverrides(map, overrides);
+
+  return map;
+}
+
+function supportedPatternsForCommercialModel(commercialModel: CommercialModel): BillingPatternProfile {
+  switch (commercialModel) {
+    case "recurring-agreement":
+      return {
+        primaryPaymentPattern: "recurring-agreement",
+        supportedPaymentPatterns: [
+          "recurring-agreement",
+          "project-milestone",
+          "ad-hoc-invoice",
+          "usage-based",
+        ],
+        invoiceExecutionMode: "prepared-not-prescribed",
+        recurringBillingApplicability: "required",
+      };
+    case "appointment-checkout":
+      return {
+        primaryPaymentPattern: "appointment-checkout",
+        supportedPaymentPatterns: ["appointment-checkout", "point-of-sale", "optional-package"],
+        invoiceExecutionMode: "manual",
+        recurringBillingApplicability: "optional",
+      };
+    case "point-of-sale":
+    case "transactional":
+      return {
+        primaryPaymentPattern: "point-of-sale",
+        supportedPaymentPatterns: ["point-of-sale", "ad-hoc-invoice"],
+        invoiceExecutionMode: "manual",
+        recurringBillingApplicability: "optional",
+      };
+    case "subscription":
+      return {
+        primaryPaymentPattern: "subscription",
+        supportedPaymentPatterns: ["subscription", "ad-hoc-invoice"],
+        invoiceExecutionMode: "prepared-not-prescribed",
+        recurringBillingApplicability: "required",
+      };
+    case "usage-based":
+      return {
+        primaryPaymentPattern: "usage-based",
+        supportedPaymentPatterns: ["usage-based", "subscription", "ad-hoc-invoice"],
+        invoiceExecutionMode: "prepared-not-prescribed",
+        recurringBillingApplicability: "recommended",
+      };
+    case "account-based-fees":
+      return {
+        primaryPaymentPattern: "retainer",
+        supportedPaymentPatterns: ["retainer", "ad-hoc-invoice"],
+        invoiceExecutionMode: "prepared-not-prescribed",
+        recurringBillingApplicability: "recommended",
+      };
+    case "encounter-based":
+      return {
+        primaryPaymentPattern: "ad-hoc-invoice",
+        supportedPaymentPatterns: ["ad-hoc-invoice"],
+        invoiceExecutionMode: "manual",
+        recurringBillingApplicability: "optional",
+      };
+    case "hybrid":
+      return {
+        primaryPaymentPattern: "ad-hoc-invoice",
+        supportedPaymentPatterns: ["ad-hoc-invoice", "subscription", "usage-based"],
+        invoiceExecutionMode: "manual",
+        recurringBillingApplicability: "recommended",
+      };
+  }
+}
+
+export function deriveBillingPatternProfile(axes: OperatingModelAxes): BillingPatternProfile {
+  return supportedPatternsForCommercialModel(axes.commercialModel);
+}

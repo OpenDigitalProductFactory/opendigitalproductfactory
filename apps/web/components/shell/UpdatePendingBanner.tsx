@@ -24,20 +24,24 @@ export async function UpdatePendingBanner() {
     <div
       style={{
         display: "flex",
+        flexWrap: "wrap",
         alignItems: "center",
         justifyContent: "space-between",
+        gap: 4,
         padding: "6px 16px",
         background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
         borderBottom: "1px solid color-mix(in srgb, var(--dpf-accent) 30%, transparent)",
         fontSize: 12,
+        lineHeight: 1.4,
         color: "var(--dpf-accent)",
+        overflowWrap: "anywhere",
       }}
     >
-      <span>
+      <span style={{ minWidth: 0 }}>
         Platform update v{config.pendingVersion} is ready. Your customisations are preserved.{" "}
         <Link
           href="/admin/platform-development"
-          style={{ color: "var(--dpf-accent)", textDecoration: "underline" }}
+          style={{ color: "var(--dpf-accent)", textDecoration: "underline", overflowWrap: "anywhere" }}
         >
           Review in Admin &rarr; Platform Development
         </Link>
