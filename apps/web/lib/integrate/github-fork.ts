@@ -11,6 +11,8 @@
 // window — callers should surface this as "fork is being created, retry soon"
 // rather than treating it as a failure.
 
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
+
 function getHeaders(token: string): Record<string, string> {
   return {
     Accept: "application/vnd.github+json",
@@ -35,13 +37,22 @@ export async function forkExistsAndIsFork(params: {
   token: string;
 }): Promise<ForkCheckResult> {
   const { owner, repo, upstreamOwner, upstreamRepo, token } = params;
-  const url = `https://api.github.com/repos/${owner}/${repo}`;
-  const res = await fetch(url, { headers: getHeaders(token) });
+  // BI-5E53A265 fix (CodeQL alert #35). owner/repo flow from caller
+  // into a fetch URL. Host is hardcoded to api.github.com, but the
+  // dataflow is still user→fetch. assertSafeOutboundUrl pins the
+  // host so a future refactor can't accidentally let the URL go
+  // anywhere else, and the validated `URL` return type makes the
+  // sanitizer pattern legible to CodeQL.
+  const url = assertSafeOutboundUrl(
+    `https://api.github.com/repos/${owner}/${repo}`,
+    { allowedHosts: ["api.github.com"] },
+  );
+  const res = await fetch(url.href, { headers: getHeaders(token) });
 
   if (res.status === 404) return { exists: false, isFork: false };
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`GitHub API GET ${url}: ${res.status} ${body.slice(0, 200)}`);
+    throw new Error(`GitHub API GET ${url.href}: ${res.status} ${body.slice(0, 200)}`);
   }
 
   const body = (await res.json()) as { fork?: boolean; parent?: { full_name?: string } };

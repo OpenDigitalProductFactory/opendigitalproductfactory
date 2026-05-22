@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { parseICal } from "@/lib/ical-parser";
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import * as crypto from "crypto";
 
 // ─── Add iCal subscription ──────────────────────────────────────────────────
@@ -22,12 +23,20 @@ export async function addICalSubscription(input: {
   });
   if (!profile) return { success: false, error: "Employee profile not found" };
 
-  // Validate URL
+  // Validate URL. BI-5E53A265 fix: assertSafeOutboundUrl gates scheme
+  // (https only by default) and blocks private-network / metadata IPs.
+  // Without this guard, a user could submit feedUrl=
+  // http://169.254.169.254/latest/meta-data/iam/security-credentials/
+  // on a cloud-hosted install and exfiltrate IAM creds through the
+  // fetch error path (CWE-918, CodeQL alert #33).
   let url: URL;
   try {
-    url = new URL(input.feedUrl);
-  } catch {
-    return { success: false, error: "Invalid URL" };
+    url = assertSafeOutboundUrl(input.feedUrl);
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Invalid URL",
+    };
   }
 
   // Check for duplicate
@@ -45,7 +54,7 @@ export async function addICalSubscription(input: {
   // Fetch and parse the feed
   let icsContent: string;
   try {
-    const res = await fetch(url.toString(), {
+    const res = await fetch(url.href, {
       signal: AbortSignal.timeout(15000),
       headers: { "User-Agent": "DPF-Calendar/1.0" },
     });

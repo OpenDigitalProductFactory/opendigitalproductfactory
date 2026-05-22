@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -456,9 +457,15 @@ export async function validateGitHubToken(
     if (resolvedAuthMethod === "fine-grained-pat") {
       const probeOwner = input.expectedOwner ?? UPSTREAM_OWNER_REPO_FALLBACK.split("/")[0];
       const probeRepo = UPSTREAM_OWNER_REPO_FALLBACK.split("/")[1];
-      const probeUrl = `https://api.github.com/repos/${probeOwner}/${probeRepo}`;
+      // BI-5E53A265 fix (CodeQL alert #34): assertSafeOutboundUrl pins
+      // the host so the user-supplied probeOwner can't redirect the
+      // probe anywhere else. Same defense pattern as github-fork.ts.
+      const probeUrl = assertSafeOutboundUrl(
+        `https://api.github.com/repos/${probeOwner}/${probeRepo}`,
+        { allowedHosts: ["api.github.com"] },
+      );
 
-      const repoResponse = await fetch(probeUrl, {
+      const repoResponse = await fetch(probeUrl.href, {
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
@@ -473,7 +480,7 @@ export async function validateGitHubToken(
           authMethod: resolvedAuthMethod,
           scope: scopesHeader ?? undefined,
           expiresAt,
-          error: `Token can't access the fork repo ${probeOwner}/${probeRepo} (status ${repoResponse.status}). Check that the fine-grained PAT grants Contents: read/write on that repository.`,
+          error: `Token can't access the fork repo ${String(probeOwner)}/${String(probeRepo)} (status ${repoResponse.status}). Check that the fine-grained PAT grants Contents: read/write on that repository.`,
         };
       }
     }
