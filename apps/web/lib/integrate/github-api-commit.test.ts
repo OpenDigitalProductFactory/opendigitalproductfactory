@@ -234,6 +234,36 @@ describe("createBranchAndPR head/base split", () => {
     expect(calls.find((c) => c.method === "POST" && c.url === `${headRepoBase}/git/refs`), "ref POST to HEAD").toBeDefined();
   });
 
+  it("uses the DCO sign-off identity as the GitHub commit author and committer", async () => {
+    const { calls } = setupFetchMock();
+
+    await createBranchAndPR({
+      headOwner: "upstream-org",
+      headRepo: "upstream-repo",
+      baseOwner: "upstream-org",
+      baseRepo: "upstream-repo",
+      baseBranch: "main",
+      branchName: "feat/tiny",
+      commitMessage: SIGNED_COMMIT_MESSAGE,
+      diff: TINY_DIFF,
+      prTitle: "feat: tiny",
+      prBody: "body",
+      labels: [],
+      token: "ghp_test",
+    });
+
+    const commitPost = calls.find((c) => c.method === "POST" && c.url.endsWith("/git/commits"));
+    expect(commitPost, "commit POST must happen").toBeDefined();
+    expect(commitPost!.body!.author).toEqual({
+      name: "dpf-agent-a1b2c3d4",
+      email: "agent-a1b2c3d4@hive.dpf",
+    });
+    expect(commitPost!.body!.committer).toEqual({
+      name: "dpf-agent-a1b2c3d4",
+      email: "agent-a1b2c3d4@hive.dpf",
+    });
+  });
+
   it("POSTs labels to the BASE repo's issue (not the HEAD repo's)", async () => {
     const { calls } = setupFetchMock();
 
