@@ -75,6 +75,25 @@ describe("writeAdapterTelemetry", () => {
     );
   });
 
+  it("persists agentMessageId so the badge/cost-rollup join key reaches the row", async () => {
+    // Regression for PR #964 follow-up: the assistant-turn badge joins
+    // AdapterRunTelemetry → AgentMessage on agentMessageId. If the writer
+    // drops the field, every turn degrades to provider-name-only.
+    await writeAdapterTelemetry({
+      adapterKind: "claude-code-cli",
+      adapterVersion: "claude-code/1.2.3",
+      providerId: "anthropic-sub",
+      modelId: "claude-opus-4-7",
+      executionMode: "single",
+      startedAt: new Date(),
+      status: "success",
+      agentMessageId: "msg_abc123",
+    });
+    expect(writeOverride).toHaveBeenCalledWith(
+      expect.objectContaining({ agentMessageId: "msg_abc123" }),
+    );
+  });
+
   it("omits optional fields when undefined (no nulls forced)", async () => {
     await writeAdapterTelemetry({
       adapterKind: "codex-cli",

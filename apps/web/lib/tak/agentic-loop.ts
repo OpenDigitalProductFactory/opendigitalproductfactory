@@ -745,6 +745,15 @@ export async function runAgenticLoop(params: {
    * by a specific skill invocation.
    */
   activeSkillId?: string | null;
+  /**
+   * Pre-allocated AgentMessage id for the assistant turn this loop is
+   * producing. Threaded down to AdapterRunTelemetry so the badge/cost-rollup
+   * join (telemetry.agentMessageId → AgentMessage.id) succeeds even though
+   * the AgentMessage row is persisted by the caller (agent-coworker) only
+   * after the loop returns. When omitted, telemetry rows are written without
+   * the join key and the UI badge degrades to provider-name-only.
+   */
+  agentMessageId?: string | null;
 }): Promise<AgenticResult> {
   const {
     chatHistory,
@@ -764,6 +773,7 @@ export async function runAgenticLoop(params: {
     taskRunId,
     apiTokenId,
     activeSkillId,
+    agentMessageId,
   } = params;
 
   const userContext = await resolveUserContext(userId);
@@ -798,6 +808,7 @@ export async function runAgenticLoop(params: {
     minimumCapabilities,
     agentMinimumContextTokens,
     agentId,
+    ...(agentMessageId ? { agentMessageId } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
