@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Clock3, RefreshCw, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useState, useTransition } from "react";
 import { requestBuildBomGeneration } from "@/lib/actions/assurance";
 import type { BomSummary } from "@/lib/assurance/bom-read";
@@ -15,9 +15,28 @@ function formatGeneratedAt(value: Date | string | null | undefined): string {
 }
 
 function statusLabel(summary: BomSummary): string {
+  if (summary.state === "missing") return "No BOM generated";
+  if (summary.findings.blocking > 0) return "Assurance blocked";
+  if (summary.scanner.state === "needs-evaluation") return "Scanner not approved";
   if (summary.state === "current") return "BOM current";
   if (summary.state === "stale") return "BOM stale";
   return "No BOM generated";
+}
+
+function statusTone(summary: BomSummary): string {
+  if (summary.findings.blocking > 0) return "text-[var(--dpf-error)]";
+  if (summary.scanner.state === "needs-evaluation") return "text-[var(--dpf-warning)]";
+  if (summary.state === "current") return "text-[var(--dpf-success)]";
+  if (summary.state === "stale") return "text-[var(--dpf-warning)]";
+  return "text-[var(--dpf-muted)]";
+}
+
+function scannerDetail(summary: BomSummary): string {
+  if (summary.scanner.state === "ready") {
+    return summary.scanner.scannerNames.join(", ");
+  }
+
+  return "No approved vulnerability scanner";
 }
 
 export function BuildAssuranceGateCard({
@@ -30,13 +49,16 @@ export function BuildAssuranceGateCard({
   const [pending, startTransition] = useTransition();
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const hasBom = summary.state !== "missing" && summary.document;
-  const StatusIcon = hasBom ? ShieldCheck : TriangleAlert;
-  const statusColor = summary.state === "current"
-    ? "text-[var(--dpf-success)]"
-    : summary.state === "stale"
-      ? "text-[var(--dpf-warning)]"
-      : "text-[var(--dpf-muted)]";
+  const StatusIcon = summary.findings.blocking > 0
+    ? ShieldAlert
+    : hasBom && summary.scanner.state === "ready"
+      ? ShieldCheck
+      : TriangleAlert;
+  const statusColor = statusTone(summary);
   const modelLabel = `${summary.counts.models} AI model${summary.counts.models === 1 ? "" : "s"}`;
+  const findingLabel = summary.findings.blocking > 0
+    ? `${summary.findings.blocking} blocking`
+    : `${summary.findings.total} active`;
   const buttonLabel = pending ? "Queueing" : requestState === "queued" ? "Queued" : "Generate BOM";
 
   return (
@@ -70,18 +92,25 @@ export function BuildAssuranceGateCard({
         </button>
       </div>
 
-      <dl className="mt-3 grid min-h-14 grid-cols-3 divide-x divide-[var(--dpf-border)] border-t border-[var(--dpf-border)] pt-3 text-xs">
-        <div className="min-w-0 pr-3">
+      <dl className="mt-3 grid min-h-20 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--dpf-border)] pt-3 text-xs">
+        <div className="min-w-0">
           <dt className="text-[var(--dpf-muted)]">Components</dt>
           <dd className="mt-1 truncate font-semibold text-[var(--dpf-text)]">
             {summary.counts.components} components
           </dd>
         </div>
-        <div className="min-w-0 px-3">
+        <div className="min-w-0">
           <dt className="text-[var(--dpf-muted)]">Models</dt>
           <dd className="mt-1 truncate font-semibold text-[var(--dpf-text)]">{modelLabel}</dd>
         </div>
-        <div className="min-w-0 pl-3">
+        <div className="min-w-0">
+          <dt className="flex items-center gap-1 text-[var(--dpf-muted)]">
+            <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+            Findings
+          </dt>
+          <dd className="mt-1 truncate font-semibold text-[var(--dpf-text)]">{findingLabel}</dd>
+        </div>
+        <div className="min-w-0">
           <dt className="flex items-center gap-1 text-[var(--dpf-muted)]">
             <Clock3 className="h-3 w-3" aria-hidden="true" />
             Generated
@@ -91,6 +120,10 @@ export function BuildAssuranceGateCard({
           </dd>
         </div>
       </dl>
+
+      <p className="mt-3 truncate border-t border-[var(--dpf-border)] pt-3 text-xs text-[var(--dpf-muted)]" title={scannerDetail(summary)}>
+        {scannerDetail(summary)}
+      </p>
 
       {requestState === "failed" && (
         <p className="mt-2 text-xs text-[var(--dpf-error)]" role="status">

@@ -113,11 +113,18 @@ const ROLE_PRIORITY: Record<SpecialistRole, number> = {
  * 4. A QA phase is always appended at the end
  */
 export function buildDependencyGraph(
-  files: PlanFileEntry[],
+  files: PlanFileEntry[] | null | undefined,
   tasks: PlanTask[],
 ): ExecutionPhase[] {
+  // Tolerate missing fileStructure — the BuildPlanDoc type says required,
+  // but the Prisma JSON column does not enforce shape and some legacy /
+  // partially-written plans store only `tasks`. Without this guard the
+  // client-side process graph crashes the entire /build page when a user
+  // selects a build whose stored buildPlan lacks `fileStructure`.
+  const safeFiles = Array.isArray(files) ? files : [];
+
   // Assign specialists to tasks
-  const assigned = tasks.map((task, i) => assignSpecialist(task, i, files));
+  const assigned = tasks.map((task, i) => assignSpecialist(task, i, safeFiles));
 
   // Group by priority level
   const byPriority = new Map<number, AssignedTask[]>();

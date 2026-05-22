@@ -75,7 +75,16 @@ export async function parseDocx(buffer: Buffer): Promise<ParsedFileContent> {
   const sections: { heading: string; text: string }[] = [];
   let match;
   while ((match = headingRe.exec(htmlResult.value)) !== null && sections.length < MAX_SECTIONS) {
-    sections.push({ heading: match[1]!.replace(/<[^>]*>/g, ""), text: "" });
+    // CodeQL #59 (js/incomplete-multi-character-sanitization): single-pass
+    // tag strip leaves nested tag fragments like `<a<script>` partially
+    // intact. Iterate until no more tag-like patterns remain.
+    let heading = match[1]!;
+    let prev = "";
+    while (heading !== prev) {
+      prev = heading;
+      heading = heading.replace(/<[^>]*>/g, "");
+    }
+    sections.push({ heading, text: "" });
   }
   const base: ParsedFileContent = { type: "document", summary: `${sections.length} section${sections.length !== 1 ? "s" : ""}, ${result.value.length} characters`, fullText: truncate(result.value, MAX_TEXT_LEN) };
   if (sections.length > 0) base.sections = sections;

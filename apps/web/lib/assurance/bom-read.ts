@@ -1,3 +1,15 @@
+import {
+  emptyFindingSummary,
+  getActiveFindingSummaryForBuild,
+  getActiveFindingSummaryForProduct,
+  type AssuranceFindingSummary,
+} from "./finding-read";
+import {
+  getAssuranceScannerReadiness,
+  noApprovedScannerReadiness,
+  type AssuranceScannerReadiness,
+} from "./scanner-catalog";
+
 export interface BomSummary {
   state: "missing" | "current" | "stale";
   document: null | {
@@ -11,6 +23,8 @@ export interface BomSummary {
     components: number;
     models: number;
   };
+  findings: AssuranceFindingSummary;
+  scanner: AssuranceScannerReadiness;
 }
 
 export interface ProductSupplyChainComponentRow {
@@ -29,6 +43,8 @@ export interface ProductSupplyChainBomRows {
     componentCount: number;
   };
   components: ProductSupplyChainComponentRow[];
+  findingSummary: AssuranceFindingSummary;
+  scanner: AssuranceScannerReadiness;
 }
 
 type BomSummaryRow = {
@@ -55,12 +71,32 @@ type BomReadDb = {
   bomDocument: {
     findFirst(args: unknown): Promise<null | BomSummaryRow>;
   };
+  assuranceFinding?: {
+    findMany(args: unknown): Promise<Array<{
+      policySeverity: string;
+      releaseImpact: string;
+      status: string;
+      findingKind: string;
+    }>>;
+  };
+  toolEvaluation?: {
+    findMany(args: unknown): Promise<Array<{
+      toolName: string;
+      toolType?: string | null;
+      status: string;
+      conditions?: unknown;
+      verdict?: unknown;
+      approvedAt?: Date | string | null;
+    }>>;
+  };
 };
 
 type ProductBomReadDb = {
   bomDocument: {
     findFirst(args: unknown): Promise<null | ProductBomRows>;
   };
+  assuranceFinding?: BomReadDb["assuranceFinding"];
+  toolEvaluation?: BomReadDb["toolEvaluation"];
 };
 
 export function missingBomSummary(): BomSummary {
@@ -68,11 +104,23 @@ export function missingBomSummary(): BomSummary {
     state: "missing",
     document: null,
     counts: { components: 0, models: 0 },
+    findings: emptyFindingSummary(),
+    scanner: noApprovedScannerReadiness(),
   };
 }
 
-function summarizeBomDocument(document: BomSummaryRow | null): BomSummary {
-  if (!document) return missingBomSummary();
+function summarizeBomDocument(
+  document: BomSummaryRow | null,
+  findings: AssuranceFindingSummary,
+  scanner: AssuranceScannerReadiness,
+): BomSummary {
+  if (!document) {
+    return {
+      ...missingBomSummary(),
+      findings,
+      scanner,
+    };
+  }
 
   const modelCount = (document.occurrences ?? []).filter((entry) => (
     entry.component?.componentType === "model"
@@ -91,6 +139,8 @@ function summarizeBomDocument(document: BomSummaryRow | null): BomSummary {
       components: document.componentCount,
       models: modelCount,
     },
+    findings,
+    scanner,
   };
 }
 
@@ -118,26 +168,34 @@ export async function getLatestBomSummaryForBuild(
   db: BomReadDb,
   buildId: string,
 ): Promise<BomSummary> {
-  const document = await db.bomDocument.findFirst({
-    where: { buildId },
-    orderBy: { generatedAt: "desc" },
-    select: latestBomSummarySelect(),
-  });
+  const [document, findings, scanner] = await Promise.all([
+    db.bomDocument.findFirst({
+      where: { buildId },
+      orderBy: { generatedAt: "desc" },
+      select: latestBomSummarySelect(),
+    }),
+    getActiveFindingSummaryForBuild(db, buildId),
+    getAssuranceScannerReadiness(db),
+  ]);
 
-  return summarizeBomDocument(document);
+  return summarizeBomDocument(document, findings, scanner);
 }
 
 export async function getLatestBomSummaryForProduct(
   db: BomReadDb,
   digitalProductId: string,
 ): Promise<BomSummary> {
-  const document = await db.bomDocument.findFirst({
-    where: { digitalProductId },
-    orderBy: { generatedAt: "desc" },
-    select: latestBomSummarySelect(),
-  });
+  const [document, findings, scanner] = await Promise.all([
+    db.bomDocument.findFirst({
+      where: { digitalProductId },
+      orderBy: { generatedAt: "desc" },
+      select: latestBomSummarySelect(),
+    }),
+    getActiveFindingSummaryForProduct(db, digitalProductId),
+    getAssuranceScannerReadiness(db),
+  ]);
 
-  return summarizeBomDocument(document);
+  return summarizeBomDocument(document, findings, scanner);
 }
 
 export async function getLatestBomComponentsForProduct(
@@ -145,33 +203,37 @@ export async function getLatestBomComponentsForProduct(
   digitalProductId: string,
   limit = 200,
 ): Promise<ProductSupplyChainBomRows> {
-  const document = await db.bomDocument.findFirst({
-    where: { digitalProductId },
-    orderBy: { generatedAt: "desc" },
-    select: {
-      documentId: true,
-      generatedAt: true,
-      digest: true,
-      componentCount: true,
-      occurrences: {
-        select: {
-          component: {
-            select: {
-              name: true,
-              version: true,
-              componentType: true,
-              ecosystem: true,
-              packageUrl: true,
+  const [document, findingSummary, scanner] = await Promise.all([
+    db.bomDocument.findFirst({
+      where: { digitalProductId },
+      orderBy: { generatedAt: "desc" },
+      select: {
+        documentId: true,
+        generatedAt: true,
+        digest: true,
+        componentCount: true,
+        occurrences: {
+          select: {
+            component: {
+              select: {
+                name: true,
+                version: true,
+                componentType: true,
+                ecosystem: true,
+                packageUrl: true,
+              },
             },
           },
+          take: limit,
         },
-        take: limit,
       },
-    },
-  });
+    }),
+    getActiveFindingSummaryForProduct(db, digitalProductId),
+    getAssuranceScannerReadiness(db),
+  ]);
 
   if (!document) {
-    return { latestBom: null, components: [] };
+    return { latestBom: null, components: [], findingSummary, scanner };
   }
 
   return {
@@ -182,5 +244,7 @@ export async function getLatestBomComponentsForProduct(
       componentCount: document.componentCount,
     },
     components: (document.occurrences ?? []).map((occurrence) => occurrence.component),
+    findingSummary,
+    scanner,
   };
 }

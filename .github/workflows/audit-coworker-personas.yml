@@ -13,6 +13,11 @@ on:
   push:
     branches: [main]
 
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only audit; needs no write surface.
+permissions:
+  contents: read
+
 concurrency:
   group: audit-coworker-personas-${{ github.ref }}
   cancel-in-progress: true

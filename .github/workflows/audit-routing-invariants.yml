@@ -1,5 +1,9 @@
 name: Routing Invariants Audit
 
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [main]

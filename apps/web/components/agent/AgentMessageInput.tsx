@@ -158,7 +158,13 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
   const overLimit = value.trim().length > MAX_MESSAGE_LENGTH;
 
   return (
-    <div style={{ borderTop: "1px solid var(--dpf-border)" }}>
+    <div
+      style={{
+        borderTop: "1px solid var(--dpf-border)",
+        minHeight: 0,
+        overflowY: showQuestionContext ? "auto" : "visible",
+      }}
+    >
       {/*
         Voice Slice 2 follow-up: surface voice errors INLINE, not just in the
         button tooltip. Operators were clicking the mic, getting silent
@@ -342,6 +348,7 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
       )}
       <div style={{
         display: "flex",
+        flexWrap: "wrap",
         gap: 6,
         padding: "10px 12px",
         alignItems: "flex-end",
@@ -355,7 +362,8 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           placeholder={disabled ? "Sending..." : busy ? "Agent is working... type your next message" : "Ask your co-worker..."}
           rows={1}
           style={{
-            flex: 1,
+            flex: "1 1 180px",
+            minWidth: 0,
             background: "color-mix(in srgb, var(--dpf-bg) 80%, transparent)",
             border: `1px solid ${overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
             borderRadius: 6,

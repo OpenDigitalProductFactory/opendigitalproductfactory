@@ -31,11 +31,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head with full history
+        # CodeQL #2 (actions/untrusted-checkout/high): pull_request_target
+        # + checking out PR head + persist-credentials:true is the flagged
+        # pattern. We don't run any PR code in this workflow (only git log,
+        # rebase, push) but the safe pattern is to not persist the token
+        # into git config and instead pass it explicitly on the push step.
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Skip if all commits already signed
         id: check
@@ -75,5 +80,12 @@ jobs:
         if: steps.check.outputs.skip == 'false'
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # Pass the token explicitly only at push time. With
+          # persist-credentials:false above, this token is never written
+          # to the git config of the working tree — so no PR code (even
+          # if executed by accident) can read it from disk.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push --force-with-lease origin "HEAD:${HEAD_REF}"
+          git push --force-with-lease \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${HEAD_REF}"

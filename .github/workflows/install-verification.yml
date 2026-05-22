@@ -4,17 +4,21 @@ name: Install Verification (E2E)
 # the full compose stack on ubuntu-latest, polls /api/health, captures
 # the doctor bundle, then tears down with uninstall-dpf.sh --purge.
 #
-# This is the gate that converts "we believe install-dpf.sh works" into
-# "install-dpf.sh was observed to reach /api/health=200 as of commit X".
+# This workflow is the MANUAL / ON-DEMAND surface for installer
+# verification. The same body also runs automatically as the final
+# `verify` job of .github/workflows/publish-image.yml on every release-
+# tag publish, so a fresh tag is always exercised end-to-end without
+# the workflow_run cache-poisoning pattern (CodeQL
+# actions/cache-poisoning/poisonable-step) we'd hit if we chained
+# across workflows.
 #
 # Triggers:
-#   - workflow_dispatch     Manual runs (e.g. before cutting a release).
-#   - push to tags v*       Automatic post-publish verification when a
-#                           release tag is pushed; the publish-image
-#                           workflow has already built multi-arch GHCR
-#                           images by the time this runs.
+#   - workflow_dispatch     Manual runs (e.g. spot-checking dev mode,
+#                           re-running release verification, or
+#                           validating an installer-only change without
+#                           cutting a release).
 #
-# Intentionally NOT triggered on every PR:
+# Intentionally NOT triggered on every PR or tag:
 #   The full local image build + multi-service compose-up takes 15-25
 #   minutes per run. The path-filtered release-gates workflow (dry-run +
 #   shellcheck) covers per-PR validation; this gate is reserved for
@@ -28,8 +32,6 @@ on:
         type: choice
         options: [dev, release]
         default: dev
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: read
@@ -40,7 +42,7 @@ concurrency:
 
 jobs:
   linux-e2e-install:
-    name: Linux E2E Install (ubuntu-latest, ${{ github.event.inputs.mode || 'release' }})
+    name: Linux E2E Install (ubuntu-latest, ${{ github.event.inputs.mode || 'dev' }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -85,7 +87,7 @@ jobs:
         # repo-write users so the practical attack surface is small, but
         # the pattern is wrong and the audit gate enforces it uniformly.
         env:
-          INSTALL_MODE: ${{ github.event.inputs.mode || 'release' }}
+          INSTALL_MODE: ${{ github.event.inputs.mode || 'dev' }}
         run: bash install-dpf.sh --headless "--${INSTALL_MODE}" --no-autostart
 
       - name: Verify /api/health response shape
@@ -116,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: doctor-bundle-${{ github.event.inputs.mode || 'release' }}-${{ github.run_id }}
+          name: doctor-bundle-${{ github.event.inputs.mode || 'dev' }}-${{ github.run_id }}
           path: ~/.dpf/doctor-*.tar.gz
           if-no-files-found: warn
           retention-days: 14

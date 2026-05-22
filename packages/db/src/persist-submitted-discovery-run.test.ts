@@ -62,13 +62,15 @@ beforeEach(() => {
 });
 
 describe("persistSubmittedDiscoveryRun", () => {
-  it("threads edgeNodeId through to persistBootstrapDiscoveryRun's runMeta", async () => {
+  it("threads edgeNodeId and customer scope through to persistBootstrapDiscoveryRun's runMeta", async () => {
     persistMock.mockResolvedValueOnce(summary);
 
     const result = await persistSubmittedDiscoveryRun(fakeDb, {
       edgeNodeId: "edgenode_cuid_42",
       nodeId: "edge_a1b2c3",
       runKey: "run_idempotent_42",
+      customerAccountId: "cust_acme",
+      customerSiteId: "site_hq",
       submittedOutput: sampleOutput,
     });
 
@@ -92,6 +94,8 @@ describe("persistSubmittedDiscoveryRun", () => {
       trigger: "edge_node",
       status: "completed",
       edgeNodeId: "edgenode_cuid_42",
+      customerAccountId: "cust_acme",
+      customerSiteId: "site_hq",
     });
   });
 

@@ -56,8 +56,15 @@ const PRIVATE_HOST_PATTERNS = [
 
 function extractTextExcerpt(html: string): string | null {
   const stripped = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    // CodeQL #56-#58 (js/bad-tag-filter): `</script>` (no spaces) was
+    // too narrow — browsers accept `</script >`, `</script\n>`, etc.
+    // Match a closing tag with optional whitespace before the `>`.
+    // CodeQL #56-#58 (js/bad-tag-filter): browsers accept any chars
+    // between `</script` and `>` (including whitespace, attributes,
+    // newlines). Match the full browser-compatible form so HTML
+    // can't sneak script content past the strip.
+    .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -290,8 +297,15 @@ function extractContactEmails(html: string): string[] {
 
   // 2. Visible text email patterns (strip tags first)
   const stripped = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    // CodeQL #56-#58 (js/bad-tag-filter): `</script>` (no spaces) was
+    // too narrow — browsers accept `</script >`, `</script\n>`, etc.
+    // Match a closing tag with optional whitespace before the `>`.
+    // CodeQL #56-#58 (js/bad-tag-filter): browsers accept any chars
+    // between `</script` and `>` (including whitespace, attributes,
+    // newlines). Match the full browser-compatible form so HTML
+    // can't sneak script content past the strip.
+    .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
     .replace(/<[^>]+>/g, " ");
   const textMatches = stripped.matchAll(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Z]{2,}\b/gi);
   for (const m of textMatches) {
@@ -327,8 +341,15 @@ function extractContactPhones(html: string): string[] {
 
   // 2. Visible text phone patterns (reuse PHONE_PATTERNS for extraction)
   const stripped = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    // CodeQL #56-#58 (js/bad-tag-filter): `</script>` (no spaces) was
+    // too narrow — browsers accept `</script >`, `</script\n>`, etc.
+    // Match a closing tag with optional whitespace before the `>`.
+    // CodeQL #56-#58 (js/bad-tag-filter): browsers accept any chars
+    // between `</script` and `>` (including whitespace, attributes,
+    // newlines). Match the full browser-compatible form so HTML
+    // can't sneak script content past the strip.
+    .replace(/<script[\s\S]*?<\/script[^>]*>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style[^>]*>/gi, " ")
     .replace(/<[^>]+>/g, " ");
   for (const { pattern } of PHONE_PATTERNS) {
     const match = stripped.match(pattern);

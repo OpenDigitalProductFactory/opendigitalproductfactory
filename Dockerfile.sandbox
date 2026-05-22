@@ -1,6 +1,13 @@
 FROM node:24-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apk add --no-cache git postgresql16-client curl bubblewrap
+# bash is required by Claude Code CLI ("Claude CLI requires a POSIX shell
+# environment"). The Alpine base image only ships /bin/sh (BusyBox), so
+# every QA-phase agent dispatch (vitest, tsc) was failing at "No suitable
+# shell found" and silently degrading to static-analysis-only verification.
+# That broke the BS verification gate for every build dispatched into this
+# sandbox. SHELL is also exported so child processes inherit a known shell.
+RUN apk add --no-cache git postgresql16-client curl bubblewrap bash
+ENV SHELL=/bin/bash
 # Codex CLI: OpenAI's coding agent (like Claude Code but for OpenAI models).
 # Used by the Build Studio orchestrator to execute build tasks autonomously.
 RUN npm install -g @openai/codex

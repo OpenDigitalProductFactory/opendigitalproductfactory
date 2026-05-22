@@ -264,7 +264,7 @@ WORKFLOW FOR BUG FIXES AND MODIFICATIONS TO EXISTING FILES:
 1. search_sandbox to find the affected code
 2. read_sandbox_file to see the EXACT current content
 3. edit_sandbox_file to make the SURGICAL change (old_text → new_text)
-4. run_sandbox_command with "pnpm --filter web build" to verify the fix compiles
+4. run_sandbox_command with "NODE_ENV=production pnpm --filter web build" to verify the fix compiles (the sandbox shell defaults to NODE_ENV=development; the production build gate forces NODE_ENV=production)
 5. run_sandbox_tests to verify nothing broke
 
 WORKFLOW FOR NEW FEATURES:

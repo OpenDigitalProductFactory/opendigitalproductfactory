@@ -69,7 +69,11 @@ function detectDarwin(): HostProfile {
     // Unified memory: GPU effectively shares RAM. Report the GPU name
     // for diagnostic value but `vramGB: null` because the concept
     // doesn't apply.
-    gpu = { name: `${cpuName.replace(/^Apple /, "Apple ")} GPU (unified)`, vramGB: null };
+    // CodeQL #75 (js/identity-replacement): the previous replace mapped
+    // "Apple " → "Apple " (no-op). The intent was to keep the "Apple"
+    // prefix while annotating it as a GPU. Direct interpolation is
+    // simpler and correct.
+    gpu = { name: `${cpuName} GPU (unified)`, vramGB: null };
   } else {
     // Intel Mac (out of scope per the installer-parity roadmap, but
     // the script still produces a sensible profile in case someone

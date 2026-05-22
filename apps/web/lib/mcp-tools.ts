@@ -10775,6 +10775,19 @@ export async function executeTool(
           error: "Missing filePath",
         };
       }
+      // CodeQL #62 (js/path-injection): filePath is MCP-supplied (user-
+      // controlled). Gate to the allowed source roots before fs is touched.
+      const { assertAllowedIngestPath } = await import("@/lib/wiki/ingest");
+      let safeFilePath: string;
+      try {
+        safeFilePath = assertAllowedIngestPath(filePath);
+      } catch (err) {
+        return {
+          success: false,
+          message: err instanceof Error ? err.message : "filePath rejected",
+          error: "path_not_allowed",
+        };
+      }
       const mode = typeof params["mode"] === "string" && params["mode"] === "commit" ? "commit" : "propose";
       const sourceKey = typeof params["sourceKey"] === "string" ? params["sourceKey"] : undefined;
       const sourceType = typeof params["sourceType"] === "string" ? params["sourceType"] : undefined;
@@ -10830,7 +10843,7 @@ export async function executeTool(
       // pipeline rejects unknown strings, so we pass through whatever the
       // caller gave us and let the source-layer surface the error.
       const sourceInput = {
-        filePath,
+        filePath: safeFilePath,
         ...(sourceKey ? { sourceKey } : {}),
         ...(sourceType
           ? {
@@ -12577,7 +12590,16 @@ export async function executeTool(
       const sql = String(params.sql ?? "").trim();
       if (!sql) return { success: false, error: "sql is required.", message: "Provide a SQL query." };
       // Only allow SELECT (and WITH ... SELECT)
-      const normalized = sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+      // CodeQL #23 (js/polynomial-redos): bound the unbounded `.*` and
+      // `[\s\S]*?` runs so adversarial SQL with thousands of `-` or
+      // `/*` chars can't trigger polynomial backtracking. SQL queries
+      // in this tool are bounded by the admin tool surface; 100k chars
+      // is well above any legitimate query.
+      const normalized = sql
+        .slice(0, 100_000)
+        .replace(/--[^\n]{0,10000}/gm, "")
+        .replace(/\/\*[\s\S]{0,10000}?\*\//g, "")
+        .trim();
       if (!/^(SELECT|WITH)\b/i.test(normalized)) {
         await logAdminActivity(userId, "admin_query_db", { sql }, "blocked", 1, "Only SELECT queries permitted");
         return { success: false, error: "Only SELECT queries are permitted.", message: "This tool is read-only. Use SELECT statements only." };
@@ -12838,12 +12860,18 @@ export async function executeTool(
       if (parsed) {
         return executeMcpServerTool(parsed.serverSlug, parsed.toolName, params);
       }
-      return { success: false, error: "Unknown tool", message: `Tool ${toolName} not found` };
+      // CodeQL #52 (js/tainted-format-string): toolName is user-influenced.
+      // Use a constant message and put the raw value in error for diagnostics.
+      return { success: false, error: "Unknown tool", message: "Tool not found" };
     }
   }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[executeTool] Uncaught exception in tool "${toolName}":`, msg);
+    // CodeQL #52 (js/tainted-format-string): keep the format string constant
+    // so a `%s` inside an attacker-controlled toolName cannot consume the
+    // next argument. toolName + msg are passed as additional args; node's
+    // util.format only honours specifiers in the literal first arg.
+    console.error("[executeTool] Uncaught exception in tool %s: %s", toolName, msg);
     return { success: false, error: msg, message: `Tool ${toolName} failed: ${msg}` };
   }
 }
