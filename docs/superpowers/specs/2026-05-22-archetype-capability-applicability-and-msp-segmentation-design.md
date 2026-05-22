@@ -247,6 +247,8 @@ The first implementation should preserve compatibility with the current profile 
 
 No `version` field and no `profileType` discriminator. The presence of `axes`/`portfolios` is the discriminator; the legacy shape continues to be recognized by the absence of those keys. If a future incompatible change becomes necessary, add the version field then — not speculatively now.
 
+Survival rule for legacy callers: when `readActivationProfile` encounters a profile without `axes`/`portfolios`, the normalizer must populate sensible defaults for both (inferred from `modules`/`billingReadinessMode`/`customerGraph`/`estateSeparation`) before returning. Downstream consumers — including rules-engine evaluation, the §13 Capability Registry, and `getCapabilityActivation` — therefore never have to branch on "axes present" vs "axes absent". Legacy seed data ages out gradually; no flag-day cutover.
+
 ### 6.5 Operating-Model Axes
 
 Each archetype is classified along a small set of orthogonal axes. Capability applicability, default scope, and billing pattern are *derived* from these axis values, not declared per archetype. The value vocabularies are sourced from the **Products and Services Sold** sheet of the reference workbook so the platform classification stays aligned with how the business taxonomy team already thinks.
@@ -372,7 +374,7 @@ Required topology invariants:
    - `customer-site`: one `CustomerSite` under one `CustomerAccount`.
 3. Customer topology queries must require `customerAccountId`. `customerSiteId` is optional only when the operator intentionally wants all sites for one customer.
 4. IP address, MAC address, hostname, LLDP system name, controller device id, SSID, serial number, and adapter-specific observed keys must never be treated as globally unique across customers.
-5. Persisted inventory identity must include the topology scope. The raw observed key may remain `arp:192.168.1.1`, but the persisted `InventoryEntity.entityKey` for a customer estate must be scoped, for example:
+5. Persisted inventory identity must include the topology scope. The persisted `InventoryEntity.entityKey` is composed as `<scopeKey>:<entityType>:<naturalKey>`, where `scopeKey` is the discovery scope (per invariant 2), `entityType` is the canonical entity type (e.g. `host`, `gateway`), and `naturalKey` is the attribution-source-prefixed raw observed key (e.g. `arp:192.168.1.1`). The `arp:` / `dns:` / `lldp:` prefixes inside `naturalKey` identify the attribution source and are not part of the scope grammar; only the leading `customer:.../site:...` / `organization:internal` segment carries scope. Examples:
 
    ```text
    customer:<customerAccountId>:site:<customerSiteId>:host:arp:192.168.1.1

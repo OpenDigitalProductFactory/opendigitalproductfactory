@@ -30,20 +30,10 @@ export const AUTO_PROMOTE_THRESHOLD = 0.90;
  * fallback list now lives in `./discovery-promotion-policy` (LEGACY_PROMOTABLE_TYPES);
  * the value here is the historical export surface kept stable.
  */
-export const PROMOTABLE_TYPES = [
-  "host",
-  "runtime",
-  "container",
-  "database",
-  "monitoring_service",
-  "ai_service",
-  "application",
-  "subnet",
-  "gateway",
-  "network_interface",
-  "docker_host",
-  "router",
-];
+// Re-exported from the policy module — source of truth lives there. Kept
+// as a separate export here because external callers reference this name.
+// Tightened in BI-79307D22 to drop runtime/infra types.
+export { LEGACY_PROMOTABLE_TYPES as PROMOTABLE_TYPES } from "./discovery-promotion-policy";
 
 export type PromotionSummary = {
   promoted: number;
@@ -116,6 +106,8 @@ function skipSummaryFor(reason: QualityIssueType, entityKey: string, entityType:
       return `Entity ${entityKey} taxonomy root does not map to a known portfolio`;
     case "type_not_promotable":
       return `Entity type ${entityType} is not promotable under current taxonomy policy (${entityKey})`;
+    case "name_not_promotable":
+      return `Entity ${entityKey} name shape looks like a runtime instance or device, not a product`;
     default:
       return `Entity ${entityKey} skipped: ${reason}`;
   }
@@ -167,6 +159,9 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
       const decision = resolvePromotionDecision(
         {
           entityType: entity.entityType,
+          // Pass through so the structural name-gate (BI-79307D22)
+          // can reject "dpf-redis-1"/"Docker GW …" runtime artifacts.
+          name: entity.name,
           attributionStatus: entity.attributionStatus,
           attributionConfidence: entity.attributionConfidence ?? 0,
           digitalProductId: entity.digitalProductId,

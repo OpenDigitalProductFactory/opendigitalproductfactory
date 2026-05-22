@@ -158,11 +158,13 @@ describe("promoteInventoryEntities", () => {
   });
 
   it("promotes network_client with governance.promotion + writes classifyAs into observationConfig", async () => {
+    // Name avoids the BI-79307D22 runtime-artifact gate (no trailing
+    // -N, no dpf- prefix, no IP, no "(WAN)").
     mockPrisma.inventoryEntity.findMany.mockResolvedValue([{
       id: "ent_nc2",
       entityKey: "network_client:2",
       entityType: "network_client",
-      name: "AP-1",
+      name: "Access Point Main",
       attributionStatus: "attributed",
       attributionConfidence: 0.98,
       taxonomyNodeId: "tn_ap",

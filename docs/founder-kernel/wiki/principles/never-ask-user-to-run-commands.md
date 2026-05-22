@@ -4,6 +4,7 @@ slug: never-ask-user-to-run-commands
 pageKind: principle
 tier: commandment
 appliesTo: [agentic-coworker, claude-code, agent]
+principleConsumerArchetype: ai-coworker-universal
 publicOnly: false
 status: published
 authoredAt: 2026-05-17

@@ -58,7 +58,10 @@ type DiscoverySyncTx = {
     }): Promise<{ id: string }>;
   };
   inventoryEntity: {
-    findMany(args: { select: { entityKey: true } }): Promise<Array<{ entityKey: string }>>;
+    findMany(args: {
+      where?: { scopeKey?: string };
+      select: { entityKey: true };
+    }): Promise<Array<{ entityKey: string }>>;
     upsert(args: {
       where: { entityKey: string };
       create: Record<string, unknown>;
@@ -66,7 +69,7 @@ type DiscoverySyncTx = {
       select: { id: true; entityKey: true };
     }): Promise<{ id: string; entityKey: string }>;
     updateMany(args: {
-      where: { entityKey: { in: string[] } };
+      where: { scopeKey?: string; entityKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -84,7 +87,10 @@ type DiscoverySyncTx = {
     }): Promise<unknown>;
   };
   inventoryRelationship: {
-    findMany(args: { select: { relationshipKey: true } }): Promise<Array<{ relationshipKey: string }>>;
+    findMany(args: {
+      where?: { scopeKey?: string };
+      select: { relationshipKey: true };
+    }): Promise<Array<{ relationshipKey: string }>>;
     upsert(args: {
       where: { relationshipKey: string };
       create: Record<string, unknown>;
@@ -92,7 +98,7 @@ type DiscoverySyncTx = {
       select: { id: true; relationshipKey: true };
     }): Promise<{ id: string; relationshipKey: string }>;
     updateMany(args: {
-      where: { relationshipKey: { in: string[] } };
+      where: { scopeKey?: string; relationshipKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -115,6 +121,22 @@ export type DiscoverySyncClient = {
 
 function countObjectKeys(value: Record<string, unknown> | undefined): number {
   return value ? Object.keys(value).length : 0;
+}
+
+function scopeFieldsFromRunMeta(runMeta: DiscoveryRunMeta): {
+  scopeKey: string;
+  customerAccountId: string | null;
+  customerSiteId: string | null;
+} {
+  const customerAccountId = runMeta.customerAccountId ?? null;
+  const customerSiteId = runMeta.customerSiteId ?? null;
+  const scopeKey = customerAccountId
+    ? customerSiteId
+      ? `customer:${customerAccountId}:site:${customerSiteId}`
+      : `customer:${customerAccountId}`
+    : "organization:internal";
+
+  return { scopeKey, customerAccountId, customerSiteId };
 }
 
 function dedupeDiscoveredItems(
@@ -185,12 +207,14 @@ export async function persistBootstrapDiscoveryRun(
       existing.push(software);
       softwareEvidenceByEntityKey.set(software.inventoryEntityKey, existing);
     }
+    const runScope = scopeFieldsFromRunMeta(runMeta);
+    const scopeWhere = { scopeKey: runScope.scopeKey };
     const existingEntityKeys = new Set(
-      (await tx.inventoryEntity.findMany({ select: { entityKey: true } }))
+      (await tx.inventoryEntity.findMany({ where: scopeWhere, select: { entityKey: true } }))
         .map((entity) => entity.entityKey),
     );
     const existingRelationshipKeys = new Set(
-      (await tx.inventoryRelationship.findMany({ select: { relationshipKey: true } }))
+      (await tx.inventoryRelationship.findMany({ where: scopeWhere, select: { relationshipKey: true } }))
         .map((relationship) => relationship.relationshipKey),
     );
     const existingIssueKeys = new Set(
@@ -278,6 +302,13 @@ export async function persistBootstrapDiscoveryRun(
             ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : undefined,
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : undefined,
           firstSeenAt: now,
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
@@ -308,6 +339,13 @@ export async function persistBootstrapDiscoveryRun(
             ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : { disconnect: true },
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : { disconnect: true },
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
         },
@@ -394,23 +432,23 @@ export async function persistBootstrapDiscoveryRun(
     const currentEntityKeys = new Set(
       normalized.inventoryEntities.map((entity) => entity.entityKey),
     );
-    // Source-scoped staleness: a unifi-only sweep MUST NOT mark
-    // dpf_bootstrap or edge_node relationships stale (they have their
-    // own refresh source and source-of-truth — that's how 196 of 257
-    // MEMBER_OF rows ended up "stale" while the underlying ARP cache was
-    // still active). The convention is that every key emitted by a
-    // collector starts with its sourceSlug followed by ":". We only
-    // consider for staleness keys that share that prefix; everything
-    // else stays untouched.
-    const sourcePrefix = `${runMeta.sourceSlug}:`;
-    const isOwnedBySource = (key: string) => key.startsWith(sourcePrefix);
+    // Stale detection: any entity in the current scope that wasn't observed
+    // in this run is marked stale. Scope-where (above) ensures cross-customer
+    // isolation. The key-prefix-based source filter that PR #1009 added here
+    // was a no-op in practice — entity keys are prefixed by entityType, not
+    // sourceSlug, so the filter excluded everything and stale detection never
+    // fired. Removed; the relationship-staleness block below keeps the
+    // source-prefix filter because *relationship* keys DO start with the
+    // sourceSlug (e.g. `dpf_bootstrap:MEMBER_OF:...`, `unifi:CONNECTS_TO:...`),
+    // which is where the original 196-stale-MEMBER_OF bug actually lived.
+    // Follow-up: proper entity source attribution via column lookup on
+    // `lastConfirmedRunId.sourceSlug` instead of key parsing.
     const staleEntityKeys = [...existingEntityKeys]
-      .filter(isOwnedBySource)
       .filter((entityKey) => !currentEntityKeys.has(entityKey));
     const staleEntities = staleEntityKeys.length === 0
       ? 0
       : (await tx.inventoryEntity.updateMany({
-          where: { entityKey: { in: staleEntityKeys } },
+          where: { ...scopeWhere, entityKey: { in: staleEntityKeys } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 
@@ -444,6 +482,13 @@ export async function persistBootstrapDiscoveryRun(
           status: "active",
           confidence: relationship.confidence ?? null,
           properties: relationship.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : undefined,
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : undefined,
           firstSeenAt: now,
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
@@ -455,6 +500,13 @@ export async function persistBootstrapDiscoveryRun(
           status: "active",
           confidence: relationship.confidence ?? null,
           properties: relationship.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : { disconnect: true },
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : { disconnect: true },
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
           fromEntity: { connect: { id: fromEntityId } },
@@ -486,15 +538,24 @@ export async function persistBootstrapDiscoveryRun(
     const currentRelationshipKeys = new Set(
       normalized.inventoryRelationships.map((relationship) => relationship.relationshipKey),
     );
-    // Same source-scoping as entities above — only the source that owns
-    // a relationship key gets to mark it stale.
+    // Source-scoped staleness for relationships: only the source that emits
+    // a relationship key gets to mark it stale. Verified against the live
+    // DB: every relationshipKey is prefixed by sourceSlug + ":" (e.g.
+    // `dpf_bootstrap:MEMBER_OF:...`, `unifi:CONNECTS_TO:...`,
+    // `edge_node:MEMBER_OF:...`). Without this filter, a unifi-only sweep
+    // marks dpf_bootstrap relationships stale and vice versa — the root
+    // cause of the 196 stale MEMBER_OF rows in the operator audit. The
+    // entity-staleness block above can't use the same trick because entity
+    // keys aren't source-prefixed.
+    const sourcePrefix = `${runMeta.sourceSlug}:`;
+    const isOwnedBySource = (key: string) => key.startsWith(sourcePrefix);
     const staleRelationshipKeys = [...existingRelationshipKeys]
       .filter(isOwnedBySource)
       .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
     const staleRelationships = staleRelationshipKeys.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
-          where: { relationshipKey: { in: staleRelationshipKeys } },
+          where: { ...scopeWhere, relationshipKey: { in: staleRelationshipKeys } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 

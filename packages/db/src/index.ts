@@ -95,6 +95,8 @@ export {
   getNeighbours,
   getLayeredDependencyStack,
   getNetworkTopologyAtLayer,
+  getNetworkTopologyAtLayerForScope,
+  type Neo4jTopologyScope,
   pruneStaleInfraCIs,
   type GraphNode,
   type GraphEdge,
@@ -102,6 +104,15 @@ export {
   type LayeredDependency,
   type PruneResult,
 } from "./neo4j-graph";
+export {
+  buildDiscoveryScopeKey,
+  buildScopedInventoryEntityKey,
+  buildScopedRelationshipKey,
+  resolveDiscoveryScopeFromIds,
+  scopeFieldsFromContext,
+  type DiscoveryScopeContext,
+  type DiscoveryScopeFields,
+} from "./discovery-scope";
 export {
   syncDigitalProduct,
   syncTaxonomyNode,

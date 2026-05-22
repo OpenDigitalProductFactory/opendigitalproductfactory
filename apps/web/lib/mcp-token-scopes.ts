@@ -42,6 +42,42 @@ export function defaultMcpTokenScopes(
 }
 
 // ---------------------------------------------------------------------------
+// Idle hygiene
+// ---------------------------------------------------------------------------
+//
+// Default stale threshold per idle-is-not-abandoned. A token unused for 7+
+// days is *suggested* stale in the UI — the operator still chooses whether
+// to revoke it. This default absorbs Mark's travel + weekly rate-limit
+// resets so paused work survives without triggering churn.
+//
+// Lives here (not in the "use server" actions file) because Next.js requires
+// every export from a server-action module to be an async function.
+export const MCP_TOKEN_DEFAULT_STALE_DAYS = 7;
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Derive idle-days from a lastUsedAt timestamp.
+ *
+ * - Returns `null` for tokens that have never been used (no lastUsedAt).
+ * - Returns `0` when last-used is at-or-after `now` (clock-skew safety —
+ *   never report a negative idle).
+ * - Floors fractional days so a 6.5-day-old token reads as 6 (not 7) and
+ *   does not prematurely cross the stale threshold.
+ *
+ * `now` is injectable so callers can hold the clock steady across a batch.
+ */
+export function deriveIdleDays(
+  lastUsedAt: Date | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  if (!lastUsedAt) return null;
+  const diff = now.getTime() - lastUsedAt.getTime();
+  if (diff < 0) return 0;
+  return Math.floor(diff / MS_PER_DAY);
+}
+
+// ---------------------------------------------------------------------------
 // Role-based token templates
 // ---------------------------------------------------------------------------
 //

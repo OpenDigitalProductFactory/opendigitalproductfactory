@@ -117,6 +117,14 @@ export interface AssuranceBomGenerateEvent {
   };
 }
 
+export interface AssuranceScanRunEvent {
+  name: "assurance/scan.run";
+  data: {
+    buildId: string;
+    requestedByUserId: string;
+  };
+}
+
 export interface PortalSelfUpgradeRequestedEvent {
   name: "portal/self-upgrade.requested";
   data: {
