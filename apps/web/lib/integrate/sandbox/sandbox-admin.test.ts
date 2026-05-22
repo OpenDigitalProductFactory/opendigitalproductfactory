@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   diagnoseSandboxReadiness,
+  normalizeSandboxPathForComparison,
   type SandboxAdminDb,
   type SandboxGitProbe,
 } from "./sandbox-admin";
@@ -79,6 +80,13 @@ function makeDb(args: {
 }
 
 describe("diagnoseSandboxReadiness", () => {
+  it("normalizes workspace paths with repeated trailing separators for safe comparison", () => {
+    expect(normalizeSandboxPathForComparison(" D:\\DPF\\.worktrees\\BI-123////\\\\ ")).toBe(
+      "d:/dpf/.worktrees/bi-123",
+    );
+    expect(normalizeSandboxPathForComparison("   ")).toBeNull();
+  });
+
   it("marks a build without sandbox metadata as not found and non-deployable", async () => {
     const snapshot = await diagnoseSandboxReadiness({
       buildId: "BI-123",

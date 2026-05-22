@@ -420,8 +420,8 @@ function checkComposeOwnership(args: {
   const expectedProject = args.runtimeTarget?.composeProjectName ?? null;
   const actualProject = args.container.composeProjectName;
   const projectMismatch = expectedProject && actualProject && expectedProject !== actualProject;
-  const expectedRoot = normalizePath(args.expectedWorkspaceRoot);
-  const actualRoot = normalizePath(args.container.composeWorkingDir);
+  const expectedRoot = normalizeSandboxPathForComparison(args.expectedWorkspaceRoot);
+  const actualRoot = normalizeSandboxPathForComparison(args.container.composeWorkingDir);
   const rootMismatch = expectedRoot && actualRoot && expectedRoot !== actualRoot;
 
   if (projectMismatch || rootMismatch) {
@@ -584,9 +584,18 @@ function booleanField(record: JsonRecord, key: string): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function normalizePath(value: string | null | undefined): string | null {
+export function normalizeSandboxPathForComparison(value: string | null | undefined): string | null {
   if (!value?.trim()) return null;
-  return value.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const trimmed = value.trim();
+  let end = trimmed.length;
+
+  while (end > 0) {
+    const code = trimmed.charCodeAt(end - 1);
+    if (code !== 47 && code !== 92) break;
+    end -= 1;
+  }
+
+  return trimmed.slice(0, end).split("\\").join("/").toLowerCase();
 }
 
 function shellQuote(value: string): string {
