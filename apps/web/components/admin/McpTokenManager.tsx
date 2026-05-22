@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Ban,
   CheckCircle2,
+  Clock,
   Copy,
   KeyRound,
   Plus,
@@ -14,6 +15,7 @@ import {
 import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
 
 import {
+  bulkRevokeMyMcpTokens,
   copyMyMcpToken,
   issueMyMcpToken,
   issueMyTemplateMcpToken,
@@ -28,6 +30,7 @@ import {
 } from "@/lib/actions/mcp-tokens";
 import {
   defaultMcpTokenScopes,
+  MCP_TOKEN_DEFAULT_STALE_DAYS,
   type McpTokenScopeTier,
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
@@ -46,10 +49,17 @@ type TokenRow = {
   scope: McpTokenScopeTier;
   scopes: string[];
   lastUsedAt: string | null;
+  // Derived server-side in listMyMcpTokens. Null when the token has never
+  // been used, when revoked, or when expired — see MCP_TOKEN_DEFAULT_STALE_DAYS.
+  idleDays: number | null;
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
 };
+
+// Alias the shared constant from mcp-token-scopes for use inside the JSX —
+// keeps the source of truth out of "use server" modules per Next.js rules.
+const STALE_THRESHOLD_DAYS = MCP_TOKEN_DEFAULT_STALE_DAYS;
 
 type Issued = {
   mode: "issued" | "rotated" | "copied";
@@ -126,6 +136,10 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
   const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
+
+  // Idle hygiene: filter to stale-only and multi-select for bulk revoke.
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const defaultScopes = useMemo(() => defaultMcpTokenScopes(scopes), [scopes]);
 
@@ -306,6 +320,59 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     });
   }
 
+  function isActive(token: TokenRow): boolean {
+    return token.revokedAt == null && !isExpired(token);
+  }
+
+  function isStale(token: TokenRow): boolean {
+    if (!isActive(token)) return false;
+    // Never-used tokens that are also older than the threshold count as
+    // stale — issued but never picked up by anything.
+    if (token.idleDays != null) return token.idleDays >= STALE_THRESHOLD_DAYS;
+    const createdAt = new Date(token.createdAt).getTime();
+    return Date.now() - createdAt >= STALE_THRESHOLD_DAYS * 86_400_000;
+  }
+
+  function toggleSelect(tokenId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tokenId)) next.delete(tokenId);
+      else next.add(tokenId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function bulkRevokeSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (!confirm(`Revoke ${ids.length} token${ids.length === 1 ? "" : "s"}? Clients using them will fail on their next MCP call.`)) {
+      return;
+    }
+    setNotice(null);
+    startTransition(async () => {
+      const result = await bulkRevokeMyMcpTokens({
+        tokenIds: ids,
+        reason: "bulk revoke from admin UI",
+      });
+      if (!result.ok) {
+        setNotice({ kind: "error", message: result.error });
+        return;
+      }
+      const parts = [`${result.revokedCount} revoked`];
+      if (result.failedCount > 0) parts.push(`${result.failedCount} failed`);
+      setNotice({
+        kind: result.failedCount > 0 ? "error" : "success",
+        message: parts.join(", ") + ".",
+      });
+      clearSelection();
+      refresh();
+    });
+  }
+
   function upgradeForCodeIntelligence(tokenId: string) {
     setNotice(null);
     setPendingTokenId(tokenId);
@@ -386,20 +453,24 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             No MCP tokens have been issued yet.
           </div>
         ) : (
-          <ul className="space-y-2">
-            {tokens.map((token) => (
-              <TokenListItem
-                key={token.id}
-                token={token}
-                pending={pending || pendingTokenId === token.id}
-                defaultScopes={defaultScopes}
-                onCopy={copyCurrentToken}
-                onRotate={rotateToken}
-                onRevoke={revoke}
-                onUpgrade={upgradeForCodeIntelligence}
-              />
-            ))}
-          </ul>
+          <TokenList
+            tokens={tokens}
+            pending={pending}
+            pendingTokenId={pendingTokenId}
+            defaultScopes={defaultScopes}
+            selectedIds={selectedIds}
+            staleOnly={staleOnly}
+            onCopy={copyCurrentToken}
+            onRotate={rotateToken}
+            onRevoke={revoke}
+            onUpgrade={upgradeForCodeIntelligence}
+            onToggleSelect={toggleSelect}
+            onToggleStaleOnly={() => setStaleOnly((v) => !v)}
+            onBulkRevoke={bulkRevokeSelected}
+            onClearSelection={clearSelection}
+            isActive={isActive}
+            isStale={isStale}
+          />
         )}
       </div>
 
@@ -433,10 +504,112 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   );
 }
 
+function TokenList(props: {
+  tokens: TokenRow[];
+  pending: boolean;
+  pendingTokenId: string | null;
+  defaultScopes: string[];
+  selectedIds: Set<string>;
+  staleOnly: boolean;
+  onCopy: (token: TokenRow) => void;
+  onRotate: (token: TokenRow) => void;
+  onRevoke: (tokenId: string) => void;
+  onUpgrade: (tokenId: string) => void;
+  onToggleSelect: (tokenId: string) => void;
+  onToggleStaleOnly: () => void;
+  onBulkRevoke: () => void;
+  onClearSelection: () => void;
+  isActive: (token: TokenRow) => boolean;
+  isStale: (token: TokenRow) => boolean;
+}) {
+  const staleCount = props.tokens.filter(props.isStale).length;
+  const visible = props.staleOnly
+    ? props.tokens.filter(props.isStale)
+    : props.tokens;
+  const selectedCount = props.selectedIds.size;
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)]">
+          <input
+            type="checkbox"
+            checked={props.staleOnly}
+            onChange={props.onToggleStaleOnly}
+            aria-label={`Show only tokens idle for at least ${STALE_THRESHOLD_DAYS} days`}
+          />
+          <Clock className="h-3.5 w-3.5 text-[var(--dpf-muted)]" aria-hidden="true" />
+          <span>
+            Show stale only
+            <span className="ml-1 text-xs text-[var(--dpf-muted)]">
+              (≥ {STALE_THRESHOLD_DAYS} days idle — {staleCount} of {props.tokens.length})
+            </span>
+          </span>
+        </label>
+        {selectedCount > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--dpf-muted)]">
+              {selectedCount} selected
+            </span>
+            <button
+              type="button"
+              onClick={props.onClearSelection}
+              disabled={props.pending}
+              className={buttonClass()}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={props.onBulkRevoke}
+              disabled={props.pending}
+              className={buttonClass("danger")}
+            >
+              <Ban className={iconClass()} aria-hidden="true" />
+              Revoke {selectedCount} selected
+            </button>
+          </div>
+        )}
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="rounded-md border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-5 text-sm text-[var(--dpf-muted)]">
+          {props.staleOnly
+            ? `No tokens are idle for ${STALE_THRESHOLD_DAYS}+ days. Uncheck "Show stale only" to see all tokens.`
+            : "No MCP tokens have been issued yet."}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {visible.map((token) => (
+            <TokenListItem
+              key={token.id}
+              token={token}
+              pending={props.pending || props.pendingTokenId === token.id}
+              defaultScopes={props.defaultScopes}
+              selected={props.selectedIds.has(token.id)}
+              selectable={props.isActive(token)}
+              stale={props.isStale(token)}
+              onToggleSelect={props.onToggleSelect}
+              onCopy={props.onCopy}
+              onRotate={props.onRotate}
+              onRevoke={props.onRevoke}
+              onUpgrade={props.onUpgrade}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function TokenListItem(props: {
   token: TokenRow;
   pending: boolean;
   defaultScopes: string[];
+  selected: boolean;
+  selectable: boolean;
+  stale: boolean;
+  onToggleSelect: (tokenId: string) => void;
   onCopy: (token: TokenRow) => void;
   onRotate: (token: TokenRow) => void;
   onRevoke: (tokenId: string) => void;
@@ -451,7 +624,18 @@ function TokenListItem(props: {
   return (
     <li className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 gap-3">
+          {props.selectable && (
+            <input
+              type="checkbox"
+              className="mt-1 shrink-0"
+              checked={props.selected}
+              onChange={() => props.onToggleSelect(token.id)}
+              disabled={props.pending}
+              aria-label={`Select token ${token.name} for bulk revoke`}
+            />
+          )}
+          <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-[var(--dpf-text)]">{token.name}</span>
             <code className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-xs text-[var(--dpf-text)]">
@@ -469,6 +653,15 @@ function TokenListItem(props: {
             </span>
             {revoked && <StatusPill label="revoked" tone="error" />}
             {expired && !revoked && <StatusPill label="expired" tone="warning" />}
+            {props.stale && (
+              <span
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-warning)] px-2 py-0.5 text-xs font-medium text-[var(--dpf-warning)]"
+                title={`Idle ${formatIdle(token)} — exceeds ${STALE_THRESHOLD_DAYS}-day threshold`}
+              >
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                stale {formatIdle(token)}
+              </span>
+            )}
           </div>
 
           <dl className="mt-2 grid gap-1 text-xs text-[var(--dpf-muted)] md:grid-cols-2">
@@ -482,13 +675,21 @@ function TokenListItem(props: {
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Last used: </dt>
-              <dd className="inline">{formatDate(token.lastUsedAt)}</dd>
+              <dd className="inline">
+                {formatDate(token.lastUsedAt)}
+                {token.idleDays != null && (
+                  <span className="ml-1 text-[var(--dpf-muted)]">
+                    ({token.idleDays === 0 ? "today" : `${token.idleDays}d idle`})
+                  </span>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Expires: </dt>
               <dd className="inline">{formatDate(token.expiresAt)}</dd>
             </div>
           </dl>
+          </div>
         </div>
 
         {!revoked && (
@@ -537,6 +738,14 @@ function TokenListItem(props: {
       </div>
     </li>
   );
+}
+
+// Human-readable idle duration for the stale pill. Falls back to
+// "never used" for tokens with no lastUsedAt — the stale predicate already
+// gated whether to show this, so we only need a short label.
+function formatIdle(token: TokenRow): string {
+  if (token.idleDays == null) return "never used";
+  return token.idleDays === 1 ? "1d" : `${token.idleDays}d`;
 }
 
 function StatusPill(props: { label: string; tone: "warning" | "error" }) {
