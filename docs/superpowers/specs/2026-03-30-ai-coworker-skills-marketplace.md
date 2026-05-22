@@ -268,6 +268,25 @@ User → Route → Persona ──→ Orchestrator(s) ──→ Specialist(s)
 
 When a specialist's skill is invoked behind a persona, the coworker panel shows a subtle attribution: "Using incident-resolution skill: auto-remediation runbook" so the user understands what's happening without needing to know the full agent hierarchy.
 
+### Skill Quality: Question Scaffolds, Not Prompt Macros
+
+The prompting bar has moved. A high-quality skill is not just a reusable instruction blob; it should help the coworker and the user frame the work as a bounded question for a senior partner.
+
+Every DPF-authored or DPF-approved knowledge-work skill should declare or infer:
+
+| Element | Why it matters |
+|---------|----------------|
+| `intentCenter` | Gives the coworker the user's thesis or direction of travel. |
+| `hardEdges` | Prevents context drift, scope creep, and unsafe assumptions. |
+| `contextRequirements` | Names the files, records, artifacts, or live data the skill must inspect. |
+| `successShape` | Describes what good looks like beyond a narrow checklist. |
+| `pushbackPolicy` | Tells the coworker when to challenge the operator's thesis instead of mirroring it. |
+| `expectedArtifact` | Makes the downstream handoff explicit: answer, plan, patch, task artifact, decision packet, or backlog item. |
+
+For pipeline-style skills, the right pattern is different: typed inputs, schemas, deterministic checks, replayable tests, and clear failure states. The question-scaffold pattern is for ambiguous knowledge work, not for predictable automation.
+
+Skill evaluation should score this distinction. A skill that claims to support architecture, product strategy, Build Studio planning, UX review, or A2A handoff must include enough question-scaffold structure to guide breadth across sources and opinions. A skill that executes a narrow operation must instead expose deterministic inputs and verification.
+
 ### Key Design Decisions
 
 1. **Skills are installed per-agent across all three tiers.** A persona gets broad contextual skills. An orchestrator gets coordination skills. A specialist gets deep domain skills. This mirrors how human teams work — the manager delegates, the specialist executes with specialized tools.
