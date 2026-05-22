@@ -2,11 +2,16 @@
 title: Destructive actions require explicit go
 slug: destructive-actions-require-explicit-go
 pageKind: principle
-tier: commandment
-appliesTo: [agentic-coworker, claude-code, agent]
-principleConsumerArchetype: ai-coworker-universal
-publicOnly: false
 status: published
+abstract: Before any destructive infrastructure action — volume wipes, force-pushes, secret rotation, recreates that lose state — list the steps and wait for an explicit go.
+principleTier: commandment
+principleDirection: List the steps and wait for an affirmative go before any destructive infrastructure action; this overrides autonomous-directive blanket approval.
+principleDimensionVector: {"blast_radius": 1.0, "governance_compliance": 0.9, "evidence_density": 0.7, "speed_to_value": -0.4}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

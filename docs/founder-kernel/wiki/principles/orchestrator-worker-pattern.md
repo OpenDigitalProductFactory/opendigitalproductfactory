@@ -9,7 +9,10 @@ principleDimensionVector: {"governance_compliance": 0.7, "long_term_maintainabil
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-principleConsumerArchetype: generalist
+  - human
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - build-studio
 principlePublic: true
 principlePublicRationale: Documents DPF's multi-agent topology so adopters understand why coworkers don't hand off directly.
 sources:

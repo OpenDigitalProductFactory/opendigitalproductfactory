@@ -81,11 +81,25 @@ export type PrincipleConsumerArchetype =
  * `principleConsumerArchetype = "route-domain-specific"`. These are NOT a
  * closed enum — `isPrincipleConsumerContextSlug` defines the slug-shape
  * contract and new contexts are added by authoring without a schema change.
- * Ordering puts `build-studio` first because it is the most-cited consumer
- * context in the existing kernel.
+ *
+ * Ordering reflects citation density in the kernel as of 2026-05-22 per the
+ * scope-refactor audit (plan: `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`):
+ * - `build-studio` and `engineering-flow` are the two largest clusters; the
+ *   former scopes BS lifecycle rules, the latter covers code-contribution
+ *   rules (PR / branch / worktree / DCO / build-gate) that bind any agent
+ *   or human touching the codebase but do not bind, say, a finance coworker.
+ * - `ui`, `data-model`, `mcp`, `release` were added as the audit surfaced
+ *   distinct principle clusters that don't fit any seed example.
+ * - `marketing`, `compliance`, `discovery`, `finance`, `storefront`,
+ *   `portfolio` remain as original seed examples for non-engineering domains.
  */
 export const PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES = [
   "build-studio",
+  "engineering-flow",
+  "ui",
+  "data-model",
+  "mcp",
+  "release",
   "marketing",
   "compliance",
   "discovery",
@@ -134,12 +148,32 @@ export const PRINCIPLE_TIER_DEFAULT_WEIGHT: Record<PrincipleTier, number> = {
 };
 
 /**
- * Hard cap on commandments (10) is the central inflation guard — if every rule
- * is a commandment, nothing is. Core has a soft cap (30) enforced by `warn`-
- * severity lint. Contextual is uncapped. See spec section 5.1 and section 14.
+ * Tier caps. Updated 2026-05-22 per founder direction recorded in plan
+ * `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`:
+ *
+ * - **Commandments are uncapped.** The earlier hard cap of 10 was an
+ *   inflation guard, but the operating model has shifted: commandments are
+ *   non-negotiable doctrine that wins in conflict resolution (weight 1.0
+ *   beats any combination of lower-tier alignments), and there is no
+ *   reason for that priority signal to be scarce. The scarcity guard is
+ *   replaced by the dimension-vector + WWMD review loop — each new
+ *   commandment must score against the dimension registry and justify
+ *   itself against existing commandments at PR review time.
+ * - **Commandments-in-context are first-class.** A `route-domain-specific`
+ *   principle may carry `principleTier: commandment` to mean "non-
+ *   negotiable within its declared contexts." The strict retrieval filter
+ *   in `recallPrincipleContext` ensures it never applies outside its
+ *   contexts, so a Build Studio commandment binds BS work without leaking
+ *   into finance or storefront prompts.
+ * - Core retains its soft cap (30) as an inflation guard, enforced by
+ *   `warn`-severity lint.
+ * - Contextual remains uncapped.
+ *
+ * See spec section 5.1 and section 14 for the original framing; the
+ * 2026-05-22 plan supersedes the commandment-cap portion.
  */
 export const PRINCIPLE_TIER_CAPS: Record<PrincipleTier, number | null> = {
-  commandment: 10,
+  commandment: null,
   core: 30,
   contextual: null,
 };

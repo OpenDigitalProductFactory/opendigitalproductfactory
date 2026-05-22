@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - portfolio
 principlePublic: true
 principlePublicRationale: Adopters need to see the backlog discipline up front — DPF treats backlog as live operational state, not as documentation.
 sources:

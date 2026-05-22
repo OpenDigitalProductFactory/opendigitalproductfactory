@@ -167,8 +167,11 @@ describe("wiki-taxonomy: PRINCIPLE_TIER_DEFAULT_WEIGHT", () => {
 });
 
 describe("wiki-taxonomy: PRINCIPLE_TIER_CAPS", () => {
-  it("caps commandments at 10 published kernel principles", () => {
-    expect(PRINCIPLE_TIER_CAPS.commandment).toBe(10);
+  // Commandment cap removed 2026-05-22 per scope-refactor plan: commandments
+  // are about conflict-resolution priority (weight 1.0 always wins), not
+  // scarcity. See docs/superpowers/plans/2026-05-22-principle-scope-refactor.md.
+  it("leaves commandments uncapped (null)", () => {
+    expect(PRINCIPLE_TIER_CAPS.commandment).toBeNull();
   });
 
   it("soft-caps core at 30", () => {

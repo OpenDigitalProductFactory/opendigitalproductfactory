@@ -6,11 +6,13 @@ import {
 } from "./principle-finding-kinds";
 
 describe("PRINCIPLE_FINDING_KIND_OPTIONS", () => {
-  it("includes the full 12-detector set from spec section 14", () => {
+  // Commandment-cap detector removed 2026-05-22 per scope-refactor plan;
+  // commandments are now uncapped (see PRINCIPLE_TIER_CAPS in wiki-taxonomy.ts).
+  // The list dropped from 12 to 11 finding kinds.
+  it("includes the canonical 11-detector set", () => {
     const values = PRINCIPLE_FINDING_KIND_OPTIONS.map((o) => o.value).sort();
     expect(values).toEqual(
       [
-        "principle-commandment-cap-exceeded",
         "principle-contradiction-review",
         "principle-duplicate",
         "principle-missing-applies-to",
@@ -24,15 +26,15 @@ describe("PRINCIPLE_FINDING_KIND_OPTIONS", () => {
         "principle-vector-dimension-mismatch",
       ].sort(),
     );
-    expect(PRINCIPLE_FINDING_KIND_OPTIONS).toHaveLength(12);
+    expect(PRINCIPLE_FINDING_KIND_OPTIONS).toHaveLength(11);
   });
 
-  it("marks 7 detectors as blocking (errors) and 5 as non-blocking (warns)", () => {
+  it("marks 6 detectors as blocking (errors) and 5 as non-blocking (warns)", () => {
     const blocking = PRINCIPLE_FINDING_KIND_OPTIONS.filter((o) => o.blocking);
     const nonBlocking = PRINCIPLE_FINDING_KIND_OPTIONS.filter(
       (o) => !o.blocking,
     );
-    expect(blocking).toHaveLength(7);
+    expect(blocking).toHaveLength(6);
     expect(nonBlocking).toHaveLength(5);
   });
 
@@ -73,7 +75,7 @@ describe("isPrincipleFindingKind", () => {
 
 describe("PRINCIPLE_FINDING_KIND_SET", () => {
   it("mirrors PRINCIPLE_FINDING_KIND_OPTIONS as a Set for O(1) lookups", () => {
-    expect(PRINCIPLE_FINDING_KIND_SET.size).toBe(12);
+    expect(PRINCIPLE_FINDING_KIND_SET.size).toBe(11);
     for (const opt of PRINCIPLE_FINDING_KIND_OPTIONS) {
       expect(PRINCIPLE_FINDING_KIND_SET.has(opt.value)).toBe(true);
     }

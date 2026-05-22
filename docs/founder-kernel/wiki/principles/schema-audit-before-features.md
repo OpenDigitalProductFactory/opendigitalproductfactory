@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - data-model
 principlePublic: true
 principlePublicRationale: Documents DPF's schema discipline — the platform actively refactors instead of accreting parallel models.
 sources:

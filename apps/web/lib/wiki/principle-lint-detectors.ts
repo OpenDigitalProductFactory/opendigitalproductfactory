@@ -16,7 +16,6 @@ import {
   isPrincipleDimension,
 } from "@dpf/db/wiki-taxonomy";
 import type { LintFinding, LintWikiPage } from "./lint-detectors";
-import { detectPrincipleCommandmentCapExceeded } from "./principle-commandment-cap";
 import { detectPrinciplePublicUnsafeMarker } from "./principle-public-safety";
 
 // ─── Snapshot extension ─────────────────────────────────────────────────────
@@ -36,7 +35,11 @@ export type LintPrincipleWikiPage = LintWikiPage & {
   principleAppliesTo: string[];
   principlePublic: boolean;
   principlePublicRationale: string | null;
-  /** Used by detectPrincipleCommandmentCapExceeded for newest-first ordering. */
+  /**
+   * Originally used by the commandment-cap detector for newest-first ordering.
+   * Detector removed 2026-05-22 with the cap; field retained because principle
+   * similarity / drift detection still consult it.
+   */
   lastReviewedAt: Date | null;
 };
 
@@ -353,7 +356,6 @@ export function runPrincipleDetectors(input: {
     ...detectPrincipleUnknownDimension(input),
     ...detectPrincipleTierWeightMismatch(input),
     ...detectPrinciplePublicMissingRationale(input),
-    ...detectPrincipleCommandmentCapExceeded(input),
     ...detectPrinciplePublicUnsafeMarker(input),
   ];
 }

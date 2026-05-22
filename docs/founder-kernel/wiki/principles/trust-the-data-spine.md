@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - data-model
 principlePublic: false
 principlePublicRationale: ""
 sources:

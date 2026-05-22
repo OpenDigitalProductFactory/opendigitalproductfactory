@@ -2,11 +2,17 @@
 title: Research before implementing
 slug: research-before-implementing
 pageKind: principle
-tier: core
-appliesTo: [agentic-coworker, claude-code, agent]
-principleConsumerArchetype: ai-coworker-universal
-publicOnly: false
 status: published
+abstract: Before writing code that depends on an external API, library, or service, read its actual source or current docs. Don't guess at shapes, ports, or contracts.
+principleTier: core
+principleDirection: Read the actual source or current documentation for any external API, library, or service before depending on it; do not guess at its shape.
+principleDimensionVector: {"evidence_density": 0.9, "long_term_maintainability": 0.7, "schema_grounding": 0.8, "speed_to_value": -0.2}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+  - human
+principleConsumerArchetype: universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

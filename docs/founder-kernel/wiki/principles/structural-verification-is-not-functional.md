@@ -2,11 +2,20 @@
 title: Structural verification is not functional verification
 slug: structural-verification-is-not-functional
 pageKind: principle
-tier: commandment
-appliesTo: [agentic-coworker, claude-code, agent]
-principleConsumerArchetype: ai-coworker-universal
-publicOnly: false
 status: published
+abstract: Code in a bundle, migrations applied, tests passing, routes returning 4xx — none of it proves the feature works. Drive the happy path on the live install before claiming complete.
+principleTier: commandment
+principleDirection: Drive the end-to-end happy path on the live install and confirm user-facing state changed before claiming a feature is complete; structural evidence alone marks it draft, not done.
+principleDimensionVector: {"evidence_density": 1.0, "governance_compliance": 0.8, "long_term_maintainability": 0.5, "speed_to_value": -0.3}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+  - human
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
+  - build-studio
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

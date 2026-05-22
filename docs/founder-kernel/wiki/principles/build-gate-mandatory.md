@@ -10,7 +10,10 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
+  - release
 principlePublic: true
 principlePublicRationale: Adopters need to know that DPF treats "done" as evidence-passed, not claim-made — the Build Gate is the contract everything else relies on.
 sources:

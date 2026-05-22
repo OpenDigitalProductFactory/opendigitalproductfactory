@@ -31,7 +31,6 @@ export type LintFindingKind =
   | "principle-vector-dimension-mismatch"
   | "principle-unknown-dimension"
   | "principle-tier-weight-mismatch"
-  | "principle-commandment-cap-exceeded"
   | "principle-public-missing-rationale"
   | "principle-public-unsafe-marker"
   | "principle-duplicate"

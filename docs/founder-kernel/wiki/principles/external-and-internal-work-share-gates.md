@@ -10,7 +10,10 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
+  - build-studio
 principlePublic: true
 principlePublicRationale: This is a contributor guarantee. External contributors should know that their work will be judged by the same criteria the maintainers hold themselves to — no special path, no extra friction. Operators should know that no path bypasses governance.
 sources: []

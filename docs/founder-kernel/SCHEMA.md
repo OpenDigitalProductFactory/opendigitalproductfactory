@@ -89,9 +89,11 @@ Required body sections (per spec §7.2):
 - **Sources** — frontmatter-driven; the viewer renders citations from `WikiPageSource`.
 
 **Tier semantics** (weights in [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts)):
-- `commandment` — default weight `1.0`; non-negotiable doctrine; hard cap of 10 published kernel commandments enforced by the lint detector `principle-commandment-cap-exceeded`.
-- `core` — default weight `0.4`; strong defaults; soft cap ~30.
+- `commandment` — default weight `1.0`; non-negotiable doctrine that wins in conflict resolution; **uncapped** as of 2026-05-22 (the prior cap of 10 was an inflation guard but commandments are about priority, not scarcity — see plan `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`).
+- `core` — default weight `0.4`; strong defaults; soft cap ~30 enforced by `warn`-severity lint.
 - `contextual` — default weight `0.1`; narrow operational rules; uncapped.
+
+**Commandments in context.** A `route-domain-specific` principle may carry `principleTier: commandment` to mean "non-negotiable within its declared contexts." The strict consumer-context filter in retrieval ensures it never applies outside those contexts. So a Build Studio commandment overrides BS core principles inside BS work, and is invisible to a finance coworker prompt. The math is unchanged — weight 1.0 wins in conflict — but the scope is narrower than a kernel-wide commandment.
 
 Situational notes — operational reminders, project-specific quirks, dated decisions — do **not** belong here. They live in local memory, backlog comments, execution evidence, or dated specs. Promotion to the wiki principle layer requires that the rule be durable enough to retrieve across many sessions and product-safe enough for at least the in-platform coworkers to read.
 

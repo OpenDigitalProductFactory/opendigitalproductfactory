@@ -2,11 +2,16 @@
 title: Check tool signals first
 slug: check-tool-signals-first
 pageKind: principle
-tier: core
-appliesTo: [agentic-coworker, claude-code, agent]
-principleConsumerArchetype: ai-coworker-universal
-publicOnly: false
 status: published
+abstract: When a tool call goes wrong, the first suspect is the tool's return value — not the model. Read the actual response shape before blaming the agent.
+principleTier: core
+principleDirection: Inspect tool return values, error codes, and structured payloads as the first hypothesis when downstream behavior is wrong, before blaming the calling model.
+principleDimensionVector: {"evidence_density": 0.9, "speed_to_value": 0.6, "schema_grounding": 0.7, "human_cognitive_load": 0.4}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

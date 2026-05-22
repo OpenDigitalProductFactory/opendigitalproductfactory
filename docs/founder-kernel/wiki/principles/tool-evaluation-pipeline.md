@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - mcp
 principlePublic: true
 principlePublicRationale: Documents DPF's external-dependency vetting posture — adopters depend on it for security and supply-chain auditability.
 sources:

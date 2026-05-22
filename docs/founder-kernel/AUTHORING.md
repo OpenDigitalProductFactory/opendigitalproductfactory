@@ -155,7 +155,7 @@ Principle pages have stricter rules than the other kinds because their content d
 
 1. **Copy the template.** `cp _templates/principle.template.md wiki/principles/<slug>.md`. The slug should be a short kebab-case noun phrase (e.g., `architecture-over-shortcuts`, `evidence-before-diagnosis`).
 2. **Set the tier consciously.**
-   - `commandment` — non-negotiable. The kernel hard-caps published commandments at 10 (lint detector `principle-commandment-cap-exceeded` blocks publish above the cap). Reserve for rules that should shape *every* relevant decision. Requires `principleDirection` AND `principleDimensionVector` AND ≥1 source.
+   - `commandment` — non-negotiable doctrine that wins in conflict resolution (weight 1.0 beats any combination of lower-tier alignments). **Uncapped as of 2026-05-22** (see plan `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`). Reserve for rules that should shape *every* relevant decision in the principle's scope. Requires `principleDirection` AND `principleDimensionVector` AND ≥1 source. A `route-domain-specific` principle may also be `commandment` to mean "non-negotiable within its declared contexts."
    - `core` — strong default. Soft cap ~30. Requires `principleDirection`; vector recommended.
    - `contextual` — narrow rules that only matter in a bounded situation. Uncapped.
 3. **Write a signed `principleDimensionVector`.** Inline JSON, keys from [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts) `PRINCIPLE_DIMENSIONS`. Positive values mean "this principle pulls *for* this axis"; negative values mean "this principle pulls *against* this axis" (e.g., `speed_to_value: -0.4` is correct for `architecture-over-shortcuts`). The seed walker rejects unknown dimensions with a clear error.
@@ -168,6 +168,13 @@ Principle pages have stricter rules than the other kinds because their content d
 5. **Set `principlePublic` deliberately.** Default is `false`. Set to `true` only when the rule is product-facing and safe for the public docs site (`/principles/`). Always pair with `principlePublicRationale`. The public-safety lint detector blocks publish on local paths, secret patterns, and internal-only agent-instruction phrases.
 6. **Cite at least one source.** Required for `commandment` tier; strongly recommended for `core`. Add raw-source slugs to the `sources:` frontmatter array, NOT inline citations in the body.
 7. **Run seed and lint.** `pnpm --filter @dpf/db seed`, then check `/admin/wiki/lint`. Fix any blocking principle finding before opening a PR.
+
+**Use `principle_decide` recursively when scoping a new (or reassessing an existing) principle.** The kernel itself is the right tool to decide where a principle belongs. Call `mcp__dpf__principle_decide` with:
+- `context` describing the scope-design question (e.g., "Tag X as universal or route-domain-specific(build-studio)?")
+- 2–4 `options` each carrying a `features` map keyed by `PRINCIPLE_DIMENSIONS` (0–1 scores)
+- `callingPopulation: "in_platform_coworker"` for platform-shaped questions
+
+The tool returns a recommendation with confidence and a per-principle contribution ledger. Treat the recommendation as advisory, not authoritative — for low-margin results (margin < `tieMargin`, default 0.2) the call is close and warrants human review. Capture the ledger in the relevant plan or PR description so future periodic-assessment passes can see what pulled which way. Periodic-assessment triggers: adding a new feature, surfacing a new coworker specialist, introducing a new route/domain context, or any time a principle keeps showing up in irrelevant prompt contexts.
 
 Common back-fill mistakes to avoid:
 - Pairing `ai-coworker-universal` / `generalist` / `specialist` with `human` in `principleAppliesTo` (seed throws — these archetypes describe agent classes).
