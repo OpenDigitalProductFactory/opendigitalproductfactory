@@ -32,6 +32,7 @@ import {
 import {
   defaultMcpTokenScopes,
   MCP_TOKEN_DEFAULT_STALE_DAYS,
+  MCP_TOKEN_REVOKED_ARCHIVE_DAYS,
   type McpTokenScopeTier,
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
@@ -58,9 +59,10 @@ type TokenRow = {
   createdAt: string;
 };
 
-// Alias the shared constant from mcp-token-scopes for use inside the JSX —
+// Alias the shared constants from mcp-token-scopes for use inside the JSX —
 // keeps the source of truth out of "use server" modules per Next.js rules.
 const STALE_THRESHOLD_DAYS = MCP_TOKEN_DEFAULT_STALE_DAYS;
+const REVOKED_ARCHIVE_DAYS = MCP_TOKEN_REVOKED_ARCHIVE_DAYS;
 
 type Issued = {
   mode: "issued" | "rotated" | "copied" | "rotated-with-edit";
@@ -150,6 +152,13 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   // Idle hygiene: filter to stale-only and multi-select for bulk revoke.
   const [staleOnly, setStaleOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // Revoked tokens are hidden by default to keep the active-token list
+  // legible. Operator toggles this on for triage / cleanup work.
+  const [showRevoked, setShowRevoked] = useState(false);
+  // Reported by the server: count of tokens auto-archived (revoked >
+  // REVOKED_ARCHIVE_DAYS ago) and dropped from the response. Surfaced in the
+  // toolbar so the operator knows older revocations aren't gone, just hidden.
+  const [archivedCount, setArchivedCount] = useState(0);
 
   const defaultScopes = useMemo(() => defaultMcpTokenScopes(scopes), [scopes]);
 
@@ -162,7 +171,10 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         listMcpTokenTemplates(),
       ]);
       if (cancelled) return;
-      if (tokensResult.ok) setTokens(tokensResult.tokens);
+      if (tokensResult.ok) {
+        setTokens(tokensResult.tokens);
+        setArchivedCount(tokensResult.archivedCount);
+      }
       const availableScopes = scopesResult.scopes;
       setScopes(availableScopes);
       setTemplates(templatesResult.templates);
@@ -178,7 +190,10 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   function refresh() {
     startTransition(async () => {
       const result = await listMyMcpTokens();
-      if (result.ok) setTokens(result.tokens);
+      if (result.ok) {
+        setTokens(result.tokens);
+        setArchivedCount(result.archivedCount);
+      }
     });
   }
 
@@ -517,6 +532,8 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             defaultScopes={defaultScopes}
             selectedIds={selectedIds}
             staleOnly={staleOnly}
+            showRevoked={showRevoked}
+            archivedCount={archivedCount}
             onCopy={copyCurrentToken}
             onRotate={rotateToken}
             onRotateWithEdit={openRotateWithEditForm}
@@ -524,6 +541,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             onUpgrade={upgradeForCodeIntelligence}
             onToggleSelect={toggleSelect}
             onToggleStaleOnly={() => setStaleOnly((v) => !v)}
+            onToggleShowRevoked={() => setShowRevoked((v) => !v)}
             onBulkRevoke={bulkRevokeSelected}
             onClearSelection={clearSelection}
             isActive={isActive}
@@ -570,6 +588,8 @@ function TokenList(props: {
   defaultScopes: string[];
   selectedIds: Set<string>;
   staleOnly: boolean;
+  showRevoked: boolean;
+  archivedCount: number;
   onCopy: (token: TokenRow) => void;
   onRotate: (token: TokenRow) => void;
   onRotateWithEdit: (token: TokenRow) => void;
@@ -577,35 +597,56 @@ function TokenList(props: {
   onUpgrade: (tokenId: string) => void;
   onToggleSelect: (tokenId: string) => void;
   onToggleStaleOnly: () => void;
+  onToggleShowRevoked: () => void;
   onBulkRevoke: () => void;
   onClearSelection: () => void;
   isActive: (token: TokenRow) => boolean;
   isStale: (token: TokenRow) => boolean;
 }) {
+  const revokedCount = props.tokens.filter((t) => t.revokedAt != null).length;
   const staleCount = props.tokens.filter(props.isStale).length;
-  const visible = props.staleOnly
-    ? props.tokens.filter(props.isStale)
-    : props.tokens;
+  // Filter chain: hide-revoked first (default), then stale-only.
+  let visible = props.showRevoked
+    ? props.tokens
+    : props.tokens.filter((t) => t.revokedAt == null);
+  if (props.staleOnly) visible = visible.filter(props.isStale);
   const selectedCount = props.selectedIds.size;
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
-        <label className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)]">
-          <input
-            type="checkbox"
-            checked={props.staleOnly}
-            onChange={props.onToggleStaleOnly}
-            aria-label={`Show only tokens idle for at least ${STALE_THRESHOLD_DAYS} days`}
-          />
-          <Clock className="h-3.5 w-3.5 text-[var(--dpf-muted)]" aria-hidden="true" />
-          <span>
-            Show stale only
-            <span className="ml-1 text-xs text-[var(--dpf-muted)]">
-              (≥ {STALE_THRESHOLD_DAYS} days idle — {staleCount} of {props.tokens.length})
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)]">
+            <input
+              type="checkbox"
+              checked={props.staleOnly}
+              onChange={props.onToggleStaleOnly}
+              aria-label={`Show only tokens idle for at least ${STALE_THRESHOLD_DAYS} days`}
+            />
+            <Clock className="h-3.5 w-3.5 text-[var(--dpf-muted)]" aria-hidden="true" />
+            <span>
+              Show stale only
+              <span className="ml-1 text-xs text-[var(--dpf-muted)]">
+                (≥ {STALE_THRESHOLD_DAYS} days idle — {staleCount} of {props.tokens.length})
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)]">
+            <input
+              type="checkbox"
+              checked={props.showRevoked}
+              onChange={props.onToggleShowRevoked}
+              aria-label="Show revoked tokens"
+            />
+            <Ban className="h-3.5 w-3.5 text-[var(--dpf-muted)]" aria-hidden="true" />
+            <span>
+              Show revoked
+              <span className="ml-1 text-xs text-[var(--dpf-muted)]">
+                ({revokedCount} hidden by default)
+              </span>
+            </span>
+          </label>
+        </div>
         {selectedCount > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-[var(--dpf-muted)]">
@@ -636,7 +677,9 @@ function TokenList(props: {
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-5 text-sm text-[var(--dpf-muted)]">
           {props.staleOnly
             ? `No tokens are idle for ${STALE_THRESHOLD_DAYS}+ days. Uncheck "Show stale only" to see all tokens.`
-            : "No MCP tokens have been issued yet."}
+            : !props.showRevoked && revokedCount > 0
+              ? `All ${revokedCount} of your tokens are revoked. Toggle "Show revoked" above to view them.`
+              : "No MCP tokens have been issued yet."}
         </div>
       ) : (
         <ul className="space-y-2">
@@ -658,6 +701,17 @@ function TokenList(props: {
             />
           ))}
         </ul>
+      )}
+
+      {props.archivedCount > 0 && (
+        <p className="mt-3 text-xs text-[var(--dpf-muted)]">
+          <strong>{props.archivedCount}</strong>{" "}
+          {props.archivedCount === 1 ? "token" : "tokens"} auto-archived
+          (revoked &gt; {REVOKED_ARCHIVE_DAYS} days). They remain in the
+          database for audit FK integrity and are queryable via{" "}
+          <code>/platform/ai/authority</code>; hidden from this list to keep
+          it legible.
+        </p>
       )}
     </div>
   );
