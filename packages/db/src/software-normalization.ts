@@ -67,7 +67,8 @@ function canonicalizeVersion(rawVersion?: string | null): string | null {
     return null;
   }
 
-  const match = rawVersion.match(/\d+(?:\.\d+){0,2}/);
+  // CodeQL #27 (js/polynomial-redos): bound the `\d+` runs.
+  const match = rawVersion.match(/\d{1,8}(?:\.\d{1,8}){0,2}/);
   return match?.[0] ?? null;
 }
 
