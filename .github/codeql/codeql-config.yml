@@ -17,6 +17,12 @@ queries:
 
 # Load our custom data-extensions model pack so the JS sanitiser
 # declarations apply at scan time.
+#
+# IMPORTANT — path-based packs must be in the flat list form. The
+# per-language map form (`packs: { javascript: [...] }`) is only for
+# *published* registry packs; path entries are silently rejected with
+# "Invalid CodeQL pack specification" and the pack is ignored. The pack
+# itself declares its target language via `extensionTargets:` in
+# `.github/codeql/dpf-sanitizers/qlpack.yml`.
 packs:
-  javascript:
-    - ./.github/codeql/dpf-sanitizers
+  - ./.github/codeql/dpf-sanitizers
