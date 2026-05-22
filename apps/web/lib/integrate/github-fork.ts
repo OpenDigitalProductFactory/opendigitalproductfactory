@@ -37,28 +37,26 @@ export async function forkExistsAndIsFork(params: {
   token: string;
 }): Promise<ForkCheckResult> {
   const { owner, repo, upstreamOwner, upstreamRepo, token } = params;
-  // BI-5E53A265 fix (CodeQL alert #35). owner/repo flow into a fetch URL.
-  // Host is hardcoded to api.github.com, but the dataflow is still
-  // user→fetch. assertSafeOutboundUrl pins the host; the explicit
-  // `url.hostname !== "api.github.com"` check below is the pattern
-  // CodeQL's HostnameSanitizer recognizes for js/request-forgery (the
-  // helper's internal check is invisible to that query).
-  const url = assertSafeOutboundUrl(
-    `https://api.github.com/repos/${owner}/${repo}`,
-    { allowedHosts: ["api.github.com"] },
-  );
-  if (url.hostname !== "api.github.com") {
-    // Defense-in-depth + CodeQL sanitizer signal. Helper already
-    // enforced this; throwing here would only fire if the helper
-    // regressed silently.
-    throw new Error(`Unexpected host after sanitization: ${url.hostname}`);
-  }
-  const res = await fetch(url.href, { headers: getHeaders(token) });
+  // BI-5E53A265 fix (CodeQL alert #35). owner/repo flow into the URL.
+  // Host is hardcoded to api.github.com; encodeURIComponent escapes
+  // the owner/repo path components so a malicious value like
+  // "../../private-repo" becomes "..%2F..%2Fprivate-repo" — still
+  // delivered to api.github.com, where it 404s harmlessly.
+  //
+  // CodeQL recognises encodeURIComponent as a sanitiser for URL path
+  // components in its js/request-forgery dataflow, so this construction
+  // pattern silences the false positive while keeping the helper as
+  // defense-in-depth.
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  // Run safe-fetch's defense as well so private-network / scheme drift
+  // gets caught (the helper does much more than CodeQL recognises).
+  assertSafeOutboundUrl(url, { allowedHosts: ["api.github.com"] });
+  const res = await fetch(url, { headers: getHeaders(token) });
 
   if (res.status === 404) return { exists: false, isFork: false };
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`GitHub API GET ${url.href}: ${res.status} ${body.slice(0, 200)}`);
+    throw new Error(`GitHub API GET ${url}: ${res.status} ${body.slice(0, 200)}`);
   }
 
   const body = (await res.json()) as { fork?: boolean; parent?: { full_name?: string } };
