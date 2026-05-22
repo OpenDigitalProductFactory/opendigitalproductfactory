@@ -4,6 +4,7 @@ slug: destructive-actions-require-explicit-go
 pageKind: principle
 tier: commandment
 appliesTo: [agentic-coworker, claude-code, agent]
+principleConsumerArchetype: ai-coworker-universal
 publicOnly: false
 status: published
 authoredAt: 2026-05-18
