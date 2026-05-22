@@ -90,6 +90,7 @@ beforeEach(() => {
   });
   tokensMock.mockResolvedValue({
     ok: true,
+    archivedCount: 0,
     tokens: [
       {
         id: "tok_active",
@@ -398,8 +399,11 @@ describe("McpTokenManager — idle hygiene", () => {
     confirmSpy.mockRestore();
   });
 
-  it("does not render a checkbox on revoked rows", async () => {
+  it("does not render a checkbox on revoked rows (once revealed via Show revoked)", async () => {
     render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    // Revoked rows are hidden by default — flip the toggle to reveal.
+    expect(await screen.findByText("Stale agent")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/Show revoked tokens/i));
     expect(await screen.findByText("Revoked token")).toBeTruthy();
     expect(
       screen.queryByLabelText(/Select token Revoked token for bulk revoke/i),
@@ -493,5 +497,75 @@ describe("McpTokenManager — rotate with edit", () => {
       await screen.findByText(/New token issued, but old token revoke failed/i),
     ).toBeTruthy();
     expect(screen.getByText(/db_locked/)).toBeTruthy();
+  });
+});
+
+describe("McpTokenManager — revoked hide + archive footer", () => {
+  beforeEach(() => {
+    tokensMock.mockResolvedValue({
+      ok: true,
+      archivedCount: 3, // server reports 3 tokens hidden by the >90d filter
+      tokens: [
+        {
+          id: "tok_active",
+          name: "Active token",
+          prefix: "dpfmcp_AC",
+          tokenSuffix: "AC01",
+          canCopy: true,
+          capability: "write",
+          scope: "write",
+          scopes: ["backlog_write"],
+          lastUsedAt: "2026-05-22T10:00:00.000Z",
+          idleDays: 0,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+        {
+          id: "tok_recently_revoked",
+          name: "Recently revoked",
+          prefix: "dpfmcp_RV",
+          tokenSuffix: "RV01",
+          canCopy: false,
+          capability: "write",
+          scope: "write",
+          scopes: ["backlog_write"],
+          lastUsedAt: null,
+          idleDays: null,
+          expiresAt: null,
+          revokedAt: "2026-05-15T00:00:00.000Z",
+          createdAt: "2026-04-01T00:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("hides revoked rows by default", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Active token")).toBeTruthy();
+    expect(screen.queryByText("Recently revoked")).toBeNull();
+  });
+
+  it("reveals revoked rows when 'Show revoked' is toggled on", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Active token")).toBeTruthy();
+    const toggle = screen.getByLabelText(/Show revoked tokens/i);
+    fireEvent.click(toggle);
+    expect(screen.getByText("Recently revoked")).toBeTruthy();
+  });
+
+  it("reports the revoked-hidden count next to the toggle", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Active token")).toBeTruthy();
+    expect(screen.getByText(/1 hidden by default/)).toBeTruthy();
+  });
+
+  it("surfaces the archive footer when the server reports archivedCount > 0", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Active token")).toBeTruthy();
+    // Footer mentions the count, the 90-day window, and the audit-replay path.
+    expect(screen.getByText(/auto-archived/)).toBeTruthy();
+    expect(screen.getByText(/3/)).toBeTruthy();
+    expect(screen.getByText(/platform\/ai\/authority/)).toBeTruthy();
   });
 });

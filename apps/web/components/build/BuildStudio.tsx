@@ -1044,6 +1044,14 @@ function FleetRailZone({
     return a.build.buildId.localeCompare(b.build.buildId);
   });
 
+  // Split entries into active (needs attention) vs completed (historical). The
+  // fleet rail surfaces what needs attention; completed work is one click away
+  // via the "{N} completed" toggle below. Matches the "Builds: {N} running"
+  // header semantic — the list should only show inflight work by default.
+  const activeEntries = sorted.filter((e) => e.build.phase !== "complete");
+  const completedEntries = sorted.filter((e) => e.build.phase === "complete");
+  const [showCompleted, setShowCompleted] = useState(false);
+
   const counts = deriveFleetCounts(entries.map((e) => e.queueState));
 
   if (buildRows.length === 0) {
@@ -1086,7 +1094,7 @@ function FleetRailZone({
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
       </button>
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
-        {sorted.map((entry, idx) => (
+        {activeEntries.map((entry, idx) => (
           <li key={entry.build.buildId}>
             <BuildListItem
               build={entry.build}
@@ -1102,6 +1110,54 @@ function FleetRailZone({
             />
           </li>
         ))}
+        {activeEntries.length === 0 && (
+          <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
+            No active builds. Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
+          </li>
+        )}
+        {completedEntries.length > 0 && (
+          <>
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowCompleted((v) => !v)}
+                aria-expanded={showCompleted}
+                aria-controls="fleet-rail-completed-list"
+                data-testid="fleet-rail-completed-toggle"
+                className="mt-2 flex w-full items-center justify-between rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-3)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+              >
+                <span>
+                  {completedEntries.length} completed build{completedEntries.length === 1 ? "" : "s"}
+                </span>
+                <span aria-hidden="true" className="text-[var(--dpf-muted)]">
+                  {showCompleted ? "▾" : "▸"}
+                </span>
+              </button>
+            </li>
+            {showCompleted && (
+              <li id="fleet-rail-completed-list" className="contents">
+                <ul className="flex flex-col gap-0.5">
+                  {completedEntries.map((entry, idx) => (
+                    <li key={entry.build.buildId}>
+                      <BuildListItem
+                        build={entry.build}
+                        active={activeBuildId === entry.build.buildId}
+                        index={activeEntries.length + idx}
+                        lifecycleLabel={entry.lifecycleLabel}
+                        isDevEnvironment={isDevEnvironment}
+                        density="fleet"
+                        queueState={entry.queueState}
+                        needsAttention={entry.needsAttention}
+                        onSelect={() => onSelectBuild(entry.build)}
+                        onDelete={() => onDeleteBuild(entry.build)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )}
+          </>
+        )}
       </ul>
     </div>
   );
