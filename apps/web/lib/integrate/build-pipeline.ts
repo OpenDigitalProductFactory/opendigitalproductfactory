@@ -53,12 +53,7 @@ export function buildFailedState(
   failedAt: string,
   error: string,
 ): BuildExecutionState {
-  // Strip completedAt so a previous success cannot leave the appearance of a
-  // completed-yet-failed checkpoint. The recovery surfaces (retryBuildExecution,
-  // workflow-action selection) rely on step alone to discriminate states.
-  const { completedAt: _omitCompletedAt, ...rest } = current;
-  void _omitCompletedAt;
-  return { ...rest, step: "failed", failedAt, error };
+  return { ...current, step: "failed", failedAt, error };
 }
 
 // ─── Pipeline Orchestration ───────────────────────────────────────────────────
@@ -70,149 +65,65 @@ export function buildFailedState(
  */
 export async function runBuildPipeline(params: {
   buildId: string;
-  /** Business taskRunId for BI-4ab6be39 heartbeat emission. Optional — older
-   * call sites may not have one in scope; the pipeline degrades gracefully
-   * (no heartbeat = watchdog flags after the build-phase threshold). */
-  taskRunId?: string;
   existingState: BuildExecutionState | null;
   updateState: (state: BuildExecutionState) => Promise<void>;
   emit: (event: AgentEvent) => void;
 }): Promise<BuildExecutionState> {
-  const { buildId, taskRunId, existingState, updateState, emit } = params;
+  const { buildId, existingState, updateState, emit } = params;
 
-  // Self-heal: if a prior run reached "complete" with an empty diff capture
-  // (the pre-fix stepComplete was a no-op and stranded any build whose agent
-  // committed work inside the sandbox), re-arm the pipeline to re-run the
-  // capture step. Without this, builds created before the fix landed would
-  // stay blocked at the PR #850 gate forever because the orchestration loop
-  // immediately breaks when state.step === "complete".
-  let effectiveExistingState = existingState;
-  if (existingState?.step === "complete" && existingState.containerId) {
-    const { prisma } = await import("@dpf/db");
-    const fbRow = await prisma.featureBuild.findUnique({
-      where: { buildId },
-      select: { diffPatch: true },
-    });
-    const hasNoCapture = !fbRow?.diffPatch || fbRow.diffPatch.length === 0;
-    if (hasNoCapture) {
-      console.log(
-        `[build-pipeline] self-heal: ${buildId} is "complete" but has empty diffPatch — rewinding to re-run stepComplete capture`,
-      );
-      // Rewind to "code_generated". getResumeStep then advances to "tests_run",
-      // and the orchestration loop dispatches stepComplete (which is the
-      // diff/commit capture step) without re-running stepRunTests or any
-      // earlier sandbox setup. The capture is idempotent.
-      effectiveExistingState = {
-        ...existingState,
-        step: "code_generated",
-        retryCount: 0,
-      };
-    }
-  }
-
-  const resumeStep = getResumeStep(effectiveExistingState);
+  const resumeStep = getResumeStep(existingState);
 
   // Build the slice of STEP_ORDER we still need to execute.
   const resumeIdx = STEP_ORDER.indexOf(resumeStep);
   const stepsToRun = resumeIdx === -1 ? STEP_ORDER : STEP_ORDER.slice(resumeIdx);
 
-  let state: BuildExecutionState = effectiveExistingState ?? {
+  let state: BuildExecutionState = existingState ?? {
     step: "pending",
     retryCount: 0,
     startedAt: new Date().toISOString(),
   };
 
-  // Persist the initial "pending" checkpoint before entering the step loop.
-  // This closes a race window where the DB has buildExecState content
-  // (e.g. sourceCurrency from recordBuildSourceCurrency) but no `step` field
-  // — which is indistinguishable from a portal-restart-killed stall.
-  // Without this write, the UI correctly shows "Reset Build" for a stalled run
-  // but also incorrectly shows it during a legitimately in-flight first step.
-  // Guarded to new/stalled-at-pending runs only; resumes already have a valid step.
-  if (state.step == null) {
-    state = {
-      ...state,
-      step: "pending",
-      retryCount: state.retryCount ?? 0,
-      startedAt: state.startedAt ?? new Date().toISOString(),
-    };
-    await updateState(state);
-  }
+  for (const step of stepsToRun) {
+    // Skip terminal steps — these are not executable.
+    if (step === "complete" || step === "failed") break;
 
-  try {
-    for (const step of stepsToRun) {
-      // Skip terminal steps — these are not executable.
-      if (step === "complete" || step === "failed") break;
+    emit({ type: "phase:change", buildId, phase: step });
 
-      emit({ type: "phase:change", buildId, phase: step });
+    let attempt = 0;
+    const maxAttempts = (MAX_RETRIES[step] ?? 0) + 1;
 
-      let attempt = 0;
-      const maxAttempts = (MAX_RETRIES[step] ?? 0) + 1;
-
-      while (attempt < maxAttempts) {
-        try {
-          // BI-e299d4d3 — wrap the slow step with withHeartbeatTicker.
-          // executeStep can take 5-30 minutes (code generation, test runs,
-          // sandbox spin-up). The post-step heartbeat below covers transition
-          // boundaries but not the in-flight step itself. The ticker keeps
-          // heartbeats flowing at (heartbeatTimeoutSeconds / 3) cadence so the
-          // watchdog doesn't false-positive on legitimately slow steps.
-          if (taskRunId) {
-            const { withHeartbeatTicker } = await import("@/lib/observability/heartbeat");
-            state = await withHeartbeatTicker(taskRunId, () => executeStep(step, buildId, state, emit));
-          } else {
-            state = await executeStep(step, buildId, state, emit);
-          }
-          // Checkpoint the completed step.
-          const advanced = nextStep(step);
-          state = { ...state, step: advanced ?? step, retryCount: 0 };
-          await updateState(state);
-          // BI-4ab6be39 — heartbeat at the step-transition boundary (only
-          // when a taskRunId was provided by the caller). Belt-and-braces
-          // alongside the in-step ticker above.
-          if (taskRunId) {
-            const { heartbeat } = await import("@/lib/observability/heartbeat");
-            await heartbeat(taskRunId);
-          }
-          break; // step succeeded — move on
-        } catch (err) {
-          attempt++;
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          if (attempt < maxAttempts) {
-            const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
-            await new Promise<void>((resolve) => setTimeout(resolve, delay));
-          } else {
-            // All retries exhausted — persist failure.
-            const failed = buildFailedState(state, step, errorMsg);
-            await updateState(failed);
-            return failed;
-          }
+    while (attempt < maxAttempts) {
+      try {
+        state = await executeStep(step, buildId, state);
+        // Checkpoint the completed step.
+        const advanced = nextStep(step);
+        state = { ...state, step: advanced ?? step, retryCount: 0 };
+        await updateState(state);
+        break; // step succeeded — move on
+      } catch (err) {
+        attempt++;
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        if (attempt < maxAttempts) {
+          const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
+          await new Promise<void>((resolve) => setTimeout(resolve, delay));
+        } else {
+          // All retries exhausted — persist failure.
+          const failed = buildFailedState(state, step, errorMsg);
+          await updateState(failed);
+          return failed;
         }
       }
     }
-
-    // Strip error/failedAt so a successful resume after a prior failure does
-    // not retain stale failure breadcrumbs on the final completed checkpoint.
-    const { error: _omitError, failedAt: _omitFailedAt, ...stateWithoutFailureFields } = state;
-    void _omitError;
-    void _omitFailedAt;
-    const complete: BuildExecutionState = {
-      ...stateWithoutFailureFields,
-      step: "complete",
-      completedAt: new Date().toISOString(),
-    };
-    await updateState(complete);
-    emit({ type: "phase:change", buildId, phase: "complete" });
-    return complete;
-  } finally {
-    // Always release the sandbox slot — whether the pipeline succeeded, failed,
-    // or threw unexpectedly. releaseSandbox is a no-op if this build never
-    // acquired a slot (e.g. failed before stepCreateSandbox ran).
-    const { releaseSandbox } = await import("./sandbox/sandbox-pool");
-    await releaseSandbox(buildId).catch((err) =>
-      console.error("[build-pipeline] Failed to release sandbox slot:", { buildId }, err),
-    );
   }
+
+  const complete: BuildExecutionState = {
+    ...state,
+    step: "complete",
+    completedAt: new Date().toISOString(),
+  };
+  await updateState(complete);
+  emit({ type: "phase:change", buildId, phase: "complete" });
+  return complete;
 }
 
 // ─── Step Dispatcher ──────────────────────────────────────────────────────────
@@ -231,10 +142,9 @@ async function executeStep(
   step: BuildExecStep,
   buildId: string,
   state: BuildExecutionState,
-  emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
 ): Promise<BuildExecutionState> {
   switch (step) {
-    case "pending":              return stepCreateSandbox(buildId, state, emit);
+    case "pending":              return stepCreateSandbox(buildId, state);
     case "sandbox_created":      return stepInitWorkspace(buildId, state);
     case "workspace_initialized":return stepInitDb(buildId, state);
     case "db_ready":             return stepInstallDeps(buildId, state);
@@ -250,31 +160,20 @@ async function executeStep(
 async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
-  emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
 ): Promise<BuildExecutionState> {
   const { isSandboxAvailable, startBuildBranch } = await import("./sandbox/build-branch");
-  const { waitForSandboxSlot } = await import("./sandbox/sandbox-pool");
 
   const available = await isSandboxAvailable();
   if (!available) {
-    throw new Error("Sandbox container is not running. Start it with: docker compose up -d sandbox");
+    throw new Error("Sandbox container (dpf-sandbox-1) is not running. Start it with: docker compose up -d sandbox");
   }
 
-  // Acquire a slot from the pool — waits up to 30 min if all slots are busy.
-  // Emits "slot_queued" progress events so Build Studio shows a waiting state
-  // rather than appearing stuck at "Pending".
-  const slot = await waitForSandboxSlot(buildId, "system", {
-    pollIntervalMs: 30_000,
-    timeoutMs: 1_800_000,
-    onWaiting: (attempt) => {
-      console.log("[build-pipeline] waiting for sandbox slot:", { buildId, attempt });
-      emit({ type: "phase:change", buildId, phase: "slot_queued" as import("@/lib/build-exec-types").BuildExecStep });
-    },
-  });
+  const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+  const hostPort = Number(process.env.SANDBOX_PORT ?? "3035");
 
-  const sourceCurrency = await startBuildBranch(buildId);
+  await startBuildBranch(buildId);
 
-  return { ...state, containerId: slot.containerId, hostPort: slot.port, sourceCurrency };
+  return { ...state, containerId, hostPort };
 }
 
 async function stepInitWorkspace(
@@ -342,8 +241,9 @@ async function stepGenerateCode(
   const { prisma } = await import("@dpf/db");
   const { runAgenticLoop } = await import("@/lib/agentic-loop");
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
-  const { getBuildPhasePrompt, getBuildContextSection } = await import("./build-agent-prompts");
+  const { getBuildContextSection } = await import("./build-agent-prompts");
   const { agentEventBus } = await import("@/lib/agent-event-bus");
+  const { buildSpecialistPrompt, SPECIALIST_AGENT_IDS, SPECIALIST_TOOLS, SPECIALIST_MODEL_REQS } = await import("./specialist-prompts");
 
   const build = await prisma.featureBuild.findUniqueOrThrow({ where: { buildId } });
 
@@ -365,7 +265,6 @@ async function stepGenerateCode(
     }
   } catch { /* non-fatal */ }
 
-  // Build the system prompt with build context (same as the coworker uses)
   const buildContext = await getBuildContextSection({
     buildId,
     phase: "build",
@@ -375,32 +274,33 @@ async function stepGenerateCode(
     plan,
     designSystem,
   });
-  const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
 
-  // Get sandbox tools — scoped to build phase only.
-  // Filtering by buildPhases: ["build"] gives the agent the file-editing surface
-  // (read_sandbox_file, edit_sandbox_file, write_sandbox_file, run_sandbox_command,
-  // run_sandbox_tests, search_sandbox, list_sandbox_files, saveBuildEvidence, …)
-  // without overwhelming it with the 100+ tool surface used by the full coworker.
-  //
-  // Tools with no buildPhases tag (null/undefined) are platform-wide utilities
-  // that are safe to include regardless of phase.
-  const adminContext = { userId: "system", platformRole: "HR-000", isSuperuser: true } as Parameters<typeof getAvailableTools>[0];
-  const allTools = await getAvailableTools(adminContext, { mode: "act", unifiedMode: true });
-  const tools = allTools.filter(
-    (t) => !t.buildPhases || t.buildPhases.includes("build"),
-  );
+  const taskDescription = [
+    `Build the following feature in the sandbox:`,
+    `Title: ${brief.title}`,
+    `Description: ${brief.description}`,
+    ``,
+    `Acceptance Criteria:`,
+    ...(Array.isArray(brief.acceptanceCriteria) ? brief.acceptanceCriteria.map((c: string, i: number) => `${i + 1}. ${c}`) : []),
+  ].join("\n");
+
+  const systemPrompt = await buildSpecialistPrompt({ role: "software-engineer", taskDescription, buildContext });
+
+  // Get sandbox tools scoped to the software-engineer specialist
+  const userContext = { userId: "system", platformRole: "HR-000", isSuperuser: true } as Parameters<typeof getAvailableTools>[0];
+  const allTools = await getAvailableTools(userContext, { mode: "act", agentId: SPECIALIST_AGENT_IDS["software-engineer"] });
+  const allowedNames = new Set(SPECIALIST_TOOLS["software-engineer"]);
+  const tools = allTools.filter(t => allowedNames.has(t.name));
   const toolsForProvider = toolsToOpenAIFormat(tools);
-  console.log("[build-pipeline] stepGenerateCode:", { buildId, tools: tools.length, allTools: allTools.length });
 
   // Build the initial message from the brief
   const userMessage = [
     `Build the following feature in the sandbox:`,
-    `Title: ${brief?.title ?? build.title ?? buildId}`,
-    `Description: ${brief?.description ?? build.description ?? "(no description provided)"}`,
+    `Title: ${brief.title}`,
+    `Description: ${brief.description}`,
     ``,
     `Acceptance Criteria:`,
-    ...(Array.isArray(brief?.acceptanceCriteria) ? brief.acceptanceCriteria.map((c: string, i: number) => `${i + 1}. ${c}`) : [`(none specified)`]),
+    ...(Array.isArray(brief.acceptanceCriteria) ? brief.acceptanceCriteria.map((c: string, i: number) => `${i + 1}. ${c}`) : []),
     ``,
     `Follow the approved implementation plan. Start by searching the codebase for existing patterns, then generate new files and edit existing ones as needed. Run tests when done.`,
   ].join("\n");
@@ -422,13 +322,10 @@ async function stepGenerateCode(
     toolsForProvider,
     userId: "system",
     routeContext: `/build/${buildId}`,
-    agentId: "build-architect",
+    agentId: SPECIALIST_AGENT_IDS["software-engineer"],
     threadId,
-    // Use "analysis" routing so the request goes to the Anthropic API (Claude),
-    // which supports proper function/tool calling in the agentic loop.
-    // "code_generation" routes to Codex CLI which dispatches single-shot prompts
-    // and cannot call the sandbox file-editing tools iteratively.
-    taskType: "analysis",
+    taskType: "code_generation",
+    modelRequirements: SPECIALIST_MODEL_REQS["software-engineer"],
     requireTools: true,
     onProgress: (event) => {
       if (thread?.id) agentEventBus.emit(thread.id, event);
@@ -493,42 +390,9 @@ async function stepRunTests(
 }
 
 async function stepComplete(
-  buildId: string,
+  _buildId: string,
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
-  // Capture the sandbox's releasable diff and commit hashes onto the
-  // FeatureBuild row so downstream gates (build→review, review→ship, the
-  // contribution flow, the release decision panel) see the work the agent
-  // actually did. Before this step ran inside the pipeline, the pipeline
-  // would mark itself "complete" with a 5-commit branch in the sandbox but
-  // diffPatch=NULL and gitCommitHashes=[] in the DB — and PR #850's gate
-  // would then reject the build for "no releasable source changes."
-  if (!state.containerId) return state;
-
-  const { prisma } = await import("@dpf/db");
-  const { extractDiff, listSandboxCommitsAheadOfBase } = await import("./sandbox/sandbox");
-  const { getClientIdentity } = await import("./sandbox/build-branch");
-
-  const identity = await getClientIdentity();
-  const baseRef = identity.clientBranch;
-
-  const [fullDiff, commitHashes] = await Promise.all([
-    extractDiff(state.containerId, { baseRef }),
-    listSandboxCommitsAheadOfBase(state.containerId, baseRef),
-  ]);
-
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: {
-      diffPatch: fullDiff,
-      diffSummary: fullDiff.slice(0, 500),
-      gitCommitHashes: commitHashes,
-    },
-  });
-
-  console.log(
-    `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${buildId}`,
-  );
-
+  // No-op: the pipeline loop handles the "complete" transition.
   return state;
 }

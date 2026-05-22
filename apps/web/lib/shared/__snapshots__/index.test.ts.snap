@@ -14,7 +14,6 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "extractHeadings",
   "getEmployeeAddresses",
   "handleFileUpload",
-  "isStallWatchdogEnabled",
   "isUnifiedCoworkerEnabled",
   "loadAllDocs",
   "loadDocPage",
