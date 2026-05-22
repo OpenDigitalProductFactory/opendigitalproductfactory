@@ -1,3 +1,49 @@
-# Default owner for all paths.
-# Extend this file as domain owners step forward for specific areas.
+# Code ownership — supports trust-boundary review under BI-860603DA.
+#
+# Branch protection setting "Require review from Code Owners" makes the
+# patterns below enforceable. Without that setting, this file is documentation
+# of intent. Both modes are useful: even as documentation, a contributor or
+# bot reviewer can see which paths need owner approval.
+#
+# Trust-boundary paths (BI-860603DA, BI-5940955C)
+# -----------------------------------------------
+# Files where a malicious or careless change can compromise the whole repo
+# or every install of the platform. PRs that touch these get extra scrutiny,
+# regardless of size, regardless of provenance (internal or fork).
+#
+# Reference: docs/security/README.md "What this gate is NOT" — gates catch
+# patterns; trust-boundary review catches design + intent.
+
+# Default — every path falls through to here unless overridden below.
 * @markdbodman
+
+# ─── CI infrastructure ────────────────────────────────────────────────
+# Every workflow file runs with at least GITHUB_TOKEN. Several use
+# `pull_request_target` (DCO sign-off for Dependabot) which executes
+# with `contents: write`. A tampered workflow can leak secrets, push
+# code, or change protection settings — see BI-5940955C.
+/.github/workflows/  @markdbodman
+/.github/CODEOWNERS  @markdbodman
+/.github/dependabot.yml  @markdbodman
+
+# ─── Security substrate ───────────────────────────────────────────────
+# Auditors, baselines, and the scripts that enforce the inflow gate.
+# Modifying these = modifying the platform's security policy. The
+# baselines in particular: lowering an entry without a fix is the
+# textbook way to silently regress security.
+/scripts/security/     @markdbodman
+/docs/security/        @markdbodman
+
+# ─── Kernel and decision substrate ────────────────────────────────────
+# Principles ship with every install. A change here propagates to every
+# DPF deployment via the hive update. The WWMD Decision Perspective
+# Kernel adjudicates every phase gate — tampering routes feature work
+# around governance.
+/docs/founder-kernel/wiki/principles/  @markdbodman
+/apps/web/lib/decision-perspective/     @markdbodman
+
+# ─── Existing audit invariants ────────────────────────────────────────
+# These auditors lock specific architectural patterns into CI. They
+# are referenced by the audit-*.yml workflows above; changes here
+# need owner review even when the workflow file isn't touched.
+/apps/web/scripts/audit-*.ts           @markdbodman

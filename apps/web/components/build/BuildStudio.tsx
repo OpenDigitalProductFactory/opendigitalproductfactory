@@ -7,7 +7,10 @@ import { useRouter } from "next/navigation";
 import { GitBranch } from "lucide-react";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { NodeInspector } from "./NodeInspector";
+import type { ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
 import { OpenSandboxButton } from "./OpenSandboxButton";
+import { DetailsDrawer, DetailsDrawerPill, type DetailsDrawerSection } from "./DetailsDrawer";
 import { computeDrivingBuild, isValidSandboxPort, type SandboxDriverCandidate } from "@/lib/build/sandbox-driver";
 import { ClaimBadge } from "./ClaimBadge";
 import { ProcessGraph } from "./ProcessGraph";
@@ -71,16 +74,28 @@ export function BuildStudio({
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  // "preview" removed per spec — sandbox is shared across builds, so the
-  // per-build Preview tab is dishonest. A single Open Sandbox button now
-  // lives in the footer and links to whichever build is currently driving
-  // the sandbox runtime.
-  const [buildView, setBuildView] = useState<"progress" | "topology" | "docs">("progress");
+  // Tab selector removed per spec §1 + §9 #11 — the workflow graph is the
+  // always-visible primary surface of the active-build pane. Progress /
+  // Brief / Review / Sandbox / BS-Queue evidence migrates into the
+  // DetailsDrawer accordion (PR #912's DetailsDrawer + this slice).
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     shouldOpenBuildStudioSidebarByDefault(
       typeof window === "undefined" ? undefined : window.innerWidth,
     ),
   );
+  // Anchored NodeInspector lifecycle. When ProcessGraph is rendered with an
+  // onNodeClick prop, it delegates click handling here instead of opening
+  // its own internal TaskInspector / WorkflowStageInspector overlays. The
+  // anchored inspector lives INSIDE the workflow canvas so it never
+  // displaces the AI Coworker rail. Per spec §2 and Mark's explicit ask.
+  const [selectedNodeClick, setSelectedNodeClick] = useState<ProcessGraphNodeClickInfo | null>(null);
+  // Clear inspector state when the active build changes — a stale anchor
+  // from another build would point at a node that's no longer in the DOM.
+  useEffect(() => {
+    setSelectedNodeClick(null);
+  }, [activeBuild?.buildId]);
   const isDevEnvironment = dpfEnvironment === "dev";
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
@@ -370,12 +385,6 @@ export function BuildStudio({
     }
   }
 
-  const getTabStyle = (selected: boolean) => ({
-    background: selected ? "var(--dpf-surface-2)" : "transparent",
-    color: selected ? "var(--dpf-text)" : "var(--dpf-muted)",
-    borderBottom: selected ? "2px solid var(--dpf-accent)" : "2px solid transparent",
-  });
-
   return (
     <div className={getBuildStudioShellClassName()} data-testid={BUILD_STUDIO_TEST_IDS.shell}>
       <div className="relative flex flex-1 overflow-hidden">
@@ -450,6 +459,10 @@ export function BuildStudio({
                 if (activeBuild?.buildId === build.buildId) setActiveBuild(null);
                 router.refresh();
               });
+            }}
+            onOpenQueueDrawer={() => {
+              setDrawerInitialSectionId("bs-queue");
+              setDrawerOpen(true);
             }}
           />
         </div>
@@ -550,91 +563,69 @@ export function BuildStudio({
                     />
                   </div>
                 )}
-                {/* Tab selector */}
-                <div role="tablist" aria-label="Workflow view tabs" className="flex gap-1 px-4 pt-3 pb-0">
-                  <button
-                    role="tab"
-                    aria-selected={buildView === "progress"}
-                    aria-controls="panel-progress"
-                    onClick={() => setBuildView("progress")}
-                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                    style={getTabStyle(buildView === "progress")}
-                  >
-                    Progress
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={buildView === "topology"}
-                    aria-controls="panel-topology"
-                    onClick={() => setBuildView("topology")}
-                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                    style={getTabStyle(buildView === "topology")}
-                  >
-                    Workflow
-                  </button>
-                  {/* Details tab — always available so design doc / brief is visible during ideate/plan */}
-                  <button
-                    role="tab"
-                    aria-selected={buildView === "docs"}
-                    aria-controls="panel-docs"
-                    onClick={() => setBuildView("docs")}
-                    className="px-3 py-1 rounded-t text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2"
-                    style={getTabStyle(buildView === "docs")}
-                  >
-                    {activeBuild.phase === "ship"
-                      ? "Release"
-                      : (activeBuild.phase === "review" || activeBuild.phase === "complete")
-                        ? "Review"
-                        : "Details"}
-                  </button>
-                  {/* Per-build "Preview" tab removed — sandbox is shared, so
-                      the per-build preview surface was misleading. The footer
-                      OpenSandboxButton handles the shared link labeled with
-                      whichever build is currently driving the sandbox. */}
-                </div>
-                {buildView === "topology" && (
-                  <div
-                    id="panel-topology"
-                    className={getBuildStudioGraphPanelClassName()}
-                    data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
-                  >
-                    <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
-                      <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
-                    </div>
-                    <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
-                      Select any stage or task to inspect what happened, related artifacts, and the next approval gate.
-                    </div>
-                    <ProcessGraph
-                      build={activeBuild}
-                      workflowLabel={activeLifecycleLabel}
-                      governedBacklogEnabled={governedBacklogEnabled}
-                      progressVisibility={progressVisibility}
-                    />
+                {/* Workflow graph — always-visible primary surface of the
+                    active-build pane. The tab selector (Progress/Workflow/
+                    Details/Preview) is gone; evidence migrates into the
+                    DetailsDrawer below. See spec §1 + §9 #11. */}
+                <div
+                  className={`${getBuildStudioGraphPanelClassName()} relative`}
+                  data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
+                >
+                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+                    <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
                   </div>
-                )}
-                {buildView !== "topology" && (
-                  <div
-                    id={`panel-${buildView}`}
-                    className={buildView === "progress" ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-0 flex-1 gap-4 p-4"}
-                  >
-                    {buildView === "progress" ? (
-                      <BuildProgressOperationalPanel projection={progressVisibility} />
-                    ) : (
-                      <div className="flex-1 overflow-auto">
-                        {activeBuild.phase === "review" || activeBuild.phase === "ship" || activeBuild.phase === "complete" ? (
-                          <ReviewPanel build={activeBuild} />
-                        ) : (
-                          <FeatureBriefPanel
-                            brief={activeBuild.brief}
-                            phase={activeBuild.phase}
-                            diffSummary={activeBuild.diffSummary}
-                            build={activeBuild}
-                          />
-                        )}
-                      </div>
+                  <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
+                    Select any stage or task to inspect — or open Details on the right for progress, brief, review, sandbox, and BS Queue evidence.
+                  </div>
+                  <ProcessGraph
+                    build={activeBuild}
+                    workflowLabel={activeLifecycleLabel}
+                    governedBacklogEnabled={governedBacklogEnabled}
+                    progressVisibility={progressVisibility}
+                    onNodeClick={(info) => {
+                      setSelectedNodeClick((prev) =>
+                        prev?.nodeId === info.nodeId ? null : info,
+                      );
+                    }}
+                  />
+                  {selectedNodeClick && (
+                    <NodeInspector
+                      nodeId={selectedNodeClick.nodeId}
+                      title={resolveInspectorTitle(selectedNodeClick)}
+                      anchorRect={selectedNodeClick.anchorRect}
+                      containerRect={selectedNodeClick.containerRect}
+                      containerScrollTop={selectedNodeClick.containerScrollTop}
+                      onClose={() => setSelectedNodeClick(null)}
+                      onAskCoworker={() => {
+                        const prefill = buildCoworkerPrefill(selectedNodeClick, activeBuild.buildId);
+                        document.dispatchEvent(
+                          new CustomEvent("open-agent-panel", {
+                            detail: { autoMessage: prefill, targetBuildId: activeBuild.buildId },
+                          }),
+                        );
+                      }}
+                    >
+                      <NodeInspectorBody info={selectedNodeClick} />
+                    </NodeInspector>
+                  )}
+                  <DetailsDrawerPill
+                    isOpen={drawerOpen}
+                    onClick={() => {
+                      setDrawerOpen((p) => !p);
+                      setDrawerInitialSectionId(null);
+                    }}
+                  />
+                  <DetailsDrawer
+                    isOpen={drawerOpen}
+                    onClose={() => setDrawerOpen(false)}
+                    sections={buildDetailsDrawerSections(
+                      activeBuild,
+                      progressVisibility,
+                      drawerInitialSectionId,
+                      buildRows,
                     )}
-                  </div>
-                )}
+                  />
+                </div>
               </div>
             </>
           ) : (
@@ -678,6 +669,207 @@ export function BuildStudio({
       <BuildStudioFooter builds={buildRows} />
     </div>
   );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* DetailsDrawer — derive accordion sections from active build + drawer state.*/
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function buildDetailsDrawerSections(
+  activeBuild: FeatureBuildRow,
+  progressVisibility: BuildProgressVisibility | null,
+  initialSectionId: string | null,
+  allBuilds: readonly FeatureBuildRow[],
+): DetailsDrawerSection[] {
+  // Default-open section depends on phase + explicit operator intent.
+  // - When the queue header opened the drawer, BS-Queue is the explicit pick.
+  // - Otherwise: ideate/plan → Brief; build → Progress; review/ship/complete → Review.
+  const defaultId =
+    initialSectionId ??
+    (activeBuild.phase === "ideate" || activeBuild.phase === "plan"
+      ? "brief"
+      : activeBuild.phase === "build"
+        ? "progress"
+        : "review");
+
+  return [
+    {
+      id: "progress",
+      title: "Progress",
+      defaultOpen: defaultId === "progress",
+      content: <BuildProgressOperationalPanel projection={progressVisibility} />,
+    },
+    {
+      id: "brief",
+      title: activeBuild.phase === "complete" ? "Shipped — original brief" : "Brief / Design Doc",
+      defaultOpen: defaultId === "brief",
+      content: (
+        <FeatureBriefPanel
+          brief={activeBuild.brief}
+          phase={activeBuild.phase}
+          diffSummary={activeBuild.diffSummary}
+          build={activeBuild}
+        />
+      ),
+    },
+    {
+      id: "review",
+      title: activeBuild.phase === "ship" ? "Release" : "Review",
+      defaultOpen: defaultId === "review",
+      content: <ReviewPanel build={activeBuild} />,
+    },
+    {
+      id: "bs-queue",
+      title: "BS Queue",
+      defaultOpen: defaultId === "bs-queue",
+      content: <BsQueueSection builds={allBuilds} />,
+    },
+  ];
+}
+
+function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
+  const entries = builds.map((b) => ({
+    build: b,
+    queueState: deriveQueueState(b),
+    needsAttention: deriveNeedsAttention(b),
+  }));
+  const kindRank = { running: 0, blocked: 1, queued: 2, idle: 3 } as const;
+  const sorted = [...entries].sort((a, b) => {
+    const ra = kindRank[a.queueState.kind];
+    const rb = kindRank[b.queueState.kind];
+    if (ra !== rb) return ra - rb;
+    if (a.queueState.kind === "queued" && b.queueState.kind === "queued") {
+      return a.queueState.position - b.queueState.position;
+    }
+    return a.build.buildId.localeCompare(b.build.buildId);
+  });
+  const counts = deriveFleetCounts(entries.map((e) => e.queueState));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[var(--dpf-muted)]">
+        Shared sandbox runtime — read-only view. Per spec §10, queue mutation
+        (start/cancel/reorder) belongs to the concurrency thread, not this layout.
+      </p>
+      <div className="flex flex-wrap gap-3 text-[11px] text-[var(--dpf-text)]">
+        <span>Running: <span className="font-semibold">{counts.runningCount}</span></span>
+        <span>Blocked: <span className="font-semibold text-[var(--dpf-warning)]">{counts.blockedCount}</span></span>
+        <span>Queued: <span className="font-semibold">{counts.queuedCount}</span></span>
+      </div>
+      <ul className="flex flex-col gap-1">
+        {sorted.map((entry) => (
+          <li
+            key={entry.build.buildId}
+            className="flex items-center gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-[11px]"
+            data-build-id={entry.build.buildId}
+            data-queue-kind={entry.queueState.kind}
+          >
+            <span className="font-mono text-[var(--dpf-text)]">{entry.build.buildId}</span>
+            <span className="truncate text-[var(--dpf-muted)]">{entry.build.title}</span>
+            <span className="ml-auto text-[10px] uppercase tracking-wider text-[var(--dpf-muted)]">
+              {entry.queueState.kind}
+              {entry.queueState.kind === "queued" && ` @${entry.queueState.position}`}
+            </span>
+          </li>
+        ))}
+        {sorted.length === 0 && (
+          <li className="text-[var(--dpf-muted)]">No builds.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* NodeInspector helpers — derive title + body + coworker-prefill from click. */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function resolveInspectorTitle(info: ProcessGraphNodeClickInfo): string {
+  if (info.kind === "task") {
+    return info.task?.title ?? "Task";
+  }
+  if (info.kind === "phase" || info.kind === "forkJoin") {
+    const phase = info.phase;
+    if (phase === "ideate") return "Ideate phase";
+    if (phase === "plan") return "Plan phase";
+    if (phase === "build") return "Build phase";
+    if (phase === "review") return "Review phase";
+    if (phase === "ship") return "Ship phase";
+    if (phase === "complete") return "Complete";
+    if (phase === "failed") return "Failed";
+    return "Workflow node";
+  }
+  return "Workflow node";
+}
+
+/**
+ * Build a prefill string for the AI Coworker panel when the operator
+ * clicks "Ask coworker about this step" inside the inspector.
+ */
+function buildCoworkerPrefill(info: ProcessGraphNodeClickInfo, buildId: string): string {
+  if (info.kind === "task" && info.task) {
+    return `In build ${buildId}, looking at task "${info.task.title}". What's happening with this step?`;
+  }
+  if (info.phase) {
+    return `In build ${buildId}, looking at the ${info.phase} phase. What's the current state and what does the operator need to do next?`;
+  }
+  return `In build ${buildId}, looking at a workflow node. What's its current state?`;
+}
+
+function NodeInspectorBody({ info }: { info: ProcessGraphNodeClickInfo }) {
+  if (info.kind === "task") {
+    const assigned = info.task;
+    if (!assigned) {
+      return (
+        <p className="text-[var(--dpf-muted)]">
+          This task is referenced by the workflow but isn't in the saved build plan.
+        </p>
+      );
+    }
+    const plan = assigned.task;
+    return (
+      <div className="flex flex-col gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Specialist</p>
+          <p className="mt-0.5 text-[var(--dpf-text)]">{assigned.specialist}</p>
+        </div>
+        {plan?.implement && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Implement</p>
+            <p className="mt-0.5 text-[var(--dpf-text)]">{plan.implement}</p>
+          </div>
+        )}
+        {plan?.testFirst && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Test first</p>
+            <p className="mt-0.5 text-[var(--dpf-text)]">{plan.testFirst}</p>
+          </div>
+        )}
+        {plan?.verify && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Verify</p>
+            <p className="mt-0.5 text-[var(--dpf-text)]">{plan.verify}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (info.kind === "phase" || info.kind === "forkJoin") {
+    return (
+      <div className="flex flex-col gap-2">
+        <p>
+          Click this node again to close the inspector, or open the Details
+          drawer for full evidence (Progress, Brief, Review, Sandbox).
+        </p>
+        <p className="text-[var(--dpf-muted)]">
+          The full per-phase inspector content migrates into the inspector in
+          a follow-up slice — for now the body shows a minimal placeholder so
+          the anchored-positioning + a11y contract is in place.
+        </p>
+      </div>
+    );
+  }
+  return <p className="text-[var(--dpf-muted)]">Workflow node selected.</p>;
 }
 
 function BuildStudioFooter({ builds }: { builds: FeatureBuildRow[] }) {
@@ -764,6 +956,7 @@ function FleetRailZone({
   isDevEnvironment,
   onSelectBuild,
   onDeleteBuild,
+  onOpenQueueDrawer,
 }: {
   buildRows: FeatureBuildRow[];
   activeBuildId: string | null;
@@ -771,6 +964,7 @@ function FleetRailZone({
   isDevEnvironment: boolean;
   onSelectBuild: (build: FeatureBuildRow) => void;
   onDeleteBuild: (build: FeatureBuildRow) => void;
+  onOpenQueueDrawer: () => void;
 }) {
   // Derive per-row fleet entries: queueState + needsAttention + lifecycle.
   // queueState falls back to phase-based heuristics until the concurrency
@@ -825,13 +1019,15 @@ function FleetRailZone({
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Compact fleet header — surfaces in-flight aggregate so the
           operator can see queue pressure without opening every build.
-          Click target is currently inert; the DetailsDrawer queue
-          subsection lands in a follow-up slice. */}
-      <div
+          Click opens the DetailsDrawer's BS-Queue section. */}
+      <button
+        type="button"
+        onClick={onOpenQueueDrawer}
         role="status"
         aria-live="polite"
+        aria-label="Open build details drawer — BS queue section"
         data-testid="build-studio-fleet-header"
-        className="flex shrink-0 items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-[11px] font-semibold text-[var(--dpf-text)]"
+        className="flex w-full shrink-0 cursor-pointer items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
       >
         <span data-testid="fleet-header-label">
           Builds: {counts.runningCount} running
@@ -842,7 +1038,8 @@ function FleetRailZone({
             <> · {counts.queuedCount} queued</>
           )}
         </span>
-      </div>
+        <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
+      </button>
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
         {sorted.map((entry, idx) => (
           <li key={entry.build.buildId}>
