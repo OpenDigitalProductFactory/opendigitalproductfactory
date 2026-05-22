@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useRef, useCallback } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
 import { setVoiceEnabled } from "@/lib/actions/voice-profile"
+import { selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
 
 interface ConsentRecord {
   id: string
@@ -110,6 +111,7 @@ export function VoiceProfileSetup({
               A consent record is required before uploading a voice sample.
             </p>
             <VoiceConsentForm
+              profileId={profileId}
               capturedByPrincipalId={currentUserId}
               onSuccess={() => window.location.reload()}
             />
@@ -117,7 +119,7 @@ export function VoiceProfileSetup({
         )}
       </section>
 
-      {/* Step 2: Upload reference audio */}
+      {/* Step 2: Upload or record reference audio */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${voiceProfile?.status === "ready" ? "bg-green-500 text-white" : "bg-muted text-muted-foreground"}`}>
@@ -138,13 +140,7 @@ export function VoiceProfileSetup({
             )}
           </div>
         ) : (
-          <div className="rounded-md border border-border p-4 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Upload 3–30 seconds of clean audio or video. Chatterbox will clone the
-              voice immediately — no training wait.
-            </p>
-            <ReferenceUploadForm profileId={profileId} />
-          </div>
+          <VoiceSampleCapture profileId={profileId} />
         )}
       </section>
 
@@ -168,7 +164,245 @@ export function VoiceProfileSetup({
   )
 }
 
-// Reference audio upload form — posts to /api/voice/reference (zero-shot Chatterbox)
+// ─── Voice Sample Capture ─────────────────────────────────────────────────────
+// Record from mic or upload a file — both POST to /api/voice/reference.
+
+type CaptureMode = "record" | "upload"
+type RecordState = "idle" | "permission" | "recording" | "preview" | "uploading" | "error"
+
+function VoiceSampleCapture({ profileId }: { profileId: string }) {
+  const [mode, setMode] = useState<CaptureMode>("record")
+
+  return (
+    <div className="rounded-md border border-border p-4 space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Provide 5–30 seconds of clean speech. Chatterbox clones your voice immediately — no training wait.
+      </p>
+
+      {/* Mode toggle */}
+      <div className="flex gap-1 rounded-md border border-border p-1 w-fit text-xs">
+        <button
+          onClick={() => setMode("record")}
+          className={`px-3 py-1.5 font-medium rounded transition-colors ${mode === "record" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          🎙 Record from mic
+        </button>
+        <button
+          onClick={() => setMode("upload")}
+          className={`px-3 py-1.5 font-medium rounded transition-colors ${mode === "upload" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          ↑ Upload file
+        </button>
+      </div>
+
+      {mode === "record" ? (
+        <MicRecorder profileId={profileId} />
+      ) : (
+        <ReferenceUploadForm profileId={profileId} />
+      )}
+    </div>
+  )
+}
+
+// ─── Mic recorder ─────────────────────────────────────────────────────────────
+
+function MicRecorder({ profileId }: { profileId: string }) {
+  const [recState, setRecState] = useState<RecordState>("idle")
+  const [error, setError] = useState<string | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const [showScript, setShowScript] = useState(true)
+
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+  }, [])
+
+  const cleanup = useCallback(() => {
+    stopTimer()
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    recorderRef.current = null
+    chunksRef.current = []
+  }, [stopTimer])
+
+  const startRecording = async () => {
+    setError(null)
+    setAudioUrl(null)
+    setAudioBlob(null)
+    setElapsed(0)
+    setRecState("permission")
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+
+      const mimeType = selectSupportedMimeType() ?? undefined
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      recorderRef.current = recorder
+      chunksRef.current = []
+
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType ?? "audio/webm" })
+        const url = URL.createObjectURL(blob)
+        setAudioUrl(url)
+        setAudioBlob(blob)
+        setRecState("preview")
+        cleanup()
+      }
+
+      recorder.start(250)
+      setRecState("recording")
+      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Microphone access failed"
+      setError(msg.toLowerCase().includes("denied")
+        ? "Microphone permission denied. Allow access in your browser settings and try again."
+        : msg)
+      setRecState("error")
+      cleanup()
+    }
+  }
+
+  const stopRecording = () => {
+    stopTimer()
+    recorderRef.current?.stop()
+  }
+
+  const discardPreview = () => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl)
+    setAudioUrl(null)
+    setAudioBlob(null)
+    setRecState("idle")
+    setElapsed(0)
+  }
+
+  const submitRecording = async () => {
+    if (!audioBlob) return
+    setRecState("uploading")
+    setError(null)
+
+    const body = new FormData()
+    body.append("voiceProfileId", profileId)
+    body.append("audio", audioBlob, "recording.webm")
+
+    try {
+      const res = await fetch("/api/voice/reference", { method: "POST", body })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError((data as { error?: string }).error ?? `Upload failed (${res.status})`)
+        setRecState("preview")
+      } else {
+        window.location.reload()
+      }
+    } catch {
+      setError("Network error — try again.")
+      setRecState("preview")
+    }
+  }
+
+  // Browser support check
+  if (typeof navigator === "undefined"
+    || !navigator.mediaDevices?.getUserMedia
+    || typeof MediaRecorder === "undefined") {
+    return <p className="text-sm text-muted-foreground">Microphone recording is not available in this browser. Use "Upload file" instead.</p>
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Suggested script */}
+      {showScript && recState === "idle" && (
+        <div className="rounded-md bg-muted/50 border border-border p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Suggested script</p>
+            <button onClick={() => setShowScript(false)} className="text-xs text-muted-foreground hover:text-foreground">dismiss</button>
+          </div>
+          <p className="text-sm text-muted-foreground italic leading-relaxed">
+            "I'm recording this voice sample to enable AI-narrated decision feedback
+            through the platform. My name is [your name] and I consent to this
+            voice profile being used for that purpose."
+          </p>
+        </div>
+      )}
+
+      {recState === "idle" && (
+        <button
+          onClick={startRecording}
+          className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
+          <span className="h-2 w-2 rounded-full bg-white/70" />
+          Start recording
+        </button>
+      )}
+
+      {recState === "permission" && (
+        <p className="text-sm text-muted-foreground">Requesting microphone access…</p>
+      )}
+
+      {recState === "recording" && (
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-2 text-sm font-medium text-red-500">
+            <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+            Recording — {elapsed}s
+          </span>
+          <button
+            onClick={stopRecording}
+            disabled={elapsed < 3}
+            className="rounded border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+          >
+            {elapsed < 3 ? `Stop (${3 - elapsed}s min)` : "Stop"}
+          </button>
+        </div>
+      )}
+
+      {recState === "preview" && audioUrl && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Preview ({elapsed}s recorded)</p>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={audioUrl} className="w-full h-9" />
+          <div className="flex gap-2">
+            <button
+              onClick={submitRecording}
+              className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Register voice
+            </button>
+            <button
+              onClick={discardPreview}
+              className="rounded border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Record again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {recState === "uploading" && (
+        <p className="text-sm text-muted-foreground">Registering voice with Chatterbox…</p>
+      )}
+
+      {(recState === "error" || error) && (
+        <div className="space-y-2">
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          {recState === "error" && (
+            <button onClick={() => { setRecState("idle"); setError(null) }} className="text-xs text-muted-foreground underline">
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── File upload form ──────────────────────────────────────────────────────────
+
 function ReferenceUploadForm({ profileId }: { profileId: string }) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
