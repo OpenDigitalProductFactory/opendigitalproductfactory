@@ -228,7 +228,11 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/class=\"truncate\">dpf\/fb8783b9\/fix-build-studio-header-content-overlap-in-workflo/);
   });
 
-  it("defaults to the operational progress view and keeps topology available", () => {
+  it("makes the workflow graph the always-visible primary surface; tabs are gone", () => {
+    // Spec §1 + §9 #11: the global tab selector (Progress/Workflow/Details/
+    // Preview) is removed. The workflow canvas is the active-build pane's
+    // primary surface. Evidence (Progress, Brief, Review, Sandbox, BS Queue)
+    // moves into the DetailsDrawer accordion behind a pill on the canvas edge.
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -239,11 +243,21 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain(">Progress<");
-    expect(html).toContain(">Workflow<");
-    expect(html).toContain("Loading build progress...");
-    expect(html).not.toContain("code-intelligence-status-card");
-    expect(html).not.toContain("process-graph");
+    // No global tab list / tab buttons.
+    expect(html).not.toMatch(/role="tablist"[^>]*aria-label="Workflow view tabs"/);
+    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Progress<\/button>/);
+    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Workflow<\/button>/);
+    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Details<\/button>/);
+
+    // Workflow canvas surfaces are rendered eagerly (not gated by tab state).
+    expect(html).toContain('data-testid="build-studio-graph-panel"');
+    expect(html).toContain('data-testid="code-intelligence-status-card"');
+    expect(html).toContain('data-testid="process-graph"');
+
+    // DetailsDrawer + Pill are mounted; drawer starts closed.
+    expect(html).toContain('data-testid="build-studio-details-drawer-pill"');
+    expect(html).toContain('data-testid="build-studio-details-drawer"');
+    expect(html).toMatch(/data-testid="build-studio-details-drawer"[^>]*data-open="false"/);
   });
 
   it("renders the portal context strip when a server envelope is provided", () => {
