@@ -55,5 +55,11 @@ jobs:
         with:
           node-version: 24
 
-      - name: Scan workflows for `${{ github.event.* }}` in run: blocks
+      - name: Scan workflows for dangerous expressions in run blocks
+        # The expression syntax that's flagged by this audit is too dangerous
+        # to put in a step `name:` field — GitHub Actions tries to evaluate
+        # the substring as a template expression at workflow-startup time
+        # and the workflow fails before any job runs. Description lives in
+        # the YAML header instead. See the hotfix PR that introduced this
+        # rewording.
         run: node scripts/security/check-actions-injection.mjs
