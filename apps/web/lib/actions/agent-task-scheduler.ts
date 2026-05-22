@@ -401,7 +401,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "unknown error";
-    console.error(`[agent-task-scheduler] Task ${taskId} failed:`, errMsg);
+    // CodeQL #39 (js/tainted-format-string): taskId via format-arg.
+    console.error("[agent-task-scheduler] Task %s failed:", taskId, errMsg);
 
     const ref = taskRunRef;
     if (ref) {

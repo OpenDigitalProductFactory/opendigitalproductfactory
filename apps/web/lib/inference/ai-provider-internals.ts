@@ -52,7 +52,8 @@ export async function getDecryptedCredential(providerId: string) {
     if (cred.status !== "key_rotated") {
       prisma.credentialEntry
         .update({ where: { providerId }, data: { status: "key_rotated" } })
-        .catch((err) => console.warn(`[credentials] Failed to mark ${providerId} as key_rotated:`, err));
+        // CodeQL #47 (js/tainted-format-string): providerId is user-influenced.
+        .catch((err) => console.warn("[credentials] Failed to mark %s as key_rotated:", providerId, err));
     }
     return null;
   }
@@ -1014,8 +1015,9 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       }
       console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${providerId}`);
     } catch (err) {
-      // Non-fatal — catalog scores are usable even without live eval
-      console.warn(`[auto-discover] Failed to queue background evals for ${providerId}:`, err);
+      // Non-fatal — catalog scores are usable even without live eval.
+      // CodeQL #48 (js/tainted-format-string): providerId via format-arg.
+      console.warn("[auto-discover] Failed to queue background evals for %s:", providerId, err);
     }
   }
 

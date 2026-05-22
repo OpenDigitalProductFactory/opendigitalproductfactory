@@ -1050,7 +1050,8 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
   }).catch(() => {});
 
   autoExecuteBuild(buildId).catch((err) =>
-    console.error(`[build] resumeBuildImplementation failed for ${buildId}:`, err),
+    // CodeQL #42 (js/tainted-format-string): buildId via format-arg.
+    console.error("[build] resumeBuildImplementation failed for %s:", buildId, err),
   );
 
   return {

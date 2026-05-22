@@ -193,15 +193,30 @@ export async function runSanitizationScan(diff: string): Promise<SanitizationRep
         });
       }
 
-      // Hardcoded URLs pointing to specific instances (not localhost/example)
+      // Hardcoded URLs pointing to specific instances (not localhost/example).
+      // CodeQL alerts #68/#69 (js/incomplete-url-substring-sanitization):
+      // the previous content.includes("github.com") check was substring-only,
+      // which would accept "github.com.evil.example". Parse the matched URL
+      // and check the actual hostname against the allowlist.
       const urlMatch = content.match(/https?:\/\/(?!localhost|127\.0\.0\.1|example\.com)[a-zA-Z0-9.-]+\.[a-z]{2,}/);
-      if (urlMatch && !content.includes("github.com") && !content.includes("googleapis.com")) {
-        findings.push({
-          file, line: i, type: "instance-url",
-          original: urlMatch[0],
-          suggestedReplacement: null,
-          severity: "review",
-        });
+      if (urlMatch) {
+        let matchedHost = "";
+        try {
+          matchedHost = new URL(urlMatch[0]).hostname.toLowerCase();
+        } catch {
+          // urlMatch is by construction a valid URL prefix — fall through
+        }
+        const isAllowedHost =
+          matchedHost === "github.com" || matchedHost.endsWith(".github.com") ||
+          matchedHost === "googleapis.com" || matchedHost.endsWith(".googleapis.com");
+        if (!isAllowedHost) {
+          findings.push({
+            file, line: i, type: "instance-url",
+            original: urlMatch[0],
+            suggestedReplacement: null,
+            severity: "review",
+          });
+        }
       }
     }
   }

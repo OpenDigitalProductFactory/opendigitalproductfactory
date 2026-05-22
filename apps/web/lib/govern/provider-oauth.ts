@@ -9,6 +9,24 @@ import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { getStablePortalUrl } from "@/lib/portal-url";
 
+// ─── Host-match helper ────────────────────────────────────────────────────────
+// CodeQL alerts #64-#67 (js/incomplete-url-substring-sanitization): the
+// previous code used `url.includes("anthropic.com")` to detect Anthropic
+// providers. Substring match is too loose — "anthropic.com.evil.example"
+// includes "anthropic.com". URL parsing + hostname equality is the right
+// check, and it's the pattern CodeQL recognises as a host sanitizer.
+function isAnthropicHost(rawUrl: string): boolean {
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    return (
+      host === "anthropic.com" || host.endsWith(".anthropic.com") ||
+      host === "claude.com" || host.endsWith(".claude.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 // ─── PKCE ─────────────────────────────────────────────────────────────────────
 
 function base64url(buffer: Buffer): string {
@@ -127,7 +145,7 @@ export async function exchangeOAuthCode(
   const redirectUri = getOAuthRedirectUri(provider as { oauthRedirectUri?: string | null; authorizeUrl?: string | null });
 
   // Anthropic requires JSON + state; OpenAI requires form-encoded without state
-  const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
+  const isAnthropicToken = isAnthropicHost(provider.tokenUrl);
   const tokenData: Record<string, string> = {
     grant_type: "authorization_code",
     code,
@@ -241,7 +259,7 @@ export async function refreshOAuthToken(
   const decryptedRefresh = decryptSecret(cred.refreshToken);
   if (!decryptedRefresh) return { error: "Re-authentication required — credential key may have changed" };
 
-  const isAnthropicToken = provider.tokenUrl.includes("claude.com") || provider.tokenUrl.includes("anthropic.com");
+  const isAnthropicToken = isAnthropicHost(provider.tokenUrl);
   const refreshData: Record<string, string> = {
     grant_type: "refresh_token",
     refresh_token: decryptedRefresh,
