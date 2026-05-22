@@ -293,6 +293,7 @@ export function BacklogPanel({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={isPending}
             className="flex-1 py-2 rounded bg-[var(--dpf-accent)] text-xs text-white font-semibold hover:opacity-90 disabled:opacity-50"
