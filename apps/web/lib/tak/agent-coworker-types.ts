@@ -8,6 +8,23 @@ export type AttachmentInfo = {
   parsedSummary: string | null;
 };
 
+/**
+ * Provider/adapter that produced an assistant turn — surfaced in the UI so
+ * users can tell which leg of dynamic routing answered (e.g. Codex CLI vs
+ * Anthropic API). Sourced from AdapterRunTelemetry joined on agentMessageId,
+ * falling back to AgentMessage.providerId for pre-telemetry rows. Omitted
+ * when no provider data is available (user messages, system messages,
+ * legacy rows).
+ */
+export type AgentMessageProvider = {
+  /** Display name (from ModelProvider.name), e.g. "Anthropic", "ChatGPT". */
+  name: string;
+  /** Model id used for the call, e.g. "claude-opus-4-7", "gpt-5-codex". May be null when only AgentMessage.providerId is known. */
+  modelId: string | null;
+  /** Adapter kind from telemetry (e.g. "claude-cli", "anthropic-api", "openai-api"). Null when falling back to AgentMessage.providerId. */
+  adapterKind: string | null;
+};
+
 /** Serialized message for client/server boundary. */
 export type AgentMessageRow = {
   id: string;
@@ -17,6 +34,7 @@ export type AgentMessageRow = {
   routeContext: string | null;
   createdAt: string; // ISO string via .toISOString()
   attachments?: AttachmentInfo[];
+  provider?: AgentMessageProvider;
   proposal?: {
     proposalId: string;
     actionType: string;
