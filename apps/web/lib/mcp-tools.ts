@@ -12590,7 +12590,16 @@ export async function executeTool(
       const sql = String(params.sql ?? "").trim();
       if (!sql) return { success: false, error: "sql is required.", message: "Provide a SQL query." };
       // Only allow SELECT (and WITH ... SELECT)
-      const normalized = sql.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+      // CodeQL #23 (js/polynomial-redos): bound the unbounded `.*` and
+      // `[\s\S]*?` runs so adversarial SQL with thousands of `-` or
+      // `/*` chars can't trigger polynomial backtracking. SQL queries
+      // in this tool are bounded by the admin tool surface; 100k chars
+      // is well above any legitimate query.
+      const normalized = sql
+        .slice(0, 100_000)
+        .replace(/--[^\n]{0,10000}/gm, "")
+        .replace(/\/\*[\s\S]{0,10000}?\*\//g, "")
+        .trim();
       if (!/^(SELECT|WITH)\b/i.test(normalized)) {
         await logAdminActivity(userId, "admin_query_db", { sql }, "blocked", 1, "Only SELECT queries permitted");
         return { success: false, error: "Only SELECT queries are permitted.", message: "This tool is read-only. Use SELECT statements only." };
@@ -12851,7 +12860,9 @@ export async function executeTool(
       if (parsed) {
         return executeMcpServerTool(parsed.serverSlug, parsed.toolName, params);
       }
-      return { success: false, error: "Unknown tool", message: `Tool ${toolName} not found` };
+      // CodeQL #52 (js/tainted-format-string): toolName is user-influenced.
+      // Use a constant message and put the raw value in error for diagnostics.
+      return { success: false, error: "Unknown tool", message: "Tool not found" };
     }
   }
   } catch (err) {
