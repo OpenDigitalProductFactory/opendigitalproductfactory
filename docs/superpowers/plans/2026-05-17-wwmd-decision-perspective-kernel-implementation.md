@@ -49,6 +49,43 @@ New application module:
 
 The refactoring target is deliberate: move shared plan-advancement context assembly into one module so the action path, API path, future MCP path, and UI inspector do not each reinterpret plan readiness, risk, profile version, and evidence context.
 
+## Invocation Routing Contract
+
+The implementation must preserve the spec's product boundary: direct ask helps think; WWMD helps decide. Do not make WWMD a hidden wrapper around every coworker response.
+
+V1 automatic routing is intentionally narrow:
+
+| Path | V1 behavior |
+| --- | --- |
+| Build Studio deterministic gate fails | Do not invoke WWMD. Return deterministic review feedback. |
+| Build Studio deterministic gate passes for `plan -> build` | Invoke WWMD because the remaining question is ambiguous and consequential. |
+| Build Studio transitions other than `plan -> build` | Do not invoke WWMD in v1. |
+| Normal coworker chat | Do not invoke WWMD automatically. Direct answer unless the user explicitly chooses a governed WWMD decision. |
+| A2A/coworker handoff | Do not invoke WWMD in this slice; future use must pass a `TaskRun`/artifact-backed ambiguity packet. |
+| Standalone Ask WWMD | Out of scope for v1; later surface must use the same evaluator, evidence rules, profile chain, and ledger contract. |
+
+Add a small pure helper when integration begins:
+
+```ts
+type DecisionPerspectiveInvocationRoute =
+  | "direct-answer"
+  | "deterministic-gate"
+  | "wwmd-gate"
+  | "deliberation-then-wwmd";
+
+function classifyDecisionPerspectiveRoute(input: {
+  surface: "build-studio" | "coworker-chat" | "a2a-handoff" | "ask-wwmd";
+  ambiguity: "low" | "high";
+  consequence: "low" | "high";
+  deterministicGatePassed?: boolean;
+  phaseFrom?: string;
+  phaseTo?: string;
+  explicitGovernedAsk?: boolean;
+}): DecisionPerspectiveInvocationRoute;
+```
+
+For v1, only `surface: "build-studio"`, `phaseFrom: "plan"`, `phaseTo: "build"`, `deterministicGatePassed: true`, `ambiguity: "high"`, and `consequence: "high"` returns `"wwmd-gate"`. `explicitGovernedAsk` is reserved for the later standalone Ask WWMD surface. Persist the routing rationale in `DecisionInteraction.outcomePayload.routingReason` so a ledger row explains why direct ask was not enough.
+
 ## Data Model Slice
 
 Add the smallest schema that still preserves the profile boundary, version snapshot, and ledger audit trail required by the spec.
@@ -89,6 +126,10 @@ Write failing tests before production code.
    - Builds a plan-advancement question from `FeatureBuild` evidence.
    - Includes compact deliberation summary when present.
    - Persists a `DecisionInteraction` for every invocation.
+   - Classifies direct-answer vs deterministic-gate vs WWMD-gate routes before invoking the evaluator.
+   - Does not invoke WWMD when the deterministic phase gate fails.
+   - Does not invoke WWMD for non-`plan -> build` transitions in v1.
+   - Persists `outcomePayload.routingReason` for every WWMD ledger row.
    - Blocks phase advancement on `escalate` or `defer`.
    - Allows phase advancement on `recommend` or `arbitrate`, while preserving the ledger.
    - Evaluator throwing on malformed input is caught by the gate service and produces a fail-closed `escalate` outcome with the error class recorded in `rationale` — never a thrown exception that bubbles to the operator without a ledger row. (This test belongs here, not in evaluator tests: the evaluator is pure and does not catch its own exceptions; the gate service is the exception boundary.)
@@ -338,6 +379,8 @@ evaluateDecisionPerspective({
 
 Any change to the evaluator's parameter shape must be backward-compatible with this future surface. The persistence layer accepts `taskRunId` as nullable from day one so MCP-triggered invocations (which may not have a `featureBuildId`) write complete ledger records.
 
+The future MCP surface must make advisory versus governed use explicit. It may do this either with a `mode`/`intent` field such as `"advisory"` vs `"governed-decision"` or with split tools such as `wwmd_evaluate` (read-only advisory) and `wwmd_decide` (write-scoped governed decision). Advisory evaluation can return a non-ledger draft if the operator is only exploring. Governed-decision evaluation must write or reuse `DecisionInteraction` and must include `routingReason`, evidence labels, confidence, and escalation/deferral behavior. This prevents the MCP surface from becoming a forked direct-chat endpoint.
+
 ## Marketing Article Unlock Map
 
 The Substack and LinkedIn drafts at `docs/superpowers/plans/2026-05-17-wwmd-article-drafts.md` have five `[PENDING IMPLEMENTATION]` markers. Each maps to a specific slice:
@@ -377,4 +420,5 @@ Use at least one meaningful refactor as part of the implementation, not as clean
 - Principle contradiction vector model (§5.7 v2 — requires real conflict data from v1 ledger).
 - `evaluate_wwmd` MCP tool using the seam defined in the MCP Future Seam section above.
 - Standalone Ask WWMD advisory surface (must use the same governed profile, evidence rules, and confidence model as the gate — not a forked chatbot).
+- Direct-ask vs WWMD evaluation harness: same ambiguous fixtures through direct chat and WWMD, adjudicated by a human resolver, with results fed back into confidence calibration.
 - Customer WWWD profile onboarding and profile-material capture (fallback chain already supports it; needs customer-scoped seed workflow and UI).

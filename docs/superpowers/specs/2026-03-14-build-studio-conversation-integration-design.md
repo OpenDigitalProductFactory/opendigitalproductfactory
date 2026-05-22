@@ -47,6 +47,21 @@ When `sendMessage()` receives a `buildId`:
 3. Injects build context: `buildId`, `phase`, `brief`, `title`, `portfolioId`
 4. Filters available MCP tools to those relevant to the current phase
 
+### Question-Method Overlay
+
+The Build Specialist should use the senior-partner question method from `2026-04-14-ai-coworker-calm-prompting-guidelines.md` during `ideate` and `plan`.
+
+This means the agent asks for or infers:
+
+- the user's intent center: what outcome they are trying to create
+- hard edges: what should not change, what is out of scope, and what must be preserved
+- source breadth: screenshots, transcripts, specs, backlog items, designs, product records, or examples that matter
+- success shape: what good looks like for the user, the operator, future maintainers, and release verification
+- pushback permission: whether the agent should challenge the user's current thesis if the evidence points elsewhere
+- expected artifact: feature brief, implementation plan, design review packet, test plan, or decision packet
+
+The agent still should not ask technical implementation questions from a non-technical user. It should translate user language into the technical plan internally. The question method changes the quality of product and outcome framing, not the user's burden.
+
 ---
 
 ## 2. Hybrid Conversation Flow (Ideate Phase)

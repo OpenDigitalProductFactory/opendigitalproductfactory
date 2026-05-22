@@ -156,6 +156,9 @@ vi.mock("@dpf/db", () => ({
     agent: {
       findUnique: vi.fn(),
     },
+    organization: {
+      findFirst: vi.fn(),
+    },
     modelProvider: {
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -192,18 +195,21 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { auth } from "@/lib/auth";
+import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
 import { routeAndCall } from "@/lib/routed-inference";
 import { classifyTask } from "@/lib/task-classifier";
 import { executeTool, getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
+import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import { createTaskArtifact } from "@/lib/tak/task-records";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import { prisma } from "@dpf/db";
 import { sendMessage } from "./agent-coworker";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
+const mockIsUnifiedCoworkerEnabled = isUnifiedCoworkerEnabled as ReturnType<typeof vi.fn>;
 const mockResolveAgentForRoute = resolveAgentForRouteWithPrompts as ReturnType<typeof vi.fn>;
 const mockRouteAndCall = routeAndCall as ReturnType<typeof vi.fn>;
 const mockClassifyTask = classifyTask as ReturnType<typeof vi.fn>;
@@ -212,6 +218,7 @@ const mockToolsToOpenAIFormat = toolsToOpenAIFormat as ReturnType<typeof vi.fn>;
 const mockExecuteTool = executeTool as ReturnType<typeof vi.fn>;
 const mockGovernedExecuteTool = governedExecuteTool as ReturnType<typeof vi.fn>;
 const mockResolvePortalContextEnvelope = resolvePortalContextEnvelope as ReturnType<typeof vi.fn>;
+const mockAssembleSystemPrompt = assembleSystemPrompt as ReturnType<typeof vi.fn>;
 const mockCreateTaskArtifact = createTaskArtifact as ReturnType<typeof vi.fn>;
 const mockRecordWorkCapsuleEvidence = recordWorkCapsuleEvidence as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
@@ -240,6 +247,7 @@ describe("agent coworker external access", () => {
     mockPrisma.agentMessage.findMany.mockResolvedValue([]);
     mockPrisma.agentAttachment.findMany.mockResolvedValue([]);
     mockPrisma.agent.findUnique.mockResolvedValue(null);
+    mockPrisma.organization.findFirst.mockResolvedValue(null);
     mockPrisma.taskRun.findFirst.mockResolvedValue(null);
     mockPrisma.featureBuild.findUnique.mockResolvedValue({
       buildId: "FB-123",
@@ -309,6 +317,7 @@ describe("agent coworker external access", () => {
         createdAt: new Date("2026-03-14T00:00:01.000Z"),
       });
     mockToolsToOpenAIFormat.mockReturnValue([]);
+    mockIsUnifiedCoworkerEnabled.mockResolvedValue(false);
   });
 
   it("passes external access state into available tool filtering", async () => {
@@ -338,6 +347,43 @@ describe("agent coworker external access", () => {
         isSuperuser: false,
       },
       expect.objectContaining({ externalAccessEnabled: true }),
+    );
+  });
+
+  it("passes question packet context into unified prompt assembly", async () => {
+    mockIsUnifiedCoworkerEnabled.mockResolvedValueOnce(true);
+    mockGetAvailableTools.mockReturnValue([]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "Use the smallest safe slice.",
+      providerId: "ollama-local",
+      modelId: "llama3.1",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      routeDecision: {},
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "Continue the implementation plan",
+      routeContext: "/workspace",
+      questionPacket: {
+        intentCenter: "Improve the coworker prompt envelope.",
+        hardEdges: ["Do not grant extra tool authority."],
+        expectedArtifact: "patch",
+      },
+    });
+
+    expect(mockAssembleSystemPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questionPacket: {
+          intentCenter: "Improve the coworker prompt envelope.",
+          hardEdges: ["Do not grant extra tool authority."],
+          expectedArtifact: "patch",
+        },
+      }),
     );
   });
 

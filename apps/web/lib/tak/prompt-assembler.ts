@@ -4,6 +4,10 @@
 
 import type { SensitivityLevel } from "./agent-router-types";
 import { loadPrompts } from "./prompt-loader";
+import {
+  formatQuestionPacketPromptBlock,
+  type QuestionPacket,
+} from "./question-packet";
 
 export type PromptInput = {
   hrRole: string;
@@ -30,6 +34,11 @@ export type PromptInput = {
    * responsibility — this layer is pure composition.
    */
   skills?: Array<{ skillId: string; label: string; description: string }>;
+  /**
+   * Optional AI Question Method packet. This carries collaboration context only;
+   * authority, tool grants, and mode restrictions remain authoritative.
+   */
+  questionPacket?: QuestionPacket | null;
 };
 
 // ─── Block 1: Identity (static) ─────────────────────────────────────────────
@@ -132,6 +141,11 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   dynamicBlocks.push(
     `This page is classified ${level}. Only endpoints cleared for ${level} are handling requests. Do not include classified data in sub-tasks routed to lower-clearance endpoints.`
   );
+
+  const questionPacketBlock = formatQuestionPacketPromptBlock(input.questionPacket);
+  if (questionPacketBlock) {
+    dynamicBlocks.push(questionPacketBlock);
+  }
 
   // Block 5: Domain context (+ wiki context per EP-WIKI-001 §7)
   let domainBlock = input.domainContext;
