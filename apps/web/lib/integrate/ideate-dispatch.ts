@@ -139,8 +139,15 @@ async function ensureClaudeAuth(providerId: string): Promise<{ authEnvFragment: 
  * Build the research prompt for Codex CLI.
  * This is a self-contained prompt — Codex will search the codebase,
  * read files, and output a structured JSON design document.
+ *
+ * Exported for unit testing the defensive guards on `scoutFindings.*` —
+ * the type declares those arrays as required, but `scoutFindings` comes
+ * back from JSON the scout produced, and a hallucinated or partial
+ * response can leave `relatedModels` or `gaps` undefined. Without guards
+ * the first BS dispatch on a fresh build crashes the agent send path
+ * with "Cannot read properties of undefined (reading 'map')".
  */
-function buildResearchPrompt(params: {
+export function buildResearchPrompt(params: {
   featureTitle: string;
   featureDescription: string;
   reusabilityScope: string;
@@ -158,8 +165,8 @@ ${params.businessContext ? `BUSINESS CONTEXT: ${params.businessContext}` : ""}
 ${
   params.scoutFindings
     ? `SCOUT FINDINGS (pre-validated — trust these):
-Related models found: ${params.scoutFindings.relatedModels.map((m) => `${m.name} at ${m.file}:${m.line}`).join(", ")}
-Gaps identified: ${params.scoutFindings.gaps.map((g) => `${g.entity} — ${g.reason}`).join("; ")}
+Related models found: ${(Array.isArray(params.scoutFindings.relatedModels) ? params.scoutFindings.relatedModels : []).map((m) => `${m.name} at ${m.file}:${m.line}`).join(", ") || "(none reported)"}
+Gaps identified: ${(Array.isArray(params.scoutFindings.gaps) ? params.scoutFindings.gaps : []).map((g) => `${g.entity} — ${g.reason}`).join("; ") || "(none reported)"}
 ${params.scoutFindings.externalStructure ? `External URL structure identified` : ""}
 
 Use these as the basis for your existingFunctionalityAudit. The related models above are confirmed to exist — cite them with file and line numbers.`
