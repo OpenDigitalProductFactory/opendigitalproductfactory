@@ -76,6 +76,149 @@ export type EstateSeparationMode = "shared" | "strict";
 
 export type TechnologySourceType = "commercial" | "open_source" | "hybrid";
 
+export type OperatingModelForm = "goods" | "services";
+
+export type OperatingModelDelivery = "digital" | "physical" | "hybrid";
+
+export type PrimaryConsumer =
+  | "individual"
+  | "household"
+  | "business"
+  | "patient-and-payer"
+  | "channel-partner"
+  | "internal";
+
+export type ConsumptionChannel =
+  | "physical"
+  | "web-app"
+  | "portal-api"
+  | "sales-assisted"
+  | "onsite-plus-portal"
+  | "api-portal-cli"
+  | "multi-channel"
+  | "portal-dashboard";
+
+export type CommercialModel =
+  | "transactional"
+  | "subscription"
+  | "recurring-agreement"
+  | "usage-based"
+  | "account-based-fees"
+  | "encounter-based"
+  | "appointment-checkout"
+  | "point-of-sale"
+  | "hybrid";
+
+export type ProvisioningModel =
+  | "none"
+  | "account-with-billing"
+  | "account-and-entitlement"
+  | "account-with-kyc"
+  | "device-bound"
+  | "episode-of-care";
+
+export type PlatformEcosystem = "no" | "yes-marketplace" | "yes-developer";
+
+export interface OperatingModelAxes {
+  form: OperatingModelForm;
+  delivery: OperatingModelDelivery;
+  primaryConsumer: PrimaryConsumer;
+  consumptionChannel: ConsumptionChannel;
+  commercialModel: CommercialModel;
+  provisioning: ProvisioningModel;
+  platform: PlatformEcosystem;
+}
+
+export type PortfolioRole =
+  | "foundational"
+  | "manufactureAndDeliver"
+  | "forEmployees"
+  | "productsAndServicesSold";
+
+export type PortfolioScope = "absent" | "minimal" | "standard" | "primary";
+
+export type It4ItStage =
+  | "strategy-to-portfolio"
+  | "requirement-to-deploy"
+  | "request-to-fulfill"
+  | "detect-to-correct"
+  | "deploy-to-operate";
+
+export interface PortfolioProfile {
+  scope: PortfolioScope;
+  it4itStages?: It4ItStage[];
+  offerings?: string[];
+}
+
+export type PortfolioDecomposition = Record<PortfolioRole, PortfolioProfile>;
+
+export type CapabilityApplicability =
+  | "required"
+  | "recommended"
+  | "optional"
+  | "hidden"
+  | "not-applicable";
+
+export type OwnershipScope =
+  | "organization"
+  | "customer-account"
+  | "customer-site"
+  | "configuration-item"
+  | "edge-node";
+
+export type TransactionContext =
+  | "service-agreement"
+  | "engagement"
+  | "appointment"
+  | "order"
+  | "billing-period"
+  | "episode-of-care";
+
+export type CapabilityIsolation = "organization-scope" | "strict-customer-scope" | "shared";
+
+export type PaymentPattern =
+  | "point-of-sale"
+  | "appointment-checkout"
+  | "ad-hoc-invoice"
+  | "recurring-agreement"
+  | "subscription"
+  | "retainer"
+  | "project-milestone"
+  | "usage-based"
+  | "donation"
+  | "optional-package";
+
+export type InvoiceExecutionMode = "none" | "manual" | "prepared-not-prescribed" | "automated";
+
+export interface CapabilityActivation {
+  capabilityKey: string;
+  applicability: CapabilityApplicability;
+  ownershipScopes: OwnershipScope[];
+  transactionContexts?: TransactionContext[];
+  isolation: CapabilityIsolation;
+  surfaces: string[];
+  sourceRules: string[];
+  reason?: string;
+  overrideReason?: string;
+}
+
+export interface CapabilityOverride {
+  capabilityKey: string;
+  applicability: CapabilityApplicability;
+  ownershipScopes?: OwnershipScope[];
+  transactionContexts?: TransactionContext[];
+  isolation?: CapabilityIsolation;
+  surfaces?: string[];
+  reason: string;
+}
+
+export interface BillingPatternProfile {
+  primaryPaymentPattern: PaymentPattern;
+  supportedPaymentPatterns: PaymentPattern[];
+  invoiceExecutionMode: InvoiceExecutionMode;
+  recurringBillingApplicability: Exclude<CapabilityApplicability, "hidden">;
+}
+
 export interface SeededConfigurationItemType {
   key: string;
   label: string;
@@ -101,6 +244,10 @@ export interface ActivationProfile {
   billingReadinessMode: BillingReadinessMode;
   customerGraph: CustomerGraphMode;
   estateSeparation: EstateSeparationMode;
+  axes?: OperatingModelAxes;
+  portfolios?: PortfolioDecomposition;
+  capabilityOverrides?: CapabilityOverride[];
+  billingProfile?: BillingPatternProfile;
   seededServiceCategories?: string[];
   seededConfigurationItemTypes?: SeededConfigurationItemType[];
   seededBillingUnitTypes?: SeededBillingUnitType[];

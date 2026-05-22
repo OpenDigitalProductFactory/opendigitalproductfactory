@@ -53,6 +53,31 @@ export const professionalServicesArchetypes: ArchetypeDefinition[] = [
       billingReadinessMode: "prepared-not-prescribed",
       customerGraph: "separate-customer-projection",
       estateSeparation: "strict",
+      axes: {
+        form: "services",
+        delivery: "hybrid",
+        primaryConsumer: "business",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "recurring-agreement",
+        provisioning: "account-and-entitlement",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: {
+          scope: "primary",
+          it4itStages: ["detect-to-correct", "deploy-to-operate", "request-to-fulfill"],
+        },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      capabilityOverrides: [
+        {
+          capabilityKey: "remote-support",
+          applicability: "recommended",
+          reason: "Consent gating is not yet automated.",
+        },
+      ],
       seededServiceCategories: [
         "managed-support",
         "help-desk",

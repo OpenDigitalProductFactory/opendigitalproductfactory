@@ -25,6 +25,20 @@ describe("finance setup profile resolution", () => {
       slug: "retail",
       archetypeName: "Retail Shop",
       profileName: "Retail",
+      primaryPaymentPattern: "point-of-sale",
+      supportedPaymentPatterns: ["point-of-sale", "ad-hoc-invoice"],
+      recurringBillingApplicability: "optional",
+    });
+  });
+
+  it("exposes checkout-first finance setup for beauty and personal care", () => {
+    expect(resolveFinanceSetupProfile({
+      category: "beauty-personal-care",
+      archetypeName: "Hair Salon",
+    })).toMatchObject({
+      slug: "beauty_personal",
+      primaryPaymentPattern: "appointment-checkout",
+      recurringBillingApplicability: "optional",
     });
   });
 });
