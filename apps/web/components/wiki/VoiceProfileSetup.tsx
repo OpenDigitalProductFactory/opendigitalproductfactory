@@ -317,7 +317,7 @@ function MicRecorder({ profileId }: { profileId: string }) {
   return (
     <div className="space-y-3">
       {/* Suggested script */}
-      {showScript && recState === "idle" && (
+      {showScript && recState !== "preview" && recState !== "uploading" && (
         <div className="rounded-md bg-muted/50 border border-border p-3 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Suggested script</p>
