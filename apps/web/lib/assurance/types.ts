@@ -28,6 +28,17 @@ export type AssurancePolicySeverity = (typeof ASSURANCE_POLICY_SEVERITIES)[numbe
 export const ASSURANCE_RELEASE_IMPACTS = ["block", "warn", "track", "none"] as const;
 export type AssuranceReleaseImpact = (typeof ASSURANCE_RELEASE_IMPACTS)[number];
 
+export const ASSURANCE_FINDING_STATUSES = [
+  "open",
+  "accepted",
+  "planned",
+  "blocked",
+  "resolved",
+  "false-positive",
+  "deferred",
+] as const;
+export type AssuranceFindingStatus = (typeof ASSURANCE_FINDING_STATUSES)[number];
+
 export const ASSURANCE_REACHABILITY = ["reachable", "not-reachable", "unknown"] as const;
 export type AssuranceReachability = (typeof ASSURANCE_REACHABILITY)[number];
 
