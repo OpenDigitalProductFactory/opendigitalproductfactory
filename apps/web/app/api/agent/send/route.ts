@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { sendMessage } from "@/lib/actions/agent-coworker";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
+import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolveAgentForRoute } from "@/lib/agent-routing";
 // Note: this route uses the sync version since it only needs agentId for message logging
 import { prisma } from "@dpf/db";
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     formAssistContext?: AgentFormAssistContext;
     buildId?: string;
     attachmentId?: string;
+    questionPacket?: QuestionPacket | null;
   };
 
   try {

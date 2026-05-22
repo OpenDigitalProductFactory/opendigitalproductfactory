@@ -201,3 +201,59 @@ describe("AgentMessageInput — Enter still sends after voice flow", () => {
     expect(onSend).toHaveBeenCalledWith("schedule the review");
   });
 });
+
+describe("AgentMessageInput — optional question packet context", () => {
+  it("keeps simple sends lightweight when the context tray is empty", () => {
+    const onSend = vi.fn();
+    render(<AgentMessageInput {...defaultProps} onSend={onSend} />);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Explain this page" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(onSend).toHaveBeenCalledWith("Explain this page");
+  });
+
+  it("sends populated optional fields as a structured question packet", () => {
+    const onSend = vi.fn();
+    render(<AgentMessageInput {...defaultProps} onSend={onSend} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.change(screen.getByLabelText(/intent/i), {
+      target: { value: "Find the smallest safe implementation slice" },
+    });
+    fireEvent.change(screen.getByLabelText(/sources/i), {
+      target: { value: "docs/superpowers/plans/2026-05-22-ai-question-method-platform-implementation.md\nBI-123" },
+    });
+    fireEvent.change(screen.getByLabelText(/exclusions/i), {
+      target: { value: "Do not grant extra tool authority\nDo not turn chat into a form" },
+    });
+    fireEvent.change(screen.getByLabelText(/artifact/i), {
+      target: { value: "patch" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/ask your co-worker/i), {
+      target: { value: "Continue" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(onSend).toHaveBeenCalledWith("Continue", {
+      questionPacket: {
+        intentCenter: "Find the smallest safe implementation slice",
+        contextRefs: [
+          {
+            kind: "freeform",
+            label: "Source 1",
+            ref: "docs/superpowers/plans/2026-05-22-ai-question-method-platform-implementation.md",
+          },
+          { kind: "freeform", label: "Source 2", ref: "BI-123" },
+        ],
+        hardEdges: [
+          "Do not grant extra tool authority",
+          "Do not turn chat into a form",
+        ],
+        expectedArtifact: "patch",
+      },
+    });
+  });
+});

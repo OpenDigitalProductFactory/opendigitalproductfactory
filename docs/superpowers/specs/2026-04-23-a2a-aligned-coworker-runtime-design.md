@@ -299,6 +299,28 @@ The artifact payload should use `parts` JSON aligned to A2A content semantics an
 - evidence references
 - append/final-chunk semantics when needed
 
+#### Question Packet Artifact
+
+For heavy knowledge work, a coworker handoff should carry a question packet artifact, not only a free-text prompt or raw chat transcript. This applies when the receiving agent must reason across files, task state, prior decisions, operator intent, or disputed assumptions.
+
+Recommended `TaskArtifact.metadata.artifactType`: `question-packet`.
+
+Recommended payload fields:
+
+| Field | Purpose |
+|-------|---------|
+| `intentCenter` | The initiating operator or agent's thesis, concern, or direction. |
+| `explorationQuestions` | The questions the receiving agent should answer or synthesize across. |
+| `hardEdges` | Explicit exclusions, non-goals, safety limits, or authority limits. |
+| `contextRefs` | Links to files, task messages, prior artifacts, DB records, specs, plans, or tool receipts. |
+| `successShape` | What a good answer or artifact must accomplish. |
+| `operatorThesis` | Optional soft opinion to test, not blindly mirror. |
+| `pushbackPermission` | Whether the receiving agent should challenge the thesis and how directly. |
+| `expectedArtifact` | The artifact type the receiving agent should produce next. |
+| `decisionRoute` | `direct-answer`, `deterministic-gate`, `wwmd-gate`, or `deliberation-then-wwmd`. |
+
+The sender is responsible for deciding whether the handoff is straightforward or ambiguity-bearing. Straightforward transfers can use a smaller artifact with clear input, output, owner, and authority. Ambiguous and consequential handoffs should either invoke deliberation or package enough context for a downstream WWMD decision interaction.
+
 ### `Agent Card`
 
 DPF should add an internal `AgentCard` projection service rather than treating the registry, agent record, and governance tables as separate sources.

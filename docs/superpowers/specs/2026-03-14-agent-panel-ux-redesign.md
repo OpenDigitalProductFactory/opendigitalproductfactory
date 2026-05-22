@@ -148,6 +148,23 @@ Note: `canAssist` (the route-level capability check) gates the entire agent. If 
 
 ---
 
+## 4.1 Question-Aware Composer Guidance
+
+The coworker panel should remain conversational, but the composer can gently help users give the AI better work packets. Per `2026-04-14-ai-coworker-calm-prompting-guidelines.md`, the UI should encourage senior-partner questions without turning chat into a required form.
+
+Recommended behavior:
+
+- Keep the main text area as the primary interaction.
+- Offer optional compact chips or expandable fields for intent, sources, exclusions, and expected artifact.
+- Only inject fields the user actually filled; do not block simple questions.
+- When a user attaches files or references a page, preserve those refs as `contextRefs` in the prompt envelope.
+- When a skill is clicked, merge the skill scaffold with the user's current message instead of replacing the user's phrasing.
+- For high-consequence actions, hand off to proposal, deterministic gate, deliberation, or WWMD instead of hiding the decision in chat copy.
+
+This is a UI design rule, not just a prompt rule: the interface should teach better collaboration by shaping the input surface lightly, then staying out of the way.
+
+---
+
 ## 5. Component Architecture
 
 ### State Ownership

@@ -32,6 +32,7 @@ import { observeConversation } from "@/lib/process-observer-hook";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { assembleSystemPrompt } from "@/lib/prompt-assembler";
+import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
 import {
@@ -393,6 +394,7 @@ export async function sendMessage(input: {
   formAssistContext?: AgentFormAssistContext;
   buildId?: string;
   attachmentId?: string;
+  questionPacket?: QuestionPacket | null;
 }): Promise<
   | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
@@ -767,6 +769,7 @@ export async function sendMessage(input: {
       attachmentContext: selectedAttachments,
       wikiContext,
       skills: skillSummaries,
+      questionPacket: input.questionPacket ?? null,
     });
 
     if (eligibleSkillIds.length > 0) {

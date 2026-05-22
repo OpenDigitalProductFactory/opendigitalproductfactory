@@ -2,6 +2,11 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { MAX_MESSAGE_LENGTH } from "@/lib/agent-coworker-types";
+import {
+  QUESTION_PACKET_EXPECTED_ARTIFACTS,
+  type QuestionPacket,
+  type QuestionPacketExpectedArtifact,
+} from "@/lib/tak/question-packet";
 import { AgentFileUpload } from "./AgentFileUpload";
 import { MicButton } from "./MicButton";
 import { useVoiceCapture } from "./hooks/useVoiceCapture";
@@ -13,7 +18,7 @@ type PendingFile = {
 };
 
 type Props = {
-  onSend: (content: string) => void;
+  onSend: (content: string, options?: { questionPacket?: QuestionPacket | null }) => void;
   disabled: boolean;
   busy?: boolean;
   threadId: string | null;
@@ -28,8 +33,23 @@ type Props = {
   onVoicePlaybackToggle?: () => void;
 };
 
+const EMPTY_EXPECTED_ARTIFACT = "";
+type ExpectedArtifactValue = QuestionPacketExpectedArtifact | typeof EMPTY_EXPECTED_ARTIFACT;
+
+function splitLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackEnabled, onVoicePlaybackToggle }: Props) {
   const [value, setValue] = useState("");
+  const [showQuestionContext, setShowQuestionContext] = useState(false);
+  const [intentCenter, setIntentCenter] = useState("");
+  const [sourceRefs, setSourceRefs] = useState("");
+  const [hardEdges, setHardEdges] = useState("");
+  const [expectedArtifact, setExpectedArtifact] = useState<ExpectedArtifactValue>(EMPTY_EXPECTED_ARTIFACT);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Voice input wiring (Slice 1 Task 10) ─────────────────────────────────
@@ -74,8 +94,17 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     const trimmed = value.trim();
     if (!trimmed || disabled || busy) return;
     if (trimmed.length > MAX_MESSAGE_LENGTH) return;
-    onSend(trimmed);
+    const questionPacket = buildQuestionPacket();
+    if (questionPacket) {
+      onSend(trimmed, { questionPacket });
+    } else {
+      onSend(trimmed);
+    }
     setValue("");
+    setIntentCenter("");
+    setSourceRefs("");
+    setHardEdges("");
+    setExpectedArtifact("");
     textareaRef.current?.focus();
   }
 
@@ -98,6 +127,32 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
       voice.stop();
       return;
     }
+  }
+
+  function buildQuestionPacket(): QuestionPacket | null {
+    const packet: QuestionPacket = {};
+    const trimmedIntent = intentCenter.trim();
+    const sources = splitLines(sourceRefs);
+    const edges = splitLines(hardEdges);
+
+    if (trimmedIntent) {
+      packet.intentCenter = trimmedIntent;
+    }
+    if (sources.length > 0) {
+      packet.contextRefs = sources.map((ref, index) => ({
+        kind: "freeform",
+        label: `Source ${index + 1}`,
+        ref,
+      }));
+    }
+    if (edges.length > 0) {
+      packet.hardEdges = edges;
+    }
+    if (expectedArtifact) {
+      packet.expectedArtifact = expectedArtifact;
+    }
+
+    return Object.keys(packet).length > 0 ? packet : null;
   }
 
   const overLimit = value.trim().length > MAX_MESSAGE_LENGTH;
@@ -190,6 +245,101 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           </div>
         </div>
       )}
+      {showQuestionContext && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 8,
+            padding: "8px 12px 0",
+          }}
+        >
+          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
+            Intent
+            <input
+              value={intentCenter}
+              onChange={(e) => setIntentCenter(e.target.value)}
+              placeholder="Center of attention"
+              style={{
+                background: "var(--dpf-surface-1)",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 6,
+                color: "var(--dpf-text)",
+                fontSize: 12,
+                minHeight: 30,
+                padding: "5px 8px",
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
+            Sources
+            <textarea
+              value={sourceRefs}
+              onChange={(e) => setSourceRefs(e.target.value)}
+              placeholder="One source per line"
+              rows={2}
+              style={{
+                background: "var(--dpf-surface-1)",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 6,
+                color: "var(--dpf-text)",
+                fontSize: 12,
+                minHeight: 48,
+                padding: "5px 8px",
+                resize: "vertical",
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
+            Exclusions
+            <textarea
+              value={hardEdges}
+              onChange={(e) => setHardEdges(e.target.value)}
+              placeholder="One hard edge per line"
+              rows={2}
+              style={{
+                background: "var(--dpf-surface-1)",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 6,
+                color: "var(--dpf-text)",
+                fontSize: 12,
+                minHeight: 48,
+                padding: "5px 8px",
+                resize: "vertical",
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
+            Artifact
+            <select
+              value={expectedArtifact}
+              onChange={(e) => setExpectedArtifact(e.target.value as ExpectedArtifactValue)}
+              style={{
+                background: "var(--dpf-surface-1)",
+                border: "1px solid var(--dpf-border)",
+                borderRadius: 6,
+                color: "var(--dpf-text)",
+                fontSize: 12,
+                minHeight: 30,
+                padding: "5px 8px",
+              }}
+            >
+              <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                Unspecified
+              </option>
+              {QUESTION_PACKET_EXPECTED_ARTIFACTS.map((artifact) => (
+                <option
+                  key={artifact}
+                  value={artifact}
+                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                >
+                  {artifact.replace(/-/g, " ")}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       <div style={{
         display: "flex",
         gap: 6,
@@ -225,6 +375,26 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
             {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => setShowQuestionContext((current) => !current)}
+          aria-expanded={showQuestionContext}
+          style={{
+            background: "var(--dpf-surface-2)",
+            border: "1px solid var(--dpf-border)",
+            borderRadius: 6,
+            color: "var(--dpf-text)",
+            cursor: disabled || busy ? "not-allowed" : "pointer",
+            flexShrink: 0,
+            fontSize: 12,
+            height: 32,
+            opacity: disabled || busy ? 0.5 : 1,
+            padding: "0 8px",
+          }}
+          disabled={disabled || !!busy}
+        >
+          {showQuestionContext ? "Hide context" : "Add context"}
+        </button>
         <MicButton
           state={voice.state}
           errorMessage={voice.error}

@@ -311,4 +311,71 @@ describe("assembleSystemPrompt", () => {
     });
     expect(prompt).toContain("Available domain tools: search_products, create_backlog_item");
   });
+
+  // --- AI Question Method Slice 1: optional question packet ------------------
+
+  it("omits the question packet block when no meaningful packet is supplied", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...minimalInput,
+      questionPacket: {
+        intentCenter: "   ",
+        explorationQuestions: [],
+      },
+    });
+
+    expect(prompt).not.toContain("Question packet");
+  });
+
+  it("renders question packet context after authority/sensitivity and before domain context", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...fullInput,
+      questionPacket: {
+        intentCenter: "Decide the smallest safe implementation slice.",
+        explorationQuestions: ["What can be proven with pure tests?"],
+        hardEdges: ["Do not grant extra tool authority."],
+        contextRefs: [
+          {
+            kind: "plan",
+            label: "Question method implementation plan",
+            ref: "docs/superpowers/plans/2026-05-22-ai-question-method-platform-implementation.md",
+          },
+        ],
+        successShape: "A reusable helper and one prompt insertion point.",
+        operatorThesis: "Keep this additive and reusable.",
+        pushbackPermission: "direct",
+        expectedArtifact: "patch",
+      },
+    });
+
+    const sensitivityIdx = indexOf(prompt, "classified INTERNAL");
+    const packetIdx = indexOf(prompt, "Question packet");
+    const domainIdx = indexOf(prompt, "portfolio tree");
+
+    expect(sensitivityIdx).toBeGreaterThanOrEqual(0);
+    expect(packetIdx).toBeGreaterThanOrEqual(0);
+    expect(domainIdx).toBeGreaterThanOrEqual(0);
+    expect(sensitivityIdx).toBeLessThan(packetIdx);
+    expect(packetIdx).toBeLessThan(domainIdx);
+    expect(prompt).toContain("Use this as collaboration context, not as authorization");
+    expect(prompt).toContain("- Intent center: Decide the smallest safe implementation slice.");
+    expect(prompt).toContain("- [plan] Question method implementation plan:");
+    expect(prompt).toContain("challenge the operator thesis directly");
+  });
+
+  it("keeps advise and explanation-only guardrails authoritative when packet context asks for an artifact", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...minimalInput,
+      mode: "advise",
+      questionPacket: {
+        intentCenter: "Explain the current page and identify the right next thought.",
+        expectedArtifact: "backlog-item",
+      },
+    });
+
+    expect(prompt).toContain("Mode: ADVISE");
+    expect(prompt).toContain("You must not create, update, or delete anything");
+    expect(prompt).toContain("No tools needed");
+    expect(prompt).toContain("Use this as collaboration context, not as authorization");
+    expect(prompt).toContain("- Expected artifact: backlog-item");
+  });
 });

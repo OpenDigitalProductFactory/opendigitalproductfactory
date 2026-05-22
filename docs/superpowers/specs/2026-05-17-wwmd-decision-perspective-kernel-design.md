@@ -346,6 +346,35 @@ Later surface. Other coworkers can invoke the gate when ambiguity, constructive 
 
 Lower-priority backlog item. It should feel similar to the current GPT experience, but it must use the same governed profile, source material, evidence labels, and confidence rules. It should not become a forked chatbot.
 
+### 9.5 Invocation Routing Policy
+
+WWMD is a governed decision path, not a universal answer button. The product rule is: **direct ask helps think; WWMD helps decide.**
+
+Use WWMD only when a question is both:
+
+- **ambiguous** - more than one reasonable answer exists after deterministic checks, and
+- **consequential** - the answer affects autonomy, phase movement, customer impact, architecture, authority, or reusable precedent.
+
+| Ambiguity | Consequence | Default path |
+| --- | --- | --- |
+| Low | Low | Direct answer, normal coworker chat, or deterministic lookup |
+| High | Low | Direct advisory chat; no ledger row unless the operator promotes the answer |
+| Low | High | Deterministic gate, checklist, policy control, or required approval |
+| High | High | WWMD decision interaction |
+
+Surface-specific routing:
+
+| Surface | Use WWMD when | Avoid WWMD when |
+| --- | --- | --- |
+| Build Studio | A deterministic phase gate has passed but the next phase still requires judgment, such as plan -> build readiness. | The plan fails structural review; deterministic feedback is enough. |
+| A2A / coworker handoff | A `TaskRun` or handoff artifact has competing recommendations, unresolved risk, or no accountable next step. | The handoff is a straightforward task transfer with clear input, output, owner, and authority. |
+| Deliberation | Deliberation has produced structured disagreement and the system must decide whether to synthesize, escalate, or defer. | Deliberation has already reached a low-risk consensus and no authority boundary is crossed. |
+| Skills | Creating, assigning, or granting tools to a skill changes coworker authority, risk, or reusable behavior. | A user needs one-off help or a missing UI affordance; use direct chat or improve the surface. |
+| Backlog / prioritization | Several plausible paths encode a doctrine or operating-model choice. | The user asks for status, lookup, hygiene, or deterministic sequencing. |
+| Standalone Ask WWMD | The operator explicitly asks for a governed advisory decision and accepts evidence labels, confidence, and ledger capture. | The user is exploring, drafting, or brainstorming without wanting precedent. |
+
+Every WWMD invocation must record why the direct path was insufficient. V1 can store this in `DecisionInteraction.outcomePayload.routingReason`; a later schema hardening can promote it to a first-class field if analytics need it.
+
 ## 10. First Implementation Slice
 
 Recommended v1:
@@ -360,7 +389,7 @@ Recommended v1:
    - risk tier
    - deliberation inputs, if present
    - And returns one of: `recommend`, `arbitrate`, `escalate`, `defer`
-3. Add Build Studio gate integration at the **plan advancement decision** — the point where Build Studio must decide whether a plan is ready to enter implementation. This is the highest-value ambiguity point in the v1 lifecycle because it is: high-stakes (wrong plan wastes a full build), frequently ambiguous (plan quality is often borderline), and already visible to the operator (it's an existing gate, not a new one).
+3. Add Build Studio gate integration at the **plan advancement decision** — the point where Build Studio must decide whether a plan is ready to enter implementation. This is the highest-value ambiguity point in the v1 lifecycle because it is: high-stakes (wrong plan wastes a full build), frequently ambiguous (plan quality is often borderline), and already visible to the operator (it's an existing gate, not a new one). This is the only automatic WWMD invocation in v1; other surfaces remain direct/advisory unless they deliberately call the same governed contract.
 
    **Relationship to existing Design Review gate:** Build Studio already has a Design Review phase gate that evaluates structural plan completeness (spec coverage, required sections, severity of review findings). WWMD is a separate, complementary gate layered *after* the deterministic Design Review gate passes. Design Review answers "is the plan structurally complete?" WWMD answers "given this plan and the organization's doctrine, is advancing the right call?" A plan that fails Design Review never reaches WWMD. A plan that passes Design Review may still be escalated or deferred by WWMD on doctrinal or contextual grounds.
 4. Persist a decision interaction ledger row using the smallest schema extension that fits existing `TaskRun`/Build Studio records, with profile version snapshot FK.
@@ -385,6 +414,7 @@ These should become explicit backlog items when the spec is accepted:
 10. Proactive profile-drift alerts and candidate-edit proposals.
 11. Standalone Ask WWMD advisory surface.
 12. Customer WWWD profile support, including fallback chain resolution, after platform kernel proves itself.
+13. Direct-ask vs WWMD evaluation harness using the same ambiguous fixtures, human adjudication, and ledger scoring so the product can prove when the governed path improves decisions.
 
 ## 12. Article Handoff Deferred
 
