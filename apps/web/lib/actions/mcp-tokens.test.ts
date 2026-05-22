@@ -1094,3 +1094,109 @@ describe("rotateMyMcpTokenWithEdit", () => {
   });
 });
 
+describe("listMyMcpTokens — revoked archive", () => {
+  it("filters out tokens revoked >90 days and reports archivedCount", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const now = new Date("2026-05-22T12:00:00Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    listMock.mockResolvedValue([
+      {
+        // Active token — always visible.
+        id: "tok_active",
+        name: "active",
+        prefix: "dpfmcp_A",
+        tokenSuffix: "AAAA",
+        canCopy: true,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: new Date("2026-05-22T00:00:00Z"),
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: new Date("2026-04-01T00:00:00Z"),
+      },
+      {
+        // Revoked 30 days ago — within window, must remain visible (UI
+        // hides via the "Show revoked" toggle separately).
+        id: "tok_recent_revoke",
+        name: "recent revoke",
+        prefix: "dpfmcp_R",
+        tokenSuffix: "RRRR",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: new Date("2026-04-22T12:00:00Z"),
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+      {
+        // Revoked 120 days ago — past archive window, must be hidden.
+        id: "tok_archived_1",
+        name: "archived 1",
+        prefix: "dpfmcp_X",
+        tokenSuffix: "XXXX",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: new Date("2026-01-22T12:00:00Z"),
+        createdAt: new Date("2025-10-01T00:00:00Z"),
+      },
+      {
+        // Revoked exactly at threshold (90 days) — must be archived.
+        id: "tok_archived_2",
+        name: "archived 2",
+        prefix: "dpfmcp_Y",
+        tokenSuffix: "YYYY",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: new Date("2026-02-21T12:00:00Z"),
+        createdAt: new Date("2025-10-01T00:00:00Z"),
+      },
+    ]);
+
+    const result = await listMyMcpTokens();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+
+    const visibleIds = result.tokens.map((t) => t.id);
+    expect(visibleIds).toEqual(["tok_active", "tok_recent_revoke"]);
+    expect(result.archivedCount).toBe(2);
+
+    vi.useRealTimers();
+  });
+
+  it("reports archivedCount=0 when no tokens are past the window", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([
+      {
+        id: "tok_x",
+        name: "x",
+        prefix: "dpfmcp_X",
+        tokenSuffix: "XXXX",
+        canCopy: true,
+        capability: "read",
+        scope: "read",
+        scopes: ["backlog_read"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: new Date(),
+      },
+    ]);
+    const result = await listMyMcpTokens();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.archivedCount).toBe(0);
+  });
+});

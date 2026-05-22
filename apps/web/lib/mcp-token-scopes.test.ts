@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
+  MCP_TOKEN_REVOKED_ARCHIVE_DAYS,
   MCP_TOKEN_TEMPLATES,
   WRITE_MCP_TOKEN_SCOPES,
   defaultMcpTokenScopes,
   getMcpTokenTemplate,
+  isMcpTokenArchived,
   resolveTemplateGrants,
 } from "./mcp-token-scopes";
 
@@ -124,5 +126,32 @@ describe("resolveTemplateGrants", () => {
   it("returns empty when no grants overlap (do-not-issue signal)", () => {
     const finance = getMcpTokenTemplate("employee_finance")!;
     expect(resolveTemplateGrants(finance, ["unrelated_grant"])).toEqual([]);
+  });
+});
+
+describe("isMcpTokenArchived", () => {
+  const now = new Date("2026-05-22T12:00:00Z");
+
+  it("returns false for active (non-revoked) tokens", () => {
+    expect(isMcpTokenArchived(null, now)).toBe(false);
+    expect(isMcpTokenArchived(undefined, now)).toBe(false);
+  });
+
+  it("returns false for tokens revoked within the window", () => {
+    // 89 days ago — just inside the window.
+    const recent = new Date(now.getTime() - 89 * 86_400_000);
+    expect(isMcpTokenArchived(recent, now)).toBe(false);
+  });
+
+  it("returns true at exactly the threshold so we never get stuck on a boundary", () => {
+    const atThreshold = new Date(
+      now.getTime() - MCP_TOKEN_REVOKED_ARCHIVE_DAYS * 86_400_000,
+    );
+    expect(isMcpTokenArchived(atThreshold, now)).toBe(true);
+  });
+
+  it("returns true for tokens revoked well past the window", () => {
+    const old = new Date(now.getTime() - 365 * 86_400_000);
+    expect(isMcpTokenArchived(old, now)).toBe(true);
   });
 });

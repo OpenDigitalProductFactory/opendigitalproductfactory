@@ -78,6 +78,38 @@ export function deriveIdleDays(
 }
 
 // ---------------------------------------------------------------------------
+// Revoked-token archive window
+// ---------------------------------------------------------------------------
+//
+// Revoked tokens stay in the DB so the ToolExecution audit FK chain isn't
+// broken (per the BI design stance: "We hide them, we don't drop them").
+// After this many days, they fall off the admin UI entirely — operator sees
+// a clean list, but forensic replay via /platform/ai/authority can still
+// surface them via raw queries against the McpApiToken table.
+//
+// 90 days mirrors the typical SOC 2 / similar audit retention window for
+// access-control rotation evidence. Bump consciously — anything shorter
+// risks hiding a token before an incident review uses it.
+export const MCP_TOKEN_REVOKED_ARCHIVE_DAYS = 90;
+
+/**
+ * True when a revoked token is past the archive window and should be hidden
+ * from the admin UI entirely. Returns false for active tokens (no
+ * `revokedAt`) and for revoked tokens still within the window — those stay
+ * visible (toggleable via the UI's "Show revoked" affordance).
+ *
+ * `now` is injectable so callers can hold the clock steady across a batch.
+ */
+export function isMcpTokenArchived(
+  revokedAt: Date | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!revokedAt) return false;
+  const ageMs = now.getTime() - revokedAt.getTime();
+  return ageMs >= MCP_TOKEN_REVOKED_ARCHIVE_DAYS * MS_PER_DAY;
+}
+
+// ---------------------------------------------------------------------------
 // Role-based token templates
 // ---------------------------------------------------------------------------
 //
