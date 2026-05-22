@@ -1,0 +1,41 @@
+{
+  "description": "Pre-existing `${{ github.event.* }}` or `${{ inputs.* }}` interpolations inside `run:` blocks of workflow files, accepted at audit-actions-injection.yml's inception. The auditor blocks PRs that ADD new occurrences but allows these. Burn-down is tracked through Build Studio. Regenerate this file after each fix: see scripts/security/regenerate-baseline.mjs pattern.",
+  "generatedAt": "2026-05-21T23:00:00.000Z",
+  "occurrences": [
+    {
+      "file": ".github/workflows/dco-signoff-dependabot.yml",
+      "line": 48,
+      "snippet": "done < <(git log origin/${{ github.event.pull_request.base.ref }}..HEAD --format=%H)",
+      "trackedBy": "BI-5940955C",
+      "rationale": "pull_request_target gated on github.actor=='dependabot[bot]' (line 30). Tracked for env-var passthrough fix through Build Studio."
+    },
+    {
+      "file": ".github/workflows/dco-signoff-dependabot.yml",
+      "line": 63,
+      "snippet": "git rebase --signoff \"origin/${{ github.event.pull_request.base.ref }}\"",
+      "trackedBy": "BI-5940955C",
+      "rationale": "Same workflow, same actor gate, same BS-tracked fix."
+    },
+    {
+      "file": ".github/workflows/dco-signoff-dependabot.yml",
+      "line": 68,
+      "snippet": "git push --force-with-lease origin \"HEAD:${{ github.event.pull_request.head.ref }}\"",
+      "trackedBy": "BI-5940955C",
+      "rationale": "The exact line CodeQL flagged as actions/code-injection/critical (alert #1). Highest priority of the three lines in this file."
+    },
+    {
+      "file": ".github/workflows/install-verification.yml",
+      "line": 81,
+      "snippet": "bash install-dpf.sh --headless --${{ github.event.inputs.mode || 'release' }} --no-autostart",
+      "trackedBy": "BI-D094AF1D",
+      "rationale": "workflow_dispatch trigger only — restricted to users with repo write access. Low practical attack surface, but pattern is wrong. Mechanical env-var passthrough fix tracked separately."
+    },
+    {
+      "file": ".github/workflows/publish-image.yml",
+      "line": 74,
+      "snippet": "TAG=\"${{ github.event.inputs.tag }}\"",
+      "trackedBy": "BI-D094AF1D",
+      "rationale": "workflow_dispatch trigger only. Same low-risk pattern. Same fix tracked separately."
+    }
+  ]
+}
