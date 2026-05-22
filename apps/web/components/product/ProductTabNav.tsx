@@ -37,6 +37,7 @@ export function ProductTabNav({ productId }: { productId: string }) {
       subItems: [
         { label: "Health", href: `${base}/health` },
         { label: "Dependencies & Estate", href: `${base}/inventory` },
+        { label: "Supply Chain", href: `${base}/supply-chain` },
       ],
     },
     {
