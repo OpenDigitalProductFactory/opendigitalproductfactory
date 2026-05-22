@@ -44,11 +44,6 @@ export const PRINCIPLE_FINDING_KIND_OPTIONS: PrincipleFindingKindOption[] = [
     blocking: true,
   },
   {
-    value: "principle-commandment-cap-exceeded",
-    label: "Commandment cap",
-    blocking: true,
-  },
-  {
     value: "principle-public-unsafe-marker",
     label: "Public safety",
     blocking: true,

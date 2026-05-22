@@ -2,10 +2,19 @@
 title: Sweep main before trusting worktree specs
 slug: sweep-main-before-trusting-worktree-specs
 pageKind: principle
-tier: core
-appliesTo: [agentic-coworker, claude-code, agent]
-publicOnly: false
 status: published
+abstract: Worktrees can be 100+ PRs behind origin/main. Run `git log origin/main -- <topic>` before claiming a spec is "not implemented" or "out of scope."
+principleTier: core
+principleDirection: Run `git log origin/main -- <topic>` against current origin/main before trusting a worktree's spec status; assume the worktree's local view may be stale.
+principleDimensionVector: {"evidence_density": 0.9, "schema_grounding": 0.6, "long_term_maintainability": 0.5, "speed_to_value": 0.4}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+  - human
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

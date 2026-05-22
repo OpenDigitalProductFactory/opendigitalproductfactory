@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - ui
 principlePublic: true
 principlePublicRationale: DPF's branding system is a product feature — adopters configure colors at install time and expect the UI to follow. Hardcoded colors break that contract.
 sources:

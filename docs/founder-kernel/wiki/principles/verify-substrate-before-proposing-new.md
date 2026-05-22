@@ -2,10 +2,17 @@
 title: Verify substrate before proposing new
 slug: verify-substrate-before-proposing-new
 pageKind: principle
-tier: core
-appliesTo: [agentic-coworker, claude-code, agent]
-publicOnly: false
 status: published
+abstract: Before proposing a new table, type, capability, or epic — grep live code and the backlog for the noun. The architecture is denser than first reads suggest.
+principleTier: core
+principleDirection: Grep the live codebase and query the live backlog for the candidate noun before proposing any new substrate; assume the substrate already exists until proven otherwise.
+principleDimensionVector: {"reusability": 0.9, "long_term_maintainability": 0.8, "schema_grounding": 0.8, "evidence_density": 0.6, "speed_to_value": -0.1}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+  - human
+principleConsumerArchetype: universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

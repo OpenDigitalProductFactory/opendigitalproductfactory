@@ -2,10 +2,16 @@
 title: Evidence before diagnosis
 slug: evidence-before-diagnosis
 pageKind: principle
-tier: core
-appliesTo: [agentic-coworker, claude-code, agent]
-publicOnly: false
 status: published
+abstract: A log line is a hypothesis, not a cause. Query the underlying state to confirm before naming a diagnosis to the operator.
+principleTier: core
+principleDirection: Query the underlying DB / filesystem / container state to confirm a log's suggested cause before reporting it as the diagnosis.
+principleDimensionVector: {"evidence_density": 1.0, "schema_grounding": 0.8, "long_term_maintainability": 0.4, "speed_to_value": -0.3}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
 principlePublic: true
 principlePublicRationale: Reviewers and adopters benefit from PRs that do one thing — the cost shows up at incident response and on every audit.
 sources:

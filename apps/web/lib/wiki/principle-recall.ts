@@ -65,10 +65,17 @@ export type RecallPrincipleContextResult = {
 // ─── Hard caps ──────────────────────────────────────────────────────────────
 
 /**
- * Commandments are capped at 10 published kernel rows by the lint
- * detector `principle-commandment-cap-exceeded`. Recall mirrors that
- * cap so a misseeded corpus can't dump more commandments into the
- * prompt than the governance contract permits.
+ * Defensive prompt-budget cap on commandments per recall. Originally mirrored
+ * the governance cap of 10 (since removed 2026-05-22 — see
+ * `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`). Now that
+ * commandments are uncapped at the governance layer, this constant is
+ * justified solely on prompt-token grounds: even with the strict consumer-
+ * context filter in `recallPrincipleContext`, the cap protects against a
+ * misseeded corpus dumping unbounded commandment text into a single prompt.
+ *
+ * Tune upward only if real usage shows commandments getting clipped in
+ * legitimate scenarios; the right answer is usually finer context scoping,
+ * not a higher cap.
  */
 const COMMANDMENT_RETRIEVAL_CAP = 10;
 const DEFAULT_CORE_LIMIT = 5;

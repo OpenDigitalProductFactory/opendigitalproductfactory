@@ -2,10 +2,17 @@
 title: Consult specs first
 slug: consult-specs-first
 pageKind: principle
-tier: core
-appliesTo: [agentic-coworker, claude-code, agent]
-publicOnly: false
 status: published
+abstract: Read existing specs, IT4IT mapping, and kernel principles before designing anything new. DPF's substrate is denser than first reads suggest.
+principleTier: core
+principleDirection: Read the relevant specs, IT4IT mapping, and kernel principles before proposing new design; extend prior intent or explicitly justify deviating from it.
+principleDimensionVector: {"long_term_maintainability": 0.8, "reusability": 0.8, "schema_grounding": 0.7, "human_cognitive_load": 0.5, "speed_to_value": -0.2}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+  - human
+principleConsumerArchetype: universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
 principlePublic: true
 principlePublicRationale: Operators adopting DPF should know how the platform handles its own defects. Test-first remediation is a public commitment that every shipped security fix carries proof it cannot regress silently — that promise is part of what the platform sells.
 sources: []

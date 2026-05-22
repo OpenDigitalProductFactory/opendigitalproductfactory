@@ -10,7 +10,10 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
+  - release
 principlePublic: true
 principlePublicRationale: Adopters need to know that DPF treats install / seed / template changes with extra care — every install inherits the change.
 sources:

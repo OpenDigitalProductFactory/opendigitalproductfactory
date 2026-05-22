@@ -2,10 +2,16 @@
 title: Never wipe the DB to fix code
 slug: never-wipe-db-for-code-fixes
 pageKind: principle
-tier: commandment
-appliesTo: [agentic-coworker, claude-code, agent]
-publicOnly: false
 status: published
+abstract: A code bug is fixed with a code change. Wiping the DB volume to "reset" destroys operator-created state — credentials, backlog, brand context, the governance ledger.
+principleTier: commandment
+principleDirection: Fix code bugs with code changes; never use docker compose down -v or prisma migrate reset as a debugging shortcut because volumes hold real operator state.
+principleDimensionVector: {"blast_radius": 1.0, "data_privacy": 0.7, "governance_compliance": 0.7, "evidence_density": 0.5}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
+principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 ---

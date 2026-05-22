@@ -2,10 +2,16 @@
 title: Never ask the user to run commands
 slug: never-ask-user-to-run-commands
 pageKind: principle
-tier: commandment
-appliesTo: [agentic-coworker, claude-code, agent]
-publicOnly: false
 status: published
+abstract: The user does not run scripts, SQL, docker, gh, or any other commands. The agent runs the system; the user makes decisions. Non-negotiable.
+principleTier: commandment
+principleDirection: Run every command yourself via the available tools and report results; never ask the user to copy-paste a shell, SQL, or browser query.
+principleDimensionVector: {"human_cognitive_load": 1.0, "governance_compliance": 0.8, "evidence_density": 0.6, "speed_to_value": 0.4}
+principleAppliesTo:
+  - in_platform_coworker
+  - external_coding_agent
+principleConsumerArchetype: ai-coworker-universal
+principlePublic: false
 authoredAt: 2026-05-17
 authoredBy: mark-bodman
 ---

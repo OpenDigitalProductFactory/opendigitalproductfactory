@@ -9,7 +9,10 @@ principleDimensionVector: {"evidence_density": 0.6, "governance_compliance": 0.4
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
-principleConsumerArchetype: ai-coworker-universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - mcp
+  - data-model
 principlePublic: true
 principlePublicRationale: Adopters consuming agent responses need to know which retrieval path produced the answer — silent fallbacks confuse downstream debugging.
 sources:

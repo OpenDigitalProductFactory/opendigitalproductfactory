@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - release
 principlePublic: true
 principlePublicRationale: Adopters need to know DPF treats UX verification as release evidence — silent UI regressions are caught here, not in production.
 sources:

@@ -570,7 +570,7 @@ Use existing `WikiLintFinding.findingKind` and severity values (`info`, `warn`, 
 | `principle-route-context-missing` | error | yes | `route-domain-specific` without at least one `principleConsumerContexts` entry |
 | `principle-incoherent-archetype-applies-to` | error / warn | yes for error rows | Violates §8A.1 coherence matrix: `human` paired with `ai-coworker-universal` / `generalist` / `specialist` = `error`; `specialist` + `external_coding_agent` without `principleWeightRationale` = `warn` with required rationale; `universal` with fewer than two `principleAppliesTo` populations = `error` |
 | `principle-tier-weight-mismatch` | warn | no | Weight differs from tier default without rationale |
-| `principle-commandment-cap-exceeded` | error | yes | More than 10 published kernel commandments |
+| ~~`principle-commandment-cap-exceeded`~~ | — | — | **Removed 2026-05-22.** Commandments are no longer capped — see plan `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`. Tier governs conflict-resolution priority, not scarcity. Detector and tests deleted; finding-kind enum reduced from 12 to 11. |
 | `principle-public-missing-rationale` | warn | no | `principlePublic=true` without `principlePublicRationale` |
 | `principle-public-unsafe-marker` | error | yes | Public principle body references local memory paths, private tokens, local user paths, unreleased PR claims, or internal-only agent instructions |
 | `principle-duplicate` | warn | no | Near-duplicate of another principle by embedding similarity and title/body overlap |

@@ -10,7 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
-principleConsumerArchetype: universal
+principleConsumerArchetype: route-domain-specific
+principleConsumerContexts:
+  - engineering-flow
 principlePublic: true
 principlePublicRationale: Adopters working in DPF need to know that completion requires pushed evidence — claiming "done" with unpushed commits is a real failure mode the principle prevents.
 sources:
