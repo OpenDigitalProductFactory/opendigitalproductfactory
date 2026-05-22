@@ -32,7 +32,15 @@ export type SandboxGateResult = {
 };
 
 export const SANDBOX_TYPECHECK_COMMAND = "cd /workspace && pnpm --filter web typecheck 2>&1";
-export const SANDBOX_BUILD_COMMAND = "cd /workspace && pnpm --filter web build 2>&1";
+// The sandbox container ships with NODE_ENV=development so the in-container Next
+// dev server behaves like local dev. Production builds must NOT inherit that:
+// Next.js emits a "non-standard NODE_ENV" warning and then crashes prerendering
+// `/_global-error` with `Cannot read properties of null (reading 'useContext')`
+// when client-component code is run through the dev-mode React runtime during
+// the prerender pass. Force NODE_ENV=production for the build gate only — the
+// dev-server launch in sandbox.ts is unaffected.
+export const SANDBOX_BUILD_COMMAND =
+  "cd /workspace && NODE_ENV=production pnpm --filter web build 2>&1";
 
 const OUTPUT_TAIL_LIMIT = 15_000;
 
