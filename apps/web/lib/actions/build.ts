@@ -165,6 +165,26 @@ export async function approveBuildStart(buildId: string): Promise<{ approvedAt: 
     },
   }).catch(() => {});
 
+  // Auto-dispatch Ideate-phase design-doc research for backlog-promoted drafts.
+  // Without this, approve_start was a structural success that produced no
+  // functional truth — the build sat at "Ready for Planning / A design document
+  // is required before planning" until the operator manually engaged the
+  // coworker chat. The helper is fire-and-forget, idempotent (skips if designDoc
+  // already exists), and only fires for backlog-promoted drafts. Maps to kernel
+  // principle `structural-verification-is-not-functional`.
+  if (build.originatingBacklogItemId) {
+    void (async () => {
+      try {
+        const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
+        await dispatchIdeateForApprovedBuild({ buildId, userId });
+      } catch (err) {
+        // dispatchIdeateForApprovedBuild already catches internally and writes
+        // a BuildActivity row; this is belt-and-braces for the dynamic import.
+        console.error("[approveBuildStart] Ideate auto-dispatch import/invoke failed:", { buildId }, err);
+      }
+    })();
+  }
+
   return { approvedAt };
 }
 
