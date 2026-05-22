@@ -122,6 +122,15 @@ export interface RouteAndCallOptions {
    */
   agentId?: string;
   /**
+   * Pre-allocated AgentMessage id for the assistant turn this call belongs to.
+   * Threaded down to AdapterRunTelemetry rows so the badge/cost-rollup join
+   * (telemetry.agentMessageId → AgentMessage.id) can succeed even though the
+   * AgentMessage row is persisted only after the agentic loop returns. The
+   * caller (agent-coworker.sendMessage) allocates the id with `randomUUID()`
+   * before starting the loop and uses the same id when creating the row.
+   */
+  agentMessageId?: string;
+  /**
    * Actor responsible for this routing decision. Agent calls normally set
    * agentId; system utilities and schedulers should set this explicitly so
    * RouteDecisionLog never lands as an unattributed audit event.
@@ -435,7 +444,7 @@ export async function routeAndCall(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
-      { agentId: options?.agentId ?? null },
+      { agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null },
     );
 
     // If the adapter returned an operation ID (async adapter), create tracking record

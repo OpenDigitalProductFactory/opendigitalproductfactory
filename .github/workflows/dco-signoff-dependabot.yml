@@ -39,13 +39,20 @@ jobs:
 
       - name: Skip if all commits already signed
         id: check
+        # BI-5940955C fix: pass `github.event.*` through env vars instead
+        # of interpolating them into shell. The runtime quotes env values
+        # correctly; the shell sees a normal variable, not template-evaluated
+        # code. See docs.github.com/actions/security-guides "intermediate
+        # environment variable" guidance.
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           UNSIGNED=0
           while IFS= read -r sha; do
             if ! git show -s --format=%B "$sha" | grep -qE "^Signed-off-by: "; then
               UNSIGNED=$((UNSIGNED + 1))
             fi
-          done < <(git log origin/${{ github.event.pull_request.base.ref }}..HEAD --format=%H)
+          done < <(git log "origin/${BASE_REF}..HEAD" --format=%H)
 
           if [ "$UNSIGNED" -eq 0 ]; then
             echo "All commits on this branch are signed. Nothing to do."
@@ -57,12 +64,16 @@ jobs:
 
       - name: Re-sign commits with Dependabot identity
         if: steps.check.outputs.skip == 'false'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           git config user.name "dependabot[bot]"
           git config user.email "49699333+dependabot[bot]@users.noreply.github.com"
-          git rebase --signoff "origin/${{ github.event.pull_request.base.ref }}"
+          git rebase --signoff "origin/${BASE_REF}"
 
       - name: Force-push signed commits back to the PR branch
         if: steps.check.outputs.skip == 'false'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          git push --force-with-lease origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          git push --force-with-lease origin "HEAD:${HEAD_REF}"

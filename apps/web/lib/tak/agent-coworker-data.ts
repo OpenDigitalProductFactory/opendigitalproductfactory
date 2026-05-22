@@ -1,6 +1,10 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
-import type { AgentMessageRow, AttachmentInfo } from "@/lib/agent-coworker-types";
+import type {
+  AgentMessageProvider,
+  AgentMessageRow,
+  AttachmentInfo,
+} from "@/lib/agent-coworker-types";
 
 type AttachmentRow = {
   id: string;
@@ -10,6 +14,18 @@ type AttachmentRow = {
   parsedContent: unknown;
 };
 
+type TelemetryRow = {
+  agentMessageId: string | null;
+  providerId: string;
+  modelId: string;
+  adapterKind: string;
+  executionMode: string;
+  startedAt: Date;
+};
+
+/** Adapter kinds whose telemetry was the user-visible response (not a shadow/loser). */
+const VISIBLE_EXEC_MODES = new Set(["single", "shadow-primary", "race-primary"]);
+
 function serializeMessage(
   m: {
     id: string;
@@ -18,6 +34,7 @@ function serializeMessage(
     agentId: string | null;
     routeContext: string | null;
     createdAt: Date;
+    providerId?: string | null;
     attachments?: AttachmentRow[];
   },
   proposal?: {
@@ -28,6 +45,7 @@ function serializeMessage(
     resultEntityId: string | null;
     resultError: string | null;
   } | null,
+  provider?: AgentMessageProvider,
 ): AgentMessageRow {
   const row: AgentMessageRow = {
     id: m.id,
@@ -58,7 +76,93 @@ function serializeMessage(
       ...(proposal.resultError ? { resultError: proposal.resultError } : {}),
     };
   }
+  if (provider) {
+    row.provider = provider;
+  }
   return row;
+}
+
+/**
+ * Pick the user-visible telemetry row for each agentMessageId.
+ *
+ * Multiple rows can exist per message in race/shadow modes; only the
+ * primary/single rows are what the user actually saw. Most-recent wins for
+ * the rare case of replays.
+ */
+function selectVisibleTelemetry(rows: TelemetryRow[]): Map<string, TelemetryRow> {
+  const sorted = [...rows].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+  const out = new Map<string, TelemetryRow>();
+  for (const r of sorted) {
+    if (!r.agentMessageId) continue;
+    if (!VISIBLE_EXEC_MODES.has(r.executionMode)) continue;
+    if (!out.has(r.agentMessageId)) out.set(r.agentMessageId, r);
+  }
+  return out;
+}
+
+/**
+ * Build the provider info attached to each assistant turn for display.
+ *
+ * Returns a map keyed by AgentMessage.id. Telemetry is the source of truth
+ * for adapter/model; AgentMessage.providerId is a name-only fallback for
+ * pre-telemetry rows.
+ */
+async function loadProviderInfo(
+  messages: Array<{ id: string; role: string; providerId?: string | null }>,
+): Promise<Map<string, AgentMessageProvider>> {
+  const assistantIds = messages
+    .filter((m) => m.role === "assistant")
+    .map((m) => m.id);
+  if (assistantIds.length === 0) return new Map();
+
+  const telemetry = (await prisma.adapterRunTelemetry.findMany({
+    where: { agentMessageId: { in: assistantIds } },
+    select: {
+      agentMessageId: true,
+      providerId: true,
+      modelId: true,
+      adapterKind: true,
+      executionMode: true,
+      startedAt: true,
+    },
+  })) as TelemetryRow[];
+
+  const visible = selectVisibleTelemetry(telemetry);
+
+  // Gather provider ids to resolve display names — from telemetry first, then
+  // from AgentMessage.providerId for messages without telemetry.
+  const providerIds = new Set<string>();
+  for (const r of visible.values()) providerIds.add(r.providerId);
+  for (const m of messages) {
+    if (m.role === "assistant" && m.providerId && !visible.has(m.id)) {
+      providerIds.add(m.providerId);
+    }
+  }
+  if (providerIds.size === 0) return new Map();
+
+  const providers = await prisma.modelProvider.findMany({
+    where: { providerId: { in: [...providerIds] } },
+    select: { providerId: true, name: true },
+  });
+  const nameByProviderId = new Map(providers.map((p) => [p.providerId, p.name]));
+
+  const out = new Map<string, AgentMessageProvider>();
+  for (const m of messages) {
+    if (m.role !== "assistant") continue;
+    const t = visible.get(m.id);
+    if (t) {
+      const name = nameByProviderId.get(t.providerId);
+      if (!name) continue;
+      out.set(m.id, { name, modelId: t.modelId, adapterKind: t.adapterKind });
+      continue;
+    }
+    if (m.providerId) {
+      const name = nameByProviderId.get(m.providerId);
+      if (!name) continue;
+      out.set(m.id, { name, modelId: null, adapterKind: null });
+    }
+  }
+  return out;
 }
 
 /**
@@ -78,14 +182,18 @@ export const getRecentMessages = cache(
         content: true,
         agentId: true,
         routeContext: true,
+        providerId: true,
         createdAt: true,
         attachments: {
           select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
         },
       },
     });
-    return messages.reverse().map((m) => serializeMessage(m));
+    const providerInfo = await loadProviderInfo(messages);
+    return messages
+      .reverse()
+      .map((m) => serializeMessage(m, undefined, providerInfo.get(m.id)));
   },
 );
 
-export { serializeMessage };
+export { serializeMessage, loadProviderInfo, selectVisibleTelemetry };

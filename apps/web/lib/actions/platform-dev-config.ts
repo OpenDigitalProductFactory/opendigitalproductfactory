@@ -4,6 +4,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -456,7 +457,13 @@ export async function validateGitHubToken(
     if (resolvedAuthMethod === "fine-grained-pat") {
       const probeOwner = input.expectedOwner ?? UPSTREAM_OWNER_REPO_FALLBACK.split("/")[0];
       const probeRepo = UPSTREAM_OWNER_REPO_FALLBACK.split("/")[1];
-      const probeUrl = `https://api.github.com/repos/${probeOwner}/${probeRepo}`;
+      // BI-5E53A265 fix (CodeQL alert #34). Same construction pattern
+      // as github-fork.ts: hardcoded host + encodeURIComponent on the
+      // user-supplied path parts. CodeQL recognises encodeURIComponent
+      // as a path-component sanitiser.
+      const probeUrl = `https://api.github.com/repos/${encodeURIComponent(String(probeOwner))}/${encodeURIComponent(String(probeRepo))}`;
+      // Defense-in-depth — safe-fetch's full validation runs too.
+      assertSafeOutboundUrl(probeUrl, { allowedHosts: ["api.github.com"] });
 
       const repoResponse = await fetch(probeUrl, {
         headers: {
@@ -473,7 +480,7 @@ export async function validateGitHubToken(
           authMethod: resolvedAuthMethod,
           scope: scopesHeader ?? undefined,
           expiresAt,
-          error: `Token can't access the fork repo ${probeOwner}/${probeRepo} (status ${repoResponse.status}). Check that the fine-grained PAT grants Contents: read/write on that repository.`,
+          error: `Token can't access the fork repo ${String(probeOwner)}/${String(probeRepo)} (status ${repoResponse.status}). Check that the fine-grained PAT grants Contents: read/write on that repository.`,
         };
       }
     }

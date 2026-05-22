@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
@@ -136,6 +136,29 @@ export function AgentCoworkerPanel({
   // without needing to re-subscribe the EventSource on every render.
   const voiceSynthRef = useRef(voiceSynth);
   voiceSynthRef.current = voiceSynth;
+
+  // Per-session voice playback toggle — persisted in localStorage so it
+  // survives panel close/open within the same browser session.
+  const VOICE_PLAYBACK_KEY = "dpf:voice_playback_enabled";
+  const [voicePlaybackEnabled, setVoicePlaybackEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem(VOICE_PLAYBACK_KEY);
+    return stored === null ? true : stored === "true";
+  });
+
+  const toggleVoicePlayback = useCallback(() => {
+    setVoicePlaybackEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem(VOICE_PLAYBACK_KEY, String(next));
+      // Stop any in-flight audio immediately when the user disables playback
+      if (!next) voiceSynthRef.current.stop();
+      return next;
+    });
+  }, []);
+
+  // Keep a ref so the SSE done handler always reads the latest value.
+  const voicePlaybackEnabledRef = useRef(voicePlaybackEnabled);
+  voicePlaybackEnabledRef.current = voicePlaybackEnabled;
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = routeAgent;
@@ -294,8 +317,9 @@ export function AgentCoworkerPanel({
                 const filtered = filterMessages(snapshot.messages);
                 setMessages(filtered);
                 // Auto-synthesize the last assistant message if voice is available
+                // and the user has not muted playback via the speaker toggle.
                 const lastMsg = filtered[filtered.length - 1];
-                if (lastMsg?.role === "assistant" && voiceSynthRef.current.available) {
+                if (lastMsg?.role === "assistant" && voiceSynthRef.current.available && voicePlaybackEnabledRef.current) {
                   voiceSynthRef.current.synthesize(lastMsg.content).catch(() => {});
                 }
               }
@@ -924,6 +948,9 @@ export function AgentCoworkerPanel({
         pendingFile={pendingAttachment}
         onFileUploaded={setPendingAttachment}
         onFileClear={() => setPendingAttachment(null)}
+        voiceSynthAvailable={voiceSynth.available}
+        voicePlaybackEnabled={voicePlaybackEnabled}
+        onVoicePlaybackToggle={toggleVoicePlayback}
       />
     </>
   );
