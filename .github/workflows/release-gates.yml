@@ -1,5 +1,9 @@
 name: Installer Release Gates
 
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+permissions:
+  contents: read
+
 # Per the installer-parity roadmap Phase 9b (CI release gates). Three
 # fast gates plus one paid macos-14 gate, all path-filtered so they
 # only run when installer-touching files change. Image-manifests
