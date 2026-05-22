@@ -37,6 +37,15 @@ export async function getVoiceProfileData(profileId: string) {
   return profile
 }
 
+/** Reset a voice profile to pending so the user can re-record their reference audio. */
+export async function resetVoiceProfile(profileId: string) {
+  await prisma.voiceProfile.update({
+    where: { profileId },
+    data: { status: "pending", providerVoiceId: null, sampleCount: 0 },
+  })
+  revalidatePath(`/wiki/perspectives/${profileId}/voice`)
+}
+
 export async function listVoiceProfiles() {
   return prisma.decisionPerspectiveProfile.findMany({
     where: { status: "active" },

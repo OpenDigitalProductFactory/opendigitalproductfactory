@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useCallback } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
-import { setVoiceEnabled } from "@/lib/actions/voice-profile"
+import { setVoiceEnabled, resetVoiceProfile } from "@/lib/actions/voice-profile"
 import { selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
 import { useVoiceSynth } from "@/components/agent/hooks/useVoiceSynth"
 
@@ -44,6 +44,7 @@ export function VoiceProfileSetup({
 }: Props) {
   const [enabled, setEnabled] = useState(voiceEnabled)
   const [isPending, startTransition] = useTransition()
+  const [resetting, setResetting] = useState(false)
   const voiceSynth = useVoiceSynth()
 
   const hasValidConsent =
@@ -165,6 +166,18 @@ export function VoiceProfileSetup({
                     : "▶ Preview voice"}
               </button>
             )}
+            <button
+              type="button"
+              disabled={resetting}
+              onClick={async () => {
+                setResetting(true)
+                await resetVoiceProfile(profileId)
+                window.location.reload()
+              }}
+              className="inline-flex items-center gap-1.5 rounded border border-border bg-white/50 px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+            >
+              {resetting ? "Resetting…" : "↺ Replace voice sample"}
+            </button>
           </div>
         ) : (
           <VoiceSampleCapture profileId={profileId} />

@@ -1,19 +1,21 @@
 // POST /api/voice/reference
-// Zero-shot voice registration for Chatterbox self-hosted TTS.
-// Accepts a single reference audio file, registers it with dpf-tts,
-// and immediately marks the VoiceProfile as ready — no async training job.
+// Stores a reference audio clip for Chatterbox zero-shot voice cloning.
+// The clip is saved to disk; providerVoiceId stores the relative path.
+// On every synthesis call the stored clip is passed inline to dpf-tts
+// via POST /v1/audio/speech/upload (multipart with voice_file field).
 //
-// Replaces /api/voice/train (Cartesia async training pipeline).
 // Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md §4.2
 
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
+import * as fs from "node:fs/promises"
+import * as path from "node:path"
 
-const MAX_BYTES = 50 * 1024 * 1024 // 50 MB
+const MAX_BYTES = 50 * 1024 * 1024
 
-function getTtsUrl(): string {
-  return process.env.DPF_TTS_URL ?? "http://dpf-tts:8000"
+function getStorageRoot(): string {
+  return process.env.UPLOAD_STORAGE_PATH ?? "./data/uploads"
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -46,9 +48,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Verify profile exists and has valid consent
   const voiceProfile = await prisma.voiceProfile.findUnique({
     where: { profileId: voiceProfileId },
-    include: {
-      consentRecord: { select: { expiresAt: true, revokedAt: true } },
-    },
+    include: { consentRecord: { select: { expiresAt: true, revokedAt: true } } },
   })
 
   if (!voiceProfile) {
@@ -60,52 +60,42 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Valid consent record required" }, { status: 422 })
   }
 
-  // Register reference audio with dpf-tts (Chatterbox)
-  let providerVoiceId: string
+  // Determine extension from mime type
+  const mimeType = audioEntry.type || "audio/wav"
+  const ext = mimeType.includes("webm") ? "webm"
+    : mimeType.includes("mp4") || mimeType.includes("m4a") ? "m4a"
+    : mimeType.includes("ogg") ? "ogg"
+    : mimeType.includes("mp3") ? "mp3"
+    : "wav"
+
+  // Store reference audio to disk — this file is passed inline on every synthesis call.
+  // Path: {storageRoot}/voices/{profileId}/reference.{ext}
+  const relDir = `voices/${voiceProfileId}`
+  const filename = `reference.${ext}`
+  const storageKey = `${relDir}/${filename}`
+  const absDir = path.join(getStorageRoot(), relDir)
+  const absPath = path.join(getStorageRoot(), storageKey)
+
   try {
-    const ttsForm = new FormData()
-    ttsForm.append("voice_id", voiceProfileId)
-    ttsForm.append(
-      "audio",
-      audioEntry,
-      audioEntry instanceof File ? audioEntry.name : "reference.wav",
-    )
-
-    const ttsRes = await fetch(`${getTtsUrl()}/v1/voices`, {
-      method: "POST",
-      body: ttsForm,
-    })
-
-    if (!ttsRes.ok) {
-      // dpf-tts not running — store voice_id as profileId, mark ready locally.
-      // When dpf-tts starts, the reference audio will be re-registered.
-      console.warn("[tool-trace] voice.reference.dpf-tts.unavailable", {
-        voiceProfileId,
-        status: ttsRes.status,
-      })
-      providerVoiceId = voiceProfileId
-    } else {
-      const json = await ttsRes.json().catch(() => ({}))
-      providerVoiceId = (json as { voice_id?: string }).voice_id ?? voiceProfileId
-    }
-  } catch {
-    // dpf-tts container not reachable (e.g. --profile tts not started yet).
-    // Store voice_id derived from profileId; voice won't synthesize until
-    // dpf-tts is running, but profile is marked ready for configuration.
-    console.warn("[tool-trace] voice.reference.dpf-tts.unreachable", { voiceProfileId })
-    providerVoiceId = voiceProfileId
+    await fs.mkdir(absDir, { recursive: true })
+    const buf = await audioEntry.arrayBuffer()
+    await fs.writeFile(absPath, Buffer.from(buf))
+  } catch (err) {
+    console.error("[tool-trace] voice.reference.storage.failed", { voiceProfileId, err: String(err) })
+    return NextResponse.json({ error: "Failed to store reference audio" }, { status: 500 })
   }
 
-  // Immediately mark VoiceProfile ready — zero-shot, no training wait
+  // Mark VoiceProfile ready; providerVoiceId is the relative path to the stored audio.
   await prisma.voiceProfile.update({
     where: { profileId: voiceProfileId },
     data: {
       provider: "chatterbox",
-      providerVoiceId,
+      providerVoiceId: storageKey,   // e.g. "voices/mark-dpf-platform/reference.webm"
       status: "ready",
       sampleCount: 1,
     },
   })
 
-  return NextResponse.json({ voiceId: providerVoiceId, status: "ready" }, { status: 200 })
+  console.info("[tool-trace] voice.reference.stored", { voiceProfileId, storageKey })
+  return NextResponse.json({ storageKey, status: "ready" }, { status: 200 })
 }
