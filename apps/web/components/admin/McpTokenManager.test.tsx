@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/actions/mcp-tokens", () => ({
+  bulkRevokeMyMcpTokens: vi.fn(),
   copyMyMcpToken: vi.fn(),
   issueMyMcpToken: vi.fn(),
   issueMyTemplateMcpToken: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@/lib/actions/mcp-tokens", () => ({
 }));
 
 import {
+  bulkRevokeMyMcpTokens,
   copyMyMcpToken,
   issueMyTemplateMcpToken,
   listAvailableMcpScopes,
@@ -26,6 +28,7 @@ import {
 } from "@/lib/actions/mcp-tokens";
 import { McpTokenManager } from "./McpTokenManager";
 
+const bulkRevokeMock = bulkRevokeMyMcpTokens as unknown as ReturnType<typeof vi.fn>;
 const copyMock = copyMyMcpToken as unknown as ReturnType<typeof vi.fn>;
 const scopesMock = listAvailableMcpScopes as unknown as ReturnType<typeof vi.fn>;
 const templatesMock = listMcpTokenTemplates as unknown as ReturnType<typeof vi.fn>;
@@ -95,6 +98,7 @@ beforeEach(() => {
         scope: "write",
         scopes: ["backlog_read", "backlog_write"],
         lastUsedAt: "2026-05-18T12:00:00.000Z",
+        idleDays: 4,
         expiresAt: null,
         revokedAt: null,
         createdAt: "2026-05-18T10:00:00.000Z",
@@ -271,5 +275,131 @@ describe("McpTokenManager", () => {
         baseUrl: "http://localhost:3000",
       });
     });
+  });
+});
+
+describe("McpTokenManager — idle hygiene", () => {
+  // Three tokens: one fresh-active, one stale-active (idle 14 days), one
+  // revoked. The stale toggle should narrow to just the stale one; the
+  // bulk-revoke action should call bulkRevokeMyMcpTokens with the right ids.
+  beforeEach(() => {
+    tokensMock.mockResolvedValue({
+      ok: true,
+      tokens: [
+        {
+          id: "tok_fresh",
+          name: "Fresh laptop",
+          prefix: "dpfmcp_FRE",
+          tokenSuffix: "FRE1",
+          canCopy: true,
+          capability: "write",
+          scope: "write",
+          scopes: ["backlog_read", "backlog_write"],
+          lastUsedAt: "2026-05-22T10:00:00.000Z",
+          idleDays: 0,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: "2026-05-20T10:00:00.000Z",
+        },
+        {
+          id: "tok_stale",
+          name: "Stale agent",
+          prefix: "dpfmcp_STA",
+          tokenSuffix: "STA1",
+          canCopy: true,
+          capability: "write",
+          scope: "write",
+          scopes: ["backlog_write"],
+          lastUsedAt: "2026-05-08T10:00:00.000Z",
+          idleDays: 14,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: "2026-04-01T10:00:00.000Z",
+        },
+        {
+          id: "tok_revoked",
+          name: "Revoked token",
+          prefix: "dpfmcp_REV",
+          tokenSuffix: "REV1",
+          canCopy: false,
+          capability: "write",
+          scope: "write",
+          scopes: ["backlog_write"],
+          lastUsedAt: null,
+          idleDays: null,
+          expiresAt: null,
+          revokedAt: "2026-05-21T00:00:00.000Z",
+          createdAt: "2026-04-01T10:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("shows idle-days inline next to the last-used timestamp", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Stale agent")).toBeTruthy();
+    // Fresh token: "(today)" annotation.
+    expect(screen.getByText(/\(today\)/)).toBeTruthy();
+    // Stale token: "(14d idle)" annotation.
+    expect(screen.getByText(/\(14d idle\)/)).toBeTruthy();
+  });
+
+  it("flags tokens past the 7-day threshold with a stale pill", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Stale agent")).toBeTruthy();
+    // The pill text reads "stale 14d".
+    expect(screen.getByText(/stale 14d/)).toBeTruthy();
+    // Fresh token must NOT carry a stale pill.
+    expect(screen.queryByText(/stale 0d/)).toBeNull();
+  });
+
+  it("filters the visible list when 'Show stale only' is checked", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Stale agent")).toBeTruthy();
+    expect(screen.getByText("Fresh laptop")).toBeTruthy();
+
+    const toggle = screen.getByLabelText(/Show only tokens idle for at least 7 days/i);
+    fireEvent.click(toggle);
+
+    expect(screen.getByText("Stale agent")).toBeTruthy();
+    expect(screen.queryByText("Fresh laptop")).toBeNull();
+    expect(screen.queryByText("Revoked token")).toBeNull();
+  });
+
+  it("calls bulkRevokeMyMcpTokens with the selected ids and clears selection on success", async () => {
+    bulkRevokeMock.mockResolvedValue({
+      ok: true,
+      results: [{ tokenId: "tok_stale", ok: true, status: "revoked" }],
+      revokedCount: 1,
+      failedCount: 0,
+    });
+    // Auto-confirm the bulk-revoke dialog.
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Stale agent")).toBeTruthy();
+
+    const checkbox = screen.getByLabelText(/Select token Stale agent for bulk revoke/i);
+    fireEvent.click(checkbox);
+
+    const bulkButton = screen.getByRole("button", { name: /Revoke 1 selected/i });
+    fireEvent.click(bulkButton);
+
+    await waitFor(() => {
+      expect(bulkRevokeMock).toHaveBeenCalledWith({
+        tokenIds: ["tok_stale"],
+        reason: "bulk revoke from admin UI",
+      });
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("does not render a checkbox on revoked rows", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Revoked token")).toBeTruthy();
+    expect(
+      screen.queryByLabelText(/Select token Revoked token for bulk revoke/i),
+    ).toBeNull();
   });
 });
