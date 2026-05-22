@@ -9,10 +9,16 @@ name: Install Verification (E2E)
 #
 # Triggers:
 #   - workflow_dispatch     Manual runs (e.g. before cutting a release).
-#   - push to tags v*       Automatic post-publish verification when a
-#                           release tag is pushed; the publish-image
-#                           workflow has already built multi-arch GHCR
-#                           images by the time this runs.
+#   - workflow_run          Chained after "Publish Docker Images" finishes
+#                           on a tag push. The publish workflow is what
+#                           builds + uploads the multi-arch GHCR images
+#                           this verification pulls; running them in
+#                           parallel (the previous `push: tags` trigger)
+#                           caused install-verification to race ahead and
+#                           hit "denied" on images that hadn't been
+#                           pushed yet. workflow_run guarantees the
+#                           publish job is `completed` (and we further
+#                           gate on success) before pulling.
 #
 # Intentionally NOT triggered on every PR:
 #   The full local image build + multi-service compose-up takes 15-25
@@ -28,14 +34,19 @@ on:
         type: choice
         options: [dev, release]
         default: dev
-  push:
-    tags: ["v*"]
+  workflow_run:
+    workflows: ["Publish Docker Images"]
+    types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: install-verification-${{ github.ref }}
+  # For workflow_run, github.ref resolves to the default branch (not
+  # the upstream tag), so include the upstream head_branch to keep
+  # per-tag runs distinct. Falls back to github.ref for
+  # workflow_dispatch.
+  group: install-verification-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -43,6 +54,11 @@ jobs:
     name: Linux E2E Install (ubuntu-latest, ${{ github.event.inputs.mode || 'release' }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    # workflow_run fires on every Publish completion (success OR
+    # failure). Skip the verification body when the publish job failed
+    # — there's no point pulling images that don't exist. Manual
+    # workflow_dispatch runs (no triggering workflow) always proceed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     env:
       # CI-specific overrides per Doctrine Contract 9 (LLM provider):
@@ -57,6 +73,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        # workflow_run events default to main HEAD; pin to the SHA the
+        # publish workflow ran against so install-dpf.sh + compose
+        # files match the images we just pushed.
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Show docker context (preinstalled on ubuntu-latest)
         run: |

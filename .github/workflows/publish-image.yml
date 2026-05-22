@@ -1,5 +1,29 @@
 name: Publish Docker Images
 
+# Multi-arch (linux/amd64 + linux/arm64) GHCR publish for every
+# installed-runtime image referenced by the installer's default
+# compose chain.
+#
+# Architecture: matrix of (image × platform) on native-arch runners,
+# pushed by-digest, then merged into a single multi-arch manifest list.
+#
+# Why native-arch runners instead of QEMU cross-compile:
+#   The prior single-job design built both archs on ubuntu-latest via
+#   QEMU emulation. linux/arm64 of the Next.js portal under QEMU runs
+#   ~10x slower than native, and v3.1.0 timed out at the GHA 6-hour
+#   per-job cap mid-portal-build. Splitting onto native runners
+#   (ubuntu-latest for amd64, ubuntu-24.04-arm for arm64) brings the
+#   portal build back under ~15 min and lets the other four images
+#   build in parallel.
+#
+# Why digest-then-merge instead of `--platform amd64,arm64`:
+#   build-push-action only supports the dual-platform syntax via
+#   buildx-with-QEMU. With native matrix jobs, each runner pushes a
+#   single-arch image referenced by its content digest; the merge job
+#   uses `docker buildx imagetools create` to assemble the multi-arch
+#   manifest list under the human-readable tag (e.g. dpf-portal:v4.0.0
+#   and dpf-portal:latest both point at the merged manifest list).
+
 on:
   push:
     tags: ["v*"]
@@ -12,22 +36,15 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Multi-arch + supply-chain attestation defaults applied to every
-  # installed-runtime image per the deployment doctrine (Contract 1)
-  # and the installer-parity roadmap Phase 1.
-  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
-  build-and-push:
+  # ─── Stage 0: Single-shot host gate ──────────────────────────────
+  # Runs typecheck on the host once. Cheaper than re-doing it inside
+  # every matrix cell, and it fails fast before the matrix burns
+  # runner-minutes on a broken commit.
+  gate:
+    name: Typecheck gate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      # Required for SBOM and provenance attestations (id-token write
-      # so the OIDC-signed attestation can be uploaded with the image).
-      id-token: write
-      attestations: write
-
     steps:
       - uses: actions/checkout@v6
 
@@ -48,14 +65,130 @@ jobs:
       - name: Typecheck (all packages)
         run: pnpm typecheck
 
-      - name: Set up QEMU
-        # Enables cross-architecture builds (linux/arm64 from an amd64 runner).
-        # Required before docker/setup-buildx-action for multi-arch builds.
-        uses: docker/setup-qemu-action@v4
+  # ─── Stage 1: Per-arch by-digest builds ──────────────────────────
+  # Each matrix cell builds ONE image for ONE architecture on a native
+  # runner and pushes by digest (no human-readable tag). Outputs are
+  # collected via the artifact bridge for stage 2.
+  build:
+    name: Build ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+    needs: gate
+    runs-on: ${{ matrix.platform.runner }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: dpf-portal
+            context: .
+            file: Dockerfile
+            target: runner
+          - name: dpf-sandbox
+            context: .
+            file: Dockerfile.sandbox
+            target: ""
+          - name: dpf-promoter
+            context: .
+            file: Dockerfile.promoter
+            target: ""
+          - name: dpf-browser-use
+            context: ./services/browser-use
+            file: ./services/browser-use/Dockerfile
+            target: ""
+          - name: dpf-adp
+            context: .
+            file: services/adp/Dockerfile
+            target: ""
+          - name: dpf-edge-node
+            context: .
+            file: services/edge-node/Dockerfile
+            target: ""
+        platform:
+          - arch: amd64
+            runner: ubuntu-latest
+            tag_suffix: linux-amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            tag_suffix: linux-arm64
+
+    steps:
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        # buildx is required for multi-arch manifest list publishing
-        # (a single tag that resolves to amd64 or arm64 per the puller).
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize image owner
+        id: owner
+        run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          target: ${{ matrix.image.target }}
+          platforms: linux/${{ matrix.platform.arch }}
+          provenance: mode=max
+          sbom: true
+          # Push by digest only — the merge job assembles the named
+          # tag manifest list. `type=image,name=...,push-by-digest=true`
+          # uploads the layers under the digest with no human tag.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        # Save the per-image+arch digest to a tiny file so the merge
+        # job can fetch all six via the artifact bridge.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests/${{ matrix.image.name }}
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${{ matrix.image.name }}/${digest#sha256:}.${{ matrix.platform.arch }}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/${{ matrix.image.name }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ─── Stage 2: Assemble multi-arch manifest lists ─────────────────
+  # One merge job per image. Each downloads the per-arch digests and
+  # uses `docker buildx imagetools create` to point the named tag
+  # (vX.Y.Z + latest) at a manifest list referencing both arch digests.
+  merge:
+    name: Merge ${{ matrix.image }} manifest
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - dpf-portal
+          - dpf-sandbox
+          - dpf-promoter
+          - dpf-browser-use
+          - dpf-adp
+          - dpf-edge-node
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
@@ -67,10 +200,6 @@ jobs:
 
       - name: Determine tag
         id: tag
-        # BI-D094AF1D fix: workflow_dispatch input via env var, not inline.
-        # github.event_name is a GH-controlled context value (not attacker-
-        # influenced) so it stays inline; only the user-supplied tag goes
-        # through env-var passthrough.
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
@@ -85,100 +214,54 @@ jobs:
         id: owner
         run: echo "value=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
-      # ─── Installed-runtime images ──────────────────────────────────
-      # Each step publishes a multi-arch manifest list (linux/amd64 +
-      # linux/arm64) with SBOM + provenance attestations. The service
-      # classification (installed-runtime vs developer/test-only) is
-      # documented in docs/superpowers/plans/2026-05-09-macos-linux-native-support.md
-      # Phase 1. integration-test-harness is intentionally NOT published
-      # because it's developer/test-only.
-
-      - name: Build and push portal image
-        uses: docker/build-push-action@v7
+      - name: Download per-arch digests
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          target: runner
-          push: true
-          platforms: ${{ env.PLATFORMS }}
-          provenance: mode=max
-          sbom: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-portal:${{ steps.tag.outputs.version }}
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-portal:latest
+          path: /tmp/digests
+          pattern: digest-${{ matrix.image }}-*
+          merge-multiple: true
 
-      - name: Build and push sandbox image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile.sandbox
-          push: true
-          platforms: ${{ env.PLATFORMS }}
-          provenance: mode=max
-          sbom: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-sandbox:${{ steps.tag.outputs.version }}
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-sandbox:latest
-
-      - name: Build and push promoter image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile.promoter
-          push: true
-          platforms: ${{ env.PLATFORMS }}
-          provenance: mode=max
-          sbom: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-promoter:${{ steps.tag.outputs.version }}
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-promoter:latest
-
-      - name: Build and push browser-use image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./services/browser-use
-          file: ./services/browser-use/Dockerfile
-          push: true
-          platforms: ${{ env.PLATFORMS }}
-          provenance: mode=max
-          sbom: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-browser-use:${{ steps.tag.outputs.version }}
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-browser-use:latest
-
-      - name: Build and push adp image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: services/adp/Dockerfile
-          push: true
-          platforms: ${{ env.PLATFORMS }}
-          provenance: mode=max
-          sbom: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-adp:${{ steps.tag.outputs.version }}
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/dpf-adp:latest
-
-      # ─── Manifest verification ──────────────────────────────────
-      # Per the installer-parity roadmap Phase 1 exit gate: every
-      # installed-runtime image must publish both linux/amd64 and
-      # linux/arm64 manifests. Fail the workflow if any image is
-      # single-arch.
-
-      - name: Verify multi-arch manifests
+      - name: Create multi-arch manifest list
         run: |
           set -euo pipefail
-          OWNER="${{ steps.owner.outputs.value }}"
+          IMAGE="${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image }}"
           TAG="${{ steps.tag.outputs.version }}"
-          IMAGES=(dpf-portal dpf-sandbox dpf-promoter dpf-browser-use dpf-adp)
-          for image in "${IMAGES[@]}"; do
-            echo "::group::${image}:${TAG}"
-            docker buildx imagetools inspect "${{ env.REGISTRY }}/${OWNER}/${image}:${TAG}"
-            # Assert both architectures are present in the manifest list.
-            docker buildx imagetools inspect "${{ env.REGISTRY }}/${OWNER}/${image}:${TAG}" --raw \
-              | grep -q '"architecture": "amd64"' \
-              || { echo "Missing linux/amd64 in ${image}:${TAG}"; exit 1; }
-            docker buildx imagetools inspect "${{ env.REGISTRY }}/${OWNER}/${image}:${TAG}" --raw \
-              | grep -q '"architecture": "arm64"' \
-              || { echo "Missing linux/arm64 in ${image}:${TAG}"; exit 1; }
-            echo "::endgroup::"
-          done
+
+          # Collect every digest file produced by the build matrix for
+          # this image and turn them into fully-qualified
+          # "image@sha256:..." references for imagetools.
+          mapfile -t REFS < <(
+            for f in /tmp/digests/*; do
+              # Filename pattern: <digest-no-prefix>.<arch>
+              digest_only="${f##*/}"
+              digest_only="${digest_only%.*}"
+              echo "${IMAGE}@sha256:${digest_only}"
+            done
+          )
+
+          if [[ ${#REFS[@]} -eq 0 ]]; then
+            echo "::error::No per-arch digests found for ${IMAGE}"
+            exit 1
+          fi
+
+          docker buildx imagetools create \
+            --tag "${IMAGE}:${TAG}" \
+            --tag "${IMAGE}:latest" \
+            "${REFS[@]}"
+
+      - name: Verify multi-arch manifest
+        # Per the installer-parity roadmap Phase 1 exit gate: every
+        # installed-runtime image must publish both linux/amd64 and
+        # linux/arm64. Fail loudly if either is missing.
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ matrix.image }}"
+          TAG="${{ steps.tag.outputs.version }}"
+
+          docker buildx imagetools inspect "${IMAGE}:${TAG}"
+
+          raw="$(docker buildx imagetools inspect "${IMAGE}:${TAG}" --raw)"
+          echo "$raw" | grep -q '"architecture": "amd64"' \
+            || { echo "::error::Missing linux/amd64 in ${IMAGE}:${TAG}"; exit 1; }
+          echo "$raw" | grep -q '"architecture": "arm64"' \
+            || { echo "::error::Missing linux/arm64 in ${IMAGE}:${TAG}"; exit 1; }
