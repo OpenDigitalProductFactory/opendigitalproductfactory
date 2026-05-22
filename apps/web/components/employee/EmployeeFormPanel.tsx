@@ -31,7 +31,13 @@ type Props = {
 
 function generateEmployeeId(): string {
   const ts = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  // CodeQL alert #72 (js/insecure-randomness): Math.random() is not
+  // cryptographically secure. The employee ID is a display string, not
+  // a secret — but using crypto.randomUUID() removes the alert AND
+  // prevents accidental copy-paste of this generator into a security
+  // context later. The 4-char slice keeps the same human-readable ID
+  // shape ("EMP-LXAB123-WXYZ").
+  const rand = globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase();
   return `EMP-${ts}-${rand}`;
 }
 
