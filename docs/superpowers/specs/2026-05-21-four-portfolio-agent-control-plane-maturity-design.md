@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — architectural-review pass applied 2026-05-21 |
+| **Status** | Draft — consistency-review pass applied 2026-05-22 |
 | **Date** | 2026-05-21 |
 | **Author** | Codex + Mark Bodman |
-| **Reviewers** | Chief-architect pass (Claude, 2026-05-21): added evidence-gated scoring (§5.1), `riskTier`-derived MVP targets (§5.2), confidence decay (§5.3), Productize Mode (§7.3), capability-record extensions (§8), assessment cadence (§8.1), capability dependency graph + effective maturity invariant (§10.3), productize promotion loop (§10.4), `boundary_adapter` qualifying criteria (§11), architectural acceptance criteria (§15.2), and four new risks (§16). |
+| **Reviewers** | Chief-architect pass (Claude, 2026-05-21): added evidence-gated scoring (§5.1), `riskTier`-derived MVP targets (§5.2), confidence decay (§5.3), Productize Mode (§7.3), capability-record extensions (§8), assessment cadence (§8.1), capability dependency graph + effective maturity invariant (§10.3), productize promotion loop (§10.4), `boundary_adapter` qualifying criteria (§11), architectural acceptance criteria (§15.2), and four new risks (§16). Consistency-review pass (Claude, 2026-05-22): resolved `claimed`-decay contradiction with `claimed_overdue` alert (§5.3), marked derived fields in capability record (§8), reframed §6 bootstrap scores as `claimed` per §5.1 gate, added `riskTier` authoring governance (§5.2.1), required `MaturityScoreEvent` audit log (§8 + AC #19), added governance-bottleneck risk and tiered cadence (§8.1, §16), made mode precedence explicit (§7.0), and qualified MCP's multi-vendor status in `boundary_adapter` criteria (§11). |
 | **Primary Objective** | Turn the existing four-portfolio taxonomy into an investment, gap-analysis, operations, and productization surface for DPF's agent control plane maturity |
 | **Scope** | Portfolio taxonomy, capability maturity scoring, hive-mind refinement, backlog fan-out, build-first vendor-replacement posture, and recursion-driven productization |
 | **Non-Goals** | This spec does not implement schema, routes, or backlog mutations. It defines the operating model that later plans should implement. |
@@ -164,6 +164,17 @@ MVP target is derived from the capability's risk tier, not authored per row. Thi
 
 Score `5` is never an MVP requirement. It is an optimization milestone reserved for capabilities that have a working improvement loop and an audit trail proving the loop changed behavior.
 
+### 5.2.1 RiskTier Authoring Governance
+
+Because MVP target derives from `riskTier`, `riskTier` becomes the load-bearing investment-pressure knob. Without governance, every record drifts to `critical` and the maturity surface loses signal.
+
+**Rules:**
+
+1. `critical` and `elevated` require a citable **breach scenario** — a one-sentence statement of what fails if the capability fails — recorded on the capability record. `standard` and `low` may be set without ceremony.
+2. Promotion from `standard → elevated` or `elevated → critical` is a governance change reviewed on the §8.1 cadence; demotion is also governed (a capability quietly downgraded to dodge an MVP gap is the same defect as inflating a score).
+3. `riskTier` changes are evidence-linked events on the §8 audit log alongside score changes.
+4. The seed must not exceed roughly one-third of capabilities at `critical` without an explicit kernel-principle justification per row; the writer warns when this ratio is crossed.
+
 ### 5.3 Confidence and Decay
 
 A score is paired with a `confidenceGrade` (§8):
@@ -182,13 +193,15 @@ A score is paired with a `confidenceGrade` (§8):
 3. Evidence stream once existed and has lapsed (> 30 days silent) OR review existed and lapsed (> 90 days) → `stale`.
 4. No evidence stream has ever flowed AND no review → `claimed`. Fresh-authored seed rows stay `claimed` indefinitely until evidence flows; they do not decay to `stale` on age alone, because there was nothing to go silent.
 
-A `stale` score automatically demotes the **effective** score by 1 (floor 0) until refreshed. This is the anti-rot rule — without it, the maturity surface drifts into a vanity dashboard. `claimed` does not demote; it carries its own "unproven" visual treatment instead.
+A `stale` score automatically demotes the **effective** score by 1 (floor 0) until refreshed. This is the anti-rot rule — without it, the maturity surface drifts into a vanity dashboard. `claimed` does not demote on age; it carries its own "unproven" visual treatment instead.
 
-## 6. Initial DPF Maturity Assessment
+**`claimed_overdue` alert (separate from decay):** a row that has carried `confidenceGrade = claimed` for more than 60 days surfaces a `claimed_overdue` alert on the operations surface and enqueues a re-assessment task per §8.1. Dead-on-arrival capabilities — those that never generated a single evidence event after seeding — are themselves a signal worth surfacing. The alert is the visibility mechanism; the `effectiveMaturity` calculation is unchanged.
 
-These scores are an initial design assessment based on repository evidence and live DB fallback. They are not final audited scores.
+## 6. Initial DPF Maturity Assessment (Bootstrap, `claimed`)
 
-| Capability | Primary Portfolio | Supporting Portfolios | Risk Tier | Current Score | Derived MVP Target | Existing DPF Strength | Main Maturity Gap | Existing Epic Anchor |
+These scores are bootstrap seed values authored from repository evidence and live DB fallback. **Per §5.1, none of these scores have passed the evidence gate yet**; they are recorded for routing and UX wiring only. Every row in this table is seeded with `confidenceGrade = claimed`, will surface a `claimed_overdue` alert per §5.3 after 60 days without evidence flow, and must be re-derived by the assessment cadence in §8.1 before any vendor-replacement or productization claim depends on them. This is the [seed-is-bootstrap-calibration-is-runtime](../../../docs/founder-kernel/wiki/principles/) discipline in action — the table exists to be replaced by lived evidence, not to be defended.
+
+| Capability | Primary Portfolio | Supporting Portfolios | Risk Tier | Bootstrap Score (claimed) | Derived MVP Target | Existing DPF Strength | Main Maturity Gap | Existing Epic Anchor |
 |------------|-------------------|-----------------------|-----------|---------------|--------------------|-----------------------|-------------------|----------------------|
 | Principal identity and authority | Foundational | For Employees, Products and Services Sold | `critical` | 3 | 4 | Principal, PrincipalAlias, grants, authority specs | Universal principal propagation, delegated consent, token vault | `EP-TAK-3F9A21`, `EP-COWORKER-RT` |
 | MCP and tool governance | Foundational | Manufacturing and Delivery | `elevated` | 3 | 4 | MCP tools, grants, token onboarding, marketplace direction | Gateway hardening, readiness, scope UX, external MCP maturity | `EP-MCP`, `EP-WWMD-MCP` |
@@ -205,6 +218,16 @@ These scores are an initial design assessment based on repository evidence and l
 ## 7. Investment vs Operations Surface
 
 The same taxonomy node must render differently based on maturity.
+
+### 7.0 Mode Precedence
+
+The three modes are not arbitrary tabs. They have a fixed precedence so the UI cannot show a "ready to package" affordance on top of an unmet MVP gap:
+
+1. **Investment Mode (§7.1)** — applies when `effectiveMaturity < mvpTargetScore`. Always wins. The UI does not show Operations or Productize affordances while a gap is open.
+2. **Operations Mode (§7.2)** — applies when `effectiveMaturity >= mvpTargetScore`. Default at-or-above-target view.
+3. **Productize Mode (§7.3)** — **overlay only** on Operations Mode when `productizationStatus ∈ {eligible, candidate}`. Never replaces Operations and never appears on a row in Investment Mode, even if `maturityScore` (the raw, un-cascaded number) would qualify. The gate is `effectiveMaturity`, not `maturityScore` — see §10.3 and AC #14.
+
+A capability whose own score qualifies for productize but whose dependency floor pulls `effectiveMaturity` below target stays in Investment Mode with a dep-blocked annotation. This prevents the "ready to sell" claim from outrunning the substrate.
 
 ### 7.1 Lagging Capability Mode
 
@@ -261,43 +284,61 @@ runtime | identity_authority | tool_gateway | data_plane | budget_spend
 
 `composition_helper` is the escape hatch for cross-cutting capabilities (e.g. kill switch) that compose multiple control points rather than owning one.
 
-Each assessed capability needs these fields at minimum:
+Each assessed capability needs these fields at minimum. **Source = `authored`** means the field is written by a human, coworker, or governance process; **Source = `derived`** means the field is computed in the single-writer module (§8.1) and must never be mutated directly by routes, UX, or migrations.
 
-| Field | Purpose |
-|-------|---------|
-| `portfolioId` | One of the four canonical portfolio roots |
-| `taxonomyNodeId` | The node where the capability is managed |
-| `capabilityCategory` | Enumerated category from the set above |
-| `riskTier` | `critical` / `elevated` / `standard` / `low` — derives `mvpTargetScore` per §5.2 |
-| `maturityScore` | Current 0-5 score; gated by §5.1 evidence criteria |
-| `mvpTargetScore` | **Derived** from `riskTier`; never authored directly |
-| `effectiveMaturity` | `min(maturityScore, min(dependsOn.effectiveMaturity))`, then -1 if `confidenceGrade = stale` (floor 0). This is the number all UX and gating logic must read. |
-| `dependsOn` | Capability records this capability requires to function (§10.3); forms a DAG, cycles rejected at write time |
-| `strategicOwnership` | `owned_core`, `embedded_accelerator`, `boundary_adapter`, or `avoid` |
-| `vendorReplacementConfidence` | `low` / `medium` / `high` / `verified` — `verified` requires a recorded parity checklist and at least one production replacement |
-| `installScope` | `canonical` / `dpf_dogfood` / `customer_overlay` — scores from different scopes never aggregate silently |
-| `archetypeScope` | Null for canonical; business archetype identifier when overlay |
-| `kernelPrinciples` | Founder Kernel principle slugs this capability enforces (e.g. `destructive-actions-require-explicit-go`, `evidence-before-diagnosis`) |
-| `existingPrimitives` | DPF models, routes, tools, specs, and epics already covering the capability |
-| `maturityGaps` | Enforcement, UX, data, policy, evidence, and workflow gaps |
-| `operationalSurface` | Route or product surface where robust capabilities are managed |
-| `investmentBacklogLinks` | Epics/backlog items that close maturity gaps |
-| `evidenceSources` | Tool executions, runtime verification, Build Studio evidence, PRs, tests, user outcomes |
-| `evidenceFreshness` | Age of newest evidence supporting the score; drives `confidenceGrade` |
-| `confidenceGrade` | `verified` / `evidenced` / `claimed` / `stale` per §5.3 |
-| `hiveMindSignals` | Feedback signals used to refine routing, prompts, coworkers, tools, and taxonomy placement |
-| `productizationStatus` | `not_eligible` / `eligible` / `candidate` / `productized` per §10.4 |
-| `lastAssessmentAt` | Timestamp for stale-score detection |
-| `assessedBy` | Human, coworker, hive process, or governed automation |
+| Field | Source | Purpose |
+|-------|--------|---------|
+| `portfolioId` | authored | One of the four canonical portfolio roots |
+| `taxonomyNodeId` | authored | The node where the capability is managed |
+| `capabilityCategory` | authored | Enumerated category from the set above |
+| `riskTier` | authored (governed, §5.2.1) | `critical` / `elevated` / `standard` / `low` — derives `mvpTargetScore` per §5.2 |
+| `riskTierRationale` | authored | One-sentence breach scenario required when `riskTier ∈ {critical, elevated}` per §5.2.1 |
+| `maturityScore` | authored (evidence-gated, §5.1) | Current 0-5 raw score; intent only — gating logic reads `effectiveMaturity` |
+| `mvpTargetScore` | derived | Computed from `riskTier` per §5.2 |
+| `effectiveMaturity` | derived | `min(maturityScore, min(dependsOn.effectiveMaturity))`, then -1 if `confidenceGrade = stale` (floor 0). This is the number all UX and gating logic must read. |
+| `dependsOn` | authored | Capability records this capability requires to function (§10.3); forms a DAG, cycles rejected at write time |
+| `strategicOwnership` | authored | `owned_core`, `embedded_accelerator`, `boundary_adapter`, or `avoid` |
+| `vendorReplacementConfidence` | authored | `low` / `medium` / `high` / `verified` — `verified` requires a recorded parity checklist and at least one production replacement |
+| `installScope` | authored | `canonical` / `dpf_dogfood` / `customer_overlay` — scores from different scopes never aggregate silently |
+| `archetypeScope` | authored | Null for canonical; business archetype identifier when overlay |
+| `kernelPrinciples` | authored | Founder Kernel principle slugs this capability enforces (e.g. `destructive-actions-require-explicit-go`, `evidence-before-diagnosis`) |
+| `existingPrimitives` | authored | DPF models, routes, tools, specs, and epics already covering the capability |
+| `maturityGaps` | authored | Enforcement, UX, data, policy, evidence, and workflow gaps |
+| `operationalSurface` | authored | Route or product surface where robust capabilities are managed |
+| `investmentBacklogLinks` | authored | Epics/backlog items that close maturity gaps |
+| `evidenceSources` | authored / ingested | Tool executions, runtime verification, Build Studio evidence, PRs, tests, user outcomes |
+| `evidenceFreshness` | derived | Age of newest evidence supporting the score; drives `confidenceGrade` |
+| `confidenceGrade` | derived | `verified` / `evidenced` / `claimed` / `stale` per §5.3 |
+| `claimedOverdue` | derived | True when `confidenceGrade = claimed` AND `lastAssessmentAt > 60d`; surfaces alert per §5.3 |
+| `hiveMindSignals` | ingested (governed, §9) | Feedback signals used to refine routing, prompts, coworkers, tools, and taxonomy placement |
+| `productizationStatus` | authored (governed, §10.4) | `not_eligible` / `eligible` / `candidate` / `productized` per §10.4 |
+| `lastAssessmentAt` | derived | Timestamp of most recent score or grade event |
+| `assessedBy` | authored | Human, coworker, hive process, or governed automation |
+
+### 8.1.A MaturityScoreEvent Audit Log
+
+Capability records produce immutable `MaturityScoreEvent` rows on every change to `maturityScore`, `riskTier`, `confidenceGrade`, `productizationStatus`, `dependsOn`, or `strategicOwnership`. Each event carries:
+
+- `capabilityId`, `field`, `previousValue`, `newValue`
+- `actor` (human, coworker, or governed automation identifier)
+- `evidenceLinks` (PRs, tool executions, runtime verification, Build Studio acceptance, hive-mind signal batches)
+- `governanceReviewId` when the change went through review
+- `transitionContextRef` (e.g. the `productizationStatus = candidate` transition that the score change is being checked against under §10.4)
+
+This log is what makes §10.4's "any score change within 14 days of candidate transition triggers governance review" enforceable. Without it, anti-inflation is folklore. The §8.1 single-writer is the only mutator. The log is append-only; correction is by compensating event, never by edit.
 
 ### 8.1 Assessment Cadence and Governance
 
 Scores rot unless the act of scoring is itself a governed process. The implementation plan must establish:
 
 - **Continuous re-scoring**: hive-mind signal capture (§9) and evidence streams (§5.3) update `evidenceFreshness` and may auto-demote `confidenceGrade` without human action.
-- **Quarterly review**: every `critical` and `elevated` capability has its score and `vendorReplacementConfidence` reviewed by a governed reviewer (human or WWMD-arbitrated coworker, grounded in `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md`) at least once per quarter.
+- **Tiered review cadence** (sustainable at growth):
+  - `critical`: quarterly review of score, `vendorReplacementConfidence`, and `riskTier`.
+  - `elevated`: semi-annual by default; quarterly if `confidenceGrade` has moved or `productizationStatus` is `eligible` or `candidate`.
+  - `standard` / `low`: opportunistic — reviewed only when triggered by a PR touch, a `claimed_overdue` alert, a hive-mind signal pattern (§9.2), or a dependency cascade change.
+- **Reviewer**: WWMD-arbitrated coworker per `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` is the default reviewer of record. Human escalation is automatic when the WWMD outcome is `defer` or `escalate`, when score change exceeds one point, or when a `productizationStatus` transition is at stake. This keeps the cadence sustainable without rubber-stamping.
 - **Triggered re-assessment**: any landed PR that touches a capability's `existingPrimitives` enqueues a re-assessment task on its record. Score changes are evidence-linked PR-by-PR, not batch-edited.
-- **Single writer**: maturity scoring logic lives in one module. Routes, UX, and reports read derived values; nothing else mutates `effectiveMaturity` or `confidenceGrade`.
+- **Single writer**: maturity scoring logic lives in one module (`packages/maturity` candidate per §17.6). Routes, UX, and reports read derived values; nothing else mutates `effectiveMaturity`, `mvpTargetScore`, `confidenceGrade`, `evidenceFreshness`, `claimedOverdue`, or `lastAssessmentAt`.
 
 ## 9. Hive-Mind Refinement Loop
 
@@ -441,7 +482,7 @@ Capabilities that can be `boundary_adapter`:
 **`boundary_adapter` qualifying criteria** (all must hold; otherwise it is an `embedded_accelerator` or it is `avoid`):
 
 1. The external system is owned by the customer or by a market-wide rail (Stripe, Plaid, an enterprise IdP), not by a single vendor whose disappearance would strand DPF.
-2. The integration is over an open or multi-vendor protocol (OIDC, OAuth2, OpenTelemetry, SCIM, ACH, FHIR, SQL, MCP), not a proprietary client SDK with no replaceable peer.
+2. The integration is over an open or multi-vendor protocol (OIDC, OAuth2, OpenTelemetry, SCIM, ACH, FHIR, SQL), not a proprietary client SDK with no replaceable peer. MCP is an interface DPF *exposes and consumes* as `owned_core` policy surface — it is not yet a multi-vendor peer protocol the way OIDC is, so MCP-based access to a single-vendor agent surface (e.g. one provider's hosted MCP) does not qualify a dependency as `boundary_adapter` on this criterion alone.
 3. DPF retains the source of truth for the corresponding `capabilityCategory` (identity *authority* stays at DPF even when identity *edge* is Okta).
 4. The adapter is swap-out testable: at least one alternate provider in the same category has a documented adapter path, even if not yet implemented.
 5. Customer data flowing through the adapter remains attributable in the DPF evidence ledger; the adapter does not become a black-box gap in `evidenceSources`.
@@ -597,9 +638,11 @@ The design is successful when later implementation can prove the following. **Fu
 13. **Single source of maturity logic**: `effectiveMaturity` and `confidenceGrade` are computed in one module; routes, UX, and reports read derived values and never mutate them.
 14. **Dependency cascade enforced**: every UX badge, gate, vendor-replacement claim, and productization eligibility check reads `effectiveMaturity`, not `maturityScore`.
 15. **Scope isolation**: scores from different `installScope` values never aggregate silently; any roll-up renders the minimum prominently.
-16. **Evidence decay active**: scores without recent evidence demote to `stale` and lose 1 effective point automatically; this rule is wired in code, not in policy documents.
-17. **Anti-inflation guard**: score changes within 14 days of a `productizationStatus = candidate` transition route through governance review.
+16. **Evidence decay active**: `evidenced` and `verified` scores without fresh evidence (per §5.3 thresholds) demote to `stale` and lose 1 effective point automatically. `claimed` scores do NOT decay on age, but a `claimed` row older than 60 days surfaces a `claimed_overdue` alert and enqueues a re-assessment task. Both rules are wired in code, not in policy documents.
+17. **Anti-inflation guard**: score changes within 14 days of a `productizationStatus = candidate` transition route through governance review. Enforceable because every change is logged per AC #19.
 18. **DAG enforcement**: the writer for `dependsOn` rejects cycles at write time, not at render time.
+19. **Immutable score history**: every mutation to `maturityScore`, `riskTier`, `confidenceGrade`, `productizationStatus`, `dependsOn`, or `strategicOwnership` emits a `MaturityScoreEvent` row per §8.1.A. The log is append-only; correction is by compensating event.
+20. **Single mutator**: only the `packages/maturity` (or equivalent) writer module mutates derived fields. Migrations that allow direct UPDATE on `effectiveMaturity`, `mvpTargetScore`, `confidenceGrade`, `evidenceFreshness`, `claimedOverdue`, or `lastAssessmentAt` from other code paths are rejected in review.
 
 ## 16. Risks and Mitigations
 
@@ -616,6 +659,9 @@ The design is successful when later implementation can prove the following. **Fu
 | **Productization pressure inflating scores** — sales narrative pushes scores up to unblock a candidate offering | §10.4 anti-pattern guard: any score change within 14 days of `candidate` transition triggers governance review; transitions are evidence-linked events. |
 | **Hive-mind feedback hijack** — biased or manipulated signal sources cause unwarranted score movement or routing changes | Signal sources carry provenance and weight; score deltas from hive-mind inputs are auditable and reversible; the writer rejects signal batches without provenance metadata. |
 | **Score rot in `dpf_dogfood` masking customer reality** — DPF's own install scores carry the dashboard while a fresh customer install would score far lower | `installScope` separation (§10.2); any "ready to sell" or `productizationStatus = eligible` claim requires `installScope = canonical` and validation against at least one non-dogfood install. |
+| **Governance-bottleneck rubber-stamping** — once the capability count grows past ~20 critical/elevated rows, uniform quarterly review by humans becomes unsustainable and degrades to rubber-stamp approval | Tiered cadence in §8.1: `critical` quarterly, `elevated` semi-annual (quarterly only when status changes), `standard`/`low` opportunistic. WWMD-arbitrated coworker as reviewer of record with automatic human escalation on `defer`/`escalate`, multi-point score moves, or productization transitions. |
+| **`riskTier` inflation** — every record drifts to `critical` to demand more investment budget, neutralizing the §5.2 derivation | §5.2.1 governance: `critical`/`elevated` require a citable breach scenario; tier changes are logged events; writer warns when the `critical` share of the catalog crosses ~one-third without explicit kernel-principle justification. |
+| **Mode-precedence violation** — UX shows Productize affordance on a capability whose raw `maturityScore` qualifies but whose `effectiveMaturity` is dragged below target by a dependency | §7.0 fixed precedence (Investment > Operations, Productize as Operations-only overlay) enforced against `effectiveMaturity`, not `maturityScore`; AC #14 already requires this for all gating logic. |
 
 ## 17. Open Decisions for the Implementation Plan
 
@@ -623,7 +669,7 @@ The design is successful when later implementation can prove the following. **Fu
 2. Should the first UI land under `/portfolio`, `/platform/ai/operations`, or both with one canonical data source?
 3. Should vendor benchmark data be repo-seeded JSON first, DB-managed later, or managed immediately through the portal?
 4. What minimum hive-mind signals are already captured and can be reused without new event models? Specifically, can `ToolExecution`, `RuntimeVerification`, Build Studio acceptance events, and existing coworker feedback rows carry the §9 signal payload, or is a new `MaturitySignal` event model required?
-5. Which capability scores should be treated as DPF-authored initial seed versus live assessed state? Seed scores must carry `confidenceGrade = claimed` and a fixed `lastAssessmentAt` that triggers decay quickly — seed is bootstrap, never the resting state.
+5. Which capability scores should be treated as DPF-authored initial seed versus live assessed state? Per §5.3, seed scores carry `confidenceGrade = claimed` (which does not auto-decay), and per §6 the §6 table is the canonical bootstrap. The `claimed_overdue` alert at 60 days is the visibility mechanism that prevents seed from becoming the resting state — seed is bootstrap, never the resting state.
 6. Where does the single-writer module for `effectiveMaturity` and `confidenceGrade` live? Candidate: a `packages/maturity` module consumed by both API routes and Build Studio gates.
 7. Who is the governed reviewer of record for `critical` and `elevated` quarterly reviews? Human-only, or WWMD-arbitrated coworker grounded in `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` with human escalation?
 8. How are `productizationStatus = candidate` transitions surfaced for governance — Build Studio brief, dedicated portal queue, or both?
