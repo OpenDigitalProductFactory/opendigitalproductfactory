@@ -52,7 +52,7 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
-import { isPageExplanationOnlyRequest } from "@/lib/tak/conversation-intent";
+import { isPageExplanationOnlyRequest, isPlatformMechanismQuestion } from "@/lib/tak/conversation-intent";
 import {
   buildExternalAccessDisabledInstruction,
   getExternalAccessToolSummaries,
@@ -1016,7 +1016,12 @@ export async function sendMessage(input: {
   // model explains from context instead of turning friction into backlog work.
   const isExplicitConversationSkill = /^This is a CONVERSATION request/i.test(trimmedContent);
   const isPageExplanationOnly = isPageExplanationOnlyRequest(trimmedContent);
-  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly;
+  // Platform-mechanism questions ("if I deploy, will it also rebase?") should
+  // answer from prompt + portal context, not by spinning tools. Especially
+  // important on Build Studio routes where the tool surface is large enough
+  // to drown a small local fallback model. See FB-71FB3A53 thread, 2026-05-22.
+  const isMechanismQuestion = isPlatformMechanismQuestion(trimmedContent);
+  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isMechanismQuestion;
 
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
@@ -1250,6 +1255,17 @@ export async function sendMessage(input: {
       "The employee is asking you to explain the current UI or page, not to file, log, queue, or triage work.",
       "Do not call tools, create backlog items, report issues, propose improvements, or list backlog status for this turn.",
       "Use PAGE DATA and recent conversation to explain what the user is seeing. If context is missing, say what you can infer and ask one concise clarifying question.",
+    ].join("\n");
+  }
+
+  if (isMechanismQuestion) {
+    populatedPrompt += [
+      "",
+      "",
+      "PLATFORM MECHANISM QUESTION",
+      "The employee is asking how a DPF mechanism behaves (e.g. what happens when they promote, deploy, ship, or rebase), not asking you to perform an action.",
+      "Answer from your system prompt, PAGE DATA, and the active build / backlog context. Do not call tools to look up basic platform behavior.",
+      "If you genuinely do not know the answer, say so plainly and offer to investigate — do not guess and do not spin through tools hoping one will explain it.",
     ].join("\n");
   }
 
