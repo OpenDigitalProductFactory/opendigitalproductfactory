@@ -8006,6 +8006,7 @@ export async function executeTool(
         where: { buildId },
         select: {
           id: true, title: true, diffPatch: true, buildBranch: true,
+          description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
           verificationOut: true, acceptanceMet: true, phase: true,
           designDoc: true, buildPlan: true,
           productVersions: {
@@ -8022,6 +8023,33 @@ export async function executeTool(
 
       const diff = (build.diffPatch ?? "") as string;
       if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
+
+      const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
+      const sandboxState = buildSandboxStateFromRecord({
+        buildBranch: build.buildBranch,
+        gitCommitHashes: build.gitCommitHashes,
+        diffPatch: diff,
+        updatedAt: build.updatedAt,
+        planDocument: typeof build.buildPlan === "string" ? build.buildPlan : serializePlanDocument(build.buildPlan),
+        description: build.description,
+        buildExecState: build.buildExecState,
+      });
+      const promotionGate = assertSandboxReadyForPromotion(sandboxState);
+      if (!promotionGate.ok) {
+        logBuildActivity(buildId, "create_portal_pr", promotionGate.message);
+        return {
+          success: false,
+          error: "Sandbox promotion integrity blocked PR creation.",
+          message: `${promotionGate.message}\n\n${promotionGate.failures.join("\n")}`,
+          data: {
+            gate: {
+              ok: false,
+              failures: promotionGate.failures,
+            },
+            sandbox: promotionGate.state,
+          },
+        };
+      }
 
       // Resolve the portal's own repo from git remote
       let repoOwner: string | null = null;
@@ -8961,6 +8989,8 @@ export async function executeTool(
         select: {
           id: true, title: true, brief: true, diffPatch: true, diffSummary: true,
           sandboxId: true, portfolioId: true, createdById: true,
+          buildBranch: true, gitCommitHashes: true, updatedAt: true, buildPlan: true,
+          description: true, buildExecState: true,
           createdBy: { select: { email: true } },
         },
       });
@@ -8984,6 +9014,33 @@ export async function executeTool(
 
       const diff = (build.diffPatch ?? "") as string;
       if (!diff.trim()) return { success: false, error: "No diff available.", message: "Run deploy_feature first to extract the diff." };
+
+      const { buildSandboxStateFromRecord, assertSandboxReadyForPromotion, serializePlanDocument } = await import("@/lib/build/sandbox-state");
+      const sandboxState = buildSandboxStateFromRecord({
+        buildBranch: build.buildBranch,
+        gitCommitHashes: build.gitCommitHashes,
+        diffPatch: diff,
+        updatedAt: build.updatedAt,
+        planDocument: typeof build.buildPlan === "string" ? build.buildPlan : serializePlanDocument(build.buildPlan),
+        description: build.description,
+        buildExecState: build.buildExecState,
+      });
+      const promotionGate = assertSandboxReadyForPromotion(sandboxState);
+      if (!promotionGate.ok) {
+        logBuildActivity(buildId, "contribute_to_hive", promotionGate.message);
+        return {
+          success: false,
+          error: "Sandbox promotion integrity blocked contribution.",
+          message: `${promotionGate.message}\n\n${promotionGate.failures.join("\n")}`,
+          data: {
+            gate: {
+              ok: false,
+              failures: promotionGate.failures,
+            },
+            sandbox: promotionGate.state,
+          },
+        };
+      }
 
       const includeMigrations = params.include_migrations !== false;
       const brief = build.brief as Record<string, unknown> | null;

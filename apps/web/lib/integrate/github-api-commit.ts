@@ -55,10 +55,24 @@ export interface GitHubCommitResult {
   prNumber: number | null;
 }
 
-const DCO_SIGNOFF_PATTERN = /^Signed-off-by:\s+.+\s+<[^<>\s@]+@[^<>\s@]+>$/im;
+const DCO_SIGNOFF_PATTERN = /^Signed-off-by:\s+(.+?)\s+<([^<>\s@]+@[^<>\s@]+)>$/im;
+
+type GitCommitIdentity = {
+  name: string;
+  email: string;
+};
+
+function parseDcoSignedCommitIdentity(commitMessage: string): GitCommitIdentity | null {
+  const match = commitMessage.match(DCO_SIGNOFF_PATTERN);
+  if (!match) return null;
+  return {
+    name: match[1].trim(),
+    email: match[2].trim(),
+  };
+}
 
 function assertDcoSignedCommitMessage(commitMessage: string): void {
-  if (DCO_SIGNOFF_PATTERN.test(commitMessage)) return;
+  if (parseDcoSignedCommitIdentity(commitMessage)) return;
   throw new Error(
     "DCO sign-off is required for Build Studio pull requests. Include a `Signed-off-by: Name <email>` trailer in the commit message.",
   );
@@ -266,6 +280,10 @@ export async function createBranchAndPR(input: {
   token: string;
 }): Promise<GitHubCommitResult> {
   assertDcoSignedCommitMessage(input.commitMessage);
+  const dcoIdentity = parseDcoSignedCommitIdentity(input.commitMessage);
+  if (!dcoIdentity) {
+    throw new Error("DCO sign-off identity could not be parsed from the commit message.");
+  }
 
   const {
     headOwner,
@@ -366,6 +384,8 @@ export async function createBranchAndPR(input: {
       message: commitMessage,
       tree: tree.sha,
       parents: [baseSha],
+      author: dcoIdentity,
+      committer: dcoIdentity,
     },
     token,
   );
