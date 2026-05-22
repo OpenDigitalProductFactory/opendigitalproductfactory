@@ -17,7 +17,11 @@ import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { writeMcpJsonToHost } from "@/lib/auth/mcp-host-writer";
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
-  WRITE_MCP_TOKEN_SCOPES,
+  getMcpTokenTemplate,
+  MCP_TOKEN_TEMPLATES,
+  resolveTemplateGrants,
+  type McpTokenTemplate,
+  type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 
@@ -130,23 +134,80 @@ export async function issueMyMcpToken(input: {
   };
 }
 
-export async function issueMyWriteMcpToken(input: {
+// Lightweight DTO for the admin UI's template picker. We hand the client a
+// trimmed payload (no closures, no nested helpers) since this is rendered in
+// a client component.
+export type McpTokenTemplateSummary = {
+  id: McpTokenTemplateId;
+  label: string;
+  category: McpTokenTemplate["category"];
+  tier: McpTokenTemplate["tier"];
+  description: string;
+  grants: string[];
+};
+
+export async function listMcpTokenTemplates(): Promise<{
+  templates: McpTokenTemplateSummary[];
+}> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { templates: [] };
+  }
+  const { scopes: availableScopes } = await listAvailableMcpScopes();
+  const templates = MCP_TOKEN_TEMPLATES.map<McpTokenTemplateSummary>((t) => ({
+    id: t.id,
+    label: t.label,
+    category: t.category,
+    tier: t.tier,
+    description: t.description,
+    // Resolve against this install's catalog so the UI cannot pre-select a
+    // grant that the platform would silently strip at issue time. The
+    // `custom` template intentionally exposes no preselected grants.
+    grants: resolveTemplateGrants(t, availableScopes),
+  }));
+  return { templates };
+}
+
+export async function issueMyTemplateMcpToken(input: {
+  templateId: McpTokenTemplateId;
+  name: string;
+  expiresInDays: number | null;
   baseUrl: string;
-  name?: string;
-  expiresInDays?: number | null;
 }): Promise<IssueTokenActionResult> {
   const session = await auth();
   if (!session?.user?.id) {
     return { ok: false, error: "unauthorized", message: "Sign in first" };
   }
+  const template = getMcpTokenTemplate(input.templateId);
+  if (!template || template.id === "custom") {
+    return {
+      ok: false,
+      error: "invalid_template",
+      message:
+        template?.id === "custom"
+          ? "Custom tokens must be issued via issueMyMcpToken with an explicit scope list."
+          : `Unknown MCP token template: ${input.templateId}`,
+    };
+  }
 
+  const { scopes: availableScopes } = await listAvailableMcpScopes();
+  const scopes = resolveTemplateGrants(template, availableScopes);
+  if (scopes.length === 0) {
+    return {
+      ok: false,
+      error: "no_resolvable_scopes",
+      message: `Template "${template.label}" has no grants registered on this install.`,
+    };
+  }
+
+  const capability: McpTokenCapability = template.tier === "read" ? "read" : "write";
   const result: IssueMcpTokenResult = await issueMcpApiToken({
     userId: session.user.id,
-    name: input.name?.trim() || "Write MCP token",
-    capability: "write",
-    scope: "write",
-    scopes: [...WRITE_MCP_TOKEN_SCOPES],
-    expiresInDays: input.expiresInDays === undefined ? 90 : input.expiresInDays,
+    name: input.name.trim() || template.label,
+    capability,
+    scope: template.tier,
+    scopes,
+    expiresInDays: input.expiresInDays,
     agentId: null,
   });
   if (!result.ok) {
@@ -162,6 +223,23 @@ export async function issueMyWriteMcpToken(input: {
     expiresAt: result.expiresAt?.toISOString() ?? null,
     setupSnippets: buildSetupSnippets(result.plaintext, input.baseUrl),
   };
+}
+
+// Back-compat alias: the one-click "Issue write token" / "Issue development
+// token" button on the admin page now goes through the development template
+// so the grant bundle stays in one place (mcp-token-scopes.ts). Callers that
+// passed name / expiresInDays still work.
+export async function issueMyWriteMcpToken(input: {
+  baseUrl: string;
+  name?: string;
+  expiresInDays?: number | null;
+}): Promise<IssueTokenActionResult> {
+  return issueMyTemplateMcpToken({
+    templateId: "development",
+    name: input.name?.trim() || "Development MCP token",
+    expiresInDays: input.expiresInDays === undefined ? 90 : input.expiresInDays,
+    baseUrl: input.baseUrl,
+  });
 }
 
 function isOwnedActiveToken(
