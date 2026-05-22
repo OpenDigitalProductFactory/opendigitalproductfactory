@@ -80,14 +80,15 @@ Bind scope at the authority boundary first. The Edge Node should never self-assi
 - [x] Write this implementation plan.
 - [x] Link the prior MSP applicability handoff to this focused spec/plan.
 
-## Chunk 6: UI Follow-Up
+## Chunk 6: Bootstrap Scope UI
 
-**Not in this PR.** This branch creates the platform contract. The next UI slice should:
+**Follow-up PR after the platform contract.** This slice makes the install-time customer/site boundary usable from `/platform/edge-nodes` without expanding into adapter management.
 
-- add customer/site selectors to bootstrap-token issuance;
-- show token and node scope badges in `/platform/edge-nodes`;
-- add adapter target selectors for organization, customer account, customer site, and specific node;
-- verify the production Docker portal route only, not a separate portal instance.
+- [x] Add customer/site selectors to bootstrap-token issuance.
+- [x] Show token and node scope badges in `/platform/edge-nodes`.
+- [x] Validate server-side that a selected customer site belongs to the selected customer account.
+- [ ] Add adapter target selectors for organization, customer account, customer site, and specific node.
+- [x] Verify the production Docker portal route on the existing `dpf-portal-1` only, not a separate portal instance.
 
 ## Verification Gate
 
