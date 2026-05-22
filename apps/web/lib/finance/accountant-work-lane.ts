@@ -162,7 +162,7 @@ export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
       missingCoverage: quickBooksMissingCoverage,
       writeBoundary:
         "QuickBooks staging is source-attributed and non-editable; no write-back or DPF-primary accounting ownership until entity links, reconciliation evidence, rollback/export, and accountant review are proven.",
-      nextBacklogItemId: "BI-07D76D6B",
+      nextBacklogItemId: "BI-4025EF5F",
     },
     {
       provider: "stripe",
@@ -173,7 +173,7 @@ export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
       missingCoverage: ["Fees", "Payout deposits", "Invoice allocation matching", "QuickBooks reconciliation"],
       writeBoundary:
         "Stripe remains the payment processor; DPF should reconcile payment evidence before promoting billing records.",
-      nextBacklogItemId: "BI-07D76D6B",
+      nextBacklogItemId: "BI-2DB52EAB",
     },
     {
       provider: "bank-feed-provider",
@@ -184,17 +184,17 @@ export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
       missingCoverage: ["Direct bank feeds", "Statement source custody", "Automated reconciliation evidence"],
       writeBoundary:
         "Bank feeds stay unmapped until DPF chooses provider ownership and proves rollback/export expectations.",
-      nextBacklogItemId: "BI-07D76D6B",
+      nextBacklogItemId: "BI-47366954",
     },
   ],
   promotionGuardrail:
     "DPF does not become the accounting system of record until read coverage, import staging, reconciliation evidence, rollback/export, and accountant review workflows are proven in dual-run.",
   nextWorkflow: {
-    backlogItemId: "BI-07D76D6B",
-    title: "QuickBooks import staging and ownership posture for core accounting records",
+    backlogItemId: "BI-4025EF5F",
+    title: "QuickBooks import review queue and accounting entity links",
     route: "/platform/tools/integrations/quickbooks",
     reason:
-      "The accountant lane needs source-attributed, non-editable staging before entity links, reconciliation, or write-back gates.",
+      "The accountant lane needs persisted review candidates and explicit entity links before reconciliation or write-back gates.",
   },
 };
 

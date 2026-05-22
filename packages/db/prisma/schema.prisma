@@ -1348,6 +1348,51 @@ model IntegrationToolCallLog {
   @@index([toolName, calledAt])
 }
 
+// Source-attributed import review queue for external provider records.
+// Stores review/link posture only; raw provider payloads stay outside DPF.
+model IntegrationImportBatch {
+  id                  String   @id @default(cuid())
+  batchRef            String   @unique
+  sourceProvider      String
+  providerEnvironment String?
+  sourceTimestamp     DateTime?
+  status              String   @default("reviewing")
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  records IntegrationImportStagedRecord[]
+
+  @@index([sourceProvider, status])
+  @@index([createdAt])
+}
+
+model IntegrationImportStagedRecord {
+  id                      String   @id @default(cuid())
+  importBatchId           String
+  sourceProvider          String
+  entityFamily            String
+  externalId              String
+  sourceTimestamp         DateTime?
+  ownerSide               String
+  reviewStatus            String   @default("candidate")
+  proposedLocalEntityType String
+  proposedLocalId         String?
+  proposedLocalStatus     String   @default("candidate")
+  proposedLocalConfidence String   @default("low")
+  proposedLocalReason     String
+  displayFields           Json
+  sourceFingerprint       String
+  readOnly                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  batch IntegrationImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([importBatchId, entityFamily, externalId], map: "integration_import_record_batch_family_external_key")
+  @@index([sourceProvider, entityFamily, externalId], map: "integration_import_record_source_family_external_idx")
+  @@index([reviewStatus])
+}
 model OAuthPendingFlow {
   id           String   @id @default(cuid())
   state        String   @unique

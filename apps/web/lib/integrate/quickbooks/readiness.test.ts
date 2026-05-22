@@ -57,6 +57,23 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     expect(
       descriptor.importStaging?.families.every((family) => family.ownerSide === "external"),
     ).toBe(true);
+    expect(descriptor.importReview).toMatchObject({
+      status: "ready-to-review",
+      nextBacklogItemId: "BI-4025EF5F",
+      readOnly: true,
+      sourceProvider: "quickbooks",
+    });
+    expect(descriptor.importReview?.families).toEqual([
+      "company",
+      "customers",
+      "invoices",
+      "vendors",
+      "bills",
+      "expenses",
+      "payments",
+      "accounts",
+      "reports",
+    ]);
     expect(
       descriptor.capabilities.find((capability) => capability.key === "expenses")?.apiCoverageNote,
     ).toContain("Purchase");
@@ -71,6 +88,9 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     );
     expect(descriptor.nextSafeActions).toContain(
       "Review non-editable import staging fields before creating local accounting links",
+    );
+    expect(descriptor.nextSafeActions).toContain(
+      "Persist reviewed import candidates through BI-4025EF5F before reconciliation",
     );
   });
 

@@ -154,6 +154,15 @@ export function buildQuickBooksReadinessDescriptor({
   const isError = status === "error";
   const isAuthError = isError && isCredentialError(connection?.lastErrorMsg);
   const importStaging = buildQuickBooksImportStagingDescriptor();
+  const importReview = {
+    status: isConnected ? "ready-to-review" : "not-started",
+    sourceProvider: "quickbooks",
+    readOnly: true,
+    nextBacklogItemId: "BI-4025EF5F",
+    families: Array.from(QUICKBOOKS_IMPORT_STAGING_ENTITY_FAMILIES),
+    guardrail:
+      "Review queue records are DPF-held posture only; staged QuickBooks source records stay non-editable and external-owned until entity links are approved.",
+  } as const;
 
   return {
     schemaVersion: "1.0",
@@ -196,6 +205,7 @@ export function buildQuickBooksReadinessDescriptor({
       }),
     ),
     importStaging,
+    importReview,
     nextSafeActions: resolveNextSafeActions(status),
     updatedAt: connection?.lastTestedAt ?? null,
   };
@@ -237,6 +247,7 @@ function resolveNextSafeActions(status: QuickBooksReadinessConnection["status"])
       "Review mapped read coverage",
       "Use expanded QuickBooks read coverage to plan source-attributed staging before imports or writes",
       "Review non-editable import staging fields before creating local accounting links",
+      "Persist reviewed import candidates through BI-4025EF5F before reconciliation",
       "Keep bank feeds, tax authority, and accountant workflow blocked until their ownership gates are designed",
       "Keep write operations blocked until proposal-mode approval exists",
     ];
