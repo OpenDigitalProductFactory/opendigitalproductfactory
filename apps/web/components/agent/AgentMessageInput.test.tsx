@@ -215,23 +215,74 @@ describe("AgentMessageInput — optional question packet context", () => {
     expect(onSend).toHaveBeenCalledWith("Explain this page");
   });
 
-  it("sends populated optional fields as a structured question packet", () => {
+  it("opens the context popover when the [+] button is clicked", () => {
+    render(<AgentMessageInput {...defaultProps} />);
+
+    // Popover hidden by default — menu role not in the DOM.
+    expect(screen.queryByRole("menu", { name: /add context/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+
+    expect(screen.getByRole("menu", { name: /add context/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /set intent/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /add source ref/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /add scope edge/i })).toBeTruthy();
+  });
+
+  it("sends populated chips as a structured question packet", () => {
     const onSend = vi.fn();
     render(<AgentMessageInput {...defaultProps} onSend={onSend} />);
 
+    // 1. Intent chip via popover → inline editor → Save.
     fireEvent.click(screen.getByRole("button", { name: /add context/i }));
-    fireEvent.change(screen.getByLabelText(/intent/i), {
+    fireEvent.click(screen.getByRole("menuitem", { name: /set intent/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^intent$/i }), {
       target: { value: "Find the smallest safe implementation slice" },
     });
-    fireEvent.change(screen.getByLabelText(/sources/i), {
-      target: { value: "docs/superpowers/plans/2026-05-22-ai-question-method-platform-implementation.md\nBI-123" },
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    // 2. First source chip (commits via Enter — exercises keyboard path).
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /add source ref/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^source$/i }), {
+      target: {
+        value:
+          "docs/superpowers/plans/2026-05-22-ai-question-method-platform-implementation.md",
+      },
     });
-    fireEvent.change(screen.getByLabelText(/exclusions/i), {
-      target: { value: "Do not grant extra tool authority\nDo not turn chat into a form" },
+    fireEvent.keyDown(screen.getByRole("textbox", { name: /^source$/i }), {
+      key: "Enter",
     });
-    fireEvent.change(screen.getByLabelText(/artifact/i), {
-      target: { value: "patch" },
+
+    // 3. Second source chip.
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /add source ref/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^source$/i }), {
+      target: { value: "BI-123" },
     });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    // 4. First scope-edge chip.
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /add scope edge/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^scope edge$/i }), {
+      target: { value: "Do not grant extra tool authority" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    // 5. Second scope-edge chip.
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /add scope edge/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^scope edge$/i }), {
+      target: { value: "Do not turn chat into a form" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    // 6. Output shape pill inside the popover (artifact has no inline editor).
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^patch$/i }));
+
+    // 7. Type the message and send.
     fireEvent.change(screen.getByPlaceholderText(/ask your co-worker/i), {
       target: { value: "Continue" },
     });
@@ -257,20 +308,45 @@ describe("AgentMessageInput — optional question packet context", () => {
     });
   });
 
-  it("keeps the context composer scrollable and wrappable for narrow panels", () => {
-    render(<AgentMessageInput {...defaultProps} />);
+  it("removes a chip via its × button and excludes it from the outgoing packet", () => {
+    const onSend = vi.fn();
+    render(<AgentMessageInput {...defaultProps} onSend={onSend} />);
 
     fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /set intent/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /^intent$/i }), {
+      target: { value: "Decide redesign vs keep" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    const messageBox = screen.getByPlaceholderText(/ask your co-worker/i);
-    const contextButton = screen.getByRole("button", { name: /hide context/i });
-    const composerRow = contextButton.closest("div");
-    const composerRoot = composerRow?.parentElement;
+    fireEvent.click(screen.getByRole("button", { name: /remove intent/i }));
 
-    expect(composerRoot?.style.minHeight).toBe("0px");
-    expect(composerRoot?.style.overflowY).toBe("auto");
-    expect(composerRow?.style.flexWrap).toBe("wrap");
-    expect(messageBox.style.flex).toBe("1 1 180px");
-    expect(messageBox.style.minWidth).toBe("0px");
+    fireEvent.change(screen.getByPlaceholderText(/ask your co-worker/i), {
+      target: { value: "Plain question" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    // No second argument — chip was removed, so the packet is empty.
+    expect(onSend).toHaveBeenCalledWith("Plain question");
+  });
+
+  it("Escape cancels an in-progress chip entry without creating a chip", () => {
+    const onSend = vi.fn();
+    render(<AgentMessageInput {...defaultProps} onSend={onSend} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /add source ref/i }));
+    const editor = screen.getByRole("textbox", { name: /^source$/i });
+    fireEvent.change(editor, { target: { value: "draft never committed" } });
+    fireEvent.keyDown(editor, { key: "Escape" });
+
+    expect(screen.queryByRole("textbox", { name: /^source$/i })).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText(/ask your co-worker/i), {
+      target: { value: "Hello" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    expect(onSend).toHaveBeenCalledWith("Hello");
   });
 });
