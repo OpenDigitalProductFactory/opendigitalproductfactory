@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   runPromoter: vi.fn(),
   emitUpgradeEvent: vi.fn(),
+  getPortalActivity: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -45,6 +46,10 @@ vi.mock("@/lib/self-upgrade/promoter", () => ({
 
 vi.mock("@/lib/self-upgrade/notifications", () => ({
   emitUpgradeEvent: mocks.emitUpgradeEvent,
+}));
+
+vi.mock("@/lib/self-upgrade/activity", () => ({
+  getPortalActivity: mocks.getPortalActivity,
 }));
 
 import type { SelfUpgradeRunEventData } from "./self-upgrade";
@@ -104,6 +109,11 @@ describe("manual payload schema", () => {
     const payload: SelfUpgradeRunEventData = { triggeredBy: "ops-bot", dryRun: false, buildId: "FB-123" };
     expect(payload).toEqual({ triggeredBy: "ops-bot", dryRun: false, buildId: "FB-123" });
   });
+
+  it("accepts force boolean", () => {
+    const payload: SelfUpgradeRunEventData = { force: true };
+    expect(payload.force).toBe(true);
+  });
 });
 
 describe("function registration", () => {
@@ -132,6 +142,12 @@ describe("success path", () => {
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockReturnValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
+    mocks.getPortalActivity.mockResolvedValue({
+      active: false,
+      lastActivityAt: null,
+      lastActivityToolName: null,
+      thresholdMs: 5 * 60 * 1000,
+    });
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-AAAABBBB" });
     mocks.startRun.mockResolvedValue({});
@@ -175,6 +191,12 @@ describe("failure path", () => {
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockReturnValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
+    mocks.getPortalActivity.mockResolvedValue({
+      active: false,
+      lastActivityAt: null,
+      lastActivityToolName: null,
+      thresholdMs: 5 * 60 * 1000,
+    });
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-FAILTEST" });
     mocks.startRun.mockResolvedValue({});
@@ -224,5 +246,107 @@ describe("failure path", () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "error" });
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.completeRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("portal-active skip", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Everything passes the prior skip-checks; isolate the activity gate.
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isInMaintenanceWindow.mockReturnValue(true);
+    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
+    mocks.getDeployedSha.mockReturnValue("oldsha1");
+    mocks.isShaFresh.mockReturnValue(false);
+  });
+
+  it("skips with reason=portal-active when getPortalActivity reports active", async () => {
+    const lastActivity = new Date("2026-05-21T12:00:00Z");
+    mocks.getPortalActivity.mockResolvedValue({
+      active: true,
+      lastActivityAt: lastActivity,
+      lastActivityToolName: "triage_backlog_item",
+      thresholdMs: 5 * 60 * 1000,
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+    expect(result).toEqual({
+      skipped: true,
+      reason: "portal-active",
+      lastActivityAt: lastActivity.toISOString(),
+      lastActivityToolName: "triage_backlog_item",
+      thresholdMs: 5 * 60 * 1000,
+    });
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("proceeds when getPortalActivity reports inactive", async () => {
+    mocks.getPortalActivity.mockResolvedValue({
+      active: false,
+      lastActivityAt: null,
+      lastActivityToolName: null,
+      thresholdMs: 5 * 60 * 1000,
+    });
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-INACTIVE" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "ok", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-INACTIVE" });
+  });
+
+  it("bypasses the activity check when force=true even if portal is active", async () => {
+    mocks.getPortalActivity.mockResolvedValue({
+      active: true,
+      lastActivityAt: new Date(),
+      lastActivityToolName: "anything",
+      thresholdMs: 5 * 60 * 1000,
+    });
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-FORCE" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "ok", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+    const result = await runSelfUpgrade({ triggeredBy: "operator", force: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-FORCE" });
+  });
+
+  it("bypasses the activity check on dryRun even if portal is active", async () => {
+    mocks.getPortalActivity.mockResolvedValue({
+      active: true,
+      lastActivityAt: new Date(),
+      lastActivityToolName: "anything",
+      thresholdMs: 5 * 60 * 1000,
+    });
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-DRY" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "ok", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+    const result = await runSelfUpgrade({ triggeredBy: "operator", dryRun: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-DRY" });
+  });
+
+  it("portal-active check runs before getLatestRun (cheap query first)", async () => {
+    const callOrder: string[] = [];
+    mocks.getPortalActivity.mockImplementation(async () => {
+      callOrder.push("getPortalActivity");
+      return {
+        active: true,
+        lastActivityAt: new Date(),
+        lastActivityToolName: "tool",
+        thresholdMs: 5 * 60 * 1000,
+      };
+    });
+    mocks.getLatestRun.mockImplementation(async () => {
+      callOrder.push("getLatestRun");
+      return null;
+    });
+    await runSelfUpgrade({ triggeredBy: "scheduled" });
+    expect(callOrder).toEqual(["getPortalActivity"]);
   });
 });
