@@ -17,6 +17,7 @@ import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { writeMcpJsonToHost } from "@/lib/auth/mcp-host-writer";
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
+  deriveIdleDays,
   getMcpTokenTemplate,
   MCP_TOKEN_TEMPLATES,
   resolveTemplateGrants,
@@ -54,6 +55,7 @@ export async function listMyMcpTokens() {
     return { ok: false as const, error: "unauthorized", tokens: [] };
   }
   const tokens = await listMcpApiTokens(session.user.id);
+  const now = new Date();
   return {
     ok: true as const,
     tokens: tokens.map((t) => ({
@@ -66,6 +68,13 @@ export async function listMyMcpTokens() {
       scope: t.scope,
       scopes: t.scopes,
       lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+      // Idle days only meaningful for active tokens. Revoked / expired rows
+      // get null so the UI can show "—" instead of an ever-growing number.
+      idleDays:
+        t.revokedAt != null ||
+        (t.expiresAt != null && t.expiresAt.getTime() < now.getTime())
+          ? null
+          : deriveIdleDays(t.lastUsedAt, now),
       expiresAt: t.expiresAt?.toISOString() ?? null,
       revokedAt: t.revokedAt?.toISOString() ?? null,
       createdAt: t.createdAt.toISOString(),
@@ -251,6 +260,81 @@ function isOwnedActiveToken(
   if (owned.revokedAt != null) return false;
   if (owned.expiresAt != null && owned.expiresAt.getTime() < Date.now()) return false;
   return true;
+}
+
+// Per-token result for bulk-revoke. The UI surfaces successes and failures
+// together so the operator knows exactly which rows landed and which need
+// follow-up — we never silently drop a request.
+export type BulkRevokeResult = {
+  ok: true;
+  results: Array<{
+    tokenId: string;
+    ok: boolean;
+    error?: string;
+    /** "revoked" if the call mutated the DB, "already_revoked" if the row
+     *  was already in revoked state (treated as a success — idempotent), or
+     *  the underlying revoke error key on failure. */
+    status: "revoked" | "already_revoked" | "not_found_or_not_yours" | "error";
+  }>;
+  /** Count of rows that ended in revoked state after this call (including
+   *  already-revoked idempotent hits). */
+  revokedCount: number;
+  /** Count of rows that failed (ownership mismatch or underlying error). */
+  failedCount: number;
+};
+
+export async function bulkRevokeMyMcpTokens(input: {
+  tokenIds: string[];
+  reason: string;
+}): Promise<BulkRevokeResult | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "unauthorized" };
+  }
+  if (input.tokenIds.length === 0) {
+    return { ok: true, results: [], revokedCount: 0, failedCount: 0 };
+  }
+  // Dedup defensively — a misclick or stale UI state could submit the same
+  // id twice; we don't want to double-write the audit row.
+  const uniqueIds = Array.from(new Set(input.tokenIds));
+
+  // Single ownership lookup for the batch — avoids N queries.
+  const tokens = await listMcpApiTokens(session.user.id);
+  const ownedById = new Map(tokens.map((t) => [t.id, t]));
+
+  const results: BulkRevokeResult["results"] = [];
+  let revokedCount = 0;
+  let failedCount = 0;
+
+  for (const tokenId of uniqueIds) {
+    const owned = ownedById.get(tokenId);
+    if (!owned) {
+      results.push({ tokenId, ok: false, error: "not_found_or_not_yours", status: "not_found_or_not_yours" });
+      failedCount += 1;
+      continue;
+    }
+    if (owned.revokedAt != null) {
+      // Idempotent success — the row is already in the target state.
+      results.push({ tokenId, ok: true, status: "already_revoked" });
+      revokedCount += 1;
+      continue;
+    }
+    const revokeResult = await revokeMcpApiToken(tokenId, input.reason);
+    if (revokeResult.ok) {
+      results.push({ tokenId, ok: true, status: "revoked" });
+      revokedCount += 1;
+    } else {
+      results.push({
+        tokenId,
+        ok: false,
+        error: revokeResult.error,
+        status: "error",
+      });
+      failedCount += 1;
+    }
+  }
+
+  return { ok: true, results, revokedCount, failedCount };
 }
 
 export async function revokeMyMcpToken(input: {

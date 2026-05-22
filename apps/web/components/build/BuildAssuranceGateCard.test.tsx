@@ -7,9 +7,20 @@ import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 
 vi.mock("@/lib/actions/assurance", () => ({
   requestBuildBomGeneration: vi.fn(async () => ({ queued: true })),
+  requestBuildAssuranceScan: vi.fn(async () => ({ queued: true })),
+  setAssuranceFindingStatus: vi.fn(async () => ({ findingKey: "fk-1", previousStatus: "open", status: "planned" })),
+  requestBacklogFromAssuranceFinding: vi.fn(async () => ({
+    findingKey: "fk-1",
+    backlogItemId: "BI-NEW",
+    epicCuid: "epic-cuid",
+    alreadyLinked: false,
+  })),
 }));
 
-import { requestBuildBomGeneration } from "@/lib/actions/assurance";
+import {
+  requestBuildAssuranceScan,
+  requestBuildBomGeneration,
+} from "@/lib/actions/assurance";
 
 afterEach(cleanup);
 
@@ -128,5 +139,112 @@ describe("BuildAssuranceGateCard", () => {
 
     expect(screen.getByText("Assurance blocked")).toBeInTheDocument();
     expect(screen.getByText("2 blocking")).toBeInTheDocument();
+  });
+
+  it("queues an assurance scan when Run scan is clicked", async () => {
+    render(
+      <BuildAssuranceGateCard
+        buildId="BUILD-1"
+        summary={{
+          state: "current",
+          document: {
+            documentId: "bom_abc",
+            digest: "abc123",
+            generatedAt: new Date("2026-05-22T00:00:00.000Z"),
+            componentCount: 12,
+            sourceKind: "pnpm-lock",
+          },
+          counts: { components: 12, models: 2 },
+          findings: emptyFindings,
+          scanner: noScanner,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("build-assurance-gate-run-scan"));
+
+    await waitFor(() => {
+      expect(requestBuildAssuranceScan).toHaveBeenCalledWith("BUILD-1");
+    });
+  });
+
+  it("disables Run scan when no BOM exists yet", () => {
+    render(
+      <BuildAssuranceGateCard
+        buildId="BUILD-1"
+        summary={{
+          state: "missing",
+          document: null,
+          counts: { components: 0, models: 0 },
+          findings: emptyFindings,
+          scanner: noScanner,
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("build-assurance-gate-run-scan")).toBeDisabled();
+  });
+
+  it("renders the active findings section with an empty hint when no findings exist", () => {
+    render(
+      <BuildAssuranceGateCard
+        buildId="BUILD-1"
+        summary={{
+          state: "missing",
+          document: null,
+          counts: { components: 0, models: 0 },
+          findings: emptyFindings,
+          scanner: noScanner,
+        }}
+        findings={[]}
+      />,
+    );
+
+    expect(screen.getByText("Active findings")).toBeInTheDocument();
+    expect(screen.getByText("Generate a BOM, then run a scan.")).toBeInTheDocument();
+  });
+
+  it("renders supplied findings inside the gate card", () => {
+    render(
+      <BuildAssuranceGateCard
+        buildId="BUILD-1"
+        summary={{
+          state: "current",
+          document: {
+            documentId: "bom_abc",
+            digest: "abc123",
+            generatedAt: new Date("2026-05-22T00:00:00.000Z"),
+            componentCount: 12,
+            sourceKind: "pnpm-lock",
+          },
+          counts: { components: 12, models: 2 },
+          findings: emptyFindings,
+          scanner: noScanner,
+        }}
+        findings={[
+          {
+            findingKey: "fk-1",
+            findingKind: "vulnerability",
+            title: "Critical issue in vulnerable-lib",
+            status: "open",
+            policySeverity: "critical",
+            releaseImpact: "block",
+            adapterKey: "pnpm-audit",
+            vendorIdentifier: "GHSA-1111",
+            affectedType: "bom-component",
+            affectedId: "key-vulnerable",
+            lastSeenAt: new Date("2026-05-22T12:00:00.000Z"),
+            component: {
+              name: "vulnerable-lib",
+              version: "1.2.0",
+              packageUrl: "pkg:npm/vulnerable-lib@1.2.0",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Critical issue in vulnerable-lib")).toBeInTheDocument();
+    expect(screen.getByText("vulnerable-lib@1.2.0")).toBeInTheDocument();
   });
 });
