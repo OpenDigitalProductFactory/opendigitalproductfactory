@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { EstateIndicatorTone, EstateItem, EstateSupportTone } from "@/lib/estate/estate-item";
 
 type Props = {
@@ -188,19 +190,25 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
 
 export function EstateItemCard({ item }: Props) {
   return (
-    <article className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <article className="group rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 transition-colors hover:border-[var(--dpf-accent)]/60">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <Link
+          href={`/inventory/entity/${item.id}`}
+          className="flex flex-1 items-start gap-3 outline-none"
+          aria-label={`Open ${item.name} detail`}
+        >
           <div className="rounded-2xl bg-[var(--dpf-surface-2)] p-3 text-[var(--dpf-accent)]" aria-hidden="true">
             <EstateGlyph iconKey={item.iconKey} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{item.name}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)] group-hover:text-[var(--dpf-accent)]">
+              {item.name}
+            </p>
             <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
               {item.technicalClassLabel}
             </p>
           </div>
-        </div>
+        </Link>
         <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.supportTone]}`}>
           {item.supportStatusLabel}
         </span>
