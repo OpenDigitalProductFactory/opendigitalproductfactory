@@ -105,4 +105,22 @@ describe("buildDependencyGraph", () => {
     expect(phases).toHaveLength(1); // QA only
     expect(phases[0]!.tasks[0]!.specialist).toBe("qa-engineer");
   });
+
+  it("does not throw when fileStructure is undefined and tasks exist", () => {
+    // Regression: a stored buildPlan with `{ tasks: [...] }` but no
+    // `fileStructure` used to crash the /build page when the build was
+    // selected. The static type declares fileStructure required, but the
+    // Prisma JSON column does not enforce that at runtime.
+    const tasks: PlanTask[] = [
+      { title: "Add AgentBudgetEvent Prisma model and run migration", testFirst: "", implement: "", verify: "" },
+    ];
+
+    expect(() => buildDependencyGraph(undefined, tasks)).not.toThrow();
+    expect(() => buildDependencyGraph(null, tasks)).not.toThrow();
+
+    const phases = buildDependencyGraph(undefined, tasks);
+    expect(phases.length).toBeGreaterThan(0);
+    // QA phase is always appended last.
+    expect(phases[phases.length - 1]?.tasks[0]?.specialist).toBe("qa-engineer");
+  });
 });
