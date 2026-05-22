@@ -20,6 +20,13 @@ import {
 } from "@/lib/assurance/finding-read";
 import type { AssuranceFindingStatus } from "@/lib/assurance/types";
 
+// CodeQL #205/#206 (js/log-injection): strip CR/LF from user-controlled
+// identifiers before they hit console.error so an attacker cannot forge
+// log entries via a crafted route param.
+function sanitizeForLog(value: string): string {
+  return value.replace(/[\r\n]+/g, "_");
+}
+
 async function requirePlatformUser(): Promise<string> {
   const session = await auth();
   const user = session?.user;
@@ -64,9 +71,9 @@ export async function getBuildAssuranceFindings(
     return await listActiveFindingsForBuild(prisma, buildId, limit);
   } catch (err) {
     console.error(
-      `[tool-trace] failed to load build assurance findings buildId=${buildId} error=${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      "[tool-trace] failed to load build assurance findings buildId=%s error=%s",
+      sanitizeForLog(buildId),
+      sanitizeForLog(err instanceof Error ? err.message : String(err)),
     );
     return [];
   }
@@ -80,9 +87,9 @@ export async function getProductAssuranceFindings(
     return await listActiveFindingsForProduct(prisma, digitalProductId, limit);
   } catch (err) {
     console.error(
-      `[tool-trace] failed to load product assurance findings productId=${digitalProductId} error=${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      "[tool-trace] failed to load product assurance findings productId=%s error=%s",
+      sanitizeForLog(digitalProductId),
+      sanitizeForLog(err instanceof Error ? err.message : String(err)),
     );
     return [];
   }
