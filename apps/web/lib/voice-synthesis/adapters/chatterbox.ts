@@ -56,7 +56,7 @@ export async function synthesizeWithChatterbox(
   const body = {
     model: "tts-1",
     input: text,
-    voice: "default",
+    voice: config.providerVoiceId ?? "default",
     response_format: "wav",
     speed: config.speed ?? 1.0,
   }
