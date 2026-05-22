@@ -2,10 +2,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — consistency-review pass applied 2026-05-22 |
+| **Status** | Draft — UX-audit absorption pass applied 2026-05-22 (after consistency pass) |
 | **Date** | 2026-05-21 |
 | **Author** | Codex + Mark Bodman |
-| **Reviewers** | Chief-architect pass (Claude, 2026-05-21): added evidence-gated scoring (§5.1), `riskTier`-derived MVP targets (§5.2), confidence decay (§5.3), Productize Mode (§7.3), capability-record extensions (§8), assessment cadence (§8.1), capability dependency graph + effective maturity invariant (§10.3), productize promotion loop (§10.4), `boundary_adapter` qualifying criteria (§11), architectural acceptance criteria (§15.2), and four new risks (§16). Consistency-review pass (Claude, 2026-05-22): resolved `claimed`-decay contradiction with `claimed_overdue` alert (§5.3), marked derived fields in capability record (§8), reframed §6 bootstrap scores as `claimed` per §5.1 gate, added `riskTier` authoring governance (§5.2.1), required `MaturityScoreEvent` audit log (§8 + AC #19), added governance-bottleneck risk and tiered cadence (§8.1, §16), made mode precedence explicit (§7.0), and qualified MCP's multi-vendor status in `boundary_adapter` criteria (§11). |
+| **Reviewers** | Chief-architect pass (Claude, 2026-05-21): added evidence-gated scoring (§5.1), `riskTier`-derived MVP targets (§5.2), confidence decay (§5.3), Productize Mode (§7.3), capability-record extensions (§8), assessment cadence (§8.1), capability dependency graph + effective maturity invariant (§10.3), productize promotion loop (§10.4), `boundary_adapter` qualifying criteria (§11), architectural acceptance criteria (§15.2), and four new risks (§16). Consistency-review pass (Claude, 2026-05-22): resolved `claimed`-decay contradiction with `claimed_overdue` alert (§5.3), marked derived fields in capability record (§8), reframed §6 bootstrap scores as `claimed` per §5.1 gate, added `riskTier` authoring governance (§5.2.1), required `MaturityScoreEvent` audit log (§8 + AC #19), added governance-bottleneck risk and tiered cadence (§8.1, §16), made mode precedence explicit (§7.0), and qualified MCP's multi-vendor status in `boundary_adapter` criteria (§11). UX-audit absorption pass (Claude, 2026-05-22, after consistency PR #1001 merged): folded the six `/portfolio`-relevant findings from [`audits/2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md) into new §12.0 (audit-grounded acceptance gates), §12.1 count-source-of-truth + drill-through + empty-state invariants, §12.2 counter-reconciliation gate, §12.3 portfolio-concentration signal, §12.4 label-fit + layer-on-existing-nav invariants, §12.5 maturity-surface audit gates pending AGT-906, AC #12, five risk rows in §16, and three new open decisions in §17 (#9–#11). |
 | **Primary Objective** | Turn the existing four-portfolio taxonomy into an investment, gap-analysis, operations, and productization surface for DPF's agent control plane maturity |
 | **Scope** | Portfolio taxonomy, capability maturity scoring, hive-mind refinement, backlog fan-out, build-first vendor-replacement posture, and recursion-driven productization |
 | **Non-Goals** | This spec does not implement schema, routes, or backlog mutations. It defines the operating model that later plans should implement. |
@@ -491,6 +491,21 @@ A `boundary_adapter` that fails any of these criteria during review must be recl
 
 ## 12. UX Surface Requirements
 
+### 12.0 Audit-Grounded Acceptance Gates
+
+The 2026-05-20 portal UX audit ([`docs/superpowers/audits/2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md)) walked `/portfolio` and `/portfolio/architecture` and recorded six findings that any maturity-surface implementation must address before it can ship. Two are critical, four are important:
+
+| Audit Ref | Finding | §12 Subsection |
+|-----------|---------|----------------|
+| S2.4 / S2.6 | "1 alert firing" chip on `/portfolio` with no drill-through; `OPEN BACKLOG = 121 (20 in progress)` on `/portfolio` situation summary disagrees with `/workspace` (`OPEN WORK = 156`) and `/ops` (`440 items across 51 epics`) — three counters, three values, no source of truth | §12.1, §12.2 |
+| S2.4 | Inner-rail label truncates to "Products and Services S…" — the four-portfolio name does not fit the AppRail width | §12.4 |
+| S2.4 | 117 products concentrated in one of four portfolios — distribution skew is invisible on the `/portfolio` root, so the operator cannot tell that "Products and Services Sold" is doing all the work | §12.3 |
+| S2.4 | `/portfolio/architecture` shows an empty state with no guidance on how to populate it | §12.1 |
+| S2.10 (positive) | `/knowledge` portfolio sub-tabs are the working sub-nav pattern — maturity overlays must layer on this rather than introducing a new navigation mode | §12.4 |
+| S2.8 | `/platform/ai` shows every coworker as "0 active grants" while `/platform` shows `STANDING TOOL GRANTS = 517`. Generalizes to: any maturity dashboard counter must reconcile against its source-of-truth aggregate when both are visible | §12.1 |
+
+[AGT-906](../specs/2026-05-16-ux-auditor-coworker-design.md) (UX-auditor coworker, in design) is the gating reviewer of record for these criteria. Until AGT-906 is shipped, implementation reviewers apply the 22-lens rubric manually using the May 20 audit as the worked example.
+
 ### 12.1 Portfolio Route
 
 The `/portfolio` experience should become the natural home for capability maturity because portfolio is already the management lens. Each root portfolio and taxonomy node should be able to show:
@@ -505,6 +520,12 @@ The `/portfolio` experience should become the natural home for capability maturi
 - hive-mind signals
 - customer overlay differences
 
+**Count source-of-truth invariant** (absorbs audit BI-CANDIDATE-S2-08): every numeric surface rendered on `/portfolio` (open backlog, alert count, evidence count, exception count, product count, maturity-coverage tally) must read from a **single named projection** shared across `/workspace`, `/portfolio`, and `/ops`. If a counter cannot be reconciled to one such projection, it is removed rather than displayed. The maturity dashboard is forbidden from introducing a fourth "open work" number.
+
+**Drill-through invariant** (absorbs S2.4 "1 alert firing" finding): no chip, badge, or alarm on a maturity surface renders without a destination route. `N alerts firing` chips drill into the underlying `BacklogItem` / `ToolExecution` failure / `RuntimeVerification` regression list, filtered to the chip's scope. Decorative status pills are forbidden — same lesson as the Six-C matrix per audit §4.1.
+
+**Empty-state invariant** (absorbs `/portfolio/architecture` finding): every maturity-surface route that can legitimately be empty (no capabilities scored, no evidence yet flowed, no architecture modeled) ships with a first-load guidance card naming the next action — "Run capability assessment", "Seed initial scores from §6 bootstrap", "Open epic EP-…" — not a blank canvas.
+
 ### 12.2 Management Surface Behavior
 
 When a capability is mature, the UI should feel like an operations console: compact, evidence-rich, and action-oriented.
@@ -518,6 +539,8 @@ Expected controls:
 - open improvement backlog
 - trigger assessment refresh
 
+**Counter reconciliation gate** (absorbs S2.8 generalization): when an operations-mode surface shows both an aggregate counter (e.g. "STANDING TOOL GRANTS 517") and per-row values that should sum or filter into that aggregate (e.g. each coworker's "active grants" count), the writer module verifies the two views agree at render time and surfaces a reconciliation failure as itself a maturity defect — not as silent UI drift.
+
 ### 12.3 Investment Surface Behavior
 
 When a capability is immature, the UI should feel like portfolio investment analysis:
@@ -530,6 +553,8 @@ When a capability is immature, the UI should feel like portfolio investment anal
 - link to specs/plans/backlog
 - show expected maturity lift after each slice
 
+**Portfolio-concentration signal** (absorbs S2.4 "117 of N in one portfolio" finding): if one of the four portfolio roots holds more than 3× the median product / capability / epic count of the other three, that concentration imbalance renders on `/portfolio` root as an investment-mode signal with its own §7.1 framing — "this portfolio is doing 80% of the catalog's work; investment in the other three is the gap." Without this surface, skewed distribution is invisible and the four-portfolio taxonomy quietly degenerates into a one-portfolio operation.
+
 ### 12.4 Theme and Design Guardrails
 
 Any UI implementation must follow DPF theme-aware styling:
@@ -540,6 +565,23 @@ Any UI implementation must follow DPF theme-aware styling:
 - avoid decorative card-heavy marketing layouts
 - no nested cards
 - preserve dense scanability for portfolio operators
+
+**Label-fit invariant** (absorbs S2.4 "Products and Services S…" finding): portfolio root names — including `Products and Services Sold` and `Manufacturing and Delivery` — must render in full at every supported viewport width. If AppRail or inner-rail width is constrained, the portfolio record carries a documented `displayShort` variant (e.g. "Sold", "Manufacturing") used in lieu of CSS truncation. Truncating the canonical taxonomy label with `…` is forbidden — it destroys the operator's ability to scan the taxonomy.
+
+**Layer-on-existing-nav invariant** (absorbs S2.10 positive finding): the maturity surface MUST be a render mode on existing `/portfolio` and `/portfolio/product/[id]` sub-tab structure, not a new sub-route. The `/knowledge` sub-tab pattern is the working precedent and the implementation copies it. Introducing a new top-level `/portfolio/maturity` tab is rejected at review.
+
+### 12.5 Maturity Surface Audit Gates (for review)
+
+Every maturity-surface PR must satisfy the following lenses from the AGT-906 22-lens rubric before merge, regardless of automated checks:
+
+- `functionality` — every interactive element has a verified destination; no decorative chips
+- `data-completeness` — no field renders as "Not assigned" / "Unknown" / "—" when a source-of-truth count says data exists (per S2.8 generalization)
+- `confidence-signal` — system prompts, coworker setup instructions, and `[tool-trace]` debug output never render in operator-visible transcripts or panels (per S2.7)
+- `object-oriented-ux` — every numeric surface drills into the query that produced it (per S2.4 Six-C matrix lesson)
+- `literal-copy` — operator-facing labels use plain language, not schema vocabulary (per §4.1 Six-C column-header finding)
+- `millers-law` — at most two header tiers above the first content row (per §4.1 workspace header-stack finding)
+
+This is the manual interim gate until AGT-906 ships; once AGT-906 is live, these become its acceptance-evidence assertions per [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md).
 
 ## 13. Backlog Fan-Out Model
 
@@ -631,6 +673,7 @@ The design is successful when later implementation can prove the following. **Fu
 9. Vendor categories are evaluated as `owned_core`, `embedded_accelerator`, `boundary_adapter`, or `avoid`, with `boundary_adapter` decisions backed by the §11 qualifying criteria.
 10. Customer overlays can refine local taxonomy without mutating the canonical shared taxonomy.
 11. DPF-on-DPF recursion is explicit: Build Studio manufactures DPF, and DPF itself is the sold product for the DPF archetype.
+12. The maturity surface passes the §12.0 / §12.5 audit gates derived from the 2026-05-20 portal UX audit: every numeric surface drills into a single named projection; every status chip has a destination; portfolio root labels render full at every viewport width; one-portfolio concentration imbalance renders as an investment signal; the surface layers on existing `/portfolio` sub-tab nav, not a new sub-route.
 
 ### 15.2 Architectural (invariants the implementation must preserve)
 
@@ -662,6 +705,11 @@ The design is successful when later implementation can prove the following. **Fu
 | **Governance-bottleneck rubber-stamping** — once the capability count grows past ~20 critical/elevated rows, uniform quarterly review by humans becomes unsustainable and degrades to rubber-stamp approval | Tiered cadence in §8.1: `critical` quarterly, `elevated` semi-annual (quarterly only when status changes), `standard`/`low` opportunistic. WWMD-arbitrated coworker as reviewer of record with automatic human escalation on `defer`/`escalate`, multi-point score moves, or productization transitions. |
 | **`riskTier` inflation** — every record drifts to `critical` to demand more investment budget, neutralizing the §5.2 derivation | §5.2.1 governance: `critical`/`elevated` require a citable breach scenario; tier changes are logged events; writer warns when the `critical` share of the catalog crosses ~one-third without explicit kernel-principle justification. |
 | **Mode-precedence violation** — UX shows Productize affordance on a capability whose raw `maturityScore` qualifies but whose `effectiveMaturity` is dragged below target by a dependency | §7.0 fixed precedence (Investment > Operations, Productize as Operations-only overlay) enforced against `effectiveMaturity`, not `maturityScore`; AC #14 already requires this for all gating logic. |
+| **Counter drift on `/portfolio`** — the maturity dashboard introduces a fourth or fifth "open work" number that disagrees with `/workspace`, `/portfolio` situation summary, and `/ops` (per 2026-05-20 audit S2.6: 121 vs 156 vs 440) | §12.1 count source-of-truth invariant: every numeric surface reads from one named projection shared across the three routes; counters that cannot reconcile are removed rather than displayed; AGT-906 enforces at review time. |
+| **Decorative status pills** — "N alerts firing" / "blocked" chips render without drill-through (per audit S2.4 `/portfolio`, §4.1 Six-C matrix) | §12.1 drill-through invariant: every chip resolves to a filtered list of underlying objects; no decorative pills permitted on maturity surfaces; AGT-906 lens `functionality` blocks ship. |
+| **Portfolio-name truncation** — canonical taxonomy labels render as "Products and Services S…" in constrained rails, destroying scanability of the four-portfolio model | §12.4 label-fit invariant: portfolio records carry `displayShort`; CSS `…` truncation of canonical labels is forbidden. |
+| **Hidden one-portfolio concentration** — 117 of N products live in one of four portfolios and the dashboard does not surface the skew (per audit S2.4) | §12.3 portfolio-concentration signal: imbalance > 3× median renders as an investment-mode finding on `/portfolio` root with §7.1 framing. |
+| **Maturity overlay invents new navigation** — implementation adds a `/portfolio/maturity` sub-tab instead of layering on existing sub-tab nav | §12.4 layer-on-existing-nav invariant: maturity is a render mode on existing routes; new top-level sub-routes rejected at review. |
 
 ## 17. Open Decisions for the Implementation Plan
 
@@ -673,5 +721,8 @@ The design is successful when later implementation can prove the following. **Fu
 6. Where does the single-writer module for `effectiveMaturity` and `confidenceGrade` live? Candidate: a `packages/maturity` module consumed by both API routes and Build Studio gates.
 7. Who is the governed reviewer of record for `critical` and `elevated` quarterly reviews? Human-only, or WWMD-arbitrated coworker grounded in `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md` with human escalation?
 8. How are `productizationStatus = candidate` transitions surfaced for governance — Build Studio brief, dedicated portal queue, or both?
+9. Which existing `/portfolio` sub-tab is the maturity render mode's primary anchor — `/portfolio` root, `/portfolio/architecture`, `/portfolio/product/[id]/health`, or all three with different scope? The §12.4 layer-on-existing-nav invariant requires re-use of an existing tab, not a new one — the plan must pick which. The 2026-05-20 audit notes `/portfolio/architecture` is currently an empty state (good landing point if seeded properly) and `/portfolio/product/[id]/health` already exists as a per-product surface (good candidate for per-capability detail).
+10. What is the single named projection for "open work" that `/workspace`, `/portfolio`, `/ops`, and the maturity dashboard all read from per §12.1? BI-CANDIDATE-S2-08 from the audit owns the audit/repair of existing counters; the maturity plan must subscribe to that projection rather than spawning a fifth one.
+11. Is the matching `displayShort` variant for portfolio root names (§12.4 label-fit invariant) authored on the `Portfolio` record itself, on the `portfolio_registry.json` seed, or derived from an inflection rule? Authoring on the record is most explicit; deriving is brittle for two-word names ("Sold" vs "Services").
 
 These decisions should be resolved in the implementation plan after schema and route audit.

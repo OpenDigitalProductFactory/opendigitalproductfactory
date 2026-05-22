@@ -75,11 +75,24 @@ export function buildRepeatedToolStopMessage(params: {
   routeContext?: string | null;
   reasonHint: string;
 }): string {
-  const base = `I called ${params.toolName} ${params.count} times with the same arguments and got stuck.${params.reasonHint}`;
+  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose tool
+  // names, file paths, error codes, or internal architecture to the user.
+  // The technical detail (toolName, count, reasonHint) is captured in the
+  // PlatformIssueReport via recordRepeatedToolIssue() at the call site, so
+  // platform engineers still get the full forensic trail. The user just sees
+  // an action they can take.
   if (BUILD_ROUTE_PATTERN.test(params.routeContext ?? "")) {
-    return `${base} Check the build evidence for what was completed.`;
+    return (
+      "I got stuck retrying the same step and stopped before going in circles. "
+      + "Open the build's details panel to see what's been saved, then either "
+      + "send me a new instruction or retry from there."
+    );
   }
-  return `${base} I recorded this as a coworker execution issue and stopped before repeating the same tool again. Check the activity trail for what was attempted, then continue from the last saved recommendation.`;
+  return (
+    "I got stuck retrying the same step and stopped before going in circles. "
+    + "Check the activity panel for what's been recorded, then tell me how "
+    + "you'd like to proceed."
+  );
 }
 
 export function buildRepeatedQuestionNudge(params: {
@@ -283,6 +296,11 @@ function buildFabricationFailureMessage(params: {
   tools: ToolDefinition[];
   executedTools: Array<{ name: string }>;
 }): string {
+  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose tool
+  // names, schema fields ("buildPlan"), or internal architecture terms like
+  // "authoritative state" / "persisted evidence" to a non-technical user.
+  // The underlying technical context is preserved in the executedTools list
+  // and console logs for engineers.
   const availableToolNames = new Set(params.tools.map((tool) => tool.name));
 
   if (
@@ -290,19 +308,32 @@ function buildFabricationFailureMessage(params: {
     && availableToolNames.has("saveBuildEvidence")
     && availableToolNames.has("reviewBuildPlan")
   ) {
-    return "I still have not persisted the implementation plan evidence. Start Implementation cannot unlock until I save buildPlan and complete reviewBuildPlan, so I am stopping instead of claiming the plan is ready.";
+    return (
+      "I caught myself saying the plan is ready before I'd actually recorded it. "
+      + "I stopped so we don't end up with a half-saved plan. "
+      + "Send me the same instruction again and I'll record it properly this time, "
+      + "or open the build details to see what's saved so far."
+    );
   }
 
-  return "I stopped because I was still describing work without using the required tools. The authoritative state was not updated yet, so the claimed progress would have been misleading.";
+  return (
+    "I caught myself describing work without actually doing it, and stopped so we "
+    + "don't end up with progress that isn't real. "
+    + "Send me the same instruction again, or check the build details to see what's "
+    + "been recorded so far."
+  );
 }
 
-function buildLocalToolCallFailureMessage(result: RoutedInferenceResult): string {
-  const modelLabel = result.modelId || "the selected local model";
-  return [
-    "This turn routed to Docker Model Runner, but the local model did not produce the required tool call for this data-backed request.",
-    `Model: ${modelLabel}.`,
-    "The route is recorded, but there is no tool-backed result to return. Retry with a tool-capable provider or update this coworker's model assignment before asking for current operational totals.",
-  ].join(" ");
+function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
+  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose
+  // infrastructure names ("Docker Model Runner"), model IDs, or routing
+  // architecture. The internal route + model details are already recorded
+  // for engineers via RoutedInferenceResult.
+  return (
+    "I couldn't complete this with the model my admin assigned me. "
+    + "Please try the question again — I'll route through a different model. "
+    + "If it keeps failing, an admin can update my model assignment in the AI Workforce settings."
+  );
 }
 
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
