@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
+import path from "node:path";
 
 // Split on both POSIX and Windows separators so callers can pass either flavor
 // of path (URL-style "/x/y/z.md" or native "C:\x\y\z.md") and get the same
@@ -118,6 +119,42 @@ export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null
 // ─── Frontmatter helpers ────────────────────────────────────────────────────
 
 /**
+ * Allowed roots for raw-source ingest. wiki_ingest is MCP-callable
+ * so `filePath` is user-supplied; without this gate a caller could
+ * pass `/etc/passwd` or `.env` and have its contents ingested. The
+ * allowed roots cover every directory we ship raw sources from.
+ */
+const ALLOWED_INGEST_ROOTS = [
+  "docs/founder-kernel/raw-sources",
+  "docs/founder-kernel/wiki",
+  "docs/superpowers/specs",
+  "docs/superpowers/plans",
+  "docs/wiki-sources",
+] as const;
+
+function assertAllowedIngestPath(filePath: string): string {
+  // CodeQL #62 (js/path-injection): wiki_ingest MCP tool passes
+  // user-supplied filePath into readFileSync. Resolve to an absolute
+  // path and assert it sits under one of the allowed roots before
+  // we hand it to fs.
+  const resolved = path.resolve(filePath);
+  const projectRoot = process.env.PROJECT_ROOT
+    ? path.resolve(process.env.PROJECT_ROOT)
+    : process.cwd();
+  for (const root of ALLOWED_INGEST_ROOTS) {
+    const allowedAbs = path.resolve(projectRoot, root);
+    const rel = path.relative(allowedAbs, resolved);
+    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+      return resolved;
+    }
+  }
+  throw new Error(
+    `wiki_ingest: filePath "${filePath}" is outside the allowed source roots ` +
+      `(${ALLOWED_INGEST_ROOTS.join(", ")}). Refusing to read.`,
+  );
+}
+
+/**
  * Read a markdown file and parse its frontmatter when present. Files without
  * a `---` delimiter fall through with empty frontmatter and the entire file
  * body — the caller still gets a citable raw source, it just has no metadata.
@@ -126,7 +163,8 @@ function readSourceFile(filePath: string): {
   frontmatter: Partial<RawSourceFrontmatter>;
   body: string;
 } {
-  const raw = readFileSync(filePath, "utf8");
+  const safePath = assertAllowedIngestPath(filePath);
+  const raw = readFileSync(safePath, "utf8");
   if (!raw.trimStart().startsWith("---")) {
     return { frontmatter: {}, body: raw };
   }
