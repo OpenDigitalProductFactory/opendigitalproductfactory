@@ -208,20 +208,11 @@ function makeLineMatcher(query: string): (line: string) => boolean {
     // to substring search to keep the matcher bounded.
     return (line) => line.includes(query);
   }
-  // CodeQL #73 (js/regex-injection): the search feature INTENDS user-
-  // supplied regex (this is the project search). Defenses are:
-  //   - Length cap (MAX_QUERY_LEN above) bounds compile/match work
-  //   - Quantifier-count gate (above) rejects ReDoS shapes
-  //   - try/catch falls back to substring on parse failure
-  // To satisfy CodeQL's static sanitizer pattern, we re-slice the query
-  // immediately before RegExp construction so the dataflow sees a
-  // bounded value flowing in.
-  const safeQuery = query.slice(0, MAX_QUERY_LEN);
   try {
-    const pattern = new RegExp(safeQuery);
+    const pattern = new RegExp(query);
     return (line) => pattern.test(line);
   } catch {
-    return (line) => line.includes(safeQuery);
+    return (line) => line.includes(query);
   }
 }
 
