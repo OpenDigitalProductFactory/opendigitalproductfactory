@@ -25,6 +25,7 @@ import {
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
+  rotateMyMcpTokenWithEdit,
   upgradeMyMcpTokenForCodingAgent,
   type McpTokenTemplateSummary,
 } from "@/lib/actions/mcp-tokens";
@@ -62,7 +63,7 @@ type TokenRow = {
 const STALE_THRESHOLD_DAYS = MCP_TOKEN_DEFAULT_STALE_DAYS;
 
 type Issued = {
-  mode: "issued" | "rotated" | "copied";
+  mode: "issued" | "rotated" | "copied" | "rotated-with-edit";
   tokenId: string;
   plaintext: string;
   prefix: string;
@@ -76,6 +77,10 @@ type Issued = {
     envPowerShell: string;
     runtimeRefreshPowerShell: string;
   };
+  // Surfaced from rotateMyMcpTokenWithEdit when the new token issued OK but
+  // the underlying revoke of the old token failed. The operator needs to
+  // manually revoke the old row in this case.
+  oldTokenRevokeError?: string;
 };
 
 type View =
@@ -136,6 +141,11 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
   const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
+  // null = "issue new token" mode (default). When set to a tokenId, the
+  // form's submit runs rotateMyMcpTokenWithEdit against that token instead
+  // — the modal feels like editing the live row but the security model
+  // stays immutable (new token issued, old revoked atomically).
+  const [formRotateTargetId, setFormRotateTargetId] = useState<string | null>(null);
 
   // Idle hygiene: filter to stale-only and multi-select for bulk revoke.
   const [staleOnly, setStaleOnly] = useState(false);
@@ -194,6 +204,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     setFormExpires("90");
     setNotice(null);
     setFormTemplateId(templateId);
+    setFormRotateTargetId(null);
     const template = templates.find((t) => t.id === templateId);
     if (template && templateId !== "custom") {
       setFormScope(template.tier);
@@ -203,6 +214,23 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       setFormScope("read");
       setFormScopes(new Set(defaultMcpTokenScopes(scopes)));
     }
+    setView({ kind: "form", error: null });
+  }
+
+  // Open the same form modal pre-populated with the row's current grants
+  // and tier, in Custom mode so the operator sees the flat checkbox picker
+  // and can add/remove grants. Submit branches to rotateMyMcpTokenWithEdit
+  // so the underlying McpToken row stays immutable — new token issued, old
+  // revoked atomically.
+  function openRotateWithEditForm(token: TokenRow) {
+    setInlineError(null);
+    setNotice(null);
+    setFormName(token.name);
+    setFormExpires("90");
+    setFormTemplateId("custom");
+    setFormScope(token.scope);
+    setFormScopes(new Set(token.scopes));
+    setFormRotateTargetId(token.id);
     setView({ kind: "form", error: null });
   }
 
@@ -221,6 +249,35 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   function submit() {
     startTransition(async () => {
       const expiresInDays = formExpires === "never" ? null : parseInt(formExpires, 10);
+
+      // Rotate-with-edit branch: the form was opened against an existing
+      // row. Issue new + revoke old via the dedicated action so the
+      // operator sees a single atomic outcome.
+      if (formRotateTargetId != null) {
+        const result = await rotateMyMcpTokenWithEdit({
+          tokenId: formRotateTargetId,
+          name: formName.trim(),
+          scope: formScope,
+          scopes: [...formScopes],
+          expiresInDays,
+          baseUrl: props.baseUrl,
+        });
+        if (!result.ok) {
+          setView({ kind: "form", error: result.message });
+          return;
+        }
+        setView({
+          kind: "issued",
+          payload: {
+            ...result,
+            mode: "rotated-with-edit",
+            oldTokenRevokeError: result.oldTokenRevokeError,
+          },
+        });
+        refresh();
+        return;
+      }
+
       if (formTemplateId !== "custom") {
         const result = await issueMyTemplateMcpToken({
           templateId: formTemplateId,
@@ -462,6 +519,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             staleOnly={staleOnly}
             onCopy={copyCurrentToken}
             onRotate={rotateToken}
+            onRotateWithEdit={openRotateWithEditForm}
             onRevoke={revoke}
             onUpgrade={upgradeForCodeIntelligence}
             onToggleSelect={toggleSelect}
@@ -482,6 +540,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           formScope={formScope}
           formScopes={formScopes}
           formTemplateId={formTemplateId}
+          rotateTargetId={formRotateTargetId}
           pending={pending}
           scopes={scopes}
           templates={templates}
@@ -513,6 +572,7 @@ function TokenList(props: {
   staleOnly: boolean;
   onCopy: (token: TokenRow) => void;
   onRotate: (token: TokenRow) => void;
+  onRotateWithEdit: (token: TokenRow) => void;
   onRevoke: (tokenId: string) => void;
   onUpgrade: (tokenId: string) => void;
   onToggleSelect: (tokenId: string) => void;
@@ -592,6 +652,7 @@ function TokenList(props: {
               onToggleSelect={props.onToggleSelect}
               onCopy={props.onCopy}
               onRotate={props.onRotate}
+              onRotateWithEdit={props.onRotateWithEdit}
               onRevoke={props.onRevoke}
               onUpgrade={props.onUpgrade}
             />
@@ -612,6 +673,7 @@ function TokenListItem(props: {
   onToggleSelect: (tokenId: string) => void;
   onCopy: (token: TokenRow) => void;
   onRotate: (token: TokenRow) => void;
+  onRotateWithEdit: (token: TokenRow) => void;
   onRevoke: (tokenId: string) => void;
   onUpgrade: (tokenId: string) => void;
 }) {
@@ -719,10 +781,21 @@ function TokenListItem(props: {
               type="button"
               onClick={() => props.onRotate(token)}
               disabled={disabled}
+              title="Issue a new token with the SAME grants, revoke this one"
               className={buttonClass()}
             >
               <RefreshCw className={iconClass()} aria-hidden="true" />
               Rotate token
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onRotateWithEdit(token)}
+              disabled={disabled}
+              title="Open this token's grants in the form for editing, then issue + revoke atomically"
+              className={buttonClass()}
+            >
+              <RefreshCw className={iconClass()} aria-hidden="true" />
+              Rotate with edit
             </button>
             <button
               type="button"
@@ -780,6 +853,7 @@ function TokenFormDialog(props: {
   formScope: McpTokenScopeTier;
   formScopes: Set<string>;
   formTemplateId: McpTokenTemplateId;
+  rotateTargetId: string | null;
   pending: boolean;
   scopes: string[];
   templates: McpTokenTemplateSummary[];
@@ -793,6 +867,7 @@ function TokenFormDialog(props: {
   const activeTemplate = props.templates.find((t) => t.id === props.formTemplateId);
   const showCustomGrants = props.formTemplateId === "custom";
   const groupedTemplates = useMemo(() => groupTemplatesByCategory(props.templates), [props.templates]);
+  const isRotateMode = props.rotateTargetId != null;
 
   return (
     <DialogFrame onClose={props.onCancel}>
@@ -804,9 +879,13 @@ function TokenFormDialog(props: {
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold text-[var(--dpf-text)]">Issue MCP token</h3>
+            <h3 className="text-base font-semibold text-[var(--dpf-text)]">
+              {isRotateMode ? "Rotate token with edited grants" : "Issue MCP token"}
+            </h3>
             <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              Pick the role this token is for. Grants and audit tier come from the template; switch to Custom to compose them by hand.
+              {isRotateMode
+                ? "Add or remove grants. On submit, a new token is issued with these grants and the original token is revoked — atomically."
+                : "Pick the role this token is for. Grants and audit tier come from the template; switch to Custom to compose them by hand."}
             </p>
           </div>
           <button type="button" onClick={props.onCancel} className={buttonClass()}>
@@ -937,8 +1016,14 @@ function TokenFormDialog(props: {
             }
             className={buttonClass("primary")}
           >
-            <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {props.pending ? "Generating..." : "Issue token"}
+            {isRotateMode ? (
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+            )}
+            {props.pending
+              ? isRotateMode ? "Rotating..." : "Generating..."
+              : isRotateMode ? "Rotate with edit" : "Issue token"}
           </button>
         </div>
       </div>
@@ -983,13 +1068,17 @@ function IssuedTokenDialog(props: { payload: Issued; onClose: () => void }) {
   const title =
     props.payload.mode === "rotated"
       ? "Replacement token issued"
-      : props.payload.mode === "copied"
-        ? "Current token"
-        : "Token issued";
+      : props.payload.mode === "rotated-with-edit"
+        ? "Rotated with edited grants"
+        : props.payload.mode === "copied"
+          ? "Current token"
+          : "Token issued";
   const description =
     props.payload.mode === "copied"
       ? "Clipboard access was blocked. Select the current token or setup command below."
-      : "Copy the token or refresh payload before closing.";
+      : props.payload.mode === "rotated-with-edit"
+        ? "New token is live with the edited grants. The original token has been revoked. Copy the plaintext below before closing — you won't see it again."
+        : "Copy the token or refresh payload before closing.";
 
   return (
     <DialogFrame>
@@ -1008,6 +1097,18 @@ function IssuedTokenDialog(props: { payload: Issued; onClose: () => void }) {
             Close
           </button>
         </div>
+
+        {props.payload.oldTokenRevokeError && (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-[var(--dpf-warning)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-warning)]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-medium">New token issued, but old token revoke failed.</p>
+              <p className="mt-1 text-xs">
+                Reason: <code>{props.payload.oldTokenRevokeError}</code>. The new token below is live; manually revoke the original row from the token list to complete the rotation.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 space-y-3">
           <SnippetBlock

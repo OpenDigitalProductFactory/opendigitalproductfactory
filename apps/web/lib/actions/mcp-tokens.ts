@@ -251,6 +251,100 @@ export async function issueMyWriteMcpToken(input: {
   });
 }
 
+// Functional "edit grants on a live token" without violating immutability.
+// The McpToken row stays untouched audit-wise — we issue a NEW token with
+// the operator-edited grants and revoke the old in one atomic operator
+// action. Order: issue first, then revoke. Doing it the other way around
+// would leave the operator with zero working tokens if the issue call
+// failed.
+//
+// On partial failure (issue ok, revoke fails) we surface the new token
+// plaintext anyway and flag the revoke failure so the operator can
+// manually revoke the old row from the list — never silently drop the new
+// token, never let the operator end up with neither.
+export type RotateWithEditResult = IssueTokenActionResult & {
+  // Present on success when the underlying revoke of the old token row
+  // failed. The new token is already live in this case; the operator must
+  // revoke the old row manually from the list.
+  oldTokenRevokeError?: string;
+};
+
+export async function rotateMyMcpTokenWithEdit(input: {
+  tokenId: string;
+  name: string;
+  scope: McpTokenScope;
+  scopes: string[];
+  expiresInDays: number | null;
+  baseUrl: string;
+}): Promise<RotateWithEditResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "unauthorized", message: "Sign in first" };
+  }
+  if (input.scopes.length === 0) {
+    return {
+      ok: false,
+      error: "no_scopes",
+      message: "Pick at least one scope before rotating the token.",
+    };
+  }
+
+  // Ownership + active-state check. We refuse to rotate revoked or expired
+  // tokens — that's a re-issue scenario, not a rotation, and the operator
+  // should use the issue flow instead.
+  const tokens = await listMcpApiTokens(session.user.id);
+  const owned = tokens.find((t) => t.id === input.tokenId);
+  if (!owned) {
+    return {
+      ok: false,
+      error: "not_found_or_not_yours",
+      message: "Token was not found for the current user.",
+    };
+  }
+  if (owned.revokedAt != null) {
+    return { ok: false, error: "revoked", message: "Revoked tokens cannot be rotated." };
+  }
+  if (owned.expiresAt != null && owned.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "expired", message: "Expired tokens cannot be rotated." };
+  }
+
+  const capability: McpTokenCapability = input.scope === "read" ? "read" : "write";
+  const issueResult: IssueMcpTokenResult = await issueMcpApiToken({
+    userId: session.user.id,
+    // Fall back to the old name so the new row is identifiable in the list.
+    name: input.name.trim() || owned.name,
+    capability,
+    scope: input.scope,
+    scopes: input.scopes,
+    expiresInDays: input.expiresInDays,
+    agentId: null,
+  });
+  if (!issueResult.ok) {
+    return { ok: false, error: issueResult.error, message: issueResult.message };
+  }
+
+  writeMcpJsonToHost(issueResult.plaintext, input.baseUrl);
+
+  const revokeResult = await revokeMcpApiToken(input.tokenId, "rotated with edited grants");
+
+  const base: IssueTokenActionResult = {
+    ok: true,
+    tokenId: issueResult.tokenId,
+    plaintext: issueResult.plaintext,
+    prefix: issueResult.prefix,
+    tokenSuffix: issueResult.tokenSuffix,
+    expiresAt: issueResult.expiresAt?.toISOString() ?? null,
+    setupSnippets: buildSetupSnippets(issueResult.plaintext, input.baseUrl),
+  };
+
+  if (!revokeResult.ok) {
+    // New token IS live — flag the cleanup gap so the UI can prompt for a
+    // manual revoke instead of pretending the old row is gone.
+    return { ...base, oldTokenRevokeError: revokeResult.error };
+  }
+  return base;
+}
+
 function isOwnedActiveToken(
   tokens: Awaited<ReturnType<typeof listMcpApiTokens>>,
   tokenId: string,

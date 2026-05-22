@@ -16,6 +16,7 @@ import { PortfolioQualityIssuesPanel } from "@/components/inventory/PortfolioQua
 import { SavedConnectionsPanel } from "@/components/inventory/SavedConnectionsPanel";
 import { SubnetGroupedInventoryPanel } from "@/components/inventory/SubnetGroupedInventoryPanel";
 import { TopologyGraph } from "@/components/inventory/TopologyGraph";
+import { CustomerTopologyScopeBar } from "@/components/inventory/CustomerTopologyScopeBar";
 
 const STATUS_COLOURS: Record<string, string> = {
   active: "var(--dpf-success)",
@@ -146,10 +147,15 @@ export async function DiscoveryOperationsPage({
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--dpf-muted)]">
             Topology And Dependency Evidence
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">Network Connectivity Context</h2>
         </div>
+        <CustomerTopologyScopeBar
+          mode="organization-internal"
+          scopeLabel="MSP Internal"
+          lastRunLabel="Global discovery view"
+        />
         <TopologyGraph data={graphData} />
       </div>
+
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">

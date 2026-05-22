@@ -603,6 +603,8 @@ git commit -s -m "feat(discovery): scope normalized inventory identity"
 - Modify: `packages/db/prisma/schema.prisma`
 - Create: `packages/db/prisma/migrations/<timestamp>_customer_topology_scope/migration.sql`
 
+> **Backfill assumption:** `scopeKey TEXT NOT NULL DEFAULT 'organization:internal'` is correct because the prior MSP customer-scope foundation (PR #988) landed only EdgeNode/DiscoveryRun/DiscoveryConnection scope columns — **no** customer-scoped `InventoryEntity` or `InventoryRelationship` rows have been persisted yet. Every existing row is genuinely internal MSP estate. Before applying the migration, the verification step in Task 9 must confirm `SELECT count(*) FROM "InventoryEntity" WHERE "discoveryRunId" IN (SELECT id FROM "DiscoveryRun" WHERE "customerAccountId" IS NOT NULL)` returns 0. If it does not, the migration plan needs a customer-attributing backfill step instead of the default.
+
 - [ ] **Step 1: Add failing schema assertion**
 
 Add a regression check to the existing schema guard if one is present for inventory models. If no dedicated schema guard exists, add a focused test to `packages/db/src/discovery-sync.test.ts` after Task 4 instead. The expected fields are:
@@ -1165,15 +1167,15 @@ Expected: FAIL because `getCustomerNetworkTopologyData()` does not exist.
 In `apps/web/lib/actions/graph.ts`, import:
 
 ```ts
-import { getNetworkTopologyAtLayerForScope } from "@dpf/db";
 import {
+  getNetworkTopologyAtLayerForScope,
   buildDiscoveryScopeKey,
   scopeFieldsFromContext,
   type DiscoveryScopeContext,
-} from "@dpf/db/discovery-scope";
+} from "@dpf/db";
 ```
 
-If `@dpf/db/discovery-scope` is not exported, add that export in `packages/db/package.json` and `packages/db/src/index.ts`.
+Export the discovery-scope symbols from `packages/db/src/index.ts` (the barrel). Do not add a subpath export to `packages/db/package.json` — subpath exports break tooling assumptions (Next.js bundler, vitest, prisma generate) and the barrel re-export is the project convention.
 
 Add:
 
@@ -1365,7 +1367,10 @@ git add apps/web/components/inventory/CustomerTopologyScopeBar.tsx apps/web/comp
 git commit -s -m "feat(inventory): show explicit topology scope context"
 ```
 
-## Task 8: Refactor Graph Styling Away From Server Hex Values
+## Task 8: Refactor Graph Styling Away From Server Hex Values (DEFERRED)
+
+> **Status:** deferred to a separate PR. Refactoring graph color tokens to semantic roles is sound hygiene (spec §12 calls for DPF theme variables only) but it is **not** on the customer-topology-isolation critical path. Landing it here would mix concerns and bloat the diff. File this as a follow-on after the topology-isolation PR merges. The refactoring allocation for this PR is already met by Tasks 0, 1, 4, and 7.
+
 
 **Files:**
 - Modify: `apps/web/lib/actions/graph.ts`
