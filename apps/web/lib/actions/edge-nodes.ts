@@ -95,6 +95,10 @@ export async function issueEdgeBootstrapTokenAction(input: {
   ttlMs?: number;
   /** Optional note for operator memory; persisted in BootstrapToken.metadata. */
   note?: string;
+  /** Optional MSP customer-account install target. */
+  targetCustomerAccountId?: string | null;
+  /** Optional MSP customer-site install target; requires account target. */
+  targetCustomerSiteId?: string | null;
 }): Promise<IssueBootstrapTokenAction> {
   const gate = await assertManagePlatform();
   if (!gate.ok) return gate;
@@ -107,12 +111,25 @@ export async function issueEdgeBootstrapTokenAction(input: {
       message: "ttlMs must be a positive number",
     };
   }
+  if (input.targetCustomerSiteId && !input.targetCustomerAccountId) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "targetCustomerSiteId requires targetCustomerAccountId",
+    };
+  }
   // Spec caps bootstrap TTL at 24h; the lib enforces it server-side.
 
   try {
     const result = await issueBootstrapToken({
       issuedByPrincipalId: gate.principalId,
       ...(ttlMs !== undefined ? { ttlMs } : {}),
+      ...(input.targetCustomerAccountId
+        ? { targetCustomerAccountId: input.targetCustomerAccountId }
+        : {}),
+      ...(input.targetCustomerSiteId
+        ? { targetCustomerSiteId: input.targetCustomerSiteId }
+        : {}),
     });
     revalidatePath(ADMIN_PATH);
     return {

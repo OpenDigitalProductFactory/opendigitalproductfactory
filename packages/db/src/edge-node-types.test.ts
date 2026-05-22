@@ -42,6 +42,9 @@ function makeNode(overrides: Partial<EdgeNode> = {}): EdgeNode {
     lastSeenAt: null,
     capabilities: ["discovery.network"],
     metadata: null,
+    customerAccountId: null,
+    customerSiteId: null,
+    scopePolicy: null,
     tokenHash: null,
     tokenPrefix: null,
     tokenRotatedAt: null,
@@ -71,6 +74,9 @@ function makeToken(overrides: Partial<BootstrapToken> = {}): BootstrapToken {
     consumedAt: null,
     consumedByEdgeNodeId: null,
     revokedAt: null,
+    targetCustomerAccountId: null,
+    targetCustomerSiteId: null,
+    scopePolicy: null,
     // Paste-provisioned default per spec § Approval policy. Tests that
     // care about the auto-approve path override via `overrides`.
     autoApprove: false,

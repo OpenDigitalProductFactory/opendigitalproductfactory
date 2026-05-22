@@ -2085,6 +2085,10 @@ model CustomerAccount {
   contactRoles       ContactAccountRole[]
   customerSites      CustomerSite[]
   configurationItems CustomerConfigurationItem[]
+  edgeNodes          EdgeNode[]
+  edgeBootstrapTokens BootstrapToken[]
+  discoveryRuns      DiscoveryRun[]
+  discoveryConnections DiscoveryConnection[]
   parentAccount      CustomerAccount?            @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
   childAccounts      CustomerAccount[]           @relation("AccountHierarchy")
   invoices           Invoice[]
@@ -2117,6 +2121,10 @@ model CustomerSite {
   primaryAddress     Address?                    @relation(fields: [primaryAddressId], references: [id])
   configurationItems CustomerConfigurationItem[]
   nodes              CustomerSiteNode[]
+  edgeNodes          EdgeNode[]
+  edgeBootstrapTokens BootstrapToken[]
+  discoveryRuns      DiscoveryRun[]
+  discoveryConnections DiscoveryConnection[]
 
   @@index([accountId])
   @@index([primaryAddressId])
@@ -3166,15 +3174,21 @@ model DiscoveryRun {
   // /api/v1/edge/discovery-runs and routed through
   // persistSubmittedDiscoveryRun.
   edgeNodeId              String?
+  customerAccountId       String?
+  customerSiteId          String?
   discoveredItems         DiscoveredItem[]
   discoveredRelations     DiscoveredRelationship[]
   fingerprintObservations DiscoveryFingerprintObservation[]
   confirmedEntities       InventoryEntity[]                 @relation("InventoryEntityConfirmedRun")
   confirmedRelations      InventoryRelationship[]           @relation("InventoryRelationshipConfirmedRun")
   edgeNode                EdgeNode?                         @relation("EdgeNodeDiscoveryRuns", fields: [edgeNodeId], references: [id])
+  customerAccount         CustomerAccount?                   @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?                      @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
 
   @@unique([edgeNodeId, runKey])
   @@index([edgeNodeId])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
 }
 
 model DiscoveredItem {
@@ -8030,13 +8044,22 @@ model DiscoveryConnection {
   lastTestStatus    String? // ok | auth_failed | unreachable | tls_error
   lastTestMessage   String?
   gatewayEntityId   String? // FK to the InventoryEntity that triggered this connection
+  customerAccountId String?
+  customerSiteId    String?
+  targetEdgeNodeId  String?
   gatewayEntity     InventoryEntity?  @relation("DiscoveryConnectionGateway", fields: [gatewayEntityId], references: [id])
+  customerAccount   CustomerAccount?  @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite      CustomerSite?     @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
+  targetEdgeNode    EdgeNode?         @relation("EdgeNodeTargetedDiscoveryConnections", fields: [targetEdgeNodeId], references: [id], onDelete: SetNull)
   inventoryEntities InventoryEntity[] @relation("DiscoveredViaConnection")
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   @@index([collectorType])
   @@index([status])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
+  @@index([targetEdgeNodeId])
 }
 
 // ---- Collaborative Work Queue (EP-CWQ-001) ----
@@ -8688,6 +8711,9 @@ model EdgeNode {
   // Hostname / IP intentionally not first-class fields per Wazuh-IP-as-key
   // anti-pattern (R&B section).
   metadata     Json?
+  customerAccountId String?
+  customerSiteId    String?
+  scopePolicy       Json?
 
   // ── Auth (per spec § Token namespaces and lifecycle) ─────────────
   // dpfedge_* node token, hashed at rest (mirrors McpApiToken pattern).
@@ -8721,8 +8747,11 @@ model EdgeNode {
   // Relations
   principal      Principal            @relation("EdgeNodeIdentity", fields: [principalId], references: [id], onDelete: Cascade)
   approvedBy     Principal?           @relation("EdgeNodeApprover", fields: [approvedByPrincipalId], references: [id])
+  customerAccount CustomerAccount?     @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite    CustomerSite?        @relation(fields: [customerSiteId], references: [id], onDelete: SetNull)
   capabilityRows EdgeNodeCapability[]
   discoveryRuns  DiscoveryRun[]       @relation("EdgeNodeDiscoveryRuns")
+  targetedDiscoveryConnections DiscoveryConnection[] @relation("EdgeNodeTargetedDiscoveryConnections")
   consumedTokens BootstrapToken[]     @relation("BootstrapTokenConsumer")
   events         EdgeEvent[]          @relation("EdgeNodeEvents")
   changes        ChangeEvent[]        @relation("EdgeNodeChanges")
@@ -8731,6 +8760,8 @@ model EdgeNode {
   @@index([status])
   @@index([tokenHash])
   @@index([lastSeenAt])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
 }
 
 model BootstrapToken {
@@ -8775,14 +8806,21 @@ model BootstrapToken {
   // with host access already, so a flag carrying that intent is no
   // weaker than the install path itself).
   autoApprove Boolean @default(false)
+  targetCustomerAccountId String?
+  targetCustomerSiteId    String?
+  scopePolicy             Json?
 
   // Relations
-  issuedBy           Principal @relation("BootstrapTokenIssuer", fields: [issuedByPrincipalId], references: [id])
-  consumedByEdgeNode EdgeNode? @relation("BootstrapTokenConsumer", fields: [consumedByEdgeNodeId], references: [id])
+  issuedBy              Principal        @relation("BootstrapTokenIssuer", fields: [issuedByPrincipalId], references: [id])
+  consumedByEdgeNode    EdgeNode?        @relation("BootstrapTokenConsumer", fields: [consumedByEdgeNodeId], references: [id])
+  targetCustomerAccount CustomerAccount? @relation(fields: [targetCustomerAccountId], references: [id], onDelete: SetNull)
+  targetCustomerSite    CustomerSite?    @relation(fields: [targetCustomerSiteId], references: [id], onDelete: SetNull)
 
   @@index([tokenHash])
   @@index([expiresAt])
   @@index([consumedAt])
+  @@index([targetCustomerAccountId])
+  @@index([targetCustomerSiteId])
 }
 
 model EdgeNodeCapability {

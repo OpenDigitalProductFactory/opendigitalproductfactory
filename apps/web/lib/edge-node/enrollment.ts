@@ -47,6 +47,7 @@ import {
   generateNodeToken,
   hashToken,
 } from "./tokens";
+import { normalizeEdgeNodeScopeBinding } from "./scope";
 
 // ── Issuance (operator-side) ─────────────────────────────────────────────────
 
@@ -80,6 +81,12 @@ export type IssueBootstrapInput = {
    * makes remote enrollment opt-in).
    */
   autoApprove?: boolean;
+  /** Optional MSP customer-account install target. */
+  targetCustomerAccountId?: string | null;
+  /** Optional MSP customer-site install target; requires account target. */
+  targetCustomerSiteId?: string | null;
+  /** Optional policy metadata. Defaults from the customer/site target. */
+  scopePolicy?: Record<string, unknown> | null;
 };
 
 export type IssueBootstrapResult = {
@@ -103,6 +110,11 @@ export async function issueBootstrapToken(
 ): Promise<IssueBootstrapResult> {
   const { plaintext, hash, prefix } = generateBootstrapToken();
   const expiresAt = computeBootstrapExpiry(input.ttlMs);
+  const scopeBinding = normalizeEdgeNodeScopeBinding({
+    customerAccountId: input.targetCustomerAccountId,
+    customerSiteId: input.targetCustomerSiteId,
+    scopePolicy: input.scopePolicy,
+  });
 
   const row = await prisma.bootstrapToken.create({
     data: {
@@ -112,6 +124,9 @@ export async function issueBootstrapToken(
       issuedByPrincipalId: input.issuedByPrincipalId,
       expiresAt,
       autoApprove: input.autoApprove === true,
+      targetCustomerAccountId: scopeBinding.customerAccountId,
+      targetCustomerSiteId: scopeBinding.customerSiteId,
+      scopePolicy: scopeBinding.scopePolicy as never,
     },
   });
 
@@ -173,6 +188,12 @@ export type EnrollResult =
       acceptedCapabilities: Phase0Capability[];
       /** trustState at enrollment ("trusted" if auto-approved else "pending"). */
       trustState: "trusted" | "pending";
+      /** Customer-account scope copied from the consumed bootstrap token. */
+      customerAccountId: string | null;
+      /** Customer-site scope copied from the consumed bootstrap token. */
+      customerSiteId: string | null;
+      /** Policy metadata copied from the consumed bootstrap token. */
+      scopePolicy: Record<string, unknown> | null;
     }
   | {
       ok: false;
@@ -281,6 +302,11 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
   const trustState = effectiveAutoApprove ? "trusted" : "pending";
   const status = effectiveAutoApprove ? "active" : "pending";
   const now = new Date();
+  const scopeBinding = normalizeEdgeNodeScopeBinding({
+    customerAccountId: tokenRow.targetCustomerAccountId,
+    customerSiteId: tokenRow.targetCustomerSiteId,
+    scopePolicy: tokenRow.scopePolicy as Record<string, unknown> | null,
+  });
 
   // Atomic transaction: consume the bootstrap token + create the
   // Principal + alias + EdgeNode + initial capability rows. If any
@@ -347,6 +373,9 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
         tokenPrefix: nodeToken.prefix,
         tokenRotatedAt: now,
         enrolledAt: now,
+        customerAccountId: scopeBinding.customerAccountId,
+        customerSiteId: scopeBinding.customerSiteId,
+        scopePolicy: scopeBinding.scopePolicy as never,
         ...(effectiveAutoApprove
           ? { approvedAt: now, approvedByPrincipalId: tokenRow.issuedByPrincipalId }
           : {}),
@@ -385,6 +414,9 @@ export async function enrollEdgeNode(input: EnrollInput): Promise<EnrollResult> 
     sweepIntervalSec: DEFAULT_SWEEP_INTERVAL_SEC,
     acceptedCapabilities,
     trustState,
+    customerAccountId: scopeBinding.customerAccountId,
+    customerSiteId: scopeBinding.customerSiteId,
+    scopePolicy: scopeBinding.scopePolicy,
   };
 }
 

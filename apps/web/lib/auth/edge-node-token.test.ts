@@ -28,6 +28,15 @@ const ACTIVE_TRUSTED_NODE = {
   lastSeenAt: new Date(),
   capabilities: ["discovery.network"],
   metadata: null,
+  customerAccountId: "cust_acme",
+  customerSiteId: "site_hq",
+  scopePolicy: {
+    ownershipScope: "customer-site",
+    enforcement: "strict-customer-scope",
+    source: "bootstrap-token",
+    customerAccountId: "cust_acme",
+    customerSiteId: "site_hq",
+  },
   tokenHash: "hashed",
   tokenPrefix: "dpfedge_xyz",
   tokenRotatedAt: new Date(),
@@ -104,6 +113,12 @@ describe("resolveEdgeNodeAuth — token resolution", () => {
       expect(r.edgeNodeRowId).toBe("edgenode_cuid_1");
       expect(r.nodeId).toBe("edge_a1b2c3");
       expect(r.trustState).toBe("trusted");
+      expect(r.customerAccountId).toBe("cust_acme");
+      expect(r.customerSiteId).toBe("site_hq");
+      expect(r.scopePolicy).toMatchObject({
+        ownershipScope: "customer-site",
+        enforcement: "strict-customer-scope",
+      });
     }
   });
 

@@ -502,6 +502,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     summary = await persistSubmittedDiscoveryRun(prisma as never, {
       edgeNodeId: authResult.edgeNodeRowId,
       nodeId: authResult.nodeId,
+      customerAccountId: authResult.customerAccountId,
+      customerSiteId: authResult.customerSiteId,
       runKey: parsed.data.runKey,
       submittedOutput,
     });

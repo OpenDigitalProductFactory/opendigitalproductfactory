@@ -43,7 +43,6 @@ export function loadDbEnv(options?: {
     const result = loadDotenv({
       path: envPath,
       override: false,
-      quiet: true,
     });
 
     if (!result.error) {
