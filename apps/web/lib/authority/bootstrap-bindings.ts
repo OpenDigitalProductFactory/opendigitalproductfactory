@@ -56,14 +56,16 @@ export type BootstrapAuthorityBindingsReport = {
 };
 
 function slugify(value: string) {
-  return value
-    .replace(/^\/+/, "")
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    // CodeQL #21 (js/polynomial-redos): the alternation `^-+|-+$` could
-    // backtrack on inputs with many `-` chars. Splitting into two replace
-    // calls eliminates the alternation; each pattern is now linear.
-    .replace(/^-+/, "")
-    .replace(/-+$/, "")
+  // CodeQL #21 (js/polynomial-redos): cap input length first, then use
+  // bounded quantifiers everywhere so backtracking is provably linear
+  // regardless of input shape. Resource refs that look like slugs are
+  // never longer than 256 chars in this codebase.
+  const bounded = value.slice(0, 256);
+  return bounded
+    .replace(/^\/{1,256}/, "")
+    .replace(/[^a-zA-Z0-9]{1,256}/g, "-")
+    .replace(/^-{1,256}/, "")
+    .replace(/-{1,256}$/, "")
     .toUpperCase();
 }
 
