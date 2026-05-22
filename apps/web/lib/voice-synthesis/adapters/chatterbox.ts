@@ -34,7 +34,7 @@ export async function synthesizeWithChatterbox(
     form.append("response_format", "wav")
     form.append(
       "voice_file",
-      new Blob([config.referenceAudioBuffer], { type: "audio/wav" }),
+      new Blob([new Uint8Array(config.referenceAudioBuffer)], { type: "audio/wav" }),
       "reference.wav",
     )
 
