@@ -85,10 +85,16 @@ export type NormalizedDiscoveryOutput = {
   softwareEvidence: NormalizedSoftwareEvidence[];
 };
 
+import {
+  scopeFieldsFromContext,
+  type DiscoveryScopeContext,
+} from "./discovery-scope";
+
 export type NormalizeDiscoveryOptions = {
   taxonomyNodes?: TaxonomyNodeCandidate[];
   softwareIdentities?: SoftwareIdentityCandidate[];
   softwareRules?: SoftwareNormalizationRuleInput[];
+  discoveryScope?: DiscoveryScopeContext;
 };
 
 type DerivedAttribution = {
@@ -160,9 +166,13 @@ function normalizeItem(
     externalRef,
   });
   const entityType = mapEntityType(item.itemType);
+  const scopeFields = options.discoveryScope
+    ? scopeFieldsFromContext(options.discoveryScope)
+    : null;
   const entityKey = buildInventoryEntityKey({
     entityType,
     naturalKey: item.naturalKey ?? externalRef,
+    scopeKey: scopeFields?.scopeKey,
   });
   const discoveredItem: NormalizedDiscoveredItem = {
     discoveredKey,
@@ -204,7 +214,16 @@ function normalizeItem(
     attributionEvidence: attributed.evidence,
     candidateTaxonomy: attributed.candidateTaxonomy,
     providerView: attributed.portfolioSlug ?? "foundational",
-    properties: item.attributes ?? {},
+    properties: {
+      ...(item.attributes ?? {}),
+      ...(scopeFields
+        ? {
+            scopeKey: scopeFields.scopeKey,
+            customerAccountId: scopeFields.customerAccountId,
+            customerSiteId: scopeFields.customerSiteId,
+          }
+        : {}),
+    },
   };
 
   if (item.confidence != null) {
@@ -220,15 +239,30 @@ function normalizeItem(
 function normalizeRelationship(
   relationship: DiscoveredRelationshipInput,
   discoveredKeyByExternalRef: Map<string, string>,
+  options: NormalizeDiscoveryOptions,
 ): NormalizedInventoryRelationship {
+  const scopeFields = options.discoveryScope
+    ? scopeFieldsFromContext(options.discoveryScope)
+    : null;
+  const rawKey = buildDiscoveredKey({
+    sourceKind: relationship.sourceKind ?? "dpf_bootstrap",
+    itemType: relationship.relationshipType,
+    externalRef: `${relationship.fromExternalRef ?? "unknown"}->${relationship.toExternalRef ?? "unknown"}`,
+  });
+
   const normalizedRelationship: NormalizedInventoryRelationship = {
-    relationshipKey: buildDiscoveredKey({
-      sourceKind: relationship.sourceKind ?? "dpf_bootstrap",
-      itemType: relationship.relationshipType,
-      externalRef: `${relationship.fromExternalRef ?? "unknown"}->${relationship.toExternalRef ?? "unknown"}`,
-    }),
+    relationshipKey: scopeFields ? `${scopeFields.scopeKey}:${rawKey}` : rawKey,
     relationshipType: relationship.relationshipType,
-    properties: relationship.attributes ?? {},
+    properties: {
+      ...(relationship.attributes ?? {}),
+      ...(scopeFields
+        ? {
+            scopeKey: scopeFields.scopeKey,
+            customerAccountId: scopeFields.customerAccountId,
+            customerSiteId: scopeFields.customerSiteId,
+          }
+        : {}),
+    },
   };
 
   if (relationship.fromExternalRef) {
@@ -345,7 +379,7 @@ export function normalizeDiscoveredFacts(
     discoveredItems: normalizedItems.map((entry) => entry.discoveredItem),
     inventoryEntities: normalizedItems.map((entry) => entry.inventoryEntity),
     inventoryRelationships: output.relationships.map((relationship) =>
-      normalizeRelationship(relationship, discoveredKeyByExternalRef),
+      normalizeRelationship(relationship, discoveredKeyByExternalRef, options),
     ),
     softwareEvidence: (output.software ?? [])
       .map((software) => normalizeSoftware(software, inventoryEntityKeyByExternalRef, options))
