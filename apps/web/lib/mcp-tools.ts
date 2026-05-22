@@ -45,6 +45,10 @@ import {
   type IntegrationTreatment,
 } from "@/lib/integrate/integration-benchmarking";
 import { normalizeBuildPlanPaths } from "@/lib/integrate/build-plan-paths";
+import {
+  SANDBOX_RECOVERY_ACTIONS,
+  isSandboxRecoveryAction,
+} from "@/lib/integrate/sandbox/sandbox-admin-types";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
 import {
   listCoworkerCapabilityNeeds,
@@ -1731,8 +1735,62 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["plan"],
   },
   {
+    name: "diagnose_sandbox",
+    description: "Diagnose Build Studio sandbox readiness for the active build. Returns the authoritative state, failed checks, and governed recovery actions; use this instead of asking the operator to run Docker commands.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+        expectedWorkspaceRoot: { type: "string", description: "Optional host worktree path expected to own the sandbox Compose project." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["build", "review", "ship"],
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+  },
+  {
+    name: "recover_sandbox",
+    description: "Run a governed Build Studio sandbox recovery action for the active build. Requires structured confirmation for destructive actions and records recovery activity instead of sending Docker instructions to the operator.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+        action: {
+          type: "string",
+          enum: [...SANDBOX_RECOVERY_ACTIONS],
+          description: "Governed sandbox recovery action to run.",
+        },
+        confirmation: {
+          type: "object",
+          description: "Structured confirmation for destructive actions, e.g. { discardSandboxChanges: true, acknowledgeReset: true, reason: '...' }.",
+          properties: {
+            discardSandboxChanges: { type: "boolean" },
+            acknowledgeReset: { type: "boolean" },
+            reason: { type: "string" },
+          },
+        },
+      },
+      required: ["action"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["build", "review", "ship"],
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    },
+  },
+  {
     name: "check_sandbox",
-    description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. Call this before start_build to diagnose sandbox issues.",
+    description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. If the result is not_found or detached, call diagnose_sandbox for governed recovery guidance.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -1741,7 +1799,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "start_sandbox",
-    description: "Start the sandbox container if it is stopped. If status is 'stopped', this will start it and wait up to 20 seconds for it to become ready. If status is 'not_found', the container has never been created — the user must run 'docker compose up -d sandbox' once to create it. Call check_sandbox first to confirm the status before calling this.",
+    description: "Start the sandbox container if it is stopped. If status is 'stopped', this will start it and wait up to 20 seconds for it to become ready. If status is 'not_found', call diagnose_sandbox because sandbox creation or rebinding is a platform-owned recovery action.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -1750,7 +1808,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "start_build",
-    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', call start_sandbox first, then retry start_build.",
+    description: "Initialize the build workspace. Call this ONCE at the start of the build phase. Verifies the sandbox container is running and creates a git branch for this build. If it returns 'not running', call diagnose_sandbox and use the returned recovery actions.",
     inputSchema: { type: "object", properties: {} },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -6962,6 +7020,57 @@ export async function executeTool(
       });
     }
 
+    case "diagnose_sandbox": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
+      const snapshot = await diagnoseSandboxReadiness({
+        buildId,
+        expectedWorkspaceRoot: optionalString(params["expectedWorkspaceRoot"]),
+      });
+
+      return {
+        success: true,
+        message: `Sandbox readiness: ${snapshot.state}. ${snapshot.summary}`,
+        data: {
+          ...snapshot,
+        },
+      };
+    }
+
+    case "recover_sandbox": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      const action = params["action"];
+      if (!isSandboxRecoveryAction(action)) {
+        return {
+          success: false,
+          error: "invalid_action",
+          message: "Invalid sandbox recovery action.",
+        };
+      }
+
+      const confirmation = params["confirmation"] && typeof params["confirmation"] === "object"
+        ? params["confirmation"] as { discardSandboxChanges?: boolean; acknowledgeReset?: boolean; reason?: string }
+        : null;
+      const { recoverSandbox } = await import("@/lib/integrate/sandbox/sandbox-recovery");
+      const result = await recoverSandbox({
+        buildId,
+        action,
+        confirmation,
+      });
+
+      return {
+        success: result.success,
+        error: result.error,
+        message: result.message,
+        entityId: buildId,
+        data: result.snapshot ? { ...result.snapshot } : undefined,
+      };
+    }
+
     case "check_sandbox": {
       const sandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
       try {
@@ -6981,7 +7090,7 @@ export async function executeTool(
       } catch {
         return {
           success: true,
-          message: `Sandbox container (${sandboxId}) does not exist. The user must run 'docker compose up -d sandbox' once from the DPF directory to create it.`,
+          message: `Sandbox container (${sandboxId}) does not exist. Call diagnose_sandbox for the authoritative Build Studio recovery actions.`,
           data: { status: "not_found", containerId: sandboxId },
         };
       }
@@ -7003,7 +7112,7 @@ export async function executeTool(
           return {
             success: false,
             error: "Sandbox container not found.",
-            message: `The sandbox container (${sandboxId}) has never been created. The user needs to run 'docker compose up -d sandbox' from the DPF directory once to create it. After that, this tool can start and stop it.`,
+            message: `The sandbox container (${sandboxId}) has never been created or is not registered. Call diagnose_sandbox so Build Studio can classify the sandbox and surface governed recovery actions.`,
           };
         }
 
@@ -7309,7 +7418,7 @@ export async function executeTool(
         return {
           success: false,
           error: "Sandbox container is not running.",
-          message: "The sandbox (dpf-sandbox-1) is not running. Call start_build first, or if that also fails, tell the user to run: docker compose up -d sandbox",
+          message: "The sandbox (dpf-sandbox-1) is not running. Call diagnose_sandbox and use the returned recovery action before retrying this file tool.",
         };
       }
 
@@ -7669,6 +7778,20 @@ export async function executeTool(
           success: false,
           error: "Build branch not initialized.",
           message: "This build has no buildBranch on record — start_build never completed. Run start_build to create and register build/<buildId>, then retry deploy_feature. Deploying without a build branch would include leaked changes from prior builds.",
+        };
+      }
+
+      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
+      const { assertSandboxReadyForDeploy } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
+      const readiness = await diagnoseSandboxReadiness({ buildId });
+      const readinessGate = assertSandboxReadyForDeploy(readiness);
+      if (!readinessGate.ok) {
+        logBuildActivity(buildId, "deploy_feature", readinessGate.message);
+        return {
+          success: false,
+          error: "Sandbox readiness blocked deploy_feature.",
+          message: readinessGate.message,
+          data: { ...readiness },
         };
       }
 
@@ -8843,6 +8966,20 @@ export async function executeTool(
       });
       if (!build || build.createdById !== userId) {
         return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
+      }
+
+      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
+      const { assertSandboxReadyForContribution } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
+      const readiness = await diagnoseSandboxReadiness({ buildId });
+      const readinessGate = assertSandboxReadyForContribution(readiness);
+      if (!readinessGate.ok) {
+        logBuildActivity(buildId, "contribute_to_hive", readinessGate.message);
+        return {
+          success: false,
+          error: "Sandbox readiness blocked contribution.",
+          message: readinessGate.message,
+          data: { ...readiness },
+        };
       }
 
       const diff = (build.diffPatch ?? "") as string;

@@ -40,6 +40,18 @@ describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
     expect(isToolAllowedByGrants("create_portal_pr", ["backlog_write"])).toBe(false);
   });
 
+  it("diagnose_sandbox is available to sandbox executors and read-only build observers", () => {
+    expect(isToolAllowedByGrants("diagnose_sandbox", ["sandbox_execute"])).toBe(true);
+    expect(isToolAllowedByGrants("diagnose_sandbox", ["work_capsule_read"])).toBe(true);
+    expect(isToolAllowedByGrants("diagnose_sandbox", ["backlog_read"])).toBe(false);
+  });
+
+  it("recover_sandbox requires sandbox execution authority", () => {
+    expect(isToolAllowedByGrants("recover_sandbox", ["sandbox_execute"])).toBe(true);
+    expect(isToolAllowedByGrants("recover_sandbox", ["work_capsule_read"])).toBe(false);
+    expect(isToolAllowedByGrants("recover_sandbox", [])).toBe(false);
+  });
+
   it("Build Studio observer tools require read-only work capsule access", () => {
     const tools = [
       "get_build_progress_visibility",
