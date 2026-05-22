@@ -1,0 +1,36 @@
+{
+  "advisories": {
+    "GHSA-2222-aaaa-bbbb": {
+      "id": 222200,
+      "ghsa_id": "GHSA-2222-aaaa-bbbb",
+      "cves": ["CVE-2026-0042"],
+      "severity": "critical",
+      "title": "Prototype pollution in vulnerable-lib",
+      "url": "https://github.com/advisories/GHSA-2222-aaaa-bbbb",
+      "module_name": "vulnerable-lib",
+      "vulnerable_versions": "<1.2.4",
+      "patched_versions": ">=1.2.4",
+      "recommendation": "Upgrade vulnerable-lib to 1.2.4 or later.",
+      "cwe": ["CWE-1321"],
+      "findings": [
+        { "version": "1.2.0", "paths": ["apps/web>vulnerable-lib"] }
+      ]
+    },
+    "GHSA-3333-cccc-dddd": {
+      "id": 333300,
+      "ghsa_id": "GHSA-3333-cccc-dddd",
+      "cves": ["CVE-2026-0099"],
+      "severity": "moderate",
+      "title": "Regex denial of service in another-pkg",
+      "url": "https://github.com/advisories/GHSA-3333-cccc-dddd",
+      "module_name": "another-pkg",
+      "vulnerable_versions": "<2.0.0",
+      "patched_versions": ">=2.0.0",
+      "recommendation": "Upgrade another-pkg to 2.0.0 or later.",
+      "cwe": ["CWE-1333"],
+      "findings": [
+        { "version": "1.5.0", "paths": ["apps/web>another-pkg"] }
+      ]
+    }
+  }
+}
