@@ -20,9 +20,15 @@ type Props = {
   pendingFile: PendingFile | null;
   onFileUploaded: (result: PendingFile) => void;
   onFileClear: () => void;
+  /** Whether a ready voice profile is available for synthesis. */
+  voiceSynthAvailable?: boolean;
+  /** Current playback preference set by the user. */
+  voicePlaybackEnabled?: boolean;
+  /** Toggle handler — flips voicePlaybackEnabled and persists to localStorage. */
+  onVoicePlaybackToggle?: () => void;
 };
 
-export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear }: Props) {
+export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackEnabled, onVoicePlaybackToggle }: Props) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -229,6 +235,32 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           onReset={voice.reset}
           disabled={disabled || !!busy}
         />
+        {voiceSynthAvailable && onVoicePlaybackToggle && (
+          <button
+            type="button"
+            onClick={onVoicePlaybackToggle}
+            title={voicePlaybackEnabled ? "Mute voice playback" : "Unmute voice playback"}
+            aria-label={voicePlaybackEnabled ? "Mute voice playback" : "Unmute voice playback"}
+            aria-pressed={voicePlaybackEnabled}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: voicePlaybackEnabled ? "var(--dpf-accent)" : "var(--dpf-muted)",
+              fontSize: 16,
+              lineHeight: 1,
+              padding: "0 2px",
+              flexShrink: 0,
+              height: 32,
+              display: "flex",
+              alignItems: "center",
+              opacity: voicePlaybackEnabled ? 1 : 0.5,
+              transition: "color 0.15s, opacity 0.15s",
+            }}
+          >
+            {voicePlaybackEnabled ? "🔊" : "🔇"}
+          </button>
+        )}
         <AgentFileUpload
           threadId={threadId}
           disabled={disabled || !!busy}
