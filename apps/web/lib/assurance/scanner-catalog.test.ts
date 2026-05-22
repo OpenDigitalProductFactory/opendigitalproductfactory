@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { resolveAssuranceScannerReadiness } from "./scanner-catalog";
+import {
+  getPlatformNativeScannerNames,
+  platformNativeOnlyReadiness,
+  resolveAssuranceScannerReadiness,
+} from "./scanner-catalog";
 
 describe("resolveAssuranceScannerReadiness", () => {
-  it("reports needs-evaluation when no approved scanner exists", () => {
-    expect(resolveAssuranceScannerReadiness({ approvedTools: [], evaluations: [] })).toEqual({
+  it("reports needs-evaluation when no approved or platform-native scanner exists", () => {
+    expect(resolveAssuranceScannerReadiness({
+      approvedTools: [],
+      evaluations: [],
+      includePlatformNative: false,
+    })).toEqual({
       state: "needs-evaluation",
       approvedScannerCount: 0,
       scannerNames: [],
@@ -11,8 +19,20 @@ describe("resolveAssuranceScannerReadiness", () => {
     });
   });
 
-  it("accepts approved registry scanner entries without hardcoding UI names", () => {
-    expect(resolveAssuranceScannerReadiness({
+  it("reports ready with platform-native reason when only pnpm-audit is bundled", () => {
+    const readiness = platformNativeOnlyReadiness();
+
+    expect(readiness.state).toBe("ready");
+    expect(readiness.reason).toBe("platform-native-scanner-available");
+    expect(readiness.scannerNames).toContain("pnpm-audit");
+  });
+
+  it("exposes platform-native scanner list", () => {
+    expect(getPlatformNativeScannerNames()).toContain("pnpm-audit");
+  });
+
+  it("accepts approved registry scanner entries and reports approved-scanner reason", () => {
+    const readiness = resolveAssuranceScannerReadiness({
       approvedTools: [
         {
           toolName: "Example Scanner",
@@ -28,11 +48,11 @@ describe("resolveAssuranceScannerReadiness", () => {
         },
       ],
       evaluations: [],
-    })).toEqual({
-      state: "ready",
-      approvedScannerCount: 1,
-      scannerNames: ["Example Scanner"],
-      reason: "approved-scanner-available",
     });
+
+    expect(readiness.state).toBe("ready");
+    expect(readiness.reason).toBe("approved-scanner-available");
+    expect(readiness.scannerNames).toContain("Example Scanner");
+    expect(readiness.scannerNames).toContain("pnpm-audit");
   });
 });
