@@ -95,4 +95,25 @@ to the default branch (which contains the trusted gate script).
 This pattern was reinforced by **BI-5940955C** (GitHub Actions code
 injection finding in `dco-signoff-dependabot.yml`). Workflows touching
 `pull_request_target` or `workflow_run` triggers are trust-boundary code
-and are subject to the two-maintainer carve-out described in **BI-860603DA**.
+and are subject to the carve-out described in **BI-860603DA**.
+
+### Trust-boundary paths
+
+The full list of paths that require extra owner review lives in
+[`.github/CODEOWNERS`](../../.github/CODEOWNERS). Categories include:
+
+- CI infrastructure (`.github/workflows/`, `.github/CODEOWNERS` itself,
+  Dependabot config).
+- Security substrate (`scripts/security/`, `docs/security/`) — modifying
+  the baselines is exactly how silent security regressions happen.
+- Kernel principles (`docs/founder-kernel/wiki/principles/`) and the
+  WWMD Decision Perspective Kernel
+  (`apps/web/lib/decision-perspective/`) — these propagate to every
+  install via the hive update.
+- Audit invariants (`apps/web/scripts/audit-*.ts`).
+
+Enforcement requires branch protection's "Require review from Code Owners"
+to be enabled. With one maintainer, CODEOWNERS today is documentation
+plus a hard signal for the bot reviewer (BI-860603DA) to look up which
+files need that signal. Branch-protection enforcement adds the second
+maintainer requirement when the team grows.
