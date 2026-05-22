@@ -58,12 +58,27 @@ export const VIEW_CONFIGS: Record<GraphViewName, ViewConfig> = {
     label: "Exploration",
     layout: "force",
     edgesShown: new Set([
-      "BELONGS_TO", "CLASSIFIED_AS", "PARENT_OF", "DEPENDS_ON",
+      "DEPENDS_ON",
       "HOSTS", "MEMBER_OF", "ROUTES_THROUGH", "RUNS_ON", "MONITORS", "PEER_OF",
+      "CONNECTS_TO", "LISTENS_ON",
     ]),
-    nodeTypesShown: new Set(["Portfolio", "TaxonomyNode", "DigitalProduct", "InfraCI"]),
+    // Scope exploration to network/runtime entities only. Mixing
+    // business capabilities (TaxonomyNode) + products + infra into one
+    // force-directed canvas produced the unreadable cluster operators
+    // saw on first load; that view is still available as
+    // `business-architecture` below.
+    nodeTypesShown: new Set(["InfraCI"]),
     rootDetection: "none",
-    description: "Force-directed freeform exploration of all entities",
+    description: "Force-directed freeform exploration of network and runtime entities",
+  },
+  "business-architecture": {
+    name: "business-architecture",
+    label: "Business Architecture",
+    layout: "force",
+    edgesShown: new Set(["BELONGS_TO", "CLASSIFIED_AS", "PARENT_OF", "DEPENDS_ON"]),
+    nodeTypesShown: new Set(["Portfolio", "TaxonomyNode", "DigitalProduct"]),
+    rootDetection: "none",
+    description: "Portfolios, capabilities, and products — the business layer of the ontology",
   },
 };
 
@@ -78,9 +93,13 @@ const TAXONOMY_VIEW_RULES: Array<{ pattern: string; view: GraphViewName }> = [
 ];
 
 export function resolveViewForTaxonomy(nodeId: string | null): GraphViewName {
-  if (!nodeId) return "exploration";
+  // Default landing view is the typed network topology, not the
+  // everything-in-one-cluster exploration view. Operators land here
+  // looking at network devices; the business layer lives on its own
+  // tab now.
+  if (!nodeId) return "network-topology";
   for (const rule of TAXONOMY_VIEW_RULES) {
     if (nodeId.includes(rule.pattern)) return rule.view;
   }
-  return "exploration";
+  return "network-topology";
 }
