@@ -1,6 +1,7 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
+import { deriveInventoryEnrichment } from "./inventory-enrichment";
 import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
@@ -233,17 +234,35 @@ export async function persistBootstrapDiscoveryRun(
       const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
         softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
       );
+      // Enrichment closes the gap between raw discovery signals (MAC OUI
+      // vendor in properties, container image tag, name patterns) and the
+      // typed columns the UI reads. evidenceSnapshot only sees package-
+      // manager softwareEvidence; this layer reads `properties` directly
+      // so unifi MAC vendors, docker image tags, and Nest/postgres/etc.
+      // name hints actually populate manufacturer/iconKey/version.
+      const enrichment = deriveInventoryEnrichment({
+        entityType: entity.entityType,
+        name: entity.name,
+        manufacturer: evidenceSnapshot.manufacturer,
+        productModel: evidenceSnapshot.productModel,
+        observedVersion: evidenceSnapshot.observedVersion,
+        normalizedVersion: evidenceSnapshot.normalizedVersion,
+        iconKey: null,
+        supportStatus: evidenceSnapshot.supportStatus,
+        properties: entity.properties as unknown as import("../generated/client/client").Prisma.JsonValue,
+      });
       const persistedEntity = await tx.inventoryEntity.upsert({
         where: { entityKey: entity.entityKey },
         create: {
           entityKey: entity.entityKey,
           entityType: entity.entityType,
           name: entity.name,
-          manufacturer: evidenceSnapshot.manufacturer,
-          productModel: evidenceSnapshot.productModel,
-          observedVersion: evidenceSnapshot.observedVersion,
-          normalizedVersion: evidenceSnapshot.normalizedVersion,
-          supportStatus: evidenceSnapshot.supportStatus,
+          manufacturer: enrichment.manufacturer,
+          productModel: enrichment.productModel,
+          observedVersion: enrichment.observedVersion,
+          normalizedVersion: enrichment.normalizedVersion,
+          iconKey: enrichment.iconKey,
+          supportStatus: enrichment.supportStatus,
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
           attributionMethod: entity.attributionMethod ?? null,
@@ -266,10 +285,14 @@ export async function persistBootstrapDiscoveryRun(
         update: {
           entityType: entity.entityType,
           name: entity.name,
-          ...(evidenceSnapshot.manufacturer ? { manufacturer: evidenceSnapshot.manufacturer } : {}),
-          ...(evidenceSnapshot.productModel ? { productModel: evidenceSnapshot.productModel } : {}),
-          ...(evidenceSnapshot.observedVersion ? { observedVersion: evidenceSnapshot.observedVersion } : {}),
-          ...(evidenceSnapshot.normalizedVersion ? { normalizedVersion: evidenceSnapshot.normalizedVersion } : {}),
+          // Use the enriched values; never overwrite a populated column
+          // with null (the `null && X` short-circuit guards that).
+          ...(enrichment.manufacturer ? { manufacturer: enrichment.manufacturer } : {}),
+          ...(enrichment.productModel ? { productModel: enrichment.productModel } : {}),
+          ...(enrichment.observedVersion ? { observedVersion: enrichment.observedVersion } : {}),
+          ...(enrichment.normalizedVersion ? { normalizedVersion: enrichment.normalizedVersion } : {}),
+          ...(enrichment.iconKey ? { iconKey: enrichment.iconKey } : {}),
+          ...(enrichment.supportStatus !== "unknown" ? { supportStatus: enrichment.supportStatus } : {}),
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
           attributionMethod: entity.attributionMethod ?? null,
@@ -371,9 +394,19 @@ export async function persistBootstrapDiscoveryRun(
     const currentEntityKeys = new Set(
       normalized.inventoryEntities.map((entity) => entity.entityKey),
     );
-    const staleEntityKeys = [...existingEntityKeys].filter(
-      (entityKey) => !currentEntityKeys.has(entityKey),
-    );
+    // Source-scoped staleness: a unifi-only sweep MUST NOT mark
+    // dpf_bootstrap or edge_node relationships stale (they have their
+    // own refresh source and source-of-truth — that's how 196 of 257
+    // MEMBER_OF rows ended up "stale" while the underlying ARP cache was
+    // still active). The convention is that every key emitted by a
+    // collector starts with its sourceSlug followed by ":". We only
+    // consider for staleness keys that share that prefix; everything
+    // else stays untouched.
+    const sourcePrefix = `${runMeta.sourceSlug}:`;
+    const isOwnedBySource = (key: string) => key.startsWith(sourcePrefix);
+    const staleEntityKeys = [...existingEntityKeys]
+      .filter(isOwnedBySource)
+      .filter((entityKey) => !currentEntityKeys.has(entityKey));
     const staleEntities = staleEntityKeys.length === 0
       ? 0
       : (await tx.inventoryEntity.updateMany({
@@ -453,9 +486,11 @@ export async function persistBootstrapDiscoveryRun(
     const currentRelationshipKeys = new Set(
       normalized.inventoryRelationships.map((relationship) => relationship.relationshipKey),
     );
-    const staleRelationshipKeys = [...existingRelationshipKeys].filter(
-      (relationshipKey) => !currentRelationshipKeys.has(relationshipKey),
-    );
+    // Same source-scoping as entities above — only the source that owns
+    // a relationship key gets to mark it stale.
+    const staleRelationshipKeys = [...existingRelationshipKeys]
+      .filter(isOwnedBySource)
+      .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
     const staleRelationships = staleRelationshipKeys.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
