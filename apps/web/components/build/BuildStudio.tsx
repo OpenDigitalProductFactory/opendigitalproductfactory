@@ -18,6 +18,7 @@ import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
 import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
+import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
 import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
@@ -28,9 +29,11 @@ import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import { getBuildProgressVisibilityAction } from "@/lib/actions/build-progress-visibility";
 import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
+import { getBuildBomSummary } from "@/lib/actions/assurance";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
 import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
@@ -54,6 +57,12 @@ type Props = {
   submissionBranchShortId?: string | null;
   initialBuildId?: string | null;
   portalContext?: PortalContextEnvelope | null;
+};
+
+const MISSING_BOM_SUMMARY: BomSummary = {
+  state: "missing",
+  document: null,
+  counts: { components: 0, models: 0 },
 };
 
 export function BuildStudio({
@@ -121,6 +130,7 @@ export function BuildStudio({
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
+  const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
   const workflowAction = activeBuild
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -136,18 +146,21 @@ export function BuildStudio({
   }, [activeBuild?.buildId, initialBuildId, router]);
 
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
-    const [freshResult, flowResult, progressResult] = await Promise.allSettled([
+    const [freshResult, flowResult, progressResult, bomResult] = await Promise.allSettled([
       getFeatureBuild(buildId),
       getBuildFlowStateAction(buildId),
       getBuildProgressVisibilityAction(buildId),
+      getBuildBomSummary(buildId),
     ]);
     const fresh = freshResult.status === "fulfilled" ? freshResult.value : null;
     const nextFlow = flowResult.status === "fulfilled" ? flowResult.value : null;
     const nextProgress = progressResult.status === "fulfilled" ? progressResult.value : null;
+    const nextBomSummary = bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY;
 
     if (fresh) setActiveBuild(fresh);
     setFlowState(nextFlow);
     setProgressVisibility(nextProgress);
+    setBomSummary(nextBomSummary);
   }, []);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
@@ -172,21 +185,25 @@ export function BuildStudio({
     if (!activeBuild) {
       setFlowState(null);
       setProgressVisibility(null);
+      setBomSummary(MISSING_BOM_SUMMARY);
       return;
     }
     let cancelled = false;
     Promise.allSettled([
       getBuildFlowStateAction(activeBuild.buildId),
       getBuildProgressVisibilityAction(activeBuild.buildId),
-    ]).then(([flowResult, progressResult]) => {
+      getBuildBomSummary(activeBuild.buildId),
+    ]).then(([flowResult, progressResult, bomResult]) => {
       if (!cancelled) {
         setFlowState(flowResult.status === "fulfilled" ? flowResult.value : null);
         setProgressVisibility(progressResult.status === "fulfilled" ? progressResult.value : null);
+        setBomSummary(bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY);
       }
     }).catch(() => {
       if (!cancelled) {
         setFlowState(null);
         setProgressVisibility(null);
+        setBomSummary(MISSING_BOM_SUMMARY);
       }
     });
     return () => { cancelled = true; };
@@ -572,7 +589,10 @@ export function BuildStudio({
                   data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                 >
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
-                    <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
+                      <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
+                      <BuildAssuranceGateCard buildId={activeBuild.buildId} summary={bomSummary} />
+                    </div>
                   </div>
                   <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
                     Select any stage or task to inspect — or open Details on the right for progress, brief, review, sandbox, and BS Queue evidence.

@@ -109,6 +109,14 @@ export interface BuildGitUpdateReceivedEvent {
   };
 }
 
+export interface AssuranceBomGenerateEvent {
+  name: "assurance/bom.generate";
+  data: {
+    buildId: string;
+    requestedByUserId: string;
+  };
+}
+
 export interface PortalSelfUpgradeRequestedEvent {
   name: "portal/self-upgrade.requested";
   data: {

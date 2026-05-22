@@ -579,6 +579,8 @@ model DigitalProduct {
   observationConfig            Json?
   backlogItems                 BacklogItem[]
   manifests                    CodebaseManifest[]
+  assuranceRuns                AssuranceRun[]
+  bomDocuments                 BomDocument[]
   portfolio                    Portfolio?                    @relation(fields: [portfolioId], references: [id])
   taxonomyNode                 TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
   eaElements                   EaElement[]
@@ -3671,6 +3673,7 @@ model ToolExecution {
   outputTokens  Int?
   costUsd       Float?
   receipt       ToolExecutionReceipt?
+  assuranceRun  AssuranceRun?
   documentLifecycleEvents DocumentLifecycleEvent[]
 
   @@index([agentId, createdAt])
@@ -3698,6 +3701,7 @@ model ToolExecutionReceipt {
   build            FeatureBuild?          @relation(fields: [buildId], references: [buildId])
   toolExecution    ToolExecution          @relation(fields: [toolExecutionId], references: [id], onDelete: Cascade)
   usages           ArtifactReceiptUsage[]
+  assuranceRun     AssuranceRun?
 
   @@index([buildId, createdAt(sort: Desc)])
   @@index([receiptKind, createdAt(sort: Desc)])
@@ -4213,6 +4217,8 @@ model FeatureBuild {
   activities               BuildActivity[]
   dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
+  assuranceRuns            AssuranceRun[]
+  bomDocuments             BomDocument[]
   phaseHandoffs            PhaseHandoff[]
   phaseRuns                BuildPhaseRun[]
   toolExecutionReceipts    ToolExecutionReceipt[]
@@ -4288,6 +4294,7 @@ model BuildArtifactRevision {
   createdAt      DateTime               @default(now())
   build          FeatureBuild           @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
   receiptUsages  ArtifactReceiptUsage[]
+  bomDocuments   BomDocument[]
 
   @@unique([buildId, field, revisionNumber])
   @@index([buildId, field, createdAt(sort: Desc)])
@@ -4304,6 +4311,111 @@ model ArtifactReceiptUsage {
 
   @@unique([artifactRevisionId, receiptId])
   @@index([receiptId])
+}
+
+model AssuranceRun {
+  id                     String                @id @default(cuid())
+  runId                  String                @unique
+  scopeType              String
+  scopeId                String
+  policyKey              String?
+  adapterKey             String
+  adapterVersion         String
+  status                 String                @default("running")
+  summary                Json                  @default("{}")
+  startedAt              DateTime              @default(now())
+  completedAt            DateTime?
+  buildId                String?
+  digitalProductId       String?
+  releaseBundleId        String?
+  toolExecutionId        String?               @unique
+  toolExecutionReceiptId String?               @unique
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  build                  FeatureBuild?         @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  digitalProduct         DigitalProduct?       @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  releaseBundle          ReleaseBundle?        @relation(fields: [releaseBundleId], references: [id], onDelete: SetNull)
+  toolExecution          ToolExecution?        @relation(fields: [toolExecutionId], references: [id], onDelete: SetNull)
+  toolExecutionReceipt   ToolExecutionReceipt? @relation(fields: [toolExecutionReceiptId], references: [id], onDelete: SetNull)
+  bomDocuments           BomDocument[]
+
+  @@index([scopeType, scopeId, startedAt(sort: Desc)])
+  @@index([buildId, startedAt(sort: Desc)])
+  @@index([digitalProductId, startedAt(sort: Desc)])
+  @@index([adapterKey, status])
+}
+
+model BomDocument {
+  id                 String                   @id @default(cuid())
+  documentId         String                   @unique
+  format             String
+  formatVersion      String
+  serialNumber       String?
+  version            Int
+  digest             String
+  sourceKind         String
+  sourceDigest       String
+  componentCount     Int
+  raw                Json
+  status             String                   @default("current")
+  generatedAt        DateTime                 @default(now())
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  buildId            String?
+  digitalProductId   String?
+  assuranceRunId     String?
+  artifactRevisionId String?
+  build              FeatureBuild?            @relation(fields: [buildId], references: [buildId], onDelete: SetNull)
+  digitalProduct     DigitalProduct?          @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  assuranceRun       AssuranceRun?            @relation(fields: [assuranceRunId], references: [id], onDelete: SetNull)
+  artifactRevision   BuildArtifactRevision?   @relation(fields: [artifactRevisionId], references: [id], onDelete: SetNull)
+  occurrences        BomComponentOccurrence[]
+
+  @@index([buildId, generatedAt(sort: Desc)])
+  @@index([digitalProductId, generatedAt(sort: Desc)])
+  @@index([digest])
+  @@index([status])
+}
+
+model BomComponent {
+  id                String                   @id @default(cuid())
+  componentKey      String                   @unique
+  componentType     String
+  name              String
+  version           String?
+  packageUrl        String?
+  supplierName      String?
+  licenseExpression String?
+  ecosystem         String?
+  scope             String?
+  metadata          Json                     @default("{}")
+  firstSeenAt       DateTime                 @default(now())
+  lastSeenAt        DateTime                 @default(now())
+  occurrences       BomComponentOccurrence[]
+
+  @@index([componentType, name])
+  @@index([packageUrl])
+  @@index([ecosystem])
+}
+
+model BomComponentOccurrence {
+  id             String       @id @default(cuid())
+  occurrenceKey  String       @unique
+  bomDocumentId  String
+  componentId    String
+  workspaceName  String?
+  workspacePath  String?
+  dependencyKind String?
+  direct         Boolean      @default(false)
+  evidence       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  bomDocument    BomDocument  @relation(fields: [bomDocumentId], references: [id], onDelete: Cascade)
+  component      BomComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([bomDocumentId])
+  @@index([componentId])
+  @@index([workspacePath])
+  @@index([dependencyKind])
 }
 
 model Sandbox {
@@ -4386,6 +4498,7 @@ model ReleaseBundle {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   builds             FeatureBuild[]
+  assuranceRuns      AssuranceRun[]
 
   @@index([status])
 }
