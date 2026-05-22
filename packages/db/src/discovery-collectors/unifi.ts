@@ -119,7 +119,23 @@ export type UnifiDeps = {
 };
 
 function createInsecureFetch(): UnifiDeps["fetchFn"] {
-  const agent = new https.Agent({ rejectUnauthorized: false });
+  // CodeQL #61 (js/disabling-certificate-validation): UniFi controllers
+  // ship with self-signed certificates by default. To talk to them at
+  // all we have to skip cert validation — but we make that explicit
+  // and opt-in via an env var rather than silently disabling validation.
+  //
+  // Default: strict cert validation. Operators running standard UniFi
+  // appliances set UNIFI_ALLOW_INSECURE_TLS=true to enable the legacy
+  // self-signed flow.
+  const allowInsecure = process.env.UNIFI_ALLOW_INSECURE_TLS === "true";
+  const agent = new https.Agent({ rejectUnauthorized: !allowInsecure });
+  if (allowInsecure) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[unifi] TLS cert validation disabled (UNIFI_ALLOW_INSECURE_TLS=true). " +
+        "Acceptable for self-signed UniFi controllers; rotate to a valid cert in production.",
+    );
+  }
   return (url, init) =>
     new Promise((resolve, reject) => {
       const parsedUrl = new URL(String(url));

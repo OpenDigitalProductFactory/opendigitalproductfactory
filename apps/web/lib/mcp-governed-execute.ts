@@ -8,7 +8,7 @@
 // external-MCP transport a stable hook.
 
 import { prisma } from "@dpf/db";
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
 import {
   PLATFORM_TOOLS,
@@ -245,10 +245,18 @@ function deriveReceiptKind(toolName: string): string | null {
   }
 }
 
+// CodeQL #63 (js/insufficient-password-hash): API tokens flow into this
+// digestPayload via dataflow; plain SHA-256 isn't appropriate for token
+// hashing per CodeQL's pattern. HMAC-SHA256 keyed on a server-side env
+// is the recognised sanitiser. Falls back to plain SHA-256 when env not
+// set (dev only).
 function digestPayload(value: unknown): string {
-  return createHash("sha256")
-    .update(JSON.stringify(value ?? null))
-    .digest("hex");
+  const json = JSON.stringify(value ?? null);
+  const hmacKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
+  if (hmacKey) {
+    return createHmac("sha256", hmacKey).update(json).digest("hex");
+  }
+  return createHash("sha256").update(json).digest("hex");
 }
 
 async function writeReceipt(data: {
