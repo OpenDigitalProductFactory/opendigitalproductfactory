@@ -26,6 +26,10 @@ export type BuildSandboxState = {
   unavailableReason: string | null;
 };
 
+export type SandboxPromotionGateResult =
+  | { ok: true; message: string }
+  | { ok: false; message: string; failures: string[]; state: BuildSandboxState };
+
 export type SandboxRecordInput = {
   buildBranch: string | null;
   gitCommitHashes: string[];
@@ -92,6 +96,50 @@ export function buildSandboxStateFromRecord(input: SandboxRecordInput): BuildSan
     sourceCurrency: extractSourceCurrency(input.buildExecState),
     observedAt,
     unavailableReason: input.diffPatch ? null : "Live sandbox git diff is not available from the projection yet.",
+  };
+}
+
+export function assertSandboxReadyForPromotion(state: BuildSandboxState): SandboxPromotionGateResult {
+  const failures: string[] = [];
+
+  if (state.sourceCurrency && state.sourceCurrency.recommendedAction !== "allow") {
+    const reason = trimTrailingPeriod(state.sourceCurrency.reason ?? "no source-currency reason recorded");
+    failures.push(
+      `Sandbox source is ${state.sourceCurrency.status} and requires ${state.sourceCurrency.recommendedAction}: ${reason}.`,
+    );
+  }
+
+  const missingPlanFiles = state.expectedPlanFiles.filter((file) => file.status === "missing");
+  if (missingPlanFiles.length > 0) {
+    failures.push(
+      `Captured diff is missing files promised by the build plan: ${missingPlanFiles.map((file) => file.path).join(", ")}.`,
+    );
+  }
+
+  const unknownPlanFiles = state.expectedPlanFiles.filter((file) => file.status === "unknown");
+  if (unknownPlanFiles.length > 0) {
+    failures.push(
+      `Captured diff could not prove planned files are present: ${unknownPlanFiles.map((file) => file.path).join(", ")}.`,
+    );
+  }
+
+  if (failures.length === 0) {
+    return { ok: true, message: "Sandbox promotion integrity checks passed." };
+  }
+
+  const hasSourceCurrencyFailure = Boolean(state.sourceCurrency && state.sourceCurrency.recommendedAction !== "allow");
+  const hasPlanFailure = missingPlanFiles.length > 0 || unknownPlanFiles.length > 0;
+  const message = hasSourceCurrencyFailure && hasPlanFailure
+    ? "Sandbox promotion blocked: source is not promotable and the captured diff is missing files promised by the build plan."
+    : hasSourceCurrencyFailure
+      ? "Sandbox promotion blocked: source is not promotable."
+      : "Sandbox promotion blocked: captured diff is missing files promised by the build plan.";
+
+  return {
+    ok: false,
+    message,
+    failures,
+    state,
   };
 }
 
@@ -173,6 +221,10 @@ function extractFilePaths(value: string): string[] {
     .map((match) => match[0].replace(/[),.;:]$/, ""));
 }
 
+function trimTrailingPeriod(value: string): string {
+  return value.replace(/\.+$/, "");
+}
+
 function getIgnoredReason(path: string): IgnoredSandboxDiffEntry["reason"] | null {
   if (path.includes("/.next/") || path.startsWith(".next/") || path.includes("/coverage/")) {
     return "generated";
@@ -186,7 +238,7 @@ function getIgnoredReason(path: string): IgnoredSandboxDiffEntry["reason"] | nul
   return null;
 }
 
-function serializePlanDocument(plan: unknown): string | null {
+export function serializePlanDocument(plan: unknown): string | null {
   if (!plan || typeof plan !== "object") {
     return null;
   }

@@ -221,8 +221,11 @@ async function writeAudit(data: {
     // Audit MUST NOT silently fail. Log with enough context to investigate
     // without throwing back to the caller (which would mask successful tool
     // execution).
+    // CodeQL #49 (js/tainted-format-string): tool/source names are user-influenced.
     console.error(
-      `[governed-execute] audit write failed tool=${data.toolName} source=${data.source}:`,
+      "[governed-execute] audit write failed tool=%s source=%s:",
+      data.toolName,
+      data.source,
       err,
     );
     return null;
@@ -288,8 +291,11 @@ async function writeReceipt(data: {
       await prisma.toolExecutionReceipt.create({ data: row });
     }
   } catch (err) {
+    // CodeQL #50 (js/tainted-format-string): tool/build names via format-args.
     console.error(
-      `[governed-execute] receipt write failed tool=${data.toolName} build=${data.buildId}:`,
+      "[governed-execute] receipt write failed tool=%s build=%s:",
+      data.toolName,
+      data.buildId,
       err,
     );
   }
@@ -328,8 +334,11 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
     try {
       await hook.onPostToolUse?.(event);
     } catch (err) {
+      // CodeQL #51 (js/tainted-format-string): hook/tool names via format-args.
       console.error(
-        `[governed-execute] post-tool hook failed hook=${hook.id} tool=${event.toolName}:`,
+        "[governed-execute] post-tool hook failed hook=%s tool=%s:",
+        hook.id,
+        event.toolName,
         err,
       );
     }
