@@ -4,6 +4,7 @@
 import type { McpConnectionConfig, HealthCheckResult } from "./mcp-server-types";
 import { lazyChildProcess } from "@/lib/shared/lazy-node";
 import { safeSpawn, type SpawnFn } from "@/lib/security/safe-spawn";
+import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 
 const HTTP_TIMEOUT_MS = 5_000;
 const STDIO_TIMEOUT_MS = 10_000;
@@ -26,10 +27,34 @@ function isServerless(): boolean {
 async function checkHttp(url: string, headers?: Record<string, string>): Promise<HealthCheckResult> {
   const start = Date.now();
   try {
+    // BI-5E53A265 follow-up (CodeQL alert #38): the MCP transport URL is
+    // admin-configured but still user-controlled in the SSRF sense — a
+    // misconfigured (or compromised-admin) entry could point at internal
+    // services or cloud-metadata IPs. assertSafeOutboundUrl gates scheme +
+    // private-network. The explicit hostname-format regex below gives
+    // CodeQL's js/request-forgery query a recognised sanitiser signal.
+    let validated: URL;
+    try {
+      validated = assertSafeOutboundUrl(url);
+    } catch (e) {
+      return {
+        healthy: false,
+        latencyMs: Date.now() - start,
+        error: e instanceof Error ? e.message : "Invalid URL",
+      };
+    }
+    if (!/^[a-z0-9][a-z0-9.-]*$/i.test(validated.hostname)) {
+      return {
+        healthy: false,
+        latencyMs: Date.now() - start,
+        error: `Invalid hostname: ${validated.hostname}`,
+      };
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
 
-    const res = await fetch(url, {
+    const res = await fetch(validated.href, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(MCP_INITIALIZE_REQUEST),
