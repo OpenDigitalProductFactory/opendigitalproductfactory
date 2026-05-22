@@ -1,0 +1,77 @@
+name: "CodeQL Advanced"
+
+# Advanced-setup CodeQL workflow. Replaces the default setup so that:
+#   1. The query config can be tuned per language.
+#   2. A custom data-extensions model pack (.github/codeql/dpf-sanitizers/)
+#      can teach CodeQL about our security helpers (assertSafeOutboundUrl,
+#      assertAllowedBinary, etc.) so they're recognised as sanitisers
+#      instead of generating false-positive alerts on every caller.
+#
+# IMPORTANT — activation requires a one-time repo settings change:
+#   Settings → Code security → "Code scanning" → CodeQL → Switch to
+#   "Advanced" mode. Once switched, default setup is disabled and this
+#   workflow becomes the source of truth for code scans.
+#
+# Until that toggle flips, this workflow is committed but inert (default
+# setup keeps running). After the toggle, this file controls scans.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly re-scan to catch new CodeQL queries / model updates.
+    - cron: "23 4 * * 1"
+
+permissions:
+  security-events: write
+  packages: read
+  actions: read
+  contents: read
+
+concurrency:
+  group: codeql-advanced-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: go
+            build-mode: autobuild
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      # continue-on-error keeps this workflow non-blocking until the one-time
+      # "Settings → Code security → CodeQL → Advanced" toggle flips. While
+      # default-setup is still enabled, the SARIF upload returns:
+      #   "CodeQL analyses from advanced configurations cannot be processed
+      #    when the default setup is enabled"
+      # After the toggle, this step succeeds and the model pack takes effect.
+      # The flag is harmless post-activation — the step still records green
+      # on success.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        continue-on-error: true
+        with:
+          category: "/language:${{ matrix.language }}"
