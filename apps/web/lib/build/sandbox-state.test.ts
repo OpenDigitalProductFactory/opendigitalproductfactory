@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertSandboxReadyForPromotion,
   buildSandboxStateFromRecord,
   extractExpectedPlanFiles,
   parseDiffstat,
@@ -117,6 +118,142 @@ describe("buildSandboxStateFromRecord", () => {
       status: "behind",
       targetRef: "origin/main",
       recommendedAction: "auto-refresh",
+    });
+  });
+});
+
+describe("assertSandboxReadyForPromotion", () => {
+  it("blocks promotion when the captured diff is missing files promised by the plan", () => {
+    const state = buildSandboxStateFromRecord({
+      buildBranch: "build/FB-STALE",
+      gitCommitHashes: ["abc1234"],
+      diffPatch: `diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma
+@@ -1 +1,2 @@
++new
+`,
+      updatedAt: new Date("2026-05-18T12:00:00.000Z"),
+      planDocument: `## File Structure
+- Create \`apps/web/lib/inference/ollama-url.ts\`: URL resolver
+- Create \`apps/web/components/platform/OllamaManagement.tsx\`: model manager
+`,
+      description: null,
+      buildExecState: {
+        sourceCurrency: {
+          source: "sandbox-git",
+          status: "ahead",
+          recommendedAction: "allow",
+          workspace: "/workspace",
+          branch: "build/FB-STALE",
+          headSha: "head",
+          headTreeSha: "tree-head",
+          targetRef: "origin/main",
+          targetSha: "target",
+          targetTreeSha: "tree-target",
+          mergeBaseSha: "target",
+          aheadBy: 2,
+          behindBy: 0,
+          dirty: false,
+          localSourceChangeCount: 2,
+          checkedAt: "2026-05-18T12:00:00.000Z",
+          reason: "Sandbox has local source commits.",
+        },
+      },
+    });
+
+    const gate = assertSandboxReadyForPromotion(state);
+
+    expect(gate.ok).toBe(false);
+    if (gate.ok) throw new Error("Expected sandbox promotion gate to block missing plan files.");
+    expect(gate.message).toContain("missing files promised by the build plan");
+    expect(gate.failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("apps/web/lib/inference/ollama-url.ts"),
+      expect.stringContaining("apps/web/components/platform/OllamaManagement.tsx"),
+    ]));
+  });
+
+  it("blocks promotion when persisted source-currency asks the operator to pause", () => {
+    const state = buildSandboxStateFromRecord({
+      buildBranch: "build/FB-DIVERGED",
+      gitCommitHashes: ["abc1234"],
+      diffPatch: `diff --git a/apps/web/lib/inference/ollama-url.ts b/apps/web/lib/inference/ollama-url.ts
+@@ -1 +1,2 @@
++new
+`,
+      updatedAt: new Date("2026-05-18T12:00:00.000Z"),
+      planDocument: `## File Structure
+- Create \`apps/web/lib/inference/ollama-url.ts\`: URL resolver
+`,
+      description: null,
+      buildExecState: {
+        sourceCurrency: {
+          source: "sandbox-git",
+          status: "diverged",
+          recommendedAction: "pause",
+          workspace: "/workspace",
+          branch: "build/FB-DIVERGED",
+          headSha: "head",
+          headTreeSha: "tree-head",
+          targetRef: "origin/main",
+          targetSha: "target",
+          targetTreeSha: "tree-target",
+          mergeBaseSha: "base",
+          aheadBy: 6,
+          behindBy: 1,
+          dirty: false,
+          localSourceChangeCount: 6,
+          checkedAt: "2026-05-18T12:00:00.000Z",
+          reason: "Sandbox has local commits and is missing origin/main commits.",
+        },
+      },
+    });
+
+    const gate = assertSandboxReadyForPromotion(state);
+
+    expect(gate.ok).toBe(false);
+    if (gate.ok) throw new Error("Expected sandbox promotion gate to block paused source currency.");
+    expect(gate.message).toContain("source is not promotable");
+    expect(gate.failures).toContain("Sandbox source is diverged and requires pause: Sandbox has local commits and is missing origin/main commits.");
+  });
+
+  it("allows promotion when expected plan files are present and source currency allows release", () => {
+    const state = buildSandboxStateFromRecord({
+      buildBranch: "build/FB-CURRENT",
+      gitCommitHashes: ["abc1234"],
+      diffPatch: `diff --git a/apps/web/lib/inference/ollama-url.ts b/apps/web/lib/inference/ollama-url.ts
+@@ -1 +1,2 @@
++new
+`,
+      updatedAt: new Date("2026-05-18T12:00:00.000Z"),
+      planDocument: `## File Structure
+- Create \`apps/web/lib/inference/ollama-url.ts\`: URL resolver
+`,
+      description: null,
+      buildExecState: {
+        sourceCurrency: {
+          source: "sandbox-git",
+          status: "current",
+          recommendedAction: "allow",
+          workspace: "/workspace",
+          branch: "build/FB-CURRENT",
+          headSha: "head",
+          headTreeSha: "tree-head",
+          targetRef: "origin/main",
+          targetSha: "target",
+          targetTreeSha: "tree-head",
+          mergeBaseSha: "head",
+          aheadBy: 0,
+          behindBy: 0,
+          dirty: false,
+          localSourceChangeCount: 0,
+          checkedAt: "2026-05-18T12:00:00.000Z",
+          reason: "Sandbox source tree matches origin/main.",
+        },
+      },
+    });
+
+    expect(assertSandboxReadyForPromotion(state)).toEqual({
+      ok: true,
+      message: "Sandbox promotion integrity checks passed.",
     });
   });
 });

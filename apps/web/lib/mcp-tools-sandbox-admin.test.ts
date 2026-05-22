@@ -5,6 +5,14 @@ const mockPrisma = {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
   },
+  featurePack: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  improvementProposal: {
+    updateMany: vi.fn(),
+  },
   buildActivity: {
     create: vi.fn().mockResolvedValue({ id: "activity-1" }),
   },
@@ -16,6 +24,7 @@ const mockPrisma = {
 const mockDiagnoseSandboxReadiness = vi.hoisted(() => vi.fn());
 const mockRecoverSandbox = vi.hoisted(() => vi.fn());
 const mockResolveHiveToken = vi.hoisted(() => vi.fn());
+const mockCreateBranchAndPR = vi.hoisted(() => vi.fn());
 
 vi.mock("@dpf/db", () => ({
   DISCOVERY_TRIAGE_AGENT_ID: "AGT-DISCOVERY",
@@ -36,6 +45,19 @@ vi.mock("@/lib/integrate/sandbox/sandbox-recovery", () => ({
 
 vi.mock("@/lib/integrate/identity-privacy", () => ({
   resolveHiveToken: mockResolveHiveToken,
+  getPlatformIdentity: vi.fn(async () => ({
+    authorName: "dpf-agent-a1b2c3d4",
+    authorEmail: "agent-a1b2c3d4@hive.dpf",
+    clientId: "a1b2c3d4-0000-0000-0000-000000000000",
+    shortId: "a1b2c3d4",
+    dcoSignoff: "Signed-off-by: dpf-agent-a1b2c3d4 <agent-a1b2c3d4@hive.dpf>",
+  })),
+  generatePrivateBranchName: vi.fn(() => "dpf/a1b2c3d4/sandbox-fix"),
+  generateAnonymousCommitMessage: vi.fn(() => "feat: Sandbox fix\n\nSigned-off-by: dpf-agent-a1b2c3d4 <agent-a1b2c3d4@hive.dpf>"),
+}));
+
+vi.mock("@/lib/integrate/github-api-commit", () => ({
+  createBranchAndPR: mockCreateBranchAndPR,
 }));
 
 vi.mock("@/lib/platform-dev-policy", () => ({
@@ -52,6 +74,17 @@ const FORBIDDEN_SANDBOX_HANDOFF_PATTERNS = [
 describe("sandbox admin MCP and coworker messaging", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.buildActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.featurePack.findFirst.mockResolvedValue(null);
+    mockPrisma.featurePack.create.mockResolvedValue({ packId: "FP-TEST" });
+    mockPrisma.featurePack.update.mockResolvedValue({ packId: "FP-TEST" });
+    mockPrisma.improvementProposal.updateMany.mockResolvedValue({ count: 0 });
+    mockCreateBranchAndPR.mockResolvedValue({
+      branchName: "dpf/a1b2c3d4/sandbox-fix",
+      commitSha: "commit-sha",
+      prUrl: null,
+      prNumber: null,
+    });
   });
 
   it("exposes diagnose_sandbox as a read-only build/review/ship tool", async () => {
@@ -281,5 +314,132 @@ describe("sandbox admin MCP and coworker messaging", () => {
         summary: expect.stringContaining("upstream contribution"),
       }),
     }));
+  });
+
+  it("blocks create_portal_pr when the captured diff misses files promised by the build plan", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        buildId: "FB-PROMOTE-1",
+        createdById: "user-1",
+      })
+      .mockResolvedValueOnce({
+        id: "feature-build-row-1",
+        title: "Ollama model management",
+        diffPatch: "diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma\n@@ -1 +1,2 @@\n+new\n",
+        buildBranch: "build/FB-PROMOTE-1",
+        gitCommitHashes: ["abc1234"],
+        updatedAt: new Date("2026-05-22T12:00:00.000Z"),
+        buildExecState: {
+          sourceCurrency: {
+            source: "sandbox-git",
+            status: "ahead",
+            recommendedAction: "allow",
+            workspace: "/workspace",
+            branch: "build/FB-PROMOTE-1",
+            headSha: "head",
+            headTreeSha: "tree-head",
+            targetRef: "origin/main",
+            targetSha: "target",
+            targetTreeSha: "tree-target",
+            mergeBaseSha: "target",
+            aheadBy: 1,
+            behindBy: 0,
+            dirty: false,
+            localSourceChangeCount: 1,
+            checkedAt: "2026-05-22T12:00:00.000Z",
+            reason: "Sandbox has local source commits.",
+          },
+        },
+        verificationOut: { typecheckPassed: true, testsPassed: 1, testsFailed: 0 },
+        acceptanceMet: [{ met: true }],
+        phase: "ship",
+        designDoc: null,
+        buildPlan: "## File Structure\n- Create `apps/web/lib/inference/ollama-url.ts`: URL resolver\n",
+        description: null,
+        productVersions: [],
+      });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("create_portal_pr", {
+      buildId: "FB-PROMOTE-1",
+    }, "user-1", { agentId: "AGT-ORCH-600" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Sandbox promotion integrity blocked PR creation.");
+    expect(result.message).toContain("missing files promised by the build plan");
+    expect(mockCreateBranchAndPR).not.toHaveBeenCalled();
+  });
+
+  it("blocks contribute_to_hive before FeaturePack creation when persisted source-currency says pause", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        buildId: "FB-PROMOTE-2",
+        createdById: "user-1",
+      })
+      .mockResolvedValueOnce({
+        id: "feature-build-row-2",
+        title: "Ollama model management",
+        brief: {},
+        diffPatch: "diff --git a/apps/web/lib/inference/ollama-url.ts b/apps/web/lib/inference/ollama-url.ts\n@@ -1 +1,2 @@\n+new\n",
+        diffSummary: "summary",
+        sandboxId: "dpf-sandbox-2",
+        portfolioId: null,
+        createdById: "user-1",
+        createdBy: { email: "admin@dpf.local" },
+        buildBranch: "build/FB-PROMOTE-2",
+        gitCommitHashes: ["abc1234"],
+        updatedAt: new Date("2026-05-22T12:00:00.000Z"),
+        buildPlan: "## File Structure\n- Create `apps/web/lib/inference/ollama-url.ts`: URL resolver\n",
+        description: null,
+        buildExecState: {
+          sourceCurrency: {
+            source: "sandbox-git",
+            status: "diverged",
+            recommendedAction: "pause",
+            workspace: "/workspace",
+            branch: "build/FB-PROMOTE-2",
+            headSha: "head",
+            headTreeSha: "tree-head",
+            targetRef: "origin/main",
+            targetSha: "target",
+            targetTreeSha: "tree-target",
+            mergeBaseSha: "base",
+            aheadBy: 6,
+            behindBy: 1,
+            dirty: false,
+            localSourceChangeCount: 6,
+            checkedAt: "2026-05-22T12:00:00.000Z",
+            reason: "Sandbox has local commits and is missing origin/main commits.",
+          },
+        },
+      });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValueOnce({
+      contributionMode: "contribute_all",
+      upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
+      dcoAcceptedAt: new Date("2026-05-22T12:00:00.000Z"),
+      gitRemoteUrl: null,
+    });
+    mockResolveHiveToken.mockResolvedValueOnce("ghp_test");
+    mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
+      buildId: "FB-PROMOTE-2",
+      state: "healthy",
+      canDeploy: true,
+      canContribute: true,
+      summary: "Sandbox is running, bound to the expected worktree, current, clean, and verified.",
+      checks: [],
+      recommendedActions: [],
+      inspectedAt: "2026-05-22T12:00:00.000Z",
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("contribute_to_hive", {
+      buildId: "FB-PROMOTE-2",
+    }, "user-1", { agentId: "AGT-ORCH-700" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Sandbox promotion integrity blocked contribution.");
+    expect(result.message).toContain("source is not promotable");
+    expect(mockPrisma.featurePack.findFirst).not.toHaveBeenCalled();
+    expect(mockCreateBranchAndPR).not.toHaveBeenCalled();
   });
 });
