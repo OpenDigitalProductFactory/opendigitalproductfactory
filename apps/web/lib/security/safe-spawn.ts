@@ -108,10 +108,18 @@ function basename(command: string): string {
 }
 
 /**
- * Throws if `command` (or its basename, for absolute paths) is not in
- * the allowlist. Use this BEFORE handing user input to spawn().
+ * Validates that `command` (or its basename, for absolute paths) is in the
+ * allowlist. Throws on failure. Returns the original `command` on success —
+ * the explicit return lets CodeQL's `js/command-line-injection` dataflow
+ * recognize the function as a sanitizer (tainted value enters, validated
+ * value exits). Callers should use the RETURNED value at the spawn call
+ * site, not the original input, so the sanitizer pattern is visible.
+ *
+ * Example (the safe pattern):
+ *   const validated = assertAllowedBinary(command);
+ *   spawn(validated, args, { ... });
  */
-export function assertAllowedBinary(command: string): void {
+export function assertAllowedBinary(command: string): string {
   if (!command || command.trim() === "") {
     throw new Error("safe-spawn: command must be a non-empty string");
   }
@@ -123,6 +131,7 @@ export function assertAllowedBinary(command: string): void {
         `If this is a legitimate MCP runner, add it deliberately to ALLOWED_BINARIES in apps/web/lib/security/safe-spawn.ts.`,
     );
   }
+  return command;
 }
 
 /**
@@ -176,8 +185,14 @@ export function safeSpawn(
   args: ReadonlyArray<string> = [],
   options: SpawnOptions = {},
 ): SafeSpawnResult {
+  // assertAllowedBinary returns the validated command. We deliberately
+  // use the RETURNED value (validatedCommand) at the spawn() call below
+  // rather than the original `command` parameter, so CodeQL's dataflow
+  // sees the allowlist check as a sanitizer. The two strings are equal
+  // at runtime — the renaming is for CodeQL's static analysis.
+  let validatedCommand: string;
   try {
-    assertAllowedBinary(command);
+    validatedCommand = assertAllowedBinary(command);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // Audit signal so reject reasons are greppable in logs.
@@ -194,7 +209,7 @@ export function safeSpawn(
   // identical to `Record<string, string | undefined>` plus a few well-known
   // keys. The cast lets us pass a plain record without re-validating
   // process.env-specific keys.
-  const proc = spawn(command, args, {
+  const proc = spawn(validatedCommand, args, {
     ...options,
     env: sanitizedEnv as NodeJS.ProcessEnv,
   });
