@@ -168,6 +168,10 @@ function mockClickInfo(overrides: Partial<ProcessGraphNodeClickInfo> = {}): Proc
 }
 
 async function renderInTopologyView(buildOverrides: Partial<FeatureBuildRow> = {}) {
+  // Post-DetailsDrawer-mount: the workflow graph is the always-visible primary
+  // surface of the active-build pane. No tab click needed; ProcessGraph mounts
+  // immediately on render. Waits for the mock's onNodeClick prop capture so
+  // tests can fire it before asserting against state.
   const result = render(
     <BuildStudio
       builds={[makeBuild(buildOverrides)]}
@@ -177,9 +181,7 @@ async function renderInTopologyView(buildOverrides: Partial<FeatureBuildRow> = {
       submissionBranchShortId="abc12345"
     />,
   );
-  // Switch to the Workflow tab so ProcessGraph mounts.
-  const workflowTab = await screen.findByRole("tab", { name: "Workflow" });
-  fireEvent.click(workflowTab);
+  await screen.findByTestId("process-graph-mock");
   return result;
 }
 
