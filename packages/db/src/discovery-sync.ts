@@ -57,7 +57,10 @@ type DiscoverySyncTx = {
     }): Promise<{ id: string }>;
   };
   inventoryEntity: {
-    findMany(args: { select: { entityKey: true } }): Promise<Array<{ entityKey: string }>>;
+    findMany(args: {
+      where?: { scopeKey?: string };
+      select: { entityKey: true };
+    }): Promise<Array<{ entityKey: string }>>;
     upsert(args: {
       where: { entityKey: string };
       create: Record<string, unknown>;
@@ -65,7 +68,7 @@ type DiscoverySyncTx = {
       select: { id: true; entityKey: true };
     }): Promise<{ id: string; entityKey: string }>;
     updateMany(args: {
-      where: { entityKey: { in: string[] } };
+      where: { scopeKey?: string; entityKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -83,7 +86,10 @@ type DiscoverySyncTx = {
     }): Promise<unknown>;
   };
   inventoryRelationship: {
-    findMany(args: { select: { relationshipKey: true } }): Promise<Array<{ relationshipKey: string }>>;
+    findMany(args: {
+      where?: { scopeKey?: string };
+      select: { relationshipKey: true };
+    }): Promise<Array<{ relationshipKey: string }>>;
     upsert(args: {
       where: { relationshipKey: string };
       create: Record<string, unknown>;
@@ -91,7 +97,7 @@ type DiscoverySyncTx = {
       select: { id: true; relationshipKey: true };
     }): Promise<{ id: string; relationshipKey: string }>;
     updateMany(args: {
-      where: { relationshipKey: { in: string[] } };
+      where: { scopeKey?: string; relationshipKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -114,6 +120,22 @@ export type DiscoverySyncClient = {
 
 function countObjectKeys(value: Record<string, unknown> | undefined): number {
   return value ? Object.keys(value).length : 0;
+}
+
+function scopeFieldsFromRunMeta(runMeta: DiscoveryRunMeta): {
+  scopeKey: string;
+  customerAccountId: string | null;
+  customerSiteId: string | null;
+} {
+  const customerAccountId = runMeta.customerAccountId ?? null;
+  const customerSiteId = runMeta.customerSiteId ?? null;
+  const scopeKey = customerAccountId
+    ? customerSiteId
+      ? `customer:${customerAccountId}:site:${customerSiteId}`
+      : `customer:${customerAccountId}`
+    : "organization:internal";
+
+  return { scopeKey, customerAccountId, customerSiteId };
 }
 
 function dedupeDiscoveredItems(
@@ -184,12 +206,14 @@ export async function persistBootstrapDiscoveryRun(
       existing.push(software);
       softwareEvidenceByEntityKey.set(software.inventoryEntityKey, existing);
     }
+    const runScope = scopeFieldsFromRunMeta(runMeta);
+    const scopeWhere = { scopeKey: runScope.scopeKey };
     const existingEntityKeys = new Set(
-      (await tx.inventoryEntity.findMany({ select: { entityKey: true } }))
+      (await tx.inventoryEntity.findMany({ where: scopeWhere, select: { entityKey: true } }))
         .map((entity) => entity.entityKey),
     );
     const existingRelationshipKeys = new Set(
-      (await tx.inventoryRelationship.findMany({ select: { relationshipKey: true } }))
+      (await tx.inventoryRelationship.findMany({ where: scopeWhere, select: { relationshipKey: true } }))
         .map((relationship) => relationship.relationshipKey),
     );
     const existingIssueKeys = new Set(
@@ -259,6 +283,13 @@ export async function persistBootstrapDiscoveryRun(
             ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : undefined,
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : undefined,
           firstSeenAt: now,
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
@@ -285,6 +316,13 @@ export async function persistBootstrapDiscoveryRun(
             ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : { disconnect: true },
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : { disconnect: true },
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
         },
@@ -377,7 +415,7 @@ export async function persistBootstrapDiscoveryRun(
     const staleEntities = staleEntityKeys.length === 0
       ? 0
       : (await tx.inventoryEntity.updateMany({
-          where: { entityKey: { in: staleEntityKeys } },
+          where: { ...scopeWhere, entityKey: { in: staleEntityKeys } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 
@@ -411,6 +449,13 @@ export async function persistBootstrapDiscoveryRun(
           status: "active",
           confidence: relationship.confidence ?? null,
           properties: relationship.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : undefined,
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : undefined,
           firstSeenAt: now,
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
@@ -422,6 +467,13 @@ export async function persistBootstrapDiscoveryRun(
           status: "active",
           confidence: relationship.confidence ?? null,
           properties: relationship.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : { disconnect: true },
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : { disconnect: true },
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
           fromEntity: { connect: { id: fromEntityId } },
@@ -459,7 +511,7 @@ export async function persistBootstrapDiscoveryRun(
     const staleRelationships = staleRelationshipKeys.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
-          where: { relationshipKey: { in: staleRelationshipKeys } },
+          where: { ...scopeWhere, relationshipKey: { in: staleRelationshipKeys } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 
