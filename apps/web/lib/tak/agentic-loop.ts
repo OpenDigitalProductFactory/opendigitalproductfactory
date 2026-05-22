@@ -359,6 +359,31 @@ function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string
   ].join(" ");
 }
 
+/**
+ * Plain-English message for when the loop hits MAX_ITERATIONS without
+ * producing a text-only response. Replaces the prior generic "I ran into
+ * a limit while working on this. Try breaking your request into smaller
+ * steps." which obscured the actual cause (usually: preferred provider
+ * unavailable → fallback model overwhelmed by the tool surface). Respects
+ * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
+ */
+function buildMaxIterationsExhaustedMessage(params: {
+  downgraded: boolean;
+  executedTools: ExecutedTool[];
+}): string {
+  const toolSummary = summarizeExecutedToolNames(params.executedTools);
+  const downgradeLead = params.downgraded
+    ? "The model my admin assigned me was unavailable, so I worked through a backup that wasn't able to keep up with this task. "
+    : "";
+  const workNote = toolSummary
+    ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
+    : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
+  const suggestion = params.downgraded
+    ? "Please try the same question again — I'll route through a different model. If it keeps failing, an admin can update my model assignment in the AI Workforce settings."
+    : "Try the same question again, or break it into a smaller piece.";
+  return `${downgradeLead}${workNote} ${suggestion}`;
+}
+
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
 // Nudging these responses toward tools breaks legitimate HR / data-entry flows
@@ -943,6 +968,31 @@ export async function runAgenticLoop(params: {
       break;
     }
 
+    // Local-model spinning guard: small local fallback models (Docker Model
+    // Runner, 7-13B class) often don't converge on a final answer when handed
+    // a large tool surface — they keep emitting plausibly-different tool calls
+    // that don't trip the exact-args repetition detector. After ~8 tool calls
+    // on a local provider with no text-only response, accept it isn't going to
+    // converge and return a diagnostic rather than burning the full 200
+    // iterations. See FB-71FB3A53 thread, 2026-05-22.
+    if (lastResult?.providerId === "local" && executedTools.length >= 8) {
+      console.warn(
+        `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
+        `Exiting early with diagnostic. agent=${agentId} route=${routeContext}`,
+      );
+      return {
+        content: buildLocalToolCallFailureMessage(lastResult),
+        providerId: lastResult.providerId,
+        modelId: lastResult.modelId,
+        downgraded: lastResult.downgraded,
+        downgradeMessage: lastResult.downgradeMessage,
+        totalInputTokens,
+        totalOutputTokens,
+        executedTools,
+        proposal: null,
+      };
+    }
+
     // Repetition detector — extracted to lib/tak/runtime-issues.ts so the
     // existing "agent stuck" PlatformIssueReport write and the new reflection
     // trigger share one detection site.
@@ -1300,12 +1350,18 @@ export async function runAgenticLoop(params: {
         }),
       });
 
+        // Local model produced text-only on iteration 0 of a tool-backed turn:
+        // exit with a diagnostic instead of nudging — nudging won't teach a
+        // small local model to use tools mid-turn, it just burns iterations.
+        // The previous Build-Studio carve-out (!BUILD_ROUTE_PATTERN) was the
+        // root cause of 200-iteration hangs on /build threads when the
+        // preferred provider was unavailable and routing fell back to local.
+        // See FB-71FB3A53 thread, 2026-05-22.
         if (
           shouldNudgeNow &&
           iteration === 0 &&
           executedTools.length === 0 &&
-          result.providerId === "local" &&
-          !BUILD_ROUTE_PATTERN.test(routeContext ?? "")
+          result.providerId === "local"
         ) {
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${agentId} route=${routeContext}`,
@@ -1590,6 +1646,10 @@ export async function runAgenticLoop(params: {
     executedTools.map((tool) => tool.name),
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
   );
+  const exhaustedMessage = buildMaxIterationsExhaustedMessage({
+    downgraded: lastResult?.downgraded ?? false,
+    executedTools,
+  });
   return {
     content: fallbackIsRawToolUse
       ? buildRuntimeLimitToolLoopMessage(executedTools)
@@ -1599,7 +1659,7 @@ export async function runAgenticLoop(params: {
           tools,
           executedTools,
         })
-      : lastResult?.content || "I ran into a limit while working on this. Try breaking your request into smaller steps.",
+      : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
     downgraded: lastResult?.downgraded ?? false,
