@@ -146,6 +146,37 @@ describe("issueEdgeBootstrapTokenAction", () => {
     if (!result.ok) expect(result.error).toBe("invalid_input");
   });
 
+  it("rejects targetCustomerSiteId without targetCustomerAccountId", async () => {
+    const result = await issueEdgeBootstrapTokenAction({
+      targetCustomerSiteId: "site_hq",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("invalid_input");
+    expect(mockIssueBootstrapToken).not.toHaveBeenCalled();
+  });
+
+  it("forwards customer/site targets to the bootstrap issuer", async () => {
+    mockIssueBootstrapToken.mockResolvedValue({
+      tokenId: "boot_scoped",
+      plaintext: "dpfboot_scoped",
+      prefix: "dpfboot_sco",
+      expiresAt: new Date(),
+    });
+
+    await issueEdgeBootstrapTokenAction({
+      targetCustomerAccountId: "cust_acme",
+      targetCustomerSiteId: "site_hq",
+    });
+
+    expect(mockIssueBootstrapToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issuedByPrincipalId: "principal_admin_1",
+        targetCustomerAccountId: "cust_acme",
+        targetCustomerSiteId: "site_hq",
+      }),
+    );
+  });
+
   it("revalidates the admin path on success so the table re-renders", async () => {
     mockIssueBootstrapToken.mockResolvedValue({
       tokenId: "boot_1",

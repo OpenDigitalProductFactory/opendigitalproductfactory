@@ -35,6 +35,9 @@ const AUTHED = {
   edgeNodeRowId: "edgenode_cuid_1",
   nodeId: "edge_abc",
   trustState: "trusted" as const,
+  customerAccountId: null,
+  customerSiteId: null,
+  scopePolicy: null,
 };
 
 function makeReq(headers: Record<string, string> = {}): NextRequest {
@@ -131,7 +134,52 @@ describe("GET /api/v1/edge/adapters — happy path", () => {
     mockFindMany.mockResolvedValue([]);
     await GET(makeReq({ Authorization: "Bearer dpfedge_xyz" }));
     const call = mockFindMany.mock.calls[0][0];
-    expect(call.where).toEqual({ collectorType: "unifi", status: "active" });
+    expect(call.where).toEqual({
+      collectorType: "unifi",
+      status: "active",
+      OR: [
+        { targetEdgeNodeId: "edgenode_cuid_1" },
+        {
+          targetEdgeNodeId: null,
+          customerAccountId: null,
+          customerSiteId: null,
+        },
+      ],
+    });
+  });
+
+  it("scopes adapter rows to the authenticated customer account and site", async () => {
+    mockResolveAuth.mockResolvedValue({
+      ...AUTHED,
+      customerAccountId: "cust_acme",
+      customerSiteId: "site_hq",
+      scopePolicy: {
+        ownershipScope: "customer-site",
+        enforcement: "strict-customer-scope",
+      },
+    });
+    mockFindMany.mockResolvedValue([]);
+
+    await GET(makeReq({ Authorization: "Bearer dpfedge_xyz" }));
+
+    const call = mockFindMany.mock.calls[0][0];
+    expect(call.where).toEqual({
+      collectorType: "unifi",
+      status: "active",
+      OR: [
+        { targetEdgeNodeId: "edgenode_cuid_1" },
+        {
+          targetEdgeNodeId: null,
+          customerAccountId: "cust_acme",
+          customerSiteId: "site_hq",
+        },
+        {
+          targetEdgeNodeId: null,
+          customerAccountId: "cust_acme",
+          customerSiteId: null,
+        },
+      ],
+    });
   });
 
   it("skips rows with missing or undecryptable keys (doesn't fail the whole request)", async () => {
