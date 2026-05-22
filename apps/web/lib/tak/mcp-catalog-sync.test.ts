@@ -50,13 +50,20 @@ beforeEach(() => {
   vi.mocked(prisma.mcpCatalogSync.update).mockResolvedValue({} as never);
 
   vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
-    if (url.includes("registry.modelcontextprotocol.io")) {
+    // CodeQL alert #70 (js/incomplete-url-substring-sanitization):
+    // proper hostname check via URL parsing. This is a test mock so
+    // the security impact is nil, but using the correct pattern keeps
+    // CodeQL clean and prevents accidental copy-paste of the loose
+    // substring pattern into production code.
+    let host = "";
+    try { host = new URL(url).hostname.toLowerCase(); } catch {}
+    if (host === "registry.modelcontextprotocol.io") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(mockRegistryPage1) });
     }
-    if (url.includes("glama.ai") && url.includes("stripe-mcp")) {
+    if (host === "glama.ai" && url.includes("stripe-mcp")) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(mockGlamaStripe) });
     }
-    if (url.includes("glama.ai") && url.includes("wp-mcp")) {
+    if (host === "glama.ai" && url.includes("wp-mcp")) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(mockGlamaWp) });
     }
     return Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
