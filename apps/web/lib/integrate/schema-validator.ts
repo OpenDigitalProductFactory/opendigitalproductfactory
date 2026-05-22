@@ -11,6 +11,13 @@
  * BEFORE prisma migrate is attempted.
  */
 
+// Escape regex metacharacters in user-supplied strings before embedding
+// them in a `new RegExp(...)` pattern. Used by the model-extractor below.
+// Plain TS implementation — no dependency needed for 11 characters.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export interface SchemaIssue {
   severity: "error" | "warning";
   line: number;
@@ -299,7 +306,11 @@ export function describeModel(schemaContent: string, modelName: string): ModelDe
     const trimmed = lines[i].trim();
 
     if (!inModel) {
-      const match = trimmed.match(new RegExp(`^model\\s+${modelName}\\s*\\{`));
+      // CodeQL #74 (js/regex-injection): modelName could contain regex
+      // metacharacters (e.g. ".*"), which would make the pattern match
+      // unrelated lines or run slow. escapeRegex turns every char into
+      // a literal match.
+      const match = trimmed.match(new RegExp(`^model\\s+${escapeRegex(modelName)}\\s*\\{`));
       if (match) {
         inModel = true;
         startLine = i + 1;
