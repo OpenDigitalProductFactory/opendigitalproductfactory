@@ -65,6 +65,7 @@ describe("sandbox admin types", () => {
       "stale_source",
       "dirty_or_leaking",
       "verification_red",
+      "stuck_mid_phase",
       "unrecoverable",
     ]);
 
@@ -105,6 +106,7 @@ export const SANDBOX_READINESS_STATES = [
   "stale_source",
   "dirty_or_leaking",
   "verification_red",
+  "stuck_mid_phase",
   "unrecoverable",
 ] as const;
 
@@ -134,7 +136,8 @@ export type SandboxRecoveryAction =
   | "release_stale_slot"
   | "checkout_registered_branch"
   | "reset_from_main"
-  | "quarantine_runtime_target";
+  | "quarantine_runtime_target"
+  | "reset_build_phase";
 
 export type RecommendedSandboxAction = {
   action: SandboxRecoveryAction;
@@ -677,15 +680,30 @@ case "diagnose_sandbox": {
 }
 ```
 
-- [ ] **Step 5: Replace unsafe legacy tool messages**
+- [ ] **Step 5: Replace unsafe legacy tool messages across ALL surfaces**
 
-In `check_sandbox` and `start_sandbox`, replace user-run command messages with:
+The legacy "tell the user to run docker compose" pattern is duplicated. Fix every occurrence in one pass:
+
+| File | Site | Replacement requirement |
+| --- | --- | --- |
+| `apps/web/lib/mcp-tools.ts` | `check_sandbox` `not_found` message (~L6984) | Direct to `diagnose_sandbox` + Sandbox Control panel. |
+| `apps/web/lib/mcp-tools.ts` | `start_sandbox` description string (~L1744) and `not_found` return (~L7006) | Remove the `docker compose up -d sandbox` instruction; describe the governed recovery path. |
+| `apps/web/lib/mcp-tools.ts` | `start_build` fallback message (~L7312) `"tell the user to run: docker compose up -d sandbox"` | Replace with: call `diagnose_sandbox`; if blocked, surface platform incident — never instruct the user. |
+| `apps/web/lib/mcp-tools.ts` | `run_ux_test` browser-use unreachable message (~L9171, L9260) `"Run 'docker compose up -d browser-use'"` | Replace with: record platform-issue, fall back to code-only analysis; never instruct the user to run docker. |
+| `apps/web/lib/integrate/build-agent-prompts.ts` | STEP 0 `not_found` branch (~L242) `"Please run: docker compose up -d sandbox"` | Replace with the diagnose/recover flow specified in spec §11.1 (`not_found` template). |
+
+Add a string-level regression test in `mcp-tools-sandbox-admin.test.ts` that scans the source of `mcp-tools.ts` and `build-agent-prompts.ts` and asserts NONE of these substrings appear in user-facing strings:
 
 ```typescript
-message: "Sandbox container is missing. Use diagnose_sandbox for build-specific details, then use the Admin > Build Studio > Sandbox Control recovery action to recreate the sandbox."
+const FORBIDDEN_DIALOG = [
+  "docker compose up -d sandbox",
+  "docker compose up -d browser-use",
+  "tell the user to run",
+  "Please run: docker",
+];
 ```
 
-Do not include `docker compose up -d sandbox` in user-facing tool descriptions or prompts.
+Allowed only in code comments referencing this audit by its issue ID. This test guards against regressions where a future PR re-introduces the pattern.
 
 - [ ] **Step 6: Update Build Studio prompts**
 
@@ -798,7 +816,11 @@ export async function recoverSandbox(args: {
 }
 ```
 
-V1 must implement `start`, `restart`, `quarantine_runtime_target`, and `release_stale_slot`. `reset_from_main` may return blocked until confirmation handling is fully implemented, but it must do so deliberately and with a recorded incident.
+V1 must implement `start`, `restart`, `quarantine_runtime_target`, `release_stale_slot`, and `reset_build_phase`. `reset_from_main` may return blocked until confirmation handling is fully implemented, but it must do so deliberately and with a recorded incident.
+
+`release_stale_slot` MUST enforce the spec §13.5 idle floor: if the build's most recent `BuildActivity` is younger than 7 days, return `{ success: false, error: "slot is held by paused-but-not-abandoned build" }` even when the operator confirms. Add a test that proves it.
+
+`reset_build_phase` MUST require structured confirmation (`{ acknowledgeReset: true, reason: string }`), mark the active `BuildPhaseRun` failed with `operator_reset_after_stall`, write a `BuildActivity` row, and release a slot held only by this build. It MUST NOT auto-redispatch the next phase — that is a separate operator action. Add a test that exercises the 4-stuck-builds class (`deps_installed` past heartbeat budget; `complete` with `filesChanged:0`).
 
 - [ ] **Step 4: Add `recover_sandbox` MCP handler**
 
@@ -1242,6 +1264,79 @@ git commit -s -m "feat(admin): add Build Studio sandbox control panel"
 
 ---
 
+## Task 10b: Add Coworker Dialog Templates and Forbidden-Pattern Guard
+
+**Files:**
+- Create: `apps/web/lib/integrate/sandbox/coworker-dialog-templates.ts`
+- Create: `apps/web/lib/integrate/sandbox/coworker-dialog-templates.test.ts`
+- Modify: handler sites that surface sandbox/deploy/contribution failure messages back to the AI Coworker panel.
+
+This task implements spec §11.1. The coworker dialog is the user-visible failure path; it must be tested independently of the underlying tool.
+
+- [ ] **Step 1: Write template tests**
+
+Create `coworker-dialog-templates.test.ts`:
+
+```typescript
+import { describe, expect, it } from "vitest";
+import { renderCoworkerDialog, FORBIDDEN_DIALOG_PATTERNS } from "./coworker-dialog-templates";
+
+describe("coworker dialog templates", () => {
+  it("renders detached state with quarantine incident and three options", () => {
+    const text = renderCoworkerDialog({
+      state: "mixed_compose_project",
+      summary: "Owned by D:\\DPF-clean-main-linux",
+      incidentId: "PIR-123",
+    });
+    expect(text).toContain("D:\\DPF-clean-main-linux");
+    expect(text).toContain("PIR-123");
+    expect(text).toMatch(/Options:.*Rebuild.*Switch.*Open Sandbox Control/s);
+  });
+
+  it("never returns text matching forbidden dialog patterns", () => {
+    for (const state of ["stopped", "not_found", "detached", "mixed_compose_project", "stale_source", "dirty_or_leaking", "verification_red", "stuck_mid_phase", "unrecoverable"] as const) {
+      const text = renderCoworkerDialog({ state, summary: "x", incidentId: null });
+      for (const forbidden of FORBIDDEN_DIALOG_PATTERNS) {
+        expect(text.toLowerCase()).not.toContain(forbidden.toLowerCase());
+      }
+      expect(text).toMatch(/\*\*Options:\*\*/);
+    }
+  });
+
+  it("ends every template with concrete options, not internal status", () => {
+    for (const state of ["healthy", "stopped", "unrecoverable"] as const) {
+      const text = renderCoworkerDialog({ state, summary: "x", incidentId: null });
+      expect(text).not.toMatch(/\b(Done|Continuing|Investigating)\.\s*$/);
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Implement template module**
+
+Create `coworker-dialog-templates.ts` exporting `FORBIDDEN_DIALOG_PATTERNS` (matching spec §11.1) and `renderCoworkerDialog({ state, summary, incidentId, branchName?, ago? })`. Each state returns one of the verbatim templates from spec §11.1 with the supplied substitutions. Helper rule: every returned string must contain the literal `**Options:**` marker.
+
+- [ ] **Step 3: Wire into failure paths**
+
+In every `deploy_feature` / `contribute_to_hive` / `recover_sandbox` failure return, populate the user-facing `message` field by calling `renderCoworkerDialog(...)` with the diagnostic snapshot's `state`, `summary`, and any incident id. Do NOT hand-write per-call strings — go through the template module so the forbidden-pattern test catches drift.
+
+- [ ] **Step 4: Run tests**
+
+```bash
+pnpm --filter web exec vitest run apps/web/lib/integrate/sandbox/coworker-dialog-templates.test.ts apps/web/lib/mcp-tools-sandbox-admin.test.ts
+```
+
+Expected: PASS, including the forbidden-pattern source scan from Task 5.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/lib/integrate/sandbox/coworker-dialog-templates.ts apps/web/lib/integrate/sandbox/coworker-dialog-templates.test.ts apps/web/lib/mcp-tools.ts
+git commit -s -m "feat(build-studio): coworker dialog templates for sandbox readiness states"
+```
+
+---
+
 ## Task 11: Add Build Studio Readiness Strip
 
 **Files:**
@@ -1323,10 +1418,21 @@ git commit -s -m "feat(build-studio): show sandbox readiness in build detail"
 Run:
 
 ```bash
-pnpm --filter web exec vitest run apps/web/lib/integrate/sandbox apps/web/lib/runtime-coordination/build-studio-runtime.test.ts apps/web/lib/integrate/build-pipeline.test.ts apps/web/lib/integrate/github-api-commit.test.ts apps/web/lib/integrate/contribution-review.test.ts apps/web/lib/actions/build-sandbox-admin.test.ts apps/web/components/build/SandboxReadinessStrip.test.tsx
+pnpm --filter web exec vitest run apps/web/lib/integrate/sandbox apps/web/lib/runtime-coordination/build-studio-runtime.test.ts apps/web/lib/integrate/build-pipeline.test.ts apps/web/lib/integrate/github-api-commit.test.ts apps/web/lib/integrate/contribution-review.test.ts apps/web/lib/actions/build-sandbox-admin.test.ts apps/web/components/build/SandboxReadinessStrip.test.tsx apps/web/lib/integrate/sandbox/coworker-dialog-templates.test.ts apps/web/lib/mcp-tools-sandbox-admin.test.ts
 ```
 
 Expected: all listed tests pass.
+
+- [ ] **Step 1b: Run FULL vitest suite (mandatory before push)**
+
+Run:
+
+```bash
+pnpm --filter web exec vitest run
+pnpm --filter @dpf/db exec vitest run
+```
+
+Expected: all suites pass. Per standing rule, pre-commit only runs typecheck — vitest must be run locally or CI will break for everyone.
 
 - [ ] **Step 2: Run typecheck**
 
@@ -1377,6 +1483,17 @@ Use a test build or fixture that points to a deliberately mismatched sandbox tar
 
 Use the `createBranchAndPR` test harness or a mocked GitHub token environment. Verify the create-commit payload includes matching `author`, `committer`, and `Signed-off-by` identities.
 
+- [ ] **Step 6b: PR overlap sweep before push**
+
+Before opening or pushing to the PR, run an overlap sweep — concurrent sessions may be touching the same surfaces:
+
+```bash
+gh pr list --state open --limit 30 --json number,title,headRefName,updatedAt
+git log origin/main --since="7 days ago" --oneline -- apps/web/lib/mcp-tools.ts apps/web/lib/integrate/sandbox apps/web/lib/integrate/build-agent-prompts.ts apps/web/lib/integrate/build-pipeline.ts apps/web/lib/integrate/github-api-commit.ts apps/web/lib/integrate/contribution-review.ts apps/web/lib/runtime-coordination/build-studio-runtime.ts
+```
+
+If another open PR or recent main commit overlaps the same files, reconcile before pushing. Re-run this sweep before *every* push in long autonomous runs, not just the first one.
+
 - [ ] **Step 7: Final commit**
 
 Run:
@@ -1395,10 +1512,14 @@ If the implementation tasks were committed along the way, this final commit shou
 
 - Diagnostic service: Tasks 1-3.
 - Runtime target ownership: Task 4.
-- MCP diagnosis/recovery tools: Tasks 5-6.
+- MCP diagnosis/recovery tools (incl. `reset_build_phase` for stuck-build class): Tasks 5-6.
+- Legacy "user-run docker" audit + forbidden-pattern source scan: Task 5.
 - Deploy and contribution gate integration: Tasks 7-9.
 - Codegen/verification hard failures: Task 8.
 - Admin UI and Build Studio UI: Tasks 10-11.
+- Coworker dialog templates + forbidden-pattern guard (spec §11.1): Task 10b.
+- Stuck mid-phase recovery + 7-day idle floor (spec §13.5): Tasks 6, 12.
+- Full vitest + PR overlap sweep before push: Task 12.
 - Verification and QA evidence: Task 12.
 
 No placeholder tasks remain. Every task has exact file paths, commands, and expected outcomes.

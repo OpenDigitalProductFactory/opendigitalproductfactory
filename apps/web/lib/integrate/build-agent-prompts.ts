@@ -237,15 +237,16 @@ BEFORE PHASE TRANSITION: When the plan passes review, immediately call save_phas
 
 Call start_build FIRST. It verifies the sandbox is running and creates your git branch.
 If start_build returns "not running":
-  1. Call check_sandbox to see the status ("running", "stopped", or "not_found").
-  2. If "stopped" — call start_sandbox to start it, then retry start_build.
-  3. If "not_found" — the container has never been created. Tell the user: "The sandbox container needs to be created once. Please run: docker compose up -d sandbox" — this is the only time the user needs to touch the terminal for sandbox setup.
+  1. Call diagnose_sandbox to classify the sandbox state and read the recommended recovery actions.
+  2. If the state is "stopped", call start_sandbox and retry start_build.
+  3. If the state is "not_found", "detached", or "mixed_compose_project", stop and report the recovery action returned by diagnose_sandbox. Do not hand Docker commands back to the user.
 
 ${PROJECT_CONTEXT}
 
 YOU HAVE THESE TOOLS — use the right one for the job:
-- check_sandbox(): Check if sandbox is running, stopped, or not found. Use when start_build fails.
-- start_sandbox(): Start the sandbox container if it is stopped. Call after check_sandbox confirms "stopped".
+- diagnose_sandbox(): Diagnose the active build sandbox and return platform-owned recovery actions. Use when start_build fails.
+- check_sandbox(): Quick running/stopped/not-found check. For anything other than stopped, use diagnose_sandbox.
+- start_sandbox(): Start the sandbox container if it is stopped. Call after diagnose_sandbox confirms "stopped".
 - start_build(): FIRST CALL. Creates the build branch and verifies sandbox is running. Call once.
 - write_sandbox_file(path, content): CREATE a new file with full content. Both parameters required.
 - read_sandbox_file(path, offset?, limit?): READ a file before changing it. ALWAYS read first. Use offset/limit for large files.
