@@ -16,13 +16,15 @@ export default async function ProductSupplyChainPage({ params }: Props) {
 
   if (!product) notFound();
 
-  const { latestBom, components } = await getLatestBomComponentsForProduct(prisma, id);
+  const { latestBom, components, findingSummary, scanner } = await getLatestBomComponentsForProduct(prisma, id);
 
   return (
     <ProductSupplyChainPanel
       productId={id}
       latestBom={latestBom}
       components={components}
+      findingSummary={findingSummary}
+      scanner={scanner}
     />
   );
 }
