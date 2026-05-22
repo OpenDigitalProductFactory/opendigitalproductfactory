@@ -432,18 +432,14 @@ export async function persistBootstrapDiscoveryRun(
     const currentEntityKeys = new Set(
       normalized.inventoryEntities.map((entity) => entity.entityKey),
     );
-    // Source-scoped staleness: a unifi-only sweep MUST NOT mark
-    // dpf_bootstrap or edge_node relationships stale (they have their
-    // own refresh source and source-of-truth — that's how 196 of 257
-    // MEMBER_OF rows ended up "stale" while the underlying ARP cache was
-    // still active). The convention is that every key emitted by a
-    // collector starts with its sourceSlug followed by ":". We only
-    // consider for staleness keys that share that prefix; everything
-    // else stays untouched.
-    const sourcePrefix = `${runMeta.sourceSlug}:`;
-    const isOwnedBySource = (key: string) => key.startsWith(sourcePrefix);
+    // Stale detection: any entity in the current scope that wasn't observed
+    // in this run is marked stale. Scope-where (above) ensures cross-customer
+    // isolation. The previous key-prefix-based source filter from PR #1009
+    // (`isOwnedBySource`) was a no-op in practice — entity keys don't start
+    // with sourceSlug, so the filter excluded everything and stale detection
+    // never fired. See follow-up task for proper source attribution via a
+    // column lookup (e.g. on `lastConfirmedRunId.sourceSlug`).
     const staleEntityKeys = [...existingEntityKeys]
-      .filter(isOwnedBySource)
       .filter((entityKey) => !currentEntityKeys.has(entityKey));
     const staleEntities = staleEntityKeys.length === 0
       ? 0
@@ -541,7 +537,6 @@ export async function persistBootstrapDiscoveryRun(
     // Same source-scoping as entities above — only the source that owns
     // a relationship key gets to mark it stale.
     const staleRelationshipKeys = [...existingRelationshipKeys]
-      .filter(isOwnedBySource)
       .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
     const staleRelationships = staleRelationshipKeys.length === 0
       ? 0
