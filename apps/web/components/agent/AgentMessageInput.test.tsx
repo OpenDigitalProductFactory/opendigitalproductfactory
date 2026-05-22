@@ -256,4 +256,21 @@ describe("AgentMessageInput — optional question packet context", () => {
       },
     });
   });
+
+  it("keeps the context composer scrollable and wrappable for narrow panels", () => {
+    render(<AgentMessageInput {...defaultProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add context/i }));
+
+    const messageBox = screen.getByPlaceholderText(/ask your co-worker/i);
+    const contextButton = screen.getByRole("button", { name: /hide context/i });
+    const composerRow = contextButton.closest("div");
+    const composerRoot = composerRow?.parentElement;
+
+    expect(composerRoot?.style.minHeight).toBe("0px");
+    expect(composerRoot?.style.overflowY).toBe("auto");
+    expect(composerRow?.style.flexWrap).toBe("wrap");
+    expect(messageBox.style.flex).toBe("1 1 180px");
+    expect(messageBox.style.minWidth).toBe("0px");
+  });
 });
