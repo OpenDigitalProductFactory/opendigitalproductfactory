@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   advanceBuildPhase,
@@ -69,6 +69,48 @@ export function BuildStudioWorkflowActionCard({
     action.kind === "advance-phase" && action.targetPhase === "build"
       ? build.decisionInteraction ?? null
       : null;
+
+  const [voiceOutput, setVoiceOutput] = useState<{ audioStorageKey: string; durationMs: number } | null>(null);
+
+  // Poll for stored voice output when a decision interaction is present.
+  // DecisionInteractionGateView only carries profileId, not the full profile —
+  // skip the voiceEnabled guard here and let the gate panel handle visibility.
+  useEffect(() => {
+    const interactionId = decisionInteraction?.interactionId;
+    if (!interactionId) {
+      setVoiceOutput(null);
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 4;
+    const POLL_INTERVAL_MS = 2000;
+
+    async function poll() {
+      if (cancelled || attempts >= MAX_ATTEMPTS) return;
+      attempts++;
+      try {
+        const res = await fetch(`/api/voice/audio/status?interactionId=${encodeURIComponent(interactionId!)}`)
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            setVoiceOutput(data as { audioStorageKey: string; durationMs: number });
+            return; // stop polling once found
+          }
+        }
+      } catch {
+        // Non-fatal — voice output may not exist yet
+      }
+      if (!cancelled && attempts < MAX_ATTEMPTS) {
+        setTimeout(poll, POLL_INTERVAL_MS);
+      }
+    }
+
+    poll();
+    return () => { cancelled = true; };
+  }, [decisionInteraction?.interactionId]);
   const primaryLabel = useMemo(() => {
     if (action.primaryLabel == null) {
       return null;
@@ -278,6 +320,7 @@ export function BuildStudioWorkflowActionCard({
         <DecisionPerspectiveGatePanel
           interaction={decisionInteraction}
           onCapture={handleDecisionCapture}
+          voiceOutput={voiceOutput}
         />
 
         <div className="flex flex-wrap items-center gap-2">

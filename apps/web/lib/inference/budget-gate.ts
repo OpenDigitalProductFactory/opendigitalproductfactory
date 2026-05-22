@@ -153,7 +153,7 @@ function getAgentDailyLimitFromRegistry(agentId: string): number {
   if (!_registryCache) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const registry = require("@dpf/db/data/agent_registry.json") as {
+      const registry = require(/* turbopackIgnore: true */ "@dpf/db/data/agent_registry.json") as {
         agents?: Array<{
           agent_name?: string;
           config_profile?: { token_budget?: { daily_limit?: number } };
