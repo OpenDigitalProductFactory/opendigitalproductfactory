@@ -12785,7 +12785,11 @@ export async function executeTool(
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return { success: false, error: msg, message: `start_deliberation failed: ${msg}` };
+        // CodeQL #52 (js/tainted-format-string): the error message ended up
+        // being used as a format string downstream. Keep the diagnostic in
+        // `error:` (raw value) and use a constant `message:` so downstream
+        // log/format consumers see no user-controlled format specifiers.
+        return { success: false, error: msg, message: "start_deliberation failed" };
       }
     }
 

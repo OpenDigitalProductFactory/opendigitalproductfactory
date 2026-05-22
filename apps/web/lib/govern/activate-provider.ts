@@ -129,7 +129,11 @@ export async function activateProvider(
       }
     }
   } catch (err) {
-    console.warn(`[activateProvider] MCP link activation failed for ${providerId}:`, err);
+    // CodeQL #43 (js/tainted-format-string): providerId came from a user-
+    // facing source; passing it inside the format-string template lets it
+    // act as a format directive (%s, %j etc). Use the format-arg form so
+    // console treats it as a value.
+    console.warn("[activateProvider] MCP link activation failed for %s:", providerId, err);
   }
 
   // 4. Activate sibling provider (codex↔chatgpt bidirectional sync)
@@ -137,7 +141,8 @@ export async function activateProvider(
     try {
       await activateLinkedSibling(providerId, opts);
     } catch (err) {
-      console.warn(`[activateProvider] Sibling activation failed for ${providerId}:`, err);
+      // CodeQL #44 — see #43 comment above.
+      console.warn("[activateProvider] Sibling activation failed for %s:", providerId, err);
     }
   }
 
@@ -153,14 +158,21 @@ export async function activateProvider(
       profiled = result.profiled;
       if (result.error) {
         warning = result.error;
+        // CodeQL #45 — format-arg form per #43 comment.
         console.warn(
-          `[activateProvider] Discovery warning for ${providerId} (trigger=${opts.trigger}): ${result.error}`,
+          "[activateProvider] Discovery warning for %s (trigger=%s): %s",
+          providerId,
+          opts.trigger,
+          result.error,
         );
       }
     } catch (err) {
       warning = err instanceof Error ? err.message : String(err);
+      // CodeQL #46 — format-arg form per #43 comment.
       console.warn(
-        `[activateProvider] Discovery failed for ${providerId} (trigger=${opts.trigger}):`,
+        "[activateProvider] Discovery failed for %s (trigger=%s):",
+        providerId,
+        opts.trigger,
         err,
       );
     }
@@ -182,7 +194,8 @@ export async function activateProvider(
       },
     });
   } catch (err) {
-    console.warn(`[activateProvider] Model restoration failed for ${providerId}:`, err);
+    // CodeQL — last activate-provider alert; format-arg form per #43 comment.
+    console.warn("[activateProvider] Model restoration failed for %s:", providerId, err);
   }
 
   return { providerId, status: "active", clearance, discovered, profiled, warning };
