@@ -4,6 +4,8 @@ const { mockAuth, mockPrisma, mockIssueBootstrapToken, mockRevalidatePath } = vi
   mockAuth: vi.fn(),
   mockPrisma: {
     principalAlias: { findFirst: vi.fn() },
+    customerAccount: { findUnique: vi.fn() },
+    customerSite: { findFirst: vi.fn() },
     edgeNode: { findUnique: vi.fn(), update: vi.fn() },
   },
   mockIssueBootstrapToken: vi.fn(),
@@ -156,6 +158,12 @@ describe("issueEdgeBootstrapTokenAction", () => {
   });
 
   it("forwards customer/site targets to the bootstrap issuer", async () => {
+    mockPrisma.customerAccount.findUnique.mockResolvedValue({
+      id: "cust_acme",
+    });
+    mockPrisma.customerSite.findFirst.mockResolvedValue({
+      id: "site_hq",
+    });
     mockIssueBootstrapToken.mockResolvedValue({
       tokenId: "boot_scoped",
       plaintext: "dpfboot_scoped",
@@ -175,6 +183,40 @@ describe("issueEdgeBootstrapTokenAction", () => {
         targetCustomerSiteId: "site_hq",
       }),
     );
+  });
+
+  it("rejects an unknown customer account target before issuing a token", async () => {
+    mockPrisma.customerAccount.findUnique.mockResolvedValue(null);
+
+    const result = await issueEdgeBootstrapTokenAction({
+      targetCustomerAccountId: "cust_missing",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("invalid_input");
+      expect(result.message).toContain("Customer account");
+    }
+    expect(mockIssueBootstrapToken).not.toHaveBeenCalled();
+  });
+
+  it("rejects a customer site target that does not belong to the selected account", async () => {
+    mockPrisma.customerAccount.findUnique.mockResolvedValue({
+      id: "cust_acme",
+    });
+    mockPrisma.customerSite.findFirst.mockResolvedValue(null);
+
+    const result = await issueEdgeBootstrapTokenAction({
+      targetCustomerAccountId: "cust_acme",
+      targetCustomerSiteId: "site_other",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("invalid_input");
+      expect(result.message).toContain("Customer site");
+    }
+    expect(mockIssueBootstrapToken).not.toHaveBeenCalled();
   });
 
   it("revalidates the admin path on success so the table re-renders", async () => {

@@ -111,7 +111,9 @@ export async function issueEdgeBootstrapTokenAction(input: {
       message: "ttlMs must be a positive number",
     };
   }
-  if (input.targetCustomerSiteId && !input.targetCustomerAccountId) {
+  const targetCustomerAccountId = input.targetCustomerAccountId?.trim() || null;
+  const targetCustomerSiteId = input.targetCustomerSiteId?.trim() || null;
+  if (targetCustomerSiteId && !targetCustomerAccountId) {
     return {
       ok: false,
       error: "invalid_input",
@@ -121,15 +123,38 @@ export async function issueEdgeBootstrapTokenAction(input: {
   // Spec caps bootstrap TTL at 24h; the lib enforces it server-side.
 
   try {
+    if (targetCustomerAccountId) {
+      const account = await prisma.customerAccount.findUnique({
+        where: { id: targetCustomerAccountId },
+        select: { id: true },
+      });
+      if (!account) {
+        return {
+          ok: false,
+          error: "invalid_input",
+          message: "Customer account target not found",
+        };
+      }
+    }
+    if (targetCustomerAccountId && targetCustomerSiteId) {
+      const site = await prisma.customerSite.findFirst({
+        where: { id: targetCustomerSiteId, accountId: targetCustomerAccountId },
+        select: { id: true },
+      });
+      if (!site) {
+        return {
+          ok: false,
+          error: "invalid_input",
+          message: "Customer site target must belong to the selected customer account",
+        };
+      }
+    }
+
     const result = await issueBootstrapToken({
       issuedByPrincipalId: gate.principalId,
       ...(ttlMs !== undefined ? { ttlMs } : {}),
-      ...(input.targetCustomerAccountId
-        ? { targetCustomerAccountId: input.targetCustomerAccountId }
-        : {}),
-      ...(input.targetCustomerSiteId
-        ? { targetCustomerSiteId: input.targetCustomerSiteId }
-        : {}),
+      ...(targetCustomerAccountId ? { targetCustomerAccountId } : {}),
+      ...(targetCustomerSiteId ? { targetCustomerSiteId } : {}),
     });
     revalidatePath(ADMIN_PATH);
     return {
