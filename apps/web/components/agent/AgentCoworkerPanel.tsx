@@ -15,6 +15,7 @@ import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
+import type { QuestionPacket } from "@/lib/tak/question-packet";
 
 /** Renders setup action buttons only when the setup overlay is active (data attribute on <html>) */
 function SetupActionButtonsWrapper({ isPending }: { isPending: boolean }) {
@@ -74,6 +75,11 @@ type Props = {
    *  Used during setup so all steps route to the onboarding-coo agent. */
   routeContextOverride?: string;
   isDocked?: boolean;
+};
+
+type MessageSendOptions = {
+  externalAccessEnabled?: boolean;
+  questionPacket?: QuestionPacket | null;
 };
 
 function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
@@ -468,7 +474,7 @@ export function AgentCoworkerPanel({
     content: string,
     optimisticMessage = createOptimisticUserMessage(content, effectiveRoute),
     appendOptimistic = true,
-    runtimeOverride?: { externalAccessEnabled?: boolean },
+    sendOptions?: MessageSendOptions,
   ) {
     if (!threadId) return;
     const formAssistContext = activeFormAssistRef.current
@@ -488,7 +494,7 @@ export function AgentCoworkerPanel({
       devMode,
       useUnifiedCoworker,
       coworkerMode,
-      externalAccessEnabled: runtimeOverride?.externalAccessEnabled ?? externalAccessEnabled,
+      externalAccessEnabled: sendOptions?.externalAccessEnabled ?? externalAccessEnabled,
     });
 
     // EP-ASYNC-COWORKER-001: Non-blocking fetch to API route.
@@ -507,6 +513,7 @@ export function AgentCoworkerPanel({
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(activeBuildId ? { buildId: activeBuildId } : {}),
         ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
+        ...(sendOptions?.questionPacket ? { questionPacket: sendOptions.questionPacket } : {}),
       }),
     }).then(async (res) => {
       if (!res.ok) {
@@ -546,8 +553,8 @@ export function AgentCoworkerPanel({
     });
   }
 
-  function handleSend(content: string) {
-    submitMessage(content);
+  function handleSend(content: string, options?: Pick<MessageSendOptions, "questionPacket">) {
+    submitMessage(content, undefined, true, options);
   }
 
   /**
