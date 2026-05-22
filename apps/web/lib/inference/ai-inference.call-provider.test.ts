@@ -52,6 +52,7 @@ vi.mock("../routing/transcription-adapter", () => ({}));
 vi.mock("../routing/async-adapter", () => ({}));
 
 import { callProvider } from "./ai-inference";
+import { _setAdapterTelemetryWriteOverrideForTests } from "../routing/adapter-telemetry-writer";
 
 describe("callProvider", () => {
   beforeEach(() => {
@@ -117,6 +118,49 @@ describe("callProvider", () => {
             "Content-Type": "application/json",
           }),
         }),
+      }),
+    );
+  });
+
+  it("forwards attribution.agentMessageId into AdapterRunTelemetry on the success path", async () => {
+    // Regression for PR #964 follow-up: the assistant-turn badge query joins
+    // AdapterRunTelemetry → AgentMessage on agentMessageId. callProvider is
+    // the only site that writes telemetry rows for the coworker turn, so the
+    // pre-allocated id has to make it through `attribution` into both writer
+    // call sites (success + error).
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "anthropic",
+      authMethod: "oauth2_authorization_code",
+      authHeader: "Authorization",
+      baseUrl: "https://api.anthropic.com",
+      endpoint: null,
+    });
+    mockGetProviderBearerToken.mockResolvedValue({ token: "tok-1" });
+
+    const writeSpy = vi.fn().mockResolvedValue(undefined);
+    _setAdapterTelemetryWriteOverrideForTests(writeSpy);
+    try {
+      await callProvider(
+        "anthropic",
+        "claude-sonnet-4-6",
+        [{ role: "user", content: "hi" }],
+        "You are helpful.",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { agentId: "agt_1", threadId: "thr_1", agentMessageId: "msg_pending_42" },
+      );
+    } finally {
+      // wait a microtask so the void-write resolves before assertions
+      await new Promise((r) => setImmediate(r));
+      _setAdapterTelemetryWriteOverrideForTests(null);
+    }
+
+    expect(writeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "success",
+        agentMessageId: "msg_pending_42",
       }),
     );
   });

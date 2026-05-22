@@ -192,6 +192,13 @@ export async function executeAutonomousAgenticLoop(input: {
    * can be attributed to the active skill.
    */
   activeSkillId?: string | null;
+  /**
+   * Pre-allocated AgentMessage id for the assistant turn this loop is
+   * producing. Threaded through to AdapterRunTelemetry so badge / cost-rollup
+   * queries can join telemetry rows to the resulting AgentMessage row even
+   * though the row itself is persisted by the caller after the loop returns.
+   */
+  agentMessageId?: string | null;
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -217,6 +224,7 @@ export async function executeAutonomousAgenticLoop(input: {
     buildPhase: input.buildPhase,
     featureBuildId: input.featureBuildId,
     activeSkillId: input.activeSkillId ?? null,
+    agentMessageId: input.agentMessageId ?? null,
     ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
     onProgress: input.onProgress,
   });
