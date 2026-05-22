@@ -59,7 +59,10 @@ type DiscoverySyncTx = {
   };
   inventoryEntity: {
     findMany(args: {
-      where?: { scopeKey?: string };
+      where?: {
+        scopeKey?: string;
+        lastConfirmedRun?: { sourceSlug?: string };
+      };
       select: { entityKey: true };
     }): Promise<Array<{ entityKey: string }>>;
     upsert(args: {
@@ -88,7 +91,10 @@ type DiscoverySyncTx = {
   };
   inventoryRelationship: {
     findMany(args: {
-      where?: { scopeKey?: string };
+      where?: {
+        scopeKey?: string;
+        lastConfirmedRun?: { sourceSlug?: string };
+      };
       select: { relationshipKey: true };
     }): Promise<Array<{ relationshipKey: string }>>;
     upsert(args: {
@@ -209,13 +215,23 @@ export async function persistBootstrapDiscoveryRun(
     }
     const runScope = scopeFieldsFromRunMeta(runMeta);
     const scopeWhere = { scopeKey: runScope.scopeKey };
+    // Source attribution via lastConfirmedRun.sourceSlug: a sweep from one
+    // source only sees the entities/relationships it has previously
+    // confirmed. A unifi sweep with no dpf_bootstrap-attributed rows in
+    // its view cannot mark dpf_bootstrap rows stale. Composes with the
+    // scopeKey filter so cross-customer isolation still holds.
+    const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
     const existingEntityKeys = new Set(
-      (await tx.inventoryEntity.findMany({ where: scopeWhere, select: { entityKey: true } }))
-        .map((entity) => entity.entityKey),
+      (await tx.inventoryEntity.findMany({
+        where: { ...scopeWhere, ...sourceFilter },
+        select: { entityKey: true },
+      })).map((entity) => entity.entityKey),
     );
     const existingRelationshipKeys = new Set(
-      (await tx.inventoryRelationship.findMany({ where: scopeWhere, select: { relationshipKey: true } }))
-        .map((relationship) => relationship.relationshipKey),
+      (await tx.inventoryRelationship.findMany({
+        where: { ...scopeWhere, ...sourceFilter },
+        select: { relationshipKey: true },
+      })).map((relationship) => relationship.relationshipKey),
     );
     const existingIssueKeys = new Set(
       (await tx.portfolioQualityIssue.findMany({ select: { issueKey: true } }))
@@ -432,17 +448,12 @@ export async function persistBootstrapDiscoveryRun(
     const currentEntityKeys = new Set(
       normalized.inventoryEntities.map((entity) => entity.entityKey),
     );
-    // Stale detection: any entity in the current scope that wasn't observed
-    // in this run is marked stale. Scope-where (above) ensures cross-customer
-    // isolation. The key-prefix-based source filter that PR #1009 added here
-    // was a no-op in practice — entity keys are prefixed by entityType, not
-    // sourceSlug, so the filter excluded everything and stale detection never
-    // fired. Removed; the relationship-staleness block below keeps the
-    // source-prefix filter because *relationship* keys DO start with the
-    // sourceSlug (e.g. `dpf_bootstrap:MEMBER_OF:...`, `unifi:CONNECTS_TO:...`),
-    // which is where the original 196-stale-MEMBER_OF bug actually lived.
-    // Follow-up: proper entity source attribution via column lookup on
-    // `lastConfirmedRunId.sourceSlug` instead of key parsing.
+    // Stale detection: any entity previously confirmed by THIS source
+    // (via lastConfirmedRun.sourceSlug above) that wasn't observed in
+    // the current run is marked stale. Scope filter handles cross-customer
+    // isolation; source filter handles cross-source isolation within a
+    // scope. A unifi sweep cannot mark dpf_bootstrap or edge-node rows
+    // stale because their lastConfirmedRun.sourceSlug differs.
     const staleEntityKeys = [...existingEntityKeys]
       .filter((entityKey) => !currentEntityKeys.has(entityKey));
     const staleEntities = staleEntityKeys.length === 0
@@ -538,19 +549,10 @@ export async function persistBootstrapDiscoveryRun(
     const currentRelationshipKeys = new Set(
       normalized.inventoryRelationships.map((relationship) => relationship.relationshipKey),
     );
-    // Source-scoped staleness for relationships: only the source that emits
-    // a relationship key gets to mark it stale. Verified against the live
-    // DB: every relationshipKey is prefixed by sourceSlug + ":" (e.g.
-    // `dpf_bootstrap:MEMBER_OF:...`, `unifi:CONNECTS_TO:...`,
-    // `edge_node:MEMBER_OF:...`). Without this filter, a unifi-only sweep
-    // marks dpf_bootstrap relationships stale and vice versa — the root
-    // cause of the 196 stale MEMBER_OF rows in the operator audit. The
-    // entity-staleness block above can't use the same trick because entity
-    // keys aren't source-prefixed.
-    const sourcePrefix = `${runMeta.sourceSlug}:`;
-    const isOwnedBySource = (key: string) => key.startsWith(sourcePrefix);
+    // Same column-based source attribution as entities above — the
+    // sweep only sees relationships it previously confirmed, so it can
+    // only mark its own rows stale.
     const staleRelationshipKeys = [...existingRelationshipKeys]
-      .filter(isOwnedBySource)
       .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
     const staleRelationships = staleRelationshipKeys.length === 0
       ? 0
