@@ -163,7 +163,8 @@ function createInsecureFetch(): UnifiDeps["fetchFn"] {
 export function buildDepsFromConnection(conn: UnifiConnectionInput): UnifiDeps {
   return {
     fetchFn: createInsecureFetch(),
-    unifiUrl: conn.endpointUrl.replace(/\/+$/, ""),
+    // CodeQL #25 (js/polynomial-redos): bound the trailing-slash run.
+    unifiUrl: conn.endpointUrl.replace(/\/{1,256}$/, ""),
     apiKey: conn.apiKey,
     site: conn.configuration?.site ?? "default",
     discoverClients: conn.configuration?.discoverClients ?? false,
