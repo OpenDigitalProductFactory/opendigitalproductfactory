@@ -104,7 +104,12 @@ export async function addICalSubscription(input: {
   // Upsert events
   let imported = 0;
   for (const event of events) {
-    const eventId = `ical-${crypto.createHash("md5").update(event.uid).digest("hex").slice(0, 12)}`;
+    // CodeQL alert #32 (js/weak-cryptographic-algorithm): MD5 was used
+    // here to derive a stable 12-char database key from event.uid. The
+    // use is NOT cryptographic (no secrecy/integrity requirement — just
+    // a deterministic hash for upsert key derivation). SHA-256 has the
+    // same deterministic property and closes the alert.
+    const eventId = `ical-${crypto.createHash("sha256").update(event.uid).digest("hex").slice(0, 12)}`;
 
     await prisma.calendarEvent.upsert({
       where: { eventId },
