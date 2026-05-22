@@ -8,6 +8,10 @@ name: Schema Regression Guard
 # hand-edited branches, manual cherry-picks, or any path that bypasses
 # deploy_feature.
 
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths:

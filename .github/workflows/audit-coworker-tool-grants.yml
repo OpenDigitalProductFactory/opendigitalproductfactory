@@ -1,5 +1,10 @@
 name: Coworker Tool-Grant Audit
 
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only audit; needs no write surface.
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [main]
