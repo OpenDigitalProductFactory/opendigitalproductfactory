@@ -113,7 +113,10 @@ export const getToolExecutions = cache(async (limit = 200): Promise<ToolExecutio
 
 /** Journal + ledger executions only — excludes metrics_only probe rows.
  *  Use for the Capability Journal tab. */
-export const getJournalToolExecutions = cache(async (limit = 500): Promise<ToolExecutionRow[]> => {
+export const getJournalToolExecutions = cache(async (
+  limit = 500,
+  includeExecutionId: string | null = null,
+): Promise<ToolExecutionRow[]> => {
   const rows = await prisma.toolExecution.findMany({
     select: TOOL_EXECUTION_SELECT,
     where: {
@@ -126,7 +129,15 @@ export const getJournalToolExecutions = cache(async (limit = 500): Promise<ToolE
     orderBy: { createdAt: "desc" },
     take: limit,
   });
-  return hydrateAgentIdentityRefs(rows.map(mapRow));
+
+  const focusedRow = includeExecutionId && !rows.some((row) => row.id === includeExecutionId)
+    ? await prisma.toolExecution.findUnique({
+        where: { id: includeExecutionId },
+        select: TOOL_EXECUTION_SELECT,
+      })
+    : null;
+
+  return hydrateAgentIdentityRefs((focusedRow ? [focusedRow, ...rows] : rows).map(mapRow));
 });
 
 /** Ledger-only executions — side-effecting writes. */

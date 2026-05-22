@@ -2,9 +2,23 @@
 import { getJournalToolExecutions, getToolExecutionStats } from "@/lib/tool-execution-data";
 import { CapabilityJournalClient } from "@/components/platform/CapabilityJournalClient";
 
-export default async function CapabilityJournalPage() {
+type CapabilityJournalPageProps = {
+  searchParams?: Promise<{
+    executionId?: string | string[];
+    receiptId?: string | string[];
+  }>;
+};
+
+function firstParam(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+export default async function CapabilityJournalPage({ searchParams }: CapabilityJournalPageProps) {
+  const query = (await searchParams) ?? {};
+  const initialFocusExecutionId = firstParam(query.executionId);
   const [executions, stats] = await Promise.all([
-    getJournalToolExecutions(),
+    getJournalToolExecutions(500, initialFocusExecutionId),
     getToolExecutionStats(),
   ]);
 
@@ -15,11 +29,11 @@ export default async function CapabilityJournalPage() {
   const uniqueCapabilities = new Set(executions.map((e) => e.capabilityId).filter(Boolean)).size;
 
   const statCards = [
-    { label: "Executions", value: journalCount, accent: "#7c8cf8" },
-    { label: "Successful",  value: successCount,  accent: "#4ade80" },
-    { label: "Failed",      value: failCount,      accent: "#ef4444" },
-    { label: "Agents",      value: uniqueAgents,   accent: "#38bdf8" },
-    { label: "Capabilities",value: uniqueCapabilities, accent: "#fbbf24" },
+    { label: "Executions", value: journalCount, accent: "var(--dpf-accent)" },
+    { label: "Successful", value: successCount, accent: "var(--dpf-success)" },
+    { label: "Failed", value: failCount, accent: "var(--dpf-error)" },
+    { label: "Agents", value: uniqueAgents, accent: "var(--dpf-info)" },
+    { label: "Capabilities", value: uniqueCapabilities, accent: "var(--dpf-warning)" },
   ];
 
   return (
@@ -62,7 +76,10 @@ export default async function CapabilityJournalPage() {
         </div>
       )}
 
-      <CapabilityJournalClient executions={executions} />
+      <CapabilityJournalClient
+        executions={executions}
+        initialFocusExecutionId={initialFocusExecutionId}
+      />
 
       {stats.total > 0 && (
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 12 }}>

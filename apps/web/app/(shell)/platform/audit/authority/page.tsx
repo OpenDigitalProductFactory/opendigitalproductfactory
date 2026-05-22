@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/platform/audit/authority/page.tsx
 import { getAgentGrantSummaries } from "@/lib/agent-grants";
 import { AuthorityMatrixPanel, type BmrRoleRow } from "@/components/platform/AuthorityMatrixPanel";
+import { AgentCardSupervisorPanel } from "@/components/platform/AgentCardSupervisorPanel";
 import { DelegationChainPanel, type BmrNode } from "@/components/platform/DelegationChainPanel";
 import { EffectivePermissionsPanel, type ProductBmr } from "@/components/platform/EffectivePermissionsPanel";
 import { IdentityProjectionSummaryGrid } from "@/components/platform/identity/IdentityProjectionSummaryGrid";
@@ -9,6 +10,7 @@ import {
   listAgentIdentitySnapshots,
   summarizeAgentIdentitySnapshots,
 } from "@/lib/identity/agent-identity-snapshot";
+import { listInternalAgentCards } from "@/lib/tak/agent-card-service";
 // mcp-tools is imported dynamically inside the component to avoid NFT whole-project tracing
 import { PERMISSIONS } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -55,9 +57,10 @@ export default async function AuditAuthorityPage() {
     }),
     listAuthorityBindingRecords({ statuses: ["active"] }),
   ]);
-  const [agentSummaries, agentSnapshots] = await Promise.all([
+  const [agentSummaries, agentSnapshots, agentCards] = await Promise.all([
     getAgentGrantSummaries(),
     listAgentIdentitySnapshots(),
+    listInternalAgentCards({ routeContext: "/platform/audit/authority" }),
   ]);
   const identitySummary = summarizeAgentIdentitySnapshots(agentSnapshots);
 
@@ -149,6 +152,10 @@ export default async function AuditAuthorityPage() {
           </p>
         </div>
         <IdentityProjectionSummaryGrid summary={identitySummary} />
+      </div>
+
+      <div style={{ marginBottom: 32 }}>
+        <AgentCardSupervisorPanel cards={agentCards} />
       </div>
 
       {/* Section 1: Authority Matrix */}
