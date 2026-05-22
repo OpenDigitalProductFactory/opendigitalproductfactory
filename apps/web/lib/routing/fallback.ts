@@ -112,8 +112,29 @@ export async function callWithFallbackChain(
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
 
+  // Small local fallback models (Docker Model Runner / 7-13B class) reliably
+  // handle ~10-15 tools before tool-selection accuracy collapses. When the
+  // caller hands us a large tool surface (Build Studio threads expose 26-36
+  // phase-filtered tools), routing local as a fallback turns the agentic loop
+  // into a 200-iteration spin. Skip local fallbacks above the threshold; the
+  // selected primary endpoint is still tried regardless. See FB-71FB3A53
+  // thread, 2026-05-22.
+  const LOCAL_FALLBACK_MAX_TOOLS = 15;
+  const skipLocalFallback = (tools?.length ?? 0) > LOCAL_FALLBACK_MAX_TOOLS;
+
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i]!;
+
+    if (skipLocalFallback && i > 0 && entry.providerId === "local") {
+      console.log(
+        `[callWithFallbackChain] Skipping local fallback (${tools?.length ?? 0} tools > ${LOCAL_FALLBACK_MAX_TOOLS} threshold for small local models)`,
+      );
+      attempts.push({
+        endpointId: entry.providerId,
+        error: `skipped local fallback: ${tools?.length ?? 0} tools exceeds threshold for small local models`,
+      });
+      continue;
+    }
 
     // Backoff between fallback attempts to avoid cascading rate limits.
     // First attempt (i=0) runs immediately; subsequent attempts wait with

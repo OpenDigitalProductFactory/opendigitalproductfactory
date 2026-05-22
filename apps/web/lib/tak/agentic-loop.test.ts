@@ -463,6 +463,33 @@ describe("runAgenticLoop", () => {
     expect(result.content).toMatch(/AI Workforce/);
   });
 
+  it("returns the same local-model diagnostic on Build Studio routes (FB-71FB3A53)", async () => {
+    // Regression guard: the prior carve-out at agentic-loop.ts:1308 excluded
+    // /build routes from the local-model early-exit guard, which led to
+    // 200-iteration spins when the preferred provider fell back to local on
+    // a Build Studio thread. Dropping the carve-out means /build routes get
+    // the same diagnostic exit any other route would.
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "I can check that for you.",
+      providerId: "local",
+      modelId: "docker.io/ai/gemma4:latest",
+      toolCalls: [],
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      agentId: "build-specialist",
+    });
+
+    expect(mockRoute).toHaveBeenCalledTimes(1);
+    expect(result.providerId).toBe("local");
+    expect(result.content.toLowerCase()).toContain("couldn't complete");
+    expect(result.content).toMatch(/AI Workforce/);
+  });
+
   it("does not surface raw tool_use JSON when a non-build tool loop hits the runtime limit", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
