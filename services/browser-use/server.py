@@ -641,11 +641,16 @@ async def mcp_endpoint(request: Request):
                 "result": {"content": [{"type": "text", "text": json.dumps(result)}]},
             })
         except Exception as e:
+            # CodeQL #18 (py/stack-trace-exposure): str(e) can leak stack
+            # trace context to clients. logger.exception() captures the
+            # full trace server-side for diagnostics; the client gets a
+            # generic message instead.
             logger.exception("Tool %s failed", tool_name)
+            _ = e  # consumed by logger.exception
             return JSONResponse(content={
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32000, "message": str(e)},
+                "error": {"code": -32000, "message": "Tool invocation failed (see server logs)"},
             })
 
     # ── initialize ──
