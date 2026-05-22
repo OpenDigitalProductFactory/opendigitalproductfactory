@@ -314,6 +314,51 @@ Required rules:
 6. Cross-customer views are allowed only in aggregate MSP operations views that never mix actionable row-level commands without a selected customer scope.
 7. Customer portal access, if introduced later, should use Principal convergence and authorization policy, not a parallel customer identity table.
 
+### 8.1 Customer Topology Isolation
+
+Network topology is the strongest proof that customer scope cannot be a presentation-layer filter. Many small-business customers will use the same private address ranges (`192.168.1.0/24`, `10.0.0.0/24`, default gateway `192.168.1.1`) and may even use the same hardware vendors, hostnames, SSIDs, or device model identifiers. Those values are only natural identifiers **inside one customer estate scope**.
+
+Required topology invariants:
+
+1. A customer-estate topology view must start from a `TopologyScopeContext`, not from a global graph plus client-side filters.
+2. `TopologyScopeContext` has three legal modes:
+   - `organization-internal`: the MSP's own DPF/internal estate.
+   - `customer-account`: one `CustomerAccount`, all active sites unless further narrowed.
+   - `customer-site`: one `CustomerSite` under one `CustomerAccount`.
+3. Customer topology queries must require `customerAccountId`. `customerSiteId` is optional only when the operator intentionally wants all sites for one customer.
+4. IP address, MAC address, hostname, LLDP system name, controller device id, SSID, serial number, and adapter-specific observed keys must never be treated as globally unique across customers.
+5. Persisted inventory identity must include the topology scope. The raw observed key may remain `arp:192.168.1.1`, but the persisted `InventoryEntity.entityKey` for a customer estate must be scoped, for example:
+
+   ```text
+   customer:<customerAccountId>:site:<customerSiteId>:host:arp:192.168.1.1
+   customer:<otherCustomerAccountId>:site:<otherCustomerSiteId>:host:arp:192.168.1.1
+   organization:internal:host:arp:192.168.1.1
+   ```
+
+6. `InventoryRelationship.relationshipKey` must be derived from scoped endpoint keys plus relationship type. A relationship whose endpoints resolve to different topology scopes is invalid unless a future, explicitly reviewed cross-scope relationship type is introduced.
+7. Stale detection must be scope-local. A discovery run for Customer A must only compare against Customer A's previous inventory keys; it must not mark Customer B's devices or the MSP's internal devices stale.
+8. Neo4j topology projection is a read model. It must carry `scopeKey`, `customerAccountId`, and `customerSiteId` properties and every graph query must filter on those properties. Postgres remains authoritative.
+9. Cross-customer MSP dashboards may show aggregate counts, health, and alerts. They must not render row-level device graphs or command buttons until a customer scope is selected.
+10. The UI must make the active scope visible in the topology workbench header: customer name, site name when selected, edge node source, and last discovery run. Internal MSP topology must be an explicit mode, not the default inside customer work.
+
+Worked example:
+
+```text
+Customer A, Site Austin:
+  observed gateway: arp:192.168.1.1
+  persisted entityKey: customer:cust_a:site:site_austin:host:arp:192.168.1.1
+
+Customer B, Site Round Rock:
+  observed gateway: arp:192.168.1.1
+  persisted entityKey: customer:cust_b:site:site_round_rock:host:arp:192.168.1.1
+
+MSP internal office:
+  observed gateway: arp:192.168.1.1
+  persisted entityKey: organization:internal:host:arp:192.168.1.1
+```
+
+Those are three different devices. Any implementation that collapses them because the IP address matches is a customer-data isolation defect.
+
 ## 9. Capability Applicability Matrix (worked examples)
 
 **This table is a rendered view of the rules engine output, not the source of truth.** It exists to make the design legible and to serve as fixtures for the applicability tests. The actual applicability is derived from the axes + portfolio decomposition in §6.5/§6.6 — adding a new archetype must not require editing this table; it must come out of the rules.
@@ -464,17 +509,28 @@ First slice:
 - derive UI/workflow behavior from normalized runtime profile via the rules engine in §6.5.
 - no migration required unless persisted profile examples need backfill.
 
-Second slice:
+Current customer-scope foundation already landed after this spec was first drafted:
 
-- add customer/site scope policy fields for Edge Node and discovery connections
-- prefer additive nullable fields first, then enforce with code-level guards and tests
-- candidate additions:
-  - `EdgeNode.customerAccountId`
-  - `EdgeNode.customerSiteId`
-  - `EdgeNode.scopePolicy Json`
-  - `DiscoveryConnection.customerAccountId`
-  - `DiscoveryConnection.customerSiteId`
-  - `DiscoveryConnection.targetEdgeNodeId`
+- `EdgeNode.customerAccountId`
+- `EdgeNode.customerSiteId`
+- `EdgeNode.scopePolicy Json`
+- `BootstrapToken.targetCustomerAccountId`
+- `BootstrapToken.targetCustomerSiteId`
+- `BootstrapToken.scopePolicy Json`
+- `DiscoveryConnection.customerAccountId`
+- `DiscoveryConnection.customerSiteId`
+- `DiscoveryConnection.targetEdgeNodeId`
+- `DiscoveryRun.customerAccountId`
+- `DiscoveryRun.customerSiteId`
+
+Next topology-isolation slice:
+
+- add `TopologyScopeContext` helpers for organization/internal, customer-account, and customer-site modes.
+- add customer/site/scope metadata to `InventoryEntity` and `InventoryRelationship`.
+- derive `InventoryEntity.entityKey` and `InventoryRelationship.relationshipKey` from scope-qualified natural keys for customer-estate discovery.
+- make discovery stale detection scope-local.
+- filter Neo4j projection and graph server actions by `scopeKey` before data reaches `TopologyGraph`.
+- add duplicate private-IP tests proving Customer A, Customer B, and MSP internal devices remain distinct.
 
 Later slice:
 
@@ -492,6 +548,8 @@ The planning and implementation track is successful when:
 6. Customer-estate actions and queries have a reusable scope helper that consumes the normalized profile, not the raw archetype id.
 7. UI plans use customer-scoped navigation and DPF theme rules.
 8. No TeamLogic-only code path is introduced, and no `archetypeId === ...` conditional appears in feature code.
+9. Two customers with the same private subnet, gateway IP, hostnames, and adapter observed keys produce separate `InventoryEntity`, `InventoryRelationship`, Neo4j `InfraCI`, and topology graph records.
+10. A customer-scoped discovery run cannot mark another customer's devices, another customer's relationships, or the MSP internal estate stale.
 
 ## 16. Risks And Mitigations
 
