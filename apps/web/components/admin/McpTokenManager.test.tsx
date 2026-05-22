@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("@/lib/actions/mcp-tokens", () => ({
   bulkRevokeMyMcpTokens: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock("@/lib/actions/mcp-tokens", () => ({
   listMyMcpTokens: vi.fn(),
   revokeMyMcpToken: vi.fn(),
   rotateMyMcpToken: vi.fn(),
+  rotateMyMcpTokenWithEdit: vi.fn(),
   upgradeMyMcpTokenForCodingAgent: vi.fn(),
 }));
 
@@ -25,6 +26,7 @@ import {
   listMcpTokenTemplates,
   listMyMcpTokens,
   rotateMyMcpToken,
+  rotateMyMcpTokenWithEdit,
 } from "@/lib/actions/mcp-tokens";
 import { McpTokenManager } from "./McpTokenManager";
 
@@ -35,6 +37,7 @@ const templatesMock = listMcpTokenTemplates as unknown as ReturnType<typeof vi.f
 const templateIssueMock = issueMyTemplateMcpToken as unknown as ReturnType<typeof vi.fn>;
 const tokensMock = listMyMcpTokens as unknown as ReturnType<typeof vi.fn>;
 const rotateMock = rotateMyMcpToken as unknown as ReturnType<typeof vi.fn>;
+const rotateWithEditMock = rotateMyMcpTokenWithEdit as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -401,5 +404,94 @@ describe("McpTokenManager — idle hygiene", () => {
     expect(
       screen.queryByLabelText(/Select token Revoked token for bulk revoke/i),
     ).toBeNull();
+  });
+});
+
+describe("McpTokenManager — rotate with edit", () => {
+  it("opens the form pre-populated from the row and calls rotateMyMcpTokenWithEdit on submit", async () => {
+    rotateWithEditMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_rotated",
+      plaintext: "dpfmcp_ROT",
+      prefix: "dpfmcp_ROT1",
+      tokenSuffix: "ROT1",
+      expiresAt: null,
+      setupSnippets: {
+        claudeCode: "{}",
+        codex: "[mcp_servers.dpf]",
+        vscode: "{}",
+        syncCommand: "",
+        envPowerShell: "[System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'dpfmcp_ROT', 'User')",
+        runtimeRefreshPowerShell: "/api/mcp/token/refresh",
+      },
+    });
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Mark laptop")).toBeTruthy();
+
+    // The new affordance appears alongside the existing "Rotate token" button.
+    const rotateEditBtn = screen.getByRole("button", { name: /Rotate with edit/i });
+    fireEvent.click(rotateEditBtn);
+
+    // Dialog opens in rotate mode — header copy mentions atomic rotation.
+    expect(
+      await screen.findByRole("heading", { name: /Rotate token with edited grants/i }),
+    ).toBeTruthy();
+
+    // Name field is pre-populated from the row.
+    const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(nameInput.value).toBe("Mark laptop");
+
+    // Submit button reads "Rotate with edit" in this mode. The row button
+    // has the same label — scope to the dialog to pick the right one.
+    const dialog = screen.getByRole("dialog");
+    const submitBtn = within(dialog).getByRole("button", { name: /^Rotate with edit$/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(rotateWithEditMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tokenId: "tok_active",
+          name: "Mark laptop",
+          scope: "write",
+          scopes: ["backlog_read", "backlog_write"],
+          baseUrl: "http://localhost:3000",
+        }),
+      );
+    });
+  });
+
+  it("surfaces the partial revoke warning when the old token revoke fails", async () => {
+    rotateWithEditMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_rotated",
+      plaintext: "dpfmcp_ROT",
+      prefix: "dpfmcp_ROT1",
+      tokenSuffix: "ROT1",
+      expiresAt: null,
+      oldTokenRevokeError: "db_locked",
+      setupSnippets: {
+        claudeCode: "{}",
+        codex: "{}",
+        vscode: "{}",
+        syncCommand: "",
+        envPowerShell: "[System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'dpfmcp_ROT', 'User')",
+        runtimeRefreshPowerShell: "/api/mcp/token/refresh",
+      },
+    });
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText("Mark laptop")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Rotate with edit/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^Rotate with edit$/i }),
+    );
+
+    expect(
+      await screen.findByText(/New token issued, but old token revoke failed/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/db_locked/)).toBeTruthy();
   });
 });
