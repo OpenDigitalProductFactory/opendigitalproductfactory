@@ -10775,6 +10775,19 @@ export async function executeTool(
           error: "Missing filePath",
         };
       }
+      // CodeQL #62 (js/path-injection): filePath is MCP-supplied (user-
+      // controlled). Gate to the allowed source roots before fs is touched.
+      const { assertAllowedIngestPath } = await import("@/lib/wiki/ingest");
+      let safeFilePath: string;
+      try {
+        safeFilePath = assertAllowedIngestPath(filePath);
+      } catch (err) {
+        return {
+          success: false,
+          message: err instanceof Error ? err.message : "filePath rejected",
+          error: "path_not_allowed",
+        };
+      }
       const mode = typeof params["mode"] === "string" && params["mode"] === "commit" ? "commit" : "propose";
       const sourceKey = typeof params["sourceKey"] === "string" ? params["sourceKey"] : undefined;
       const sourceType = typeof params["sourceType"] === "string" ? params["sourceType"] : undefined;
@@ -10830,7 +10843,7 @@ export async function executeTool(
       // pipeline rejects unknown strings, so we pass through whatever the
       // caller gave us and let the source-layer surface the error.
       const sourceInput = {
-        filePath,
+        filePath: safeFilePath,
         ...(sourceKey ? { sourceKey } : {}),
         ...(sourceType
           ? {
