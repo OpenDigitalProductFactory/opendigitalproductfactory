@@ -48,7 +48,7 @@ describe("persistGeneratedBom", () => {
         upsert: vi.fn(async () => ({ id: "db-component-1", componentKey: "component-1" })),
       },
       bomDocument: {
-        create: vi.fn(async () => ({ id: "db-document-1", documentId: "bom_document-digest" })),
+        upsert: vi.fn(async () => ({ id: "db-document-1", documentId: "bom_document-digest" })),
       },
       bomComponentOccurrence: {
         createMany: vi.fn(async () => ({ count: 1 })),
@@ -66,8 +66,13 @@ describe("persistGeneratedBom", () => {
     expect(db.bomComponent.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { componentKey: "component-1" },
     }));
-    expect(db.bomDocument.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
+    expect(db.bomDocument.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { documentId: "bom_document-digest" },
+      create: expect.objectContaining({
+        digest: "document-digest",
+        raw: generatedBom.cyclonedx,
+      }),
+      update: expect.objectContaining({
         digest: "document-digest",
         raw: generatedBom.cyclonedx,
       }),

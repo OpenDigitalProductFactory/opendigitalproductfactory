@@ -6,7 +6,7 @@ type BomPersistenceDb = {
     upsert(args: unknown): Promise<{ id: string; componentKey: string }>;
   };
   bomDocument: {
-    create(args: unknown): Promise<{ id: string; documentId: string }>;
+    upsert(args: unknown): Promise<{ id: string; documentId: string }>;
   };
   bomComponentOccurrence: {
     createMany(args: unknown): Promise<{ count: number }>;
@@ -54,23 +54,28 @@ export async function persistGeneratedBom(
   }
 
   const documentId = `bom_${input.generatedBom.documentDigest.slice(0, 24)}`;
-  const document = await db.bomDocument.create({
-    data: {
+  const documentData = {
+    format: "cyclonedx-json",
+    formatVersion: input.generatedBom.cyclonedx.specVersion,
+    serialNumber: input.generatedBom.cyclonedx.serialNumber,
+    version: input.generatedBom.cyclonedx.version,
+    digest: input.generatedBom.documentDigest,
+    sourceKind: "pnpm-lock",
+    sourceDigest: input.generatedBom.sourceDigest,
+    componentCount: input.generatedBom.components.length,
+    raw: input.generatedBom.cyclonedx as unknown as Prisma.InputJsonValue,
+    buildId: input.buildId,
+    digitalProductId: input.digitalProductId,
+    assuranceRunId: input.assuranceRunId,
+    artifactRevisionId: input.artifactRevisionId ?? null,
+  };
+  const document = await db.bomDocument.upsert({
+    where: { documentId },
+    create: {
       documentId,
-      format: "cyclonedx-json",
-      formatVersion: input.generatedBom.cyclonedx.specVersion,
-      serialNumber: input.generatedBom.cyclonedx.serialNumber,
-      version: input.generatedBom.cyclonedx.version,
-      digest: input.generatedBom.documentDigest,
-      sourceKind: "pnpm-lock",
-      sourceDigest: input.generatedBom.sourceDigest,
-      componentCount: input.generatedBom.components.length,
-      raw: input.generatedBom.cyclonedx as unknown as Prisma.InputJsonValue,
-      buildId: input.buildId,
-      digitalProductId: input.digitalProductId,
-      assuranceRunId: input.assuranceRunId,
-      artifactRevisionId: input.artifactRevisionId ?? null,
+      ...documentData,
     },
+    update: documentData,
   });
 
   const occurrenceRows = input.generatedBom.occurrences.flatMap((occurrence) => {
