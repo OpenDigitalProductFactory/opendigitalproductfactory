@@ -72,11 +72,12 @@ export function BuildStudioWorkflowActionCard({
 
   const [voiceOutput, setVoiceOutput] = useState<{ audioStorageKey: string; durationMs: number } | null>(null);
 
-  // Poll for stored voice output when a decision interaction is present and voice is enabled
+  // Poll for stored voice output when a decision interaction is present.
+  // DecisionInteractionGateView only carries profileId, not the full profile —
+  // skip the voiceEnabled guard here and let the gate panel handle visibility.
   useEffect(() => {
     const interactionId = decisionInteraction?.interactionId;
-    const voiceEnabled = decisionInteraction?.profile?.voiceEnabled;
-    if (!interactionId || !voiceEnabled) {
+    if (!interactionId) {
       setVoiceOutput(null);
       return;
     }
@@ -109,7 +110,7 @@ export function BuildStudioWorkflowActionCard({
 
     poll();
     return () => { cancelled = true; };
-  }, [decisionInteraction?.interactionId, decisionInteraction?.profile?.voiceEnabled]);
+  }, [decisionInteraction?.interactionId]);
   const primaryLabel = useMemo(() => {
     if (action.primaryLabel == null) {
       return null;
