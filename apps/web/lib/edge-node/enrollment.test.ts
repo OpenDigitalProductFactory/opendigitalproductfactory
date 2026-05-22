@@ -106,6 +106,35 @@ describe("issueBootstrapToken", () => {
     const persistedData = tokCreate.mock.calls[0]?.[0]?.data;
     expect(persistedData?.autoApprove).toBe(true);
   });
+
+  it("persists customer/site scope onto the bootstrap token", async () => {
+    tokCreate.mockImplementation(async ({ data }: { data: { tokenHash: string; expiresAt: Date } }) => ({
+      id: "btok_cuid_scoped",
+      ...data,
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+    }));
+
+    await issueBootstrapToken({
+      issuedByPrincipalId: "principal_user_admin",
+      targetCustomerAccountId: "cust_acme",
+      targetCustomerSiteId: "site_hq",
+    });
+
+    const persistedData = tokCreate.mock.calls[0]?.[0]?.data;
+    expect(persistedData).toMatchObject({
+      targetCustomerAccountId: "cust_acme",
+      targetCustomerSiteId: "site_hq",
+      scopePolicy: {
+        ownershipScope: "customer-site",
+        enforcement: "strict-customer-scope",
+        source: "bootstrap-token",
+        customerAccountId: "cust_acme",
+        customerSiteId: "site_hq",
+      },
+    });
+  });
 });
 
 // ── enrollEdgeNode — validation paths (no transaction needed) ────────────────
@@ -594,6 +623,77 @@ describe("enrollEdgeNode — happy path", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.trustState).toBe("pending");
+  });
+
+  it("copies bootstrap customer/site scope onto the enrolled edge node", async () => {
+    tokFindUnique.mockResolvedValueOnce({
+      id: "btok_scoped",
+      tokenHash: "hash",
+      prefix: "dpfboot_scoped",
+      scope: "edge:enroll",
+      issuedAt: new Date(),
+      issuedByPrincipalId: "principal_installer",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      consumedByEdgeNodeId: null,
+      revokedAt: null,
+      autoApprove: true,
+      targetCustomerAccountId: "cust_acme",
+      targetCustomerSiteId: "site_hq",
+      scopePolicy: {
+        ownershipScope: "customer-site",
+        enforcement: "strict-customer-scope",
+        source: "bootstrap-token",
+        customerAccountId: "cust_acme",
+        customerSiteId: "site_hq",
+      },
+    });
+
+    let edgeNodeCreateData: Record<string, unknown> | undefined;
+    $transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        bootstrapToken: { update: vi.fn(async () => ({})) },
+        principal: { create: vi.fn(async () => ({ id: "principal_edge_scoped" })) },
+        principalAlias: { create: vi.fn(async () => ({})) },
+        edgeNode: {
+          create: vi.fn(async (args: { data: Record<string, unknown> }) => {
+            edgeNodeCreateData = args.data;
+            return { id: "edgenode_scoped" };
+          }),
+        },
+        edgeNodeCapability: { create: vi.fn(async () => ({})) },
+      };
+      return fn(tx);
+    });
+
+    const result = await enrollEdgeNode({
+      bootstrapToken: "dpfboot_SCOPED",
+      displayName: "Scoped node",
+      platform: "linux",
+      installMode: "container-host",
+      version: "0.1.0",
+      advertisedCapabilities: ["discovery.network"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(edgeNodeCreateData).toMatchObject({
+      customerAccountId: "cust_acme",
+      customerSiteId: "site_hq",
+      scopePolicy: {
+        ownershipScope: "customer-site",
+        enforcement: "strict-customer-scope",
+        source: "bootstrap-token",
+        customerAccountId: "cust_acme",
+        customerSiteId: "site_hq",
+      },
+    });
+    expect(result.customerAccountId).toBe("cust_acme");
+    expect(result.customerSiteId).toBe("site_hq");
+    expect(result.scopePolicy).toMatchObject({
+      ownershipScope: "customer-site",
+      enforcement: "strict-customer-scope",
+    });
   });
 });
 

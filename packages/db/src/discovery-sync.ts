@@ -27,6 +27,10 @@ type DiscoveryRunMeta = {
   // DiscoveryRun row carries this through so consumers can attribute
   // observations back to a specific agent.
   edgeNodeId?: string | null;
+  // Customer-estate scope derived server-side from the authenticated
+  // EdgeNode, never from an edge request body.
+  customerAccountId?: string | null;
+  customerSiteId?: string | null;
 };
 
 export type DiscoveryProjectionOptions = {
@@ -46,6 +50,8 @@ type DiscoverySyncTx = {
         itemCount: number;
         relationshipCount: number;
         edgeNodeId?: string | null;
+        customerAccountId?: string | null;
+        customerSiteId?: string | null;
       };
       select: { id: true };
     }): Promise<{ id: string }>;
@@ -205,6 +211,12 @@ export async function persistBootstrapDiscoveryRun(
         // column default (null) takes effect.
         ...(runMeta.edgeNodeId !== undefined
           ? { edgeNodeId: runMeta.edgeNodeId }
+          : {}),
+        ...(runMeta.customerAccountId !== undefined
+          ? { customerAccountId: runMeta.customerAccountId }
+          : {}),
+        ...(runMeta.customerSiteId !== undefined
+          ? { customerSiteId: runMeta.customerSiteId }
           : {}),
       },
       select: { id: true },

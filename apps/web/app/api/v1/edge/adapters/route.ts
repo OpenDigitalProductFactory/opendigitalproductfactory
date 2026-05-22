@@ -22,6 +22,49 @@ import { decryptSecret } from "@/lib/govern/credential-crypto";
 
 const ROUTE_CONTEXT = "/api/v1/edge/adapters";
 
+type AdapterScopeWhere = {
+  collectorType: "unifi";
+  status: "active";
+  OR: Array<Record<string, string | null>>;
+};
+
+function buildAdapterScopeWhere(authResult: {
+  edgeNodeRowId: string;
+  customerAccountId: string | null;
+  customerSiteId: string | null;
+}): AdapterScopeWhere {
+  const scopedRows: AdapterScopeWhere["OR"] = [
+    { targetEdgeNodeId: authResult.edgeNodeRowId },
+  ];
+
+  if (authResult.customerAccountId) {
+    scopedRows.push({
+      targetEdgeNodeId: null,
+      customerAccountId: authResult.customerAccountId,
+      customerSiteId: authResult.customerSiteId,
+    });
+    if (authResult.customerSiteId) {
+      scopedRows.push({
+        targetEdgeNodeId: null,
+        customerAccountId: authResult.customerAccountId,
+        customerSiteId: null,
+      });
+    }
+  } else {
+    scopedRows.push({
+      targetEdgeNodeId: null,
+      customerAccountId: null,
+      customerSiteId: null,
+    });
+  }
+
+  return {
+    collectorType: "unifi",
+    status: "active",
+    OR: scopedRows,
+  };
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const startedAt = Date.now();
   const authResult = await resolveEdgeNodeAuth(
@@ -71,12 +114,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // For Phase 0 every trusted node sees every active unifi connection.
-  // BI-35de9ce8 follow-up adds targetEdgeNodeId routing; until then
-  // operators with multiple edge nodes will see duplicate work, which
-  // is observable + harmless (idempotent upserts on InventoryEntity).
+  // Scope is derived from the authenticated EdgeNode, not the request.
+  // Organization-scoped nodes keep the legacy all-null adapter path.
+  // Customer-scoped nodes receive rows targeted to that exact node plus
+  // account/site-matching rows only.
   const rows = await prisma.discoveryConnection.findMany({
-    where: { collectorType: "unifi", status: "active" },
+    where: buildAdapterScopeWhere(authResult),
     select: {
       id: true,
       connectionKey: true,

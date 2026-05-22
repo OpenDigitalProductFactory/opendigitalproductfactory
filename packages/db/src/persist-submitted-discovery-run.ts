@@ -32,6 +32,10 @@ export type SubmittedDiscoveryRunInput = {
   edgeNodeId: string;
   /** Stable nodeId (used in sourceSlug for human-readable provenance). */
   nodeId: string;
+  /** Customer account scope derived from the authenticated EdgeNode. */
+  customerAccountId?: string | null;
+  /** Customer site scope derived from the authenticated EdgeNode. */
+  customerSiteId?: string | null;
   /** Agent-supplied idempotency key. Becomes DiscoveryRun.runKey. */
   runKey: string;
   /** Agent-supplied envelope (CollectorOutput shape). */
@@ -73,6 +77,8 @@ export async function persistSubmittedDiscoveryRun(
       trigger: SUBMITTED_TRIGGER,
       status: "completed",
       edgeNodeId: input.edgeNodeId,
+      customerAccountId: input.customerAccountId ?? null,
+      customerSiteId: input.customerSiteId ?? null,
     },
     options,
   );
