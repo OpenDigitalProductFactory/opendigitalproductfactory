@@ -29,7 +29,8 @@ import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import { getBuildProgressVisibilityAction } from "@/lib/actions/build-progress-visibility";
 import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
-import { getBuildBomSummary } from "@/lib/actions/assurance";
+import { getBuildAssuranceFindings, getBuildBomSummary } from "@/lib/actions/assurance";
+import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
@@ -143,6 +144,7 @@ export function BuildStudio({
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
+  const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
   const workflowAction = activeBuild
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -158,21 +160,24 @@ export function BuildStudio({
   }, [activeBuild?.buildId, initialBuildId, router]);
 
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
-    const [freshResult, flowResult, progressResult, bomResult] = await Promise.allSettled([
+    const [freshResult, flowResult, progressResult, bomResult, findingsResult] = await Promise.allSettled([
       getFeatureBuild(buildId),
       getBuildFlowStateAction(buildId),
       getBuildProgressVisibilityAction(buildId),
       getBuildBomSummary(buildId),
+      getBuildAssuranceFindings(buildId, 25),
     ]);
     const fresh = freshResult.status === "fulfilled" ? freshResult.value : null;
     const nextFlow = flowResult.status === "fulfilled" ? flowResult.value : null;
     const nextProgress = progressResult.status === "fulfilled" ? progressResult.value : null;
     const nextBomSummary = bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY;
+    const nextFindings = findingsResult.status === "fulfilled" ? findingsResult.value : [];
 
     if (fresh) setActiveBuild(fresh);
     setFlowState(nextFlow);
     setProgressVisibility(nextProgress);
     setBomSummary(nextBomSummary);
+    setAssuranceFindings(nextFindings);
   }, []);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
@@ -198,6 +203,7 @@ export function BuildStudio({
       setFlowState(null);
       setProgressVisibility(null);
       setBomSummary(MISSING_BOM_SUMMARY);
+      setAssuranceFindings([]);
       return;
     }
     let cancelled = false;
@@ -205,17 +211,20 @@ export function BuildStudio({
       getBuildFlowStateAction(activeBuild.buildId),
       getBuildProgressVisibilityAction(activeBuild.buildId),
       getBuildBomSummary(activeBuild.buildId),
-    ]).then(([flowResult, progressResult, bomResult]) => {
+      getBuildAssuranceFindings(activeBuild.buildId, 25),
+    ]).then(([flowResult, progressResult, bomResult, findingsResult]) => {
       if (!cancelled) {
         setFlowState(flowResult.status === "fulfilled" ? flowResult.value : null);
         setProgressVisibility(progressResult.status === "fulfilled" ? progressResult.value : null);
         setBomSummary(bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY);
+        setAssuranceFindings(findingsResult.status === "fulfilled" ? findingsResult.value : []);
       }
     }).catch(() => {
       if (!cancelled) {
         setFlowState(null);
         setProgressVisibility(null);
         setBomSummary(MISSING_BOM_SUMMARY);
+        setAssuranceFindings([]);
       }
     });
     return () => { cancelled = true; };
@@ -603,7 +612,11 @@ export function BuildStudio({
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
                       <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
-                      <BuildAssuranceGateCard buildId={activeBuild.buildId} summary={bomSummary} />
+                      <BuildAssuranceGateCard
+                        buildId={activeBuild.buildId}
+                        summary={bomSummary}
+                        findings={assuranceFindings}
+                      />
                     </div>
                   </div>
                   <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">

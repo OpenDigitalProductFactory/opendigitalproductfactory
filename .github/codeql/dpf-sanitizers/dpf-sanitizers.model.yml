@@ -51,3 +51,13 @@ extensions:
       # regex with bounded length (MAX_QUERY_LEN) + quantifier-count gate.
       # Declared neutral so the alert doesn't recur.
       - ["codebase-tools", "Module", "Member[makeLineMatcher]", "ReturnValue", "manual"]
+
+  # ─── safe-log — js/log-injection sanitiser ───────────────────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # sanitizeForLog strips C0 control characters (U+0000..U+001F) and
+      # DEL (U+007F) — including CR + LF — so the returned string cannot
+      # forge a log line. Breaks taint flow for js/log-injection (CWE-117).
+      - ["safe-log", "Module", "Member[sanitizeForLog]", "Argument[0]", "ReturnValue", "taint", "manual"]

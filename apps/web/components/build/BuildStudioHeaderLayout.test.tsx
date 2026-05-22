@@ -62,6 +62,16 @@ vi.mock("@/lib/actions/assurance", () => ({
     },
   }),
   requestBuildBomGeneration: vi.fn(async () => ({ queued: true })),
+  requestBuildAssuranceScan: vi.fn(async () => ({ queued: true })),
+  getBuildAssuranceFindings: vi.fn(async () => []),
+  getProductAssuranceFindings: vi.fn(async () => []),
+  setAssuranceFindingStatus: vi.fn(async () => ({ findingKey: "fk-1", previousStatus: "open", status: "planned" })),
+  requestBacklogFromAssuranceFinding: vi.fn(async () => ({
+    findingKey: "fk-1",
+    backlogItemId: "BI-NEW",
+    epicCuid: "epic-cuid",
+    alreadyLinked: false,
+  })),
 }));
 
 vi.mock("@/components/build/PhaseIndicator", () => ({

@@ -5,6 +5,8 @@ import type {
   ProductSupplyChainBomRows,
   ProductSupplyChainComponentRow,
 } from "@/lib/assurance/bom-read";
+import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
+import { AssuranceFindingsList } from "@/components/build/AssuranceFindingsList";
 
 export type ProductSupplyChainComponent = ProductSupplyChainComponentRow;
 export type ProductSupplyChainLatestBom = NonNullable<ProductSupplyChainBomRows["latestBom"]>;
@@ -25,12 +27,14 @@ export function ProductSupplyChainPanel({
   components,
   findingSummary,
   scanner,
+  findings = [],
 }: {
   productId: string;
   latestBom: ProductSupplyChainLatestBom | null;
   components: ProductSupplyChainComponent[];
   findingSummary: ProductSupplyChainBomRows["findingSummary"];
   scanner: ProductSupplyChainBomRows["scanner"];
+  findings?: ActiveAssuranceFindingRow[];
 }) {
   const modelCount = components.filter((component) => component.componentType === "model").length;
   const packageCountLabel = `${latestBom?.componentCount ?? 0} component${latestBom?.componentCount === 1 ? "" : "s"}`;
@@ -120,6 +124,15 @@ export function ProductSupplyChainPanel({
               <p className="font-medium text-[var(--dpf-text)]">Scanner {scannerLabel}</p>
               <p className="truncate text-xs text-[var(--dpf-muted)]" title={scannerDetail}>{scannerDetail}</p>
             </div>
+          </section>
+
+          <section aria-label="Active assurance findings" className="space-y-2">
+            <p className="text-sm font-semibold text-[var(--dpf-text)]">Active findings</p>
+            <AssuranceFindingsList
+              findings={findings}
+              readOnly
+              emptyLabel="No active findings. Run a build scan to populate."
+            />
           </section>
 
           <div className="overflow-x-auto rounded-md border border-[var(--dpf-border)]">
