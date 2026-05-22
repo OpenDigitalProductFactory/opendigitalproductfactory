@@ -6,6 +6,12 @@ vi.mock("@dpf/db", () => ({
       findUnique: vi.fn(),
       findMany: vi.fn(),
     },
+    agentActionProposal: {
+      findMany: vi.fn(),
+    },
+    toolExecution: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -21,6 +27,8 @@ import { listInternalAgentCards, resolveInternalAgentCard } from "./agent-card-s
 describe("resolveInternalAgentCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
   });
 
   it("projects an internal Agent Card with TAK and GAID supervisor metadata", async () => {
@@ -333,6 +341,114 @@ describe("resolveInternalAgentCard", () => {
     expect(prisma.agent.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         orderBy: { name: "asc" },
+      }),
+    );
+  });
+
+  it("adds pending proposal and receipt state for supervisor decisions", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        agentId: "build-specialist",
+        name: "Build Specialist",
+        description: "Implements governed Build Studio changes.",
+        status: "active",
+        lifecycleStage: "production",
+        sensitivity: "internal",
+        hitlTierDefault: 2,
+        executionConfig: null,
+        governanceProfile: {
+          autonomyLevel: "bounded",
+          hitlPolicy: "proposal_for_external_writes",
+          allowDelegation: true,
+          maxDelegationRiskBand: "medium",
+        },
+        skills: [],
+        toolGrants: [{ grantKey: "sandbox_execute" }],
+      },
+    ] as never);
+    vi.mocked(resolveAIDocForAgent).mockResolvedValue(null);
+    vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([
+      {
+        proposalId: "PROP-002",
+        agentId: "build-specialist",
+        actionType: "register_digital_product_from_build",
+        proposedAt: new Date("2026-05-20T15:00:00Z"),
+      },
+      {
+        proposalId: "PROP-001",
+        agentId: "build-specialist",
+        actionType: "deploy_feature",
+        proposedAt: new Date("2026-05-19T15:00:00Z"),
+      },
+    ] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([
+      {
+        id: "tool-exec-2",
+        agentId: "build-specialist",
+        toolName: "run_sandbox_tests",
+        createdAt: new Date("2026-05-20T16:00:00Z"),
+        receipt: {
+          id: "receipt-2",
+          toolExecutionId: "tool-exec-2",
+          receiptStatus: "valid",
+          executionStatus: "succeeded",
+          createdAt: new Date("2026-05-20T16:00:01Z"),
+        },
+      },
+      {
+        id: "tool-exec-1",
+        agentId: "build-specialist",
+        toolName: "launch_sandbox",
+        createdAt: new Date("2026-05-19T16:00:00Z"),
+        receipt: {
+          id: "receipt-1",
+          toolExecutionId: "tool-exec-1",
+          receiptStatus: "valid",
+          executionStatus: "succeeded",
+          createdAt: new Date("2026-05-19T16:00:01Z"),
+        },
+      },
+    ] as never);
+
+    const [card] = await listInternalAgentCards();
+
+    expect(card.extensions.tak.authority.supervisorDecisionState).toEqual({
+      pendingProposalCount: 2,
+      latestPendingProposal: {
+        proposalId: "PROP-002",
+        actionType: "register_digital_product_from_build",
+        proposedAt: "2026-05-20T15:00:00.000Z",
+      },
+      recentReceiptCount: 2,
+      latestReceipt: {
+        receiptId: "receipt-2",
+        toolExecutionId: "tool-exec-2",
+        toolName: "run_sandbox_tests",
+        receiptStatus: "valid",
+        executionStatus: "succeeded",
+        createdAt: "2026-05-20T16:00:01.000Z",
+      },
+    });
+    expect(prisma.agentActionProposal.findMany).toHaveBeenCalledWith({
+      where: {
+        agentId: { in: ["build-specialist"] },
+        status: "proposed",
+      },
+      orderBy: { proposedAt: "desc" },
+      select: {
+        proposalId: true,
+        agentId: true,
+        actionType: true,
+        proposedAt: true,
+      },
+    });
+    expect(prisma.toolExecution.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          agentId: { in: ["build-specialist"] },
+          receipt: { isNot: null },
+        },
+        orderBy: { createdAt: "desc" },
       }),
     );
   });

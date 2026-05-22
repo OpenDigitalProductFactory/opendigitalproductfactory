@@ -35,6 +35,25 @@ export type RuntimeAuthoritySnapshot = {
   authorizationClasses: GaidAuthorizationClass[];
   requiresApprovalForSideEffects: boolean;
   limitations: string[];
+  supervisorDecisionState: RuntimeSupervisorDecisionState;
+};
+
+export type RuntimeSupervisorDecisionState = {
+  pendingProposalCount: number;
+  latestPendingProposal: {
+    proposalId: string;
+    actionType: string;
+    proposedAt: string;
+  } | null;
+  recentReceiptCount: number;
+  latestReceipt: {
+    receiptId: string;
+    toolExecutionId: string;
+    toolName: string;
+    receiptStatus: string;
+    executionStatus: string;
+    createdAt: string;
+  } | null;
 };
 
 export type InternalAgentCard = {

@@ -55,6 +55,23 @@ const baseCard: InternalAgentCard = {
         authorizationClasses: ["observe", "execute"],
         requiresApprovalForSideEffects: true,
         limitations: ["side-effecting actions require proposal or review before execution"],
+        supervisorDecisionState: {
+          pendingProposalCount: 2,
+          latestPendingProposal: {
+            proposalId: "PROP-002",
+            actionType: "register_digital_product_from_build",
+            proposedAt: "2026-05-20T15:00:00.000Z",
+          },
+          recentReceiptCount: 3,
+          latestReceipt: {
+            receiptId: "receipt-2",
+            toolExecutionId: "tool-exec-2",
+            toolName: "run_sandbox_tests",
+            receiptStatus: "valid",
+            executionStatus: "succeeded",
+            createdAt: "2026-05-20T16:00:01.000Z",
+          },
+        },
       },
     },
     gaid: {
@@ -76,6 +93,11 @@ describe("AgentCardSupervisorPanel", () => {
     expect(html).toContain("validated");
     expect(html).toContain("HITL 2");
     expect(html).toContain("3 exposed tools");
+    expect(html).toContain("Pending proposals");
+    expect(html).toContain("PROP-002");
+    expect(html).toContain("Latest receipt");
+    expect(html).toContain("run_sandbox_tests");
+    expect(html).toContain("succeeded");
     expect(html).toContain("proposal/review");
     expect(html).toContain("mcp");
     expect(html).toContain("run_sandbox_tests");

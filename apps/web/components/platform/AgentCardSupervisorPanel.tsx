@@ -98,6 +98,7 @@ function sortCardsForSupervisor(cards: InternalAgentCard[]) {
 
 function AgentCardArticle({ card }: { card: InternalAgentCard }) {
   const authority = card.extensions.tak.authority;
+  const decisionState = authority.supervisorDecisionState;
   const approvalPosture = authority.requiresApprovalForSideEffects
     ? "proposal/review"
     : "direct";
@@ -154,6 +155,41 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
       </div>
 
       <div className="mt-4 space-y-3">
+        <div className="grid grid-cols-1 gap-3 border-y border-[var(--dpf-border)] py-3 lg:grid-cols-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              Pending proposals
+            </p>
+            <p className="mt-2 text-sm font-semibold text-[var(--dpf-text)]">
+              {decisionState.pendingProposalCount}
+            </p>
+            {decisionState.latestPendingProposal ? (
+              <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
+                {decisionState.latestPendingProposal.proposalId} / {decisionState.latestPendingProposal.actionType}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-[var(--dpf-muted)]">No pending proposal cards.</p>
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              Latest receipt
+            </p>
+            {decisionState.latestReceipt ? (
+              <>
+                <p className="mt-2 break-all text-sm font-semibold text-[var(--dpf-text)]">
+                  {decisionState.latestReceipt.toolName}
+                </p>
+                <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+                  {decisionState.latestReceipt.executionStatus} / {decisionState.latestReceipt.receiptStatus}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-[var(--dpf-muted)]">No receipt-backed executions yet.</p>
+            )}
+          </div>
+        </div>
+
         <div>
           <p className="mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
             Protocol interfaces
@@ -200,6 +236,14 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
     (total, card) => total + card.extensions.tak.authority.exposedToolCount,
     0,
   );
+  const pendingProposalCount = cards.reduce(
+    (total, card) => total + card.extensions.tak.authority.supervisorDecisionState.pendingProposalCount,
+    0,
+  );
+  const recentReceiptCount = cards.reduce(
+    (total, card) => total + card.extensions.tak.authority.supervisorDecisionState.recentReceiptCount,
+    0,
+  );
   const sortedCards = sortCardsForSupervisor(cards);
   const primaryCards = sortedCards.slice(0, PRIMARY_CARD_LIMIT);
   const additionalCards = sortedCards.slice(PRIMARY_CARD_LIMIT);
@@ -219,10 +263,12 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         <Metric label="Projected cards" value={cards.length} note={`${linkedCount} GAID linked`} />
         <Metric label="Approval posture" value={approvalCount} note="proposal/review constrained" />
         <Metric label="Exposed tools" value={exposedToolCount} note="from AIDoc or grant mapping" />
+        <Metric label="Pending proposals" value={pendingProposalCount} note="awaiting human decision" />
+        <Metric label="Recent receipts" value={recentReceiptCount} note="receipt-backed executions" />
       </div>
 
       {cards.length === 0 ? (

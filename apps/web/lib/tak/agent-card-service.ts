@@ -8,9 +8,10 @@ import type {
   InternalAgentCardSecurityScheme,
   InternalAgentCardSkill,
   RuntimeAuthoritySnapshot,
+  RuntimeSupervisorDecisionState,
 } from "./agent-card-types";
 
-type AgentCardDb = Pick<typeof prisma, "agent">;
+type AgentCardDb = Pick<typeof prisma, "agent" | "agentActionProposal" | "toolExecution">;
 
 type AgentCardAgent = {
   agentId: string;
@@ -48,6 +49,7 @@ export type ListInternalAgentCardsOptions = Omit<ResolveInternalAgentCardOptions
 export type InternalAgentCardProjectionSource = {
   agent: AgentCardAgent;
   aidoc: InternalAIDoc | null;
+  supervisorDecisionState?: RuntimeSupervisorDecisionState;
   routeContext?: string | null;
   actingPrincipalRef?: string | null;
   actingPrincipalGaid?: string | null;
@@ -89,6 +91,17 @@ const SECURITY_REQUIREMENTS = [
   "route context must expose the requested capability",
   "side-effecting work may require HITL proposal approval",
 ];
+
+const EMPTY_SUPERVISOR_DECISION_STATE: RuntimeSupervisorDecisionState = {
+  pendingProposalCount: 0,
+  latestPendingProposal: null,
+  recentReceiptCount: 0,
+  latestReceipt: null,
+};
+
+function createEmptySupervisorDecisionState(): RuntimeSupervisorDecisionState {
+  return { ...EMPTY_SUPERVISOR_DECISION_STATE };
+}
 
 const AGENT_CARD_SELECT = {
   agentId: true,
@@ -179,6 +192,7 @@ function buildAuthoritySnapshot(params: {
   aidoc: InternalAIDoc | null;
   grantKeys: string[];
   exposedTools: string[];
+  supervisorDecisionState?: RuntimeSupervisorDecisionState;
   routeContext?: string | null;
   actingPrincipalRef?: string | null;
   actingPrincipalGaid?: string | null;
@@ -206,6 +220,7 @@ function buildAuthoritySnapshot(params: {
     authorizationClasses,
     requiresApprovalForSideEffects: requiresApprovalForSideEffects(params.agent),
     limitations,
+    supervisorDecisionState: params.supervisorDecisionState ?? createEmptySupervisorDecisionState(),
   };
 }
 
@@ -221,6 +236,7 @@ export function projectInternalAgentCard(
     aidoc: source.aidoc,
     grantKeys,
     exposedTools,
+    supervisorDecisionState: source.supervisorDecisionState,
     routeContext: source.routeContext,
     actingPrincipalRef: source.actingPrincipalRef,
     actingPrincipalGaid: source.actingPrincipalGaid,
@@ -265,6 +281,90 @@ export function projectInternalAgentCard(
   };
 }
 
+async function getSupervisorDecisionStateForAgents(
+  agentIds: string[],
+  db: AgentCardDb,
+): Promise<Map<string, RuntimeSupervisorDecisionState>> {
+  const stateByAgentId = new Map(
+    agentIds.map((agentId) => [agentId, createEmptySupervisorDecisionState()]),
+  );
+
+  if (agentIds.length === 0) {
+    return stateByAgentId;
+  }
+
+  const [pendingProposals, receiptExecutions] = await Promise.all([
+    db.agentActionProposal.findMany({
+      where: {
+        agentId: { in: agentIds },
+        status: "proposed",
+      },
+      orderBy: { proposedAt: "desc" },
+      select: {
+        proposalId: true,
+        agentId: true,
+        actionType: true,
+        proposedAt: true,
+      },
+    }),
+    db.toolExecution.findMany({
+      where: {
+        agentId: { in: agentIds },
+        receipt: { isNot: null },
+      },
+      orderBy: { createdAt: "desc" },
+      take: Math.max(100, agentIds.length * 10),
+      select: {
+        id: true,
+        agentId: true,
+        toolName: true,
+        createdAt: true,
+        receipt: {
+          select: {
+            id: true,
+            toolExecutionId: true,
+            receiptStatus: true,
+            executionStatus: true,
+            createdAt: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  for (const proposal of pendingProposals) {
+    const current = stateByAgentId.get(proposal.agentId) ?? createEmptySupervisorDecisionState();
+    stateByAgentId.set(proposal.agentId, {
+      ...current,
+      pendingProposalCount: current.pendingProposalCount + 1,
+      latestPendingProposal: current.latestPendingProposal ?? {
+        proposalId: proposal.proposalId,
+        actionType: proposal.actionType,
+        proposedAt: proposal.proposedAt.toISOString(),
+      },
+    });
+  }
+
+  for (const execution of receiptExecutions) {
+    if (!execution.receipt) continue;
+    const current = stateByAgentId.get(execution.agentId) ?? createEmptySupervisorDecisionState();
+    stateByAgentId.set(execution.agentId, {
+      ...current,
+      recentReceiptCount: current.recentReceiptCount + 1,
+      latestReceipt: current.latestReceipt ?? {
+        receiptId: execution.receipt.id,
+        toolExecutionId: execution.receipt.toolExecutionId,
+        toolName: execution.toolName,
+        receiptStatus: execution.receipt.receiptStatus,
+        executionStatus: execution.receipt.executionStatus,
+        createdAt: execution.receipt.createdAt.toISOString(),
+      },
+    });
+  }
+
+  return stateByAgentId;
+}
+
 export async function resolveInternalAgentCard(
   agentId: string,
   options: ResolveInternalAgentCardOptions = {},
@@ -280,10 +380,14 @@ export async function resolveInternalAgentCard(
   }
 
   const aidoc = await resolveAIDocForAgent(agent.agentId);
+  const supervisorDecisionState = (await getSupervisorDecisionStateForAgents([agent.agentId], db)).get(
+    agent.agentId,
+  );
 
   return projectInternalAgentCard({
     agent,
     aidoc,
+    supervisorDecisionState,
     routeContext: options.routeContext,
     actingPrincipalRef: options.actingPrincipalRef,
     actingPrincipalGaid: options.actingPrincipalGaid,
@@ -298,12 +402,17 @@ export async function listInternalAgentCards(
     orderBy: { name: "asc" },
     select: AGENT_CARD_SELECT,
   });
+  const supervisorStateByAgentId = await getSupervisorDecisionStateForAgents(
+    agents.map((agent) => agent.agentId),
+    db,
+  );
 
   return Promise.all(
     agents.map(async (agent) =>
       projectInternalAgentCard({
         agent,
         aidoc: await resolveAIDocForAgent(agent.agentId),
+        supervisorDecisionState: supervisorStateByAgentId.get(agent.agentId),
         routeContext: options.routeContext,
         actingPrincipalRef: options.actingPrincipalRef,
         actingPrincipalGaid: options.actingPrincipalGaid,
