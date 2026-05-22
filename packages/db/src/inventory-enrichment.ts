@@ -79,9 +79,11 @@ function canonicalizeVendor(raw: string | null | undefined): string | null {
   }
   // Strip common corporate suffixes when no canonical match — "Foo
   // Technologies Inc." → "Foo". Keeps the brand readable without
-  // hand-listing every vendor.
+  // hand-listing every vendor. The whitespace quantifier is bounded
+  // (\s{0,8}) to avoid the polynomial-ReDoS surface CodeQL flags on
+  // `\s*` against attacker-controlled long inputs.
   return trimmed
-    .replace(/[,]?\s*(inc\.?|incorporated|corp\.?|corporation|llc|ltd\.?|limited|gmbh|co\.?|company|technologies?)$/i, "")
+    .replace(/,?\s{0,8}(inc\.?|incorporated|corp\.?|corporation|llc|ltd\.?|limited|gmbh|co\.?|company|technologies?)$/i, "")
     .trim() || trimmed;
 }
 
