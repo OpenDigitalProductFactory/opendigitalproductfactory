@@ -4,6 +4,7 @@ slug: research-before-implementing
 pageKind: principle
 tier: core
 appliesTo: [agentic-coworker, claude-code, agent]
+principleConsumerArchetype: ai-coworker-universal
 publicOnly: false
 status: published
 authoredAt: 2026-05-18

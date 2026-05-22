@@ -49,7 +49,7 @@ export function SubnetGroupedInventoryPanel({
             Operational Inventory
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">
-            Network Segments
+            Discovered Devices
           </h2>
         </div>
         <div className="flex items-center gap-2">

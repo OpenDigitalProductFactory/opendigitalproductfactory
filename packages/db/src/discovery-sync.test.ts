@@ -202,7 +202,7 @@ describe("persistBootstrapDiscoveryRun", () => {
       productModel: "PostgreSQL",
       observedVersion: "16.3-1",
       normalizedVersion: "16.3",
-      supportStatus: "unknown",
+      supportStatus: "supported",
     });
     expect(qualityIssues.map((issue) => issue.issueType)).toContain(
       "taxonomy_attribution_low_confidence",
