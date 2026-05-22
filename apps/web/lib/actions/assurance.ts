@@ -19,7 +19,6 @@ import {
   type ActiveAssuranceFindingRow,
 } from "@/lib/assurance/finding-read";
 import type { AssuranceFindingStatus } from "@/lib/assurance/types";
-import { sanitizeForLog } from "@/lib/security/safe-log";
 
 async function requirePlatformUser(): Promise<string> {
   const session = await auth();
@@ -64,10 +63,15 @@ export async function getBuildAssuranceFindings(
   try {
     return await listActiveFindingsForBuild(prisma, buildId, limit);
   } catch (err) {
+    // CodeQL js/log-injection: JSON.stringify is a built-in taint sanitiser
+    // for log lines — it escapes CR/LF and quotes the value, preventing
+    // CRLF log forgery (CWE-117). safe-log's sanitizeForLog is the longer-
+    // term registered sanitiser but only takes effect once the repo's
+    // CodeQL setup flips to Advanced (see codeql.yml).
     console.error(
       "[tool-trace] failed to load build assurance findings buildId=%s error=%s",
-      sanitizeForLog(buildId),
-      sanitizeForLog(err instanceof Error ? err.message : String(err)),
+      JSON.stringify(buildId),
+      JSON.stringify(err instanceof Error ? err.message : String(err)),
     );
     return [];
   }
@@ -82,8 +86,8 @@ export async function getProductAssuranceFindings(
   } catch (err) {
     console.error(
       "[tool-trace] failed to load product assurance findings productId=%s error=%s",
-      sanitizeForLog(digitalProductId),
-      sanitizeForLog(err instanceof Error ? err.message : String(err)),
+      JSON.stringify(digitalProductId),
+      JSON.stringify(err instanceof Error ? err.message : String(err)),
     );
     return [];
   }
