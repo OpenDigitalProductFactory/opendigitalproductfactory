@@ -242,7 +242,11 @@ async function insertRows(
         if (Array.isArray(v)) {
           // Pass arrays as JSON text and cast to the column's array type via SQL
           castPlaceholders.push(`$${paramIdx}::text[]`);
-          values.push(`{${v.map((item: unknown) => `"${String(item).replace(/"/g, '\\"')}"`).join(",")}}`);
+          // CodeQL #60 (js/incomplete-sanitization): escape backslashes FIRST,
+          // then quotes. The original `replace(/"/g, '\\"')` left embedded
+          // backslashes intact, so a value like `"\"x` would round-trip as
+          // `"\"x"` which Postgres parses as a closing quote + literal x.
+          values.push(`{${v.map((item: unknown) => `"${String(item).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`);
         } else {
           // JSON/JSONB columns — pass as text with explicit cast
           castPlaceholders.push(`$${paramIdx}::jsonb`);
