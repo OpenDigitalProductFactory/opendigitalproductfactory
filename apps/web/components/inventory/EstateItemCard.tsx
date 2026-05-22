@@ -137,6 +137,45 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
           <path d="M5 20h14" />
         </svg>
       );
+    case "thermostat":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="4.5" />
+          <path d="M12 7v2M12 15v2M7 12h2M15 12h2" />
+        </svg>
+      );
+    case "appliance":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <circle cx="12" cy="13" r="4" />
+          <path d="M8 6h.01M11 6h.01" />
+        </svg>
+      );
+    case "phone":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="7" y="3" width="10" height="18" rx="2" />
+          <path d="M10 18h4" />
+        </svg>
+      );
+    case "speaker":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="6" y="3" width="12" height="18" rx="2" />
+          <circle cx="12" cy="14" r="3" />
+          <circle cx="12" cy="7" r="1" />
+        </svg>
+      );
+    case "router":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="3" y="12" width="18" height="7" rx="2" />
+          <path d="M7 12V9l5-3 5 3v3" />
+          <path d="M8 15.5h.01M11 15.5h.01M14 15.5h.01" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
