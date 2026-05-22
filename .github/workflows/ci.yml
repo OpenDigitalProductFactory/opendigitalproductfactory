@@ -1,5 +1,10 @@
 name: CI
 
+# CodeQL actions/missing-workflow-permissions: least-privilege default
+# applied at workflow level. All CI jobs only need to read the source.
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [main]

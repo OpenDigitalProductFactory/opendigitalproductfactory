@@ -270,11 +270,13 @@ export async function inferProductDependencies(
 
 /** Normalize a name for fuzzy matching: lowercase, strip common prefixes/suffixes. */
 function normalizeName(name: string): string {
-  return name
+  // CodeQL #26 (js/polynomial-redos): bound the unbounded quantifiers.
+  const bounded = name.slice(0, 1024);
+  return bounded
     .toLowerCase()
-    .replace(/^dpf[-_\s]*/i, "")       // strip "dpf-" prefix
-    .replace(/[-_\s]+/g, "")            // collapse separators
-    .replace(/\(.*\)$/, "")             // strip trailing parenthetical
+    .replace(/^dpf[-_\s]{0,256}/i, "")
+    .replace(/[-_\s]{1,256}/g, "")
+    .replace(/\([^)]{0,256}\)$/, "")
     .trim();
 }
 

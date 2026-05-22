@@ -27,6 +27,32 @@ function stubByCommand(map: Record<string, () => Promise<string>>): ExecStub {
   };
 }
 
+describe("SANDBOX_BUILD_COMMAND", () => {
+  // Sandbox container exposes NODE_ENV=development; the production build gate
+  // must override it so Next.js does not run the dev React runtime during the
+  // prerender pass. See BI-6A1CE023.
+  it("forces NODE_ENV=production for the Next production build", () => {
+    expect(SANDBOX_BUILD_COMMAND).toContain("NODE_ENV=production");
+    expect(SANDBOX_BUILD_COMMAND).toMatch(/NODE_ENV=production\s+pnpm --filter web build/);
+  });
+
+  it("does not leak NODE_ENV into the typecheck command", () => {
+    expect(SANDBOX_TYPECHECK_COMMAND).not.toContain("NODE_ENV");
+  });
+
+  it("captures the production NODE_ENV in the command issued to the sandbox exec", async () => {
+    const observed: string[] = [];
+    const exec: ExecStub = async (_c, command) => {
+      observed.push(command);
+      return "ok";
+    };
+    await runSandboxTypecheckBuildGate("container-1", exec);
+    const buildCommand = observed.find((c) => c.includes("pnpm --filter web build"));
+    expect(buildCommand).toBeDefined();
+    expect(buildCommand).toContain("NODE_ENV=production");
+  });
+});
+
 describe("runSandboxTypecheckBuildGate", () => {
   it("returns allPassed when both commands succeed", async () => {
     const exec = stubSuccess("typecheck ok\n");
