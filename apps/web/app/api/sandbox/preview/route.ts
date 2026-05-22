@@ -14,6 +14,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!buildId) {
     return NextResponse.json({ error: "buildId required" }, { status: 400 });
   }
+  // CodeQL #30, #31 (js/reflected-xss): buildId is interpolated into
+  // both an inline <script> block and an HTML status page. Validate
+  // the format up front so only the documented FB-XXXXXXXX shape (or
+  // legacy alphanumeric IDs) is accepted. Anything else returns 400
+  // before ever reaching the HTML response.
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(buildId)) {
+    return NextResponse.json({ error: "buildId malformed" }, { status: 400 });
+  }
 
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
@@ -55,9 +63,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       // Script intercepts clicks on <a> tags and client-side navigation,
       // rewriting them to go through the proxy endpoint.
+      // Defense-in-depth: even with the regex validation above, escape
+      // `</` to `<\/` so a JSON-encoded buildId containing `</script>`
+      // can't break out of the script tag. Recognised CodeQL sanitizer
+      // pattern for js/reflected-xss in inline scripts.
+      const safeBidJson = JSON.stringify(buildId).replace(/</g, "\\u003c");
       const navScript = `<script data-sandbox-nav>
 (function(){
-  var bid = ${JSON.stringify(buildId)};
+  var bid = ${safeBidJson};
   var proxyBase = "/api/sandbox/preview?buildId=" + encodeURIComponent(bid) + "&path=";
   var blocked = ["/build", "/platform"];
 
@@ -131,7 +144,7 @@ h2{color:#7c8cf8;margin:0 0 8px}p{font-size:13px;color:#888;line-height:1.5}
 <body><div class="card">
 <div class="spinner"></div>
 <h2>Sandbox Active</h2>
-<p>Build: ${buildId}</p>
+<p>Build: ${buildId.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)}</p>
 <p>The sandbox environment is running. Code is being generated — the preview will update automatically when the dev server starts.</p>
 </div></body></html>`;
     return new NextResponse(statusHtml, {
