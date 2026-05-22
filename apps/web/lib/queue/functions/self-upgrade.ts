@@ -6,6 +6,7 @@ import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/compl
 import { createRun, startRun, completeRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
+import { getPortalActivity } from "@/lib/self-upgrade/activity";
 
 export const SELF_UPGRADE_FUNCTION_ID_SCHEDULED = "ops/self-upgrade-scheduled";
 export const SELF_UPGRADE_FUNCTION_ID_MANUAL = "ops/self-upgrade-manual";
@@ -16,6 +17,13 @@ export type SelfUpgradeRunEventData = {
   triggeredBy?: string;
   dryRun?: boolean;
   buildId?: string;
+  /**
+   * Force-apply even when the portal has live operator activity.
+   * Operator-confirmed only; never set by the scheduled cron. Bypasses the
+   * "portal-active" skip-check so an operator can self-service the upgrade
+   * after a hard reload.
+   */
+  force?: boolean;
 };
 
 export async function runSelfUpgrade(
@@ -31,6 +39,24 @@ export async function runSelfUpgrade(
 
   const deployedSha = getDeployedSha();
   if (isShaFresh(deployedSha, targetSha)) return { skipped: true, reason: "up-to-date" };
+
+  // Defer if the portal has live operator activity. Applying an upgrade
+  // mid-session invalidates cached Next.js server action ids in browsers
+  // and breaks every subsequent click until a hard reload — see
+  // docs/superpowers/audits/2026-05-21-bs-end-to-end-cycle-blockers.md §5
+  // Slice 5. dryRun and force bypass this check.
+  if (!params.force && !params.dryRun) {
+    const activity = await getPortalActivity();
+    if (activity.active) {
+      return {
+        skipped: true,
+        reason: "portal-active",
+        lastActivityAt: activity.lastActivityAt?.toISOString() ?? null,
+        lastActivityToolName: activity.lastActivityToolName,
+        thresholdMs: activity.thresholdMs,
+      };
+    }
+  }
 
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
