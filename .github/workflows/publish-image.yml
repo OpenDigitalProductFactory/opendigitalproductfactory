@@ -45,6 +45,8 @@ jobs:
   gate:
     name: Typecheck gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -265,3 +267,76 @@ jobs:
             || { echo "::error::Missing linux/amd64 in ${IMAGE}:${TAG}"; exit 1; }
           echo "$raw" | grep -q '"architecture": "arm64"' \
             || { echo "::error::Missing linux/arm64 in ${IMAGE}:${TAG}"; exit 1; }
+
+  # ─── Stage 3: End-to-end install verification ────────────────────
+  # Runs install-dpf.sh in --release mode against the manifest lists
+  # we just published. Lives in this workflow (rather than a separate
+  # workflow_run-chained one) to avoid the cache-poisoning pattern
+  # CodeQL flags on workflow_run + privileged checkout of head_sha
+  # (rule actions/cache-poisoning/poisonable-step). The body is
+  # identical to the manual-dispatch install-verification.yml.
+  verify:
+    name: E2E install verification (release mode)
+    needs: merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DPF_MODEL_PULL_MODE: skip
+      DPF_HEALTH_TIMEOUT: 900
+      DPF_HEALTH_URL: http://localhost:3000/api/health
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show docker context
+        run: |
+          docker --version
+          docker compose version
+          docker info | head -30
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Run install-dpf.sh (release mode, --no-autostart for CI)
+        run: bash install-dpf.sh --headless --release --no-autostart
+
+      - name: Verify /api/health response shape
+        run: |
+          set -euo pipefail
+          curl --silent --fail "$DPF_HEALTH_URL" > /tmp/health.json
+          cat /tmp/health.json
+          test -s /tmp/health.json
+          if command -v jq >/dev/null 2>&1; then
+            jq -e '(.ok // .status // "ok") != null' /tmp/health.json
+          fi
+
+      - name: Capture docker compose ps + portal logs
+        if: always()
+        run: |
+          docker compose -p dpf ps || true
+          echo "---"
+          docker compose -p dpf logs --tail=50 portal || true
+
+      - name: Capture doctor bundle
+        if: always()
+        run: bash install-dpf.sh doctor || true
+
+      - name: Upload doctor bundle artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: doctor-bundle-release-${{ github.run_id }}
+          path: ~/.dpf/doctor-*.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Tear down (uninstall --purge)
+        if: always()
+        run: bash uninstall-dpf.sh --purge --headless --yes || true
