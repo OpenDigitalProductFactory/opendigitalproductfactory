@@ -6,6 +6,7 @@ import type { ToolExecutionRow } from "@/lib/tool-execution-data";
 
 type Props = {
   executions: ToolExecutionRow[];
+  initialFocusExecutionId?: string | null;
 };
 
 function timeAgo(iso: string): string {
@@ -24,15 +25,27 @@ function formatToolName(name: string): string {
 }
 
 const AUDIT_CLASS_BADGE: Record<string, { label: string; bg: string; color: string }> = {
-  ledger:   { label: "Ledger",  bg: "#451a03", color: "#f59e0b" },
-  journal:  { label: "Journal", bg: "#1e3a5f", color: "#60a5fa" },
+  ledger: {
+    label: "Ledger",
+    bg: "color-mix(in srgb, var(--dpf-warning) 16%, transparent)",
+    color: "var(--dpf-warning)",
+  },
+  journal: {
+    label: "Journal",
+    bg: "color-mix(in srgb, var(--dpf-info) 16%, transparent)",
+    color: "var(--dpf-info)",
+  },
 };
 
-export function CapabilityJournalClient({ executions }: Props) {
+export function CapabilityJournalClient({ executions, initialFocusExecutionId = null }: Props) {
   const [auditClassFilter, setAuditClassFilter] = useState("all");
   const [successFilter, setSuccessFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(() =>
+    initialFocusExecutionId && executions.some((execution) => execution.id === initialFocusExecutionId)
+      ? initialFocusExecutionId
+      : null,
+  );
 
   const filtered = executions.filter((e) => {
     if (auditClassFilter === "ledger" && e.auditClass !== "ledger") return false;
@@ -210,7 +223,7 @@ export function CapabilityJournalClient({ executions }: Props) {
                   }}>
                     {e.summary && Object.keys(e.parameters ?? {}).length === 0 ? (
                       <div style={{ color: "var(--dpf-muted)", fontSize: 11, marginBottom: 8 }}>
-                        <span style={{ color: "#666" }}>Summary: </span>{e.summary}
+                        <span style={{ color: "var(--dpf-muted)" }}>Summary: </span>{e.summary}
                       </div>
                     ) : (
                       <>
