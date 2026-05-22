@@ -10,5 +10,9 @@ library: true
 dataExtensions:
   - "**/*.model.yml"
 
-dependencies:
+# Data-extension packs use `extensionTargets:` to declare which library
+# packs they augment, not `dependencies:` (which is for query-pack imports).
+# This was the first cause of the model pack being silently ignored on
+# the initial scan after activation.
+extensionTargets:
   codeql/javascript-all: "*"
