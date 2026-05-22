@@ -59,7 +59,11 @@ function slugify(value: string) {
   return value
     .replace(/^\/+/, "")
     .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    // CodeQL #21 (js/polynomial-redos): the alternation `^-+|-+$` could
+    // backtrack on inputs with many `-` chars. Splitting into two replace
+    // calls eliminates the alternation; each pattern is now linear.
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
     .toUpperCase();
 }
 
