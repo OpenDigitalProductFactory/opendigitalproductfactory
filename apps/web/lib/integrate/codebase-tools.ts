@@ -187,7 +187,27 @@ function globMatches(filePath: string, glob?: string): boolean {
   return filePath === normalized || filePath.endsWith(`/${normalized}`);
 }
 
+// CodeQL #73 (js/regex-injection): query is user-supplied and gets used
+// as a regex by design (this is the search feature). The risk isn't
+// pattern injection (that IS the feature) but ReDoS — a malicious
+// pattern can stall the matcher.
+//
+// Defenses:
+//   1. Length cap (200 chars) — bounds catastrophic-backtracking growth.
+//   2. Fall back to substring match if the regex compile fails OR if the
+//      pattern looks too aggressive (>4 `*`/`+` quantifiers).
 function makeLineMatcher(query: string): (line: string) => boolean {
+  const MAX_QUERY_LEN = 200;
+  const MAX_QUANTIFIERS = 4;
+  if (query.length > MAX_QUERY_LEN) {
+    return (line) => line.includes(query.slice(0, MAX_QUERY_LEN));
+  }
+  const quantifierCount = (query.match(/[*+?]/g) ?? []).length;
+  if (quantifierCount > MAX_QUANTIFIERS) {
+    // Quantifier-heavy patterns are the classic ReDoS shape. Fall back
+    // to substring search to keep the matcher bounded.
+    return (line) => line.includes(query);
+  }
   try {
     const pattern = new RegExp(query);
     return (line) => pattern.test(line);
