@@ -43,6 +43,15 @@ vi.mock("@/lib/actions/build-progress-visibility", () => ({
   getBuildProgressVisibilityAction: vi.fn(),
 }));
 
+vi.mock("@/lib/actions/assurance", () => ({
+  getBuildBomSummary: vi.fn().mockResolvedValue({
+    state: "missing",
+    document: null,
+    counts: { components: 0, models: 0 },
+  }),
+  requestBuildBomGeneration: vi.fn(async () => ({ queued: true })),
+}));
+
 vi.mock("@/components/build/PhaseIndicator", () => ({
   PhaseIndicator: () => <div data-testid="phase-indicator" />,
 }));
@@ -258,6 +267,22 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain('data-testid="build-studio-details-drawer-pill"');
     expect(html).toContain('data-testid="build-studio-details-drawer"');
     expect(html).toMatch(/data-testid="build-studio-details-drawer"[^>]*data-open="false"/);
+  });
+
+  it("renders the build assurance gate next to code intelligence", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild()]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain('data-testid="build-assurance-gate-card"');
+    expect(html).toContain("Assurance Gate");
+    expect(html).toContain("No BOM generated");
   });
 
   it("renders the portal context strip when a server envelope is provided", () => {

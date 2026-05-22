@@ -59,6 +59,15 @@ vi.mock("@/lib/actions/code-intelligence", () => ({
   getCodeGraphFreshnessAction: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@/lib/actions/assurance", () => ({
+  getBuildBomSummary: vi.fn().mockResolvedValue({
+    state: "missing",
+    document: null,
+    counts: { components: 0, models: 0 },
+  }),
+  requestBuildBomGeneration: vi.fn(async () => ({ queued: true })),
+}));
+
 vi.mock("@/components/build/PhaseIndicator", () => ({
   PhaseIndicator: () => <div data-testid="phase-indicator" />,
 }));
