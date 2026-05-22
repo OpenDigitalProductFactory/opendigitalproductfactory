@@ -3,6 +3,7 @@
 
 import type { McpConnectionConfig, HealthCheckResult } from "./mcp-server-types";
 import { lazyChildProcess } from "@/lib/shared/lazy-node";
+import { safeSpawn, type SpawnFn } from "@/lib/security/safe-spawn";
 
 const HTTP_TIMEOUT_MS = 5_000;
 const STDIO_TIMEOUT_MS = 10_000;
@@ -62,11 +63,32 @@ async function checkStdio(command: string, args?: string[], env?: Record<string,
   const start = Date.now();
   try {
     const { spawn } = lazyChildProcess();
+    // BI-7DB95878 fix: safeSpawn enforces an allowlist on `command` and
+    // strips exec-hijacking env vars (LD_PRELOAD, NODE_OPTIONS, etc.)
+    // before invoking spawn. A misconfigured (or malicious) MCP entry
+    // with `command: "/bin/sh"` is rejected with a structured error
+    // instead of running arbitrary shell. See safe-spawn.ts for the
+    // allowlist + the test suite that pins the contract.
+    // Cast to the narrower (command, args, options) shape. Node's spawn
+    // is overloaded — including a (command, options) form whose second
+    // arg is SpawnOptions, not args[] — so a direct pass doesn't match
+    // safeSpawn's signature. The runtime call is the same.
+    const spawnResult = safeSpawn(spawn as unknown as SpawnFn, command, args ?? [], {
+      env: { ...process.env, ...env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    if (!spawnResult.ok) {
+      return { healthy: false, latencyMs: Date.now() - start, error: spawnResult.error };
+    }
     return new Promise<HealthCheckResult>((resolve) => {
-      const proc = spawn(command, args ?? [], {
-        env: { ...process.env, ...env },
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      const proc = spawnResult.proc;
+      // We requested stdio: ["pipe", "pipe", "pipe"], so stdout and stdin
+      // are guaranteed non-null at runtime. The wider ChildProcess type
+      // returned by safeSpawn doesn't carry the literal-tuple narrowing,
+      // so we assert here. If stdio config ever changes, the !-asserts
+      // become the failure surface and the tests catch it.
+      const procStdout = proc.stdout!;
+      const procStdin = proc.stdin!;
 
       const timeout = setTimeout(() => {
         proc.kill();
@@ -74,7 +96,7 @@ async function checkStdio(command: string, args?: string[], env?: Record<string,
       }, STDIO_TIMEOUT_MS);
 
       let stdout = "";
-      proc.stdout.on("data", (chunk: Buffer) => {
+      procStdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString();
         try {
           const lines = stdout.split("\n").filter(Boolean);
@@ -104,7 +126,7 @@ async function checkStdio(command: string, args?: string[], env?: Record<string,
         }
       });
 
-      proc.stdin.write(JSON.stringify(MCP_INITIALIZE_REQUEST) + "\n");
+      procStdin.write(JSON.stringify(MCP_INITIALIZE_REQUEST) + "\n");
     });
   } catch (err) {
     return { healthy: false, latencyMs: Date.now() - start, error: err instanceof Error ? err.message : "Unknown error" };
