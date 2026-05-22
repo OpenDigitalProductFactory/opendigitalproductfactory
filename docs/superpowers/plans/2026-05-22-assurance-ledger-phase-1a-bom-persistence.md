@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Persist a CycloneDX-compatible BOM for the DPF web workspace, expose read-only Build Studio and Product Registry supply-chain state, and keep vulnerability scanning blocked until a scanner has passed Tool Evaluation.
+**Goal:** Persist a CycloneDX 1.7-compatible BOM for the DPF web workspace, expose read-only Build Studio and Product Registry supply-chain state, publish a shareable SBOM export for customers/auditors, and keep vulnerability scanning blocked until a scanner has passed Tool Evaluation.
 
-**Architecture:** This slice implements `BI-ASSURANCE-P1-01` only. It adds queryable BOM and assurance-run rows, a first-party lockfile-based CycloneDX generator, a background Inngest job, and read-only UI surfaces. It does not add `AssuranceFinding` or any vulnerability scanner adapter; `BI-ASSURANCE-P1-02` starts after a scanner is evaluated and approved.
+**Architecture:** This slice implements `BI-ASSURANCE-P1-01` only. It adds queryable BOM and assurance-run rows, a first-party lockfile-based CycloneDX generator, a background Inngest job, read-only UI surfaces, and a shareable SBOM export profile that strips internal execution paths while preserving component identity. It does not add `AssuranceFinding` or any vulnerability scanner adapter; `BI-ASSURANCE-P1-02` starts after a scanner is evaluated and approved.
 
 **Tech Stack:** Next.js 16, TypeScript, Prisma 7, PostgreSQL, Inngest, Vitest, existing `apps/web/lib/assurance/*` contracts from Phase 0, DPF theme variables.
 
@@ -34,10 +34,11 @@ Phase 1 from the spec has two backlog items. Execute them as two separate PRs.
 This PR:
 
 - Adds `AssuranceRun`, `BomDocument`, `BomComponent`, and `BomComponentOccurrence`.
-- Generates CycloneDX JSON from pinned workspace dependencies and active AI model profiles.
-- Persists raw CycloneDX JSON plus normalized component/occurrence rows.
+- Generates CycloneDX 1.7 JSON from pinned workspace dependencies and active AI model profiles.
+- Persists raw internal CycloneDX JSON plus normalized component/occurrence rows.
 - Shows honest read-only state in Build Studio and Product Registry.
-- Exports the latest CycloneDX JSON.
+- Exports a shareable CycloneDX SBOM JSON document for customers, auditors, partners, and security reviewers.
+- Redacts internal-only execution paths, source directories, route context, user identifiers, and other non-SBOM operational metadata from the shareable export.
 
 Not this PR:
 
@@ -47,6 +48,19 @@ Not this PR:
 - No release-blocking vulnerability policy.
 
 Reason: external scanner adoption is governed by AGENTS.md section 9 and the Tool Evaluation Pipeline. The approved registry is empty, so a scanner-backed gate would be a false capability claim.
+
+## 2.1 Internal vs Shareable SBOM Contract
+
+Phase 1A must produce two related views of the same BOM:
+
+| View | Audience | Contents | Storage/export behavior |
+|------|----------|----------|-------------------------|
+| Internal ledger BOM | Build Studio, product operators, future scanners | Raw CycloneDX document, normalized component rows, occurrence evidence, source digest, workspace paths, build linkage, and tool receipts. | Persisted in `BomDocument.raw`, `BomComponent`, `BomComponentOccurrence`, and `AssuranceRun`; not exposed as the default download. |
+| Shareable SBOM | Customers, auditors, partners, security reviewers | CycloneDX 1.7 JSON with component names, versions, package URLs, supplier/license fields where known, AI model/runtime components, generated timestamp, build/product reference, and a digest for the exported document. | Generated from the internal ledger BOM through `createShareableCycloneDxBom`; default API export. |
+
+The shareable SBOM is not a marketing summary. It must remain a machine-readable SBOM that preserves the component inventory needed by downstream risk tools. Redaction only removes information that is operationally internal and not required for SBOM interoperability: absolute file paths, local workspace paths, route context, user IDs, internal service URLs, raw source digests, secrets/tokens, and scanner/runtime evidence fields that belong in future auditor evidence bundles.
+
+If a future component cannot be disclosed without breaking a customer contract, that is a product/release policy decision and must block public export for that release. Do not silently omit components from the SBOM while still calling it complete.
 
 ## 3. File Structure
 
@@ -58,10 +72,12 @@ Reason: external scanner adoption is governed by AGENTS.md section 9 and the Too
 | Add `apps/web/lib/assurance/bom-types.ts` | CycloneDX-facing and normalized BOM TypeScript types. |
 | Add `apps/web/lib/assurance/component-key.ts` | Stable component key and purl helpers. |
 | Add `apps/web/lib/assurance/pnpm-lock-parser.ts` | Small first-party parser for the lockfile importers needed by this repo. |
-| Add `apps/web/lib/assurance/cyclonedx-generator.ts` | Generate CycloneDX 1.6 JSON and normalized components from package metadata, lockfile text, and model profiles. |
+| Add `apps/web/lib/assurance/cyclonedx-generator.ts` | Generate CycloneDX 1.7 JSON and normalized components from package metadata, lockfile text, and model profiles. |
 | Add `apps/web/lib/assurance/bom-persistence.ts` | Persist document, components, occurrences, run state, and receipt linkage. |
 | Add `apps/web/lib/assurance/bom-read.ts` | Read latest BOM summary and component rows for Build Studio/Product UI. |
-| Add `apps/web/lib/assurance/bom-export.ts` | Return the latest raw CycloneDX JSON for download/API response. |
+| Add `apps/web/lib/assurance/bom-redaction.ts` | Convert internal CycloneDX BOMs into shareable SBOM exports without leaking internal execution metadata. |
+| Add `apps/web/lib/assurance/bom-redaction.test.ts` | Guard shareable SBOM redaction and completeness behavior. |
+| Add `apps/web/lib/assurance/bom-export.ts` | Return the latest shareable CycloneDX JSON for download/API response. |
 | Add `apps/web/lib/assurance/bom-job.ts` | Orchestrate generation and persistence from a build context. |
 | Add `apps/web/lib/queue/functions/assurance-bom.ts` | Background Inngest worker for `assurance/bom.generate`. |
 | Modify `apps/web/lib/queue/functions/index.ts` | Register the worker. |
@@ -491,7 +507,7 @@ export interface NormalizedBomOccurrence {
 
 export interface CycloneDxDocument {
   bomFormat: "CycloneDX";
-  specVersion: "1.6";
+  specVersion: "1.7";
   serialNumber: string;
   version: number;
   metadata: Record<string, unknown>;
@@ -744,7 +760,7 @@ describe("generateCycloneDxBom", () => {
     });
 
     expect(result.cyclonedx.bomFormat).toBe("CycloneDX");
-    expect(result.cyclonedx.specVersion).toBe("1.6");
+    expect(result.cyclonedx.specVersion).toBe("1.7");
     expect(result.components.map((component) => component.name)).toEqual([
       "next",
       "@dpf/db",
@@ -858,7 +874,7 @@ export function generateCycloneDxBom(input: GenerateCycloneDxBomInput): Generate
   }));
   const cyclonedx: CycloneDxDocument = {
     bomFormat: "CycloneDX",
-    specVersion: "1.6",
+    specVersion: "1.7",
     serialNumber: `urn:uuid:${randomUUID()}`,
     version: 1,
     metadata: {
@@ -923,7 +939,7 @@ import type { GeneratedBom } from "./bom-types";
 const generatedBom: GeneratedBom = {
   cyclonedx: {
     bomFormat: "CycloneDX",
-    specVersion: "1.6",
+    specVersion: "1.7",
     serialNumber: "urn:uuid:test",
     version: 1,
     metadata: {},
@@ -1287,6 +1303,8 @@ git commit -s -m "feat(assurance): generate bom in background"
 **Files:**
 - Create: `apps/web/lib/assurance/bom-read.ts`
 - Create: `apps/web/lib/assurance/bom-read.test.ts`
+- Create: `apps/web/lib/assurance/bom-redaction.ts`
+- Create: `apps/web/lib/assurance/bom-redaction.test.ts`
 - Create: `apps/web/lib/assurance/bom-export.ts`
 - Create: `apps/web/lib/assurance/bom-trigger.ts`
 - Create: `apps/web/lib/actions/assurance.ts`
@@ -1378,20 +1396,190 @@ export async function getLatestBomSummaryForBuild(
 }
 ```
 
-- [ ] **Step 4: Add export helper and trigger**
+- [ ] **Step 4: Write failing shareable export redaction tests**
+
+Create `apps/web/lib/assurance/bom-redaction.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import type { CycloneDxDocument } from "./bom-types";
+import { createShareableCycloneDxBom } from "./bom-redaction";
+
+const internalBom: CycloneDxDocument = {
+  bomFormat: "CycloneDX",
+  specVersion: "1.7",
+  serialNumber: "urn:uuid:11111111-1111-1111-1111-111111111111",
+  version: 1,
+  metadata: {
+    timestamp: "2026-05-22T00:00:00.000Z",
+    component: { type: "application", name: "dpf-web", version: "0.1.0" },
+    properties: [
+      { name: "dpf:sourceDigest", value: "internal-source-digest" },
+      { name: "dpf:workspacePath", value: "D:/DPF/apps/web" },
+    ],
+  },
+  components: [
+    {
+      type: "framework",
+      name: "next",
+      version: "16.2.6",
+      purl: "pkg:npm/next@16.2.6",
+      evidence: { workspacePath: "D:/DPF/apps/web", requestedByUserId: "user_123" },
+    },
+    {
+      type: "machine-learning-model",
+      name: "gpt-5.4",
+      version: "2026-05",
+      properties: [{ name: "dpf:routeContext", value: "/build" }],
+    },
+  ],
+  dependencies: [{ ref: "pkg:npm/next@16.2.6" }],
+};
+
+describe("createShareableCycloneDxBom", () => {
+  it("preserves machine-readable component inventory", () => {
+    const shareable = createShareableCycloneDxBom(internalBom);
+
+    expect(shareable.bomFormat).toBe("CycloneDX");
+    expect(shareable.specVersion).toBe("1.7");
+    expect(shareable.components).toHaveLength(2);
+    expect(shareable.components[0]).toMatchObject({
+      name: "next",
+      version: "16.2.6",
+      purl: "pkg:npm/next@16.2.6",
+    });
+    expect(shareable.components[1]).toMatchObject({
+      name: "gpt-5.4",
+      version: "2026-05",
+    });
+  });
+
+  it("removes internal execution metadata from shareable exports", () => {
+    const serialized = JSON.stringify(createShareableCycloneDxBom(internalBom));
+
+    expect(serialized).not.toContain("D:/DPF");
+    expect(serialized).not.toContain("workspacePath");
+    expect(serialized).not.toContain("requestedByUserId");
+    expect(serialized).not.toContain("routeContext");
+    expect(serialized).not.toContain("internal-source-digest");
+  });
+});
+```
+
+- [ ] **Step 5: Run the failing redaction test**
+
+Run:
+
+```powershell
+pnpm --filter web exec vitest run lib/assurance/bom-redaction.test.ts
+```
+
+Expected: fails because `bom-redaction.ts` does not exist.
+
+- [ ] **Step 6: Implement shareable SBOM redaction**
+
+Create `apps/web/lib/assurance/bom-redaction.ts`:
+
+```ts
+import type { CycloneDxDocument } from "./bom-types";
+
+const INTERNAL_KEYS = new Set([
+  "absolutePath",
+  "localPath",
+  "routeContext",
+  "requestedByUserId",
+  "sourceDigest",
+  "toolExecutionId",
+  "workspacePath",
+]);
+
+const INTERNAL_PROPERTY_NAMES = new Set([
+  "dpf:routeContext",
+  "dpf:sourceDigest",
+  "dpf:workspacePath",
+]);
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function redactValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => redactValue(entry))
+      .filter((entry) => entry !== undefined);
+  }
+
+  if (!isPlainRecord(value)) return value;
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (INTERNAL_KEYS.has(key)) continue;
+
+    if (key === "properties" && Array.isArray(entry)) {
+      const properties = entry.filter((property) => {
+        if (!isPlainRecord(property)) return true;
+        const name = typeof property.name === "string" ? property.name : "";
+        return !INTERNAL_PROPERTY_NAMES.has(name);
+      });
+      redacted[key] = redactValue(properties);
+      continue;
+    }
+
+    redacted[key] = redactValue(entry);
+  }
+
+  return redacted;
+}
+
+export function createShareableCycloneDxBom(input: CycloneDxDocument): CycloneDxDocument {
+  const redacted = redactValue(input) as CycloneDxDocument;
+  return {
+    ...redacted,
+    metadata: {
+      ...(redacted.metadata ?? {}),
+      properties: [
+        ...((redacted.metadata?.properties as Array<Record<string, unknown>> | undefined) ?? []),
+        { name: "dpf:exportProfile", value: "shareable" },
+      ],
+    },
+  };
+}
+```
+
+- [ ] **Step 7: Verify redaction tests pass**
+
+Run:
+
+```powershell
+pnpm --filter web exec vitest run lib/assurance/bom-redaction.test.ts
+```
+
+Expected: pass.
+
+- [ ] **Step 8: Add shareable export helper and trigger**
 
 Create `apps/web/lib/assurance/bom-export.ts`:
 
 ```ts
+import type { CycloneDxDocument } from "./bom-types";
+import { createShareableCycloneDxBom } from "./bom-redaction";
+
 export async function getLatestCycloneDxForProduct(
   db: { bomDocument: { findFirst(args: unknown): Promise<null | { raw: unknown; documentId: string }> } },
   digitalProductId: string,
 ): Promise<null | { documentId: string; raw: unknown }> {
-  return db.bomDocument.findFirst({
+  const document = await db.bomDocument.findFirst({
     where: { digitalProductId },
     orderBy: { generatedAt: "desc" },
     select: { documentId: true, raw: true },
   });
+  if (!document) return null;
+
+  return {
+    documentId: document.documentId,
+    raw: createShareableCycloneDxBom(document.raw as CycloneDxDocument),
+  };
 }
 ```
 
@@ -1428,23 +1616,23 @@ export async function requestBuildBomGeneration(buildId: string): Promise<{ queu
 }
 ```
 
-- [ ] **Step 5: Verify focused tests and typecheck**
+- [ ] **Step 9: Verify focused tests and typecheck**
 
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run lib/assurance/bom-read.test.ts
+pnpm --filter web exec vitest run lib/assurance/bom-read.test.ts lib/assurance/bom-redaction.test.ts
 pnpm --filter web typecheck
 ```
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 Run:
 
 ```powershell
-git add apps/web/lib/assurance/bom-read.ts apps/web/lib/assurance/bom-read.test.ts apps/web/lib/assurance/bom-export.ts apps/web/lib/assurance/bom-trigger.ts apps/web/lib/actions/assurance.ts
+git add apps/web/lib/assurance/bom-read.ts apps/web/lib/assurance/bom-read.test.ts apps/web/lib/assurance/bom-redaction.ts apps/web/lib/assurance/bom-redaction.test.ts apps/web/lib/assurance/bom-export.ts apps/web/lib/assurance/bom-trigger.ts apps/web/lib/actions/assurance.ts
 git commit -s -m "feat(assurance): expose bom read and trigger helpers"
 ```
 
@@ -1670,7 +1858,7 @@ describe("ProductSupplyChainPanel", () => {
     }]} />);
 
     expect(screen.getByText("next")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Export CycloneDX/i })).toHaveAttribute("href", "/api/portfolio/product/prod-1/supply-chain/bom");
+    expect(screen.getByRole("link", { name: /Export shareable SBOM/i })).toHaveAttribute("href", "/api/portfolio/product/prod-1/supply-chain/bom");
   });
 });
 ```
@@ -1721,11 +1909,11 @@ export function ProductSupplyChainPanel({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-[var(--dpf-text)]">Supply Chain</h1>
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">BOM components, AI model dependencies, and exportable evidence.</p>
+          <p className="mt-1 text-sm text-[var(--dpf-muted)]">BOM components, AI model dependencies, and shareable customer evidence.</p>
         </div>
         {latestBom ? (
           <Link className="rounded bg-[var(--dpf-accent)] px-3 py-2 text-sm font-medium text-white" href={`/api/portfolio/product/${productId}/supply-chain/bom`}>
-            Export CycloneDX
+            Export shareable SBOM
           </Link>
         ) : null}
       </div>
@@ -1853,7 +2041,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return new NextResponse(JSON.stringify(bom.raw, null, 2), {
     headers: {
       "content-type": "application/vnd.cyclonedx+json; charset=utf-8",
-      "content-disposition": `attachment; filename="${bom.documentId}.json"`,
+      "content-disposition": `attachment; filename="${bom.documentId}.shareable.cdx.json"`,
     },
   });
 }
@@ -1890,7 +2078,7 @@ Run:
 
 ```powershell
 pnpm --filter @dpf/db exec vitest run src/assurance-schema-contract.test.ts
-pnpm --filter web exec vitest run lib/assurance/component-key.test.ts lib/assurance/pnpm-lock-parser.test.ts lib/assurance/cyclonedx-generator.test.ts lib/assurance/bom-persistence.test.ts lib/assurance/bom-job.test.ts lib/assurance/bom-read.test.ts components/build/BuildAssuranceGateCard.test.tsx components/product/ProductTabNav.test.tsx components/product/ProductSupplyChainPanel.test.tsx
+pnpm --filter web exec vitest run lib/assurance/component-key.test.ts lib/assurance/pnpm-lock-parser.test.ts lib/assurance/cyclonedx-generator.test.ts lib/assurance/bom-persistence.test.ts lib/assurance/bom-job.test.ts lib/assurance/bom-read.test.ts lib/assurance/bom-redaction.test.ts components/build/BuildAssuranceGateCard.test.tsx components/product/ProductTabNav.test.tsx components/product/ProductSupplyChainPanel.test.tsx
 ```
 
 Expected: all pass.
@@ -1941,7 +2129,7 @@ Then sign in with `admin@dpf.local` and `ADMIN_PASSWORD` from repo-root `.env`, 
 - `/build`: Build Assurance Gate card renders with "No BOM generated" or latest BOM state.
 - Trigger "Generate BOM"; UI does not block while job runs.
 - Product detail Operate -> Supply Chain tab renders.
-- Export CycloneDX returns JSON when a BOM exists and 404 when missing.
+- Export shareable CycloneDX SBOM returns JSON without internal execution paths when a BOM exists and 404 when missing.
 
 Record screenshots or Playwright traces in the final evidence if the browser tool is used.
 
@@ -1950,7 +2138,7 @@ Record screenshots or Playwright traces in the final evidence if the browser too
 Use MCP `record_execution_evidence` on `BI-ASSURANCE-P1-01`:
 
 ```text
-Phase 1A persisted CycloneDX-compatible BOM documents, normalized components, component occurrences, and assurance runs. Verification: focused tests, @dpf/db typecheck, web typecheck, migration apply, production build, and Docker-served UX checks passed. Vulnerability scanning remains deferred to BI-ASSURANCE-P1-02 because the approved tools registry is empty and scanner adoption requires Tool Evaluation.
+Phase 1A persisted CycloneDX 1.7-compatible BOM documents, normalized components, component occurrences, and assurance runs. It also exposed a shareable SBOM export profile for customers/auditors that preserves component identity while redacting internal execution metadata. Verification: focused tests, @dpf/db typecheck, web typecheck, migration apply, production build, and Docker-served UX checks passed. Vulnerability scanning remains deferred to BI-ASSURANCE-P1-02 because the approved tools registry is empty and scanner adoption requires Tool Evaluation.
 ```
 
 Use MCP `record_execution_evidence` on `BI-ASSURANCE-P1-02`:
@@ -1981,13 +2169,13 @@ Open a PR only after every verification command above has passed and evidence is
 
 | Spec requirement | Phase 1A coverage |
 |------------------|-------------------|
-| Generate CycloneDX BOM for web workspace | Implemented by generator and background job tasks. |
+| Generate CycloneDX 1.7 BOM for web workspace | Implemented by generator and background job tasks. |
 | Persist normalized components | Implemented by `BomComponent` and `BomComponentOccurrence`. |
 | AI model components first-class | Implemented by model-profile input and `componentType = "model"`. |
 | Queryable ledger rows, not JSON blobs | BOM raw JSON is retained, but component and occurrence rows are queryable. |
 | Build Studio Assurance Gate | Implemented as read-only BOM state; scanner state is explicitly unavailable. |
 | Product Supply Chain tab | Implemented as a product route and nav item. |
-| Export CycloneDX JSON | Implemented by API route. |
+| Export shareable CycloneDX SBOM JSON | Implemented by `createShareableCycloneDxBom`, redaction tests, and the API route. |
 | Tool Evaluation gating | Scanner work is deferred because approved registry is empty. |
 | No auto-remediation | No remediation actions are introduced. |
 | AssuranceRun to ToolExecution coupling | BOM job creates ToolExecution, ToolExecutionReceipt, and AssuranceRun for terminal runs. |
@@ -2007,6 +2195,7 @@ Names used consistently across tasks:
 - `BomComponentOccurrence`
 - `GeneratedBom`
 - `generateCycloneDxBom`
+- `createShareableCycloneDxBom`
 - `persistGeneratedBom`
 - `generateAndPersistBuildBom`
 - `BuildAssuranceGateCard`
