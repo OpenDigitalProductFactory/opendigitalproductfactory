@@ -1,4 +1,4 @@
-import { config as loadDotenv } from "dotenv";
+import { config as loadDotenv, type DotenvConfigOptions } from "dotenv";
 import { fileURLToPath } from "url";
 
 const DEFAULT_PATHS = [
@@ -8,6 +8,8 @@ const DEFAULT_PATHS = [
 ];
 
 let defaultEnvLoaded = false;
+
+type QuietDotenvConfigOptions = DotenvConfigOptions & { quiet?: boolean };
 
 export function resolveDbEnvPaths(options?: {
   webEnvPath?: string;
@@ -43,7 +45,8 @@ export function loadDbEnv(options?: {
     const result = loadDotenv({
       path: envPath,
       override: false,
-    });
+      quiet: true,
+    } satisfies QuietDotenvConfigOptions);
 
     if (!result.error) {
       loadedPaths.push(envPath);
