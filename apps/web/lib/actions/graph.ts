@@ -7,6 +7,10 @@ import {
   getDownstreamImpact,
   getLayeredDependencyStack,
   getNetworkTopologyAtLayer,
+  getNetworkTopologyAtLayerForScope,
+  buildDiscoveryScopeKey,
+  scopeFieldsFromContext,
+  type DiscoveryScopeContext,
   type GraphNode,
   type GraphEdge,
 } from "@dpf/db";
@@ -226,6 +230,47 @@ export async function getNetworkTopologyData(): Promise<GraphData> {
     return { nodes: [], links: [] };
   }
 }
+
+export type TopologyScopeContext = DiscoveryScopeContext;
+
+/**
+ * Customer-scoped network topology. The only entry point for customer-estate
+ * topology views: every InfraCI node and edge endpoint must carry the same
+ * scopeKey, so two customers reusing 192.168.1.0/24 stay distinct.
+ *
+ * For organization-internal scope this just delegates to getNetworkTopologyData,
+ * which produces the existing MSP-internal graph.
+ */
+export async function getCustomerNetworkTopologyData(
+  scope: TopologyScopeContext,
+): Promise<GraphData> {
+  if (scope.mode === "organization-internal") {
+    return getNetworkTopologyData();
+  }
+
+  try {
+    const scopeFields = scopeFieldsFromContext(scope);
+    const { nodes: ciNodes, edges: ciEdges } = await getNetworkTopologyAtLayerForScope(3, {
+      scopeKey: buildDiscoveryScopeKey(scope),
+      customerAccountId: scopeFields.customerAccountId,
+      customerSiteId: scopeFields.customerSiteId,
+    });
+
+    const nodeMap = new Map<string, GraphData["nodes"][0]>();
+    for (const ci of ciNodes) {
+      nodeMap.set(ci.id, infraCIToGraphNode(ci));
+    }
+
+    const links: GraphData["links"] = ciEdges
+      .filter((edge) => nodeMap.has(edge.from) && nodeMap.has(edge.to))
+      .map((edge) => ({ source: edge.from, target: edge.to, type: edge.type }));
+
+    return { nodes: Array.from(nodeMap.values()), links };
+  } catch {
+    return { nodes: [], links: [] };
+  }
+}
+
 
 /** Hosting stack: Docker host + runtime + containers + HOSTS/RUNS_ON edges. */
 export async function getHostingStackData(): Promise<GraphData> {

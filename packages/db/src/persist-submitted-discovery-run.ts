@@ -24,8 +24,10 @@ import {
   type DiscoverySyncClient,
   persistBootstrapDiscoveryRun,
 } from "./discovery-sync";
-import { normalizeDiscoveredFacts } from "./discovery-normalize";
+
 import type { CollectorOutput } from "./discovery-types";
+import { normalizeDiscoveredFacts } from "./discovery-normalize";
+import { resolveDiscoveryScopeFromIds } from "./discovery-scope";
 
 export type SubmittedDiscoveryRunInput = {
   /** Edge Node row id (cuid surrogate). Threaded onto DiscoveryRun.edgeNodeId. */
@@ -58,10 +60,19 @@ export async function persistSubmittedDiscoveryRun(
   input: SubmittedDiscoveryRunInput,
   options: DiscoveryProjectionOptions = {},
 ): Promise<DiscoveryPersistenceSummary> {
+  // Derive the discovery scope from the server-authenticated edge node's
+  // customer/site ids — never from the submitted output body. The
+  // normalizer uses this to scope inventory entity and relationship keys,
+  // which is what keeps two customers with the same private IP distinct.
+  const discoveryScope = resolveDiscoveryScopeFromIds({
+    customerAccountId: input.customerAccountId,
+    customerSiteId: input.customerSiteId,
+  });
+
   // Normalize the submitted CollectorOutput. The same code path the
   // bootstrap collectors feed; the agent's job is to emit a valid
   // CollectorOutput, not to pre-normalize.
-  const normalized = normalizeDiscoveredFacts(input.submittedOutput);
+  const normalized = normalizeDiscoveredFacts(input.submittedOutput, { discoveryScope });
 
   // Source slug encodes "this came from edge-node X" so admins can
   // filter discovered items by submission origin without joining

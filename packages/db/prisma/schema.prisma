@@ -2099,10 +2099,13 @@ model CustomerAccount {
   quotes             Quote[]
   salesOrders        SalesOrder[]
   recurringSchedules RecurringSchedule[]
+  inventoryEntities       InventoryEntity[]       @relation("InventoryEntityCustomerAccount")
+  inventoryRelationships  InventoryRelationship[] @relation("InventoryRelationshipCustomerAccount")
 
   @@index([status])
   @@index([parentAccountId])
 }
+
 
 model CustomerSite {
   id                 String                      @id @default(cuid())
@@ -2126,6 +2129,8 @@ model CustomerSite {
   edgeBootstrapTokens BootstrapToken[]
   discoveryRuns      DiscoveryRun[]
   discoveryConnections DiscoveryConnection[]
+  inventoryEntities       InventoryEntity[]       @relation("InventoryEntityCustomerSite")
+  inventoryRelationships  InventoryRelationship[] @relation("InventoryRelationshipCustomerSite")
 
   @@index([accountId])
   @@index([primaryAddressId])
@@ -3403,12 +3408,20 @@ model InventoryEntity {
   discoveryConnectionGateways DiscoveryConnection[]             @relation("DiscoveryConnectionGateway")
   discoveredViaConnectionId   String?
   discoveredViaConnection     DiscoveryConnection?              @relation("DiscoveredViaConnection", fields: [discoveredViaConnectionId], references: [id])
+  scopeKey                    String                            @default("organization:internal")
+  customerAccountId           String?
+  customerSiteId              String?
+  customerAccount             CustomerAccount?                  @relation("InventoryEntityCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite                CustomerSite?                     @relation("InventoryEntityCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
 
   @@index([entityType])
   @@index([attributionStatus])
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
+  @@index([scopeKey])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
 }
 
 model InventoryRelationship {
@@ -3423,15 +3436,23 @@ model InventoryRelationship {
   lastConfirmedRunId      String?
   fromEntityId            String
   toEntityId              String
+  scopeKey                String                   @default("organization:internal")
+  customerAccountId       String?
+  customerSiteId          String?
   discoveredRelationships DiscoveredRelationship[]
   fromEntity              InventoryEntity          @relation("InventoryRelationshipFromEntity", fields: [fromEntityId], references: [id], onDelete: Cascade)
   lastConfirmedRun        DiscoveryRun?            @relation("InventoryRelationshipConfirmedRun", fields: [lastConfirmedRunId], references: [id])
   toEntity                InventoryEntity          @relation("InventoryRelationshipToEntity", fields: [toEntityId], references: [id], onDelete: Cascade)
   qualityIssues           PortfolioQualityIssue[]
+  customerAccount         CustomerAccount?         @relation("InventoryRelationshipCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
+  customerSite            CustomerSite?            @relation("InventoryRelationshipCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
 
   @@unique([fromEntityId, toEntityId, relationshipType])
   @@index([relationshipType])
   @@index([status])
+  @@index([scopeKey])
+  @@index([customerAccountId])
+  @@index([customerSiteId])
 }
 
 model PortfolioQualityIssue {
