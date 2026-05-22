@@ -67,11 +67,17 @@ jobs:
 
       - name: Determine tag
         id: tag
+        # BI-D094AF1D fix: workflow_dispatch input via env var, not inline.
+        # github.event_name is a GH-controlled context value (not attacker-
+        # influenced) so it stays inline; only the user-supplied tag goes
+        # through env-var passthrough.
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="${{ github.event.inputs.tag }}"
+            TAG="${INPUT_TAG}"
           fi
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
 
