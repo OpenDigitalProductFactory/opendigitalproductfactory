@@ -30,5 +30,9 @@ export function resolveFinanceSetupProfile(input: {
     slug,
     archetypeName: input.archetypeName ?? profile?.displayName ?? "Professional Services",
     profileName: profile?.displayName ?? "Professional Services",
+    primaryPaymentPattern: profile?.billingPatternProfile.primaryPaymentPattern ?? "ad-hoc-invoice",
+    supportedPaymentPatterns: profile?.billingPatternProfile.supportedPaymentPatterns ?? ["ad-hoc-invoice"],
+    recurringBillingApplicability:
+      profile?.billingPatternProfile.recurringBillingApplicability ?? "optional",
   };
 }

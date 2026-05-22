@@ -20,6 +20,7 @@ export default async function StorefrontSetupPage() {
         tags: true,
         itemTemplates: true,
         sectionTemplates: true,
+        activationProfile: true,
         isBuiltIn: true,
       },
       orderBy: { category: "asc" },

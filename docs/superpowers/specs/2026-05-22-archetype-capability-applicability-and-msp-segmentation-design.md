@@ -137,6 +137,21 @@ Rejected patterns:
 - do not hard-code one vendor's invoice workflow into DPF.
 - do not make recurring invoices the default finance shape for every business.
 
+### 3.5 Internal reference: 4-portfolio taxonomy workbook
+
+`docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` is the canonical internal reference for how the business taxonomy team decomposes any digital product or service. Four sheets, four portfolios:
+
+- **For Employees** — internal-facing tooling (TBM business capabilities).
+- **Foundational** — substrate (compute, storage, network, identity, data fabric).
+- **Manufacturing and Delivery** — IT4IT v3.0.1 value streams (Detect to Correct, Deploy to Operate, Request to Fulfill, etc.).
+- **Products and Services Sold** — the external commercial offer. This sheet carries the operating-model axis columns added during the most recent pass — Digital/Physical, Goods/Services, Primary External Consumer, Consumption Channel, Commercial Model, Provisioning/Entitlement Model, Platform/Ecosystem.
+
+Adopted patterns:
+
+- treat the 4 portfolios as the macro classification for every archetype (see §6.6).
+- treat the axis columns as the canonical value vocabularies for the operating-model axes (see §6.5).
+- when an archetype needs a new value, propose it as a workbook column update first; promote into the platform enum only once the taxonomy team has accepted it. This keeps platform code and the business taxonomy in lockstep.
+
 ## 4. Design Goals
 
 1. Make archetypes activate operating capabilities, not just vocabulary and storefront defaults.
@@ -157,7 +172,9 @@ Rejected patterns:
 
 ## 6. Core Architecture Decision
 
-Archetype behavior should be driven by a versioned `activationProfile` contract that names capabilities, applicability, scope, isolation, UI surfaces, workflow defaults, and billing/payment patterns.
+Archetype behavior should be driven by an `activationProfile` contract that names **operating-model axes**, **portfolio roles**, and **capability applicability rules** — in that order of authority. Per-capability records (scope, isolation, surfaces, billing pattern) are *derived* from the axes + portfolios via a named rule set; they should not be hand-authored per (capability × archetype).
+
+This is a deliberate inversion of the obvious approach. A flat `(archetype → capabilities[])` table works for two or three archetypes; it collapses under its own weight at ten. The reference workbook in `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` already encodes the right factoring — see §6.5 and §6.6.
 
 Current model:
 
@@ -169,27 +186,78 @@ Target model:
 
 ```ts
 activationProfile = {
-  version: 2,
-  profileType: "managed-service-provider",
-  capabilities: [
-    {
-      capabilityKey: "customer-estate",
-      applicability: "required",
-      scopes: ["customer-account", "customer-site", "configuration-item"],
-      isolation: "strict-customer-scope",
-      surfaces: ["customers", "customer-estate", "edge-nodes", "lifecycle-reviews"],
-      defaultWorkflows: ["estate-review", "coverage-gap-review"]
-    }
+  axes: {
+    form: "services",                       // goods | services
+    delivery: "hybrid",                     // digital | physical | hybrid
+    primaryConsumer: "business",            // individual | business | household | patient | channel-partner | internal
+    consumptionChannel: "portal+onsite",
+    commercialModel: "recurring-agreement", // see §10
+    provisioning: "account-and-entitlement",
+    platform: "no"                          // is this a platform/ecosystem play
+  },
+  portfolios: {
+    foundational:           { scope: "minimal" },
+    manufactureAndDeliver:  { scope: "primary", it4itStages: ["detect-to-correct", "deploy-to-operate", "request-to-fulfill"] },
+    forEmployees:           { scope: "standard" },
+    productsAndServicesSold:{ scope: "primary", offerings: [/* taxonomy refs */] }
+  },
+  capabilityOverrides: [
+    // Only here when the rules-engine output is wrong for a specific archetype.
+    // Empty for most archetypes. Required overrides are visible in code review.
+    { capabilityKey: "remote-support", applicability: "recommended", reason: "consent gating not yet automated" }
   ],
-  billingProfile: {
-    primaryPaymentPattern: "recurring-agreement",
-    supportedPaymentPatterns: ["recurring-agreement", "project-milestone", "ad-hoc-invoice"],
-    invoiceExecutionMode: "prepared-not-prescribed"
-  }
+  billingProfile: { /* derived from axes.commercialModel — see §10 */ }
 }
 ```
 
-The first implementation should preserve compatibility with the current profile shape. `readActivationProfile` should normalize legacy profiles into a v2 runtime shape. Seed data can then be migrated gradually without breaking current archetype reset, marketing, TAK route context, and customer-estate helpers.
+The first implementation should preserve compatibility with the current profile shape. `readActivationProfile` should normalize legacy profiles by *inferring* axes and portfolios from the existing `modules`/`billingReadinessMode`/`customerGraph`/`estateSeparation` fields. Seed data migrates gradually without breaking archetype reset, marketing, TAK route context, or customer-estate helpers.
+
+No `version` field and no `profileType` discriminator. The presence of `axes`/`portfolios` is the discriminator; the legacy shape continues to be recognized by the absence of those keys. If a future incompatible change becomes necessary, add the version field then — not speculatively now.
+
+### 6.5 Operating-Model Axes
+
+Each archetype is classified along a small set of orthogonal axes. Capability applicability, default scope, and billing pattern are *derived* from these axis values, not declared per archetype. The value vocabularies are sourced from the **Products and Services Sold** sheet of the reference workbook so the platform classification stays aligned with how the business taxonomy team already thinks.
+
+| Axis | Values (initial) | Source |
+| --- | --- | --- |
+| `form` | `goods`, `services` | workbook col *Goods/Services* |
+| `delivery` | `digital`, `physical`, `hybrid` | workbook col *Digital/Physical* |
+| `primaryConsumer` | `individual`, `household`, `business`, `patient-and-payer`, `channel-partner`, `internal` | workbook col *Primary External Consumer* (collapsed) |
+| `consumptionChannel` | `physical`, `web-app`, `portal-api`, `sales-assisted`, `onsite-plus-portal`, … | workbook col *Consumption Channel* (collapsed to ~8 canonical bands) |
+| `commercialModel` | `transactional`, `subscription`, `recurring-agreement`, `usage-based`, `account-based-fees`, `encounter-based`, `appointment-checkout`, `point-of-sale`, `hybrid` | workbook col *Commercial Model* |
+| `provisioning` | `none`, `account-with-billing`, `account-and-entitlement`, `account-with-kyc`, `device-bound`, `episode-of-care` | workbook col *Provisioning and Entitlement Model* |
+| `platform` | `no`, `yes-marketplace`, `yes-developer` | workbook col *Platform/Ecosystem* |
+
+Rules engine examples (illustrative, not exhaustive):
+
+- `axes.primaryConsumer === "business" && portfolios.manufactureAndDeliver.scope === "primary"` → `customer-estate.applicability = required`, `scopes = ["customer-account", "customer-site"]`, `isolation = "strict-customer-scope"`.
+- `axes.commercialModel === "recurring-agreement"` → `service-agreements.applicability = required`, `billingProfile.primaryPaymentPattern = "recurring-agreement"`, `billingProfile.invoiceExecutionMode = "prepared-not-prescribed"`.
+- `axes.commercialModel === "appointment-checkout"` → `appointment-checkout.applicability = required`, `recurring-agreement-billing.applicability = optional`.
+- `axes.delivery !== "physical" && portfolios.manufactureAndDeliver.it4itStages.includes("detect-to-correct")` → `edge-node-customer-deployment.applicability = required`.
+
+The rule set is short, code-reviewed, and lives next to the capability registry (see §13). An archetype that needs to override a derived applicability uses `capabilityOverrides` with a stated reason — visible in PR review so deviations don't accumulate silently.
+
+### 6.6 Portfolio Decomposition
+
+Every digital product or service an archetype touches falls into one of four portfolios. This matches the four sheets in the reference workbook and matches how the platform's existing IT4IT and TBM alignment thinks about it:
+
+| Portfolio | What it contains | Primary axis the rules engine reads |
+| --- | --- | --- |
+| **Foundational** | Compute, storage, network, identity, data fabric — substrate the business runs on | `delivery`, `provisioning` |
+| **Manufacture & Deliver** | IT4IT value streams the business *executes* — Detect to Correct, Deploy to Operate, Request to Fulfill, etc. | `commercialModel`, `it4itStages` |
+| **For Employees** | Internal-facing tooling (TBM business capabilities such as Corp Comms, Finance, HR, Sales) | `primaryConsumer === internal`, headcount-scale heuristics |
+| **Products & Services Sold** | The external commercial offer — what the customer pays for | `form`, `primaryConsumer`, `commercialModel`, `consumptionChannel`, `platform` |
+
+Each archetype declares the **scope** of each portfolio (`absent` / `minimal` / `standard` / `primary`) and, for the *primary* portfolios, which sub-elements are required.
+
+Worked examples:
+
+- **MSP (`it-managed-services`)**: `manufactureAndDeliver` and `productsAndServicesSold` are *primary*. The MSP's "products sold" portfolio is largely a resale of `manufactureAndDeliver > Detect to Correct / Deploy to Operate / Request to Fulfill` against *customer* estates. `forEmployees` is *standard*. `foundational` is *minimal* (it's not infrastructure-as-product).
+- **Hair salon**: `productsAndServicesSold` is *primary*; `manufactureAndDeliver` and `forEmployees` are *minimal*; `foundational` is *minimal* (POS substrate only). No customer-estate falls out of the rules; appointment-checkout does.
+- **Retail**: `productsAndServicesSold` primary, with `form = goods` and `consumptionChannel = web-app` or `physical` flipping the activated surfaces (e-commerce vs in-store POS).
+- **HOA / property mgmt**: `productsAndServicesSold` primary with `commercialModel = recurring-agreement`, plus a managed external estate (sites/property) — which means *customer-estate falls out of the same rule that activates it for MSP*, demonstrating the architecture's reusability.
+
+The rules engine reads axes + portfolios and produces the runtime capability set. This is what scales: adding the 50th archetype is a row of axis values and a portfolio mix, not a column of hand-curated capability flags.
 
 ## 7. Key Terms
 
@@ -207,9 +275,15 @@ How a capability applies to an archetype:
 - `hidden`: not shown by default but usable through admin/configuration.
 - `not-applicable`: should not be offered because it creates the wrong operating model.
 
-**Scope**
+**Ownership scope** (where does the row live, who can see it)
 
-The domain boundary for data and workflows. Examples: `organization`, `customer-account`, `customer-site`, `configuration-item`, `service-agreement`, `appointment`, `order`, `billing-period`, `edge-node`.
+`organization`, `customer-account`, `customer-site`, `configuration-item`, `edge-node`.
+
+**Transaction context** (what work-event bound this row)
+
+`service-agreement`, `engagement`, `appointment`, `order`, `billing-period`, `episode-of-care`.
+
+These were a single enum in earlier drafts. They have been split because they answer different questions: ownership scope drives row-level authorization and isolation; transaction context drives reporting roll-ups and billing-readiness joins. Conflating them broke down as soon as scope policy met server-action guards.
 
 **Isolation**
 
@@ -240,9 +314,11 @@ Required rules:
 6. Cross-customer views are allowed only in aggregate MSP operations views that never mix actionable row-level commands without a selected customer scope.
 7. Customer portal access, if introduced later, should use Principal convergence and authorization policy, not a parallel customer identity table.
 
-## 9. Capability Applicability Matrix
+## 9. Capability Applicability Matrix (worked examples)
 
-This is the target shape for first-class archetype applicability.
+**This table is a rendered view of the rules engine output, not the source of truth.** It exists to make the design legible and to serve as fixtures for the applicability tests. The actual applicability is derived from the axes + portfolio decomposition in §6.5/§6.6 — adding a new archetype must not require editing this table; it must come out of the rules.
+
+If a row below disagrees with what the rules engine produces, the rules engine wins. The fix is either an `capabilityOverride` on the archetype (with stated reason) or a refinement of the rules — not a hand-edit of this table.
 
 | Capability | MSP (`it-managed-services`) | Hair salon / beauty | Retail | HOA/property |
 | --- | --- | --- | --- | --- |
@@ -371,10 +447,11 @@ At least 20 percent of the first implementation capacity should be refactoring. 
 Refactoring targets:
 
 1. Move activation profile parsing and normalization into a shared profile contract instead of keeping all behavior in route-specific helpers.
-2. Normalize legacy `modules` into v2 capability applicability records.
-3. Replace finance `recurringBillingEnabled` call sites with derived billing pattern helpers while keeping the legacy boolean as compatibility output.
+2. Normalize legacy `modules` into the axis-derived capability applicability records (see §6.5).
+3. Replace finance `recurringBillingEnabled` call sites with derived billing pattern helpers while keeping the legacy boolean as a compatibility output marked for removal once call sites migrate.
 4. Add customer-estate scope helpers that force queries and actions to carry account/site context.
 5. Keep archetype-specific UI copy and labels out of business logic; derive from profiles and vocabulary helpers.
+6. Stand up a **Capability Registry** (see §14) as the single source of truth for legal `capabilityKey` values, their IT4IT value-stream stage, their default ownership scope, and their portfolio. Every consumer imports from it instead of carrying its own string union.
 
 ## 14. Data Model Direction
 
@@ -382,9 +459,10 @@ First slice:
 
 - keep `StorefrontArchetype.activationProfile Json?`
 - add TypeScript contracts, validation, and normalizers
-- update seeded archetype definitions
-- derive UI/workflow behavior from normalized runtime profile
-- no migration required unless persisted profile examples need backfill
+- add the **Capability Registry** as a code-resident record: a single typed map keyed by `capabilityKey` declaring `portfolio`, `it4itStage` (nullable), `defaultOwnershipScope`, `defaultIsolation`, and `surfaces`. Imported by archetype definitions, server actions, and the activation summary component. No DB table yet — promote only when a second platform install needs to extend it.
+- update seeded archetype definitions to use **axes + portfolios + (optional) overrides**, not a flat capabilities array.
+- derive UI/workflow behavior from normalized runtime profile via the rules engine in §6.5.
+- no migration required unless persisted profile examples need backfill.
 
 Second slice:
 
@@ -406,13 +484,14 @@ Later slice:
 
 The planning and implementation track is successful when:
 
-1. The MSP archetype declares customer estate, edge node deployment, service agreements, billing readiness, backup posture, cybersecurity posture, lifecycle reviews, and service operations through normalized capability applicability.
-2. Beauty/salon archetypes do not inherit recurring invoice behavior as a default operating assumption.
-3. Finance setup can distinguish point-of-sale, appointment checkout, recurring agreement, subscription, project milestone, retainer, and ad-hoc invoice patterns.
-4. Edge Node MSP planning has a customer/site binding path.
-5. Customer-estate actions and queries have a reusable scope helper.
-6. UI plans use customer-scoped navigation and DPF theme rules.
-7. No TeamLogic-only code path is introduced.
+1. The MSP archetype declares its operating model through **axes + portfolios**, and customer estate / edge node / service agreements / billing readiness / backup / cybersecurity / lifecycle / service operations fall out of the rules engine — not from a hand-authored capability list keyed by archetype id.
+2. Beauty/salon archetypes do not inherit recurring invoice behavior as a default operating assumption. The same rules engine produces the salon's capability set from its axis values.
+3. Adding a third archetype (e.g., HOA/property management) requires *zero* edits to the §9 example table and zero hand-curated capability rows — only axis values and portfolio scope declarations.
+4. Finance setup can distinguish point-of-sale, appointment checkout, recurring agreement, subscription, project milestone, retainer, and ad-hoc invoice patterns, and the billing profile is derived from `axes.commercialModel`.
+5. Edge Node MSP planning has a customer/site binding path.
+6. Customer-estate actions and queries have a reusable scope helper that consumes the normalized profile, not the raw archetype id.
+7. UI plans use customer-scoped navigation and DPF theme rules.
+8. No TeamLogic-only code path is introduced, and no `archetypeId === ...` conditional appears in feature code.
 
 ## 16. Risks And Mitigations
 
@@ -427,9 +506,11 @@ The planning and implementation track is successful when:
 
 ## 17. Recommended Next Slices
 
-1. Implement activation profile v2 normalization and tests.
-2. Update the MSP archetype and finance profile contract to express applicability and payment patterns.
-3. Add a read-only setup/admin summary that shows what the selected archetype activates.
-4. Add customer-estate scope helpers and tests.
-5. Plan the Edge Node customer/site binding migration under `EP-EDGE-NODE` and `EP-SITE-7C4D2B`.
-6. Plan service agreement billing-readiness records as the bridge to invoices, not full invoice execution.
+1. Land the **Capability Registry** + **operating-model axis enums** + **portfolio decomposition types** as the shared contract. Tests cover the rules engine producing MSP, salon, retail, and HOA capability sets from axis values alone.
+2. Implement activation profile normalization (legacy `modules` → axes/portfolios/derived capabilities) and the compatibility helpers consumers still need.
+3. Update the MSP and beauty archetype definitions to use the new shape; assert that all the §9 example rows are produced by the rules engine, not by hand-edits.
+4. Update the finance profile contract to derive payment patterns from `axes.commercialModel`. Mark `recurringBillingEnabled` deprecated and track migration of call sites in the PR.
+5. Add a read-only setup/admin summary that shows what the selected archetype activates, sourced from the runtime profile.
+6. Add customer-estate scope helpers and tests, consuming the normalized profile.
+7. Plan the Edge Node customer/site binding migration under `EP-EDGE-NODE` and `EP-SITE-7C4D2B` as its own spec.
+8. Plan service agreement billing-readiness records as the bridge to invoices, not full invoice execution.

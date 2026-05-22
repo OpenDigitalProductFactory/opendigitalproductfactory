@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { ArchetypeActivationSummary } from "./ArchetypeActivationSummary";
 import { FinancialSetupStep } from "./FinancialSetupStep";
 import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-offer";
 import { financeProfileSlugFromCategory } from "@/lib/finance/setup-profile";
@@ -13,6 +14,7 @@ type Archetype = {
   tags: unknown;
   itemTemplates: unknown;
   sectionTemplates: unknown;
+  activationProfile?: unknown;
   isBuiltIn?: boolean;
 };
 
@@ -179,6 +181,7 @@ export function SetupWizard({
         tags: created.tags,
         itemTemplates: created.itemTemplates,
         sectionTemplates: created.sectionTemplates,
+        activationProfile: created.activationProfile,
         isBuiltIn: false,
       });
       setStep(2);
@@ -403,6 +406,7 @@ export function SetupWizard({
           These sections and items will be created. You can edit them later.
           {selected?.isBuiltIn === false && " This is a custom template."}
         </p>
+        <ArchetypeActivationSummary activationProfile={selected?.activationProfile} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Sections</div>

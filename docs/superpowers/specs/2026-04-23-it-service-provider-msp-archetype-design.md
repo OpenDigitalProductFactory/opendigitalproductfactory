@@ -3,13 +3,29 @@
 **Date:** 2026-04-23  
 **Status:** Draft  
 **Author:** OpenAI Codex with user direction  
-**Epic:** TBD - recommend new epic
+**Epic:** `EP-ARCH-8D4F2A` - Archetype Model V2: Unified Business Archetypes
 
-> Applicability update: the cross-archetype capability, segmentation,
-> and billing-pattern contract now lives in
+> **Architecture update (2026-05-22).** The cross-archetype capability,
+> segmentation, and billing-pattern contract is now governed by
 > `docs/superpowers/specs/2026-05-22-archetype-capability-applicability-and-msp-segmentation-design.md`.
-> Treat this document as the MSP operating-model grounding and the newer
-> spec as the canonical applicability architecture.
+>
+> In particular: the modules and behaviors enumerated below (customer
+> estate, agreements, billing readiness, service operations, edge-node
+> customer deployment, internal-vs-customer separation) **are no longer
+> declared per archetype**. They are *derived* from operating-model axes
+> + portfolio decomposition (design §6.5 and §6.6), keyed against the
+> Capability Registry (design §14). The MSP archetype is a *worked
+> example* of that contract — its axis values are
+> `services / hybrid / business / onsite-plus-portal /
+> recurring-agreement / account-and-entitlement / no` and its primary
+> portfolios are `manufactureAndDeliver` (Detect to Correct, Deploy to
+> Operate, Request to Fulfill) and `productsAndServicesSold`.
+>
+> Treat this document as the **MSP operating-model grounding and
+> research record**. Treat the newer spec as the **canonical
+> applicability architecture**. When the two disagree, the newer spec
+> wins; raise a PR to update this one rather than implementing against
+> the older shape.
 
 ## 1. Problem Statement
 

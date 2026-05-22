@@ -24,6 +24,11 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const billingProfile = profile?.billingPatternProfile;
+
+  function formatToken(value: string) {
+    return value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+  }
 
   async function handleSetup() {
     setError(null);
@@ -105,6 +110,40 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
         {archetypeName}. We&#39;ll configure your finances to match.
       </div>
 
+      {billingProfile && (
+        <div
+          style={{
+            padding: "12px 16px",
+            borderRadius: 8,
+            background: "var(--dpf-surface-1)",
+            border: "1px solid var(--dpf-border)",
+            marginBottom: 16,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+            gap: 8,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 2 }}>Payment</div>
+            <div style={{ fontSize: 13, color: "var(--dpf-text)", fontWeight: 700 }}>
+              {formatToken(billingProfile.primaryPaymentPattern)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 2 }}>Recurring</div>
+            <div style={{ fontSize: 13, color: "var(--dpf-text)", fontWeight: 700 }}>
+              {formatToken(billingProfile.recurringBillingApplicability)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 2 }}>Invoices</div>
+            <div style={{ fontSize: 13, color: "var(--dpf-text)", fontWeight: 700 }}>
+              {formatToken(billingProfile.invoiceExecutionMode)}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* Question 2: VAT registered */}
         <div>
@@ -161,28 +200,38 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
           >
             {/* Ensure the suggested currency appears even if not in the standard list */}
             {suggestedCurrency && !["GBP","USD","EUR","CAD","AUD","NZD","CHF","SEK","NOK","DKK","JPY","SGD","HKD","ZAR","AED","INR","BRL","MXN","PLN","CZK"].includes(suggestedCurrency) && (
-              <option value={suggestedCurrency}>{suggestedCurrency}</option>
+              <option value={suggestedCurrency} style={{ background: "var(--dpf-surface-2)", color: "var(--dpf-text)" }}>{suggestedCurrency}</option>
             )}
-            <option value="GBP">GBP — British Pound</option>
-            <option value="USD">USD — US Dollar</option>
-            <option value="EUR">EUR — Euro</option>
-            <option value="CAD">CAD — Canadian Dollar</option>
-            <option value="AUD">AUD — Australian Dollar</option>
-            <option value="NZD">NZD — New Zealand Dollar</option>
-            <option value="CHF">CHF — Swiss Franc</option>
-            <option value="SEK">SEK — Swedish Krona</option>
-            <option value="NOK">NOK — Norwegian Krone</option>
-            <option value="DKK">DKK — Danish Krone</option>
-            <option value="JPY">JPY — Japanese Yen</option>
-            <option value="SGD">SGD — Singapore Dollar</option>
-            <option value="HKD">HKD — Hong Kong Dollar</option>
-            <option value="ZAR">ZAR — South African Rand</option>
-            <option value="AED">AED — UAE Dirham</option>
-            <option value="INR">INR — Indian Rupee</option>
-            <option value="BRL">BRL — Brazilian Real</option>
-            <option value="MXN">MXN — Mexican Peso</option>
-            <option value="PLN">PLN — Polish Zloty</option>
-            <option value="CZK">CZK — Czech Koruna</option>
+            {[
+              ["GBP", "British Pound"],
+              ["USD", "US Dollar"],
+              ["EUR", "Euro"],
+              ["CAD", "Canadian Dollar"],
+              ["AUD", "Australian Dollar"],
+              ["NZD", "New Zealand Dollar"],
+              ["CHF", "Swiss Franc"],
+              ["SEK", "Swedish Krona"],
+              ["NOK", "Norwegian Krone"],
+              ["DKK", "Danish Krone"],
+              ["JPY", "Japanese Yen"],
+              ["SGD", "Singapore Dollar"],
+              ["HKD", "Hong Kong Dollar"],
+              ["ZAR", "South African Rand"],
+              ["AED", "UAE Dirham"],
+              ["INR", "Indian Rupee"],
+              ["BRL", "Brazilian Real"],
+              ["MXN", "Mexican Peso"],
+              ["PLN", "Polish Zloty"],
+              ["CZK", "Czech Koruna"],
+            ].map(([code, label]) => (
+              <option
+                key={code}
+                value={code}
+                style={{ background: "var(--dpf-surface-2)", color: "var(--dpf-text)" }}
+              >
+                {code} - {label}
+              </option>
+            ))}
           </select>
           {suggestedCurrency && (
             <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 4 }}>
