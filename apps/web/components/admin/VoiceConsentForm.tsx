@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { createVoiceConsentRecord } from "@/lib/actions/voice-consent"
 
 interface Props {
+  profileId: string
   capturedByPrincipalId: string
   onSuccess?: (consentRecordId: string) => void
 }
@@ -20,7 +21,7 @@ const USE_CASES = [
   { value: "general-tts", label: "General TTS output" },
 ]
 
-export function VoiceConsentForm({ capturedByPrincipalId, onSuccess }: Props) {
+export function VoiceConsentForm({ profileId, capturedByPrincipalId, onSuccess }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -53,6 +54,7 @@ export function VoiceConsentForm({ capturedByPrincipalId, onSuccess }: Props) {
     startTransition(async () => {
       try {
         const record = await createVoiceConsentRecord({
+          profileId,
           subjectName,
           subjectEmail: subjectEmail || undefined,
           consentMethod,
