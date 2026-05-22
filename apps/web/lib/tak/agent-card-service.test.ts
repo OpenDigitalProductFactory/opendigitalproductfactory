@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     agent: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
     },
   },
 }));
@@ -15,7 +16,7 @@ vi.mock("@/lib/identity/aidoc-resolver", () => ({
 import { prisma } from "@dpf/db";
 import { resolveAIDocForAgent } from "@/lib/identity/aidoc-resolver";
 
-import { resolveInternalAgentCard } from "./agent-card-service";
+import { listInternalAgentCards, resolveInternalAgentCard } from "./agent-card-service";
 
 describe("resolveInternalAgentCard", () => {
   beforeEach(() => {
@@ -214,6 +215,125 @@ describe("resolveInternalAgentCard", () => {
     });
     expect(card!.extensions.tak.authority.limitations).toContain(
       "agent has no resolved GAID/AIDoc projection",
+    );
+  });
+
+  it("lists internal Agent Cards for supervisor authority surfaces", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      {
+        agentId: "build-specialist",
+        name: "Build Specialist",
+        description: "Implements governed Build Studio changes.",
+        status: "active",
+        lifecycleStage: "production",
+        sensitivity: "internal",
+        hitlTierDefault: 2,
+        executionConfig: {
+          executionType: "sandbox",
+          defaultModelId: "gpt-5.2",
+        },
+        governanceProfile: {
+          autonomyLevel: "bounded",
+          hitlPolicy: "proposal_for_external_writes",
+          allowDelegation: true,
+          maxDelegationRiskBand: "medium",
+        },
+        skills: [
+          {
+            label: "build-phase-implementation",
+            taskType: "code_generation",
+            capability: "build_promote",
+          },
+        ],
+        toolGrants: [{ grantKey: "sandbox_execute" }],
+      },
+      {
+        agentId: "planner",
+        name: "Planner",
+        description: null,
+        status: "active",
+        lifecycleStage: "production",
+        sensitivity: "internal",
+        hitlTierDefault: 3,
+        executionConfig: null,
+        governanceProfile: null,
+        skills: [],
+        toolGrants: [{ grantKey: "registry_read" }],
+      },
+    ] as never);
+    vi.mocked(resolveAIDocForAgent).mockImplementation(async (agentId) =>
+      agentId === "build-specialist"
+        ? ({
+            gaid: "gaid:priv:dpf.internal:build-specialist",
+            issuer: "dpf.internal",
+            subject_type: "agent",
+            subject_name: "Build Specialist",
+            principal_ref: "PRN-AGENT-1",
+            status: "active",
+            exposure_state: "private",
+            validation_state: "validated",
+            lifecycle_stage: "production",
+            data_sensitivity_profile: "internal",
+            model_binding: {
+              default_model_id: "gpt-5.2",
+              pinned_provider_id: "openai",
+              pinned_model_id: "gpt-5.2",
+              minimum_tier: "strong",
+              budget_class: "quality_first",
+              execution_type: "sandbox",
+              temperature: 0.2,
+              max_tokens: 12000,
+            },
+            hitl_profile: {
+              default_tier: 2,
+              policy: "proposal_for_external_writes",
+              autonomy_level: "bounded",
+              allow_delegation: true,
+              max_delegation_risk_band: "medium",
+            },
+            prompt_class_refs: ["code_generation:build-phase-implementation"],
+            tool_surface: ["launch_sandbox", "run_sandbox_tests"],
+            authorization_classes: ["observe", "execute"],
+            operating_profile_fingerprint: "b".repeat(64),
+          } as never)
+        : null,
+    );
+
+    const cards = await listInternalAgentCards({
+      routeContext: "/platform/audit/authority",
+      actingPrincipalRef: "PRN-HUMAN-1",
+    });
+
+    expect(cards.map((card) => card.agentId)).toEqual(["build-specialist", "planner"]);
+    expect(cards[0]).toMatchObject({
+      agentId: "build-specialist",
+      exposedTools: ["launch_sandbox", "run_sandbox_tests"],
+      extensions: {
+        tak: {
+          authority: {
+            routeContext: "/platform/audit/authority",
+            actingPrincipalRef: "PRN-HUMAN-1",
+            agentGaid: "gaid:priv:dpf.internal:build-specialist",
+            aidocValidationState: "validated",
+            exposedToolCount: 2,
+            authorizationClasses: ["observe", "execute"],
+          },
+        },
+      },
+    });
+    expect(cards[1]).toMatchObject({
+      agentId: "planner",
+      extensions: {
+        gaid: {
+          gaid: null,
+          validationState: "unlinked",
+        },
+      },
+    });
+    expect(prisma.agent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { name: "asc" },
+      }),
     );
   });
 });

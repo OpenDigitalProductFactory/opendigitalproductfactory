@@ -41,6 +41,10 @@ export type ResolveInternalAgentCardOptions = {
   db?: AgentCardDb;
 };
 
+export type ListInternalAgentCardsOptions = Omit<ResolveInternalAgentCardOptions, "db"> & {
+  db?: AgentCardDb;
+};
+
 export type InternalAgentCardProjectionSource = {
   agent: AgentCardAgent;
   aidoc: InternalAIDoc | null;
@@ -85,6 +89,43 @@ const SECURITY_REQUIREMENTS = [
   "route context must expose the requested capability",
   "side-effecting work may require HITL proposal approval",
 ];
+
+const AGENT_CARD_SELECT = {
+  agentId: true,
+  name: true,
+  description: true,
+  status: true,
+  lifecycleStage: true,
+  sensitivity: true,
+  hitlTierDefault: true,
+  executionConfig: {
+    select: {
+      executionType: true,
+      defaultModelId: true,
+    },
+  },
+  governanceProfile: {
+    select: {
+      autonomyLevel: true,
+      hitlPolicy: true,
+      allowDelegation: true,
+      maxDelegationRiskBand: true,
+    },
+  },
+  skills: {
+    orderBy: { sortOrder: "asc" as const },
+    select: {
+      label: true,
+      taskType: true,
+      capability: true,
+    },
+  },
+  toolGrants: {
+    select: {
+      grantKey: true,
+    },
+  },
+};
 
 function sortedUnique(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))].sort();
@@ -231,42 +272,7 @@ export async function resolveInternalAgentCard(
   const db = options.db ?? prisma;
   const agent = await db.agent.findUnique({
     where: { agentId },
-    select: {
-      agentId: true,
-      name: true,
-      description: true,
-      status: true,
-      lifecycleStage: true,
-      sensitivity: true,
-      hitlTierDefault: true,
-      executionConfig: {
-        select: {
-          executionType: true,
-          defaultModelId: true,
-        },
-      },
-      governanceProfile: {
-        select: {
-          autonomyLevel: true,
-          hitlPolicy: true,
-          allowDelegation: true,
-          maxDelegationRiskBand: true,
-        },
-      },
-      skills: {
-        orderBy: { sortOrder: "asc" },
-        select: {
-          label: true,
-          taskType: true,
-          capability: true,
-        },
-      },
-      toolGrants: {
-        select: {
-          grantKey: true,
-        },
-      },
-    },
+    select: AGENT_CARD_SELECT,
   });
 
   if (!agent) {
@@ -282,4 +288,26 @@ export async function resolveInternalAgentCard(
     actingPrincipalRef: options.actingPrincipalRef,
     actingPrincipalGaid: options.actingPrincipalGaid,
   });
+}
+
+export async function listInternalAgentCards(
+  options: ListInternalAgentCardsOptions = {},
+): Promise<InternalAgentCard[]> {
+  const db = options.db ?? prisma;
+  const agents = await db.agent.findMany({
+    orderBy: { name: "asc" },
+    select: AGENT_CARD_SELECT,
+  });
+
+  return Promise.all(
+    agents.map(async (agent) =>
+      projectInternalAgentCard({
+        agent,
+        aidoc: await resolveAIDocForAgent(agent.agentId),
+        routeContext: options.routeContext,
+        actingPrincipalRef: options.actingPrincipalRef,
+        actingPrincipalGaid: options.actingPrincipalGaid,
+      }),
+    ),
+  );
 }
