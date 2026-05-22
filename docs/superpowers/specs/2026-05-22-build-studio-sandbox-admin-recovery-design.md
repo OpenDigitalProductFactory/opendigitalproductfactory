@@ -40,6 +40,7 @@ The diagnosis that produced this spec was grounded in current code, live databas
 
 - `check_sandbox` in `apps/web/lib/mcp-tools.ts` only checks `docker inspect ... .State.Status`; it does not validate build ownership, Compose project, source path, branch, slot, runtime target, source currency, or active diff base.
 - `start_sandbox` tells the user to run `docker compose up -d sandbox` when the container is missing. That violates AGENTS.md's "never ask the user to run commands" rule.
+- The same violation appears in at least four more places that this spec must address as one cohort, not piecemeal: `start_build` legacy fallback message in `mcp-tools.ts` (`"tell the user to run: docker compose up -d sandbox"`), `run_ux_test` browser-use unreachable path (`"Run 'docker compose up -d browser-use'"`), `evaluate_page` browser-use fallback (same string), and the `start_build` instructions in `build-agent-prompts.ts` STEP 0 ("Please run: docker compose up -d sandbox"). The legacy text is duplicated; the fix must be too.
 - `deploy_feature` blocks missing `sandboxId` or missing `buildBranch`, and it has a schema-regression guard, but it trusts the registered sandbox identity too much once those fields exist.
 - `contribute_to_hive` requires a non-empty stored diff, but it does not rerun sandbox readiness, schema regression, CI prediction, DCO identity validation, or the Build Studio verification gate before opening a PR.
 - `createBranchAndPR` validates only that a `Signed-off-by` trailer exists; it does not ensure the GitHub commit author/committer matches that trailer.
@@ -154,7 +155,10 @@ The diagnostic service returns one of these states:
 | `stale_source` | Sandbox cannot prove current `origin/main` or configured base ref. | Block PR contribution; allow `reset_from_main` only when diff preservation policy passes. |
 | `dirty_or_leaking` | Workspace has source changes not attributable to this build, generated artifacts in the releasable diff, or a dirty tree before a new build starts. | Block deploy; record issue; require reset or manual review. |
 | `verification_red` | Sandbox is structurally healthy but build evidence is red, contradictory, or absent. | Block contribution; return next verification action. |
+| `stuck_mid_phase` | Build is registered to a sandbox and a `BuildPhaseRun` is `running` past its heartbeat budget, or last phase finished with `filesChanged:0` and no further activity. | Block deploy; offer governed `reset_build_phase`/`release_stale_slot`; never silently mark complete. |
 | `unrecoverable` | Recovery would be destructive or the platform lacks authority. | Stop; record incident; surface admin status. |
+
+The `stuck_mid_phase` state is the umbrella for the current "stuck COST-P1 builds awaiting Reset Build" class: builds wedged at `deps_installed` or builds at `complete` with `filesChanged:0`. This spec's governed `reset_build_phase` action replaces the missing Reset Build UI for sandbox-side stuck states; the broader phase-reset feature can land separately, but sandbox-attributable stuck states must be clearable here.
 
 ### 7.2 Readiness checks
 
@@ -258,8 +262,9 @@ Supported v1 actions:
 | `checkout_registered_branch` | Branch mismatch but no dirty source changes. | Checkout the registered `build/<buildId>` branch and rerun diagnostics. |
 | `reset_from_main` | No unpreserved build diff exists, or operator approved discard. | Fetch/reset from `origin/main`, recreate client/build branch, record source currency. |
 | `quarantine_runtime_target` | Container belongs to wrong worktree/project or unknown owner. | Mark target `misconfigured`, block deploy/contribution, record issue. |
+| `reset_build_phase` | Build is `stuck_mid_phase` past heartbeat budget OR phase finished with `filesChanged:0` and no diff. | Mark phase failed with reason, release sandbox slot if held, surface for re-dispatch. |
 
-`reset_from_main` and any action that could discard source changes require an explicit recovery confirmation captured as structured input, not an implied chat "yes."
+`reset_from_main`, `reset_build_phase`, and any action that could discard source changes or in-flight build state require an explicit recovery confirmation captured as structured input, not an implied chat "yes." A build that is merely paused (no heartbeat activity but inside the idle window) must NOT be eligible for slot release — see §13.5 for the staleness threshold.
 
 ### 9.3 `record_sandbox_incident`
 
@@ -327,6 +332,43 @@ The Build Studio coworker must follow these rules:
 6. Do not treat an already-submitted PR as authoritative when GitHub checks are red.
 7. Do not call `contribute_to_hive` unless `deploy_feature` succeeded in the current readiness window and contribution gates pass.
 8. If the issue is platform capability rather than user input, say so directly: "Build Studio is blocked because the sandbox recovery tool is missing or denied."
+
+### 11.1 Coworker dialog contract
+
+The rules above describe *what* the coworker may not do. This section specifies *what it must say* — the text the user actually sees in the AI Coworker panel. Every dialog ends with concrete next-step choices (never internal status, never "your call"). The coworker drives the portal UI itself where possible (Claude-in-Chrome → server action → MCP tool → SQL, in that order of preference); chat is the explanation surface, not the operator console.
+
+Required dialog templates per readiness state:
+
+| State | Required coworker dialog (paraphrasable, but must end with choices) |
+| --- | --- |
+| `stopped` | "Your sandbox container is stopped. I'm starting it now via the platform — no action needed from you. **Options:** (1) Wait for restart and continue (default), (2) Open Sandbox Control to watch progress." |
+| `not_found` | "The sandbox container does not exist for this install. I'll request the platform to provision it. **Options:** (1) Provision now (default), (2) Open Sandbox Control to review prerequisites." |
+| `detached` / `mixed_compose_project` | "Build Studio's sandbox is owned by a different worktree (`<wrong path>`). I cannot safely deploy from this state, and I will not ask you to run Docker. The platform has quarantined the target and recorded incident `<PIR-id>`. **Options:** (1) Rebuild the sandbox from this worktree (default), (2) Switch the active build to the owning worktree, (3) Open Sandbox Control." |
+| `stale_source` | "The sandbox cannot prove it is current against `origin/main` — `PlatformDevConfig.upstreamRemoteUrl` is unset or the fetch probe failed. I will not open a PR from unverified base. **Options:** (1) Configure upstream remote and reprobe (default), (2) Hold this build in review until source currency is verified, (3) Open Platform Development settings." |
+| `dirty_or_leaking` | "The sandbox workspace contains changes not attributable to this build (generated artifacts / cross-build leakage). I'm blocking deploy to prevent a contaminated PR. **Options:** (1) Show me the leaking paths (default), (2) Reset workspace from `build/<id>` with structured confirmation, (3) Open Sandbox Control." |
+| `verification_red` | "Verification is red: <one-line failure summary from raw output>. The earlier green summary booleans were wrong; I'm trusting the raw test/typecheck output. **Options:** (1) Show me the failing output (default), (2) Re-run verification, (3) Send build back to code generation." |
+| `stuck_mid_phase` | "The build is wedged at `<phase>` — last heartbeat `<ago>`, `filesChanged: <n>`, `ranTests: <bool>`. I will not advance it on contradictory evidence. **Options:** (1) Reset this phase and re-dispatch (default), (2) Show me the last task output, (3) Mark the build paused for later." |
+| `unrecoverable` | "Build Studio is blocked because the sandbox recovery tool is missing or denied — this is a platform issue, not something you can fix from chat. I've recorded `<PIR-id>`. **Options:** (1) Open the incident, (2) Open Sandbox Control to review state, (3) Switch to a different build." |
+
+Forbidden coworker dialog patterns (all currently observed in the FB-9706671B trace and in surrounding `mcp-tools.ts` strings):
+
+- "Please run `docker compose up -d sandbox`."
+- "Tell the user to run …"
+- "Run `docker compose up -d browser-use` …"
+- "Want me to skip the sandbox check and submit anyway?" / "Should I override deploy_feature?"
+- "I've submitted the PR — let me know if CI is red." (treating a red PR as authoritative.)
+- "Try restarting Docker Desktop."
+- Replies that end with internal status ("Done.", "Continuing.", "Investigating.") rather than user choices.
+
+The dialog test in §10 of the plan must assert at least one negative example per forbidden pattern and one positive example per required template.
+
+### 11.2 Self-upgrade interaction
+
+Per the live `project_self_upgrade_kills_in_session_ux` note: the portal recycles whenever the main bundle hash changes (every merged sibling PR). Sandbox recovery actions must therefore be:
+
+1. **Idempotent** — calling `recover_sandbox` twice with the same `(buildId, action)` after a portal restart must not double-execute. Use `BuildActivity` for the de-dupe lookup.
+2. **Resumable from snapshot** — the UI re-derives state from `RuntimeTarget` + `BuildActivity` + `PlatformIssueReport` on cold load; chat-only state does not survive restart.
+3. **Non-blocking on portal restart** — if a recovery server action is interrupted mid-flight, the next `diagnose_sandbox` call must distinguish "action was rolled back" from "action partially applied" via the persisted activity row.
 
 ## 12. Gate Integration
 
@@ -414,6 +456,27 @@ The GitHub commit API call must set explicit `author` and `committer` metadata t
 3. Coworker tells the operator the PR should be closed or superseded.
 4. Repair happens from a clean branch/worktree; the bad PR is not used as authoritative source.
 
+### 13.5 Stuck mid-phase recovery
+
+Heartbeat budget per phase (initial values; tunable via `PlatformDevConfig`):
+
+| Phase | In-flight heartbeat budget | Idle (no activity) staleness | Notes |
+| --- | --- | --- | --- |
+| `deps_installed` → next phase dispatch | 30 min | 7 days | Current stuck-build class. |
+| `code_generation` (active) | 90 min | 7 days | Long-running agentic runs allowed. |
+| `code_generation` (returned `filesChanged:0`) | n/a | immediate-fail (no idle window) | Hard-fail per §12.2. |
+| `verification` | 60 min | 7 days | |
+| `review` / `ship` (awaiting operator) | n/a | 14 days | Paused work; never auto-released. |
+
+The 7-day idle floor is intentional and derives from the `idle_is_not_abandoned` operating rule: paused work must survive a full week to absorb the operator's travel and weekly rate-limit resets. `release_stale_slot` against a build whose last activity is younger than the idle threshold returns `blocked` even if the operator clicks the button — the UI must disable it with that reason.
+
+Recovery flow:
+
+1. Diagnostic detects `stuck_mid_phase`.
+2. Coworker emits the §11.1 dialog and offers `reset_build_phase` (default) plus "show last task output" and "pause for later."
+3. On operator confirmation, `recover_sandbox({ action:"reset_build_phase" })` marks the active `BuildPhaseRun` failed with reason `operator_reset_after_stall`, records `BuildActivity`, releases the slot if it was held by this build only, and reruns diagnosis.
+4. Re-dispatch is governed by the existing phase dispatcher; this recovery does NOT auto-restart the phase — that is a separate operator choice.
+
 ## 14. Acceptance Criteria
 
 ### 14.1 Diagnostic correctness
@@ -441,6 +504,15 @@ The GitHub commit API call must set explicit `author` and `committer` metadata t
 - Admin sandbox console exposes governed recovery actions with disabled reasons.
 - Coworker never asks the user to run Docker or skip sandbox diff extraction.
 - In the `FB-9706671B` failure class, the platform blocks PR creation and records an incident before any GitHub PR is opened.
+- Coworker dialog templates from §11.1 are used verbatim (or paraphrased while preserving structure); every reply ends with concrete options, never internal status.
+- An automated test asserts that none of the forbidden dialog patterns from §11.1 appear in any sandbox/build prompt source file or in any sandbox/start_build/run_ux_test/evaluate_page tool return message — caught at the string level, not behaviorally.
+- Recovery is idempotent across a portal self-upgrade restart (§11.2): replaying the same recovery action does not double-apply.
+
+### 14.5 Stuck build class
+
+- `stuck_mid_phase` correctly classifies the four builds currently wedged (3 at `deps_installed`, 1 at `complete/no-diff`) without requiring DB inspection by the operator.
+- `reset_build_phase` clears them through the governed path; no SQL is required.
+- The 7-day idle floor for `release_stale_slot` is enforced and surfaced as a disabled-button reason.
 
 ## 15. Implementation Slices
 
@@ -458,4 +530,6 @@ These decisions should be resolved at implementation start:
 1. Should `reset_from_main` be v1, or should v1 stop at `quarantine_runtime_target` and require a later rebuild workflow?
 2. Should contribution PR creation create the `FeaturePack` before or after PR creation? This spec recommends after all pre-PR gates pass, but existing code creates it first.
 3. Should generated snapshot churn have a generic denylist or be per-task allowlisted through build-plan metadata?
-4. Should Build Studio mark the existing PR #961 lineage as superseded through GitHub comments automatically, or should that stay manual for v1?
+4. Heartbeat budgets in §13.5 are initial values — should they live in `PlatformDevConfig` (operator-tunable) or in code constants for v1?
+
+(The earlier "should we comment on PR #961 from Build Studio?" decision is *not* architectural and belongs to the followup PR that closes the FB-9706671B incident, not this spec.)
