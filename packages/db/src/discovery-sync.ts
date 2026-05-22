@@ -59,7 +59,10 @@ type DiscoverySyncTx = {
   };
   inventoryEntity: {
     findMany(args: {
-      where?: { scopeKey?: string };
+      where?: {
+        scopeKey?: string;
+        lastConfirmedRun?: { sourceSlug?: string };
+      };
       select: { entityKey: true };
     }): Promise<Array<{ entityKey: string }>>;
     upsert(args: {
@@ -88,7 +91,10 @@ type DiscoverySyncTx = {
   };
   inventoryRelationship: {
     findMany(args: {
-      where?: { scopeKey?: string };
+      where?: {
+        scopeKey?: string;
+        lastConfirmedRun?: { sourceSlug?: string };
+      };
       select: { relationshipKey: true };
     }): Promise<Array<{ relationshipKey: string }>>;
     upsert(args: {
@@ -209,13 +215,23 @@ export async function persistBootstrapDiscoveryRun(
     }
     const runScope = scopeFieldsFromRunMeta(runMeta);
     const scopeWhere = { scopeKey: runScope.scopeKey };
+    // Source attribution via lastConfirmedRun.sourceSlug: a sweep from one
+    // source only sees the entities/relationships it has previously
+    // confirmed. A unifi sweep with no dpf_bootstrap-attributed rows in
+    // its view cannot mark dpf_bootstrap rows stale. Composes with the
+    // scopeKey filter so cross-customer isolation still holds.
+    const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
     const existingEntityKeys = new Set(
-      (await tx.inventoryEntity.findMany({ where: scopeWhere, select: { entityKey: true } }))
-        .map((entity) => entity.entityKey),
+      (await tx.inventoryEntity.findMany({
+        where: { ...scopeWhere, ...sourceFilter },
+        select: { entityKey: true },
+      })).map((entity) => entity.entityKey),
     );
     const existingRelationshipKeys = new Set(
-      (await tx.inventoryRelationship.findMany({ where: scopeWhere, select: { relationshipKey: true } }))
-        .map((relationship) => relationship.relationshipKey),
+      (await tx.inventoryRelationship.findMany({
+        where: { ...scopeWhere, ...sourceFilter },
+        select: { relationshipKey: true },
+      })).map((relationship) => relationship.relationshipKey),
     );
     const existingIssueKeys = new Set(
       (await tx.portfolioQualityIssue.findMany({ select: { issueKey: true } }))
@@ -432,13 +448,12 @@ export async function persistBootstrapDiscoveryRun(
     const currentEntityKeys = new Set(
       normalized.inventoryEntities.map((entity) => entity.entityKey),
     );
-    // Stale detection: any entity in the current scope that wasn't observed
-    // in this run is marked stale. Scope-where (above) ensures cross-customer
-    // isolation. The previous key-prefix-based source filter from PR #1009
-    // (`isOwnedBySource`) was a no-op in practice — entity keys don't start
-    // with sourceSlug, so the filter excluded everything and stale detection
-    // never fired. See follow-up task for proper source attribution via a
-    // column lookup (e.g. on `lastConfirmedRunId.sourceSlug`).
+    // Stale detection: any entity previously confirmed by THIS source
+    // (via lastConfirmedRun.sourceSlug above) that wasn't observed in
+    // the current run is marked stale. Scope filter handles cross-customer
+    // isolation; source filter handles cross-source isolation within a
+    // scope. A unifi sweep cannot mark dpf_bootstrap or edge-node rows
+    // stale because their lastConfirmedRun.sourceSlug differs.
     const staleEntityKeys = [...existingEntityKeys]
       .filter((entityKey) => !currentEntityKeys.has(entityKey));
     const staleEntities = staleEntityKeys.length === 0
@@ -534,8 +549,9 @@ export async function persistBootstrapDiscoveryRun(
     const currentRelationshipKeys = new Set(
       normalized.inventoryRelationships.map((relationship) => relationship.relationshipKey),
     );
-    // Same source-scoping as entities above — only the source that owns
-    // a relationship key gets to mark it stale.
+    // Same column-based source attribution as entities above — the
+    // sweep only sees relationships it previously confirmed, so it can
+    // only mark its own rows stale.
     const staleRelationshipKeys = [...existingRelationshipKeys]
       .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
     const staleRelationships = staleRelationshipKeys.length === 0

@@ -101,12 +101,18 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
     );
 
     expect(entityFindMany).toHaveBeenCalledWith({
-      where: { scopeKey: "customer:cust_a:site:site_austin" },
+      where: {
+        scopeKey: "customer:cust_a:site:site_austin",
+        lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
+      },
       select: { entityKey: true },
     });
 
     expect(relationshipFindMany).toHaveBeenCalledWith({
-      where: { scopeKey: "customer:cust_a:site:site_austin" },
+      where: {
+        scopeKey: "customer:cust_a:site:site_austin",
+        lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
+      },
       select: { relationshipKey: true },
     });
 
